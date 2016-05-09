@@ -1,12 +1,13 @@
 # InsightAgent
 
-To deploy agent in several machines:
-1. Get deployment script:
+To deploy agent on multiple hosts:
+
+- Get deployment script from github:
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/xiaohuigu/InsightAgent/master/deployInsightAgent.py
 ```
-2. Include IP address of all machines in hostlist.txt and enter one IP address per line.
-3. To deploy run the following command:
+- Include IP address of all hosts in hostlist.txt and enter one IP address per line.
+- To deploy run the following command:
 ```
 python deployInsightAgent.py -n USER_NAME_IN_HOST -u
                              USER_NAME_IN_INSIGHTFINDER -k LICENSE_KEY -s
