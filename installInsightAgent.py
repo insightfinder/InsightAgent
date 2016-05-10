@@ -10,9 +10,20 @@ import getopt
 import argparse
 import re
 
+def sshInstall(retry):
+    global user
+    global host
+    global password
+    global user_insightfinder
+    global license_key
+    global sampling_interval
+    global reporting_interval
+    global expectations
+    if retry == 0:
+        return False
 
-expectations = ['[Pp]assword:',
-           'continue (yes/no)?',
+    expectations = ['password for %s: '%user,
+          'continue (yes/no)?',
            pexpect.EOF,
            pexpect.TIMEOUT,
            'Name or service not known',
@@ -23,16 +34,6 @@ expectations = ['[Pp]assword:',
            'failure in name resolution',
            'No space left on device'
           ]
-
-
-def sshInstall():
-    global user
-    global host
-    global password
-    global user_insightfinder
-    global license_key
-    global sampling_interval
-    global reporting_interval
     try:
         s = pxssh.pxssh()
         s.login (host, user, password, original_prompt='[#$]')
