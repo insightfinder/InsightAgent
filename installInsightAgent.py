@@ -54,6 +54,9 @@ def sshInstall(retry):
         s.sendline ('tar xzvf insightagent.tar.gz')       # run a command
         s.prompt()                    # match the prompt
         print(s.before)               # print everything before the prompt.
+        s.sendline ('sudo python checkpackages.py')
+        s.prompt()                    # match the prompt
+        print(s.before)               # print everything before the prompt.
         s.logout()
         return True
     except pxssh.ExceptionPxssh as e:
