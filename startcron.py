@@ -40,7 +40,7 @@ def sshDeploy(retry):
     try:
         s = pxssh.pxssh()
         s.login (host, user, password, original_prompt='[#$]')
-        command="cd insightagent && sudo ./install.sh -u "+user_insightfinder+" -k "+license_key+" -s "+sampling_interval+" -r "+reporting_interval+" -t "+agent_type
+        command="cd InsightAgent-master && sudo ./install.sh -u "+user_insightfinder+" -k "+license_key+" -s "+sampling_interval+" -r "+reporting_interval+" -t "+agent_type
         s.sendline (command)
         res = s.expect( expectations )
         if res == 0:

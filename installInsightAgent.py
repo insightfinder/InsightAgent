@@ -40,7 +40,7 @@ def sshInstall(retry):
     try:
         s = pxssh.pxssh()
         s.login (host, user, password, original_prompt='[#$]')
-        s.sendline ('sudo rm -rf insightagent*')
+        s.sendline ('sudo rm -rf insightagent* InsightAgent-master')
         res = s.expect( expectations )
         #res = s.expect(["Password:", pexpect.EOF, pexpect.TIMEOUT])
         if res == 0:
@@ -51,7 +51,7 @@ def sshInstall(retry):
             return sshInstall(retry-1)
         s.prompt()
         print(s.before)
-        s.sendline ('wget --no-check-certificate https://github.com/xiaohuigu/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz')
+        s.sendline ('wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz')
         s.prompt()         
         print(s.before)
         s.sendline ('tar xzvf insightagent.tar.gz')       # run a command
