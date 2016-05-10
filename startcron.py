@@ -10,21 +10,6 @@ import getopt
 import argparse
 import re
 
-
-expectations = ['[Pp]assword for %s:%host',
-           '',
-           'continue (yes/no)?',
-           pexpect.EOF,
-           pexpect.TIMEOUT,
-           'Name or service not known',
-           'Permission denied',
-           'No such file or directory',
-           'No route to host',
-           'Network is unreachable',
-           'failure in name resolution',
-           'No space left on device'
-          ]
-
 def sshDeploy(retry):
     global user
     global host
@@ -37,6 +22,19 @@ def sshDeploy(retry):
     global expectations
     if retry == 0:
         return False
+
+    expectations = ['password for %s: '%user,
+          'continue (yes/no)?',
+           pexpect.EOF,
+           pexpect.TIMEOUT,
+           'Name or service not known',
+           'Permission denied',
+           'No such file or directory',
+           'No route to host',
+           'Network is unreachable',
+           'failure in name resolution',
+           'No space left on device'
+          ]
     try:
         s = pxssh.pxssh()
         s.login (host, user, password, original_prompt='[#$]')
