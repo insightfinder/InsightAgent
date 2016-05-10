@@ -38,18 +38,26 @@ def sshDeploy(retry):
     try:
         s = pxssh.pxssh()
         s.login (host, user, password, original_prompt='[#$]')
-        command="cd insightagent && sudo ./install.sh -u "+user_insightfinder+" -k "+license_key+" -s "+sampling_interval+" -r "+reporting_interval+" -t "+agent_type
+        command="cd InsightAgent-master && sudo ./install.sh -u "+user_insightfinder+" -k "+license_key+" -s "+sampling_interval+" -r "+reporting_interval+" -t "+agent_type
         s.sendline (command)
         res = s.expect( expectations )
         if res == 0:
             s.sendline(password)
+        if res >= 4:
+            s.prompt()
+            s.logout()
+            return sshDeploy(retry-1)
         s.prompt()
         print(s.before)
         s.logout()
         return True
     except pxssh.ExceptionPxssh as e:
         print(e)
-        return False
+        if 'synchronize with original prompt' in str(e):
+            time.sleep(1)
+            return sshInstall(retry-1)
+        else:
+            return False
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -98,14 +106,17 @@ if __name__ == '__main__':
                 line = f.readline()
                 if line:
                     host=line.split("\n")[0]
-                    print host
-                    stat = sshDeploy()
+                    print "Start deploying agent in", host, "..."
+                    stat = sshDeploy(3)
                     if stat:
                         print "Deploy Succeed in", host
                     else:
                         print "Deploy Fail in", host
                 else:
                     break
-    except:
-        print "Deploy Failed"
-        sys.exit("Failed to open hostlist.txt!")
+    except (KeyboardInterrupt, SystemExit):
+        print "Keyboard Interrupt!!"
+        sys.exit()
+    except IOError as e:
+        print "I/O error({0}): {1}: {2}".format(e.errno, e.strerror, e.filename)
+        sys.exit()

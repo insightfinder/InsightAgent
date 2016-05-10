@@ -40,13 +40,13 @@ if __name__ == '__main__':
     global agent_type
 
     user, user_insightfinder, license_key, sampling_interval, reporting_interval, agent_type = get_args()
-    password=getpass.getpass("Enter %s's password:"%user)
+    password=getpass.getpass("Enter %s's password for the deploying hosts:"%user)
     stat=True
     homepath = os.getcwd()
     print "Starting Installation"
     proc = subprocess.Popen([os.path.join(homepath,"installInsightAgent.py")+" -n "+user+" -u "+user_insightfinder+" -k "+license_key+" -s "+sampling_interval+" -r "+reporting_interval+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
-    if out == "Install Failed\n":
+    if "error" in out:
         sys.exit(out)
     print out
     print "Proceeding to Deployment"

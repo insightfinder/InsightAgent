@@ -37,14 +37,18 @@ def sshInstall(retry):
     try:
         s = pxssh.pxssh()
         s.login (host, user, password, original_prompt='[#$]')
-        s.sendline ('sudo rm -rf insightagent*')
+        s.sendline ('sudo rm -rf insightagent* InsightAgent-master')
         res = s.expect( expectations )
         #res = s.expect(["Password:", pexpect.EOF, pexpect.TIMEOUT])
         if res == 0:
             s.sendline(password)
+        if res >= 4:
+            s.prompt()
+            s.logout()
+            return sshInstall(retry-1)
         s.prompt()
         print(s.before)
-        s.sendline ('wget --no-check-certificate https://github.com/xiaohuigu/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz')
+        s.sendline ('wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz')
         s.prompt()         
         print(s.before)
         s.sendline ('tar xzvf insightagent.tar.gz')       # run a command
@@ -54,7 +58,11 @@ def sshInstall(retry):
         return True
     except pxssh.ExceptionPxssh as e:
         print(e)
-        return False
+        if 'synchronize with original prompt' in str(e):
+            time.sleep(1)
+            return sshInstall(retry-1)
+        else:
+            return False
 
 
 def get_args():
@@ -100,14 +108,17 @@ if __name__ == '__main__':
                 line = f.readline()
                 if line:
                     host=line.split("\n")[0]
-                    print host
-                    stat = sshInstall()
+                    print "Start installing agent in", host, "..."
+                    stat = sshInstall(3)
                     if stat:
                         print "Install Succeed in", host
                     else:
                         print "Install Fail in", host
                 else:
                     break
-    except:
-        print "Install Failed"
-        sys.exit("Failed to open hostlist.txt!")
+    except (KeyboardInterrupt, SystemExit):
+        print "Keyboard Interrupt!!"
+        sys.exit()
+    except IOError as e:
+        print "I/O error({0}): {1}: {2}".format(e.errno, e.strerror, e.filename)
+        sys.exit()
