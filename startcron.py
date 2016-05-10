@@ -24,7 +24,8 @@ def sshDeploy(retry):
         return False
 
     expectations = ['password for %s: '%user,
-          'continue (yes/no)?',
+           '',
+           'continue (yes/no)?',
            pexpect.EOF,
            pexpect.TIMEOUT,
            'Name or service not known',
@@ -37,7 +38,10 @@ def sshDeploy(retry):
           ]
     try:
         s = pxssh.pxssh()
-        s.login (host, user, password, original_prompt='[#$]')
+        if os.path.isfile(password) == True:
+            s.login (host, user, ssh_key=password, original_prompt='[#$]')
+        else:
+            s.login (host, user, password, original_prompt='[#$]')
         command="cd InsightAgent-master && sudo ./install.sh -u "+user_insightfinder+" -k "+license_key+" -s "+sampling_interval+" -r "+reporting_interval+" -t "+agent_type
         s.sendline (command)
         res = s.expect( expectations )
