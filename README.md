@@ -2,9 +2,11 @@
 
 ###### To deploy agent on multiple hosts:
 
-- Get deployment script from github:
+- Get the 3 deployment scripts from github using below commands:
 ```
-wget --no-check-certificate https://raw.githubusercontent.com/xiaohuigu/InsightAgent/master/deployInsightAgent.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployInsightAgent.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/installInsightAgent.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/startcron.py
 ```
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 - To deploy run the following command:
