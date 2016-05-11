@@ -2,11 +2,9 @@
 
 ###### To deploy agent on multiple hosts:
 
-- Get the 3 deployment scripts from github using below commands:
+- Get the deployment script from github using below command:
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployInsightAgent.py
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/installInsightAgent.py
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/startcron.py
 ```
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 - To deploy run the following command:
@@ -18,8 +16,12 @@ python deployInsightAgent.py -n USER_NAME_IN_HOST
                              -r REPORTING_INTERVAL_MINUTE 
                              -t AGENT_TYPE
 ```
+When prompted, put in user password or private key file path, for ssh authentication. 
+
 Currently, AGENT_TYPE can be *proc* or *docker*. 
 
+When the above script is run, if prompted for password, enter either the password or the name of the identity file along with file path.
+Example: /home/insight/.ssh/id_rsa
 
 
 ###### To get more details on the command, run 

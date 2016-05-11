@@ -23,7 +23,8 @@ def sshInstall(retry):
         return False
 
     expectations = ['password for %s: '%user,
-          'continue (yes/no)?',
+           '',
+           'continue (yes/no)?',
            pexpect.EOF,
            pexpect.TIMEOUT,
            'Name or service not known',
@@ -36,7 +37,10 @@ def sshInstall(retry):
           ]
     try:
         s = pxssh.pxssh()
-        s.login (host, user, password, original_prompt='[#$]')
+        if os.path.isfile(password) == True:
+            s.login (host, user, ssh_key=password, original_prompt='[#$]')
+        else:
+            s.login (host, user, password, original_prompt='[#$]')
         s.sendline ('sudo rm -rf insightagent* InsightAgent-master')
         res = s.expect( expectations )
         #res = s.expect(["Password:", pexpect.EOF, pexpect.TIMEOUT])
@@ -52,6 +56,9 @@ def sshInstall(retry):
         s.prompt()         
         print(s.before)
         s.sendline ('tar xzvf insightagent.tar.gz')       # run a command
+        s.prompt()                    # match the prompt
+        print(s.before)               # print everything before the prompt.
+        s.sendline ('cd InsightAgent-master && sudo python checkpackages.py')
         s.prompt()                    # match the prompt
         print(s.before)               # print everything before the prompt.
         s.logout()
@@ -79,7 +86,7 @@ def get_args():
     parser.add_argument(
         '-r', '--REPORTING_INTERVAL_MINUTE', type=str, help='Reporting Interval Minutes', required=True)
     parser.add_argument(
-        '-p', '--PASSWORD', type=str, help='Password for hosts', required=True)
+        '-p', '--PASSWORD', type=str, help='Password or private key file path for ssh to hosts', required=True)
     args = parser.parse_args()
     user = args.USER_NAME_IN_HOST
     user_insightfinder = args.USER_NAME_IN_INSIGHTFINDER
