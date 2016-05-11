@@ -54,7 +54,7 @@ def getindex(col_name):
         return 2
     elif col_name == "DiskFree#MB":
         return 3
-    elif col_name == "NetworkIn#KB" or col_name == "NetworkOut#KB":
+    elif col_name == "NetworkIn#MB" or col_name == "NetworkOut#MB":
         return 4
     elif col_name == "MemFree#MB":
         return 5

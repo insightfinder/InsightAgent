@@ -9,7 +9,7 @@ cat /proc/diskstats | awk '{readsector+=$6;writesector+=$10} END{print "DiskRead
 
 df -k | awk '{if (NR!=1) diskfreespace += $4} END{print "DiskFree#MB="diskfreespace/1024}' > diskfreemetrics.txt & PID4=$!
 
-cat /proc/net/dev | awk '{NetworkBytesin+=$2;NetworkBytesout+=$10} END{print "NetworkIn#KB="NetworkBytesin/1024"\nNetworkOut#KB="NetworkBytesout/1024}' > networkmetrics.txt & PID5=$!
+cat /proc/net/dev | awk '{NetworkBytesin+=$2;NetworkBytesout+=$10} END{print "NetworkIn#MB="NetworkBytesin/(1024*1024)"\nNetworkOut#MB="NetworkBytesout/(1024*1024)}' > networkmetrics.txt & PID5=$!
 
 cat /proc/meminfo | grep Mem | awk '{gsub( "[:':']","=" );print}' | awk 'BEGIN{i=0} {mem[i]=$2;i=i+1} END{print "MemFree#MB="mem[1]/1024;print "MemUsed#MB="(mem[0]-mem[1])/1024}' > memmetrics.txt & PID6=$!
 
