@@ -50,14 +50,16 @@ USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
 def getindex(col_name):
     if col_name == "CPU_utilization#%":
         return 1
-    elif col_name == "DiskRead#KB" or col_name == "DiskWrite#KB":
+    elif col_name == "DiskRead#MB" or col_name == "DiskWrite#MB":
         return 2
-    elif col_name == "DiskFree#KB":
+    elif col_name == "DiskFree#MB":
         return 3
-    elif col_name == "NetworkIn#KB" or col_name == "NetworkOut#KB":
+    elif col_name == "NetworkIn#MB" or col_name == "NetworkOut#MB":
         return 4
-    elif col_name == "MemFree#MB" or col_name == "MemUsed#MB":
+    elif col_name == "MemFree#MB":
         return 5
+    elif col_name == "MemUsed#MB":
+        return 6
 
 #update prev_endtime in config file
 def update_timestamp(prev_endtime):
