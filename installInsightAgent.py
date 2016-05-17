@@ -41,7 +41,7 @@ def sshInstall(retry):
             s.login (host, user, ssh_key=password, original_prompt='[#$]')
         else:
             s.login (host, user, password, original_prompt='[#$]')
-        s.sendline ('sudo rm -rf insightagent* InsightAgent-master')
+        s.sendline ('sudo rm -rf insightagent* InsightAgent*')
         res = s.expect( expectations )
         #res = s.expect(["Password:", pexpect.EOF, pexpect.TIMEOUT])
         if res == 0:
@@ -86,7 +86,7 @@ def get_args():
     parser.add_argument(
         '-r', '--REPORTING_INTERVAL_MINUTE', type=str, help='Reporting Interval Minutes', required=True)
     parser.add_argument(
-        '-p', '--PASSWORD', type=str, help='Password or private key file path for ssh to hosts', required=True)
+        '-p', '--PASSWORD', type=str, help='Password for hosts', required=True)
     args = parser.parse_args()
     user = args.USER_NAME_IN_HOST
     user_insightfinder = args.USER_NAME_IN_INSIGHTFINDER

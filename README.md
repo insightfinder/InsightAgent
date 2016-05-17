@@ -18,7 +18,7 @@ python deployInsightAgent.py -n USER_NAME_IN_HOST
 ```
 Currently, AGENT_TYPE can be *proc* or *docker*. 
 
-When the above script is run, you will be prompted for password, enter either the password or the name of the identity file along with file path.
+When the above script is run, if prompted for password, enter either the password or the name of the identity file along with file path.
 Example: /home/insight/.ssh/id_rsa
 
 

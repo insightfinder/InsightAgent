@@ -79,7 +79,7 @@ def get_args():
     parser.add_argument(
         '-t', '--AGENT_TYPE', type=str, help='Agent type: proc or docker', choices=['proc', 'docker'], required=True)
     parser.add_argument(
-        '-p', '--PASSWORD', type=str, help='Password or private key file path for ssh to hosts', required=True)
+        '-p', '--PASSWORD', type=str, help='Password for hosts', required=True)
     args = parser.parse_args()
     user = args.USER_NAME_IN_HOST
     user_insightfinder = args.USER_NAME_IN_INSIGHTFINDER

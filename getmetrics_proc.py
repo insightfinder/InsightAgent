@@ -107,7 +107,7 @@ def get_cpuusage(filename,field_values,which_dict):
     result = 1 - round(float(idle/Total),4)
     field_values.append(result*100)
 
-filenames = ["timestamp.txt", "cpumetrics.txt","diskmetrics.txt","diskfreemetrics.txt","networkmetrics.txt","memmetrics.txt"]
+filenames = ["timestamp.txt", "cpumetrics.txt","diskmetrics.txt","diskusedmetrics.txt","networkmetrics.txt","memmetrics.txt"]
 fields = []
 try:
     date = time.strftime("%Y%m%d")

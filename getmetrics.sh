@@ -7,11 +7,11 @@ grep 'cpu ' /proc/stat | awk '{print "user="$2"\nnice="$3"\nsystem="$4"\nidle="$
 
 cat /proc/diskstats | awk '{readsector+=$6;writesector+=$10} END{print "DiskRead#MB="readsector*512/(1024*1024)"\nDiskWrite#MB="writesector*512/(1024*1024)}' > diskmetrics.txt & PID3=$!
 
-df -k | awk '{if (NR!=1) diskfreespace += $4} END{print "DiskFree#MB="diskfreespace/1024}' > diskfreemetrics.txt & PID4=$!
+df -k | awk '{if (NR!=1) diskusedspace += $3} END{print "DiskUsed#MB="diskusedspace/1024}' > diskusedmetrics.txt & PID4=$!
 
 cat /proc/net/dev | awk '{NetworkBytesin+=$2;NetworkBytesout+=$10} END{print "NetworkIn#MB="NetworkBytesin/(1024*1024)"\nNetworkOut#MB="NetworkBytesout/(1024*1024)}' > networkmetrics.txt & PID5=$!
 
-cat /proc/meminfo | grep Mem | awk '{gsub( "[:':']","=" );print}' | awk 'BEGIN{i=0} {mem[i]=$2;i=i+1} END{print "MemFree#MB="mem[1]/1024;print "MemUsed#MB="(mem[0]-mem[1])/1024}' > memmetrics.txt & PID6=$!
+cat /proc/meminfo | grep Mem | awk '{gsub( "[:':']","=" );print}' | awk 'BEGIN{i=0} {mem[i]=$2;i=i+1} END{print "MemUsed#MB="(mem[0]-mem[1])/1024}' > memmetrics.txt & PID6=$!
 
 wait $PID1
 wait $PID2
