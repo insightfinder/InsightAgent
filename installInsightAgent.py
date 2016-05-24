@@ -57,6 +57,8 @@ def sshInstall(retry,hostname):
     except socket.error, e:
         print "Socket connection failed in %s:"%hostname, e
         return sshInstall(retry-1,hostname)
+    except:
+        print "Unexpected error in %s:"%hostname
 
 def get_args():
     parser = argparse.ArgumentParser(

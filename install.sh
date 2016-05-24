@@ -3,7 +3,7 @@
 function usage()
 {
 	echo "Usage: ./install.sh -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
-AGENT_TYPE = proc or docker"
+AGENT_TYPE = proc or cadvisor or docker_remote_api"
 }
 
 if [ "$#" -ne 10 ]; then
@@ -34,7 +34,7 @@ while [ "$1" != "" ]; do
 	shift
 done
 
-if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'docker' ]; then
+if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'docker_remote_api' ]; then
 	usage
 	exit 1
 fi
@@ -71,9 +71,11 @@ fi
 USER=`whoami`
 
 if [ $AGENT_TYPE = 'proc' ]; then
-	echo "*/$SAMPLING_INTERVAL * * * * root python $INSIGHTAGENTDIR/getmetrics_proc.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-elif [ $AGENT_TYPE = 'docker' ]; then
-	echo "*/$SAMPLING_INTERVAL * * * * root python $INSIGHTAGENTDIR/getmetrics_docker.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
+	echo "*/$SAMPLING_INTERVAL * * * * root python $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_proc.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
+elif [ $AGENT_TYPE = 'cadvisor' ]; then
+	echo "*/$SAMPLING_INTERVAL * * * * root python $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_cadvisor.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
+elif [ $AGENT_TYPE = 'docker_remote_api' ]; then
+	echo "*/$SAMPLING_INTERVAL * * * * root python $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_docker_remote_api.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
 fi
 
 echo "*/$REPORTING_INTERVAL * * * * root python $INSIGHTAGENTDIR/csvtojson.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON

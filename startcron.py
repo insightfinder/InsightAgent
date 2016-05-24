@@ -56,6 +56,8 @@ def sshDeploy(retry,hostname):
     except socket.error, e:
         print "Socket connection failed in %s:"%hostname, e
         return sshDeploy(retry-1,hostname)
+    except:
+        print "Unexpected error in %s:"%hostname
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -71,7 +73,7 @@ def get_args():
     parser.add_argument(
         '-r', '--REPORTING_INTERVAL_MINUTE', type=str, help='Reporting Interval Minutes', required=True)
     parser.add_argument(
-        '-t', '--AGENT_TYPE', type=str, help='Agent type: proc or docker', choices=['proc', 'docker'], required=True)
+        '-t', '--AGENT_TYPE', type=str, help='Agent type: proc or cadvisor or docker_remote_api', choices=['proc', 'cadvisor', 'docker_remote_api'], required=True)
     parser.add_argument(
         '-p', '--PASSWORD', type=str, help='Password for hosts', required=True)
     args = parser.parse_args()
