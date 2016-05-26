@@ -21,6 +21,8 @@ assumping gmt epoch timestamp and local date daily file
 
 usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)
+parser.add_option("-f", "--fileInput",
+    action="store", dest="inputFile", help="Input data file (overriding daily data file)")
 parser.add_option("-m", "--mode",
     action="store", dest="mode", help="Running mode: live or replay")
 parser.add_option("-d", "--directory",
@@ -88,27 +90,58 @@ else: # prev_endtime == 0
     end_time_epoch = int(time.time())*1000
     start_time_epoch = end_time_epoch - 1000*60*reporting_interval
 
-for i in range(0,2+int(float(reporting_interval)/24/60)):
-    dates.append(time.strftime("%Y%m%d", time.localtime(start_time_epoch/1000 + 60*60*24*i)))
-
 alldata = {}
 metricData = []
 fieldnames = []
 idxdate = 0
 hostname = socket.gethostname().partition(".")[0]
 
-for date in dates:
-    if os.path.isfile(os.path.join(homepath,datadir+date+".csv")):
-        dailyFile = open(os.path.join(homepath,datadir+date+".csv"))
-        dailyFileReader = csv.reader(dailyFile)
-        for row in dailyFileReader:
-            if idxdate == 0 and dailyFileReader.line_num == 1:
+if options.inputFile is None:
+    for i in range(0,2+int(float(reporting_interval)/24/60)):
+        dates.append(time.strftime("%Y%m%d", time.localtime(start_time_epoch/1000 + 60*60*24*i)))
+    for date in dates:
+        if os.path.isfile(os.path.join(homepath,datadir+date+".csv")):
+            dailyFile = open(os.path.join(homepath,datadir+date+".csv"))
+            dailyFileReader = csv.reader(dailyFile)
+            for row in dailyFileReader:
+                if idxdate == 0 and dailyFileReader.line_num == 1:
+                    #Get all the metric names
+                    fieldnames = row
+                    for i in range(0,len(fieldnames)):
+                        if fieldnames[i] == "timestamp":
+                            timestamp_index = i
+                elif dailyFileReader.line_num > 1:
+                    if long(row[timestamp_index]) < long(start_time_epoch) or long(row[timestamp_index]) > long(end_time_epoch) :
+                        continue                
+                    #Read each line from csv and generate a json
+                    thisData = {}
+                    for i in range(0,len(row)):
+                        if fieldnames[i] == "timestamp":
+                            new_prev_endtime_epoch = row[timestamp_index]
+                            thisData[fieldnames[i]] = row[i]
+                        else:
+                            colname = fieldnames[i]
+                            if colname.find("]") == -1:
+                                colname = colname+"["+hostname+"]"
+                            if colname.find(":") == -1:
+                                groupid = getindex(fieldnames[i])
+                                colname = colname+":"+str(groupid)
+                            thisData[colname] = row[i]
+                    metricData.append(thisData)
+            dailyFile.close()
+            idxdate += 1
+else:
+    if os.path.isfile(os.path.join(homepath,datadir+options.inputFile)):
+        file = open(os.path.join(homepath,datadir+options.inputFile))
+        fileReader = csv.reader(file)
+        for row in fileReader:
+            if fileReader.line_num == 1:
                 #Get all the metric names
                 fieldnames = row
                 for i in range(0,len(fieldnames)):
                     if fieldnames[i] == "timestamp":
                         timestamp_index = i
-            elif dailyFileReader.line_num > 1:
+            elif fileReader.line_num > 1:
                 if long(row[timestamp_index]) < long(start_time_epoch) or long(row[timestamp_index]) > long(end_time_epoch) :
                     continue                
                 #Read each line from csv and generate a json
@@ -121,21 +154,9 @@ for date in dates:
                         colname = fieldnames[i]
                         if colname.find("]") == -1:
                             colname = colname+"["+hostname+"]"
-                        if colname.find(":") == -1:
-                            groupid = getindex(fieldnames[i])
-                            colname = colname+":"+str(groupid)
                         thisData[colname] = row[i]
                 metricData.append(thisData)
-        dailyFile.close()
-        idxdate += 1
-
-'''
-#Aggregate all the values
-for i in range(0,len(fieldnames)):
-    if(i == timestamp_index):
-        continue
-    dict[fieldnames[i]] = round(dict[fieldnames[i]]/entryCount,2)
-'''
+        file.close()
 
 #update endtime in config
 if new_prev_endtime_epoch == 0:
