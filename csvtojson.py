@@ -153,7 +153,10 @@ else:
                     else:
                         colname = fieldnames[i]
                         if colname.find("]") == -1:
-                            colname = colname+"["+hostname+"]"
+                            colname = colname+"[-]"
+                        if colname.find(":") == -1:
+                            groupid = i
+                            colname = colname+":"+str(groupid)
                         thisData[colname] = row[i]
                 metricData.append(thisData)
         file.close()
@@ -176,6 +179,7 @@ else:
     print json_data
     print str(len(bytearray(json_data))) + " bytes data are reported"
     url = 'https://insightfindergae.appspot.com/customprojectrawdata'
+    #url = 'http://localhost:8888/customprojectrawdata'
     response = requests.post(url, data=json.loads(json_data))
 
 #old file cleaning

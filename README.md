@@ -1,6 +1,8 @@
 # InsightAgent
 
 ###### Pre-requisites:
+Minimum required docker version for monitoring docker containers: v1.7.x
+
 This pre-requisite is needed on the machine which launches deployInsightAgent.py.
 For Debian and Ubuntu, the following command will ensure that the required dependencies are installed:
 

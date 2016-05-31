@@ -10,6 +10,7 @@ import subprocess
 import signal
 import socket
 from optparse import OptionParser
+import json
 
 usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)
@@ -33,33 +34,58 @@ index = 59
 dockers = []
 num_apache = 0
 num_sql = 0
+newInstanceAvailable = False
 
 def getindex(colName):
     if colName == "WEB_CPU_utilization#%" or colName == "DB_CPU_utilization#%":
-	return 1
+        return 1
     elif colName == "WEB_DiskRead#MB" or colName == "DB_DiskRead#MB" or colName == "WEB_DiskWrite#MB" or colName == "DB_DiskWrite#MB":
-	return 2
+        return 2
     elif colName == "WEB_NetworkIn#MB" or colName == "DB_NetworkIn#MB" or colName == "WEB_NetworkOut#MB" or colName == "DB_NetworkOut#MB":
-	return 3
+        return 3
     elif colName == "WEB_MemUsed#MB" or colName == "DB_MemUsed#MB":
-	return 4
+        return 4
 
+dockerInstances = []
 def update_docker():
     global dockers
     global num_apache
     global num_sql
+    global newInstanceAvailable
+    global dockerInstances
 
-    proc = subprocess.Popen(["sudo docker ps --no-trunc | grep -cP 'rubis_apache' | awk '{print $ 1;}'"], stdout=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen(["docker ps --no-trunc | grep -cP 'rubis_apache' | awk '{print $ 1;}'"], stdout=subprocess.PIPE, shell=True)
     (out, err) = proc.communicate()
     num_apache = int(out.split("\n")[0])
 
-    proc = subprocess.Popen(["sudo docker ps --no-trunc | grep -cP 'rubis_db' | awk '{print $ 1;}'"], stdout=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen(["docker ps --no-trunc | grep -cP 'rubis_db' | awk '{print $ 1;}'"], stdout=subprocess.PIPE, shell=True)
     (out, err) = proc.communicate()
     num_sql = int(out.split("\n")[0])
 
-    proc = subprocess.Popen(["sudo docker ps --no-trunc | grep -E 'rubis_apache|rubis_db' | awk '{print $ 1;}'"], stdout=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen(["docker ps --no-trunc | grep -E 'rubis_apache|rubis_db' | awk '{print $ 1;}'"], stdout=subprocess.PIPE, shell=True)
     (out, err) = proc.communicate()
     dockers = out.split("\n")
+    if os.path.isfile(os.path.join(homepath,datadir+"totalInstances.json")) == False:
+        towritePreviousInstances = {}
+        for containers in dockers:
+            if containers != "":
+                dockerInstances.append(containers)
+        towritePreviousInstances["overallDockerInstances"] = dockerInstances
+        with open(os.path.join(homepath,datadir+"totalInstances.json"),'w') as f:
+            json.dump(towritePreviousInstances,f)
+    else:
+        with open(os.path.join(homepath,datadir+"totalInstances.json"),'r') as f:
+            dockerInstances = json.load(f)["overallDockerInstances"]
+    for eachDocker in dockers:
+        if eachDocker == "":
+            continue
+        if eachDocker not in dockerInstances:
+            towritePreviousInstances = {}
+            dockerInstances.append(eachDocker)
+            towritePreviousInstances["overallDockerInstances"] = dockerInstances
+            with open(os.path.join(homepath,datadir+"totalInstances.json"),'w') as f:
+                json.dump(towritePreviousInstances,f)
+            newInstanceAvailable = True
 
 def getmetric():
     global counter_time_map
@@ -69,13 +95,26 @@ def getmetric():
     global num_apache
     global num_sql
     global cAdvisoraddress
+    global dockerInstances
 
     try:
+        startTime = int(round(time.time() * 1000))
+        date = time.strftime("%Y%m%d")
         while True:
             try:
                 r = requests.get(cAdvisoraddress)
             except:
+                currTime = int(round(time.time() * 1000))
+                if currTime > startTime+10000:
+                    print "unable to get requests from ",cAdvisoraddress
+                    sys.exit()
                 continue
+            if num_apache == 0 and num_sql == 0:
+                break
+            if newInstanceAvailable == True:
+                oldFile = os.path.join(homepath,datadir+date+".csv")
+                newFile = os.path.join(homepath,datadir+date+"."+time.strftime("%Y%m%d%H%M%S")+".csv")
+                os.rename(oldFile,newFile)
             index = len(r.json()["/docker/"+dockers[0]]["stats"])-1
             time_stamp = r.json()["/docker/"+dockers[0]]["stats"][index]["timestamp"][:19]
             if (time_stamp in counter_time_map.values()):
@@ -84,14 +123,16 @@ def getmetric():
             counter = (counter+1)%60
             log = str((int(time.mktime(time.strptime(time_stamp, "%Y-%m-%dT%H:%M:%S")))-4*3600)*1000)
             cpu_all = 0
-            if num_apache == 0:
-                log = log + ","
+            resource_usage_file = open(os.path.join(homepath,datadir+date+".csv"), 'a+')
+            numlines = len(resource_usage_file.readlines())
+            if num_apache == 0 and len(dockers)-1 != len(dockerInstances):
+                log = log + ",NaN,NaN,NaN,NaN,NaN,NaN"
             for i in range(len(dockers)-1):
                 #get cpu
                 cpu_used = r.json()["/docker/"+dockers[i]]["stats"][index]["cpu"]["usage"]["total"]
                 prev_cpu = r.json()["/docker/"+dockers[i]]["stats"][index-1]["cpu"]["usage"]["total"]
                 cur_cpu = float((cpu_used - prev_cpu)/10000000)
-		#get mem
+                #get mem
                 curr_mem = r.json()["/docker/"+dockers[i]]["stats"][index]['memory']['usage']
                 mem = float(curr_mem/(1024*1024)) #MB
                 #get disk
@@ -119,24 +160,30 @@ def getmetric():
                 network_t = float((curr_network_t - prev_network_t)/(1024*1024)) #MB
                 network_r = float((curr_network_r - prev_network_r)/(1024*1024)) #MB
                 log = log + "," + str(cur_cpu) + "," + str(io_read) + "," + str(io_write)+ "," + str(network_r)+ "," + str(network_t)+ "," + str(mem)
-
+                if(numlines < 1):
+                    serverType = ["WEB", "DB"]
+                    fields = ["timestamp","CPU_utilization#%","DiskRead#MB","DiskWrite#MB","NetworkIn#MB","NetworkOut#MB","MemUsed#MB"]
+                    if i == 0:
+                        fieldnames = fields[0]
+                    host = hostname.partition(".")[0]
+                    for k in range(1,len(fields)):
+                        if(fields[k] == "timestamp"):
+                            continue
+                        if(fieldnames != ""):
+                            fieldnames = fieldnames + ","
+                        if num_apache == 0:
+                            server = serverType[1]
+                        else:
+                            server = serverType[i]
+                        metric = server + "_" + fields[k]
+                        groupid = getindex(metric)
+                        fieldnames = fieldnames + metric + "[" +dockers[i]+"_"+host+"]"+":"+str(groupid)
+            if num_sql == 0 and len(dockers)-1 != len(dockerInstances):
+                log = log + ",NaN,NaN,NaN,NaN,NaN,NaN"
+            if(numlines < 1):
+                resource_usage_file.write("%s\n"%(fieldnames))
             print log #is it possible that print too many things?
             writelog = log
-            date = time.strftime("%Y%m%d")
-            resource_usage_file = open(os.path.join(homepath,datadir+date+".csv"), 'a+')
-            numlines = len(resource_usage_file.readlines())
-            if(numlines < 1):
-		fields = ["timestamp","WEB_CPU_utilization#%","WEB_DiskRead#MB","WEB_DiskWrite#MB","WEB_NetworkIn#MB","WEB_NetworkOut#MB","WEB_MemUsed#MB","timestamp","DB_CPU_utilization#%","DB_DiskRead#MB","DB_DiskWrite#MB","DB_NetworkIn#MB","DB_NetworkOut#MB","DB_MemUsed#MB"]
-		fieldnames = fields[0]
-		host = hostname.partition(".")[0]
-		for i in range(1,len(fields)):
-		    if(fields[i] == "timestamp"):
-			continue
-		    if(fieldnames != ""):
-			fieldnames = fieldnames + ","
-		    groupid = getindex(fields[i])
-		    fieldnames = fieldnames+fields[i] + "[" +host+"]"+":"+str(groupid)
-		resource_usage_file.write("%s\n"%(fieldnames))
             resource_usage_file.write("%s\n" % (writelog))
             resource_usage_file.flush()
             resource_usage_file.close()

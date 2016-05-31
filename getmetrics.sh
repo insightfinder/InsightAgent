@@ -5,7 +5,7 @@ date +%s%3N | awk '{print "timestamp="$1}' > timestamp.txt & PID1=$!
 
 grep 'cpu ' /proc/stat | awk '{print "user="$2"\nnice="$3"\nsystem="$4"\nidle="$5"\niowait="$6"\nirq="$7"\nsoftirq="$8}' > cpumetrics.txt & PID2=$!
 
-cat /proc/diskstats | awk '{readsector+=$6;writesector+=$10} END{print "DiskRead#MB="readsector*512/(1024*1024)"\nDiskWrite#MB="writesector*512/(1024*1024)}' > diskmetrics.txt & PID3=$!
+cat /proc/diskstats | awk '{if ($3 ~ /[0-9]/) {} else {readsector+=$6;writesector+=$10}} END{print "DiskRead#MB="readsector*512/(1024*1024)"\nDiskWrite#MB="writesector*512/(1024*1024)}' > diskmetrics.txt & PID3=$!
 
 df -k | awk '{if (NR!=1) diskusedspace += $3} END{print "DiskUsed#MB="diskusedspace/1024}' > diskusedmetrics.txt & PID4=$!
 
