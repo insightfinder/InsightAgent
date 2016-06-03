@@ -63,6 +63,7 @@ def stopCron():
     (out,err) = proc.communicate()
     if "failed" in str(err) or "error" in str(err):
         print "Can't stop agent in some machines"
+    removeFile("stopcron.py")
 
 if __name__ == '__main__':
     global user
@@ -117,3 +118,5 @@ if __name__ == '__main__':
     proc = subprocess.Popen([os.path.join(homepath,"startcron.py")+" -n "+user+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
     print out
+    clearDownloads()
+    removeFile("deployInsightAgent.py")

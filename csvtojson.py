@@ -50,7 +50,7 @@ PROJECTKEY = os.environ["INSIGHTFINDER_PROJECT_KEY"]
 USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
 
 def getindex(col_name):
-    if col_name == "CPU_utilization#%":
+    if col_name == "CPU#%":
         return 1
     elif col_name == "DiskRead#MB" or col_name == "DiskWrite#MB":
         return 2

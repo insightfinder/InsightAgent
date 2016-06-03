@@ -37,14 +37,15 @@ num_sql = 0
 newInstanceAvailable = False
 
 def getindex(colName):
-    if colName == "WEB_CPU_utilization#%" or colName == "DB_CPU_utilization#%":
+    if colName == "CPU#%":
         return 1
-    elif colName == "WEB_DiskRead#MB" or colName == "DB_DiskRead#MB" or colName == "WEB_DiskWrite#MB" or colName == "DB_DiskWrite#MB":
+    elif colName == "MemUsed#MB":
         return 2
-    elif colName == "WEB_NetworkIn#MB" or colName == "DB_NetworkIn#MB" or colName == "WEB_NetworkOut#MB" or colName == "DB_NetworkOut#MB":
-        return 3
-    elif colName == "WEB_MemUsed#MB" or colName == "DB_MemUsed#MB":
-        return 4
+
+def get_ip_address():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    return s.getsockname()[0]
 
 dockerInstances = []
 def update_docker():
@@ -100,6 +101,7 @@ def getmetric():
     try:
         startTime = int(round(time.time() * 1000))
         date = time.strftime("%Y%m%d")
+        ipAddress = get_ip_address()
         while True:
             try:
                 r = requests.get(cAdvisoraddress)
@@ -126,15 +128,17 @@ def getmetric():
             resource_usage_file = open(os.path.join(homepath,datadir+date+".csv"), 'a+')
             numlines = len(resource_usage_file.readlines())
             if num_apache == 0 and len(dockers)-1 != len(dockerInstances):
-                log = log + ",NaN,NaN,NaN,NaN,NaN,NaN"
+                log = log + ",NaN,NaN"
             for i in range(len(dockers)-1):
                 #get cpu
                 cpu_used = r.json()["/docker/"+dockers[i]]["stats"][index]["cpu"]["usage"]["total"]
                 prev_cpu = r.json()["/docker/"+dockers[i]]["stats"][index-1]["cpu"]["usage"]["total"]
                 cur_cpu = float((cpu_used - prev_cpu)/10000000)
+                cur_cpu = abs(cur_cpu)
                 #get mem
                 curr_mem = r.json()["/docker/"+dockers[i]]["stats"][index]['memory']['usage']
                 mem = float(curr_mem/(1024*1024)) #MB
+                mem = abs(mem)
                 #get disk
                 curr_block_num = len(r.json()["/docker/"+dockers[i]]["stats"][index]["diskio"]["io_service_bytes"])
                 curr_io_read = 0
@@ -159,10 +163,12 @@ def getmetric():
                 curr_network_r = r.json()["/docker/"+dockers[i]]["stats"][index]["network"]["rx_bytes"]
                 network_t = float((curr_network_t - prev_network_t)/(1024*1024)) #MB
                 network_r = float((curr_network_r - prev_network_r)/(1024*1024)) #MB
-                log = log + "," + str(cur_cpu) + "," + str(io_read) + "," + str(io_write)+ "," + str(network_r)+ "," + str(network_t)+ "," + str(mem)
+                #log = log + "," + str(cur_cpu) + "," + str(io_read) + "," + str(io_write)+ "," + str(network_r)+ "," + str(network_t)+ "," + str(mem)
+                log = log + "," + str(cur_cpu) + "," + str(mem)
                 if(numlines < 1):
-                    serverType = ["WEB", "DB"]
-                    fields = ["timestamp","CPU_utilization#%","DiskRead#MB","DiskWrite#MB","NetworkIn#MB","NetworkOut#MB","MemUsed#MB"]
+                    serverType = ["Web", "DB"]
+                    #fields = ["timestamp","CPU#%","DiskRead#MB","DiskWrite#MB","NetworkIn#MB","NetworkOut#MB","MemUsed#MB"]
+                    fields = ["timestamp","CPU#%","MemUsed#MB"]
                     if i == 0:
                         fieldnames = fields[0]
                     host = hostname.partition(".")[0]
@@ -175,11 +181,12 @@ def getmetric():
                             server = serverType[1]
                         else:
                             server = serverType[i]
-                        metric = server + "_" + fields[k]
-                        groupid = getindex(metric)
-                        fieldnames = fieldnames + metric + "[" +dockers[i]+"_"+host+"]"+":"+str(groupid)
+                        groupid = getindex(fields[k])
+                        metric = fields[k] + "[" + server + "_" + str(ipAddress) + "]"
+                        fieldnames = fieldnames + metric +":"+str(groupid)
             if num_sql == 0 and len(dockers)-1 != len(dockerInstances):
-                log = log + ",NaN,NaN,NaN,NaN,NaN,NaN"
+                #log = log + ",NaN,NaN,NaN,NaN,NaN,NaN"
+                log = log + ",NaN,NaN"
             if(numlines < 1):
                 resource_usage_file.write("%s\n"%(fieldnames))
             print log #is it possible that print too many things?
