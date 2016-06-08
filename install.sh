@@ -3,7 +3,7 @@
 function usage()
 {
 	echo "Usage: ./install.sh -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
-AGENT_TYPE = proc or cadvisor or docker_remote_api"
+AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup"
 }
 
 if [ "$#" -ne 10 ]; then
@@ -34,7 +34,7 @@ while [ "$1" != "" ]; do
 	shift
 done
 
-if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'docker_remote_api' ]; then
+if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ]; then
 	usage
 	exit 1
 fi
@@ -76,6 +76,9 @@ elif [ $AGENT_TYPE = 'cadvisor' ]; then
 	echo "*/$SAMPLING_INTERVAL * * * * root python $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_cadvisor.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
 elif [ $AGENT_TYPE = 'docker_remote_api' ]; then
 	echo "*/$SAMPLING_INTERVAL * * * * root python $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_docker_remote_api.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
+elif [ $AGENT_TYPE = 'cgroup' ]; then
+	echo "*/$SAMPLING_INTERVAL * * * * root python $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_cgroup.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
+
 fi
 
 echo "*/$REPORTING_INTERVAL * * * * root python $INSIGHTAGENTDIR/csvtojson.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON

@@ -128,7 +128,7 @@ def getmetric():
             resource_usage_file = open(os.path.join(homepath,datadir+date+".csv"), 'a+')
             numlines = len(resource_usage_file.readlines())
             if num_apache == 0 and len(dockers)-1 != len(dockerInstances):
-                log = log + ",NaN,NaN"
+                log = log + ",NaN"
             for i in range(len(dockers)-1):
                 #get cpu
                 cpu_used = r.json()["/docker/"+dockers[i]]["stats"][index]["cpu"]["usage"]["total"]
@@ -164,11 +164,11 @@ def getmetric():
                 network_t = float((curr_network_t - prev_network_t)/(1024*1024)) #MB
                 network_r = float((curr_network_r - prev_network_r)/(1024*1024)) #MB
                 #log = log + "," + str(cur_cpu) + "," + str(io_read) + "," + str(io_write)+ "," + str(network_r)+ "," + str(network_t)+ "," + str(mem)
-                log = log + "," + str(cur_cpu) + "," + str(mem)
+                log = log + "," + str(cur_cpu)
                 if(numlines < 1):
                     serverType = ["Web", "DB"]
                     #fields = ["timestamp","CPU#%","DiskRead#MB","DiskWrite#MB","NetworkIn#MB","NetworkOut#MB","MemUsed#MB"]
-                    fields = ["timestamp","CPU#%","MemUsed#MB"]
+                    fields = ["timestamp","CPU#%"]
                     if i == 0:
                         fieldnames = fields[0]
                     host = hostname.partition(".")[0]
@@ -186,7 +186,7 @@ def getmetric():
                         fieldnames = fieldnames + metric +":"+str(groupid)
             if num_sql == 0 and len(dockers)-1 != len(dockerInstances):
                 #log = log + ",NaN,NaN,NaN,NaN,NaN,NaN"
-                log = log + ",NaN,NaN"
+                log = log + ",NaN"
             if(numlines < 1):
                 resource_usage_file.write("%s\n"%(fieldnames))
             print log #is it possible that print too many things?
