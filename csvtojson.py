@@ -9,6 +9,7 @@ import requests
 import datetime
 import socket
 from optparse import OptionParser
+import math
 
 '''
 this script reads reporting interval and prev endtime config2
@@ -82,6 +83,11 @@ new_prev_endtime = prev_endtime
 new_prev_endtime_epoch = 0
 dates = []
 if mode == "replay" and prev_endtime != "0" and len(prev_endtime) >= 8:
+    start_time = prev_endtime
+    # pad a second after prev_endtime
+    start_time_epoch = 1000+long(1000*time.mktime(time.strptime(start_time, "%Y%m%d%H%M%S")));
+    end_time_epoch = start_time_epoch + 1000*60*reporting_interval
+elif prev_endtime != "0":
     start_time = prev_endtime
     # pad a second after prev_endtime
     start_time_epoch = 1000+long(1000*time.mktime(time.strptime(start_time, "%Y%m%d%H%M%S")));
@@ -165,7 +171,8 @@ else:
 if new_prev_endtime_epoch == 0:
     print "No data is reported"
 else:
-    new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtime_epoch)/1000))
+    new_prev_endtimeinsec = math.ceil(long(new_prev_endtime_epoch)/1000.0)
+    new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtimeinsec)))
     update_timestamp(new_prev_endtime)
 
     #update projectKey, userName in dict
