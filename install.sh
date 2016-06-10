@@ -2,11 +2,11 @@
 
 function usage()
 {
-	echo "Usage: ./install.sh -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
+	echo "Usage: ./install.sh -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE -m REPLAY
 AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup"
 }
 
-if [ "$#" -ne 10 ]; then
+if [ "$#" -lt 10 ]; then
 	usage
 	exit 1
 fi
@@ -27,6 +27,9 @@ while [ "$1" != "" ]; do
 			;;
 		-t )	shift
 			AGENT_TYPE=$1
+			;;
+		-m )	shift
+			INSTALL_MODE='REPLAY'
 			;;
 		* )	usage
 			exit 1
@@ -62,6 +65,10 @@ fi
 echo "export INSIGHTFINDER_PROJECT_KEY=$PROJECTKEY" >> $AGENTRC
 echo "export INSIGHTFINDER_USER_NAME=$USERNAME" >> $AGENTRC
 echo "export INSIGHTAGENTDIR=$INSIGHTAGENTDIR" >> $AGENTRC
+
+if [ $INSTALL_MODE == 'REPLAY' ]; then
+	exit 1
+fi
 
 TEMPCRON=$INSIGHTAGENTDIR/ifagent
 if [[ -f $TEMPCRON ]]

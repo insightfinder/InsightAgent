@@ -49,7 +49,11 @@ proc.communicate()
 
 PROJECTKEY = os.environ["INSIGHTFINDER_PROJECT_KEY"]
 USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
+serverUrl = 'http://localhost:8888'
+#serverurl = 'https://insightfindergae.appspot.com'
 
+reportedDataSize = 0
+totalSize = 0
 def getindex(col_name):
     if col_name == "CPU#%":
         return 1
@@ -69,6 +73,43 @@ def update_timestamp(prev_endtime):
     config['prev_endtime'] = prev_endtime
     with open(os.path.join(homepath,"reporting_config.json"),"w") as f:
         json.dump(config, f)
+
+#send data to insightfinder
+def sendData():
+    global reportedDataSize
+    if len(metricData) == 0:
+        return
+    #update projectKey, userName in dict
+    alldata["metricData"] = json.dumps(metricData)
+    alldata["projectKey"] = PROJECTKEY
+    alldata["userName"] = USERNAME
+    alldata["instanceName"] = hostname
+
+    #print the json
+    json_data = json.dumps(alldata)
+    #print json_data
+    if mode == "replay":
+        reportedDataSize += len(bytearray(json.dumps(metricData)))
+        reportedDataPer = (float(reportedDataSize)/float(totalSize))*100
+        print str(min(100.0,math.ceil(reportedDataPer))) + "% of data are reported"
+    else:
+        print str(len(bytearray(json_data))) + " bytes data are reported"
+    url = serverUrl + "/customprojectrawdata"
+    response = requests.post(url, data=json.loads(json_data))
+
+def updateAgentDataRange(minTS,maxTS):
+    #update projectKey, userName in dict
+    alldata["projectKey"] = PROJECTKEY
+    alldata["userName"] = USERNAME
+    alldata["operation"] = "updateAgentDataRange"
+    alldata["minTimestamp"] = minTS
+    alldata["maxTimestamp"] = maxTS
+
+    #print the json
+    json_data = json.dumps(alldata)
+    #print json_data
+    url = serverUrl + "/agentdatahelper"
+    response = requests.post(url, data=json.loads(json_data))
 
 #main
 with open(os.path.join(homepath,"reporting_config.json"), 'r') as f:
@@ -101,6 +142,8 @@ metricData = []
 fieldnames = []
 idxdate = 0
 hostname = socket.gethostname().partition(".")[0]
+minTimestampEpoch = 0
+maxTimestampEpoch = 0
 
 if options.inputFile is None:
     for i in range(0,2+int(float(reporting_interval)/24/60)):
@@ -138,8 +181,11 @@ if options.inputFile is None:
             idxdate += 1
 else:
     if os.path.isfile(os.path.join(homepath,datadir+options.inputFile)):
+        numlines = len(open(os.path.join(homepath,datadir+options.inputFile)).readlines())
         file = open(os.path.join(homepath,datadir+options.inputFile))
         fileReader = csv.reader(file)
+        metricdataSizeKnown = False
+        metricdataSize = 0
         for row in fileReader:
             if fileReader.line_num == 1:
                 #Get all the metric names
@@ -148,14 +194,17 @@ else:
                     if fieldnames[i] == "timestamp":
                         timestamp_index = i
             elif fileReader.line_num > 1:
-                if long(row[timestamp_index]) < long(start_time_epoch) or long(row[timestamp_index]) > long(end_time_epoch) :
-                    continue                
                 #Read each line from csv and generate a json
                 thisData = {}
                 for i in range(0,len(row)):
                     if fieldnames[i] == "timestamp":
                         new_prev_endtime_epoch = row[timestamp_index]
                         thisData[fieldnames[i]] = row[i]
+                        # update min/max timestamp epoch
+                        if minTimestampEpoch == 0 or minTimestampEpoch > long(new_prev_endtime_epoch):
+                            minTimestampEpoch = long(new_prev_endtime_epoch)
+                        if maxTimestampEpoch == 0 or maxTimestampEpoch < long(new_prev_endtime_epoch):
+                            maxTimestampEpoch = long(new_prev_endtime_epoch)
                     else:
                         colname = fieldnames[i]
                         if colname.find("]") == -1:
@@ -165,7 +214,18 @@ else:
                             colname = colname+":"+str(groupid)
                         thisData[colname] = row[i]
                 metricData.append(thisData)
+                if metricdataSizeKnown == False:
+                    metricdataSize = len(bytearray(json.dumps(metricData)))
+                    metricdataSizeKnown = True
+                    totalSize = metricdataSize * (numlines - 1) # -1 for header
+            if ((len(bytearray(json.dumps(metricData))) + metricdataSize) < 700000): #Not using exact 750KB as some data will be padded later
+                continue
+            else:
+                sendData()
+                metricData = []
+                alldata = {}
         file.close()
+        updateAgentDataRange(minTimestampEpoch,maxTimestampEpoch)
 
 #update endtime in config
 if new_prev_endtime_epoch == 0:
@@ -175,19 +235,7 @@ else:
     new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtimeinsec)))
     update_timestamp(new_prev_endtime)
 
-    #update projectKey, userName in dict
-    alldata["metricData"] = json.dumps(metricData)
-    alldata["projectKey"] = PROJECTKEY
-    alldata["userName"] = USERNAME
-    alldata["instanceName"] = hostname
-
-    #print the json
-    json_data = json.dumps(alldata)
-    print json_data
-    print str(len(bytearray(json_data))) + " bytes data are reported"
-    url = 'https://insightfindergae.appspot.com/customprojectrawdata'
-    #url = 'http://localhost:8888/customprojectrawdata'
-    response = requests.post(url, data=json.loads(json_data))
+    sendData()
 
 #old file cleaning
 for dirpath, dirnames, filenames in os.walk(os.path.join(homepath,datadir)):
