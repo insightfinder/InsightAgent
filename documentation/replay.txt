@@ -9,12 +9,12 @@ InsightAgent support replay mode in which the data from the csv file is read and
 wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
 
 3) In InsightAgent-master directory, run the install command:
-./install.sh -u USER_NAME -k LICENSE_KEY -s 0 -r 0 -t proc -m REPLAY
+./install.sh -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 0 -r 0 -t proc -m REPLAY
 
-4) Save data files in InsightAgent-master/data/
+4) Put data files in InsightAgent-master/data/
 
 5) For each data file, run the following command:
-./csvtojson.py -m replay -f CSVFILE
+./csvtojson.py -m replay -f CSVFILENAME
 
-CSVFILE is the name of the csv file which is placed in InsightAgent-master/data/ path.
+CSVFILENAME is the name of the csv file which is placed in InsightAgent-master/data/ path.
 
