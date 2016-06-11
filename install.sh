@@ -2,8 +2,8 @@
 
 function usage()
 {
-	echo "Usage: ./install.sh -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE -m REPLAY
-AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup"
+	echo "Usage: ./install.sh -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
+AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or replay"
 }
 
 if [ "$#" -lt 10 ]; then
@@ -28,16 +28,13 @@ while [ "$1" != "" ]; do
 		-t )	shift
 			AGENT_TYPE=$1
 			;;
-		-m )	shift
-			INSTALL_MODE='REPLAY'
-			;;
 		* )	usage
 			exit 1
 	esac
 	shift
 done
 
-if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ]; then
+if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ] && [ $AGENT_TYPE != 'replay' ]; then
 	usage
 	exit 1
 fi
@@ -66,7 +63,7 @@ echo "export INSIGHTFINDER_PROJECT_KEY=$PROJECTKEY" >> $AGENTRC
 echo "export INSIGHTFINDER_USER_NAME=$USERNAME" >> $AGENTRC
 echo "export INSIGHTAGENTDIR=$INSIGHTAGENTDIR" >> $AGENTRC
 
-if [ $INSTALL_MODE == 'REPLAY' ]; then
+if [ $AGENT_TYPE == 'replay' ]; then
 	exit 1
 fi
 

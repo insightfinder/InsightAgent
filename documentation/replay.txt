@@ -9,7 +9,7 @@ InsightAgent support replay mode in which the data from the csv file is read and
 wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
 
 3) In InsightAgent-master directory, run the install command:
-./install.sh -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 0 -r 0 -t proc -m REPLAY
+./install.sh -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 0 -r 0 -t replay
 
 4) Put data files in InsightAgent-master/data/
 
