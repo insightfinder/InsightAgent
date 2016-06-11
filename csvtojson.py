@@ -179,9 +179,9 @@ if options.inputFile is None:
             dailyFile.close()
             idxdate += 1
 else:
-    if os.path.isfile(os.path.join(homepath,datadir+options.inputFile)):
-        numlines = len(open(os.path.join(homepath,datadir+options.inputFile)).readlines())
-        file = open(os.path.join(homepath,datadir+options.inputFile))
+    if os.path.isfile(os.path.join(homepath,options.inputFile)):
+        numlines = len(open(os.path.join(homepath,options.inputFile)).readlines())
+        file = open(os.path.join(homepath,options.inputFile))
         fileReader = csv.reader(file)
         metricdataSizeKnown = False
         metricdataSize = 0

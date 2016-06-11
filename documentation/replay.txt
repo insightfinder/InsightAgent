@@ -14,7 +14,7 @@ wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archiv
 4) Put data files in InsightAgent-master/data/
 
 5) For each data file, run the following command:
-./csvtojson.py -m replay -f CSVFILENAME
+./csvtojson.py -m replay -f PATH_TO_CSVFILENAME
 
-CSVFILENAME is the name of the csv file which is placed in InsightAgent-master/data/ path.
+PATH_TO_CSVFILENAME is the path and filename of the csv file. 
 
