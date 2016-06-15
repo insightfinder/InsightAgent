@@ -7,6 +7,7 @@ import subprocess
 import time
 import os
 from optparse import OptionParser
+import multiprocessing
 
 '''
 this script gathers system info from /proc/ and add to daily csv file
@@ -86,36 +87,48 @@ def calculate_delta(fieldname,value):
 def calculate_cpudelta(current_result):
     previous_result = get_previous_results()
     prev_cpu_usage = previous_result["cpu_usage"]
-    prev_total = 0
-    curr_total = 0
-    for eachmetric in prev_cpu_usage:
-        prev_total += prev_cpu_usage[eachmetric]
-    for eachmetric in current_result:
-        curr_total += current_result[eachmetric]
-    prev_idle = prev_cpu_usage["idle"] + prev_cpu_usage["iowait"]
-    curr_idle = current_result["idle"] + current_result["iowait"]
-    if((curr_total - prev_total) == 0):
-        result = 0
-    else:
-        result = (1-round((curr_idle - prev_idle)/(curr_total - prev_total),4))*100
-    result = abs(result)
-    return result
+    totalresult = 0
+    for eachcpu in prev_cpu_usage:
+        prev_total = 0
+        curr_total = 0
+        for eachmetric in prev_cpu_usage[eachcpu]:
+            prev_total += prev_cpu_usage[eachcpu][eachmetric]
+        for eachmetric in current_result[eachcpu]:
+            curr_total += current_result[eachcpu][eachmetric]
+        prev_idle = prev_cpu_usage[eachcpu]["idle"] + prev_cpu_usage[eachcpu]["iowait"]
+        curr_idle = current_result[eachcpu]["idle"] + current_result[eachcpu]["iowait"]
+        if((curr_total - prev_total) == 0):
+            result = 0
+        else:
+            result = (1-round((curr_idle - prev_idle)/(curr_total - prev_total),4))*100
+        result = abs(result)
+        totalresult += float(result)
+    return totalresult
 
 def get_cpuusage(filename,field_values,which_dict):
     cpuusage_file = open(os.path.join(homepath,datadir,filename))
     lines = cpuusage_file.read().split("\n")
     cpu_dict={}
+    cpu_count = multiprocessing.cpu_count()
+    for i in range(0,cpu_count):
+        cpucore = "cpu"+str(i)
+        cpu_dict[cpucore] = {}
     for eachline in lines:
         tokens_split = eachline.split("=")
         if(len(tokens_split) == 1):
             continue
-        cpu_dict[tokens_split[0]] = float(tokens_split[1])
-    which_dict["cpu_usage"] = cpu_dict
-    Total = cpu_dict["user"] + cpu_dict["nice"] + cpu_dict["system"] + cpu_dict["idle"] + cpu_dict["iowait"] + cpu_dict["irq"] + cpu_dict["softirq"]
-    idle = cpu_dict["idle"] + cpu_dict["iowait"]
-    field_values[0] = "CPU#%"
-    result = 1 - round(float(idle/Total),4)
-    field_values.append(result*100)
+        cpucoresplit = tokens_split[0].split("$")
+        cpu_dict[cpucoresplit[0]][cpucoresplit[1]] = float(tokens_split[1])
+    totalresult = 0
+    for i in range(0,cpu_count):
+        cpucore = "cpu"+str(i)
+        which_dict["cpu_usage"] = cpu_dict
+        Total = cpu_dict[cpucore]["user"] + cpu_dict[cpucore]["nice"] + cpu_dict[cpucore]["system"] + cpu_dict[cpucore]["idle"] + cpu_dict[cpucore]["iowait"] + cpu_dict[cpucore]["irq"] + cpu_dict[cpucore]["softirq"]
+        idle = cpu_dict[cpucore]["idle"] + cpu_dict[cpucore]["iowait"]
+        field_values[0] = "CPU#%"
+        result = 1 - round(float(idle/Total),4)
+        totalresult += float(result)
+    field_values.append(totalresult*100)
 
 filenames = ["timestamp.txt", "cpumetrics.txt","diskmetrics.txt","diskusedmetrics.txt","networkmetrics.txt","memmetrics.txt"]
 fields = []

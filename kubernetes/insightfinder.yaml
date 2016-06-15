@@ -1,0 +1,27 @@
+kind: DaemonSet
+apiVersion: extensions/v1beta1
+metadata:
+  name: insightfinder-agent
+spec:
+  template:
+    metadata:
+      labels:
+        component: docker-remote-api
+    spec:
+      containers:
+        - name: insightfinder
+          image: shankar1200/ubun:v2
+          command: [ "bash", "-c", "sleep infinity" ]
+          volumeMounts:
+            - name: run
+              mountPath: /var/run/docker.sock
+          ports:
+            - containerPort: 7077
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 100m
+      volumes:
+            - name: run
+              hostPath:
+                  path: /var/run/docker.sock
