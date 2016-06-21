@@ -10,11 +10,22 @@ spec:
     spec:
       containers:
         - name: insightfinder
-          image: shankar1200/ubun:v2
-          command: [ "bash", "-c", "sleep infinity" ]
+          image: insightfinderagent/kubernetes-daemon-set:v1
+          command: [ "bash", "-c", "/startup.sh" ]
+          env:
+            - name: INSIGHTFINDER_PROJECTKEY
+              value: "35f2a8a9ec0650afc93e4f308a8179f497e635f8"
+            - name: INSIGHTFINDER_USERNAME
+              value: "insightuser"
+            - name: SAMPLING_INTERVAL
+              value: "1"
+            - name: REPORTING_INTERVAL
+              value: "2"
           volumeMounts:
             - name: run
               mountPath: /var/run/docker.sock
+            - name: list
+              mountPath: /var/lib/docker/containers
           ports:
             - containerPort: 7077
             - containerPort: 8080
@@ -25,3 +36,6 @@ spec:
             - name: run
               hostPath:
                   path: /var/run/docker.sock
+            - name: list
+              hostPath:
+                  path: /var/lib/docker/containers

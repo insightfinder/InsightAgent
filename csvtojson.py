@@ -159,7 +159,7 @@ if options.inputFile is None:
                         if fieldnames[i] == "timestamp":
                             timestamp_index = i
                 elif dailyFileReader.line_num > 1:
-                    if long(row[timestamp_index]) < long(start_time_epoch) or long(row[timestamp_index]) > long(end_time_epoch) :
+                    if long(row[timestamp_index]) < long(start_time_epoch) :
                         continue                
                     #Read each line from csv and generate a json
                     thisData = {}

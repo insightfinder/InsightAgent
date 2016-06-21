@@ -64,10 +64,14 @@ def initPreviousResults():
     global numlines
     global date
     global hostname
+    global dockers
+    timestampRecorded = False
 
     log = ''
     fieldnames = ''
+    towritePreviousInstances = {}
     for i in range(len(dockers)-1):
+        validDocker = False
         try:
             filename = "stat%s.txt"%dockers[i]
             statsFile = open(os.path.join(homepath,datadir+filename),'r')
@@ -78,33 +82,45 @@ def initPreviousResults():
         for eachline in data:
             if isJson(eachline) == True:
                 metricData = json.loads(eachline)
+                validDocker = True
                 break
-        if(numlines < 1):
-            fields = ["timestamp","CPU#%","DiskRead#MB","DiskWrite#MB","NetworkIn#MB","NetworkOut#MB","MemUsed#MB"]
-            if i == 0:
-                fieldnames = fields[0]
-            host = dockers[i]
-            for j in range(1,len(fields)):
-                if(fieldnames != ""):
-                    fieldnames = fieldnames + ","
-                groupid = getindex(fields[j])
-                nextfield = fields[j] + "[" +host+"_"+hostname+"]"+":"+str(groupid)
-                fieldnames = fieldnames + nextfield
-        else:
-            fieldnames = linecache.getline(os.path.join(homepath,datadir+date+".csv"),1)
+        if validDocker == False:
+            continue
         timestamp = metricData['read'][:19]
         timestamp =  int(time.mktime(datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S").timetuple())*1000)
+        if (time.time()*1000 - timestamp) > 300000:
+            continue
+        if os.path.isfile("/var/lib/docker/containers/"+dockers[i]+"/config.json") == False:
+            continue
+        containerConfig = open("/var/lib/docker/containers/"+dockers[i]+"/config.json","r")
+        dataline = containerConfig.readline()
+        containerName = json.loads(dataline)["Name"]
+        print containerName
+        if "insightfinder" in containerName:
+            continue
+        fields = ["timestamp","CPU#%","DiskRead#MB","DiskWrite#MB","NetworkIn#MB","NetworkOut#MB","MemUsed#MB"]
+        if timestampRecorded == False:
+            fieldnames = fields[0]
+        host = dockers[i]
+        if len(host) > 12:
+            host = host[:12]
+        for j in range(1,len(fields)):
+            if(fieldnames != ""):
+                fieldnames = fieldnames + ","
+            groupid = getindex(fields[j])
+            nextfield = fields[j] + "[" +host+"_"+hostname+"]"+":"+str(groupid)
+            fieldnames = fieldnames + nextfield
         try:
             if 'network' in metricData or 'networks' in metricData:
                 networkRx = round(float(float(metricData['network']['rx_bytes'])/(1024*1024)),4) #MB
                 networkTx = round(float(float(metricData['network']['tx_bytes'])/(1024*1024)),4) #MB
             else:
-                networkRx = 0
-                networkTx = 0
+                networkRx = 0.0
+                networkTx = 0.0
         except KeyError,e:
             networkMetrics = metricData['networks']
-            networkRx = 0
-            networkTx = 0
+            networkRx = 0.0
+            networkTx = 0.0
             for key in networkMetrics:
                 networkRx += float(networkMetrics[key]['rx_bytes'])
                 networkTx += float(networkMetrics[key]['tx_bytes'])
@@ -114,9 +130,17 @@ def initPreviousResults():
         memUsed = round(float(float(metricData['memory_stats']['usage'])/(1024*1024)),4) #MB
         diskRead = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][0]['value'])/(1024*1024)),4) #MB
         diskWrite = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][1]['value'])/(1024*1024)),4) #MB
-        if i == 0:
-            log = log + str(timestamp)
+        if timestampRecorded == False:
+            if log != "":
+                log = str(timestamp) + "," + log
+            else:
+                log = str(timestamp)
+            timestampRecorded = True
         log = log + "," + str(cpu) + "," + str(diskRead) + "," + str(diskWrite) + "," + str(networkRx) + "," + str(networkTx) + "," + str(memUsed)
+        dockerInstances.append(dockers[i])
+        towritePreviousInstances["overallDockerInstances"] = dockerInstances
+        with open(os.path.join(homepath,datadir+"totalInstances.json"),'w') as f:
+            json.dump(towritePreviousInstances,f)
     toJson(fieldnames,log)
     updateResults()
     time.sleep(1)
@@ -170,7 +194,7 @@ def calculateDelta():
                     deltaValue = 0
             finallogList.append(deltaValue)
         elif(checkDelta(key.split('#')[0]) == True):
-            if key not in currentResult or key not in previousResult:
+            if (key not in currentResult) or (key not in previousResult):
                 deltaValue = "NaN"
             elif str(currentResult[key]) == "NaN" or str(previousResult[key]) == "NaN":
                 deltaValue = "NaN"
@@ -188,20 +212,18 @@ def calculateDelta():
     return finallogList
 
 def removeStatFiles():
-    global dockerInstances
-    for i in range(len(dockerInstances)):
-        statfile = "stat%s.txt"%dockerInstances[i]
+    global dockers
+    for i in range(len(dockers)):
+        statfile = "stat%s.txt"%dockers[i]
         if os.path.isfile(os.path.join(homepath,datadir+statfile)) == True:
             os.remove(os.path.join(homepath,datadir+statfile))
 
 dockerInstances = []
+dockers = []
 def update_docker():
-    global dockers
     global newInstanceAvailable
-    global dockerInstances
-    proc = subprocess.Popen(["docker ps | awk '{if(NR!=1) print $1}'"], stdout=subprocess.PIPE, shell=True)
-    (out, err) = proc.communicate()
-    dockers = out.split("\n")
+    global dockers
+    dockers = os.listdir("/var/lib/docker/containers")
     cronfile = open(os.path.join(homepath,datadir+"getmetrics_docker.sh"),'w')
     cronfile.write("#!/bin/sh\nDATADIR='data/'\ncd $DATADIR\n")
     containerCount = 0
@@ -209,33 +231,12 @@ def update_docker():
         if container == "":
             continue
         containerCount+=1
-        command = "echo -e \"GET /containers/"+container+"/stats?stream=0 HTTP/1.1\\r\\n\" | nc -U -i 10 /var/run/docker.sock > stat"+container+".txt & PID"+str(containerCount)+"=$!"
+        command = "echo \"GET /containers/"+container+"/stats?stream=0 HTTP/1.1\\r\\n\" | nc -U -i 5 /var/run/docker.sock > stat"+container+".txt & PID"+str(containerCount)+"=$!"
         cronfile.write(command+"\n")
     for i in range(1,containerCount+1):
         cronfile.write("wait $PID"+str(i)+"\n")
     cronfile.close()
     os.chmod(os.path.join(homepath,datadir+"getmetrics_docker.sh"),0755)
-    if os.path.isfile(os.path.join(homepath,datadir+"totalInstances.json")) == False:
-        towritePreviousInstances = {}
-        for containers in dockers:
-            if containers != "":
-                dockerInstances.append(containers)
-        towritePreviousInstances["overallDockerInstances"] = dockerInstances
-        with open(os.path.join(homepath,datadir+"totalInstances.json"),'w') as f:
-            json.dump(towritePreviousInstances,f)
-    else:
-        with open(os.path.join(homepath,datadir+"totalInstances.json"),'r') as f:
-            dockerInstances = json.load(f)["overallDockerInstances"]
-    for eachDocker in dockers:
-        if eachDocker == "":
-            continue
-        if eachDocker not in dockerInstances:
-            towritePreviousInstances = {}
-            dockerInstances.append(eachDocker)
-            towritePreviousInstances["overallDockerInstances"] = dockerInstances
-            with open(os.path.join(homepath,datadir+"totalInstances.json"),'w') as f:
-                json.dump(towritePreviousInstances,f)
-            newInstanceAvailable = True
 
 metricData = {}
 def getmetrics():
@@ -248,6 +249,8 @@ def getmetrics():
     global newInstanceAvailable
     timestampAvailable = False
     global metricData
+    global dockers
+    instances = []
     try:
         while True:
             fields = ["timestamp","CPU#%","DiskRead#MB","DiskWrite#MB","NetworkIn#MB","NetworkOut#MB","MemUsed#MB"]
@@ -261,15 +264,28 @@ def getmetrics():
                 initPreviousResults()
             log = ''
             fieldnames = ''
-            for i in range(len(dockerInstances)):
+            for i in range(len(dockers)-1):
                 try:
-                    filename = "stat%s.txt"%dockerInstances[i]
+                    with open(os.path.join(homepath,datadir+"totalInstances.json"),'r') as f:
+                        dockerInstances = json.load(f)["overallDockerInstances"]
+                    filename = "stat%s.txt"%dockers[i]
+                    host = dockers[i]
+                    if len(host) > 12:
+                        host = host[:12]
                     if os.path.isfile(os.path.join(homepath,datadir+filename)) == False:
-                        for fieldIndex in range(1,len(fields)):
-                            if(log != ""):
-                                log = log + ","
-                            log = log + "NaN"
-                        continue
+                        if dockers[i] in dockerInstances:
+                            print "STAT FILE NOT AVAILABLE"
+                            for fieldIndex in range(1,len(fields)):
+                                if(fieldnames != ""):
+                                    fieldnames = fieldnames + ","
+                                groupid = getindex(fields[fieldIndex])
+                                nextfield = fields[fieldIndex] + "[" +host+"_"+hostname+"]"+":"+str(groupid)
+                                fieldnames = fieldnames + nextfield
+                                if(log != ""):
+                                    log = log + ","
+                                log = log + "NaN"
+                            instances.append(dockers[i])
+                            continue
                     else:
                         statsFile = open(os.path.join(homepath,datadir+filename),'r')
                 except IOError as e:
@@ -282,49 +298,63 @@ def getmetrics():
                         metricData = json.loads(eachline)
                         jsonAvailable = True
                         break
-                if(numlines < 1 or newInstanceAvailable == True):
-                    if i == 0:
-                        fieldnames = fields[0]
-                    host = dockerInstances[i]
-                    for j in range(1,len(fields)):
+                #File available but stat file doesn't have json object
+                if jsonAvailable == False and dockers[i] in dockerInstances:
+                    for fieldIndex in range(1,len(fields)):
                         if(fieldnames != ""):
                             fieldnames = fieldnames + ","
-                        groupid = getindex(fields[j])
-                        nextfield = fields[j] + "[" +host+"_"+hostname+"]"+":"+str(groupid)
+                        groupid = getindex(fields[fieldIndex])
+                        nextfield = fields[fieldIndex] + "[" +host+"_"+hostname+"]"+":"+str(groupid)
                         fieldnames = fieldnames + nextfield
-                else:
-                    fieldnames = linecache.getline(os.path.join(homepath,datadir+date+".csv"),1).rstrip("\n")
-                #File available but stat file doesn't have json object
-                if jsonAvailable == False:
-                    for fieldIndex in range(1,len(fields)):
                         if(log != ""):
                             log = log + ","
                         log = log + "NaN"
+                    instances.append(dockers[i])
                     continue
                 timestamp = metricData['read'][:19]
                 timestamp =  int(time.mktime(datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S").timetuple())*1000)
+                if (time.time()*1000 - timestamp) > 300000:
+                    continue
+                if os.path.isfile("/var/lib/docker/containers/"+dockers[i]+"/config.json") == False:
+                    continue
+                containerConfig = open("/var/lib/docker/containers/"+dockers[i]+"/config.json","r")
+                dataline = containerConfig.readline()
+                containerName = json.loads(dataline)["Name"]
+                if "insightfinder" in containerName:
+                    continue
+                for j in range(1,len(fields)):
+                    if(fieldnames != ""):
+                        fieldnames = fieldnames + ","
+                    groupid = getindex(fields[j])
+                    nextfield = fields[j] + "[" +host+"_"+hostname+"]"+":"+str(groupid)
+                    fieldnames = fieldnames + nextfield
                 try:
                     if "network" in metricData or "networks" in metricData:
                         networkRx = round(float(float(metricData['network']['rx_bytes'])/(1024*1024)),4) #MB
                         networkTx = round(float(float(metricData['network']['tx_bytes'])/(1024*1024)),4) #MB
                     else:
-                        networkRx = 0
-                        networkTx = 0
+                        networkRx = 0.0
+                        networkTx = 0.0
                 except KeyError,e:
                     networkMetrics = metricData['networks']
-                    networkRx = 0
-                    networkTx = 0
+                    networkRx = 0.0
+                    networkTx = 0.0
                     for key in networkMetrics:
                         networkRx += float(networkMetrics[key]['rx_bytes'])
                         networkTx += float(networkMetrics[key]['tx_bytes'])
                     networkRx = round(float(networkRx/(1024*1024)),4) #MB
                     networkTx = round(float(networkTx/(1024*1024)),4) #MB
                 cpu = round(float(metricData['cpu_stats']['cpu_usage']['total_usage'])/10000000,4) #Convert nanoseconds to jiffies
-                precpu["CPU#%["+dockerInstances[i]+"_"+hostname+"]"+":"+str(1)] = round(float(metricData['precpu_stats']['cpu_usage']['total_usage'])/10000000,4)
+                precpu["CPU#%["+host+"_"+hostname+"]"+":"+str(1)] = round(float(metricData['precpu_stats']['cpu_usage']['total_usage'])/10000000,4)
                 memUsed = round(float(float(metricData['memory_stats']['usage'])/(1024*1024)),4) #MB
                 diskRead = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][0]['value'])/(1024*1024)),4) #MB
                 diskWrite = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][1]['value'])/(1024*1024)),4) #MB
+                instances.append(dockers[i])
                 if timestampAvailable == False:
+                    if fieldnames != "":
+                        fieldnames = fields[0] + "," + fieldnames
+                    else:
+                        fieldnames = fields[0]
                     if log == "":
                         log = str(timestamp)
                     else:
@@ -332,10 +362,22 @@ def getmetrics():
                     timestampAvailable = True
                 log = log + "," + str(cpu) + "," + str(diskRead) + "," + str(diskWrite) + "," + str(networkRx) + "," + str(networkTx) + "," + str(memUsed)
             if timestampAvailable == False and fieldnames != "":
+                fieldnames = fields[0] + "," + fieldnames
                 log = "NaN" + "," + log
             toJson(fieldnames,log)
             deltaList = calculateDelta()
             updateResults()
+            if cmp(instances,dockerInstances) != 0:
+                newInstanceAvailable = True
+                oldFile = os.path.join(homepath,datadir+date+".csv")
+                newFile = os.path.join(homepath,datadir+date+"."+time.strftime("%Y%m%d%H%M%S")+".csv")
+                os.rename(oldFile,newFile)
+                csvFile = open(os.path.join(homepath,datadir+date+".csv"), 'a+')
+                numlines = len(csvFile.readlines())
+                towritePreviousInstances = {}
+                towritePreviousInstances["overallDockerInstances"] = instances
+                with open(os.path.join(homepath,datadir+"totalInstances.json"),'w') as f:
+                    json.dump(towritePreviousInstances,f)
             if numlines < 1 or newInstanceAvailable == True:
                 if fieldnames != "":
                     csvFile.write("%s\n"%(fieldnames))
