@@ -54,11 +54,13 @@ Example: /home/insight/.ssh/id_rsa
 python deployInsightAgent.py -h
 ```
 
-###### To manually stop agent on multiple hosts:
+###### To undo agent deployment on multiple hosts:
 - Get the script for stopping agents from github using below command:
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/stopcron.py
 ```
+
+- Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 
 - To stop the agent run the following command:
 ```

@@ -274,7 +274,6 @@ def getmetrics():
                         host = host[:12]
                     if os.path.isfile(os.path.join(homepath,datadir+filename)) == False:
                         if dockers[i] in dockerInstances:
-                            print "STAT FILE NOT AVAILABLE"
                             for fieldIndex in range(1,len(fields)):
                                 if(fieldnames != ""):
                                     fieldnames = fieldnames + ","
@@ -299,17 +298,18 @@ def getmetrics():
                         jsonAvailable = True
                         break
                 #File available but stat file doesn't have json object
-                if jsonAvailable == False and dockers[i] in dockerInstances:
-                    for fieldIndex in range(1,len(fields)):
-                        if(fieldnames != ""):
-                            fieldnames = fieldnames + ","
-                        groupid = getindex(fields[fieldIndex])
-                        nextfield = fields[fieldIndex] + "[" +host+"_"+hostname+"]"+":"+str(groupid)
-                        fieldnames = fieldnames + nextfield
-                        if(log != ""):
-                            log = log + ","
-                        log = log + "NaN"
-                    instances.append(dockers[i])
+                if jsonAvailable == False:
+                    if dockers[i] in dockerInstances:
+                        for fieldIndex in range(1,len(fields)):
+                            if(fieldnames != ""):
+                                fieldnames = fieldnames + ","
+                            groupid = getindex(fields[fieldIndex])
+                            nextfield = fields[fieldIndex] + "[" +host+"_"+hostname+"]"+":"+str(groupid)
+                            fieldnames = fieldnames + nextfield
+                            if(log != ""):
+                                log = log + ","
+                            log = log + "NaN"
+                        instances.append(dockers[i])
                     continue
                 timestamp = metricData['read'][:19]
                 timestamp =  int(time.mktime(datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S").timetuple())*1000)

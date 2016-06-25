@@ -7,29 +7,25 @@ required_packages = ["requests","paramiko"]
 '''
 This script checks for required packages and installs using pip
 '''
-
+homepath = os.getcwd()
+user = os.getlogin()
 try:
     import pip
 except ImportError as e:
     #Install pip if not found
-    homepath = os.getcwd()
     proc = subprocess.Popen(["sudo python "+os.path.join(homepath,"get-pip.py")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
     try:
-	import pip
+        import pip
     except ImportError as e:
-	print "Dependencies are missing. Please install the dependencies as stated in README"
-	sys.exit()
-
-installed_packages = pip.get_installed_distributions()
-flat_installed_packages = [package.project_name for package in installed_packages]
-
-for eachpackage in required_packages:
-    if eachpackage in flat_installed_packages:
-        print "%s already Installed"%eachpackage
-    else:
-        print "%s not found. Installing..."%eachpackage
-        try:
-            pip.main(['install','-q',eachpackage])
-        except:
-            print "Unable to install %s using pip. Please install the dependencies as stated in README"%eachpackage
+        print "Dependencies are missing. Please install the dependencies as stated in README"
+        sys.exit()
+pyVersion = sys.version
+versionElements = pyVersion.split(" ")[0].split(".")
+version = versionElements[0] + "." + versionElements[1]
+command = "pip install --user virtualenv\n \
+        python  /home/"+user+"/.local/lib/python"+version+"/site-packages/virtualenv.py pyenv\n \
+        source pyenv/bin/activate\n \
+        pip install -r requirements\n"
+proc = subprocess.Popen([command], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+(out,err) = proc.communicate()
