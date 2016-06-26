@@ -23,7 +23,7 @@ except ImportError as e:
 pyVersion = sys.version
 versionElements = pyVersion.split(" ")[0].split(".")
 version = versionElements[0] + "." + versionElements[1]
-command = "pip install --user virtualenv\n \
+command = "pip install -U --force-reinstall --user virtualenv\n \
         python  /home/"+user+"/.local/lib/python"+version+"/site-packages/virtualenv.py pyenv\n \
         source pyenv/bin/activate\n \
         pip install -r requirements\n"
