@@ -1,32 +1,30 @@
-# InsightAgent: Docker remote api
+# InsightAgent: Docker Remote Api
 Agent Type: docker_remote_api
 
 Platform: Linux
 
 InsightFinder agent can be used to monitor performance metrics of docker containers using docker remote api.
 
-###### Instructions to register a project in Insightfinder.com
-1) Go to the link https://insightfinder.com/
+##### Instructions to register a project in Insightfinder.com
+- Go to the link https://insightfinder.com/
+- Sign in with the user credentials or sign up for a new account.
+- Go to Settings and Register for a project under "Insight Agent" tab.
+- Give a project name, select Project Type as "Private Cloud". When registered, a License Key is sent to the registered email account.
 
-2) Sign in with the user credentials or sign up for a new account.
-
-3) Go to Settings and Register for a project under "Insight Agent" tab.
-
-4) Give a project name, select Project Type as "Private Cloud". When registered a project license key is sent to the registered email account.
-
-###### Pre-requisites:
+##### Pre-requisites:
 Minimum required docker version for monitoring docker containers: v1.7.x
 
 The below pre-requisite is needed on the machine which launches deployInsightAgent.py.
 For Debian and Ubuntu, the following command will ensure that the required dependencies are installed:
-
+```
 sudo apt-get install build-essential libssl-dev libffi-dev python-dev
-
+```
 For Fedora and RHEL-derivatives, the following command will ensure that the required dependencies are installed:
-
+```
 sudo yum install gcc libffi-devel python-devel openssl-devel
+```
 
-###### To deploy agent on multiple hosts:
+##### To deploy agent on multiple hosts:
 
 - Get the deployment script from github using below command:
 ```
@@ -37,39 +35,38 @@ wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/Insi
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 - To deploy run the following command:
 ```
-python deployInsightAgent.py -n USER_NAME_IN_HOST
+python deployInsightAgent.py -i PROJECT_NAME_IN_INSIGHTFINDER
+                             -n USER_NAME_IN_HOST
                              -u USER_NAME_IN_INSIGHTFINDER 
                              -k LICENSE_KEY 
                              -s SAMPLING_INTERVAL_MINUTE 
                              -r REPORTING_INTERVAL_MINUTE 
                              -t AGENT_TYPE
-```
 AGENT_TYPE is *docker_remote_api*.
-
-When the above script is run, if prompted for password, enter either the password or the name of the identity file along with file path.
+```
+- When the above script is run, if prompted for password, enter either the password or the name of the identity file along with file path.
 Example: /home/insight/.ssh/id_rsa
 
 
-###### To get more details on the command, run 
+##### To get more details on the command, run
 ```
 python deployInsightAgent.py -h
 ```
 
-###### To undo agent deployment on multiple hosts:
+##### To undo agent deployment on multiple hosts:
 - Get the script for stopping agents from github using below command:
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/stopcron.py
 ```
 
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
-
 - To stop the agent run the following command:
 ```
 python stopcron.py -n USER_NAME_IN_HOST -p PASSWORD
 ```
 
-###### To install agent on local machine:
+##### To install agent on local machine:
 ```
-./install.sh -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
+./install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
 ```
 
