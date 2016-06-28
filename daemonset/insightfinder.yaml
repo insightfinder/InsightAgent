@@ -13,6 +13,8 @@ spec:
           image: insightfinderagent/kubernetes-daemon-set:master
           command: [ "bash", "-c", "/startup.sh" ]
           env:
+            - name: INSIGHTFINDER_PROJECTNAME
+              value: "projectname"
             - name: INSIGHTFINDER_PROJECTKEY
               value: "35f2a8a9ec0650afc93e4f308a8179f497e635f8"
             - name: INSIGHTFINDER_USERNAME
