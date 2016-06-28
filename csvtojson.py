@@ -48,6 +48,7 @@ for line in proc.stdout:
 proc.communicate()
 
 PROJECTKEY = os.environ["INSIGHTFINDER_PROJECT_KEY"]
+PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
 USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
 serverUrl = 'https://insightfindergae.appspot.com'
 
@@ -81,6 +82,7 @@ def sendData():
     #update projectKey, userName in dict
     alldata["metricData"] = json.dumps(metricData)
     alldata["projectKey"] = PROJECTKEY
+    alldata["projectName"] = PROJECTNAME
     alldata["userName"] = USERNAME
     alldata["instanceName"] = hostname
 
@@ -99,6 +101,7 @@ def sendData():
 def updateAgentDataRange(minTS,maxTS):
     #update projectKey, userName in dict
     alldata["projectKey"] = PROJECTKEY
+    alldata["projectName"] = PROJECTNAME
     alldata["userName"] = USERNAME
     alldata["operation"] = "updateAgentDataRange"
     alldata["minTimestamp"] = minTS

@@ -12,6 +12,7 @@ This script will start two scripts for deploying insightagent to hosts
 
 def get_args():
     parser = argparse.ArgumentParser(description='Script retrieves arguments for insightfinder agent.')
+    parser.add_argument('-i', '--PROJECT_NAME_IN_INSIGHTFINDER', type=str, help='Project Name registered in Insightfinder', required=True)
     parser.add_argument('-n', '--USER_NAME_IN_HOST', type=str, help='User Name in Hosts', required=True)
     parser.add_argument('-u', '--USER_NAME_IN_INSIGHTFINDER', type=str, help='User Name in Insightfinder', required=True)
     parser.add_argument('-k', '--LICENSE_KEY', type=str, help='License key of an agent project', required=True)
@@ -19,13 +20,14 @@ def get_args():
     parser.add_argument('-r', '--REPORTING_INTERVAL_MINUTE', type=str, help='Reporting Interval Minutes', required=True)
     parser.add_argument('-t', '--AGENT_TYPE', type=str, help='Agent type: proc or cadvisor or docker_remote_api or cgroup or daemonset', choices=['proc', 'cadvisor', 'docker_remote_api', 'cgroup', 'daemonset'],required=True)
     args = parser.parse_args()
+    projectName = args.PROJECT_NAME_IN_INSIGHTFINDER
     user = args.USER_NAME_IN_HOST
     userInsightfinder = args.USER_NAME_IN_INSIGHTFINDER
     licenseKey = args.LICENSE_KEY
     samplingInterval = args.SAMPLING_INTERVAL_MINUTE
     reportingInterval = args.REPORTING_INTERVAL_MINUTE
     agentType = args.AGENT_TYPE
-    return user, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType
+    return projectName, user, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType
 
 downloadFiles = ["installInsightAgent.py", "startcron.py", "checkpackages.py", "get-pip.py"]
 homepath = os.getcwd()
@@ -66,6 +68,7 @@ def stopCron():
     removeFile("stopcron.py")
 
 if __name__ == '__main__':
+    global projectName
     global user
     global host
     global password
@@ -76,7 +79,7 @@ if __name__ == '__main__':
     global reportingInterval
     global agentType
 
-    user, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType = get_args()
+    projectName, user, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType = get_args()
     retryOptionAttempts = 3
     retryKeyAttempts = 3
     while retryOptionAttempts:
@@ -115,7 +118,7 @@ if __name__ == '__main__':
         sys.exit(out)
     print out
     print "Proceeding to Deployment"
-    proc = subprocess.Popen([os.path.join(homepath,"startcron.py")+" -n "+user+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen([os.path.join(homepath,"startcron.py")+ " -i " +projectName+" -n "+user+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
     print out
     clearDownloads()
