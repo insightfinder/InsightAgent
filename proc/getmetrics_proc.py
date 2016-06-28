@@ -62,7 +62,7 @@ def init_previous_results():
                 first_result[tokens[0]] = float(tokens[1])
     update_results(first_result)
     time.sleep(1)
-    proc = subprocess.Popen([os.path.join(homepath,"getmetrics.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen([os.path.join(homepath,"proc","getmetrics.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
 
 def get_previous_results():
@@ -138,7 +138,7 @@ try:
     numlines = len(resource_usage_file.readlines())
     values = []
     dict = {}
-    proc = subprocess.Popen([os.path.join(homepath,"getmetrics.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen([os.path.join(homepath,"proc","getmetrics.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
 
     if(os.path.isfile(homepath+"/"+datadir+"previous_results.json") == False):
