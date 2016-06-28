@@ -6,11 +6,11 @@ spec:
   template:
     metadata:
       labels:
-        component: docker-remote-api
+        component: daemonset
     spec:
       containers:
         - name: insightfinder
-          image: insightfinderagent/kubernetes-daemon-set:v1
+          image: insightfinderagent/kubernetes-daemon-set:master
           command: [ "bash", "-c", "/startup.sh" ]
           env:
             - name: INSIGHTFINDER_PROJECTKEY
@@ -21,11 +21,15 @@ spec:
               value: "1"
             - name: REPORTING_INTERVAL
               value: "2"
+            - name: AGENT
+              value: "daemonset"
           volumeMounts:
             - name: run
               mountPath: /var/run/docker.sock
             - name: list
               mountPath: /var/lib/docker/containers
+            - name: timezone
+              mountPath: /etc/timezone
           ports:
             - containerPort: 7077
             - containerPort: 8080
@@ -39,3 +43,6 @@ spec:
             - name: list
               hostPath:
                   path: /var/lib/docker/containers
+            - name: timezone
+              hostPath:
+                  path: /etc/localtime
