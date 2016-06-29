@@ -1,9 +1,9 @@
-# InsightAgent: Docker Remote Api
-Agent Type: docker_remote_api
+# InsightAgent: cgroup
+Agent Type: cgroup
 
 Platform: Linux
 
-InsightFinder agent can be used to monitor performance metrics of docker containers using docker remote api.
+InsightFinder agent can be used to monitor performance metrics of docker containers using cgroup.
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
@@ -12,9 +12,7 @@ InsightFinder agent can be used to monitor performance metrics of docker contain
 - Give a project name, select Project Type as "Private Cloud". When registered, a License Key is sent to the registered email account.
 
 ##### Pre-requisites:
-Minimum required docker version for monitoring docker containers: v1.7.x
-
-The below pre-requisite is needed on the machine which launches deployInsightAgent.py.
+This pre-requisite is needed on the machine which launches deployInsightAgent.py.
 For Debian and Ubuntu, the following command will ensure that the required dependencies are installed:
 ```
 sudo apt-get install build-essential libssl-dev libffi-dev python-dev
@@ -30,7 +28,7 @@ sudo yum install gcc libffi-devel python-devel openssl-devel
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployInsightAgent.py
 ```
-- Get IP address of the hosts on which docker containers are running.
+- Get IP address of all machines (or hosts) on which InsightFinder agent needs to be installed.
 - All machines should have same login username and password.
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 - To deploy run the following command:
@@ -42,7 +40,7 @@ python deployInsightAgent.py -i PROJECT_NAME_IN_INSIGHTFINDER
                              -s SAMPLING_INTERVAL_MINUTE 
                              -r REPORTING_INTERVAL_MINUTE 
                              -t AGENT_TYPE
-AGENT_TYPE is *docker_remote_api*.
+AGENT_TYPE is *cgroup*.
 ```
 - When the above script is run, if prompted for password, enter either the password or the name of the identity file along with file path.
 Example: /home/insight/.ssh/id_rsa

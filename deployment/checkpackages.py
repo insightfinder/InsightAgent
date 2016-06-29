@@ -13,7 +13,7 @@ try:
     import pip
 except ImportError as e:
     #Install pip if not found
-    proc = subprocess.Popen(["sudo python "+os.path.join(homepath,"get-pip.py")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen(["sudo python "+os.path.join(homepath,"deployment","get-pip.py")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
     try:
         import pip
