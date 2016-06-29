@@ -28,7 +28,7 @@ sudo yum install gcc libffi-devel python-devel openssl-devel
 
 - Get the deployment script from github using below command:
 ```
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployInsightAgent.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.py
 ```
 - Get IP address of the hosts on which docker containers are running.
 - All machines should have same login username and password.
@@ -56,7 +56,7 @@ python deployInsightAgent.py -h
 ##### To undo agent deployment on multiple hosts:
 - Get the script for stopping agents from github using below command:
 ```
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/stopcron.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.py
 ```
 
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
