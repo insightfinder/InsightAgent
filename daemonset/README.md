@@ -10,8 +10,17 @@ Insightfinder agent can be deployed as a kubernetes daemonset using the configur
 
 - Give a project name, select Project Type as "Private Cloud". When registered a project license key is sent to the registered email account.
 
+##### Instructions to get deployment file
+
+- Get the deployment file from github using below command:
+```
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/daemonset/insightfinder.yaml
+```
+
 ##### Changes to be made in insightfinder.yaml
 In the env part of insightfinder.yaml, the following parameters are required:
+
+- INSIGHTFINDER_PROJECTNAME - name of the registered project with insightfinder.
 
 - INSIGHTFINDER_PROJECTKEY - is available via email when a project is registered with insightfinder
 
@@ -26,6 +35,8 @@ Modify the insightfinder.yaml with the appropriate parameter values.
 Example:
 ```
 env:
+   - name: INSIGHTFINDER_PROJECTNAME
+    value: "projectname"
    - name: INSIGHTFINDER_PROJECTKEY
     value: "35f2a8a9ec0650afc93e4f308a8179f497e635f8"
    - name: INSIGHTFINDER_USERNAME
@@ -38,7 +49,7 @@ env:
     value: "daemonset"
 ```
 
-##### To run config file
+##### To deploy the daemonset containing insightfinder agent
 ```
 kubectl create -f insightfinder.yaml
 ```
