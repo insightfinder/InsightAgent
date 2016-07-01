@@ -14,7 +14,6 @@ parser.add_option("-d", "--directory",
     action="store", dest="homepath", help="Directory to run from")
 (options, args) = parser.parse_args()
 date = time.strftime("%Y%m%d")
-hostname=socket.gethostname().partition(".")[0]
 
 if options.homepath is None:
     homepath = os.getcwd()
@@ -23,6 +22,11 @@ else:
 datadir = 'data/'
 
 newInstanceAvailable = False
+
+def getHostName():
+    with open("/etc/hostmachinename","r") as h:
+        hostName = h.readline().partition(".")[0]
+    return hostName
 
 def listtocsv(lists):
     finallog = ''
@@ -390,6 +394,7 @@ def getmetrics():
         print "Keyboard Interrupt"
 
 try:
+    hostname = getHostName()
     update_docker()
     proc = subprocess.Popen([os.path.join(homepath,datadir+"getmetrics_docker.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()

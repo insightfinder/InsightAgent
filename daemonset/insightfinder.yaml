@@ -16,7 +16,7 @@ spec:
             - name: INSIGHTFINDER_PROJECTNAME
               value: "projectname"
             - name: INSIGHTFINDER_PROJECTKEY
-              value: "35f2a8a9ec0650afc93e4f308a8179f497e635f8"
+              value: "licensekey"
             - name: INSIGHTFINDER_USERNAME
               value: "insightuser"
             - name: SAMPLING_INTERVAL
@@ -32,6 +32,8 @@ spec:
               mountPath: /var/lib/docker/containers
             - name: timezone
               mountPath: /etc/timezone
+            - name: hostname
+              mountPath: /etc/hostmachinename
           ports:
             - containerPort: 7077
             - containerPort: 8080
@@ -48,3 +50,6 @@ spec:
             - name: timezone
               hostPath:
                   path: /etc/localtime
+            - name: hostname
+              hostPath:
+                  path: /etc/hostname
