@@ -13,9 +13,9 @@ import math
 
 '''
 this script reads reporting interval and prev endtime config2
-and opens daily log file and reports header + rows within 
+and opens daily log file and reports header + rows within
 window of reporting interval after prev endtime
-if prev endtime is 0, report most recent reporting interval 
+if prev endtime is 0, report most recent reporting interval
 till now from today's log file (may or may not be present)
 assumping gmt epoch timestamp and local date daily file
 '''
@@ -47,7 +47,7 @@ for line in proc.stdout:
   os.environ[key] = value.strip()
 proc.communicate()
 
-PROJECTKEY = os.environ["INSIGHTFINDER_PROJECT_KEY"]
+LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
 PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
 USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
 serverUrl = 'https://insightfindergae.appspot.com'
@@ -81,7 +81,7 @@ def sendData():
         return
     #update projectKey, userName in dict
     alldata["metricData"] = json.dumps(metricData)
-    alldata["projectKey"] = PROJECTKEY
+    alldata["licenseKey"] = LICENSEKEY
     alldata["projectName"] = PROJECTNAME
     alldata["userName"] = USERNAME
     alldata["instanceName"] = hostname
@@ -100,7 +100,7 @@ def sendData():
 
 def updateAgentDataRange(minTS,maxTS):
     #update projectKey, userName in dict
-    alldata["projectKey"] = PROJECTKEY
+    alldata["licenseKey"] = LICENSEKEY
     alldata["projectName"] = PROJECTNAME
     alldata["userName"] = USERNAME
     alldata["operation"] = "updateAgentDataRange"
@@ -163,7 +163,7 @@ if options.inputFile is None:
                             timestamp_index = i
                 elif dailyFileReader.line_num > 1:
                     if long(row[timestamp_index]) < long(start_time_epoch) :
-                        continue                
+                        continue
                     #Read each line from csv and generate a json
                     thisData = {}
                     for i in range(0,len(row)):
