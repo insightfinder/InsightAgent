@@ -35,8 +35,8 @@ wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/Insi
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 - To deploy run the following command:
 ```
-python deployInsightAgent.py -i PROJECT_NAME_IN_INSIGHTFINDER
-                             -n USER_NAME_IN_HOST
+python deployInsightAgent.py -n USER_NAME_IN_HOST
+                             -i PROJECT_NAME_IN_INSIGHTFINDER
                              -u USER_NAME_IN_INSIGHTFINDER 
                              -k LICENSE_KEY 
                              -s SAMPLING_INTERVAL_MINUTE 
