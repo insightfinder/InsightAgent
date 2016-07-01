@@ -68,7 +68,7 @@ def get_args():
     parser.add_argument(
         '-u', '--USER_NAME_IN_INSIGHTFINDER', type=str, help='User Name in Insightfinder', required=True)
     parser.add_argument(
-        '-k', '--LICENSE_KEY', type=str, help='License key of an agent project', required=True)
+        '-k', '--LICENSE_KEY', type=str, help='License key for the user', required=True)
     parser.add_argument(
         '-s', '--SAMPLING_INTERVAL_MINUTE', type=str, help='Sampling Interval Minutes', required=True)
     parser.add_argument(

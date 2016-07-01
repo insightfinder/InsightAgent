@@ -14,7 +14,7 @@ fi
 while [ "$1" != "" ]; do
 	case $1 in
 		-k )	shift
-			PROJECTKEY=$1
+			LICENSEKEY=$1
 			;;
 		-i )	shift
 			PROJECTNAME=$1
@@ -66,7 +66,7 @@ if [[ -f $AGENTRC ]]
 then
 	rm $AGENTRC
 fi
-echo "export INSIGHTFINDER_PROJECT_KEY=$PROJECTKEY" >> $AGENTRC
+echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> $AGENTRC
 echo "export INSIGHTFINDER_PROJECT_NAME=$PROJECTNAME" >> $AGENTRC
 echo "export INSIGHTFINDER_USER_NAME=$USERNAME" >> $AGENTRC
 echo "export INSIGHTAGENTDIR=$INSIGHTAGENTDIR" >> $AGENTRC
@@ -84,10 +84,10 @@ USER=`whoami`
 
 if [ $AGENT_TYPE == 'daemonset' ]; then
 	echo "*/$SAMPLING_INTERVAL * * * * root python $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-	echo "*/$REPORTING_INTERVAL * * * * root python $INSIGHTAGENTDIR/common/csvtojson.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
+	echo "*/$REPORTING_INTERVAL * * * * root python $INSIGHTAGENTDIR/common/reportMetrics.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
 else
 	echo "*/$SAMPLING_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-	echo "*/$REPORTING_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/common/csvtojson.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
+	echo "*/$REPORTING_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/common/reportMetrics.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
 fi
 
 sudo chown root:root $TEMPCRON

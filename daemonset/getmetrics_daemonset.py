@@ -70,7 +70,7 @@ def initPreviousResults():
     log = ''
     fieldnames = ''
     towritePreviousInstances = {}
-    for i in range(len(dockers)-1):
+    for i in range(len(dockers)):
         validDocker = False
         try:
             filename = "stat%s.txt"%dockers[i]
@@ -264,7 +264,7 @@ def getmetrics():
                 initPreviousResults()
             log = ''
             fieldnames = ''
-            for i in range(len(dockers)-1):
+            for i in range(len(dockers)):
                 try:
                     with open(os.path.join(homepath,datadir+"totalInstances.json"),'r') as f:
                         dockerInstances = json.load(f)["overallDockerInstances"]
