@@ -369,6 +369,8 @@ def getmetrics():
             if timestampAvailable == False and fieldnames != "":
                 fieldnames = fields[0] + "," + fieldnames
                 log = "NaN" + "," + log
+                csvFile.close()
+                sys.exit()
             toJson(fieldnames,log)
             deltaList = calculateDelta()
             updateResults()
