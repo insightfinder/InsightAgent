@@ -10,7 +10,7 @@ spec:
     spec:
       containers:
         - name: insightfinder
-          image: insightfinderagent/kubernetes-daemon-set:master
+          image: insightfinderagent/kubernetes-daemon-set:latest
           command: [ "bash", "-c", "/startup.sh" ]
           env:
             - name: INSIGHTFINDER_PROJECTNAME
