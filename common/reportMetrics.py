@@ -55,15 +55,15 @@ serverUrl = 'https://insightfindergae.appspot.com'
 reportedDataSize = 0
 totalSize = 0
 def getindex(col_name):
-    if col_name == "CPU#%":
+    if col_name == "CPU":
         return 1
-    elif col_name == "DiskRead#MB" or col_name == "DiskWrite#MB":
+    elif col_name == "DiskRead" or col_name == "DiskWrite":
         return 2
-    elif col_name == "DiskUsed#MB":
+    elif col_name == "DiskUsed":
         return 3
-    elif col_name == "NetworkIn#MB" or col_name == "NetworkOut#MB":
+    elif col_name == "NetworkIn" or col_name == "NetworkOut":
         return 4
-    elif col_name == "MemUsed#MB":
+    elif col_name == "MemUsed":
         return 5
 
 #update prev_endtime in config file
