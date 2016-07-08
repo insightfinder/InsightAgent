@@ -40,13 +40,13 @@ def listtocsv(lists):
     resource_usage_file.write("%s\n"%(log))
 
 def getindex(colName):
-    if "CPU#%" in colName:
+    if "CPU" in colName:
         return 1
-    elif "DiskRead#MB" in colName or "DiskWrite#MB" in colName:
+    elif "DiskRead" in colName or "DiskWrite" in colName:
         return 2
-    elif "NetworkIn#MB" in colName or "NetworkOut#MB" in colName:
+    elif "NetworkIn" in colName or "NetworkOut" in colName:
         return 3
-    elif "MemUsed#MB" in colName:
+    elif "MemUsed" in colName:
         return 4
 
 
@@ -78,14 +78,14 @@ def init_previous_results():
 		    continue
 		if(eachfile == "cpumetrics.txt"):
                     if(server == "rubis_apache"):
-                        tokens[0] = tokens[0] + "#%[Web_" + ipAddress + "]"
+                        tokens[0] = tokens[0] + "[Web_" + ipAddress + "]"
                     elif(server == "rubis_db"):
-                        tokens[0] = tokens[0] + "#%[DB_" + ipAddress + "]"
+                        tokens[0] = tokens[0] + "[DB_" + ipAddress + "]"
 		elif(server == "rubis_apache" and correctFile != "timestamp.txt"):
-		    tokens[0] = tokens[0] + "#MB[Web_" + ipAddress + "]"
+		    tokens[0] = tokens[0] + "[Web_" + ipAddress + "]"
 		    tokens[1] = float(float(tokens[1])/(1024*1024))
 		elif(server == "rubis_db" and correctFile != "timestamp.txt"):
-		    tokens[0] = tokens[0] +"#MB[DB_" + ipAddress + "]"
+		    tokens[0] = tokens[0] +"[DB_" + ipAddress + "]"
 		    tokens[1] = float(float(tokens[1])/(1024*1024))
 		if(tokens[0] != "timestamp"):
 		    groupid = getindex(tokens[0])
@@ -116,7 +116,7 @@ def calculate_delta(fieldname,value):
     return round(delta,4)
 
 fields = []
-filenames = ["timestamp.txt","cpumetrics.txt","diskmetricsread.txt","diskmetricswrite.txt","networkmetrics.txt","memmetrics.txt"]
+filenames = ["timestamp.txt","cpumetrics.txt","diskmetricsread.txt","diskmetricswrite.txt","networkmetrics.txt"]
 try:
     date = time.strftime("%Y%m%d")
     resource_usage_file = open(os.path.join(homepath,datadir+date+".csv"),'a+')
@@ -157,14 +157,14 @@ try:
 		    continue
 		if(eachfile == "cpumetrics.txt"):
                     if(server == "rubis_apache"):
-                        tokens[0] = tokens[0] + "#%[Web_" + ipAddress + "]"
+                        tokens[0] = tokens[0] + "[Web_" + ipAddress + "]"
                     elif(server == "rubis_db"):
-                        tokens[0] = tokens[0] + "#%[DB_" + ipAddress + "]"
+                        tokens[0] = tokens[0] + "[DB_" + ipAddress + "]"
 		elif(server == "rubis_apache" and correctFile != "timestamp.txt"):
-		    tokens[0] = tokens[0] + "#MB[Web_" + ipAddress + "]"
+		    tokens[0] = tokens[0] + "[Web_" + ipAddress + "]"
 		    tokens[1] = float(float(tokens[1])/(1024*1024))
 		elif(server == "rubis_db" and correctFile != "timestamp.txt"):
-		    tokens[0] = tokens[0] +"#MB[DB_" + ipAddress + "]"
+		    tokens[0] = tokens[0] +"[DB_" + ipAddress + "]"
 		    tokens[1] = float(float(tokens[1])/(1024*1024))
 		if(tokens[0] != "timestamp"):
 		    groupid = getindex(tokens[0])

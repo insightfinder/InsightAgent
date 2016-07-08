@@ -37,9 +37,9 @@ num_sql = 0
 newInstanceAvailable = False
 
 def getindex(colName):
-    if colName == "CPU#%":
+    if colName == "CPU":
         return 1
-    elif colName == "MemUsed#MB":
+    elif colName == "MemUsedB":
         return 2
 
 def get_ip_address():
@@ -167,8 +167,8 @@ def getmetric():
                 log = log + "," + str(cur_cpu)
                 if(numlines < 1):
                     serverType = ["Web", "DB"]
-                    #fields = ["timestamp","CPU#%","DiskRead#MB","DiskWrite#MB","NetworkIn#MB","NetworkOut#MB","MemUsed#MB"]
-                    fields = ["timestamp","CPU#%"]
+                    #fields = ["timestamp","CPU","DiskRead","DiskWrite","NetworkIn","NetworkOut","MemUsed"]
+                    fields = ["timestamp","CPU"]
                     if i == 0:
                         fieldnames = fields[0]
                     host = hostname.partition(".")[0]
