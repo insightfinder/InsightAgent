@@ -49,8 +49,6 @@ def init_previous_results():
             lines = txt_file.read().split("\n")
             for eachline in lines:
                 tokens = eachline.split("=")
-                if(eachfile != "timestamp.txt" and eachfile != "cpumetrics.txt"):
-                    tokens[0] = tokens[0]+"#MB"
                 if(len(tokens) == 1):
                     continue
                 if(eachfile == "diskmetrics.txt"):
@@ -125,7 +123,7 @@ def get_cpuusage(filename,field_values,which_dict):
         which_dict["cpu_usage"] = cpu_dict
         Total = cpu_dict[cpucore]["user"] + cpu_dict[cpucore]["nice"] + cpu_dict[cpucore]["system"] + cpu_dict[cpucore]["idle"] + cpu_dict[cpucore]["iowait"] + cpu_dict[cpucore]["irq"] + cpu_dict[cpucore]["softirq"]
         idle = cpu_dict[cpucore]["idle"] + cpu_dict[cpucore]["iowait"]
-        field_values[0] = "CPU#%"
+        field_values[0] = "CPU"
         result = 1 - round(float(idle/Total),4)
         totalresult += float(result)
     field_values.append(totalresult*100)
@@ -162,8 +160,6 @@ try:
                 tokens = eachline.split("=")
                 if(len(tokens) == 1):
                     continue
-                if(eachfile != "timestamp.txt" and eachfile != "cpumetrics.txt"):
-                    tokens[0] = tokens[0]+"#MB"
                 fields.append(tokens[0])
                 if(eachfile == "diskmetrics.txt"):
                     tokens[1] = float(float(tokens[1])*512/(1024*1024))

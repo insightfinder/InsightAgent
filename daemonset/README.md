@@ -22,7 +22,7 @@ In the env part of insightfinder.yaml, the following parameters are required:
 
 - INSIGHTFINDER_PROJECTNAME - name of the registered project with insightfinder.
 
-- INSIGHTFINDER_PROJECTKEY - is available via email when a project is registered with insightfinder
+- INSIGHTFINDER_PROJECTKEY - is available in "User Account Information" as license key. To go to "User Account Information", click the userid on the top right corner.
 
 - INSIGHTFINDER_USERNAME - username used to login into insightfinder website.
 
