@@ -18,7 +18,7 @@ else:
 if homepath is None:
 	homepath = os.getcwd()
 
-deltaFields = ["CPU#%", "DiskRead#MB", "DiskWrite#MB", "NetworkIn#MB", "NetworkOut#MB"]
+deltaFields = ["CPU", "DiskRead", "DiskWrite", "NetworkIn", "NetworkOut"]
 
 #update endtime in config file
 def update_configs(reporting_interval,prev_endtime,keep_file_days):
