@@ -34,13 +34,13 @@ def listtocsv(lists):
         csvFile.write("%s\n"%(finallog))
 
 def getindex(colName):
-    if colName == "CPU#%":
+    if colName == "CPU":
         return 1
-    elif colName == "DiskRead#MB" or colName == "DiskWrite#MB":
+    elif colName == "DiskRead" or colName == "DiskWrite":
         return 2
-    elif colName == "NetworkIn#MB" or colName == "NetworkOut#MB":
+    elif colName == "NetworkIn" or colName == "NetworkOut":
         return 3
-    elif colName == "MemUsed#MB":
+    elif colName == "MemUsed":
         return 4
 
 metricResults = {}
@@ -80,7 +80,7 @@ def initPreviousResults():
                 metricData = json.loads(eachline)
                 break
         if(numlines < 1):
-            fields = ["timestamp","CPU#%","DiskRead#MB","DiskWrite#MB","NetworkIn#MB","NetworkOut#MB","MemUsed#MB"]
+            fields = ["timestamp","CPU","DiskRead","DiskWrite","NetworkIn","NetworkOut","MemUsed"]
             if i == 0:
                 fieldnames = fields[0]
             host = dockers[i]
@@ -156,7 +156,7 @@ def calculateDelta():
     previousResult = getPreviousResults()
     currentResult = metricResults
     for key in fieldsList:
-        if((key.split('#')[0]) == "CPU"):
+        if((key.split('[')[0]) == "CPU"):
             if  key not in precpu:
                 deltaValue = "NaN"
                 finallogList.append(deltaValue)
@@ -169,7 +169,7 @@ def calculateDelta():
                 if deltaValue < 0:
                     deltaValue = 0
             finallogList.append(deltaValue)
-        elif(checkDelta(key.split('#')[0]) == True):
+        elif(checkDelta(key.split('[')[0]) == True):
             if key not in currentResult or key not in previousResult:
                 deltaValue = "NaN"
             elif str(currentResult[key]) == "NaN" or str(previousResult[key]) == "NaN":
@@ -250,7 +250,7 @@ def getmetrics():
     global metricData
     try:
         while True:
-            fields = ["timestamp","CPU#%","DiskRead#MB","DiskWrite#MB","NetworkIn#MB","NetworkOut#MB","MemUsed#MB"]
+            fields = ["timestamp","CPU","DiskRead","DiskWrite","NetworkIn","NetworkOut","MemUsed"]
             if newInstanceAvailable == True:
                 oldFile = os.path.join(homepath,datadir+date+".csv")
                 newFile = os.path.join(homepath,datadir+date+"."+time.strftime("%Y%m%d%H%M%S")+".csv")
@@ -320,7 +320,7 @@ def getmetrics():
                     networkRx = round(float(networkRx/(1024*1024)),4) #MB
                     networkTx = round(float(networkTx/(1024*1024)),4) #MB
                 cpu = round(float(metricData['cpu_stats']['cpu_usage']['total_usage'])/10000000,4) #Convert nanoseconds to jiffies
-                precpu["CPU#%["+dockerInstances[i]+"_"+hostname+"]"+":"+str(1)] = round(float(metricData['precpu_stats']['cpu_usage']['total_usage'])/10000000,4)
+                precpu["CPU["+dockerInstances[i]+"_"+hostname+"]"+":"+str(1)] = round(float(metricData['precpu_stats']['cpu_usage']['total_usage'])/10000000,4)
                 memUsed = round(float(float(metricData['memory_stats']['usage'])/(1024*1024)),4) #MB
                 diskRead = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][0]['value'])/(1024*1024)),4) #MB
                 diskWrite = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][1]['value'])/(1024*1024)),4) #MB
