@@ -1,5 +1,4 @@
-#Version8: based of monitorMetrics7.py
-#This script makes a GET request to the cAdvisor running on hgcc07
+#!/usr/bin/python
 
 import time
 import datetime
