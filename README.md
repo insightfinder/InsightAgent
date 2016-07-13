@@ -7,5 +7,6 @@ The following types of agents are available:
  - cgroup
  - cadvisor
  - daemonset
+ - file replay
 
 Instructions on how to use each agent is available in the README file of each agent folders.
