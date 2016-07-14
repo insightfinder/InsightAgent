@@ -104,13 +104,6 @@ if __name__ == '__main__':
     clearDownloads()
     downloadRequiredFiles()
 
-    #Check if required packages are installed
-    proc = subprocess.Popen(["sudo python "+os.path.join(homepath,"checkpackages.py")], cwd=homepath, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    (out,err) = proc.communicate()
-    if "failed" in str(err) or "ERROR" in str(err):
-        print "Dependencies are missing. Please install the dependencies as stated in README"
-        sys.exit()
-
     print "Starting Installation"
     proc = subprocess.Popen([os.path.join(homepath,"installInsightAgent.py")+" -n "+user+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
