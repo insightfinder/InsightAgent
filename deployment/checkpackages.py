@@ -23,6 +23,9 @@ except ImportError as e:
 pyVersion = sys.version
 versionElements = pyVersion.split(" ")[0].split(".")
 version = versionElements[0] + "." + versionElements[1]
+command = "sudo chown -R "+user+" /home/"+user+"/.local"
+proc = subprocess.Popen([command], cwd=homepath, stdout=subprocess.PIPE, shell=True, executable="/bin/bash")
+(out,err) = proc.communicate()
 command = "pip install -U --force-reinstall --user virtualenv\n \
         sudo python  /home/"+user+"/.local/lib/python"+version+"/site-packages/virtualenv.py pyenv\n \
         source pyenv/bin/activate\n \
