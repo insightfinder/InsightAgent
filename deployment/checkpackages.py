@@ -27,8 +27,8 @@ command = "sudo chown -R "+user+" /home/"+user+"/.local"
 proc = subprocess.Popen([command], cwd=homepath, stdout=subprocess.PIPE, shell=True, executable="/bin/bash")
 (out,err) = proc.communicate()
 command = "pip install -U --force-reinstall --user virtualenv\n \
-        sudo python  /home/"+user+"/.local/lib/python"+version+"/site-packages/virtualenv.py pyenv\n \
+        python  /home/"+user+"/.local/lib/python"+version+"/site-packages/virtualenv.py pyenv\n \
         source pyenv/bin/activate\n \
-        sudo pip upgrade -r deployment/requirements\n"
+        pip install -r deployment/requirements\n"
 proc = subprocess.Popen([command], cwd=homepath, stdout=subprocess.PIPE, shell=True, executable="/bin/bash")
 (out,err) = proc.communicate()
