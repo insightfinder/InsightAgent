@@ -27,5 +27,5 @@ command = "pip install -U --force-reinstall --user virtualenv\n \
         python  /home/"+user+"/.local/lib/python"+version+"/site-packages/virtualenv.py pyenv\n \
         source pyenv/bin/activate\n \
         pip install -r deployment/requirements\n"
-proc = subprocess.Popen([command], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+proc = subprocess.Popen([command], cwd=homepath, stdout=subprocess.PIPE, shell=True, executable="/bin/bash")
 (out,err) = proc.communicate()
