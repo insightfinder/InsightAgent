@@ -164,7 +164,6 @@ try:
             get_cpuusage(eachfile, tokens,dict)
             groupid = getindex(tokens[0])
             field = tokens[0]+":"+str(groupid)
-            print field
             fields.append(field)
             if(check_delta(tokens[0]) == True):
                 deltaValue = calculate_cpudelta(dict["cpu_usage"])
@@ -182,7 +181,6 @@ try:
                 if(tokens[0] != "timestamp"):
                     groupid = getindex(tokens[0])
                     field = tokens[0]+":"+str(groupid)
-                    print field
                 else:
                     field = tokens[0]
                 fields.append(field)
@@ -209,7 +207,6 @@ try:
     else:
         headercsv = csvContent[0]
         header = headercsv.split("\n")[0].split(",")
-        print header
         if cmp(header,fields) != 0:
             oldFile = os.path.join(homepath,datadir+date+".csv")
             newFile = os.path.join(homepath,datadir+date+"."+time.strftime("%Y%m%d%H%M%S")+".csv")
