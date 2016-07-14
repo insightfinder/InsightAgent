@@ -25,6 +25,8 @@ if options.homepath is None:
 else:
     homepath = options.homepath
 datadir = 'data/'
+newInstanceAvailable = False
+hostname = socket.gethostname().partition(".")[0]
 
 def get_ip_address():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -55,45 +57,48 @@ def update_results(lists):
         json.dump(lists,f)
 
 def init_previous_results():
+    global dockerInstances
     first_result = {}
     timestampRead = False
-    serverType = ["rubis_apache", "rubis_db"]
-    for server in serverType:
+    for containers in dockerInstances:
+        dockerID = containers
+        if len(dockerID) > 12:
+            dockerID = dockerID[:12]
         for eachfile in filenames:
             tempfile = eachfile.split(".")
-    	    correctFile = tempfile[0]+"_"+server+"."+tempfile[1]
-	    if(eachfile == "timestamp.txt" and timestampRead == False):
-		correctFile = eachfile
-		timestampRead = True
-	    elif(eachfile == "timestamp.txt"):
-		continue
-	    try:
-		txt_file = open(os.path.join(homepath,datadir,correctFile))
-	    except IOError:
-		continue
-	    lines = txt_file.read().split("\n")
-	    for eachline in lines:
-		tokens = eachline.split("=")
-		if(len(tokens) == 1):
-		    continue
-		if(eachfile == "cpumetrics.txt"):
-                    if(server == "rubis_apache"):
-                        tokens[0] = tokens[0] + "[Web_" + ipAddress + "]"
-                    elif(server == "rubis_db"):
-                        tokens[0] = tokens[0] + "[DB_" + ipAddress + "]"
-		elif(server == "rubis_apache" and correctFile != "timestamp.txt"):
-		    tokens[0] = tokens[0] + "[Web_" + ipAddress + "]"
-		    tokens[1] = float(float(tokens[1])/(1024*1024))
-		elif(server == "rubis_db" and correctFile != "timestamp.txt"):
-		    tokens[0] = tokens[0] +"[DB_" + ipAddress + "]"
-		    tokens[1] = float(float(tokens[1])/(1024*1024))
-		if(tokens[0] != "timestamp"):
-		    groupid = getindex(tokens[0])
-		    tokens[0] = tokens[0] + ":" + str(groupid)
-		first_result[tokens[0]] = float(tokens[1])
+            correctFile = tempfile[0]+"_"+containers+"."+tempfile[1]
+            if(eachfile == "timestamp.txt" and timestampRead == False):
+                correctFile = eachfile
+                timestampRead = True
+            elif(eachfile == "timestamp.txt"):
+                continue
+            try:
+                txt_file = open(os.path.join(homepath,datadir,correctFile))
+            except IOError:
+                continue
+            lines = txt_file.read().split("\n")
+            for eachline in lines:
+                tokens = eachline.split("=")
+                if(len(tokens) == 1):
+                    continue
+                if(eachfile == "cpumetrics.txt"):
+                    tokens[0] = tokens[0] + "[" + hostname + "_" + dockerID + "]"
+                elif(correctFile != "timestamp.txt"):
+                    tokens[0] = tokens[0] + "[" + hostname + "_" + dockerID + "]"
+                    tokens[1] = float(float(tokens[1])/(1024*1024))
+                if(tokens[0] != "timestamp"):
+                    groupid = getindex(tokens[0])
+                    tokens[0] = tokens[0] + ":" + str(groupid)
+                first_result[tokens[0]] = float(tokens[1])
     update_results(first_result)
     time.sleep(1)
-    proc = subprocess.Popen([os.path.join(homepath,"cgroup/getmetrics_cgroup.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    if(os.path.isdir("/cgroup") == True):
+        proc = subprocess.Popen([os.path.join(homepath,"cgroup/getmetrics_cgroup.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    elif(os.path.isdir("/sys/fs/cgroup") == True):
+        proc = subprocess.Popen([os.path.join(homepath,"cgroup/getmetrics_sys_cgroup.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    else:
+        print"No cgroups found.Stopping."
+        sys.exit()
     (out,err) = proc.communicate()
 
 def get_previous_results():
@@ -115,74 +120,112 @@ def calculate_delta(fieldname,value):
         delta = delta/100
     return round(delta,4)
 
+dockerInstances = []
+def update_docker():
+    global dockers
+    global newInstanceAvailable
+    global dockerInstances
+
+
+    proc = subprocess.Popen(["docker ps --no-trunc | awk '{if(NR!=1) print $1}'"], stdout=subprocess.PIPE, shell=True)
+    (out, err) = proc.communicate()
+    dockers = out.split("\n")
+    if os.path.isfile(os.path.join(homepath,datadir+"totalInstances.json")) == False:
+        towritePreviousInstances = {}
+        for containers in dockers:
+            if containers != "":
+                dockerInstances.append(containers)
+        towritePreviousInstances["overallDockerInstances"] = dockerInstances
+        with open(os.path.join(homepath,datadir+"totalInstances.json"),'w') as f:
+            json.dump(towritePreviousInstances,f)
+    else:
+        with open(os.path.join(homepath,datadir+"totalInstances.json"),'r') as f:
+            dockerInstances = json.load(f)["overallDockerInstances"]
+    newInstances = []
+    for eachDocker in dockers:
+        if eachDocker == "":
+            continue
+        newInstances.append(eachDocker)
+    if cmp(newInstances,dockerInstances) != 0:
+        towritePreviousInstances = {}
+        towritePreviousInstances["overallDockerInstances"] = newInstances
+        with open(os.path.join(homepath,datadir+"totalInstances.json"),'w') as f:
+            json.dump(towritePreviousInstances,f)
+        newInstanceAvailable = True
+
 fields = []
-filenames = ["timestamp.txt","cpumetrics.txt","diskmetricsread.txt","diskmetricswrite.txt","networkmetrics.txt"]
+filenames = ["timestamp.txt","cpumetrics.txt","diskmetricsread.txt","diskmetricswrite.txt","networkmetrics.txt","memmetrics.txt"]
 try:
     date = time.strftime("%Y%m%d")
+    if newInstanceAvailable == True and os.path.isfile(os.path.join(homepath,datadir+date+".csv")) == True:
+        oldFile = os.path.join(homepath,datadir+date+".csv")
+        newFile = os.path.join(homepath,datadir+date+"."+time.strftime("%Y%m%d%H%M%S")+".csv")
+        os.rename(oldFile,newFile)
     resource_usage_file = open(os.path.join(homepath,datadir+date+".csv"),'a+')
     numlines = len(resource_usage_file.readlines())
     values = []
     dict = {}
     timestampread = False
     ipAddress = get_ip_address()
-    proc = subprocess.Popen([os.path.join(homepath,"cgroup/getmetrics_cgroup.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    if(os.path.isdir("/cgroup") == True):
+        proc = subprocess.Popen([os.path.join(homepath,"cgroup/getmetrics_cgroup.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    elif(os.path.isdir("/sys/fs/cgroup") == True):
+        proc = subprocess.Popen([os.path.join(homepath,"cgroup/getmetrics_sys_cgroup.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    else:
+        print"No cgroups found.Stopping."
+        sys.exit()
     (out,err) = proc.communicate()
     print out
     print err
-
+    update_docker()
     if(os.path.isfile(homepath+"/"+datadir+"timestamp.txt") == False):
         sys.exit()
     if(os.path.isfile(homepath+"/"+datadir+"previous_results.json") == False):
         init_previous_results()
-
-    serverType = ["rubis_apache", "rubis_db"]
-    for server in serverType:
-	tokens = []
-	for eachfile in filenames:
-	    tempfile = eachfile.split(".")
-	    correctFile = tempfile[0]+"_"+server+"."+tempfile[1]
-	    if(eachfile == "timestamp.txt" and timestampread == False):
-		correctFile = eachfile
-		timestampread = True
-	    elif(eachfile == "timestamp.txt"):
-		continue
-	    try:
-		txt_file = open(os.path.join(homepath,datadir,correctFile))
-	    except IOError:
-		continue
-	    lines = txt_file.read().split("\n")
-	    for eachline in lines:
-		tokens = eachline.split("=")
-		if(len(tokens) == 1):
-		    continue
-		if(eachfile == "cpumetrics.txt"):
-                    if(server == "rubis_apache"):
-                        tokens[0] = tokens[0] + "[Web_" + ipAddress + "]"
-                    elif(server == "rubis_db"):
-                        tokens[0] = tokens[0] + "[DB_" + ipAddress + "]"
-		elif(server == "rubis_apache" and correctFile != "timestamp.txt"):
-		    tokens[0] = tokens[0] + "[Web_" + ipAddress + "]"
-		    tokens[1] = float(float(tokens[1])/(1024*1024))
-		elif(server == "rubis_db" and correctFile != "timestamp.txt"):
-		    tokens[0] = tokens[0] +"[DB_" + ipAddress + "]"
-		    tokens[1] = float(float(tokens[1])/(1024*1024))
-		if(tokens[0] != "timestamp"):
-		    groupid = getindex(tokens[0])
-		    tokens[0] = tokens[0] + ":" + str(groupid)
-		fields.append(tokens[0])
-		if(check_delta(tokens[0]) == True):
-		    deltaValue = calculate_delta(tokens[0], tokens[1])
-		    valuetoappend = "%.4f" %deltaValue
-		    values.append(valuetoappend)
-		else:
-		    if(tokens[0] == "timestamp"):
-			values.append(tokens[1])
-		    else:
-			valuetoappend = "%.4f" %float(tokens[1])
-			values.append(valuetoappend)
-		dict[tokens[0]] = float(tokens[1])
+    for containers in dockerInstances:
+        tokens = []
+        dockerID = containers
+        if len(dockerID) > 12:
+            dockerID = dockerID[:12]
+        for eachfile in filenames:
+            tempfile = eachfile.split(".")
+            correctFile = tempfile[0]+"_"+containers+"."+tempfile[1]
+            if(eachfile == "timestamp.txt" and timestampread == False):
+                correctFile = eachfile
+                timestampread = True
+            elif(eachfile == "timestamp.txt"):
+                continue
+            try:
+                txt_file = open(os.path.join(homepath,datadir,correctFile))
+            except IOError:
+                continue
+            lines = txt_file.read().split("\n")
+            for eachline in lines:
+                tokens = eachline.split("=")
+                if(len(tokens) == 1):
+                    continue
+                if(eachfile == "cpumetrics.txt"):
+                    tokens[0] = tokens[0] + "[" + hostname + "_" + dockerID + "]"
+                elif(correctFile != "timestamp.txt"):
+                    tokens[0] = tokens[0] + "[" + hostname + "_" + dockerID + "]"
+                    tokens[1] = float(float(tokens[1])/(1024*1024))
+                if(tokens[0] != "timestamp"):
+                    groupid = getindex(tokens[0])
+                    tokens[0] = tokens[0] + ":" + str(groupid)
+                fields.append(tokens[0])
+                if(check_delta(tokens[0]) == True):
+                    deltaValue = calculate_delta(tokens[0], tokens[1])
+                    valuetoappend = "%.4f" %deltaValue
+                    values.append(valuetoappend)
+                else:
+                    if(tokens[0] == "timestamp"):
+                        values.append(tokens[1])
+                    else:
+                        valuetoappend = "%.4f" %float(tokens[1])
+                        values.append(valuetoappend)
+                dict[tokens[0]] = float(tokens[1])
     if(numlines < 1):
-	listtocsv(fields)
+        listtocsv(fields)
     listtocsv(values)
     resource_usage_file.flush()
     resource_usage_file.close()
