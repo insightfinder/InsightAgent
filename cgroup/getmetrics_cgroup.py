@@ -94,8 +94,10 @@ def init_previous_results():
     time.sleep(1)
     if(os.path.isdir("/cgroup") == True):
         proc = subprocess.Popen([os.path.join(homepath,"cgroup/getmetrics_cgroup.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
-    elif(os.path.isdir("/sys/fs/cgroup") == True):
-        proc = subprocess.Popen([os.path.join(homepath,"cgroup/getmetrics_sys_cgroup.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    elif(os.path.isdir("/sys/fs/cgroup/blkio/docker") == True):
+         proc = subprocess.Popen([os.path.join(homepath,"cgroup/getmetrics_sys_fs_cgroup.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    elif(os.path.isdir("/sys/fs/cgroup/blkio/system.slice") == True):
+        proc = subprocess.Popen([os.path.join(homepath,"cgroup/getmetrics_sys_fs_slice_cgroup.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     else:
         print"No cgroups found.Stopping."
         sys.exit()
@@ -169,8 +171,10 @@ try:
     ipAddress = get_ip_address()
     if(os.path.isdir("/cgroup") == True):
         proc = subprocess.Popen([os.path.join(homepath,"cgroup/getmetrics_cgroup.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
-    elif(os.path.isdir("/sys/fs/cgroup") == True):
-        proc = subprocess.Popen([os.path.join(homepath,"cgroup/getmetrics_sys_cgroup.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    elif(os.path.isdir("/sys/fs/cgroup/blkio/docker") == True):
+         proc = subprocess.Popen([os.path.join(homepath,"cgroup/getmetrics_sys_fs_cgroup.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    elif(os.path.isdir("/sys/fs/cgroup/blkio/system.slice") == True):
+        proc = subprocess.Popen([os.path.join(homepath,"cgroup/getmetrics_sys_fs_slice_cgroup.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     else:
         print"No cgroups found.Stopping."
         sys.exit()
