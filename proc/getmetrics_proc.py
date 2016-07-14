@@ -34,6 +34,21 @@ def listtocsv(lists):
             log = log + ','
     resource_usage_file.write("%s\n"%(log))
 
+def getindex(col_name):
+    if col_name == "CPU":
+        return 1
+    elif col_name == "DiskRead" or col_name == "DiskWrite":
+        return 2
+    elif col_name == "DiskUsed":
+        return 3
+    elif col_name == "NetworkIn" or col_name == "NetworkOut":
+        return 4
+    elif col_name == "MemUsed":
+        return 5
+    elif "DiskUsed" in col_name:
+        return 6
+    elif "LoadAvg" in col_name:
+        return 7
 
 def update_results(lists):
     with open(os.path.join(homepath,datadir+"previous_results.json"),'w') as f:
@@ -128,12 +143,13 @@ def get_cpuusage(filename,field_values,which_dict):
         totalresult += float(result)
     field_values.append(totalresult*100)
 
-filenames = ["timestamp.txt", "cpumetrics.txt","diskmetrics.txt","diskusedmetrics.txt","networkmetrics.txt","memmetrics.txt"]
+filenames = ["timestamp.txt", "cpumetrics.txt","diskmetrics.txt","diskusedmetrics.txt","networkmetrics.txt","memmetrics.txt","loadavg.txt"]
 fields = []
 try:
     date = time.strftime("%Y%m%d")
     resource_usage_file = open(os.path.join(homepath,datadir+date+".csv"),'a+')
-    numlines = len(resource_usage_file.readlines())
+    csvContent = resource_usage_file.readlines()
+    numlines = len(csvContent)
     values = []
     dict = {}
     proc = subprocess.Popen([os.path.join(homepath,"proc","getmetrics.sh")], cwd=homepath, stdout=subprocess.PIPE, shell=True)
@@ -146,7 +162,10 @@ try:
     for eachfile in filenames:
         if(eachfile == "cpumetrics.txt"):
             get_cpuusage(eachfile, tokens,dict)
-            fields.append(tokens[0])
+            groupid = getindex(tokens[0])
+            field = tokens[0]+":"+str(groupid)
+            print field
+            fields.append(field)
             if(check_delta(tokens[0]) == True):
                 deltaValue = calculate_cpudelta(dict["cpu_usage"])
                 values.append(deltaValue)
@@ -160,7 +179,13 @@ try:
                 tokens = eachline.split("=")
                 if(len(tokens) == 1):
                     continue
-                fields.append(tokens[0])
+                if(tokens[0] != "timestamp"):
+                    groupid = getindex(tokens[0])
+                    field = tokens[0]+":"+str(groupid)
+                    print field
+                else:
+                    field = tokens[0]
+                fields.append(field)
                 if(eachfile == "diskmetrics.txt"):
                     tokens[1] = float(float(tokens[1])*512/(1024*1024))
                 elif(eachfile == "diskusedmetrics.txt" or eachfile == "memmetrics.txt"):
@@ -181,6 +206,16 @@ try:
     if(numlines < 1):
         listtocsv(fields)
         FieldsWritten = True
+    else:
+        headercsv = csvContent[0]
+        header = headercsv.split("\n")[0].split(",")
+        print header
+        if cmp(header,fields) != 0:
+            oldFile = os.path.join(homepath,datadir+date+".csv")
+            newFile = os.path.join(homepath,datadir+date+"."+time.strftime("%Y%m%d%H%M%S")+".csv")
+            os.rename(oldFile,newFile)
+            resource_usage_file = open(os.path.join(homepath,datadir+date+".csv"), 'a+')
+            listtocsv(fields)
     listtocsv(values)
     resource_usage_file.flush()
     resource_usage_file.close()
