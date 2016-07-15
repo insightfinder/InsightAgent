@@ -121,7 +121,7 @@ def calculate_delta(fieldname,value):
     delta = float(value) - previous_result[fieldname]
     delta = abs(delta)
     # If there is an error in fetching data, return 0. Else delta value will be wrong and high.
-    if (abs(delta) == abs(previous_result[fieldname])) or (abs(delta) == abs(float(value))):
+    if (abs(delta) == abs(previous_result[fieldname])):
         delta = 0
     if("CPU" in fieldname):
         delta = delta/100
