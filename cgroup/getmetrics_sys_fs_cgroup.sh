@@ -3,9 +3,7 @@ DATADIR='data/'
 cd $DATADIR
 
 dockers=$(docker ps --no-trunc | awk '{if(NR!=1)print $1}')
-echo $dockers
 for container in $dockers; do
-    echo "$container"
     CONTAINER_PID=`docker inspect -f '{{ .State.Pid }}' $container`
     date +%s%3N | awk '{print "timestamp="$1}' > timestamp.txt & PID1=$!
     cat /sys/fs/cgroup/memory/docker/$container/memory.usage_in_bytes | awk '{print "MemUsed="$1}' > memmetrics_$container.txt & PID2=$!
