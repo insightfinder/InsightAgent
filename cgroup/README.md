@@ -6,7 +6,8 @@ Platform: Linux
 InsightFinder agent can be used to monitor performance metrics of docker containers using cgroup.
 
 Tested with Ubuntu 14.04, Redhat 6.8, Redhat 7.2, Centos 7.1, Amazon Linux AMI 2016.03.3.
-Tested with docker version 1.9.1 and later.
+
+Required docker version: 1.9.1 and later.
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
