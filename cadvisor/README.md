@@ -5,6 +5,12 @@ Platform: Linux
 
 InsightFinder agent can be used to monitor performance metrics of docker containers using cadvisor.
 
+Tested with Ubuntu 14.04, Redhat 7.2, Centos 7.2.
+
+Required docker version: 1.9.1 and later.
+
+Required cadvisor version: 0.19.3 and later.
+
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
 - Sign in with the user credentials or sign up for a new account.
