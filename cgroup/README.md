@@ -16,6 +16,8 @@ Tested with docker version 1.9.1 and later.
 - Note down license key which is available in "User Account Information". To go to "User Account Information", click the userid on the top right corner.
 
 ##### Pre-requisites:
+Python 2.7.
+
 This pre-requisite is needed on the machine which launches deployInsightAgent.py.
 For Debian and Ubuntu, the following commands will ensure that the required dependencies are installed:
 ```
