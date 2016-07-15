@@ -61,6 +61,7 @@ python deployInsightAgent.py -n USER_NAME_IN_HOST
                              -r REPORTING_INTERVAL_MINUTE 
                              -t AGENT_TYPE
 AGENT_TYPE is *cadvisor*.
+SAMPLING_INTERVAL_MINUTE and REPORTING_INTERVAL_MINUTE should be greater than or equal to 2 if number of containers in the host is greater than 10.
 ```
 - When the above script is run, if prompted for password, enter either the password or the name of the identity file along with file path.
 Example: /home/insight/.ssh/id_rsa
