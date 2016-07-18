@@ -264,7 +264,7 @@ def getmetrics():
                 os.rename(oldFile,newFile)
             csvFile = open(os.path.join(homepath,datadir+date+".csv"), 'a+')
             numlines = len(csvFile.readlines())
-            if(os.path.isfile(homepath+"/"+datadir+"previous_results.json") == False):
+            if(os.path.isfile(homepath+"/"+datadir+"previous_results.json") == False) or (os.path.isfile(os.path.join(homepath,datadir+"totalInstances.json")) == False):
                 initPreviousResults()
             log = ''
             fieldnames = ''
