@@ -3,7 +3,7 @@ Agent Type: docker_remote_api
 
 Platform: Linux
 
-InsightFinder agent can be used to monitor performance metrics of docker containers using docker remote api.
+InsightFinder agent can be used to monitor system metrics of docker containers using docker remote api.
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/

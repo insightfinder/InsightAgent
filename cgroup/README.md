@@ -3,7 +3,7 @@ Agent Type: cgroup
 
 Platform: Linux
 
-InsightFinder agent can be used to monitor performance metrics of docker containers using cgroup.
+InsightFinder agent can be used to monitor system metrics of docker containers using cgroup.
 
 Tested with Ubuntu 14.04, Redhat 6.8, Redhat 7.2, Centos 7.1, Amazon Linux AMI 2016.03.3.
 
