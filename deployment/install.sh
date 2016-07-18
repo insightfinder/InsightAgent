@@ -3,7 +3,7 @@
 function usage()
 {
 	echo "Usage: ./install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
-AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or replay or daemonset or hypervisor"
+AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or filereplay or daemonset or hypervisor"
 }
 
 if [ "$#" -lt 12 ]; then
@@ -37,7 +37,7 @@ while [ "$1" != "" ]; do
 	shift
 done
 
-if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ] && [ $AGENT_TYPE != 'replay' ] && [ $AGENT_TYPE != 'daemonset' ] && [ $AGENT_TYPE != 'hypervisor' ]; then
+if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ] && [ $AGENT_TYPE != 'filereplay' ] && [ $AGENT_TYPE != 'daemonset' ] && [ $AGENT_TYPE != 'hypervisor' ]; then
 	usage
 	exit 1
 fi
@@ -46,7 +46,7 @@ if [ -z "$INSIGHTAGENTDIR" ]; then
 	export INSIGHTAGENTDIR=`pwd`
 fi
 
-if [ $AGENT_TYPE == 'daemonset' ]; then
+if [ $AGENT_TYPE == 'daemonset' ] || [ $AGENT_TYPE == 'filereplay' ]; then
 	python $INSIGHTAGENTDIR/common/config/initconfig.py -r $REPORTING_INTERVAL
 else
 	$INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/common/config/initconfig.py -r $REPORTING_INTERVAL
@@ -70,8 +70,10 @@ echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> $AGENTRC
 echo "export INSIGHTFINDER_PROJECT_NAME=$PROJECTNAME" >> $AGENTRC
 echo "export INSIGHTFINDER_USER_NAME=$USERNAME" >> $AGENTRC
 echo "export INSIGHTAGENTDIR=$INSIGHTAGENTDIR" >> $AGENTRC
+echo "export SAMPLING_INTERVAL=$SAMPLING_INTERVAL" >> $AGENTRC
+echo "export REPORTING_INTERVAL=$REPORTING_INTERVAL" >> $AGENTRC
 
-if [ $AGENT_TYPE == 'replay' ]; then
+if [ $AGENT_TYPE == 'filereplay' ]; then
 	exit 1
 fi
 

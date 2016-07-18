@@ -242,6 +242,8 @@ else:
 #old file cleaning
 for dirpath, dirnames, filenames in os.walk(os.path.join(homepath,datadir)):
     for file in filenames:
+        if ".csv" not in file:
+            continue
         curpath = os.path.join(dirpath, file)
         file_modified = datetime.datetime.fromtimestamp(os.path.getmtime(curpath))
         if datetime.datetime.now() - file_modified > datetime.timedelta(days=keep_file_days):

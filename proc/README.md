@@ -3,7 +3,7 @@ Agent Type: proc
 
 Platform: Linux
 
-InsightFinder agent can be used to monitor system performance metrics on bare metal machines or virtual machines.
+InsightFinder agent can be used to monitor system metrics on bare metal machines or virtual machines.
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/

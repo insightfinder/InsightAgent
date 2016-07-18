@@ -3,7 +3,13 @@ Agent Type: cadvisor
 
 Platform: Linux
 
-InsightFinder agent can be used to monitor performance metrics of docker containers using cadvisor.
+InsightFinder agent can be used to monitor system metrics of docker containers using cadvisor.
+
+Tested with Ubuntu 14.04, Redhat 7.2, Centos 7.2.
+
+Required docker version: 1.9.1 and later.
+
+Required cadvisor version: 0.19.3 and later.
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
@@ -55,6 +61,7 @@ python deployInsightAgent.py -n USER_NAME_IN_HOST
                              -r REPORTING_INTERVAL_MINUTE 
                              -t AGENT_TYPE
 AGENT_TYPE is *cadvisor*.
+SAMPLING_INTERVAL_MINUTE and REPORTING_INTERVAL_MINUTE should be greater than or equal to 2 if number of containers in the host is greater than 10.
 ```
 - When the above script is run, if prompted for password, enter either the password or the name of the identity file along with file path.
 Example: /home/insight/.ssh/id_rsa
