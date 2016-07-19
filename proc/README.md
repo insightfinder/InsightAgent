@@ -3,6 +3,8 @@ Agent Type: proc
 
 Platform: Linux
 
+Tested with Ubuntu 14.04, Redhat 6.8, Redhat 7.2, Centos 7.1, Amazon Linux AMI 2016.03.3
+
 InsightFinder agent can be used to monitor system metrics on bare metal machines or virtual machines.
 
 ##### Instructions to register a project in Insightfinder.com
@@ -69,3 +71,7 @@ python stopcron.py -n USER_NAME_IN_HOST -p PASSWORD
 ./install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
 ```
 
+##### To check raw data in host machines:
+- Login into the individual host machines.
+- In the InsightAgent-master/data folder, all raw data will be stored in csv files. csv files older than 5 days are moved to /tmp folder.
+- To change the retention period, edit the InsightAgent-master/reporting_config.json and change the "keep_file_days" to the required value.
