@@ -43,13 +43,13 @@ def listtocsv(lists):
 
 def getindex(colName):
     if "CPU" in colName:
-        return 1
+        return 2001
     elif "DiskRead" in colName or "DiskWrite" in colName:
-        return 2
+        return 2002
     elif "NetworkIn" in colName or "NetworkOut" in colName:
-        return 3
+        return 2003
     elif "MemUsed" in colName:
-        return 4
+        return 2004
 
 
 def update_results(lists):
