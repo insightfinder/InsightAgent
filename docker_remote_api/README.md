@@ -3,6 +3,10 @@ Agent Type: docker_remote_api
 
 Platform: Linux
 
+Tested on Redhat 7.2.
+
+Required docker version: 1.9.1 and later.
+
 InsightFinder agent can be used to monitor system metrics of docker containers using docker remote api.
 
 ##### Instructions to register a project in Insightfinder.com
