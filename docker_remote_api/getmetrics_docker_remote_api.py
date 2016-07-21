@@ -35,13 +35,13 @@ def listtocsv(lists):
 
 def getindex(colName):
     if colName == "CPU":
-        return 1
+        return 4001
     elif colName == "DiskRead" or colName == "DiskWrite":
-        return 2
+        return 4002
     elif colName == "NetworkIn" or colName == "NetworkOut":
-        return 3
+        return 4003
     elif colName == "MemUsed":
-        return 4
+        return 4004
 
 metricResults = {}
 def toJson (header, values):

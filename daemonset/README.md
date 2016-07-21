@@ -5,6 +5,10 @@ The insightfinder docker image is found at the link: https://hub.docker.com/r/in
 
 The insightfinder.yaml configuration file takes care of downloading this docker image from docker hub.
 
+Tested with kubernetes v1.2.0 on Centos 7.
+
+Required docker version: 1.9.1 and later.
+
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
 

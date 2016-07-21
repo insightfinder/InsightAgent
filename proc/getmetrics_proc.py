@@ -38,19 +38,19 @@ def listtocsv(lists):
 
 def getindex(col_name):
     if col_name == "CPU":
-        return 1
+        return 1001
     elif col_name == "DiskRead" or col_name == "DiskWrite":
-        return 2
+        return 1002
     elif col_name == "DiskUsed":
-        return 3
+        return 1003
     elif col_name == "NetworkIn" or col_name == "NetworkOut":
-        return 4
+        return 1004
     elif col_name == "MemUsed":
-        return 5
+        return 1005
     elif "DiskUsed" in col_name:
-        return 6
+        return 1006
     elif "LoadAvg" in col_name:
-        return 7
+        return 1007
 
 def update_results(lists):
     with open(os.path.join(homepath,datadir+"previous_results.json"),'w') as f:

@@ -49,13 +49,13 @@ cAdvisorStruct = {"old": ["/docker/",""], "new": ["/system.slice/docker-", ".sco
 
 def getindex(colName):
     if colName == "CPU":
-        return 1
+        return 3001
     elif colName == "DiskRead" or colName == "DiskWrite":
-        return 2
+        return 3002
     elif colName == "NetworkIn" or colName == "NetworkOut":
-        return 3
+        return 3003
     elif colName == "MemUsed":
-        return 4
+        return 3004
 
 def get_ip_address():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

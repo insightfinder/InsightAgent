@@ -18,7 +18,7 @@ def get_args():
     parser.add_argument('-k', '--LICENSE_KEY', type=str, help='License key for the user', required=True)
     parser.add_argument('-s', '--SAMPLING_INTERVAL_MINUTE', type=str, help='Sampling Interval Minutes', required=True)
     parser.add_argument('-r', '--REPORTING_INTERVAL_MINUTE', type=str, help='Reporting Interval Minutes', required=True)
-    parser.add_argument('-t', '--AGENT_TYPE', type=str, help='Agent type: proc or cadvisor or docker_remote_api or cgroup or daemonset', choices=['proc', 'cadvisor', 'docker_remote_api', 'cgroup', 'daemonset'],required=True)
+    parser.add_argument('-t', '--AGENT_TYPE', type=str, help='Agent type: proc or cadvisor or docker_remote_api or cgroup or daemonset or elasticsearch', choices=['proc', 'cadvisor', 'docker_remote_api', 'cgroup', 'daemonset', 'elasticsearch'],required=True)
     args = parser.parse_args()
     projectName = args.PROJECT_NAME_IN_INSIGHTFINDER
     user = args.USER_NAME_IN_HOST
@@ -29,7 +29,7 @@ def get_args():
     agentType = args.AGENT_TYPE
     return projectName, user, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType
 
-downloadFiles = ["installInsightAgent.py", "startcron.py", "checkpackages.py", "get-pip.py"]
+downloadFiles = ["installInsightAgent.py", "startcron.py", "get-pip.py"]
 homepath = os.getcwd()
 
 def removeFile(filename):
@@ -61,7 +61,7 @@ def stopCron():
         print "Can't download stopcron.py"
         return
     os.chmod("stopcron.py",0755)
-    proc = subprocess.Popen(["sudo python "+os.path.join(homepath,"stopcron.py")+" -n "+user+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen(["pyenv/bin/python "+os.path.join(homepath,"stopcron.py")+" -n "+user+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
     if "failed" in str(err) or "error" in str(err):
         print "Can't stop agent in some machines"
@@ -104,21 +104,14 @@ if __name__ == '__main__':
     clearDownloads()
     downloadRequiredFiles()
 
-    #Check if required packages are installed
-    proc = subprocess.Popen(["sudo python "+os.path.join(homepath,"checkpackages.py")], cwd=homepath, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    (out,err) = proc.communicate()
-    if "failed" in str(err) or "ERROR" in str(err):
-        print "Dependencies are missing. Please install the dependencies as stated in README"
-        sys.exit()
-
     print "Starting Installation"
-    proc = subprocess.Popen([os.path.join(homepath,"installInsightAgent.py")+" -n "+user+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen(["pyenv/bin/python "+os.path.join(homepath,"installInsightAgent.py")+" -n "+user+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
     if "error" in out:
         sys.exit(out)
     print out
     print "Proceeding to Deployment"
-    proc = subprocess.Popen([os.path.join(homepath,"startcron.py")+ " -i " +projectName+" -n "+user+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen(["pyenv/bin/python "+os.path.join(homepath,"startcron.py")+ " -i " +projectName+" -n "+user+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
     print out
     clearDownloads()
