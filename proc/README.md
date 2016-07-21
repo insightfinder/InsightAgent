@@ -13,6 +13,8 @@ InsightFinder agent can be used to monitor system performance metrics on bare me
 - Note down license key which is available in "User Account Information". To go to "User Account Information", click the userid on the top right corner.
 
 ##### Pre-requisites:
+Python 2.7.
+
 This pre-requisite is needed on the machine which launches deployInsightAgent.py.
 For Debian and Ubuntu, the following command will ensure that the required dependencies are installed:
 ```
@@ -52,7 +54,7 @@ Example: /home/insight/.ssh/id_rsa
 
 ##### To get more details on the command, run
 ```
-python deployInsightAgent.py -h
+./deployInsightAgent.sh
 ```
 
 ##### To undo agent deployment on multiple hosts:
