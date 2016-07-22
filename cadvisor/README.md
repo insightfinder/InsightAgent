@@ -19,14 +19,18 @@ Required cadvisor version: 0.19.3 and later.
 - Note down license key which is available in "User Account Information". To go to "User Account Information", click the userid on the top right corner.
 
 ##### Pre-requisites:
+Python 2.7.
+
 This pre-requisite is needed on the machine which launches deployInsightAgent.py.
 For Debian and Ubuntu, the following command will ensure that the required dependencies are installed:
 ```
-sudo apt-get install build-essential libssl-dev libffi-dev python-dev
+sudo apt-get upgrade
+sudo apt-get install build-essential libssl-dev libffi-dev python-dev wget
 ```
 For Fedora and RHEL-derivatives, the following command will ensure that the required dependencies are installed:
 ```
-sudo yum install gcc libffi-devel python-devel openssl-devel
+sudo yum update
+sudo yum install gcc libffi-devel python-devel openssl-devel wget
 ```
 cAdvisor should be running in all hosts. To run cAdvisor use
 ```
@@ -46,20 +50,20 @@ sudo docker run \
 
 - Get the deployment script from github using below command:
 ```
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.sh
 ```
 - Get IP address of all machines (or hosts) on which InsightFinder agent needs to be installed.
 - All machines should have same login username and password.
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 - To deploy run the following command:
 ```
-python deployInsightAgent.py -n USER_NAME_IN_HOST
-                             -i PROJECT_NAME_IN_INSIGHTFINDER
-                             -u USER_NAME_IN_INSIGHTFINDER 
-                             -k LICENSE_KEY 
-                             -s SAMPLING_INTERVAL_MINUTE 
-                             -r REPORTING_INTERVAL_MINUTE 
-                             -t AGENT_TYPE
+./deployInsightAgent.sh -n USER_NAME_IN_HOST
+                        -i PROJECT_NAME_IN_INSIGHTFINDER
+                        -u USER_NAME_IN_INSIGHTFINDER
+                        -k LICENSE_KEY
+                        -s SAMPLING_INTERVAL_MINUTE
+                        -r REPORTING_INTERVAL_MINUTE
+                        -t AGENT_TYPE
 AGENT_TYPE is *cadvisor*.
 SAMPLING_INTERVAL_MINUTE and REPORTING_INTERVAL_MINUTE should be greater than or equal to 2 if number of containers in the host is greater than 10.
 ```
@@ -69,7 +73,7 @@ Example: /home/insight/.ssh/id_rsa
 
 ##### To get more details on the command, run 
 ```
-python deployInsightAgent.py -h
+./deployInsightAgent.sh
 ```
 
 ##### To undo agent deployment on multiple hosts:
@@ -82,6 +86,9 @@ wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/Insi
 - To stop the agent run the following command:
 ```
 python stopcron.py -n USER_NAME_IN_HOST -p PASSWORD
+
+USER_NAME_IN_HOST - username used to login into the host machines
+PASSWORD - password or name of the identity file along with path
 ```
 
 ##### To install agent on local machine:
