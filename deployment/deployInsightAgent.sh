@@ -2,8 +2,8 @@
 
 function usage()
 {
-	echo "Usage: ./install.sh -n USER_NAME_IN_HOST -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
-AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or filereplay or daemonset or hypervisor"
+	echo "Usage: ./deployInsightAgent.sh -n USER_NAME_IN_HOST -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
+AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or filereplay or daemonset or hypervisor or elasticsearch or collectd"
 }
 
 if [ "$#" -lt 14 ]; then
@@ -40,7 +40,7 @@ while [ "$1" != "" ]; do
 	shift
 done
 
-if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ] && [ $AGENT_TYPE != 'filereplay' ] && [ $AGENT_TYPE != 'daemonset' ] && [ $AGENT_TYPE != 'hypervisor' ]; then
+if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ] && [ $AGENT_TYPE != 'filereplay' ] && [ $AGENT_TYPE != 'daemonset' ] && [ $AGENT_TYPE != 'hypervisor' ] && [ $AGENT_TYPE != 'elasticsearch' ] && [ $AGENT_TYPE != 'collectd' ]; then
 	usage
 	exit 1
 fi
@@ -49,21 +49,43 @@ wget https://bootstrap.pypa.io/get-pip.py && python get-pip.py --force-reinstall
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/requirements
 /home/$USER/.local/bin/pip install -U --force-reinstall --user virtualenv
 if [ "$?" -ne "0" ]; then
-    echo "pip install failed. Please install the pre-requisites mentioned in README"
+    echo "pip install failed. Please install the pre-requisites using the following commands and retry deployment again"
+if [ "$(command -v yum)" ]; then
+    echo "sudo yum update"
+    echo "sudo yum install gcc libffi-devel python-devel openssl-devel wget"
+else
+    echo "sudo apt-get upgrade"
+    echo "sudo apt-get install build-essential libssl-dev libffi-dev python-dev wget"
+fi
     rm get-pip.py
     rm requirements
     exit 1
 fi
 version=`python -c 'import sys; print(str(sys.version_info[0])+"."+str(sys.version_info[1]))'`
 if [ "$?" -ne "0" ]; then
-    echo "Unable to get python version. Please install the pre-requisites mentioned in README"
+    echo "Unable to get python version. Please install the pre-requisites using the following commands and retry deployment again"
+if [ "$(command -v yum)" ]; then
+    echo "sudo yum update"
+    echo "sudo yum install gcc libffi-devel python-devel openssl-devel wget"
+else
+    echo "sudo apt-get upgrade"
+    echo "sudo apt-get install build-essential libssl-dev libffi-dev python-dev wget"
+fi
     rm get-pip.py
     rm requirements
     exit 1
+
 fi
 python  /home/$USER/.local/lib/python$version/site-packages/virtualenv.py pyenv
 if [ "$?" -ne "0" ]; then
-    echo "python virtual environment install failed. Please install the pre-requisites mentioned in README"
+    echo "Unable to install python virtual environment. Please install the pre-requisites using the following commands and retry deployment again"
+if [ "$(command -v yum)" ]; then
+    echo "sudo yum update"
+    echo "sudo yum install gcc libffi-devel python-devel openssl-devel wget"
+else
+    echo "sudo apt-get upgrade"
+    echo "sudo apt-get install build-essential libssl-dev libffi-dev python-dev wget"
+fi
     rm get-pip.py
     rm requirements
     exit 1
@@ -71,7 +93,14 @@ fi
 source pyenv/bin/activate
 pip install -r requirements
 if [ "$?" -ne "0" ]; then
-    echo "install failed. Please install the pre-requisites mentioned in README"
+    echo "Install failed. Please install the pre-requisites using the following commands and retry deployment again"
+if [ "$(command -v yum)" ]; then
+    echo "sudo yum update"
+    echo "sudo yum install gcc libffi-devel python-devel openssl-devel wget"
+else
+    echo "sudo apt-get upgrade"
+    echo "sudo apt-get install build-essential libssl-dev libffi-dev python-dev wget"
+fi
     rm get-pip.py
     rm requirements
     rm -rf pyenv
