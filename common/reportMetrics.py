@@ -5,7 +5,6 @@ import json
 import os
 import time
 import subprocess
-import requests
 import datetime
 import socket
 from optparse import OptionParser
@@ -28,6 +27,8 @@ parser.add_option("-m", "--mode",
     action="store", dest="mode", help="Running mode: live or replay")
 parser.add_option("-d", "--directory",
     action="store", dest="homepath", help="Directory to run from")
+parser.add_option("-t", "--agentType",
+    action="store", dest="agentType", help="Agent type")
 (options, args) = parser.parse_args()
 
 if options.homepath is None:
@@ -38,9 +39,20 @@ if options.mode is None:
     mode = "live"
 else:
     mode = options.mode
+if options.agentType is None:
+    agentType = ""
+else:
+    agentType = options.agentType
+
 datadir = 'data/'
 
-command = ['bash', '-c', 'source ' + str(homepath) + '/.agent.bashrc && env']
+if agentType == "hypervisor":
+    import urllib
+    command = ['sh', '-c', 'source ' + str(homepath) + '/.agent.bashrc && env']
+else:
+    import requests
+    command = ['bash', '-c', 'source ' + str(homepath) + '/.agent.bashrc && env']
+
 proc = subprocess.Popen(command, stdout = subprocess.PIPE)
 for line in proc.stdout:
   (key, _, value) = line.partition("=")
@@ -96,7 +108,10 @@ def sendData():
     else:
         print str(len(bytearray(json_data))) + " bytes data are reported"
     url = serverUrl + "/customprojectrawdata"
-    response = requests.post(url, data=json.loads(json_data))
+    if agentType == "hypervisor":
+        response = urllib.urlopen(url, data=urllib.urlencode(alldata))
+    else:
+        response = requests.post(url, data=json.loads(json_data))
 
 def updateAgentDataRange(minTS,maxTS):
     #update projectKey, userName in dict
