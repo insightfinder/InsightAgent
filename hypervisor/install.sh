@@ -1,9 +1,9 @@
-#!/bin/bash
 
-function usage()
+
+usage()
 {
 	echo "Usage: ./install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
-AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or filereplay or daemonset or hypervisor or elasticsearch or collectd"
+AGENT_TYPE = hypervisor"
 }
 
 if [ "$#" -lt 12 ]; then
@@ -37,7 +37,7 @@ while [ "$1" != "" ]; do
 	shift
 done
 
-if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ] && [ $AGENT_TYPE != 'filereplay' ] && [ $AGENT_TYPE != 'daemonset' ] && [ $AGENT_TYPE != 'hypervisor' ] && [ $AGENT_TYPE != 'elasticsearch' ] && [ $AGENT_TYPE != 'collectd' ]; then
+if [ $AGENT_TYPE != 'hypervisor' ]; then
 	usage
 	exit 1
 fi
@@ -46,7 +46,7 @@ if [ -z "$INSIGHTAGENTDIR" ]; then
 	export INSIGHTAGENTDIR=`pwd`
 fi
 
-if [ $AGENT_TYPE == 'daemonset' ]; then
+if [ $AGENT_TYPE == 'hypervisor' ]; then
 	python $INSIGHTAGENTDIR/common/config/initconfig.py -r $REPORTING_INTERVAL
 else
 	$INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/common/config/initconfig.py -r $REPORTING_INTERVAL
@@ -73,29 +73,37 @@ echo "export INSIGHTAGENTDIR=$INSIGHTAGENTDIR" >> $AGENTRC
 echo "export SAMPLING_INTERVAL=$SAMPLING_INTERVAL" >> $AGENTRC
 echo "export REPORTING_INTERVAL=$REPORTING_INTERVAL" >> $AGENTRC
 
-if [ $AGENT_TYPE == 'filereplay' ]; then
-	exit 1
-fi
-
 TEMPCRON=$INSIGHTAGENTDIR/ifagent
 if [[ -f $TEMPCRON ]]
 then
 	rm $TEMPCRON
 fi
-USER=`whoami`
 
-if [ $AGENT_TYPE == 'daemonset' ]; then
-	echo "*/$SAMPLING_INTERVAL * * * * root python $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-	echo "*/$REPORTING_INTERVAL * * * * root python $INSIGHTAGENTDIR/common/reportMetrics.py -d $INSIGHTAGENTDIR -t $AGENT_TYPE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
-elif [ $AGENT_TYPE == 'collectd' ]; then
-	echo "*/$REPORTING_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/$AGENT_TYPE/collectdReportMetrics.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
+if [ $AGENT_TYPE == 'hypervisor' ]; then
+	TEMPCRON=/var/spool/cron/crontabs/root
+fi
+	
+if [ $AGENT_TYPE == 'hypervisor' ]; then
+	echo "*/$SAMPLING_INTERVAL * * * * python $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
+	echo "*/$REPORTING_INTERVAL * * * * python $INSIGHTAGENTDIR/common/reportMetrics.py -d $INSIGHTAGENTDIR -t $AGENT_TYPE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
 else
 	echo "*/$SAMPLING_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
 	echo "*/$REPORTING_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/common/reportMetrics.py -d $INSIGHTAGENTDIR -t $AGENT_TYPE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
 fi
 
-sudo chown root:root $TEMPCRON
-sudo chmod 644 $TEMPCRON
-sudo mv $TEMPCRON /etc/cron.d/
+if [ $AGENT_TYPE == 'hypervisor' ]; then
+	cronpid=`cat /var/run/crond.pid`
+	echo "CRONPID is"
+	kill $cronpid
+	crond
+else
+	sudo chown root:root $TEMPCRON
+	sudo chmod 644 $TEMPCRON
+	sudo mv $TEMPCRON /etc/cron.d/
+fi
 
-echo "Agent configuration completed. Two cron jobs are created via /etc/cron.d/ifagent"
+if [ $AGENT_TYPE == 'hypervisor' ]; then
+	echo "Agent configuration completed. Two cron jobs are added in /var/spool/cron/crontabs/root"
+else
+	echo "Agent configuration completed. Two cron jobs are created via /etc/cron.d/ifagent"
+fi
