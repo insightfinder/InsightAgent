@@ -129,7 +129,7 @@ if __name__ == '__main__':
     print "Starting Installation"
     proc = subprocess.Popen(["pyenv/bin/python "+os.path.join(homepath,"installInsightAgent.py")+" -n "+user+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
-    if "error" in out:
+    if ("error" in out) or ("Not enough disk space" in out):
         sys.exit(out)
     print out
     print "Proceeding to Deployment"

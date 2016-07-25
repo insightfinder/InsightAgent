@@ -113,8 +113,12 @@ def sshInstallHypervisor(retry,hostname):
     except socket.error, e:
         print "Socket connection failed in %s:"%hostname, e
         return sshInstallHypervisor(retry-1,hostname)
-    #except:
-        #print "Unexpected error in %s:"%hostname
+    except IOError,e :
+        print "Not enough disk space in host"
+        return sshInstallHypervisor(retry-1,hostname)
+    except:
+        print "Unexpected error in %s:"%hostname
+        return sshInstallHypervisor(retry-1,hostname)
 
 def get_args():
     parser = argparse.ArgumentParser(
