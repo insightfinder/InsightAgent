@@ -9,4 +9,4 @@ The following types of agents are available:
  - daemonset
  - file replay
 
-Instructions on how to use each agent is available in the README file of each agent folders.
+More details on the agents and installation details are in the wiki: https://github.com/insightfinder/InsightAgent/wiki
