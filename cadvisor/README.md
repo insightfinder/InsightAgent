@@ -35,7 +35,6 @@ sudo yum install gcc libffi-devel python-devel openssl-devel wget
 cAdvisor should be running in all hosts. To run cAdvisor use
 ```
 sudo docker run \
-  --cpuset=3 \
   --volume=/:/rootfs:ro \
   --volume=/var/run:/var/run:rw \
   --volume=/sys:/sys:ro \
