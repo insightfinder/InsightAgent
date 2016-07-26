@@ -55,7 +55,7 @@ python deployInsightAgent.py -h
 ##### To undo agent deployment on multiple hosts:
 - Get the script for stopping agents from github using below command:
 ```
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/hypervisor/stopcron.py
 ```
 
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.

@@ -29,6 +29,7 @@ sudo yum install gcc libffi-devel python-devel openssl-devel wget
 
 # Steps to use replay mode:
 1) Download the insightfinder agent code using this command, and untar insightagent.tar.gz in installation directory
+
 wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
 
 2) In InsightAgent-master directory, run the following commands to install and use python virtual environment for insightfinder agent:
@@ -39,9 +40,10 @@ source pyenv/bin/activate
 
 ./deployment/install.sh -i PROJECT_NAME -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 0 -r 0 -t filereplay
 
-3) Put data files in InsightAgent-master/data/
+3) Put csv files in InsightAgent-master/data/
 
 4) For each data file, run the following command:
+
 python common/reportMetrics.py -m replay -f PATH_TO_CSVFILENAME
 
 PATH_TO_CSVFILENAME is the path and filename of the csv file.

@@ -87,7 +87,7 @@ def sshInstallHypervisor(retry,hostname):
         session = transport.open_session()
         session.set_combine_stderr(True)
         session.get_pty()
-        session.exec_command("sudo rm -rf InsightAgent*\n \
+        session.exec_command("rm -rf InsightAgent*\n \
         tar xzvf insightagent.tar.gz\n \
         cd InsightAgent-master\n")
         stdin = session.makefile('wb', -1)
@@ -95,6 +95,11 @@ def sshInstallHypervisor(retry,hostname):
         stdin.write(password+'\n')
         stdin.flush()
         session.recv_exit_status() #wait for exec_command to finish
+        if "IOError" in stdout.readlines():
+             print "Not enough space in host"
+             print "Install Failed in ",hostname
+             s.close()
+             return sshInstallHypervisor(retry-1,hostname)
         s.close()
         print "Install Succeed in", hostname
         q.task_done()
@@ -108,8 +113,12 @@ def sshInstallHypervisor(retry,hostname):
     except socket.error, e:
         print "Socket connection failed in %s:"%hostname, e
         return sshInstallHypervisor(retry-1,hostname)
-    #except:
-        #print "Unexpected error in %s:"%hostname
+    except IOError,e :
+        print "Not enough disk space in host"
+        return sshInstallHypervisor(retry-1,hostname)
+    except:
+        print "Unexpected error in %s:"%hostname
+        return sshInstallHypervisor(retry-1,hostname)
 
 def get_args():
     parser = argparse.ArgumentParser(

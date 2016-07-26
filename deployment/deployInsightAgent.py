@@ -51,6 +51,22 @@ def downloadRequiredFiles():
     for eachFile in downloadFiles:
         downloadFile(eachFile)
 
+def stopCronHypervisor():
+    global user
+    global password
+    removeFile("stopcron.py")
+    proc = subprocess.Popen("wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/hypervisor/stopcron.py", cwd=homepath, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    (out,err) = proc.communicate()
+    if "failed" in str(err) or "ERROR" in str(err):
+        print "Can't download stopcron.py"
+        return
+    os.chmod("stopcron.py",0755)
+    proc = subprocess.Popen(["pyenv/bin/python "+os.path.join(homepath,"stopcron.py")+" -n "+user+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    (out,err) = proc.communicate()
+    if "failed" in str(err) or "error" in str(err):
+        print "Can't stop agent in some machines"
+    removeFile("stopcron.py")
+
 def stopCron():
     global user
     global password
@@ -100,7 +116,10 @@ if __name__ == '__main__':
         print "Retry attempts exceeded. Exiting now"
         sys.exit()
 
-    stopCron()
+    if agentType == "hypervisor":
+        stopCronHypervisor()
+    else:
+        stopCron()
     clearDownloads()
     downloadRequiredFiles()
 
@@ -110,7 +129,7 @@ if __name__ == '__main__':
     print "Starting Installation"
     proc = subprocess.Popen(["pyenv/bin/python "+os.path.join(homepath,"installInsightAgent.py")+" -n "+user+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
-    if "error" in out:
+    if ("error" in out) or ("Not enough disk space" in out):
         sys.exit(out)
     print out
     print "Proceeding to Deployment"
