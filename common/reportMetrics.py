@@ -24,7 +24,7 @@ parser = OptionParser(usage=usage)
 parser.add_option("-f", "--fileInput",
     action="store", dest="inputFile", help="Input data file (overriding daily data file)")
 parser.add_option("-m", "--mode",
-    action="store", dest="mode", help="Running mode: live or replay")
+    action="store", dest="mode", help="Running mode: live or metricFileReplay or logFileReplay")
 parser.add_option("-d", "--directory",
     action="store", dest="homepath", help="Directory to run from")
 parser.add_option("-t", "--agentType",
@@ -101,7 +101,7 @@ def sendData():
     #print the json
     json_data = json.dumps(alldata)
     #print json_data
-    if mode == "replay":
+    if "FileReplay" in mode:
         reportedDataSize += len(bytearray(json.dumps(metricData)))
         reportedDataPer = (float(reportedDataSize)/float(totalSize))*100
         print str(min(100.0,math.ceil(reportedDataPer))) + "% of data are reported"
@@ -140,7 +140,7 @@ deltaFields = config['delta_fields']
 new_prev_endtime = prev_endtime
 new_prev_endtime_epoch = 0
 dates = []
-if mode == "replay" and prev_endtime != "0" and len(prev_endtime) >= 8:
+if "FileReplay" in mode and prev_endtime != "0" and len(prev_endtime) >= 8:
     start_time = prev_endtime
     # pad a second after prev_endtime
     start_time_epoch = 1000+long(1000*time.mktime(time.strptime(start_time, "%Y%m%d%H%M%S")));
