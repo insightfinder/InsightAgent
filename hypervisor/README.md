@@ -1,9 +1,9 @@
-# InsightAgent: proc
-Agent Type: proc
+# InsightAgent: hypervisor
+Agent Type: hypervisor
 
-Platform: Linux
+Platform: VMkernel
 
-InsightFinder agent can be used to monitor system performance metrics on bare metal machines or virtual machines.
+InsightFinder agent can be used to monitor system performance metrics of hypervisor hosts.
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
@@ -41,7 +41,7 @@ python deployInsightAgent.py -n USER_NAME_IN_HOST
                              -s SAMPLING_INTERVAL_MINUTE
                              -r REPORTING_INTERVAL_MINUTE
                              -t AGENT_TYPE
-AGENT_TYPE is *proc*.
+AGENT_TYPE is *hypervisor*.
 ```
 - When the above script is run, if prompted for password, enter either the password or the name of the identity file along with file path.
 Example: /home/insight/.ssh/id_rsa
@@ -62,6 +62,9 @@ wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/Insi
 - To stop the agent run the following command:
 ```
 python stopcron.py -n USER_NAME_IN_HOST -p PASSWORD
+
+USER_NAME_IN_HOST - username used to login into the host machines
+PASSWORD - password or name of the identity file along with path
 ```
 
 ##### To install agent on local machine:
