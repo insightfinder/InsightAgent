@@ -8,8 +8,8 @@ The following types of agents are available:
  - cadvisor
  - daemonset
  - file replay
- - hypervisor
  - elasticsearch
+ - hypervisor
  - collectd
 
 More details on the agents and installation details are in the wiki: https://github.com/insightfinder/InsightAgent/wiki
