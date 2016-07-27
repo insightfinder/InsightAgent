@@ -7,6 +7,10 @@ InsightFinder agent can be used to monitor system performance metrics on bare me
 
 collectd is an open source daemon that collects statistics from a system and publishes them to insightfinder server.
 
+Supported collectd version: collectd-5.5.2
+
+Tested on Centos 7.
+
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
 - Sign in with the user credentials or sign up for a new account.
@@ -28,6 +32,37 @@ For Fedora and RHEL-derivatives, the following command will ensure that the requ
 sudo yum update
 sudo yum install gcc libffi-devel python-devel openssl-devel wget
 ```
+
+##### Collectd Configuration Requirements:
+
+- collectd should be installed and running.
+- Following plugins should be installed and available:
+```
+cpu, csv, disk, interface, load, memory, processes
+```
+- The following lines in the collectd.conf should be uncommented. See sample configuration file "collectdsample.conf" for example.
+```
+Interval 60
+LoadPlugin cpu
+LoadPlugin csv
+LoadPlugin disk
+LoadPlugin processes
+LoadPlugin memory
+LoadPlugin interface
+LoadPlugin load
+
+<Plugin cpu>
+  ReportByCpu false
+  ReportByState false
+  ValuesPercentage false
+</Plugin>
+
+<Plugin csv>
+        DataDir "${prefix}/var/lib/collectd/csv"
+        StoreRates false
+</Plugin>
+```
+- The Interval above is specified in seconds. Set it to required sampling value. It specifies how often data is collected.
 
 ##### To deploy agent on multiple hosts:
 
