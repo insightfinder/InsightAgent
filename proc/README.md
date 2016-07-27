@@ -15,7 +15,7 @@ InsightFinder agent can be used to monitor system performance metrics on bare me
 ##### Pre-requisites:
 Python 2.7.
 
-This pre-requisite is needed on the machine which launches deployInsightAgent.py.
+This pre-requisite is needed on the machine which launches deployInsightAgent.sh.
 For Debian and Ubuntu, the following command will ensure that the required dependencies are installed:
 ```
 sudo apt-get upgrade

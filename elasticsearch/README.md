@@ -17,7 +17,7 @@ Tested on Elasticsearch-2.3.3 in Centos 7.
 ##### Pre-requisites:
 Elasticsearch installed and should be accessible on port 9200.
 
-This pre-requisite is needed on the machine which launches deployInsightAgent.py.
+This pre-requisite is needed on the machine which launches deployInsightAgent.sh.
 For Debian and Ubuntu, the following command will ensure that the required dependencies are installed:
 ```
 sudo apt-get upgrade
