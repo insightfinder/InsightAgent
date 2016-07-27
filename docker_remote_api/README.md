@@ -36,7 +36,7 @@ sudo yum install gcc libffi-devel python-devel openssl-devel wget
 
 - Get the deployment script from github using below command:
 ```
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.sh
 ```
 - Get IP address of the hosts on which docker containers are running.
 - All machines should have same login username and password.
