@@ -9,6 +9,9 @@ Tested with kubernetes v1.2.0 on Centos 7.
 
 Required docker version: 1.9.1 and later.
 
+##### Pre-requisites:
+- It is expected to have atleast one container other than the insightfinder daemonset container in each node of the kubernetes cluster.
+
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
 
