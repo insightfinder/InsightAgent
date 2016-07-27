@@ -37,6 +37,10 @@ sudo yum install gcc libffi-devel python-devel openssl-devel
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.sh
 ```
+and change the permissions with the command
+```
+ chmod 755 deployInsightAgent.sh 
+ ```
 - Get IP address of all machines (or hosts) on which InsightFinder agent needs to be installed.
 - All machines should have same login username and password.
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
