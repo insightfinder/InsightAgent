@@ -36,7 +36,8 @@ sudo yum install gcc libffi-devel python-devel openssl-devel wget
 ##### Collectd Configuration Requirements:
 
 - collectd should be installed and running.
-- Following plugins should be installed and available:
+- collectd should be installed in /opt/ and the configuration file is available in /opt/collectd/etc/collectd.conf
+- Check collectd.conf as the following plugins should be installed and available:
 ```
 cpu, csv, disk, interface, load, memory, processes
 ```
