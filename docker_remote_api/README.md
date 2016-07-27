@@ -38,6 +38,10 @@ sudo yum install gcc libffi-devel python-devel openssl-devel wget
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.sh
 ```
+and change the permissions with the command.
+```
+ chmod 755 deployInsightAgent.sh
+```
 - Get IP address of the hosts on which docker containers are running.
 - All machines should have same login username and password.
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
@@ -64,13 +68,16 @@ Example: /home/insight/.ssh/id_rsa
 ##### To undo agent deployment on multiple hosts:
 - Get the script for stopping agents from github using below command:
 ```
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.sh
 ```
-
+and change the permissions with the command.
+```
+ chmod 755 stopcron.sh
+```
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 - To stop the agent run the following command:
 ```
-python stopcron.py -n USER_NAME_IN_HOST -p PASSWORD
+./stopcron.sh -n USER_NAME_IN_HOST -p PASSWORD
 
 USER_NAME_IN_HOST - username used to login into the host machines
 PASSWORD - password or name of the identity file along with path

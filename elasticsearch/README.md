@@ -64,11 +64,14 @@ python deployInsightAgent.py -h
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.py
 ```
-
+nd change the permissions with the command.
+```
+ chmod 755 stopcron.sh
+```
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 - To stop the agent run the following command:
 ```
-python stopcron.py -n USER_NAME_IN_HOST -p PASSWORD
+./stopcron.sh -n USER_NAME_IN_HOST -p PASSWORD
 
 USER_NAME_IN_HOST - username used to login into the host machines
 PASSWORD - password or name of the identity file along with path

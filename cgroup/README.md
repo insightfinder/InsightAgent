@@ -37,6 +37,10 @@ sudo yum install gcc libffi-devel python-devel openssl-devel
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.sh
 ```
+and change the permissions with the command.
+```
+ chmod 755 deployInsightAgent.sh
+```
 - Get IP address of all machines (or hosts) on which InsightFinder agent needs to be installed.
 - All machines should have same login username and password.
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
@@ -65,11 +69,14 @@ Example: /home/insight/.ssh/id_rsa
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.py
 ```
-
+and change the permissions with the command.
+```
+ chmod 755 stopcron.sh
+```
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 - To stop the agent run the following command:
 ```
-python stopcron.py -n USER_NAME_IN_HOST -p PASSWORD
+./stopcron.sh -n USER_NAME_IN_HOST -p PASSWORD
 
 USER_NAME_IN_HOST - username used to login into the host machines
 PASSWORD - password or name of the identity file along with path
