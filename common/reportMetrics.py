@@ -200,47 +200,68 @@ else:
     if os.path.isfile(os.path.join(homepath,options.inputFile)):
         numlines = len(open(os.path.join(homepath,options.inputFile)).readlines())
         file = open(os.path.join(homepath,options.inputFile))
-        fileReader = csv.reader(file)
         metricdataSizeKnown = False
         metricdataSize = 0
-        for row in fileReader:
-            if fileReader.line_num == 1:
-                #Get all the metric names
-                fieldnames = row
-                for i in range(0,len(fieldnames)):
-                    if fieldnames[i] == "timestamp":
-                        timestamp_index = i
-            elif fileReader.line_num > 1:
-                #Read each line from csv and generate a json
-                thisData = {}
-                for i in range(0,len(row)):
-                    if fieldnames[i] == "timestamp":
-                        new_prev_endtime_epoch = row[timestamp_index]
-                        thisData[fieldnames[i]] = row[i]
-                        # update min/max timestamp epoch
-                        if minTimestampEpoch == 0 or minTimestampEpoch > long(new_prev_endtime_epoch):
-                            minTimestampEpoch = long(new_prev_endtime_epoch)
-                        if maxTimestampEpoch == 0 or maxTimestampEpoch < long(new_prev_endtime_epoch):
-                            maxTimestampEpoch = long(new_prev_endtime_epoch)
-                    else:
-                        colname = fieldnames[i]
-                        if colname.find("]") == -1:
-                            colname = colname+"[-]"
-                        if colname.find(":") == -1:
-                            groupid = i
-                            colname = colname+":"+str(groupid)
-                        thisData[colname] = row[i]
-                metricData.append(thisData)
+        if mode == "logFileReplay":
+            jsonData = json.load(file)
+            numlines = len(jsonData)
+            for row in jsonData:
+                new_prev_endtime_epoch = row[row.keys()[0]]
+                if minTimestampEpoch == 0 or minTimestampEpoch > long(new_prev_endtime_epoch):
+                    minTimestampEpoch = long(new_prev_endtime_epoch)
+                if maxTimestampEpoch == 0 or maxTimestampEpoch < long(new_prev_endtime_epoch):
+                    maxTimestampEpoch = long(new_prev_endtime_epoch)
+                metricData.append(row)
                 if metricdataSizeKnown == False:
                     metricdataSize = len(bytearray(json.dumps(metricData)))
                     metricdataSizeKnown = True
-                    totalSize = metricdataSize * (numlines - 1) # -1 for header
-            if ((len(bytearray(json.dumps(metricData))) + metricdataSize) < 700000): #Not using exact 750KB as some data will be padded later
-                continue
-            else:
-                sendData()
-                metricData = []
-                alldata = {}
+                    totalSize = metricdataSize * numlines
+                if ((len(bytearray(json.dumps(metricData))) + metricdataSize) < 700000):  # Not using exact 750KB as some data will be padded later
+                    continue
+                else:
+                    sendData()
+                    metricData = []
+
+        else:
+            fileReader = csv.reader(file)
+            for row in fileReader:
+                if fileReader.line_num == 1:
+                    #Get all the metric names
+                    fieldnames = row
+                    for i in range(0,len(fieldnames)):
+                        if fieldnames[i] == "timestamp":
+                            timestamp_index = i
+                elif fileReader.line_num > 1:
+                    #Read each line from csv and generate a json
+                    thisData = {}
+                    for i in range(0,len(row)):
+                        if fieldnames[i] == "timestamp":
+                            new_prev_endtime_epoch = row[timestamp_index]
+                            thisData[fieldnames[i]] = row[i]
+                            # update min/max timestamp epoch
+                            if minTimestampEpoch == 0 or minTimestampEpoch > long(new_prev_endtime_epoch):
+                                minTimestampEpoch = long(new_prev_endtime_epoch)
+                            if maxTimestampEpoch == 0 or maxTimestampEpoch < long(new_prev_endtime_epoch):
+                                maxTimestampEpoch = long(new_prev_endtime_epoch)
+                        else:
+                            colname = fieldnames[i]
+                            if colname.find("]") == -1:
+                                colname = colname+"[-]"
+                            if colname.find(":") == -1:
+                                groupid = i
+                                colname = colname+":"+str(groupid)
+                            thisData[colname] = row[i]
+                    metricData.append(thisData)
+                    if metricdataSizeKnown == False:
+                        metricdataSize = len(bytearray(json.dumps(metricData)))
+                        metricdataSizeKnown = True
+                        totalSize = metricdataSize * (numlines - 1) # -1 for header
+                if ((len(bytearray(json.dumps(metricData))) + metricdataSize) < 700000): #Not using exact 750KB as some data will be padded later
+                    continue
+                else:
+                    sendData()
+                    metricData = []
+                    alldata = {}
         file.close()
         updateAgentDataRange(minTimestampEpoch,maxTimestampEpoch)
 
