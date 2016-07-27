@@ -56,7 +56,7 @@ Example: /home/insight/.ssh/id_rsa
 
 ##### To get more details on the command, run
 ```
-python deployInsightAgent.py -h
+./deployInsightAgent.py
 ```
 
 ##### To undo agent deployment on multiple hosts:
