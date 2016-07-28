@@ -62,7 +62,7 @@ AGENT_TYPE is *docker_remote_api*.
 To validate deployment, select to enter either a password or key. For a key, enter the identity file's path name. For example: /home/insight/.ssh/id_rsa
 
 
-##### To undo agent deployment on multiple hosts:
+##### To undo agent deployment on multiple hosts
 - Get the script for stopping agents from GitHub with the following command
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.sh
