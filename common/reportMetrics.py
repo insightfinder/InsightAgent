@@ -66,6 +66,10 @@ serverUrl = 'https://insightfindergae.appspot.com'
 
 reportedDataSize = 0
 totalSize = 0
+firstData = False
+chunkSize = 0
+totalChunks = 0
+currentChunk = 1
 def getindex(col_name):
     if col_name == "CPU":
         return 1
@@ -86,9 +90,24 @@ def update_timestamp(prev_endtime):
     with open(os.path.join(homepath,"reporting_config.json"),"w") as f:
         json.dump(config, f)
 
+def getTotalSize(iFile):
+    filejson = open(os.path.join(homepath, iFile))
+    allJsonData = []
+    jsonData = json.load(filejson)
+    for row in jsonData:
+        allJsonData.append(row)
+    filejson.close()
+    return len(bytearray(json.dumps(allJsonData)))
+
+
 #send data to insightfinder
 def sendData():
     global reportedDataSize
+    global firstData
+    global chunkSize
+    global totalChunks
+    global currentChunk
+    global totalSize
     if len(metricData) == 0:
         return
     #update projectKey, userName in dict
@@ -100,13 +119,24 @@ def sendData():
 
     #print the json
     json_data = json.dumps(alldata)
-    #print json_data
     if "FileReplay" in mode:
         reportedDataSize += len(bytearray(json.dumps(metricData)))
+        if firstData == False:
+            chunkSize = reportedDataSize
+            firstData = True
+            totalChunks = int(math.ceil(float(totalSize)/float(chunkSize)))
         reportedDataPer = (float(reportedDataSize)/float(totalSize))*100
         print str(min(100.0,math.ceil(reportedDataPer))) + "% of data are reported"
+        alldata["chunkSerialNumber"] = str(currentChunk)
+        alldata["chunkTotalNumber"] = str(totalChunks)
+        currentChunk += 1
+        if mode == "logFileReplay":
+            alldata["agentType"] = "LogFileReplay"
     else:
         print str(len(bytearray(json_data))) + " bytes data are reported"
+    #print the json
+    json_data = json.dumps(alldata)
+    #print json_data
     url = serverUrl + "/customprojectrawdata"
     if agentType == "hypervisor":
         response = urllib.urlopen(url, data=urllib.urlencode(alldata))
@@ -215,7 +245,7 @@ else:
                 if metricdataSizeKnown == False:
                     metricdataSize = len(bytearray(json.dumps(metricData)))
                     metricdataSizeKnown = True
-                    totalSize = metricdataSize * numlines
+                    totalSize = getTotalSize(options.inputFile)
                 if ((len(bytearray(json.dumps(metricData))) + metricdataSize) < 700000):  # Not using exact 750KB as some data will be padded later
                     continue
                 else:
