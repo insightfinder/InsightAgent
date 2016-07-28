@@ -64,9 +64,9 @@ LoadPlugin load
 ```
 - The Interval above is specified in seconds. Set it to required sampling value. It specifies how often data is collected.
 
-##### To deploy agent on multiple hosts:
+##### To deploy agent on multiple hosts
 
-- Get the deployment script from github using below command:
+- Get the deployment script from github using below command
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.sh
 ```
@@ -97,7 +97,7 @@ To validate deployment, select to enter either a password or key. For a key, ent
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.sh
 ```
-and change the permissions with the command.
+and change the permissions with the command
 ```
  chmod 755 stopcron.sh
 ```
