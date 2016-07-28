@@ -65,6 +65,11 @@ env:
 kubectl create -f insightfinder.yaml
 ```
 
+##### To undo deployment 
+```
+kubectl delete -f insightfinder.yaml
+```
+
 ##### To check for status of the pods created:
 ```
 kubectl get pods
