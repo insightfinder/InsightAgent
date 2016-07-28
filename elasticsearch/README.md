@@ -78,7 +78,26 @@ PASSWORD - password or name of the identity file along with path
 ```
 
 ##### To install agent on local machine:
+1) Use the following command to download the insightfinder agent code.
+```
+wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
+```
+Untar using this command.
+```
+tar -xvf insightagent.tar.gz
+```
+
+2) In InsightAgent-master directory, run the following commands to install and use python virtual environment for insightfinder agent:
+```
+./deployment/checkpackages.sh
+```
+```
+source pyenv/bin/activate
+```
+
+3) Run the below command to install agent.
 ```
 ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
 ```
+After using the agent, use command "deactivate" to get out of python virtual environment.
 
