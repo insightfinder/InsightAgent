@@ -12,13 +12,13 @@ Required docker version: 1.9.1 and later.
 Required cadvisor version: 0.19.3 and later.
 
 ##### Instructions to register a project in Insightfinder.com
-- Go to the [insightfinder website](https://insightfinder.com/)
+- Go to the [insightfinder.com](https://insightfinder.com/)
 - Sign in with the user credentials or sign up for a new account.
 - Go to Settings and Register for a project under "Insight Agent" tab.
 - Give a project name, select Project Type as "Private Cloud".
 - Go to Account Info by clicking on your user id at the top right corner of the webpage, and note the license key number.
 
-##### Pre-requisites:
+##### Pre-requisites
 Python 2.7.
 
 This pre-requisite is needed on the machine which launches deployInsightAgent.sh.
@@ -52,7 +52,7 @@ sudo docker run \
 
 
 
-##### To deploy agent on multiple hosts:
+##### To deploy agent on multiple hosts
 
 - Get the deployment script from github using the command
 ```
@@ -96,7 +96,7 @@ and change the permissions with the command.
  chmod 755 stopcron.sh
 ```
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
-- To stop the agent run the following command:
+- To stop the agent run the following command
 ```
 ./stopcron.sh -n USER_NAME_IN_HOST -p PASSWORD
 
@@ -104,7 +104,7 @@ USER_NAME_IN_HOST - username used to login into the host machines
 PASSWORD - password or name of the identity file along with path
 ```
 
-##### To install agent on local machine:
+##### To install agent on local machine
 1) Use the following command to download the insightfinder agent code.
 ```
 wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
@@ -128,7 +128,7 @@ source pyenv/bin/activate
 ```
 After using the agent, use command "deactivate" to get out of python virtual environment.
 
-##### To check raw data in host machines:
+##### To check raw data in host machines
 - Login into the individual host machines.
 - In the InsightAgent-master/data folder, all raw data will be stored in csv files. csv files older than 5 days are moved to /tmp folder.
 - To change the retention period, edit the InsightAgent-master/reporting_config.json and change the "keep_file_days" to the required value.
