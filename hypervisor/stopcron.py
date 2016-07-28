@@ -28,7 +28,7 @@ def sshStopCron(retry,hostname):
         session = transport.open_session()
         session.set_combine_stderr(True)
         session.get_pty()
-        command = "./InsightAgent-testing/hypervisor/stopcron.sh -t hypervisor\n"
+        command = "./InsightAgent-master/hypervisor/stopcron.sh -t hypervisor\n"
         session.exec_command(command)
         stdin = session.makefile('wb', -1)
         stdout = session.makefile('rb', -1)
