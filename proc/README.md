@@ -95,4 +95,5 @@ source pyenv/bin/activate
 ```
 ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
 ```
+After using the agent, use command "deactivate" to get out of python virtual environment.
 
