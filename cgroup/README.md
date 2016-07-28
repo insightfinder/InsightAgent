@@ -58,7 +58,7 @@ AGENT_TYPE is *cgroup*.
 ```
 ./deployInsightAgent.sh
 ```
--To validate deployment, select to enter either a password or key. For a key, enter the file path for the identity file. For example: /home/insight/.ssh/id_rsa
+To validate deployment, select to enter either a password or key. For a key, enter the identity file's path name. For example: /home/insight/.ssh/id_rsa
 
 
 ##### To undo agent deployment on multiple hosts
