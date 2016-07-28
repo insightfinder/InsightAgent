@@ -70,7 +70,7 @@ LoadPlugin load
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.sh
 ```
--Change permission for "deployInsightAgent.sh" to executable.
+- Change permission for "deployInsightAgent.sh" to executable.
 -Ensure all machines have the same login username and password.
 -Obtain the IP address for every machine (or host) the InsightFinder agent will be installed on.
 -Include the IP address of all hosts in hostlist.txt, entering one IP address per line.
@@ -101,7 +101,7 @@ and change the permissions with the command
 ```
  chmod 755 stopcron.sh
 ```
-- Include IP address of all hosts in hostlist.txt and enter one IP address per line.
+- Include IP addresses of all hosts in hostlist.txt and enter one IP address per line.
 - To stop the agent run the following command
 ```
 ./stopcron.sh -n USER_NAME_IN_HOST -p PASSWORD
