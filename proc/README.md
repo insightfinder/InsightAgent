@@ -10,7 +10,7 @@ InsightFinder agent can be used to monitor system performance metrics on bare me
 - Sign in with the user credentials or sign up for a new account.
 - Go to Settings and Register for a project under "Insight Agent" tab.
 - Give a project name, select Project Type as "Private Cloud".
-- Note down license key which is available in "User Account Information". To go to "User Account Information", click the userid on the top right corner.
+- View your account information by clicking on your user id at the top right corner of the webpage. Note the license key number.
 
 ##### Pre-requisites:
 Python 2.7.
