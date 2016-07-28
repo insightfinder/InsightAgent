@@ -11,7 +11,10 @@ The following types of agents are available:
  - docker remote api
  - elastic search
  - file replay
+ - elasticsearch
+ - hypervisor
+ - collectd
  - hypervisor
  - proc
 
-Instructions on how to use each agent is available in the README file of each agent folders.
+More details on the agents and installation details are in the wiki: https://github.com/insightfinder/InsightAgent/wiki

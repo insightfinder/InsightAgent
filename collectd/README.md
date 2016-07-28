@@ -7,6 +7,10 @@ InsightFinder agent can be used to monitor system performance metrics on bare me
 
 collectd is an open source daemon that collects statistics from a system and publishes them to insightfinder server.
 
+Supported collectd version: collectd-5.5.2
+
+Tested on Centos 7.
+
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
 - Sign in with the user credentials or sign up for a new account.
@@ -17,7 +21,7 @@ collectd is an open source daemon that collects statistics from a system and pub
 ##### Pre-requisites:
 Python 2.7.
 
-This pre-requisite is needed on the machine which launches deployInsightAgent.py.
+This pre-requisite is needed on the machine which launches deployInsightAgent.sh.
 For Debian and Ubuntu, the following command will ensure that the required dependencies are installed:
 ```
 sudo apt-get upgrade
@@ -28,6 +32,38 @@ For Fedora and RHEL-derivatives, the following command will ensure that the requ
 sudo yum update
 sudo yum install gcc libffi-devel python-devel openssl-devel wget
 ```
+
+##### Collectd Configuration Requirements:
+
+- collectd should be installed and running.
+- collectd should be installed in /opt/ and the configuration file is available in /opt/collectd/etc/collectd.conf
+- Check collectd.conf as the following plugins should be installed and available:
+```
+cpu, csv, disk, interface, load, memory, processes
+```
+- The following lines in the collectd.conf should be uncommented. See sample configuration file "collectdsample.conf" for example.
+```
+Interval 60
+LoadPlugin cpu
+LoadPlugin csv
+LoadPlugin disk
+LoadPlugin processes
+LoadPlugin memory
+LoadPlugin interface
+LoadPlugin load
+
+<Plugin cpu>
+  ReportByCpu false
+  ReportByState false
+  ValuesPercentage false
+</Plugin>
+
+<Plugin csv>
+        DataDir "${prefix}/var/lib/collectd/csv"
+        StoreRates false
+</Plugin>
+```
+- The Interval above is specified in seconds. Set it to required sampling value. It specifies how often data is collected.
 
 ##### To deploy agent on multiple hosts:
 
@@ -62,13 +98,16 @@ Example: /home/insight/.ssh/id_rsa
 ##### To undo agent deployment on multiple hosts:
 - Get the script for stopping agents from github using below command:
 ```
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.sh
 ```
-
+and change the permissions with the command.
+```
+ chmod 755 stopcron.sh
+```
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 - To stop the agent run the following command:
 ```
-python stopcron.py -n USER_NAME_IN_HOST -p PASSWORD
+./stopcron.sh -n USER_NAME_IN_HOST -p PASSWORD
 
 USER_NAME_IN_HOST - username used to login into the host machines
 PASSWORD - password or name of the identity file along with path

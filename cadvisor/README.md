@@ -12,16 +12,16 @@ Required docker version: 1.9.1 and later.
 Required cadvisor version: 0.19.3 and later.
 
 ##### Instructions to register a project in Insightfinder.com
-- Go to the link https://insightfinder.com/
+- Go to the [insightfinder website](https://insightfinder.com/)
 - Sign in with the user credentials or sign up for a new account.
 - Go to Settings and Register for a project under "Insight Agent" tab.
 - Give a project name, select Project Type as "Private Cloud".
-- Note down license key which is available in "User Account Information". To go to "User Account Information", click the userid on the top right corner.
+- Go to Account Info by clicking on your user id at the top right corner of the webpage, and note the license key number.
 
 ##### Pre-requisites:
 Python 2.7.
 
-This pre-requisite is needed on the machine which launches deployInsightAgent.py.
+This pre-requisite is needed on the machine which launches deployInsightAgent.sh.
 For Debian and Ubuntu, the following command will ensure that the required dependencies are installed:
 ```
 sudo apt-get upgrade
@@ -32,10 +32,13 @@ For Fedora and RHEL-derivatives, the following command will ensure that the requ
 sudo yum update
 sudo yum install gcc libffi-devel python-devel openssl-devel wget
 ```
-cAdvisor should be running in all hosts. To run cAdvisor use
+Ensure cAdvisor is running on all hosts. Use the following command to check that the cadvisor container is present
+```
+sudo docker ps
+```
+Otherwise run cAdvisor using
 ```
 sudo docker run \
-  --cpuset=3 \
   --volume=/:/rootfs:ro \
   --volume=/var/run:/var/run:rw \
   --volume=/sys:/sys:ro \
@@ -46,16 +49,23 @@ sudo docker run \
   google/cadvisor:latest
 ```
 
+
+
+
 ##### To deploy agent on multiple hosts:
 
-- Get the deployment script from github using below command:
+- Get the deployment script from github using the command
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.sh
 ```
-- Get IP address of all machines (or hosts) on which InsightFinder agent needs to be installed.
-- All machines should have same login username and password.
-- Include IP address of all hosts in hostlist.txt and enter one IP address per line.
-- To deploy run the following command:
+and change the permissions with the command.
+```
+ chmod 755 deployInsightAgent.sh 
+```
+- Ensure all machines have the same login username and password.
+- Obtain the IP address for every machine (or host) the InsightFinder agent will be installed on.
+- Include the IP address of all hosts in **hostlist.txt**, entering one IP address per line.
+- Deploy by running the following command:
 ```
 ./deployInsightAgent.sh -n USER_NAME_IN_HOST
                         -i PROJECT_NAME_IN_INSIGHTFINDER
@@ -79,13 +89,16 @@ Example: /home/insight/.ssh/id_rsa
 ##### To undo agent deployment on multiple hosts:
 - Get the script for stopping agents from github using below command:
 ```
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.sh
 ```
-
+and change the permissions with the command.
+```
+ chmod 755 stopcron.sh
+```
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 - To stop the agent run the following command:
 ```
-python stopcron.py -n USER_NAME_IN_HOST -p PASSWORD
+./stopcron.sh -n USER_NAME_IN_HOST -p PASSWORD
 
 USER_NAME_IN_HOST - username used to login into the host machines
 PASSWORD - password or name of the identity file along with path

@@ -15,7 +15,7 @@ InsightFinder agent can be used to monitor system performance metrics on bare me
 ##### Pre-requisites:
 Python 2.7.
 
-This pre-requisite is needed on the machine which launches deployInsightAgent.py.
+This pre-requisite is needed on the machine which launches deployInsightAgent.sh.
 For Debian and Ubuntu, the following command will ensure that the required dependencies are installed:
 ```
 sudo apt-get upgrade
@@ -60,13 +60,14 @@ Example: /home/insight/.ssh/id_rsa
 ##### To undo agent deployment on multiple hosts:
 - Get the script for stopping agents from github using below command:
 ```
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.sh
 ```
 
+- Change permission of "stopcron.sh" as a executable.
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 - To stop the agent run the following command:
 ```
-python stopcron.py -n USER_NAME_IN_HOST -p PASSWORD
+./stopcron.sh -n USER_NAME_IN_HOST -p PASSWORD
 
 USER_NAME_IN_HOST - username used to login into the host machines
 PASSWORD - password or name of the identity file along with path

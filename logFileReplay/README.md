@@ -1,21 +1,20 @@
-# InsightAgent: filereplay
-Agent Type: filereplay
+# InsightAgent: LogFileReplay
+Agent Type: LogFileReplay
 
 Platform: Linux
 
-InsightAgent support filereplay mode in which the data from the csv file is read and sent to insightfinder server.
+InsightAgent support replay mode of json log files in which the data from the json file is read and sent to insightfinder server.
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
 - Sign in with the user credentials or sign up for a new account.
 - Go to Settings and Register for a project under "Insight Agent" tab.
-- Give a project name, select Project Type as "File Replay".
+- Give a project name, select Project Type as "Log File".
 - Note down the project name and license key which will be used for agent installation. The license key is also available in "User Account Information". To go to "User Account Information", click the userid on the top right corner.
 
 ##### Pre-requisites:
 Python 2.7.
 
-This pre-requisite is needed on the machine which launches deployInsightAgent.py.
 For Debian and Ubuntu, the following command will ensure that the required dependencies are installed:
 ```
 sudo apt-get upgrade
@@ -45,16 +44,25 @@ tar -xvf insightagent.tar.gz
 source pyenv/bin/activate
 ```
 ```
-./deployment/install.sh -i PROJECT_NAME -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 0 -r 0 -t filereplay
+./deployment/install.sh -i PROJECT_NAME -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 0 -r 0 -t logFileReplay
 ```
-3) Put data files in InsightAgent-master/data/ 
-Make sure each file is .csv formatted and starts with a row of headers.
+3) Put data files in InsightAgent-master/data/
+Make sure the contents of the file are in json format.
 
+Example:
+```
+[
+  {
+    "eventId": 1000100001,
+    "Root cause": "RC ID-00001\nMissing Feature"
+  }
+]
+```
 4) Run the following command for each data file.
 ```
-python common/reportMetrics.py -m replay -f PATH_TO_CSVFILENAME
+python common/reportMetrics.py -m logFileReplay -f PATH_TO_JSON_FILE
 ```
-Where PATH_TO_CSVFILENAME is the path and filename of the csv file.
+Where PATH_TO_JSON_FILE is the path and filename of the json file.
 
 After using the agent, use command "deactivate" to get out of python virtual environment.
 

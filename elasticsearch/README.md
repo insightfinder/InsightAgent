@@ -17,7 +17,7 @@ Tested on Elasticsearch-2.3.3 in Centos 7.
 ##### Pre-requisites:
 Elasticsearch installed and should be accessible on port 9200.
 
-This pre-requisite is needed on the machine which launches deployInsightAgent.py.
+This pre-requisite is needed on the machine which launches deployInsightAgent.sh.
 For Debian and Ubuntu, the following command will ensure that the required dependencies are installed:
 ```
 sudo apt-get upgrade
@@ -56,7 +56,7 @@ Example: /home/insight/.ssh/id_rsa
 
 ##### To get more details on the command, run
 ```
-python deployInsightAgent.py -h
+./deployInsightAgent.sh
 ```
 
 ##### To undo agent deployment on multiple hosts:
@@ -64,11 +64,14 @@ python deployInsightAgent.py -h
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.py
 ```
-
+nd change the permissions with the command.
+```
+ chmod 755 stopcron.sh
+```
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 - To stop the agent run the following command:
 ```
-python stopcron.py -n USER_NAME_IN_HOST -p PASSWORD
+./stopcron.sh -n USER_NAME_IN_HOST -p PASSWORD
 
 USER_NAME_IN_HOST - username used to login into the host machines
 PASSWORD - password or name of the identity file along with path
