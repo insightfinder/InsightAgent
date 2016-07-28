@@ -123,18 +123,41 @@ def initPreviousResults():
                 networkRx = 0.0
                 networkTx = 0.0
         except KeyError,e:
-            networkMetrics = metricData['networks']
-            networkRx = 0.0
-            networkTx = 0.0
-            for key in networkMetrics:
-                networkRx += float(networkMetrics[key]['rx_bytes'])
-                networkTx += float(networkMetrics[key]['tx_bytes'])
-            networkRx = round(float(networkRx/(1024*1024)),4) #MB
-            networkTx = round(float(networkTx/(1024*1024)),4) #MB
-        cpu = round(float(metricData['cpu_stats']['cpu_usage']['total_usage'])/10000000,4) #Convert nanoseconds to jiffies
-        memUsed = round(float(float(metricData['memory_stats']['usage'])/(1024*1024)),4) #MB
-        diskRead = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][0]['value'])/(1024*1024)),4) #MB
-        diskWrite = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][1]['value'])/(1024*1024)),4) #MB
+            try:
+                networkMetrics = metricData['networks']
+                networkRx = 0.0
+                networkTx = 0.0
+                for key in networkMetrics:
+                    networkRx += float(networkMetrics[key]['rx_bytes'])
+                    networkTx += float(networkMetrics[key]['tx_bytes'])
+                networkRx = round(float(networkRx/(1024*1024)),4) #MB
+                networkTx = round(float(networkTx/(1024*1024)),4) #MB
+            except KeyError,e:
+                print "Couldn't fetch network information for container: " + host
+                networkRx = 0.0
+                networkTx = 0.0
+        try:
+            cpu = round(float(metricData['cpu_stats']['cpu_usage']['total_usage'])/10000000,4) #Convert nanoseconds to jiffies
+        except KeyError,e:
+            print "Couldn't fetch cpu information for container: " + host
+            cpu = 0.0
+        try:
+            memUsed = round(float(float(metricData['memory_stats']['usage'])/(1024*1024)),4) #MB
+        except KeyError,e:
+            print "Couldn't fetch memory information for container: " + host
+            memUsed = 0
+        try:
+            if len(metricData['blkio_stats']['io_service_bytes_recursive']) == 0:
+                diskRead = 0
+                diskWrite = 0
+            else:
+                diskRead = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][0]['value'])/(1024*1024)),4) #MB
+                diskWrite = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][1]['value'])/(1024*1024)),4) #MB
+        except (KeyError,IndexError) as e:
+            print "Couldn't fetch disk information for container: " + host
+            diskRead = 0
+            diskWrite = 0
+
         if timestampRecorded == False:
             if log != "":
                 log = str(timestamp) + "," + log
@@ -359,19 +382,44 @@ def getmetrics():
                         networkRx = 0.0
                         networkTx = 0.0
                 except KeyError,e:
-                    networkMetrics = metricData['networks']
-                    networkRx = 0.0
-                    networkTx = 0.0
-                    for key in networkMetrics:
-                        networkRx += float(networkMetrics[key]['rx_bytes'])
-                        networkTx += float(networkMetrics[key]['tx_bytes'])
-                    networkRx = round(float(networkRx/(1024*1024)),4) #MB
-                    networkTx = round(float(networkTx/(1024*1024)),4) #MB
-                cpu = round(float(metricData['cpu_stats']['cpu_usage']['total_usage'])/10000000,4) #Convert nanoseconds to jiffies
-                precpu["CPU["+host+"_"+hostname+"]"+":"+str(5001)] = round(float(metricData['precpu_stats']['cpu_usage']['total_usage'])/10000000,4)
-                memUsed = round(float(float(metricData['memory_stats']['usage'])/(1024*1024)),4) #MB
-                diskRead = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][0]['value'])/(1024*1024)),4) #MB
-                diskWrite = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][1]['value'])/(1024*1024)),4) #MB
+                    try:
+                        networkMetrics = metricData['networks']
+                        networkRx = 0.0
+                        networkTx = 0.0
+                        for key in networkMetrics:
+                            networkRx += float(networkMetrics[key]['rx_bytes'])
+                            networkTx += float(networkMetrics[key]['tx_bytes'])
+                        networkRx = round(float(networkRx/(1024*1024)),4) #MB
+                        networkTx = round(float(networkTx/(1024*1024)),4) #MB
+                    except KeyError, e:
+                        print "Couldn't fetch network information for container: " + host
+                        networkRx = 0.0
+                        networkTx = 0.0
+                try:
+                    cpu = round(float(metricData['cpu_stats']['cpu_usage']['total_usage'])/10000000,4) #Convert nanoseconds to jiffies
+                    precpu["CPU["+host+"_"+hostname+"]"+":"+str(5001)] = round(float(metricData['precpu_stats']['cpu_usage']['total_usage'])/10000000,4)
+                except KeyError, e:
+                    print "Couldn't fetch cpu information for container: " + host
+                    cpu = 0.0
+                    precpu["CPU["+host+"_"+hostname+"]"+":"+str(5001)] = 0.0
+                try:
+                    memUsed = round(float(float(metricData['memory_stats']['usage'])/(1024*1024)),4) #MB
+                except KeyError, e:
+                    print "Couldn't fetch memory information for container: " + host
+                    memUsed = 0
+
+                try:
+                    if len(metricData['blkio_stats']['io_service_bytes_recursive']) == 0:
+                        diskRead = 0
+                        diskWrite = 0
+                    else:
+                        diskRead = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][0]['value'])/(1024*1024)),4) #MB
+                        diskWrite = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][1]['value'])/(1024*1024)),4) #MB
+                except (KeyError, IndexError) as e:
+                    print "Couldn't fetch disk information for container: "+host
+                    diskRead = 0
+                    diskWrite = 0
+
                 instances.append(dockers[i])
                 if timestampAvailable == False:
                     if fieldnames != "":
