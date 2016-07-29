@@ -7,6 +7,7 @@ import json
 import time
 import datetime
 import socket
+import sys
 
 usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)
@@ -102,18 +103,40 @@ def initPreviousResults():
                 networkRx = 0
                 networkTx = 0
         except KeyError,e:
-            networkMetrics = metricData['networks']
-            networkRx = 0
-            networkTx = 0
-            for key in networkMetrics:
-                networkRx += float(networkMetrics[key]['rx_bytes'])
-                networkTx += float(networkMetrics[key]['tx_bytes'])
-            networkRx = round(float(networkRx/(1024*1024)),4) #MB
-            networkTx = round(float(networkTx/(1024*1024)),4) #MB
-        cpu = round(float(metricData['cpu_stats']['cpu_usage']['total_usage'])/10000000,4) #Convert nanoseconds to jiffies
-        memUsed = round(float(float(metricData['memory_stats']['usage'])/(1024*1024)),4) #MB
-        diskRead = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][0]['value'])/(1024*1024)),4) #MB
-        diskWrite = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][1]['value'])/(1024*1024)),4) #MB
+            try:
+                networkMetrics = metricData['networks']
+                networkRx = 0
+                networkTx = 0
+                for key in networkMetrics:
+                    networkRx += float(networkMetrics[key]['rx_bytes'])
+                    networkTx += float(networkMetrics[key]['tx_bytes'])
+                networkRx = round(float(networkRx/(1024*1024)),4) #MB
+                networkTx = round(float(networkTx/(1024*1024)),4) #MB
+            except KeyError, e:
+                print "Couldn't fetch network information for container: " + dockers[i]
+                networkRx = "NaN"
+                networkTx = "NaN"
+        try:
+            cpu = round(float(metricData['cpu_stats']['cpu_usage']['total_usage'])/10000000,4) #Convert nanoseconds to jiffies
+        except KeyError, e:
+            print "Couldn't fetch cpu information for container: " + dockers[i]
+            cpu = "NaN"
+        try:
+            memUsed = round(float(float(metricData['memory_stats']['usage'])/(1024*1024)),4) #MB
+        except KeyError, e:
+            print "Couldn't fetch memory information for container: " + dockers[i]
+            memUsed = "NaN"
+        try:
+            if len(metricData['blkio_stats']['io_service_bytes_recursive']) == 0:
+                diskRead = "NaN"
+                diskWrite = "NaN"
+            else:
+                diskRead = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][0]['value'])/(1024*1024)),4) #MB
+                diskWrite = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][1]['value'])/(1024*1024)),4) #MB
+        except (KeyError, IndexError) as e:
+            print "Couldn't fetch disk information for container: " + dockers[i]
+            diskRead = "NaN"
+            diskWrite = "NaN"
         if i == 0:
             log = log + str(timestamp)
         log = log + "," + str(cpu) + "," + str(diskRead) + "," + str(diskWrite) + "," + str(networkRx) + "," + str(networkTx) + "," + str(memUsed)
@@ -204,6 +227,7 @@ def update_docker():
     dockers = out.split("\n")
     cronfile = open(os.path.join(homepath,datadir+"getmetrics_docker.sh"),'w')
     cronfile.write("#!/bin/sh\nDATADIR='data/'\ncd $DATADIR\n")
+    cronfile.write("now=$(date +%M)\n")
     containerCount = 0
     for container in dockers:
         if container == "":
@@ -213,6 +237,20 @@ def update_docker():
         cronfile.write(command+"\n")
     for i in range(1,containerCount+1):
         cronfile.write("wait $PID"+str(i)+"\n")
+    cronfile.write(
+        "if [ $now -eq \"00\" ] || [ $now -eq \"15\" ] || [ $now -eq \"30\" ] || [ $now -eq \"45\" ];\nthen\n")
+    for container in dockers:
+        if container == "":
+            continue
+        command = "    cat stat" + container + ".txt > stat" + container + "_backup.txt\n"
+        cronfile.write(command)
+    cronfile.write("else\n")
+    for container in dockers:
+        if container == "":
+            continue
+        command = "    cat stat" + container + ".txt >> stat" + container + "_backup.txt\n"
+        cronfile.write(command)
+    cronfile.write("fi\n")
     cronfile.close()
     os.chmod(os.path.join(homepath,datadir+"getmetrics_docker.sh"),0755)
     if os.path.isfile(os.path.join(homepath,datadir+"totalInstances.json")) == False:
@@ -311,19 +349,42 @@ def getmetrics():
                         networkRx = 0
                         networkTx = 0
                 except KeyError,e:
-                    networkMetrics = metricData['networks']
-                    networkRx = 0
-                    networkTx = 0
-                    for key in networkMetrics:
-                        networkRx += float(networkMetrics[key]['rx_bytes'])
-                        networkTx += float(networkMetrics[key]['tx_bytes'])
-                    networkRx = round(float(networkRx/(1024*1024)),4) #MB
-                    networkTx = round(float(networkTx/(1024*1024)),4) #MB
-                cpu = round(float(metricData['cpu_stats']['cpu_usage']['total_usage'])/10000000,4) #Convert nanoseconds to jiffies
-                precpu["CPU["+dockerInstances[i]+"_"+hostname+"]"+":"+str(1)] = round(float(metricData['precpu_stats']['cpu_usage']['total_usage'])/10000000,4)
-                memUsed = round(float(float(metricData['memory_stats']['usage'])/(1024*1024)),4) #MB
-                diskRead = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][0]['value'])/(1024*1024)),4) #MB
-                diskWrite = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][1]['value'])/(1024*1024)),4) #MB
+                    try:
+                        networkMetrics = metricData['networks']
+                        networkRx = 0
+                        networkTx = 0
+                        for key in networkMetrics:
+                            networkRx += float(networkMetrics[key]['rx_bytes'])
+                            networkTx += float(networkMetrics[key]['tx_bytes'])
+                        networkRx = round(float(networkRx/(1024*1024)),4) #MB
+                        networkTx = round(float(networkTx/(1024*1024)),4) #MB
+                    except KeyError, e:
+                        print "Couldn't fetch network information for container: " + dockerInstances[i]
+                        networkRx = "NaN"
+                        networkTx = "NaN"
+                try:
+                    cpu = round(float(metricData['cpu_stats']['cpu_usage']['total_usage'])/10000000,4) #Convert nanoseconds to jiffies
+                    precpu["CPU["+dockerInstances[i]+"_"+hostname+"]"+":"+str(4001)] = round(float(metricData['precpu_stats']['cpu_usage']['total_usage'])/10000000,4)
+                except KeyError, e:
+                    print "Couldn't fetch cpu information for container: " + dockerInstances[i]
+                    cpu = "NaN"
+                    precpu["CPU["+dockerInstances[i]+"_"+hostname+"]"+":"+str(4001)] = "NaN"
+                try:
+                    memUsed = round(float(float(metricData['memory_stats']['usage'])/(1024*1024)),4) #MB
+                except KeyError, e:
+                    print "Couldn't fetch memory information for container: " + dockerInstances[i]
+                    memUsed = "NaN"
+                try:
+                    if len(metricData['blkio_stats']['io_service_bytes_recursive']) == 0:
+                        diskRead = "NaN"
+                        diskWrite = "NaN"
+                    else:
+                        diskRead = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][0]['value'])/(1024*1024)),4) #MB
+                        diskWrite = round(float(float(metricData['blkio_stats']['io_service_bytes_recursive'][1]['value'])/(1024*1024)),4) #MB
+                except (KeyError, IndexError) as e:
+                    print "Couldn't fetch disk information for container: " + dockerInstances[i]
+                    diskRead = "NaN"
+                    diskWrite = "NaN"
                 if timestampAvailable == False:
                     if log == "":
                         log = str(timestamp)
@@ -333,6 +394,8 @@ def getmetrics():
                 log = log + "," + str(cpu) + "," + str(diskRead) + "," + str(diskWrite) + "," + str(networkRx) + "," + str(networkTx) + "," + str(memUsed)
             if timestampAvailable == False and fieldnames != "":
                 log = "NaN" + "," + log
+                csvFile.close()
+                sys.exit()
             toJson(fieldnames,log)
             deltaList = calculateDelta()
             updateResults()

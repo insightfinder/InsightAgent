@@ -32,7 +32,7 @@ if [ -z "$INSIGHTAGENTDIR" ]; then
 fi
 
 TEMPCRON=/var/spool/cron/crontabs/root
-sed -i '/InsightAgent-testing/d' $TEMPCRON
+sed -i '/InsightAgent-master/d' $TEMPCRON
 	
 cronpid=`cat /var/run/crond.pid`
 kill $cronpid
