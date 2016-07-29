@@ -27,6 +27,7 @@ newInstanceAvailable = False
 def getHostName():
     with open("/etc/hostmachinename","r") as h:
         hostName = h.readline().partition(".")[0]
+        hostName = hostName.strip("\n")
     return hostName
 
 def listtocsv(lists):
