@@ -5,12 +5,11 @@ The following types of agents are available:
  - cadvisor
  - cgroup
  - collectd
- - common
  - daemonset
- - deployment
  - docker remote api
  - elastic search
- - file replay
+ - log file replay
+ - metric file replay
  - elasticsearch
  - hypervisor
  - collectd

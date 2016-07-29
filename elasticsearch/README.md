@@ -62,7 +62,7 @@ Example: /home/insight/.ssh/id_rsa
 ##### To undo agent deployment on multiple hosts:
 - Get the script for stopping agents from github using below command:
 ```
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.sh
 ```
 nd change the permissions with the command.
 ```
