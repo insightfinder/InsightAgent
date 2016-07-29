@@ -32,11 +32,11 @@ sudo yum install gcc libffi-devel python-devel openssl-devel wget
 ```
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.sh
 ```
--Change permission for "deployInsightAgent.sh" to executable.
--Ensure all machines have the same login username and password.
--Obtain the IP address for every machine (or host) the InsightFinder agent will be installed on.
--Include the IP address of all hosts in hostlist.txt, entering one IP address per line.
--To deploy run the following command
+- Change permission for "deployInsightAgent.sh" to executable.
+- Ensure all machines have the same login username and password.
+- Obtain the IP address for every machine (or host) the InsightFinder agent will be installed on.
+- Include the IP address of all hosts in hostlist.txt, entering one IP address per line.
+- To deploy run the following command
 ```
 ./deployInsightAgent.sh -n USER_NAME_IN_HOST
                         -i PROJECT_NAME_IN_INSIGHTFINDER
@@ -53,8 +53,6 @@ AGENT_TYPE is *proc*.
 ```
 
 To validate deployment, select to enter either a password or key. For a key, enter the identity file's path name. For example: /home/insight/.ssh/id_rsa
-./deployInsightAgent.sh
-```
 
 ##### To undo agent deployment on multiple hosts
 - Get the script for stopping agents from GitHub using below command
