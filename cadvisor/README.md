@@ -114,7 +114,7 @@ Untar using this command.
 tar -xvf insightagent.tar.gz
 ```
 
-2) In InsightAgent-master directory, run the following commands to install and use python virtual environment for insightfinder agent:
+2) **In InsightAgent-master directory,** run the following commands to install and use python virtual environment for insightfinder agent:
 ```
 ./deployment/checkpackages.sh
 ```
