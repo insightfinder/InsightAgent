@@ -111,6 +111,16 @@ fi
 rm requirements
 rm get-pip.py
 
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/verifyInsightCredentials.py
+if ! python verifyInsightCredentials.py -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY
+then
+    rm verifyInsightCredentials.py
+    rm -rf pyenv
+    deactivate
+    exit 1
+fi
+rm verifyInsightCredentials.py
+
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.py
 python deployInsightAgent.py -n $INSIGHTFINDER_USERNAME -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE
 deactivate
