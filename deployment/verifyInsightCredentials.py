@@ -6,7 +6,7 @@ import argparse
 import sys
 import time
 
-serverUrl = 'https://insightfinderstaging.appspot.com'
+serverUrl = 'https://insightfindergae.appspot.com'
 
 def get_args():
     parser = argparse.ArgumentParser(description='Script retrieves arguments for insightfinder agent.')
@@ -40,7 +40,13 @@ def sendData():
         print "Response from server: "+str(response.status_code)
         print "Verification of InsightFinder credentials Failed"
         sys.exit(1)
-    return response.json()
+    try:
+        jsonResponse = response.json()
+    except ValueError:
+        print "Not a valid response from server"
+        print "Verification of InsightFinder credentials Failed"
+        sys.exit(1)
+    return jsonResponse
 
 if __name__ == '__main__':
     global projectName
