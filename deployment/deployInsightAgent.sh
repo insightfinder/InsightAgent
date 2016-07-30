@@ -47,7 +47,7 @@ fi
 
 wget https://bootstrap.pypa.io/get-pip.py && python get-pip.py --force-reinstall --user
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/requirements
-/home/$USER/.local/bin/pip install -U --force-reinstall --user virtualenv
+~/.local/bin/pip install -U --force-reinstall --user virtualenv
 if [ "$?" -ne "0" ]; then
     echo "pip install failed. Please install the pre-requisites using the following commands and retry deployment again"
 if [ "$(command -v yum)" ]; then
@@ -76,7 +76,7 @@ fi
     exit 1
 
 fi
-python  /home/$USER/.local/lib/python$version/site-packages/virtualenv.py pyenv
+python  ~/.local/lib/python$version/site-packages/virtualenv.py pyenv
 if [ "$?" -ne "0" ]; then
     echo "Unable to install python virtual environment. Please install the pre-requisites using the following commands and retry deployment again"
 if [ "$(command -v yum)" ]; then
@@ -110,6 +110,16 @@ fi
 
 rm requirements
 rm get-pip.py
+
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/verifyInsightCredentials.py
+if ! python verifyInsightCredentials.py -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY
+then
+    rm verifyInsightCredentials.py
+    rm -rf pyenv
+    deactivate
+    exit 1
+fi
+rm verifyInsightCredentials.py
 
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.py
 python deployInsightAgent.py -n $INSIGHTFINDER_USERNAME -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE

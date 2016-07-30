@@ -27,7 +27,7 @@ done
 
 wget https://bootstrap.pypa.io/get-pip.py && python get-pip.py --force-reinstall --user
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/requirements
-/home/$USER/.local/bin/pip install -U --force-reinstall --user virtualenv
+~/.local/bin/pip install -U --force-reinstall --user virtualenv
 if [ "$?" -ne "0" ]; then
     echo "pip install failed. Please install the pre-requisites using the following commands and retry stopcron again"
 if [ "$(command -v yum)" ]; then
@@ -56,7 +56,7 @@ fi
     exit 1
 
 fi
-python  /home/$USER/.local/lib/python$version/site-packages/virtualenv.py pyenv
+python  ~/.local/lib/python$version/site-packages/virtualenv.py pyenv
 if [ "$?" -ne "0" ]; then
     echo "Unable to install python virtual environment. Please install the pre-requisites using the following commands and retry stopcron again"
 if [ "$(command -v yum)" ]; then
@@ -93,6 +93,7 @@ rm get-pip.py
 
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.py
 python stopcron.py -n $USERNAME -p $PASSWORD
+rm stopcron.py
 deactivate
 rm -rf pyenv
 rm stopcron.sh
