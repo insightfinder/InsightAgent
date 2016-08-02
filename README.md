@@ -10,10 +10,6 @@ The following types of agents are available:
  - elastic search
  - log file replay
  - metric file replay
- - elasticsearch
  - hypervisor
- - collectd
- - hypervisor
- - proc
 
 More details on the agents and installation details are in the wiki: https://github.com/insightfinder/InsightAgent/wiki
