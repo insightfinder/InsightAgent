@@ -31,7 +31,7 @@ spec:
             - name: list
               mountPath: /var/lib/docker/containers
             - name: timezone
-              mountPath: /etc/timezone
+              mountPath: /etc/localtime
             - name: hostname
               mountPath: /etc/hostmachinename
           ports:
