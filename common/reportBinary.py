@@ -31,6 +31,8 @@ parser.add_option("-d", "--directory",
     action="store", dest="homepath", help="Directory to run from")
 parser.add_option("-t", "--agentType",
     action="store", dest="agentType", help="Agent type")
+parser.add_option("-T", "--fileType",
+    action="store", dest="fileType", help="File type: 1 for faultImpactAnalysis, 2 for functionLocalization")
 (options, args) = parser.parse_args()
 
 if options.homepath is None:
@@ -45,6 +47,15 @@ if options.agentType is None:
     agentType = ""
 else:
     agentType = options.agentType
+if options.fileType is None:
+    print "Please specify fileType. 1 for faultImpactAnalysis, 2 for functionLocalization."
+    parser.print_help()
+    sys.exit()
+else:
+    if options.fileType == "1":
+        fileType = "faultImpactAnalysis"
+    if options.fileType == "2":
+        fileType = "functionLocalization"
 
 datadir = 'syscall/data/'
 
@@ -85,6 +96,7 @@ def sendData():
     global totalChunks
     global currentChunk
     global totalSize
+    global fileType
     if len(metricData) == 0:
         return
     #update projectKey, userName in dict
@@ -95,13 +107,13 @@ def sendData():
     #with open(file2, 'wb') as fw:
     #    fw.write(base64.b64decode(encodedData))
     #print encodedData
-
+    #print LICENSEKEY, PROJECTNAME, USERNAME, hostname, fileType, metricdataSize
     alldata["metricData"] = base64.b64encode(metricData)
     alldata["licenseKey"] = LICENSEKEY
     alldata["projectName"] = PROJECTNAME
     alldata["userName"] = USERNAME
     alldata["instanceName"] = hostname
-    alldata["fileName"] = fileName
+    alldata["fileType"] = fileType
     alldata["fileSize"] = metricdataSize
 
     if mode == "binaryFileReplay":
