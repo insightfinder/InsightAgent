@@ -99,7 +99,18 @@ def getTotalSize(iFile):
     filejson.close()
     return len(bytearray(json.dumps(allJsonData)))
 
-
+def ec2InstanceType():
+    url = "http://169.254.169.254/latest/meta-data/instance-type"
+    try:
+        response = requests.post(url)
+    except requests.ConnectionError, e:
+        print "Error finding instance-type"
+        return
+    if response.status_code != 200:
+        print "Error finding instance-type"
+        return
+    instanceType = response.text
+    return instanceType
 #send data to insightfinder
 def sendData():
     global reportedDataSize
@@ -116,6 +127,8 @@ def sendData():
     alldata["projectName"] = PROJECTNAME
     alldata["userName"] = USERNAME
     alldata["instanceName"] = hostname
+    if agentType == "ec2monitoring":
+        alldata["instanceType"] = ec2InstanceType()
 
     #print the json
     json_data = json.dumps(alldata)
