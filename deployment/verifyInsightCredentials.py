@@ -33,18 +33,18 @@ def sendData():
     try:
         response = requests.post(url, data = json.loads(json_data))
     except requests.ConnectionError, e:
-        print "Not valid url for requests"
-        print "Verification of InsightFinder credentials Failed"
+        print "Connection failure : " + str(e)
+        print "Verification with InsightFinder credentials Failed"
         sys.exit(1)
     if response.status_code != 200:
         print "Response from server: "+str(response.status_code)
-        print "Verification of InsightFinder credentials Failed"
+        print "Verification with InsightFinder credentials Failed"
         sys.exit(1)
     try:
         jsonResponse = response.json()
     except ValueError:
         print "Not a valid response from server"
-        print "Verification of InsightFinder credentials Failed"
+        print "Verification with InsightFinder credentials Failed"
         sys.exit(1)
     return jsonResponse
 
