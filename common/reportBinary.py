@@ -33,6 +33,8 @@ parser.add_option("-t", "--agentType",
     action="store", dest="agentType", help="Agent type")
 parser.add_option("-T", "--fileType",
     action="store", dest="fileType", help="File type: 1 for faultImpactAnalysis, 2 for functionLocalization")
+parser.add_option("-S", "--sessionID",
+    action="store", dest="sessionID", help="Session ID")
 (options, args) = parser.parse_args()
 
 if options.homepath is None:
@@ -56,6 +58,12 @@ else:
         fileType = "faultImpactAnalysis"
     if options.fileType == "2":
         fileType = "functionLocalization"
+if options.sessionID is None:
+    print "Please specify sessionID."
+    parser.print_help()
+    sys.exit()
+else:
+    sessionID = options.sessionID
 
 datadir = 'syscall/data/'
 
@@ -76,7 +84,8 @@ LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
 PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
 USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
 #serverUrl = 'https://insightfindergae.appspot.com'
-serverUrl = 'http://localhost:8888'
+serverUrl = 'https://insightfinderui.appspot.com'
+#serverUrl = 'http://localhost:8888'
 
 reportedDataSize = 0
 totalSize = 0
@@ -97,6 +106,7 @@ def sendData():
     global currentChunk
     global totalSize
     global fileType
+    global sessionID
     if len(metricData) == 0:
         return
     #update projectKey, userName in dict
@@ -115,6 +125,7 @@ def sendData():
     alldata["instanceName"] = hostname
     alldata["fileType"] = fileType
     alldata["fileSize"] = metricdataSize
+    alldata["sessionID"] = sessionID
 
     if mode == "binaryFileReplay":
         reportedDataSize += BLOCKSIZE
