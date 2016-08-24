@@ -11,6 +11,10 @@ Required docker version: 1.9.1 and later.
 
 ##### Pre-requisites:
 - It is expected to have atleast one container other than the insightfinder daemonset container in each node of the kubernetes cluster.
+- Due to a bug in kubernetes, the docker containers need to be launched using docker commands for the insightfinder agent to collect data. The link to the kubernetes bug is below:
+```
+https://github.com/kubernetes/kubernetes/issues/28301#issuecomment-231908634
+```
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
