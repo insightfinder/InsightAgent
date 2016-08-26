@@ -216,9 +216,9 @@ try:
                 if(len(tokens) == 1):
                     continue
                 if(eachfile == "cpumetrics.txt"):
-                    tokens[0] = tokens[0] + "[" + hostname + "_" + dockerID + "]"
+                    tokens[0] = tokens[0] + "[" + dockerID + "_" + hostname + "]"
                 elif(correctFile != "timestamp.txt"):
-                    tokens[0] = tokens[0] + "[" + hostname + "_" + dockerID + "]"
+                    tokens[0] = tokens[0] + "[" + dockerID + "_" + hostname + "]"
                     tokens[1] = float(float(tokens[1])/(1024*1024))
                 if(tokens[0] != "timestamp"):
                     groupid = getindex(tokens[0])
