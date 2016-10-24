@@ -15,6 +15,8 @@ import pickle
 import subprocess
 import json
 
+serverUrl = 'https://insightfindergae.appspot.com'
+
 def sshInstall(retry,hostname):
     global user
     global password
@@ -174,13 +176,12 @@ if __name__ == '__main__':
     global projectName
     global newInstances
     pickleFile="instancesMetaData.pkl"
-    serverUrl = 'http://localhost:8888'
     user, projectName, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password = get_args()
     q = Queue.Queue()
     newInstances = []
     try:
         dataString = "projectName="+projectName+"&userName="+userInsightfinder
-        url = serverUrl + "/instance-list"
+        url = serverUrl + "/api/v1/instanceMetaData"
         proc = subprocess.Popen(['curl --data \''+ dataString +'\' '+url], stdout=subprocess.PIPE, shell=True)
         (out,err) = proc.communicate()
         print 'Output', out
