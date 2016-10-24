@@ -11,5 +11,6 @@ The following types of agents are available:
  - log file replay
  - metric file replay
  - hypervisor
+ - jolokia
 
 More details on the agents and installation details are in the wiki: https://github.com/insightfinder/InsightAgent/wiki
