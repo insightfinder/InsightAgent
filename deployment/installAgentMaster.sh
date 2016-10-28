@@ -66,13 +66,11 @@ fi
 USER=`whoami`
 
 mkdir $INSIGHTAGENTDIR/log
-cat > $INSIGHTAGENTDIR/log/agentMaster.log
-cat > $INSIGHTAGENTDIR/log/agentMaster.err
 
 echo "LICENSEKEY=$LICENSEKEY"
 echo "INSTANCE=$PROJECTNAME"
 
-echo "*/$SAMPLING_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/agentMaster.py -n $USER -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE -p $PASSWORD 2>$INSIGHTAGENTDIR/log/agentMaster.err 1>$INSIGHTAGENTDIR/log/agentMaster.out" >> $TEMPCRON
+echo "*/$CRON_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/agentMaster.py -n $USER -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE -p $PASSWORD 2>$INSIGHTAGENTDIR/log/agentMaster.err 1>$INSIGHTAGENTDIR/log/agentMaster.out" >> $TEMPCRON
 
 sudo chown root:root $TEMPCRON
 sudo chmod 644 $TEMPCRON
