@@ -4,6 +4,8 @@ import csv
 import os
 from optparse import OptionParser
 import socket
+import ConfigParser
+
 
 COMMA_DELIMITER = ","
 NEWLINE_DELIMITER = "\n"
@@ -47,14 +49,6 @@ def getindex(col_name):
 
 
 
-#initialization
-options = {
-    'api_key': os.getenv('DATADOG_API_KEY', ''),
-    'app_key': os.getenv('DATADOG_APP_KEY', '')
-}
-
-initialize(**options)
-
 usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)
 parser.add_option("-d", "--directory",action="store", dest="homepath", help="Directory to run from")
@@ -64,6 +58,24 @@ if options.homepath is None:
 	homepath = os.getcwd()
 else:
 	homepath = options.homepath
+
+
+config = ConfigParser.ConfigParser()
+
+instance_file = os.path.join(homepath,"datadog/datadog.cfg");
+config.read(instance_file)
+
+instances=[]
+instances = [e.strip() for e in config.get('HOSTNAME', 'HOSTLIST').split(',')]
+
+#initialization
+options = {
+    'api_key': config.get('KEYS', 'API_KEY'),
+    'app_key': config.get('KEYS', 'APP_KEY')
+}
+
+initialize(**options)
+
 
 datadir = 'data/'
 date = time.strftime("%Y%m%d")
@@ -81,11 +93,12 @@ metrics = []
 
 header = 'timestamp'
 query = ''
-for m in metrics_names:
-    #building query for api calls
-    query += 'system.' + m +'{*}by{'+ socket.gethostname()+'},'
-    #building header
-    header += COMMA_DELIMITER + m + "["+socket.gethostname()+"]:" + str(getindex(m))
+for i in instances:
+    for m in metrics_names:
+        #building query for api calls
+        query += 'system.' + m +'{*}by{'+ i +'},'
+        #building header
+        header += COMMA_DELIMITER + m + "["+ i +"]:" + str(getindex(m))
 
 query = query[:-1]
 header += NEWLINE_DELIMITER
@@ -95,6 +108,7 @@ return_from_api = api.Metric.query(start=now - offset, end=now, query=query)
 line = ''
 line += str(now*1000)
 status = return_from_api.get('status','error')
+
 
 if status == 'ok' and return_from_api['series']:
     for i in range(0,len(return_from_api['series'])):
@@ -108,7 +122,6 @@ if status == 'ok' and return_from_api['series']:
                 val = item[1]
                 break
         line += COMMA_DELIMITER + str(val)
-
     csvFile = open(filename, "a+")
     if( not (os.path.isfile(filename)) or (os.stat(filename).st_size == 0)):
         csvFile.write(header)
