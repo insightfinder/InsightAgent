@@ -126,7 +126,7 @@ if __name__ == '__main__':
     print "Starting Deployment"
     print "Homepath: ", homepath
     downloadFile("agentMaster.py");
-    command = ""+os.path.join(homepath,"installAgentMaster.sh")+ " -i " +projectName+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -p "+password+" -c "+"1"
+    command = ""+os.path.join(homepath,"installAgentMaster.sh")+ " -i " +projectName+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -p "+password+" -c "+"60"
     print "Command", command
     proc = subprocess.Popen([command], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     
