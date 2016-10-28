@@ -80,7 +80,15 @@ Untar using this command.
 tar -xvf insightagent.tar.gz
 ```
 
-2) In InsightAgent-master directory, run the following commands to install and use python virtual environment for insightfinder agent:
+2) In InsightAgent-master directory, make changes to the config file.
+```
+datadog/datadog.cfg
+```
+Update the APP_KEY and API_KEY. These keys can be obtained by clicking on Integartions in the side bar , then clicking on API tab and then create keys on datadog website.
+
+Update the hostlists to include the host names which you want to monitor. You can find the hostnames on the datadog dashboards
+
+3) run the following commands to install and use python virtual environment for insightfinder agent:
 ```
 ./deployment/checkpackages.sh
 ```
@@ -88,7 +96,7 @@ tar -xvf insightagent.tar.gz
 source pyenv/bin/activate
 ```
 
-3) Run the below command to install agent.
+4) Run the below command to install agent.
 ```
 ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
 ```

@@ -15,6 +15,7 @@ import pickle
 import subprocess
 import json
 
+#serverUrl = 'http://localhost:8888'
 serverUrl = 'https://insightfindergae.appspot.com'
 
 def sshInstall(retry,hostname):
@@ -44,10 +45,10 @@ def sshInstall(retry,hostname):
         session = transport.open_session()
         session.set_combine_stderr(True)
         session.get_pty()
-        command = "sudo rm -rf insightagent* InsightAgent*\n \
-        wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz\n \
-        tar xzvf insightagent.tar.gz\n \
-        cd InsightAgent-master && deployment/checkpackages.sh\n \
+        command = "sudo rm -rf insightagent* InsightAgent* && \
+        wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz && \
+        tar xzvf insightagent.tar.gz && \
+        cd InsightAgent-master && deployment/checkpackages.sh && \
         deployment/install.sh "+ arguments + "\n"
         #print 'Command: ', command
         session.exec_command(command)
@@ -175,31 +176,39 @@ if __name__ == '__main__':
     global agentType
     global projectName
     global newInstances
-    pickleFile="instancesMetaData.pkl"
+    jsonFile="instancesMetaData.json"
     user, projectName, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password = get_args()
     q = Queue.Queue()
     newInstances = []
     try:
-        dataString = "projectName="+projectName+"&userName="+userInsightfinder
+        dataString = "projectName="+projectName+"&userName="+userInsightfinder+"&licenseKey="+licenseKey
         url = serverUrl + "/api/v1/instanceMetaData"
+        print "url", url
+        print "dataString", dataString
         proc = subprocess.Popen(['curl --data \''+ dataString +'\' '+url], stdout=subprocess.PIPE, shell=True)
         (out,err) = proc.communicate()
         print 'Output', out
         output = json.loads(out)   
+        if not output["success"]:
+            print "Error: " + output["message"]
+            sys.exit(output["message"])
         instances = output["data"]
         newInstances = {} 
-        print "Checking Path: ",os.path.join(os.getcwd(),pickleFile)
-        if not os.path.exists(os.path.join(os.getcwd(),pickleFile)):
-	        newInstances = instances
+        oldInstances = {}
+        print "Checking Path: ",os.path.join(os.getcwd(),jsonFile)
+        if not os.path.exists(os.path.join(os.getcwd(),jsonFile)):
+            newInstances = instances
         else:
-	        oldInstances = pickle.load(open(os.path.join(os.getcwd(),pickleFile), "rb" ))
-	        newKeys = set(instances.keys()) - set(oldInstances.keys())
-	        for newKey in newKeys:
-	            newInstances[newKey]=instances[newKey]
-	            
-        print 'New Instances: ', newInstances    
-        pickle.dump(instances,open(os.path.join(os.getcwd(),pickleFile), "wb" ))
-	    
+            oldInstances = json.load(open(os.path.join(os.getcwd(),jsonFile), "rb" ))
+            newKeys = set(instances.keys()) - set(oldInstances.keys())
+            for newKey in newKeys:
+                newInstances[newKey]=instances[newKey]
+                
+        print 'New Instances: ', newInstances   
+        updatedInstances = oldInstances.copy()
+        updatedInstances.update(newInstances) 
+        json.dump(updatedInstances,open(os.path.join(os.getcwd(),jsonFile), "wb" ))
+        
         for instanceKey in newInstances:
                host = newInstances[instanceKey]["publicIp"]
                q.put(host)
