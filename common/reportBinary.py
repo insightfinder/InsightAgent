@@ -83,7 +83,7 @@ proc.communicate()
 LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
 PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
 USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
-serverUrl = 'https://insightfindergae.appspot.com'
+serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
 
 reportedDataSize = 0
 totalSize = 0

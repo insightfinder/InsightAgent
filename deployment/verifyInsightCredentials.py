@@ -6,7 +6,7 @@ import argparse
 import sys
 import time
 
-serverUrl = 'https://insightfindergae.appspot.com'
+serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
 
 def get_args():
     parser = argparse.ArgumentParser(description='Script retrieves arguments for insightfinder agent.')

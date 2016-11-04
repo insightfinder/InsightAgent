@@ -32,7 +32,7 @@ proc.communicate()
 LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
 PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
 USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
-serverUrl = 'https://insightfindergae.appspot.com'
+serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
 
 with open(os.path.join(homepath,"reporting_config.json"), 'r') as f:
     config = json.load(f)

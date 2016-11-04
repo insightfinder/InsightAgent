@@ -14,9 +14,12 @@ import threading
 import pickle
 import subprocess
 import json
+import csv
+from datetime import datetime
+from dateutil import parser
 
 #serverUrl = 'http://localhost:8888'
-serverUrl = 'https://insightfindergae.appspot.com'
+serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
 
 def sshInstall(retry,hostname):
     global user
@@ -177,6 +180,7 @@ if __name__ == '__main__':
     global projectName
     global newInstances
     jsonFile="instancesMetaData.json"
+    excludeListFile="excludeList.csv"
     user, projectName, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password = get_args()
     q = Queue.Queue()
     newInstances = []
@@ -195,14 +199,37 @@ if __name__ == '__main__':
         instances = output["data"]
         newInstances = {} 
         oldInstances = {}
+        excludeList = []
+        newKeys = []
+        print "Checking Path: ",os.path.join(os.getcwd(),excludeListFile)
+        if os.path.exists(os.path.join(os.getcwd(),excludeListFile)):
+            with open(os.path.join(os.getcwd(),excludeListFile), 'rb') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    excludeList.append(row[0])
+                    print "Added Exclude List: ", row[0]
+
         print "Checking Path: ",os.path.join(os.getcwd(),jsonFile)
         if not os.path.exists(os.path.join(os.getcwd(),jsonFile)):
             newInstances = instances
+            newKeys = instances.keys()
         else:
             oldInstances = json.load(open(os.path.join(os.getcwd(),jsonFile), "rb" ))
             newKeys = set(instances.keys()) - set(oldInstances.keys())
-            for newKey in newKeys:
-                newInstances[newKey]=instances[newKey]
+            for instance in instances:
+                if instance in oldInstances:
+                    print "Instance", instance
+                    print "DateTimeDiff: ", datetime.now()-parser.parse(oldInstances[instance]["lastSeen"])
+                    if (datetime.now()-parser.parse(oldInstances[instance]["lastSeen"])).days > 0:
+                        newInstances[instance]=oldInstances[instance]
+                        newInstances[instance]["lastSeen"]=str(datetime.now())  
+                              
+        for newKey in newKeys:
+            newInstances[newKey]=instances[newKey]
+            newInstances[newKey]["lastSeen"]=str(datetime.now())
+
+
+
                 
         print 'New Instances: ', newInstances   
         updatedInstances = oldInstances.copy()
@@ -210,8 +237,10 @@ if __name__ == '__main__':
         json.dump(updatedInstances,open(os.path.join(os.getcwd(),jsonFile), "wb" ))
         
         for instanceKey in newInstances:
-               host = newInstances[instanceKey]["publicIp"]
-               q.put(host)
+                host = newInstances[instanceKey]["publicIp"]
+                if host in excludeList:
+                    continue;
+                q.put(host)
         
         while q.empty() != True:
             host = q.get()
