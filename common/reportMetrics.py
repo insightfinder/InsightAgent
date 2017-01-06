@@ -239,6 +239,14 @@ if options.inputFile is None:
                     metricData.append(thisData)
             dailyFile.close()
             idxdate += 1
+    #update endtime in config
+    if new_prev_endtime_epoch == 0:
+        print "No data is reported"
+    else:
+        new_prev_endtimeinsec = math.ceil(long(new_prev_endtime_epoch)/1000.0)
+        new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtimeinsec)))
+        update_timestamp(new_prev_endtime)
+        sendData()
 else:
     if os.path.isfile(os.path.join(homepath,options.inputFile)):
         numlines = len(open(os.path.join(homepath,options.inputFile)).readlines())
@@ -307,16 +315,6 @@ else:
                     alldata = {}
         file.close()
         updateAgentDataRange(minTimestampEpoch,maxTimestampEpoch)
-
-#update endtime in config
-if new_prev_endtime_epoch == 0:
-    print "No data is reported"
-else:
-    new_prev_endtimeinsec = math.ceil(long(new_prev_endtime_epoch)/1000.0)
-    new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtimeinsec)))
-    update_timestamp(new_prev_endtime)
-
-    sendData()
 
 #old file cleaning
 for dirpath, dirnames, filenames in os.walk(os.path.join(homepath,datadir)):
