@@ -3,10 +3,10 @@
 
 function usage()
 {
-        echo "Usage: ./stopSysCall.sh -i SESSION_ID"
+        echo "Usage: ./stopSysCall.sh -i SESSION_ID -l Language [java/c/c++]"
 }
 
-if [ "$#" -ne 2 ]; then
+if [ "$#" -ne 4 ]; then
         usage
         exit 1
 fi
@@ -15,6 +15,9 @@ while [ "$1" != "" ]; do
         case $1 in
                 -i )    shift
                         SESSIONID=$1
+                        ;;
+                -l )    shift
+                        LANGUAGE=$1
                         ;;
                 * )     usage
                         exit 1
@@ -32,7 +35,11 @@ TRACEFILE=data/syscall_${SESSIONID}.log
 
 lttng set-session $SESSIONNAME
 lttng stop
-babeltrace $BUFFERDIR > $TRACEFILE
+if [ $LANGUAGE = "java" ]; then
+        babeltrace --clock-date $BUFFERDIR > $TRACEFILE
+fi
+if [ $LANGUAGE = "c" ] || [ $LANGUAGE = "cpp" ]; then
+        babeltrace $BUFFERDIR > $TRACEFILE
+fi
 lttng destroy
 rm -rf $BUFFERDIR
-
