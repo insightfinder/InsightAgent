@@ -21,6 +21,8 @@ till now from today's log file (may or may not be present)
 assumping gmt epoch timestamp and local date daily file
 '''
 
+serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
+
 usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)
 parser.add_option("-f", "--fileInput",
@@ -35,6 +37,8 @@ parser.add_option("-T", "--fileType",
     action="store", dest="fileType", help="File type: 1 for faultImpactAnalysis, 2 for functionLocalization")
 parser.add_option("-S", "--sessionID",
     action="store", dest="sessionID", help="Session ID")
+parser.add_option("-w", "--serverUrl",
+    action="store", dest="serverUrl", help="Server Url")
 (options, args) = parser.parse_args()
 
 if options.homepath is None:
@@ -49,6 +53,8 @@ if options.agentType is None:
     agentType = ""
 else:
     agentType = options.agentType
+if options.serverUrl != None:
+    serverUrl = options.serverUrl
 if options.fileType is None:
     print "Please specify fileType. 1 for faultImpactAnalysis, 2 for functionLocalization."
     parser.print_help()
@@ -83,7 +89,6 @@ proc.communicate()
 LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
 PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
 USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
-serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
 
 reportedDataSize = 0
 totalSize = 0

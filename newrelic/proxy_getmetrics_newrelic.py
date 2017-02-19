@@ -49,12 +49,37 @@ usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)
 parser.add_option("-d", "--directory",
     action="store", dest="homepath", help="Directory to run from")
+parser.add_option("-u", "--username",
+    action="store", dest="userName", help="User name")
+parser.add_option("-p", "--projectname",
+    action="store", dest="projectName", help="Project name")
+parser.add_option("-k", "--apikey",
+    action="store", dest="apiKey", help="API key")
+parser.add_option("-s", "--samplinginterval",
+    action="store", dest="samplingInterval", help="Sampling Interval")
 (options, args) = parser.parse_args()
 
 tstamp = int(time.time())
 
 
-min_diff = os.getenv('SAMPLING_INTERVAL_MINUTE', '5')
+if options.userName is None:
+    USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
+else:
+    USERNAME = options.userName
+if options.projectName is None:
+    PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
+else:
+    PROJECTNAME = options.projectName
+if options.apiKey is None:
+    API_KEY = ""
+else:
+    API_KEY = options.apiKey
+if options.samplingInterval is None:
+    min_diff = '5'
+else:
+    min_diff = options.samplingInterval
+
+
 now = datetime.datetime.utcnow()
 before = now - datetime.timedelta(minutes=int(min_diff)) # sampling interval
 now = now.isoformat().split('.')[0] + '+00:00'
@@ -65,22 +90,23 @@ if options.homepath is None:
 else:
 	homepath = options.homepath
 
-config = ConfigParser.ConfigParser()
+#config = ConfigParser.ConfigParser()
 
-instance_file = os.path.join(homepath,"newrelic/newrelic.cfg");
-config.read(instance_file)
+#instance_file = os.path.join(homepath,"newrelic/newrelic.cfg");
+#config.read(instance_file)
 
-instances=[]
-instances = [e.strip() for e in config.get('HOSTNAME', 'HOSTLIST').split(',')]
+#instances=[]
+#instances = [e.strip() for e in config.get('HOSTNAME', 'HOSTLIST').split(',')]
 
-app_instances=[]
-app_instances = [e.strip() for e in config.get('APPNAME', 'APPLIST').split(',')]
+#app_instances=[]
+#app_instances = [e.strip() for e in config.get('APPNAME', 'APPLIST').split(',')]
 
-datadir = 'data/'
+
+datadir = os.path.join('data',os.path.join(USERNAME,PROJECTNAME))
 date = time.strftime("%Y%m%d")
-filename = os.path.join(homepath,datadir+date+".csv")
+filename = os.path.join(homepath,os.path.join(datadir,date+".csv"))
 
-API_KEY = config.get('KEYS', 'API_KEY')
+
 
 req = 'curl -X GET "https://api.newrelic.com/v2/servers.json"  -H "X-Api-Key:' + API_KEY + '" -i'
 proc = subprocess.Popen([req] , stdout=subprocess.PIPE,stderr=subprocess.PIPE , shell=True)
@@ -108,9 +134,10 @@ if "OK" in status:
     for i in range(0,len(output['servers'])):
         name = output['servers'][i]['name']
         sid = output['servers'][i]['id']
-        tempdict = {}
-        tempdict['id'] = sid
-        if name in instances:
+        reporting = output['servers'][i]['reporting']
+        if reporting:
+            tempdict = {}
+            tempdict['id'] = sid
             for val in colvalues:
                 tempdict[val] = output['servers'][i]['summary'][val]
 
@@ -119,23 +146,29 @@ if "OK" in status:
             (inner_out,inner_err) = inner_proc.communicate()
             inner_outlist = inner_out.split("\n")
             inner_status = inner_outlist[6]
-            inner_output = json.loads(inner_outlist[14])
-            inner_output = inner_output['metric_data']['metrics']
 
-            for i in range(0,len(inner_output)):
-                tempdict[add_colvalues[inner_output[i]['name']]] = inner_output[i]['timeslices'][0]['values']['average_value']
+            if "OK" in inner_status:
+                inner_output = json.loads(inner_outlist[14])
+                inner_output = inner_output['metric_data']['metrics']
+                for i in range(0,len(inner_output)):
+                    tempdict[add_colvalues[inner_output[i]['name']]] = inner_output[i]['timeslices'][0]['values']['average_value']
             metric[name]= tempdict
     header = 'timestamp'
     line = str(tstamp*1000)
 
+    print metric
+
     for key in metric:
-        for val in colvalues:
-            header += COMMA_DELIMITER + val + '[' + key + ']:'+ str(getindex(val))
-            line += COMMA_DELIMITER + str(metric[key][val])
-        for tempval in add_colvalues:
-            val = add_colvalues[tempval]
-            header += COMMA_DELIMITER + val + '[' + key + ']:'+ str(getindex(val))
-            line += COMMA_DELIMITER + str(metric[key][val])
+        if "OK" in status:
+            for val in colvalues:
+                header += COMMA_DELIMITER + val + '[' + key + ']:'+ str(getindex(val))
+                line += COMMA_DELIMITER + str(metric[key][val])
+                
+        if "OK" in inner_status:
+            for tempval in add_colvalues:
+                val = add_colvalues[tempval]
+                header += COMMA_DELIMITER + val + '[' + key + ']:'+ str(getindex(val))
+                line += COMMA_DELIMITER + str(metric[key][val])
 
 app_req = 'curl -X GET "https://api.newrelic.com/v2/applications.json"  -H "X-Api-Key:' + API_KEY + '" -i'
 app_proc = subprocess.Popen([app_req] , stdout=subprocess.PIPE,stderr=subprocess.PIPE , shell=True)
@@ -158,17 +191,18 @@ if "OK" in status:
             #print output['applications'][i]
             tempdict = {}
             tempdict['id'] = sid
-            if name in app_instances:
-                for val in app_colvalues:
-                    tempdict[val] = app_output['applications'][i]['application_summary'][val]
+            for val in app_colvalues:
+                tempdict[val] = app_output['applications'][i]['application_summary'][val]
 
-                app_metric[name]= tempdict
+            app_metric[name]= tempdict
 
     for key in app_metric:
         for val in app_colvalues:
             header += COMMA_DELIMITER + val + '[' + key + ']:'+ str(getindex(val))
             line += COMMA_DELIMITER + str(app_metric[key][val])
 
+print line
+print header
 
 
 if "OK" in app_status or "OK" in status:

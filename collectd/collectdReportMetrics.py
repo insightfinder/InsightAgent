@@ -10,16 +10,23 @@ import sys
 import subprocess
 import requests
 
+serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
 usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)
 parser.add_option("-d", "--directory",
     action="store", dest="homepath", help="Directory to run from")
+parser.add_option("-w", "--serverUrl",
+    action="store", dest="serverUrl", help="Server Url")
 (options, args) = parser.parse_args()
 
 if options.homepath is None:
     homepath = os.getcwd()
 else:
     homepath = options.homepath
+
+if options.serverUrl != None:
+    serverUrl = options.serverUrl
+
 datadir = "data/"
 
 command = ['bash', '-c', 'source ' + str(homepath) + '/.agent.bashrc && env']
@@ -32,7 +39,6 @@ proc.communicate()
 LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
 PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
 USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
-serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
 
 with open(os.path.join(homepath,"reporting_config.json"), 'r') as f:
     config = json.load(f)

@@ -30,8 +30,8 @@ def sshInstall(retry,hostname):
     global reportingInterval
     global agentType
     global projectName
-    
-    arguments = " -i "+projectName+" -u " + userInsightfinder + " -k " + licenseKey + " -s " + samplingInterval + " -r " + reportingInterval + " -t " + agentType
+
+    arguments = " -i "+projectName+" -u " + userInsightfinder + " -k " + licenseKey + " -s " + samplingInterval + " -r " + reportingInterval + " -t " + agentType + " -w " +serverUrl
     if retry == 0:
         print "Install Fail in", hostname
         q.task_done()
@@ -156,6 +156,8 @@ def get_args():
         '-t', '--AGENT_TYPE', type=str, help='Agent type: proc or cadvisor or docker_remote_api or cgroup or daemonset or elasticsearch or collectd or hypervisor or ec2monitoring', choices=['proc', 'cadvisor', 'docker_remote_api', 'cgroup', 'daemonset', 'elasticsearch', 'collectd', 'hypervisor', 'ec2monitoring'],required=True)
     parser.add_argument(
         '-p', '--PASSWORD', type=str, help='Password for hosts', required=True)
+    parser.add_argument(
+        '-w', '--SERVER_URL', type=str, help='Server URL for InsightFinder', required=False)
     args = parser.parse_args()
     user = args.USER_NAME_IN_HOST
     userInsightfinder = args.USER_NAME_IN_INSIGHTFINDER
@@ -165,6 +167,9 @@ def get_args():
     agentType = args.AGENT_TYPE
     password = args.PASSWORD
     projectName = args.PROJECT_NAME
+    global serverUrl
+    if args.SERVER_URL != None:
+        serverUrl = args.SERVER_URL
     return user, projectName, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password
 
 

@@ -34,11 +34,22 @@ while [ "$1" != "" ]; do
 		-t )	shift
 			AGENT_TYPE=$1
 			;;
+		-w )	shift
+			SERVER_URL=$1
+			;;
 		* )	usage
 			exit 1
 	esac
 	shift
 done
+if [ -z "$SERVER_URL" ]; then
+	SERVER_URL='https://agentdata-dot-insightfindergae.appspot.com'
+fi
+
+if [ -z "$AGENT_TYPE" ] || [ -z "$REPORTING_INTERVAL" ] || [ -z "$INSIGHTFINDER_USERNAME" ] || [ -z "$SAMPLING_INTERVAL" ] || [ -z "$LICENSEKEY" ] || [ -z "$USERNAME" ] || [ -z "$PROJECTNAME" ]; then
+	usage
+	exit 1
+fi
 
 if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ] && [ $AGENT_TYPE != 'filereplay' ] && [ $AGENT_TYPE != 'daemonset' ] && [ $AGENT_TYPE != 'hypervisor' ] && [ $AGENT_TYPE != 'elasticsearch' ] && [ $AGENT_TYPE != 'collectd' ] && [ $AGENT_TYPE != 'ec2monitoring' ] && [ $AGENT_TYPE != 'jolokia' ]; then
 	usage
@@ -112,7 +123,7 @@ rm requirements
 rm get-pip.py
 
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/verifyInsightCredentials.py
-if ! python verifyInsightCredentials.py -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY
+if ! python verifyInsightCredentials.py -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -w $SERVER_URL
 then
     rm verifyInsightCredentials.py
     rm -rf pyenv
@@ -122,7 +133,7 @@ fi
 rm verifyInsightCredentials.py
 
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployAgentMaster.py
-python deployAgentMaster.py -n $INSIGHTFINDER_USERNAME -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE
+python deployAgentMaster.py -n $INSIGHTFINDER_USERNAME -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE -w $SERVER_URL
 deactivate
 rm -rf pyenv
 rm deployAgentMaster.sh
