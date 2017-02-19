@@ -1,5 +1,5 @@
-# InsightAgent: datadog
-Agent Type: datadog
+# InsightAgent: New relic
+Agent Type: New relic
 
 Platform: Linux
 
@@ -38,12 +38,11 @@ tar -xvf insightagent.tar.gz
 
 2) In InsightAgent-master directory, make changes to the config file.
 ```
-datadog/datadog.cfg
+newrelic/newrelic.cfg
 ```
-Update the APP_KEY and API_KEY. These keys can be obtained by clicking on Integartions >  API tab > Create keys on datadog website.
+Update the API_KEY. This key can be obtained from new relic website by clicking on Account Setting > API Keys > Show key
 
-Update the hostlists to include the host names which you want to monitor. You can find the hostnames on the datadog dashboard.
-(If you want to monitor multiple hosts write the name of the hosts separated by comma)
+Update the hostapp section to include the host names and corresponding applications which you want to monitor. You can find the hostnames and corresponding appnames on the New relic dashboard.If you want to monitor multiple hosts and app write (hostname1:appname1),(hostname2:appname2),..... ,(hostnameN:appnameN)
 
 3) run the following commands to install and use python virtual environment for insightfinder agent:
 ```
@@ -53,13 +52,9 @@ Update the hostlists to include the host names which you want to monitor. You ca
 source pyenv/bin/activate
 ```
 
-4) Install the datadog package in python if you are running it for the first time
-```
-pip install datadog
-```
-
-5) Run the below command to install agent.
+4) Run the below command to install agent.
 ```
 ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
 ```
 After using the agent, use command "deactivate" to get out of python virtual environment.
+

@@ -9,6 +9,7 @@ import sys
 '''
 This script will start two scripts for deploying insightagent to hosts
 '''
+serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
 
 def get_args():
     parser = argparse.ArgumentParser(description='Script retrieves arguments for insightfinder agent.')
@@ -19,6 +20,7 @@ def get_args():
     parser.add_argument('-s', '--SAMPLING_INTERVAL_MINUTE', type=str, help='Sampling Interval Minutes', required=True)
     parser.add_argument('-r', '--REPORTING_INTERVAL_MINUTE', type=str, help='Reporting Interval Minutes', required=True)
     parser.add_argument('-t', '--AGENT_TYPE', type=str, help='Agent type: proc or cadvisor or docker_remote_api or cgroup or daemonset or elasticsearch or collectd or hypervisor or ec2monitoring or jolokia', choices=['proc', 'cadvisor', 'docker_remote_api', 'cgroup', 'daemonset', 'elasticsearch', 'collectd', 'hypervisor', 'ec2monitoring', 'jolokia'],required=True)
+    parser.add_argument('-w', '--SERVER_URL', type=str, help='Server url of Insightfinder', required=False)
     args = parser.parse_args()
     projectName = args.PROJECT_NAME_IN_INSIGHTFINDER
     user = args.USER_NAME_IN_HOST
@@ -27,6 +29,9 @@ def get_args():
     samplingInterval = args.SAMPLING_INTERVAL_MINUTE
     reportingInterval = args.REPORTING_INTERVAL_MINUTE
     agentType = args.AGENT_TYPE
+    global serverUrl
+    if args.SERVER_URL != None:
+        serverUrl = args.SERVER_URL
     return projectName, user, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType
 
 downloadFiles = ["installAgentMaster.sh"]
@@ -126,7 +131,7 @@ if __name__ == '__main__':
     print "Starting Deployment"
     print "Homepath: ", homepath
     downloadFile("agentMaster.py");
-    command = ""+os.path.join(homepath,"installAgentMaster.sh")+ " -i " +projectName+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -p "+password+" -c "+"60"
+    command = ""+os.path.join(homepath,"installAgentMaster.sh")+ " -i " +projectName+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -p "+password+" -c "+"60"+" -w "+serverUrl
     print "Command", command
     proc = subprocess.Popen([command], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     

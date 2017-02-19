@@ -9,14 +9,19 @@ import time
 serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
 
 def get_args():
+    global serverUrl
     parser = argparse.ArgumentParser(description='Script retrieves arguments for insightfinder agent.')
     parser.add_argument('-i', '--PROJECT_NAME_IN_INSIGHTFINDER', type=str, help='Project Name registered in Insightfinder', required=True)
     parser.add_argument('-u', '--USER_NAME_IN_INSIGHTFINDER', type=str, help='User Name in Insightfinder', required=True)
     parser.add_argument('-k', '--LICENSE_KEY', type=str, help='License key for the user', required=True)
+    parser.add_argument('-w', '--SERVER_URL', type=str, help='Server Url of Insightfinder server', required=False)
     args = parser.parse_args()
     projectName = args.PROJECT_NAME_IN_INSIGHTFINDER
     userInsightfinder = args.USER_NAME_IN_INSIGHTFINDER
     licenseKey = args.LICENSE_KEY
+    if args.SERVER_URL != None:
+        serverUrl = args.SERVER_URL
+    print serverUrl
     return projectName, userInsightfinder, licenseKey
 
 def sendData():
@@ -30,6 +35,7 @@ def sendData():
     json_data = json.dumps(alldata)
     #print json_data
     url = serverUrl + "/api/v1/agentdatahelper"
+    print serverUrl
     try:
         response = requests.post(url, data = json.loads(json_data))
     except requests.ConnectionError, e:
@@ -66,7 +72,3 @@ if __name__ == '__main__':
         except KeyError:
             print "Verification of InsightFinder credentials Failed"
         sys.exit(1)
-        
-    
-        
-

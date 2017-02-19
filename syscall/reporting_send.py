@@ -17,14 +17,19 @@ uploadPort=4445
 #syscallList=list()
 Timer=0
 TimerInterval = 15 * 60 * 1000 #15 mins
+serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
 
 def get_args():
     parser = argparse.ArgumentParser(description='Script retrieves arguments for insightfinder system call tracing.')
     parser.add_argument('-d', '--HOME_DIR', type=str, help='The HOME directory of Insight syscall trace', required=True)
     parser.add_argument('-D', '--ROOT_DIR', type=str, help='The Root directory of Insight agent', required=True)
+    parser.add_argument('-w', '--SERVER_URL', type=str, help='URL of the insightfinder Server', required=False)
     args = parser.parse_args()
     homepath = args.HOME_DIR
     rootpath = args.ROOT_DIR
+    global serverUrl
+    if args.SERVER_URL != None:
+        serverUrl = args.SERVER_URL
     return homepath, rootpath
 
 def checkPrivilege():
@@ -105,8 +110,8 @@ def sendFile(self):
         thread = prepareThreads(command,homepath)
         thread.start()
         thread.join()
- 
-        command = "cd " + rootpath +" && python common/reportBinary.py -f syscall/data/" + fnameSeg + ".tar.gz -m binaryFileReplay -T 1 -S " + sysTrace_timestamp
+
+        command = "cd " + rootpath +" && python common/reportBinary.py -f syscall/data/" + fnameSeg + ".tar.gz -m binaryFileReplay -T 1 -S " + sysTrace_timestamp + " -w "+serverUrl
         print command
         thread = prepareThreads(command,rootpath)
         thread.start()

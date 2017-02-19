@@ -30,8 +30,16 @@ parser.add_option("-d", "--directory",
     action="store", dest="homepath", help="Directory to run from")
 parser.add_option("-t", "--agentType",
     action="store", dest="agentType", help="Agent type")
+parser.add_option("-u", "--username",
+    action="store", dest="userName", help="User name")
+parser.add_option("-p", "--projectname",
+    action="store", dest="projectName", help="Project name")
+parser.add_option("-k", "--licensekey",
+    action="store", dest="licenseKey", help="Licesne key")
 parser.add_option("-w", "--serverUrl",
     action="store", dest="serverUrl", help="Server Url")
+
+
 (options, args) = parser.parse_args()
 
 if options.homepath is None:
@@ -46,10 +54,28 @@ if options.agentType is None:
     agentType = ""
 else:
     agentType = options.agentType
+
+if options.userName is None:
+    USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
+else:
+    USERNAME = options.userName
+
+if options.projectName is None:
+    PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
+else:
+    PROJECTNAME = options.projectName
+
+if options.licenseKey is None:
+    LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
+else:
+    LICENSEKEY = options.licenseKey
+
 if options.serverUrl != None:
     serverUrl = options.serverUrl
 
-datadir = 'data/'
+
+datadir = os.path.join('data',os.path.join(USERNAME,PROJECTNAME))
+#print datadir
 
 if agentType == "hypervisor":
     import urllib
@@ -64,9 +90,7 @@ for line in proc.stdout:
   os.environ[key] = value.strip()
 proc.communicate()
 
-LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
-PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
-USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
+#serverUrl = 'https://insightfindergae.appspot.com'
 
 
 reportedDataSize = 0
@@ -89,10 +113,10 @@ def getindex(col_name):
 
 #update prev_endtime in config file
 def update_timestamp(prev_endtime):
-    with open(os.path.join(homepath,"reporting_config.json"), 'r') as f:
+    with open(os.path.join(homepath,"proxy_reporting_config.json"), 'r') as f:
         config = json.load(f)
-    config['prev_endtime'] = prev_endtime
-    with open(os.path.join(homepath,"reporting_config.json"),"w") as f:
+    config[USERNAME+"_"+PROJECTNAME]['prev_endtime'] = prev_endtime
+    with open(os.path.join(homepath,"proxy_reporting_config.json"),"w") as f:
         json.dump(config, f)
 
 def getTotalSize(iFile):
@@ -163,30 +187,37 @@ def sendData():
 
 def updateAgentDataRange(minTS,maxTS):
     #update projectKey, userName in dict
-    helperdata["licenseKey"] = LICENSEKEY
-    helperdata["projectName"] = PROJECTNAME
-    helperdata["userName"] = USERNAME
-    helperdata["operation"] = "updateAgentDataRange"
-    helperdata["minTimestamp"] = minTS
-    helperdata["maxTimestamp"] = maxTS
+    alldata["licenseKey"] = LICENSEKEY
+    alldata["projectName"] = PROJECTNAME
+    alldata["userName"] = USERNAME
+    alldata["operation"] = "updateAgentDataRange"
+    alldata["minTimestamp"] = minTS
+    alldata["maxTimestamp"] = maxTS
 
     #print the json
-    json_data = json.dumps(helperdata)
+    json_data = json.dumps(alldata)
     #print json_data
     url = serverUrl + "/agentdatahelper"
     response = requests.post(url, data=json.loads(json_data))
 
 #main
-with open(os.path.join(homepath,"reporting_config.json"), 'r') as f:
-    config = json.load(f)
+with open(os.path.join(homepath,"proxy_reporting_config.json"), 'r') as f:
+    config = json.load(f)[USERNAME+"_"+PROJECTNAME]
 reporting_interval = int(config['reporting_interval'])
 keep_file_days = int(config['keep_file_days'])
 prev_endtime = config['prev_endtime']
 deltaFields = config['delta_fields']
 
+#print config
+
 #locate time range and date range
 new_prev_endtime = prev_endtime
 new_prev_endtime_epoch = 0
+
+#print new_prev_endtime
+#print new_prev_endtime_epoch
+
+
 dates = []
 if "FileReplay" in mode and prev_endtime != "0" and len(prev_endtime) >= 8:
     start_time = prev_endtime
@@ -203,7 +234,6 @@ else: # prev_endtime == 0
     start_time_epoch = end_time_epoch - 1000*60*reporting_interval
 
 alldata = {}
-helperdata = {}
 metricData = []
 fieldnames = []
 idxdate = 0
@@ -215,9 +245,11 @@ if options.inputFile is None:
     for i in range(0,2+int(float(reporting_interval)/24/60)):
         dates.append(time.strftime("%Y%m%d", time.localtime(start_time_epoch/1000 + 60*60*24*i)))
     for date in dates:
-        if os.path.isfile(os.path.join(homepath,datadir+date+".csv")):
-            dailyFile = open(os.path.join(homepath,datadir+date+".csv"))
+        if os.path.isfile(os.path.join(homepath,os.path.join(datadir,date+".csv"))):
+            dailyFile = open(os.path.join(homepath,os.path.join(datadir,date+".csv")))
             dailyFileReader = csv.reader(dailyFile)
+            #print dailyFileReader
+            #print "hi"
             for row in dailyFileReader:
                 if idxdate == 0 and dailyFileReader.line_num == 1:
                     #Get all the metric names
@@ -245,14 +277,6 @@ if options.inputFile is None:
                     metricData.append(thisData)
             dailyFile.close()
             idxdate += 1
-    #update endtime in config
-    if new_prev_endtime_epoch == 0:
-        print "No data is reported"
-    else:
-        new_prev_endtimeinsec = math.ceil(long(new_prev_endtime_epoch)/1000.0)
-        new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtimeinsec)))
-        update_timestamp(new_prev_endtime)
-        sendData()
 else:
     if os.path.isfile(os.path.join(homepath,options.inputFile)):
         numlines = len(open(os.path.join(homepath,options.inputFile)).readlines())
@@ -278,7 +302,7 @@ else:
                 else:
                     sendData()
                     metricData = []
-            sendData()
+
         else:
             fileReader = csv.reader(file)
             for row in fileReader:
@@ -319,9 +343,19 @@ else:
                     sendData()
                     metricData = []
                     alldata = {}
-            sendData()
         file.close()
+
         updateAgentDataRange(minTimestampEpoch,maxTimestampEpoch)
+
+#update endtime in config
+if new_prev_endtime_epoch == 0:
+    print "No data is reported"
+else:
+    new_prev_endtimeinsec = math.ceil(long(new_prev_endtime_epoch)/1000.0)
+    new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtimeinsec)))
+    update_timestamp(new_prev_endtime)
+
+    sendData()
 
 #old file cleaning
 for dirpath, dirnames, filenames in os.walk(os.path.join(homepath,datadir)):
