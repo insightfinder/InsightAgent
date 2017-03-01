@@ -9,7 +9,7 @@ import sys
 '''
 This script will start two scripts for deploying insightagent to hosts
 '''
-serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
+serverUrl = 'https://agent-data.insightfinder.com'
 
 def get_args():
     parser = argparse.ArgumentParser(description='Script retrieves arguments for insightfinder agent.')

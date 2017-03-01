@@ -6,7 +6,7 @@ import argparse
 import sys
 import time
 
-serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
+serverUrl = 'https://agent-data.insightfinder.com'
 
 def get_args():
     global serverUrl

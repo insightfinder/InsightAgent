@@ -48,7 +48,7 @@ while [ "$1" != "" ]; do
 done
 
 if [ -z "$SERVER_URL" ]; then
-	SERVER_URL='https://agentdata-dot-insightfindergae.appspot.com'
+	SERVER_URL='https://agent-data.insightfinder.com'
 fi
 
 if [ -z "$AGENT_TYPE" ] || [ -z "$REPORTING_INTERVAL" ] || [ -z "$CRON_INTERVAL" ] || [ -z "$PASSWORD" ] || [ -z "$SAMPLING_INTERVAL" ] || [ -z "$LICENSEKEY" ] || [ -z "$USERNAME" ] || [ -z "$PROJECTNAME" ]; then
