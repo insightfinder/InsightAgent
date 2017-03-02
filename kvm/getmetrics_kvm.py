@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 from __future__ import print_function
 import sys
 import libvirt
@@ -38,7 +40,7 @@ date = time.strftime("%Y%m%d")
 
 def createInitialHeader():
     global header
-    header += "Timestamp,FreeMemory[Host]<MB>,CPUCount[Host],CPUUsage_Kernel[Host]<s>,CPUUsage_Idle[Host]<s>,CPUUsage_User[Host]<s>,CPUUsage_IOWait[Host]<s>"
+    header += "timestamp,FreeMemory[Host]<MB>,CPUCount[Host],CPUUsage_Kernel[Host]<s>,CPUUsage_Idle[Host]<s>,CPUUsage_User[Host]<s>,CPUUsage_IOWait[Host]<s>"
 
 def appendGuestHeader(name):
     global header
