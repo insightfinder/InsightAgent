@@ -10,7 +10,7 @@ import sys
 import subprocess
 import requests
 
-serverUrl = 'https://agent-data.insightfinder.com'
+serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
 usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)
 parser.add_option("-d", "--directory",
@@ -48,7 +48,7 @@ prev_endtime = config['prev_endtime']
 deltaFields = config['delta_fields']
 
 new_prev_endtime_epoch = 0
-hostname = socket.gethostname()
+hostname = socket.getfqdn()
 hostnameShort = socket.gethostname().partition(".")[0]
 csvpath = "/opt/collectd/var/lib/collectd/${prefix}/var/lib/collectd/csv/"+ hostname
 date = time.strftime("%Y-%m-%d")

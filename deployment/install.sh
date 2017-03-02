@@ -11,7 +11,7 @@ if [ "$#" -lt 12 ]; then
 	exit 1
 fi
 
-DEFAULT_SERVER_URL='https://agent-data.insightfinder.com'
+DEFAULT_SERVER_URL='https://agentdata-dot-insightfindergae.appspot.com'
 
 while [ "$1" != "" ]; do
 	case $1 in
@@ -43,7 +43,7 @@ while [ "$1" != "" ]; do
 done
 
 if [ -z "$SERVER_URL" ]; then
-	SERVER_URL='https://agent-data.insightfinder.com'
+	SERVER_URL='https://agentdata-dot-insightfindergae.appspot.com'
 fi
 
 if [ -z "$AGENT_TYPE" ] || [ -z "$REPORTING_INTERVAL" ] || [ -z "$SAMPLING_INTERVAL" ] || [ -z "$LICENSEKEY" ] || [ -z "$USERNAME" ] || [ -z "$PROJECTNAME" ]; then

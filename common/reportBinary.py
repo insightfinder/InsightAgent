@@ -21,7 +21,7 @@ till now from today's log file (may or may not be present)
 assumping gmt epoch timestamp and local date daily file
 '''
 
-serverUrl = 'https://agent-data.insightfinder.com'
+serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
 
 usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)

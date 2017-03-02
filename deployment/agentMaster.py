@@ -19,7 +19,7 @@ from datetime import datetime
 from dateutil import parser
 
 #serverUrl = 'http://localhost:8888'
-serverUrl = 'https://agent-data.insightfinder.com'
+serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
 
 def sshInstall(retry,hostname):
     global user
