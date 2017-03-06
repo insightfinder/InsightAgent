@@ -24,6 +24,11 @@ if options.homepath is None:
 else:
     homepath = options.homepath
 
+#For calling reportCustomMetrics from '../common' directory.
+sys.path.insert(0, os.path.join(homepath,'common'))
+import reportCustomMetrics
+
+
 if options.serverUrl != None:
     serverUrl = options.serverUrl
 
@@ -113,7 +118,7 @@ def sendData():
     #print the json
     json_data = json.dumps(alldata)
     #print json_data
-    print str(len(bytearray(json_data))) + " bytes data are reported"
+    print str(len(bytearray(json_data))) + " Bytes data are reported"
     url = serverUrl + "/customprojectrawdata"
     response = requests.post(url, data=json.loads(json_data))
 
@@ -225,7 +230,7 @@ for eachtimestamp in rawData:
     metricData.append(thisData)
 
 update_results(previousResult)
-    
+
 print metricData
 
 #update endtime in config
@@ -237,3 +242,9 @@ else:
     update_timestamp(new_prev_endtime)
     sendData()
 
+#Update custom Metrics
+reported = reportCustomMetrics.getcustommetrics(serverUrl, PROJECTNAME, USERNAME, LICENSEKEY, homepath)
+if reported:
+    print "Custom metrics sent"
+else:
+    print "Failed to send custom metrics"
