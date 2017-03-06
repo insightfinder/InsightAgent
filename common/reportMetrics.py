@@ -9,6 +9,7 @@ import datetime
 import socket
 from optparse import OptionParser
 import math
+import reportCustomMetrics
 
 '''
 this script reads reporting interval and prev endtime config2
@@ -332,3 +333,10 @@ for dirpath, dirnames, filenames in os.walk(os.path.join(homepath,datadir)):
         file_modified = datetime.datetime.fromtimestamp(os.path.getmtime(curpath))
         if datetime.datetime.now() - file_modified > datetime.timedelta(days=keep_file_days):
             os.rename(curpath,os.path.join("/tmp",file))
+
+#Update custom Metrics
+reported = reportCustomMetrics.getcustommetrics(serverUrl, PROJECTNAME, USERNAME, LICENSEKEY, homepath)
+if reported:
+    print "Custom metrics sent"
+else:
+    print "Failed to send custom metrics"

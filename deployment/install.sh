@@ -87,6 +87,10 @@ if [[ ! -d $INSIGHTAGENTDIR/log ]]
 then
 	mkdir $INSIGHTAGENTDIR/log
 fi
+if [[ ! -d $INSIGHTAGENTDIR/custom ]]
+then
+        mkdir $INSIGHTAGENTDIR/custom
+fi
 
 AGENTRC=$INSIGHTAGENTDIR/.agent.bashrc
 if [[ -f $AGENTRC ]]
