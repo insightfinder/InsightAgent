@@ -12,8 +12,8 @@ InsightAgent supports an integration with fluentd's td-agent, allowing log data 
 - Give a project name, select Project Type as "Log File".
 - Note down the project name and license key which will be used for agent installation. The license key is also available in "User Account Information". To go to "User Account Information", click the userid on the top right corner.
 
-##### Pre-requisites:
-# Python 2.7
+# Pre-requisites:
+## Python 2.7
 
 For Debian and Ubuntu, the following command will ensure that the required dependencies are installed:
 ```
@@ -25,13 +25,13 @@ For Fedora and RHEL-derivatives, the following command will ensure that the requ
 sudo yum update
 sudo yum install gcc libffi-devel python-devel openssl-devel wget
 ```
-## Install td-agent
+# Install td-agent
 
 Per (td-agent's web site)[http://docs.fluentd.org/v0.12/articles/before-install], please work with a system administrator to insure that the td-agent's pre-requisites are met:
 - ntp is enabled
 - The system's maximum number of file descriptors (both soft and hard limits) are set to 65536
 
-# For Debian/Ubuntu systems, install td-agent with the appropriate command below:
+## For Debian/Ubuntu systems, install td-agent with the appropriate command below:
 
 For Xenial:
 ```
@@ -62,7 +62,7 @@ For Debian Squeeze:
 curl -L https://toolbelt.treasuredata.com/sh/install-debian-squeeze-td-agent2.sh | sh
 ```
 
-# Start the td-agent daemon:
+Start the td-agent daemon:
 
 The /etc/init.d/td-agent script is provided to start, stop, or restart the agent.
 ```
@@ -81,7 +81,7 @@ Please make sure your configuration file is located at /etc/td-agent/td-agent.co
 
 For more details on Debian/Ubuntu-specific installation, please see the (td-agent web site)[http://docs.fluentd.org/v0.12/articles/install-by-deb].
 
-# For td-agent on Red Hat/CentOS/Amazon Linux and other RHEL derivative distributions
+## For td-agent on Red Hat/CentOS/Amazon Linux and other RHEL derivative distributions
 
 Execute the following command on your system as root or equivalent:
 ```
@@ -136,4 +136,4 @@ source pyenv/bin/activate
 
 For your convenience, we have included a sample td-agent configuration that includes configuration directives to monitor a Cassandra system.log file and forward its contents to an InsightFinder server.
 
-For additional information on td-agent configuration, please see the (td-agent web site)[http://docs.fluentd.org/v0.12/articles/config-file#list-of-directives] and as always, don't hesitate to (contact InsightFinder support)[mailto:support@insightfinder.com]
+For additional information on td-agent configuration, please see the td-agent web site: http://docs.fluentd.org/v0.12/articles/config-file#list-of-directives and as always, don't hesitate to contact InsightFinder support at support@insightfinder.com
