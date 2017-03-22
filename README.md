@@ -22,3 +22,4 @@ InsightFinder also supports a special integration with Splunk via a native Splun
 
 More details on the InsightFinder for Splunk app is available at https://splunkbase.splunk.com/app/3281/
 
+
