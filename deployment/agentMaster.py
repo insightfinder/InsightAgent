@@ -180,6 +180,8 @@ def get_args():
         '-p', '--PASSWORD', type=str, help='Password for hosts', required=True)
     parser.add_argument(
         '-w', '--SERVER_URL', type=str, help='Server URL for InsightFinder', required=False)
+    parser.add_argument(
+        '-d', '--DIRECTORY', type=str, help='Home path', required=True)
     args = parser.parse_args()
     user = args.USER_NAME_IN_HOST
     userInsightfinder = args.USER_NAME_IN_INSIGHTFINDER
@@ -189,10 +191,11 @@ def get_args():
     agentType = args.AGENT_TYPE
     password = args.PASSWORD
     projectName = args.PROJECT_NAME
+    homepath = arge.DIRECTORY
     global serverUrl
     if args.SERVER_URL != None:
         serverUrl = args.SERVER_URL
-    return user, projectName, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password
+    return user, projectName, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password, homepath
 
 
 if __name__ == '__main__':
@@ -210,7 +213,7 @@ if __name__ == '__main__':
     jsonFile="instancesMetaData.json"
     #File containing blacklisted instances.
     excludeListFile="excludeList.csv"
-    user, projectName, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password = get_args()
+    user, projectName, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password, homepath = get_args()
     q = Queue.Queue()
     newInstances = []
     try:
@@ -249,24 +252,24 @@ if __name__ == '__main__':
         oldInstances = {}
         excludeList = []
         newKeys = []
-        print "Checking Path: ",os.path.join(os.getcwd(),excludeListFile)
+        print "Checking Path: ",os.path.join(homepath,excludeListFile)
 
         #Also, check the exclude list for blacklisted instances and create a list of excluded instances.
-        if os.path.exists(os.path.join(os.getcwd(),excludeListFile)):
-            with open(os.path.join(os.getcwd(),excludeListFile), 'rb') as f:
+        if os.path.exists(os.path.join(homepath,excludeListFile)):
+            with open(os.path.join(homepath,excludeListFile), 'rb') as f:
                 reader = csv.reader(f)
                 for row in reader:
                     excludeList.append(row[0])
                     print "Added Exclude List: ", row[0]
 
-        print "Checking Path: ",os.path.join(os.getcwd(),jsonFile)
+        print "Checking Path: ",os.path.join(homepath,jsonFile)
         #If the file doesn't exist, then all allowed instances should be included for agent installation
-        if not os.path.exists(os.path.join(os.getcwd(),jsonFile)):
+        if not os.path.exists(os.path.join(homepath,jsonFile)):
             newInstances = allowed_instances
             newKeys = allowed_instances.keys()
         #If the file exists, remove the instances which already exist in the file.
         else:
-            oldInstances = json.load(open(os.path.join(os.getcwd(),jsonFile), "rb" ))
+            oldInstances = json.load(open(os.path.join(homepath,jsonFile), "rb" ))
             #Get the final list of instances.
             newKeys = set(allowed_instances.keys()) - set(oldInstances.keys())
             #If the instance is in oldInstances list then, check the time difference between them, if the instances are more than 1 day old then put them in the newlist again.
@@ -310,7 +313,7 @@ if __name__ == '__main__':
             ip = str(updatedInstances[key]['privateip'])
             if ip in hostMap and hostMap[ip] == 0:
                 updatedInstances[key]['agentExist'] = True
-        json.dump(updatedInstances,open(os.path.join(os.getcwd(),jsonFile), "wb" ))
+        json.dump(updatedInstances,open(os.path.join(homepath,jsonFile), "wb" ))
 
     except (KeyboardInterrupt, SystemExit):
         print "Keyboard Interrupt!!"
