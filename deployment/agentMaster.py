@@ -224,7 +224,7 @@ if __name__ == '__main__':
         print "url", url
         print "dataString", dataString
         #Subprocess to run the CURL command for POST reqest.
-        proc = subprocess.Popen(['curl --data \''+ dataString +'\' '+url], stdout=subprocess.PIPE, shell=True)
+        proc = subprocess.Popen(['curl -s --data \''+ dataString +'\' '+url], stdout=subprocess.PIPE, shell=True)
         #Get the ouput data and err data.
         (out,err) = proc.communicate()
         print 'Output', out
