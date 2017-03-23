@@ -295,7 +295,7 @@ if __name__ == '__main__':
                 if host in excludeList:
                     continue
                 print host
-                #q.put(host)
+                q.put(host)
         hostMap = {}
         while q.empty() != True:
             host = q.get()
