@@ -191,7 +191,7 @@ def get_args():
     agentType = args.AGENT_TYPE
     password = args.PASSWORD
     projectName = args.PROJECT_NAME
-    homepath = arge.DIRECTORY
+    homepath = args.DIRECTORY
     global serverUrl
     if args.SERVER_URL != None:
         serverUrl = args.SERVER_URL
