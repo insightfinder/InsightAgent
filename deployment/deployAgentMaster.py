@@ -46,7 +46,7 @@ def clearDownloads():
         removeFile(eachFile)
 
 def downloadFile(filename):
-    proc = subprocess.Popen("wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/"+filename, cwd=homepath, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen("wget --no-check-certificate https://raw.githubusercontent.com/amurark/InsightAgent/master/deployment/"+filename, cwd=homepath, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
     if "failed" in str(err) or "ERROR" in str(err):
         sys.exit(err)
@@ -60,7 +60,7 @@ def stopCronHypervisor():
     global user
     global password
     removeFile("stopcron.py")
-    proc = subprocess.Popen("wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/hypervisor/stopcron.py", cwd=homepath, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen("wget --no-check-certificate https://raw.githubusercontent.com/amurark/InsightAgent/master/hypervisor/stopcron.py", cwd=homepath, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
     if "failed" in str(err) or "ERROR" in str(err):
         print "Can't download stopcron.py"
@@ -76,7 +76,7 @@ def stopCron():
     global user
     global password
     removeFile("stopcron.py")
-    proc = subprocess.Popen("wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.py", cwd=homepath, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen("wget --no-check-certificate https://raw.githubusercontent.com/amurark/InsightAgent/master/deployment/stopcron.py", cwd=homepath, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
     if "failed" in str(err) or "ERROR" in str(err):
         print "Can't download stopcron.py"
