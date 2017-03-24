@@ -99,7 +99,7 @@ def sshInstall(retry,hostname,hostMap):
         print "Unexpected error in %s:"%hostname
         return sshInstall(retry-1,hostname,hostMap)
 
-def sshInstallHypervisor(retry,hostname):
+def sshInstallHypervisor(retry,hostname,hostMap):
     global user
     global password
     global userInsightfinder
@@ -107,6 +107,8 @@ def sshInstallHypervisor(retry,hostname):
     global samplingInterval
     global reportingInterval
     global agentType
+    global homepath
+
     if retry == 0:
         print "Install Fail in", hostname
         q.task_done()
@@ -115,8 +117,8 @@ def sshInstallHypervisor(retry,hostname):
     try:
         s = paramiko.SSHClient()
         s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        if os.path.isfile(password) == True:
-            s.connect(hostname, username=user, key_filename = password, timeout=60)
+        if os.path.isfile(os.path.join(homepath,password)) == True:
+            s.connect(hostname, username=user, key_filename = os.path.join(homepath,password), timeout=60)
         else:
             s.connect(hostname, username=user, password = password, timeout=60)
         ftp = s.open_sftp()
@@ -125,38 +127,52 @@ def sshInstallHypervisor(retry,hostname):
         session = transport.open_session()
         session.set_combine_stderr(True)
         session.get_pty()
-        session.exec_command("rm -rf InsightAgent*\n \
-        tar xzvf insightagent.tar.gz\n \
-        cd InsightAgent-master\n")
-        stdin = session.makefile('wb', -1)
+        command = "[ -f /etc/cron.d/ifagent ] && echo 'File exist' || echo 'File does not exist'"
+        session.exec_command(command)
         stdout = session.makefile('rb', -1)
-        stdin.write(password+'\n')
-        stdin.flush()
-        session.recv_exit_status() #wait for exec_command to finish
-        if "IOError" in stdout.readlines():
-             print "Not enough space in host"
-             print "Install Failed in ",hostname
-             s.close()
-             return sshInstallHypervisor(retry-1,hostname)
-        s.close()
-        print "Install Succeed in", hostname
-        q.task_done()
-        return
+        if stdout.read().strip(' \t\n\r') == 'File exist':
+            s.close()
+            hostMap[hostname] = 0
+            print "Installation stopped in ", hostname
+            q.task_done()
+            return
+        else:
+            hostMap[hostname] = 1
+            session = transport.open_session()
+            session.set_combine_stderr(True)
+            session.get_pty()
+            session.exec_command("rm -rf InsightAgent*\n \
+            tar xzvf insightagent.tar.gz\n \
+            cd InsightAgent-master\n")
+            stdin = session.makefile('wb', -1)
+            stdout = session.makefile('rb', -1)
+            stdin.write(password+'\n')
+            stdin.flush()
+            session.recv_exit_status() #wait for exec_command to finish
+            if "IOError" in stdout.readlines():
+                 print "Not enough space in host"
+                 print "Install Failed in ",hostname
+                 s.close()
+                 return sshInstallHypervisor(retry-1,hostname)
+            s.close()
+            print "Install Succeed in", hostname
+            q.task_done()
+            return
     except paramiko.SSHException, e:
         print "Invalid Username/Password for %s:"%hostname , e
-        return sshInstallHypervisor(retry-1,hostname)
+        return sshInstallHypervisor(retry-1,hostname,hostMap)
     except paramiko.AuthenticationException:
         print "Authentication failed for some reason in %s:"%hostname
-        return sshInstallHypervisor(retry-1,hostname)
+        return sshInstallHypervisor(retry-1,hostname,hostMap)
     except socket.error, e:
         print "Socket connection failed in %s:"%hostname, e
-        return sshInstallHypervisor(retry-1,hostname)
+        return sshInstallHypervisor(retry-1,hostname,hostMap)
     except IOError,e :
         print "Not enough disk space in host"
-        return sshInstallHypervisor(retry-1,hostname)
+        return sshInstallHypervisor(retry-1,hostname,hostMap)
     except:
         print "Unexpected error in %s:"%hostname
-        return sshInstallHypervisor(retry-1,hostname)
+        return sshInstallHypervisor(retry-1,hostname,hostMap)
 
 
 
@@ -295,6 +311,7 @@ if __name__ == '__main__':
         for instanceKey in newInstances:
                 host = newInstances[instanceKey]["privateip"]#Changed from publicIp
                 if host in excludeList:
+                    print "Excluded:",host
                     continue
                 q.put(host)
         hostMap = {}
