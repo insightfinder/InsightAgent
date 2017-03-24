@@ -135,5 +135,5 @@ rm verifyInsightCredentials.py
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployAgentMaster.py
 python deployAgentMaster.py -n $INSIGHTFINDER_USERNAME -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE -w $SERVER_URL
 deactivate
-rm -rf pyenv
+#rm -rf pyenv
 rm deployAgentMaster.sh
