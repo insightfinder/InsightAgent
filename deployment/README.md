@@ -14,6 +14,7 @@ wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/Insi
 - Add a new file 'excludeList.txt' with Private IPs (Each IP in a new line) of instances where you don't want to install the agents.
 - In case of 'Key based Authentication', add the file to the same path.
 - To deploy run the following command
+- To force install agent on all instance, use -f flag.
 ```
 ./deployAgentMaster.sh  -n USER_NAME_IN_HOST
                         -i PROJECT_NAME_IN_INSIGHTFINDER
@@ -22,7 +23,7 @@ wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/Insi
                         -s SAMPLING_INTERVAL_MINUTE
                         -r REPORTING_INTERVAL_MINUTE
                         -t AGENT_TYPE
-                        -f FORCE_INSTALL
+                        -f
 ```
 ##### To view command in terminal, run
 ```

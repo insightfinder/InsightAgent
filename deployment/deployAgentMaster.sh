@@ -2,7 +2,7 @@
 
 function usage()
 {
-	echo "Usage: ./deployAgentMaster.sh -n USER_NAME_IN_HOST -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE -f FORCE_INSTALL
+	echo "Usage: ./deployAgentMaster.sh -n USER_NAME_IN_HOST -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE -f
 AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or filereplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia."
 }
 
