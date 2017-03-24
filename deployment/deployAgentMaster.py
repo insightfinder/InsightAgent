@@ -21,7 +21,7 @@ def get_args():
     parser.add_argument('-r', '--REPORTING_INTERVAL_MINUTE', type=str, help='Reporting Interval Minutes', required=True)
     parser.add_argument('-t', '--AGENT_TYPE', type=str, help='Agent type: proc or cadvisor or docker_remote_api or cgroup or daemonset or elasticsearch or collectd or hypervisor or ec2monitoring or jolokia', choices=['proc', 'cadvisor', 'docker_remote_api', 'cgroup', 'daemonset', 'elasticsearch', 'collectd', 'hypervisor', 'ec2monitoring', 'jolokia'],required=True)
     parser.add_argument('-w', '--SERVER_URL', type=str, help='Server url of Insightfinder', required=False)
-    parser.add_argument('-f', '--FORCE_INSTALL', type=str, help='Forcefully install agent to all instances', requried=True)
+    parser.add_argument('-f', '--FORCE_INSTALL', type=str, help='Forcefully install agent to all instances', required=True)
     args = parser.parse_args()
     projectName = args.PROJECT_NAME_IN_INSIGHTFINDER
     user = args.USER_NAME_IN_HOST
