@@ -2,15 +2,15 @@
 
 function usage()
 {
-	echo "Usage: ./deployAgentMaster.sh -n USER_NAME_IN_HOST -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
-AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or filereplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia"
+	echo "Usage: ./deployAgentMaster.sh -n USER_NAME_IN_HOST -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE -f
+AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or filereplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia."
 }
 
 if [ "$#" -lt 14 ]; then
 	usage
 	exit 1
 fi
-
+FORCE_INSTALL='false'
 while [ "$1" != "" ]; do
 	case $1 in
 		-n )	shift
@@ -36,6 +36,9 @@ while [ "$1" != "" ]; do
 			;;
 		-w )	shift
 			SERVER_URL=$1
+			;;
+		-f ) shift
+			FORCE_INSTALL='true'
 			;;
 		* )	usage
 			exit 1
@@ -133,7 +136,7 @@ fi
 rm verifyInsightCredentials.py
 
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployAgentMaster.py
-python deployAgentMaster.py -n $INSIGHTFINDER_USERNAME -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE -w $SERVER_URL
+python deployAgentMaster.py -n $INSIGHTFINDER_USERNAME -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE -w $SERVER_URL -f $FORCE_INSTALL
 deactivate
 #rm -rf pyenv
 rm deployAgentMaster.sh
