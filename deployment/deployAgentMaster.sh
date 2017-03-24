@@ -60,7 +60,7 @@ if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE !
 fi
 
 wget https://bootstrap.pypa.io/get-pip.py && python get-pip.py --force-reinstall --user
-wget --no-check-certificate https://raw.githubusercontent.com/amurark/InsightAgent/master/deployment/requirements
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/requirements
 ~/.local/bin/pip install -U --force-reinstall --user virtualenv
 if [ "$?" -ne "0" ]; then
     echo "pip install failed. Please install the pre-requisites using the following commands and retry deployment again"
@@ -125,7 +125,7 @@ fi
 rm requirements
 rm get-pip.py
 
-wget --no-check-certificate https://raw.githubusercontent.com/amurark/InsightAgent/master/deployment/verifyInsightCredentials.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/verifyInsightCredentials.py
 if ! python verifyInsightCredentials.py -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -w $SERVER_URL
 then
     rm verifyInsightCredentials.py
@@ -135,7 +135,7 @@ then
 fi
 rm verifyInsightCredentials.py
 
-wget --no-check-certificate https://raw.githubusercontent.com/amurark/InsightAgent/master/deployment/deployAgentMaster.py
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployAgentMaster.py
 python deployAgentMaster.py -n $INSIGHTFINDER_USERNAME -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE -w $SERVER_URL -f $FORCE_INSTALL
 deactivate
 #rm -rf pyenv

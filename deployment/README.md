@@ -7,7 +7,7 @@ The agent master can be used for seamless automatic deployment of agent codes in
 
 - Get the deployment script from GitHub using below command
 ```
-wget --no-check-certificate https://raw.githubusercontent.com/amurark/InsightAgent/master/deployment/deployAgentMaster.sh
+wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployAgentMaster.sh
 ```
 - Change permission for "deployAgentMaster.sh" to executable.
 - Ensure all machines have the same login username and password.
