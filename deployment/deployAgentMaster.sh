@@ -50,7 +50,7 @@ if [ -z "$SERVER_URL" ]; then
 fi
 
 if [ -z "$FORCE_INSTALL"]; then
-	FORCE_INSTALL = 'false'
+	FORCE_INSTALL='false'
 fi
 
 if [ -z "$AGENT_TYPE" ] || [ -z "$REPORTING_INTERVAL" ] || [ -z "$INSIGHTFINDER_USERNAME" ] || [ -z "$SAMPLING_INTERVAL" ] || [ -z "$LICENSEKEY" ] || [ -z "$USERNAME" ] || [ -z "$PROJECTNAME" ]; then
