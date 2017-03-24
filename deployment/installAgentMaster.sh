@@ -54,7 +54,7 @@ if [ -z "$SERVER_URL" ]; then
 	SERVER_URL='https://agentdata-dot-insightfindergae.appspot.com'
 fi
 
-if [ -z "$FORCE_INSTALL"]; then
+if [ -z "$FORCE_INSTALL" ]; then
 	FORCE_INSTALL='false'
 fi
 

@@ -71,7 +71,7 @@ def sshInstall(retry,hostname,hostMap):
             session.set_combine_stderr(True)
             session.get_pty()
             nextcommand = "sudo rm -rf insightagent* InsightAgent* && \
-            wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz && \
+            wget --no-check-certificate https://github.com/amurark/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz && \
             tar xzvf insightagent.tar.gz && \
             cd InsightAgent-master && deployment/checkpackages.sh && \
             deployment/install.sh "+ arguments + "\n"
