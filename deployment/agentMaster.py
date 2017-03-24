@@ -241,7 +241,6 @@ if __name__ == '__main__':
         url = serverUrl + "/api/v1/instanceMetaData"
         print "Running at time: ", time.strftime('%X %x %Z')
         print "url", url
-        print "dataString", dataString
         #Subprocess to run the CURL command for POST reqest.
         proc = subprocess.Popen(['curl -s --data \''+ dataString +'\' '+url], stdout=subprocess.PIPE, shell=True)
         #Get the ouput data and err data.

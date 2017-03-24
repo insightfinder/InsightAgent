@@ -10,10 +10,12 @@ The agent master can be used for seamless automatic deployment of agent codes in
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployAgentMaster.sh
 ```
 - Change permission for "deployAgentMaster.sh" to executable.
-- Add a new file 'excludeList.csv' with Public IPs (Each IP in a new line) of instances where you don't want to install the agents.
+- Ensure all machines have the same login username and password.
+- Add a new file 'excludeList.csv' with Private IPs (Each IP in a new line) of instances where you don't want to install the agents.
+- In case of 'Key based Authentication', add the file to the same path.
 - To deploy run the following command
 ```
-./deployAgentMaster.sh -n USER_NAME_IN_HOST
+./deployAgentMaster.sh  -n USER_NAME_IN_HOST
                         -i PROJECT_NAME_IN_INSIGHTFINDER
                         -u USER_NAME_IN_INSIGHTFINDER
                         -k LICENSE_KEY
