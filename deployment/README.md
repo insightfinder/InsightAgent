@@ -11,7 +11,7 @@ wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/Insi
 ```
 - Change permission for "deployAgentMaster.sh" to executable.
 - Ensure all machines have the same login username and password.
-- Add a new file 'excludeList.csv' with Private IPs (Each IP in a new line) of instances where you don't want to install the agents.
+- Add a new file 'excludeList.txt' with Private IPs (Each IP in a new line) of instances where you don't want to install the agents.
 - In case of 'Key based Authentication', add the file to the same path.
 - To deploy run the following command
 ```

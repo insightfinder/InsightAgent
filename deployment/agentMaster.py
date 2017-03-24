@@ -14,7 +14,6 @@ import threading
 import pickle
 import subprocess
 import json
-import csv
 from datetime import datetime
 #from dateutil import parser
 
@@ -230,7 +229,7 @@ if __name__ == '__main__':
     #File containing list of instances the agent is installed on. The file doesn't exit the first time the agent runs.
     jsonFile="instancesMetaData.json"
     #File containing blacklisted instances.
-    excludeListFile="excludeList.csv"
+    excludeListFile="excludeList.txt"
     user, projectName, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password, homepath = get_args()
     q = Queue.Queue()
     newInstances = []
@@ -274,10 +273,9 @@ if __name__ == '__main__':
         #Also, check the exclude list for blacklisted instances and create a list of excluded instances.
         if os.path.exists(os.path.join(homepath,excludeListFile)):
             with open(os.path.join(homepath,excludeListFile), 'rb') as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    excludeList.append(row[0])
-                    #print "Added Exclude List: ", row[0]
+                content = f.readlines()
+                excludeList = [x.strip() for x in content]
+                print excludeList
 
         print "Checking Path: ",os.path.join(homepath,jsonFile)
         #If the file doesn't exist, then all allowed instances should be included for agent installation
