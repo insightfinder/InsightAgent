@@ -35,6 +35,7 @@ def sshInstall(retry,hostname,hostMap):
     global reportingInterval
     global agentType
     global projectName
+    global homepath
 
     arguments = " -i "+projectName+" -u " + userInsightfinder + " -k " + licenseKey + " -s " + samplingInterval + " -r " + reportingInterval + " -t " + agentType + " -w " +serverUrl
     if retry == 0:
@@ -47,8 +48,8 @@ def sshInstall(retry,hostname,hostMap):
         s = paramiko.SSHClient()
         s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-        if os.path.isfile(password) == True:
-            s.connect(hostname, username=user, key_filename = password, timeout=60)
+        if os.path.isfile(os.path.join(homepath,password)) == True:
+            s.connect(hostname, username=user, key_filename = os.path.join(homepath,password), timeout=60)
         else:
             s.connect(hostname, username=user, password = password, timeout=60)
         transport = s.get_transport()
@@ -209,6 +210,7 @@ if __name__ == '__main__':
     global agentType
     global projectName
     global newInstances
+    global homepath
     #File containing list of instances the agent is installed on. The file doesn't exit the first time the agent runs.
     jsonFile="instancesMetaData.json"
     #File containing blacklisted instances.
@@ -221,6 +223,7 @@ if __name__ == '__main__':
         dataString = "projectName="+projectName+"&userName="+userInsightfinder+"&licenseKey="+licenseKey
         #URL for POST request
         url = serverUrl + "/api/v1/instanceMetaData"
+        print "Running at time: ", time.strftime('%X %x %Z')
         print "url", url
         print "dataString", dataString
         #Subprocess to run the CURL command for POST reqest.
