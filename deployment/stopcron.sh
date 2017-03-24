@@ -26,7 +26,7 @@ done
 
 
 wget https://bootstrap.pypa.io/get-pip.py && python get-pip.py --force-reinstall --user
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/requirements
+wget --no-check-certificate https://raw.githubusercontent.com/amurark/InsightAgent/master/deployment/requirements
 ~/.local/bin/pip install -U --force-reinstall --user virtualenv
 if [ "$?" -ne "0" ]; then
     echo "pip install failed. Please install the pre-requisites using the following commands and retry stopcron again"
@@ -91,7 +91,7 @@ fi
 rm requirements
 rm get-pip.py
 
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/stopcron.py
+wget --no-check-certificate https://raw.githubusercontent.com/amurark/InsightAgent/master/deployment/stopcron.py
 python stopcron.py -n $USERNAME -p $PASSWORD
 rm stopcron.py
 deactivate

@@ -2,8 +2,8 @@
 
 function usage()
 {
-	echo "Usage: ./deployAgentMaster.sh -n USER_NAME_IN_HOST -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
-AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or filereplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia"
+	echo "Usage: ./deployAgentMaster.sh -n USER_NAME_IN_HOST -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE -f FORCE_INSTALL
+AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or filereplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia."
 }
 
 if [ "$#" -lt 14 ]; then
@@ -37,6 +37,9 @@ while [ "$1" != "" ]; do
 		-w )	shift
 			SERVER_URL=$1
 			;;
+		-f ) shift
+			FORCE_INSTALL=$1
+			;;
 		* )	usage
 			exit 1
 	esac
@@ -44,6 +47,10 @@ while [ "$1" != "" ]; do
 done
 if [ -z "$SERVER_URL" ]; then
 	SERVER_URL='https://agentdata-dot-insightfindergae.appspot.com'
+fi
+
+if [ -z "$FORCE_INSTALL"]; then
+	FORCE_INSTALL = 'false'
 fi
 
 if [ -z "$AGENT_TYPE" ] || [ -z "$REPORTING_INTERVAL" ] || [ -z "$INSIGHTFINDER_USERNAME" ] || [ -z "$SAMPLING_INTERVAL" ] || [ -z "$LICENSEKEY" ] || [ -z "$USERNAME" ] || [ -z "$PROJECTNAME" ]; then
@@ -57,7 +64,7 @@ if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE !
 fi
 
 wget https://bootstrap.pypa.io/get-pip.py && python get-pip.py --force-reinstall --user
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/requirements
+wget --no-check-certificate https://raw.githubusercontent.com/amurark/InsightAgent/master/deployment/requirements
 ~/.local/bin/pip install -U --force-reinstall --user virtualenv
 if [ "$?" -ne "0" ]; then
     echo "pip install failed. Please install the pre-requisites using the following commands and retry deployment again"
@@ -122,7 +129,7 @@ fi
 rm requirements
 rm get-pip.py
 
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/verifyInsightCredentials.py
+wget --no-check-certificate https://raw.githubusercontent.com/amurark/InsightAgent/master/deployment/verifyInsightCredentials.py
 if ! python verifyInsightCredentials.py -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -w $SERVER_URL
 then
     rm verifyInsightCredentials.py
@@ -132,8 +139,8 @@ then
 fi
 rm verifyInsightCredentials.py
 
-wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployAgentMaster.py
-python deployAgentMaster.py -n $INSIGHTFINDER_USERNAME -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE -w $SERVER_URL
+wget --no-check-certificate https://raw.githubusercontent.com/amurark/InsightAgent/master/deployment/deployAgentMaster.py
+python deployAgentMaster.py -n $INSIGHTFINDER_USERNAME -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE -w $SERVER_URL -f $FORCE_INSTALL
 deactivate
 #rm -rf pyenv
 rm deployAgentMaster.sh
