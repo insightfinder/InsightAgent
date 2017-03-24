@@ -62,7 +62,7 @@ def sshInstall(retry,hostname,hostMap):
         if stdout.read().strip(' \t\n\r') == 'File exist' and forceInstall.lower() == 'false':
             s.close()
             hostMap[hostname] = 0
-            print "Installation stopped in ", hostname
+            print "Installation stopped in ", hostname, "because another agent exists."
             q.task_done()
             return
         else:
@@ -134,7 +134,7 @@ def sshInstallHypervisor(retry,hostname,hostMap):
         if stdout.read().strip(' \t\n\r') == 'File exist' and forceInstall.lower() == 'false':
             s.close()
             hostMap[hostname] = 0
-            print "Installation stopped in ", hostname
+            print "Installation stopped in ", hostname, "because another agent exists."
             q.task_done()
             return
         else:
@@ -263,7 +263,9 @@ if __name__ == '__main__':
         allowed_instances = {}
         self_ip = get_ip_address()
         #If the instance has the flag 'AutoDeployInsightAgent' set to False, then ignore the instance for auto agent install.
+        print "EC2 Instances:"
         for key in instances:
+            print key
             if 'AutoDeployInsightAgent' in instances[key] and instances[key]['AutoDeployInsightAgent'] == False:
                 continue
             else:
@@ -282,7 +284,6 @@ if __name__ == '__main__':
             with open(os.path.join(homepath,excludeListFile), 'rb') as f:
                 content = f.readlines()
                 excludeList = [x.strip() for x in content]
-                print excludeList
 
         print "Checking Path: ",os.path.join(homepath,jsonFile)
         #If the file doesn't exist, then all allowed instances should be included for agent installation
