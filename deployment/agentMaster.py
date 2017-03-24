@@ -227,7 +227,6 @@ if __name__ == '__main__':
         proc = subprocess.Popen(['curl -s --data \''+ dataString +'\' '+url], stdout=subprocess.PIPE, shell=True)
         #Get the ouput data and err data.
         (out,err) = proc.communicate()
-        print 'Output', out
         output = json.loads(out)
         #If the output doesn't create success field, exit because of error in POST.
         if not output["success"]:
@@ -260,7 +259,7 @@ if __name__ == '__main__':
                 reader = csv.reader(f)
                 for row in reader:
                     excludeList.append(row[0])
-                    print "Added Exclude List: ", row[0]
+                    #print "Added Exclude List: ", row[0]
 
         print "Checking Path: ",os.path.join(homepath,jsonFile)
         #If the file doesn't exist, then all allowed instances should be included for agent installation
@@ -294,7 +293,6 @@ if __name__ == '__main__':
                 host = newInstances[instanceKey]["privateip"]#Changed from publicIp
                 if host in excludeList:
                     continue
-                print host
                 q.put(host)
         hostMap = {}
         while q.empty() != True:
