@@ -237,6 +237,7 @@ if __name__ == '__main__':
     #File containing blacklisted instances.
     excludeListFile="excludeList.txt"
     user, projectName, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password, homepath, forceInstall = get_args()
+    print "FORCE_INSTALL flag: ",forceInstall
     q = Queue.Queue()
     newInstances = []
     try:

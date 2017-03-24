@@ -10,7 +10,7 @@ if [ "$#" -lt 14 ]; then
 	usage
 	exit 1
 fi
-
+FORCE_INSTALL='false'
 while [ "$1" != "" ]; do
 	case $1 in
 		-n )	shift
@@ -38,7 +38,7 @@ while [ "$1" != "" ]; do
 			SERVER_URL=$1
 			;;
 		-f ) shift
-			FORCE_INSTALL=$1
+			FORCE_INSTALL='true'
 			;;
 		* )	usage
 			exit 1
@@ -47,10 +47,6 @@ while [ "$1" != "" ]; do
 done
 if [ -z "$SERVER_URL" ]; then
 	SERVER_URL='https://agentdata-dot-insightfindergae.appspot.com'
-fi
-
-if [ -z "$FORCE_INSTALL"]; then
-	FORCE_INSTALL='false'
 fi
 
 if [ -z "$AGENT_TYPE" ] || [ -z "$REPORTING_INTERVAL" ] || [ -z "$INSIGHTFINDER_USERNAME" ] || [ -z "$SAMPLING_INTERVAL" ] || [ -z "$LICENSEKEY" ] || [ -z "$USERNAME" ] || [ -z "$PROJECTNAME" ]; then
