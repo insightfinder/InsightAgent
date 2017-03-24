@@ -284,7 +284,6 @@ if __name__ == '__main__':
             with open(os.path.join(homepath,excludeListFile), 'rb') as f:
                 content = f.readlines()
                 excludeList = [x.strip() for x in content]
-                print excludeList
 
         print "Checking Path: ",os.path.join(homepath,jsonFile)
         #If the file doesn't exist, then all allowed instances should be included for agent installation
