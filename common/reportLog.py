@@ -30,6 +30,8 @@ parser.add_option("-m", "--mode",
     action="store", dest="mode", help="Running mode: live or metricFileReplay or logFileReplay or logStreaming")
 parser.add_option("-t", "--agentType",
     action="store", dest="agentType", help="Agent type")
+parser.add_option("-w", "--hostname",
+    action="store", dest="serverUrl", help="Server IP")
 (options, args) = parser.parse_args()
 
 if options.homepath is None:
@@ -67,7 +69,6 @@ proc.communicate()
 LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
 PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
 USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
-serverUrl = 'https://insightfinderstaging.appspot.com'
 
 reportedDataSize = 0
 totalSize = 0
@@ -188,14 +189,17 @@ def sendData():
     if mode == "logStreaming":
         alldata["minTimestamp"] = str(minTimestampEpoch)
         alldata["maxTimestamp"] = str(maxTimestampEpoch)
-    alldata["agentType"] = "LogFileReplay"
+        alldata["agentType"] = "LogStreaming"
+    else:
+      alldata["agentType"] = "LogFileReplay"
 
     currentChunk += 1
     #print the json
     json_data = json.dumps(alldata)
     #print json_data
-    url = serverUrl + "/customprojectrawdata"
+    url = options.serverUrl + "/customprojectrawdata"
     print alldata["chunkTotalNumber"] +" ^^^^ "+alldata["chunkSerialNumber"]
+    print url
     response = requests.post(url, data=json.loads(json_data))
 
 def updateAgentDataRange(minTS,maxTS):
@@ -210,7 +214,7 @@ def updateAgentDataRange(minTS,maxTS):
     #print the json
     json_data = json.dumps(alldata)
     #print json_data
-    url = serverUrl + "/agentdatahelper"
+    url = options.serverUrl + "/agentdatahelper"
     response = requests.post(url, data=json.loads(json_data))
 
 #main
@@ -302,11 +306,10 @@ if os.path.isfile(os.path.join('/tmp',options.inputFile)):
             totalChunks += 1
         sendData()
     #save json file
-
     file.close()
     #deleteContent(options.inputFile)
     if new_prev_endtime_epoch == 0:
-        print "No data is reported"
+        print "No data is reported!"
     else:
         new_prev_endtimeinsec = math.ceil(long(new_prev_endtime_epoch)/1000.0)
         new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtimeinsec)))

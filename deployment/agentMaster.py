@@ -14,6 +14,7 @@ import threading
 import pickle
 import subprocess
 import json
+import csv
 from datetime import datetime
 #from dateutil import parser
 
@@ -35,7 +36,6 @@ def sshInstall(retry,hostname,hostMap):
     global agentType
     global projectName
     global homepath
-    global forceInstall
 
     arguments = " -i "+projectName+" -u " + userInsightfinder + " -k " + licenseKey + " -s " + samplingInterval + " -r " + reportingInterval + " -t " + agentType + " -w " +serverUrl
     if retry == 0:
@@ -59,7 +59,7 @@ def sshInstall(retry,hostname,hostMap):
         command = "[ -f /etc/cron.d/ifagent ] && echo 'File exist' || echo 'File does not exist'"
         session.exec_command(command)
         stdout = session.makefile('rb', -1)
-        if stdout.read().strip(' \t\n\r') == 'File exist' and forceInstall.lower() == 'false':
+        if stdout.read().strip(' \t\n\r') == 'File exist':
             s.close()
             hostMap[hostname] = 0
             print "Installation stopped in ", hostname
@@ -108,7 +108,6 @@ def sshInstallHypervisor(retry,hostname,hostMap):
     global reportingInterval
     global agentType
     global homepath
-    global forceInstall
 
     if retry == 0:
         print "Install Fail in", hostname
@@ -131,7 +130,7 @@ def sshInstallHypervisor(retry,hostname,hostMap):
         command = "[ -f /etc/cron.d/ifagent ] && echo 'File exist' || echo 'File does not exist'"
         session.exec_command(command)
         stdout = session.makefile('rb', -1)
-        if stdout.read().strip(' \t\n\r') == 'File exist' and forceInstall.lower() == 'false':
+        if stdout.read().strip(' \t\n\r') == 'File exist':
             s.close()
             hostMap[hostname] = 0
             print "Installation stopped in ", hostname
@@ -200,8 +199,6 @@ def get_args():
         '-w', '--SERVER_URL', type=str, help='Server URL for InsightFinder', required=False)
     parser.add_argument(
         '-d', '--DIRECTORY', type=str, help='Home path', required=True)
-    parser.add_argument(
-        '-f', '--FORCE_INSTALL', type=str, help='Force Install', required=True)
     args = parser.parse_args()
     user = args.USER_NAME_IN_HOST
     userInsightfinder = args.USER_NAME_IN_INSIGHTFINDER
@@ -212,11 +209,10 @@ def get_args():
     password = args.PASSWORD
     projectName = args.PROJECT_NAME
     homepath = args.DIRECTORY
-    forceInstall = args.FORCE_INSTALL
     global serverUrl
     if args.SERVER_URL != None:
         serverUrl = args.SERVER_URL
-    return user, projectName, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password, homepath, forceInstall
+    return user, projectName, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password, homepath
 
 
 if __name__ == '__main__':
@@ -231,13 +227,11 @@ if __name__ == '__main__':
     global projectName
     global newInstances
     global homepath
-    global forceInstall
     #File containing list of instances the agent is installed on. The file doesn't exit the first time the agent runs.
     jsonFile="instancesMetaData.json"
     #File containing blacklisted instances.
-    excludeListFile="excludeList.txt"
-    user, projectName, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password, homepath, forceInstall = get_args()
-    print "FORCE_INSTALL flag: ",forceInstall
+    excludeListFile="excludeList.csv"
+    user, projectName, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password, homepath = get_args()
     q = Queue.Queue()
     newInstances = []
     try:
@@ -280,9 +274,10 @@ if __name__ == '__main__':
         #Also, check the exclude list for blacklisted instances and create a list of excluded instances.
         if os.path.exists(os.path.join(homepath,excludeListFile)):
             with open(os.path.join(homepath,excludeListFile), 'rb') as f:
-                content = f.readlines()
-                excludeList = [x.strip() for x in content]
-                print excludeList
+                reader = csv.reader(f)
+                for row in reader:
+                    excludeList.append(row[0])
+                    #print "Added Exclude List: ", row[0]
 
         print "Checking Path: ",os.path.join(homepath,jsonFile)
         #If the file doesn't exist, then all allowed instances should be included for agent installation
@@ -322,7 +317,7 @@ if __name__ == '__main__':
         while q.empty() != True:
             host = q.get()
             if agentType == "hypervisor":
-                t = threading.Thread(target=sshInstallHypervisor, args=(3,host,hostMap))
+                t = threading.Thread(target=sshInstallHypervisor, args=(3,host,))
             else:
                 t = threading.Thread(target=sshInstall, args=(3,host,hostMap))
             t.daemon = True

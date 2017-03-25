@@ -216,8 +216,15 @@ if options.inputFile is None:
     for i in range(0,2+int(float(reporting_interval)/24/60)):
         dates.append(time.strftime("%Y%m%d", time.localtime(start_time_epoch/1000 + 60*60*24*i)))
     for date in dates:
-        if os.path.isfile(os.path.join(homepath,datadir+date+".csv")):
-            dailyFile = open(os.path.join(homepath,datadir+date+".csv"))
+        if agentType == "kafka":
+            fileadd = "_kafka"
+        elif agentType == "elasticsearch-storage":
+            fileadd = "_es"
+        else:
+            fileadd = ""
+
+        if os.path.isfile(os.path.join(homepath, datadir + date + fileadd + ".csv")):
+            dailyFile = open(os.path.join(homepath, datadir + date + fileadd + ".csv"))
             dailyFileReader = csv.reader(dailyFile)
             for row in dailyFileReader:
                 if idxdate == 0 and dailyFileReader.line_num == 1:
