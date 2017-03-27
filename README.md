@@ -3,17 +3,24 @@ InsightFinder agents can be used to monitor system performance on bare-metal mac
 
 The following types of agents are available:
 
+ - AWS EC2
  - cadvisor
  - cgroup
  - collectd
  - daemonset
- - docker remote api
- - elastic search
- - log file replay
- - hypervisor
- - jolokia
- - kvm
- - metric file replay
+ - DataDog
+ - Docker Remote API
+ - Elasticsearch (storage & metrics)
+ - hypervisor (VMware)
+ - Jolokia
+ - Kafka
+ - KVM
+ - Log File Replay (for testing)
+ - Log Streaming
+ - Metric File Replay (for testing)
+ - New Relic
+ - /proc (Linux)
+ - syscall
 
 More details on the agents and installation details are in the wiki: https://github.com/insightfinder/InsightAgent/wiki
 
