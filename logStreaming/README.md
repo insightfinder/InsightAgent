@@ -129,7 +129,7 @@ source pyenv/bin/activate
 
 3) Install and enable the Insight Agent's logStreaming agent.
 ```
-./deployment/install.sh -i PROJECT_NAME -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 0 -r 0 -t logStreaming
+./deployment/install.sh -i PROJECT_NAME -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 1 -r 1 -t logStreaming
 ```
 
 ## Configure the td-agent to find and monitor the log files you wish to integrate.
