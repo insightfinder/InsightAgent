@@ -10,7 +10,7 @@ import sys
 import subprocess
 import requests
 
-serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
+serverUrl = 'https://agent-data.insightfinder.com'
 usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)
 parser.add_option("-d", "--directory",

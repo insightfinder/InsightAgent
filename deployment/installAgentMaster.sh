@@ -2,7 +2,7 @@
 
 function usage()
 {
-	echo "Usage: ./installAgentMaster.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE -c CRON_INTERVAL -p PASSWORD
+	echo "Usage: ./installAgentMaster.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE -c CRON_INTERVAL -p PASSWORD -f FORCE_INSTALL
 AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or metricFileReplay or logFileReplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia or kvm"
 }
 
@@ -31,16 +31,19 @@ while [ "$1" != "" ]; do
 			;;
 		-t )	shift
 			AGENT_TYPE=$1
-		;;
+			;;
 		-c )	shift
-		CRON_INTERVAL=$1
-		;;
+			CRON_INTERVAL=$1
+			;;
 		-p )	shift
-		PASSWORD=$1
-		;;
+			PASSWORD=$1
+			;;
 		-w )	shift
-		SERVER_URL=$1
-		;;
+			SERVER_URL=$1
+			;;
+		-f ) shift
+			FORCE_INSTALL=$1
+			;;
 		* )	usage
 			exit 1
 	esac
@@ -48,7 +51,11 @@ while [ "$1" != "" ]; do
 done
 
 if [ -z "$SERVER_URL" ]; then
-	SERVER_URL='https://agentdata-dot-insightfindergae.appspot.com'
+	SERVER_URL='https://agent-data.insightfinder.com'
+fi
+
+if [ -z "$FORCE_INSTALL" ]; then
+	FORCE_INSTALL='false'
 fi
 
 if [ -z "$AGENT_TYPE" ] || [ -z "$REPORTING_INTERVAL" ] || [ -z "$CRON_INTERVAL" ] || [ -z "$PASSWORD" ] || [ -z "$SAMPLING_INTERVAL" ] || [ -z "$LICENSEKEY" ] || [ -z "$USERNAME" ] || [ -z "$PROJECTNAME" ]; then
@@ -83,7 +90,7 @@ mkdir $INSIGHTAGENTDIR/log
 echo "LICENSEKEY=$LICENSEKEY"
 echo "INSTANCE=$PROJECTNAME"
 
-echo "*/$CRON_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/agentMaster.py -n $USER -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE -w $SERVER_URL -p $PASSWORD -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/agentMaster.err 1>$INSIGHTAGENTDIR/log/agentMaster.out" >> $TEMPCRON
+echo "*/$CRON_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/agentMaster.py -n $USER -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE -w $SERVER_URL -p $PASSWORD -d $INSIGHTAGENTDIR -f $FORCE_INSTALL 2>$INSIGHTAGENTDIR/log/agentMaster.err 1>$INSIGHTAGENTDIR/log/agentMaster.out" >> $TEMPCRON
 
 sudo chown root:root $TEMPCRON
 sudo chmod 644 $TEMPCRON

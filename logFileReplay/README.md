@@ -44,7 +44,7 @@ tar -xvf insightagent.tar.gz
 source pyenv/bin/activate
 ```
 ```
-./deployment/install.sh -i PROJECT_NAME -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 0 -r 0 -t logFileReplay
+./deployment/install.sh -i PROJECT_NAME -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 1 -r 1 -t logFileReplay
 ```
 3) Put data files in InsightAgent-master/data/
 Make sure the contents of the file are in json format.

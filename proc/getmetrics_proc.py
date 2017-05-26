@@ -39,18 +39,30 @@ def listtocsv(lists):
 def getindex(col_name):
     if col_name == "CPU":
         return 1001
+    elif col_name == "l":
+        return 1999
     elif col_name == "DiskRead" or col_name == "DiskWrite":
         return 1002
     elif col_name == "DiskUsed":
         return 1003
     elif col_name == "NetworkIn" or col_name == "NetworkOut":
         return 1004
-    elif col_name == "MemUsed":
+    elif "Mem" in col_name:
         return 1005
     elif "DiskUsed" in col_name:
         return 1006
     elif "LoadAvg" in col_name:
         return 1007
+    elif "InOctets" in col_name or "OutOctets" in col_name:
+        return 1008
+    elif "InDiscards" in col_name or "OutDiscards" in col_name:
+        return 1009
+    elif "InErrors" in col_name or "OutErrors" in col_name:
+        return 1010
+    elif "SwapUsed" in col_name or "SwapTotal" in col_name:
+        return 1011
+
+
 
 def update_results(lists):
     with open(os.path.join(homepath,datadir+"previous_results.json"),'w') as f:
@@ -68,11 +80,13 @@ def init_previous_results():
                 tokens = eachline.split("=")
                 if(len(tokens) == 1):
                     continue
+                if(tokens[1].isdigit() is False):
+                    continue
                 if(eachfile == "diskmetrics.txt"):
                     tokens[1] = float(float(tokens[1])*512/(1024*1024))
                 elif(eachfile == "diskusedmetrics.txt" or eachfile == "memmetrics.txt"):
                     tokens[1] = float(float(tokens[1])/1024)
-                elif(eachfile == "networkmetrics.txt"):
+                elif(eachfile == "networkmetrics.txt" or eachfile == "networkinterfacemetrics.txt"):#Change
                     tokens[1] = float(float(tokens[1])/(1024*1024))
                 first_result[tokens[0]] = float(tokens[1])
     update_results(first_result)
@@ -85,19 +99,27 @@ def get_previous_results():
         return json.load(f)
 
 def check_delta(field):
+#     print field
     with open(os.path.join(homepath,"reporting_config.json"),'r') as f:
         config_lists = json.load(f)
     deltaFields = config_lists['delta_fields']
     for eachfield in deltaFields:
+        print eachfield
         if(eachfield == field):
+#             print field + " " +eachfield
+            return True
+        elif(eachfield in field):
+            print field + " " +eachfield
             return True
     return False
 
 def calculate_delta(fieldname,value):
+#     print fieldname
     previous_result = get_previous_results()
     delta = float(value) - previous_result[fieldname]
     delta = abs(delta)
     return round(delta,4)
+
 
 def calculate_cpudelta(current_result):
     previous_result = get_previous_results()
@@ -145,7 +167,7 @@ def get_cpuusage(filename,field_values,which_dict):
         totalresult += float(result)
     field_values.append(totalresult*100)
 
-filenames = ["timestamp.txt", "cpumetrics.txt","diskmetrics.txt","diskusedmetrics.txt","networkmetrics.txt","memmetrics.txt","loadavg.txt"]
+filenames = ["timestamp.txt", "cpumetrics.txt","diskmetrics.txt","diskusedmetrics.txt","networkmetrics.txt","networkinterfacemetrics.txt","memmetrics.txt","loadavg.txt"]
 fields = []
 try:
     date = time.strftime("%Y%m%d")
@@ -167,7 +189,7 @@ try:
             groupid = getindex(tokens[0])
             field = tokens[0]+"["+hostname+"]:"+str(groupid)
             fields.append(field)
-            if(check_delta(tokens[0]) == True):
+            if(check_delta(tokens[0]) is True):
                 deltaValue = calculate_cpudelta(dict["cpu_usage"])
                 values.append(deltaValue)
             else:
@@ -190,9 +212,9 @@ try:
                     tokens[1] = float(float(tokens[1])*512/(1024*1024))
                 elif(eachfile == "diskusedmetrics.txt" or eachfile == "memmetrics.txt"):
                     tokens[1] = float(float(tokens[1])/1024)
-                elif(eachfile == "networkmetrics.txt"):
+                elif(eachfile == "networkmetrics.txt" or eachfile == "networkinterfacemetrics.txt"):#Change
                     tokens[1] = float(float(tokens[1])/(1024*1024))
-                if(check_delta(tokens[0]) == True):
+                if check_delta(tokens[0]) is True:
                     deltaValue = calculate_delta(tokens[0],tokens[1])
                     values.append(deltaValue)
                     dict[tokens[0]] = float(tokens[1]) # Actual values need to be stored in dict and not delta values
@@ -209,6 +231,7 @@ try:
     else:
         headercsv = csvContent[0]
         header = headercsv.split("\n")[0].split(",")
+        #If there are new fields added, then copy the fields from date.csv to date.time.csv and add new fields to date.csv
         if cmp(header,fields) != 0:
             oldFile = os.path.join(homepath,datadir+date+".csv")
             newFile = os.path.join(homepath,datadir+date+"."+time.strftime("%Y%m%d%H%M%S")+".csv")

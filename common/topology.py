@@ -6,6 +6,7 @@ import glob
 import json
 import time
 from optparse import OptionParser
+import netifaces
 
 '''
 this script gathers network info from the local system and outputs a json file
@@ -161,6 +162,24 @@ def _get_pid_of_inode(inode):
             pass
     return None
 
+def get_interfaces():
+
+    interfaces = netifaces.interfaces()
+    interfaces.remove('lo')
+
+    out_interfaces = dict()
+
+    for interface in interfaces:
+        addrs = netifaces.ifaddresses(interface)
+        out_addrs = dict()
+        if netifaces.AF_INET in addrs.keys():
+            out_addrs["ipv4"] = addrs[netifaces.AF_INET]
+        if netifaces.AF_INET6 in addrs.keys():
+            out_addrs["ipv6"] = addrs[netifaces.AF_INET6]
+        out_interfaces[interface] = out_addrs
+
+    return out_interfaces
+
 
 if __name__ == '__main__':
 
@@ -171,6 +190,8 @@ if __name__ == '__main__':
     # get the timestamp
     ts = int(time.time())
 
+    # servers = machines I am getting connected to
+    # clients = machines who are connecting to me
     serversv4 = []
     serversv6 = []
     clientsv4 = []
@@ -179,9 +200,9 @@ if __name__ == '__main__':
     listenersv6 = []
     listening_portsv4 = []
     listening_portsv6 = []
+    interfaces = get_interfaces()
 
     for conn_tcp in tcpv4_result:
-        print conn_tcp
         if conn_tcp[4] == "LISTEN":
             listenersv4.append(conn_tcp[2])
             listening_portsv4.append(conn_tcp[2].split(":")[1])
@@ -189,12 +210,11 @@ if __name__ == '__main__':
     for conn_tcp in tcpv4_result:
         if conn_tcp[4] != "LISTEN":
             if conn_tcp[2].split(":")[1] in listening_portsv4:
-                clientsv4.append(conn_tcp[3])
+                clientsv4.append(conn_tcp[3] + "-" + conn_tcp[2])
             else:
-                serversv4.append(conn_tcp[3])
+                serversv4.append(conn_tcp[2] + "-" + conn_tcp[3])
 
     for conn_tcp in tcpv6_result:
-        print conn_tcp
         if conn_tcp[4] == "LISTEN":
             listening_portsv6.append(conn_tcp[2].split(":")[16])
             listenersv6.append(conn_tcp[2])
@@ -202,19 +222,22 @@ if __name__ == '__main__':
     for conn_tcp in tcpv6_result:
         if conn_tcp[4] != "LISTEN":
             if conn_tcp[2].split(":")[16] in listening_portsv6:
-                clientsv6.append(conn_tcp[3])
+                clientsv6.append(conn_tcp[3] + "-" + conn_tcp[2])
             else:
-                serversv6.append(conn_tcp[3])
+                serversv6.append(conn_tcp[2] + "-" + conn_tcp[3])
 
     result = {}
 
-    result["serversv4"] = serversv4
-    result["serversv6"] = serversv6
-    result["clientsv4"] = clientsv4
-    result["clientsv6"] = clientsv6
-    result["listenersv4"] = listenersv4
-    result["listenersv6"] = listenersv6
-    result["timestamp"] = ts
+
+
+    result["outboundv4"] = serversv4
+    result["outboundv6"] = serversv6
+    result["inboundv4"] = clientsv4
+    result["inboundv6"] = clientsv6
+    #result["listenersv4"] = listenersv4
+    #result["listenersv6"] = listenersv6
+    result["timestamp"] = str(int(round(ts/60)*60))+'000'
+    result["interfaces"] = interfaces
     #
     # for idx, item in enumerate(listening_portsv4):
     #     listening_portsv4[idx] = ":" + item

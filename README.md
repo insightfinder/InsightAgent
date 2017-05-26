@@ -3,24 +3,17 @@ InsightFinder agents can be used to monitor system performance on bare-metal mac
 
 The following types of agents are available:
 
- - AWS EC2
  - cadvisor
  - cgroup
  - collectd
  - daemonset
- - DataDog
- - Docker Remote API
- - Elasticsearch (storage & metrics)
- - hypervisor (VMware)
- - Jolokia
- - Kafka
- - KVM
- - Log File Replay (for testing)
- - Log Streaming
- - Metric File Replay (for testing)
- - New Relic
- - /proc (Linux)
- - syscall
+ - docker remote api
+ - elastic search
+ - log file replay
+ - hypervisor
+ - jolokia
+ - kvm
+ - metric file replay
 
 More details on the agents and installation details are in the wiki: https://github.com/insightfinder/InsightAgent/wiki
 
@@ -28,5 +21,4 @@ More details on the agents and installation details are in the wiki: https://git
 InsightFinder also supports a special integration with Splunk via a native Splunk app.
 
 More details on the InsightFinder for Splunk app is available at https://splunkbase.splunk.com/app/3281/
-
 

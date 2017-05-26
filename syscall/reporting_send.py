@@ -17,7 +17,7 @@ uploadPort=4445
 #syscallList=list()
 Timer=0
 TimerInterval = 15 * 60 * 1000 #15 mins
-serverUrl = 'https://agentdata-dot-insightfindergae.appspot.com'
+serverUrl = 'https://agent-data.insightfinder.com'
 
 def get_args():
     parser = argparse.ArgumentParser(description='Script retrieves arguments for insightfinder system call tracing.')

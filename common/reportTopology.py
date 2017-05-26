@@ -21,7 +21,7 @@ if options.homepath is None:
 else:
     homepath = options.homepath
 
-if options.homepath is None:
+if options.reporting_time is None:
     reporting_time = 1
 else:
     reporting_time = options.reporting_time
@@ -31,7 +31,7 @@ datadir = 'data/'
 LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
 PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
 USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
-serverUrl = 'https://insightfinderstaging.appspot.com'
+serverUrl = 'https://agent-data.insightfinder.com'
 
 hostname = socket.gethostname().partition(".")[0]
 
@@ -43,7 +43,7 @@ if os.path.exists(json_file_path):  # check if file exists
     now = time.time()
 
     #check if the file is created/modified within the reporting interval
-    if now - created > reporting_time * 60:
+    if now - created <= reporting_time * 60:
 
         #load the topology json
         with open(json_file_path) as json_data:
@@ -51,17 +51,20 @@ if os.path.exists(json_file_path):  # check if file exists
 
         #start create the output json
         result = {}
-        result["topologyData"] = topology_json
+        result["metricData"] = json.dumps(topology_json)
         result["licenseKey"] = LICENSEKEY
         result["projectName"] = PROJECTNAME
         result["userName"] = USERNAME
         result["instanceName"] = hostname
+        result["agentType"] = "topologyData"
         #end create output json
 
-        #print result
+        #post data to server
         json_data = json.dumps(result)
-        url = serverUrl + "/agenttopologydata"
+        url = serverUrl + "/customprojectrawdata"
+        time.sleep(5)
         response = requests.post(url, data=json.loads(json_data))
+        print response
 
     else:
         os.remove(json_file_path)

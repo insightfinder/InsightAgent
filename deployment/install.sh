@@ -11,7 +11,7 @@ if [ "$#" -lt 12 ]; then
 	exit 1
 fi
 
-DEFAULT_SERVER_URL='https://agentdata-dot-insightfindergae.appspot.com'
+DEFAULT_SERVER_URL='https://agent-data.insightfinder.com'
 
 while [ "$1" != "" ]; do
 	case $1 in
@@ -43,7 +43,7 @@ while [ "$1" != "" ]; do
 done
 
 if [ -z "$SERVER_URL" ]; then
-	SERVER_URL='https://agentdata-dot-insightfindergae.appspot.com'
+	SERVER_URL='https://agent-data.insightfinder.com'
 fi
 
 if [ -z "$AGENT_TYPE" ] || [ -z "$REPORTING_INTERVAL" ] || [ -z "$SAMPLING_INTERVAL" ] || [ -z "$LICENSEKEY" ] || [ -z "$USERNAME" ] || [ -z "$PROJECTNAME" ]; then
@@ -128,6 +128,9 @@ else
 	echo "*/$SAMPLING_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
 	echo "*/$REPORTING_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/common/reportMetrics.py -d $INSIGHTAGENTDIR -t $AGENT_TYPE -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
 fi
+
+echo "*/$SAMPLING_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/common/topology.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling_topology.err 1>$INSIGHTAGENTDIR/log/sampling_topology.out" >> $TEMPCRON
+echo "*/$REPORTING_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/common/reportTopology.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/reporting_topology.err 1>$INSIGHTAGENTDIR/log/reporting_topology.out" >> $TEMPCRON
 
 sudo chown root:root $TEMPCRON
 sudo chmod 644 $TEMPCRON

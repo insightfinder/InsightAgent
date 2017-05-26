@@ -41,15 +41,29 @@ def listtocsv(lists):
             log = log + ','
     resource_usage_file.write("%s\n"%(log))
 
-def getindex(colName):
-    if "CPU" in colName:
+def getindex(col_name):
+    if "CPU" in col_name:
         return 2001
-    elif "DiskRead" in colName or "DiskWrite" in colName:
+    elif "DiskRead" in col_name or "DiskWrite" in col_name:
         return 2002
-    elif "NetworkIn" in colName or "NetworkOut" in colName:
+    elif "DiskUsed" in col_name:
         return 2003
-    elif "MemUsed" in colName:
+    elif "NetworkIn" in col_name or "NetworkOut" in col_name:
         return 2004
+    elif "Mem" in col_name:
+        return 2005
+    elif "DiskUsed" in col_name:
+        return 2006
+    elif "LoadAvg" in col_name:
+        return 2007
+    elif "InOctets" in col_name or "OutOctets" in col_name:
+        return 2008
+    elif "InDiscards" in col_name or "OutDiscards" in col_name:
+        return 2009
+    elif "InErrors" in col_name or "OutErrors" in col_name:
+        return 2010
+    elif "SwapUsed" in col_name or "SwapTotal" in col_name:
+        return 2011
 
 
 def update_results(lists):
@@ -162,7 +176,7 @@ def update_docker():
         dockerInstances = newInstances
 
 fields = []
-filenames = ["timestamp.txt","cpumetrics.txt","diskmetricsread.txt","diskmetricswrite.txt","networkmetrics.txt","memmetrics.txt"]
+filenames = ["timestamp.txt","cpumetrics.txt","diskmetricsread.txt","diskmetricswrite.txt","networkmetrics.txt","memmetrics.txt", "networkinterfacemetrics.txt", "diskusedmetrics.txt"]
 try:
     date = time.strftime("%Y%m%d")
     update_docker()
