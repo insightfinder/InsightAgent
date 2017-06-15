@@ -151,6 +151,8 @@ def sendData():
         currentChunk += 1
         if mode == "logFileReplay":
             alldata["agentType"] = "LogFileReplay"
+        if mode == "metricFileReplay":
+            alldata["agentType"] = "MetricFileReplay"
     else:
         print str(len(bytearray(json_data))) + " bytes data are reported"
     #print the json
