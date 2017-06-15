@@ -46,6 +46,7 @@ source pyenv/bin/activate
 ```
 ./deployment/install.sh -i PROJECT_NAME -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 1 -r 1 -t metricFileReplay
 ```
+Note: If running from a different server, add the -w SERVER_NAME option.
 3) Put data files in InsightAgent-master/data/
 Make sure each file is .csv formatted, starts with a row of headers and the headers should have "timestamp" field in it.
 
@@ -54,6 +55,7 @@ Make sure each file is .csv formatted, starts with a row of headers and the head
 python common/reportMetrics.py -m metricFileReplay -f PATH_TO_CSVFILENAME
 ```
 Where PATH_TO_CSVFILENAME is the path and filename of the csv file.
+Note: If running from a different server, add the -w SERVER_NAME option.
 
 After using the agent, use command "deactivate" to get out of python virtual environment.
 
