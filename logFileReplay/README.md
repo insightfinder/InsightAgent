@@ -46,6 +46,7 @@ source pyenv/bin/activate
 ```
 ./deployment/install.sh -i PROJECT_NAME -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 1 -r 1 -t logFileReplay
 ```
+Note: If running from a different server, add the -w SERVER_NAME option.
 3) Put data files in InsightAgent-master/data/
 Make sure the contents of the file are in json format.
 
@@ -63,6 +64,7 @@ Example:
 python common/reportMetrics.py -m logFileReplay -f PATH_TO_JSON_FILE
 ```
 Where PATH_TO_JSON_FILE is the path and filename of the json file.
+Note: If running from a different server, add the -w SERVER_NAME option.
 
 After using the agent, use command "deactivate" to get out of python virtual environment.
 
