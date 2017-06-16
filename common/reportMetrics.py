@@ -33,6 +33,10 @@ parser.add_option("-t", "--agentType",
     action="store", dest="agentType", help="Agent type")
 parser.add_option("-w", "--serverUrl",
     action="store", dest="serverUrl", help="Server Url")
+parser.add_option("-s", "--splitID",
+    action="store", dest="splitID", help="The split ID to use when grouping results on the server")
+parser.add_option("-g", "--splitBy",
+    action="store", dest="splitBy", help="The 'split by' to use when grouping results on the server. Examples: splitByEnv, splitByGroup")
 (options, args) = parser.parse_args()
 
 if options.homepath is None:
@@ -49,6 +53,15 @@ else:
     agentType = options.agentType
 if options.serverUrl != None:
     serverUrl = options.serverUrl
+##Optional split id and split by for metric file replay
+if options.splitID is None:
+    splitID = None 
+else:
+    splitID = options.splitID
+if options.splitBy is None:
+    splitBy = None
+else:
+    splitBy = options.splitBy
 
 datadir = 'data/'
 
@@ -127,6 +140,8 @@ def sendData():
     global totalSize
     global minTimestampEpoch
     global maxTimestampEpoch
+    global splitID
+    global splitBy
     if len(metricData) == 0:
         return
     #update projectKey, userName in dict
@@ -142,7 +157,6 @@ def sendData():
     json_data = json.dumps(alldata)
     if "FileReplay" in mode:
         reportedDataSize += len(bytearray(json.dumps(metricData)))
-	print "Reported size: " + str(reportedDataSize)
         if firstData == False:
             chunkSize = reportedDataSize
             firstData = True
@@ -152,12 +166,13 @@ def sendData():
 	      totalChunks = totalChunks-1
     	alldata["minTimestamp"] = minTimestampEpoch
     	alldata["maxTimestamp"] = maxTimestampEpoch
-	print "TotalSize: "+str(totalSize)
-	print "ChunkSize: "+str(chunkSize)
         reportedDataPer = (float(reportedDataSize)/float(totalSize))*100
         print str(min(100.0,math.ceil(reportedDataPer))) + "% of data are reported"
         alldata["chunkSerialNumber"] = str(currentChunk)
         alldata["chunkTotalNumber"] = str(totalChunks)
+	if(not splitID == None and not splitBy == None):
+	  alldata["splitID"] = splitID
+	  alldata["splitBy"] = splitBy
         currentChunk += 1
         if mode == "logFileReplay":
             alldata["agentType"] = "LogFileReplay"
