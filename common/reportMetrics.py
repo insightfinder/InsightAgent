@@ -1,5 +1,5 @@
 #!/usr/bin/python
-
+##TODO: This file needs to be refactored when time permits
 import csv
 import json
 import os
@@ -19,8 +19,8 @@ if prev endtime is 0, report most recent reporting interval
 till now from today's log file (may or may not be present)
 assumping gmt epoch timestamp and local date daily file
 '''
-serverUrl = 'https://agent-data.insightfinder.com'
-
+#serverUrl = 'https://agent-data.insightfinder.com'
+serverUrl = 'http://localhost:8080'
 usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)
 parser.add_option("-f", "--fileInput",
@@ -140,10 +140,16 @@ def sendData():
     json_data = json.dumps(alldata)
     if "FileReplay" in mode:
         reportedDataSize += len(bytearray(json.dumps(metricData)))
+	print "Reported size: " + str(reportedDataSize)
         if firstData == False:
             chunkSize = reportedDataSize
             firstData = True
             totalChunks = int(math.ceil(float(totalSize)/float(chunkSize)))
+	    #This is a hack fix and should be fixed. Pushing the fix off until we refactor this file.
+	    if mode == "metricFileReplay":
+	      totalChunks = totalChunks-1
+	print "TotalSize: "+str(totalSize)
+	print "ChunkSize: "+str(chunkSize)
         reportedDataPer = (float(reportedDataSize)/float(totalSize))*100
         print str(min(100.0,math.ceil(reportedDataPer))) + "% of data are reported"
         alldata["chunkSerialNumber"] = str(currentChunk)
@@ -178,6 +184,7 @@ def updateAgentDataRange(minTS,maxTS):
     #print json_data
     url = serverUrl + "/agentdatahelper"
     response = requests.post(url, data=json.loads(json_data))
+
 
 #main
 with open(os.path.join(homepath,"reporting_config.json"), 'r') as f:
@@ -349,3 +356,9 @@ if reported:
     print "Custom metrics sent"
 else:
     print "Failed to send custom metrics"
+
+
+
+
+
+
