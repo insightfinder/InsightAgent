@@ -125,6 +125,8 @@ def sendData():
     global totalChunks
     global currentChunk
     global totalSize
+    global minTimestampEpoch
+    global maxTimestampEpoch
     if len(metricData) == 0:
         return
     #update projectKey, userName in dict
@@ -148,6 +150,8 @@ def sendData():
 	    #This is a hack fix and should be fixed. Pushing the fix off until we refactor this file.
 	    if mode == "metricFileReplay":
 	      totalChunks = totalChunks-1
+    	alldata["minTimestamp"] = minTimestampEpoch
+    	alldata["maxTimestamp"] = maxTimestampEpoch
 	print "TotalSize: "+str(totalSize)
 	print "ChunkSize: "+str(chunkSize)
         reportedDataPer = (float(reportedDataSize)/float(totalSize))*100
