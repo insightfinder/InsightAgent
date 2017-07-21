@@ -81,4 +81,4 @@ licenseKey abcdef1234567890abcdef1234567890abc
     keep_time_key true
   </source>
 ~~~~
-7.  Restart td-agent force your new configuration to be read and the plugin to be recognized.
+7.  Start (or Restart) the td-agent service to force your new configuration to be read and the plugin to be recognized.
