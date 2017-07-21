@@ -131,6 +131,7 @@ source pyenv/bin/activate
 ```
 ./deployment/install.sh -i PROJECT_NAME -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 1 -r 1 -t logStreaming
 ```
+Note: If running from a different server, add the -w SERVER_NAME option.
 
 ## Configure the td-agent to find and monitor the log files you wish to integrate.
 
