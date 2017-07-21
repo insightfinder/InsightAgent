@@ -15,7 +15,7 @@ Tested with td-agent version 2 (v0.12) (installer package versions 2.5 and up).
 ## Installing td-agent with the InsightFinder output plugin
 
 1. Install td-agent per the [fluentd installation documentation](http://docs.fluentd.org/v0.12/categories/installation).
-2. Download [InsightFinder's fluentd output plugin](https://github.com/insightfinder/InsightAgent/blob/master/td-agent/out_InsightFinder.rb) and save it on your system.
+2. Download [InsightFinder's fluentd output plugin](https://raw.githubusercontent.com/insightfinder/InsightAgent/master/td-agent/out_InsightFinder.rb).  Right-click on this link and choose "Save" to download it to your system.
 3. Copy the output plugin to td-agent's plugin directory.  By default in package installs, this is /etc/td-agent/plugins
 4. Add an appropriate configuration to your /etc/td-agent/td-agent.conf file that includes a [match directive](http://docs.fluentd.org/v0.12/articles/config-file#2-ldquomatchrdquo-tell-fluentd-what-to-do) that includes the following InsightFinder-REQUIRED values:
 - A "type" that specifies the InsightFinder output plugin, a la:
