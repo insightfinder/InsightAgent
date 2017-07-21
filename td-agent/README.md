@@ -38,6 +38,7 @@ An "instanceType" to leverage external meta-data about this node.  Note:  The on
   instanceType AWS
 
 6. An example configuration is provided below:
+~~~~
   <match *>
     type InsightFinder
     # Endpoint for messages
@@ -69,4 +70,5 @@ An "instanceType" to leverage external meta-data about this node.  Note:  The on
     #message_key data
     keep_time_key true
   </source>
+~~~~
 7.  Restart td-agent force your new configuration to be read and the plugin to be recognized.
