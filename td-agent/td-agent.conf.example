@@ -1,0 +1,30 @@
+<match *>
+  type InsightFinder
+  flush_interval 60s
+  buffer_chunk_limit 200k
+  # Endpoint for messages
+  destinationHost https://agent-data.insightfinder.com/customprojectrawdata
+  # Comma separated list of http statuses which need to be retried
+  http_retry_statuses 500,403
+  # Read timeout in seconds, supports floats
+  http_read_timeout 2.2
+  # Open timeout in seconds, supports floats
+  http_open_timeout 2.34
+  userName guest
+  projectName WorkerSysLogs
+  # instancename (leave blank to use hostname)
+  instanceName 
+  # License Key
+  licenseKey b697f8711004d32fb2e4086dc5ea0a6d8f7df947 
+  # Instance Type 
+  instanceType AWS
+</match>
+<source>
+  @type tail
+  format /^(?<time>[A-Z][a-z][a-z] (([1-3][0-9])| [1-9]) [0-9][0-9]:[0-9][0-9]:[0-9][0-9]) (?<data>.*)$/
+  time_format %b %e %H:%M:%S
+  path /var/log/messages 
+  tag if-worker-messages-log
+  #message_key data
+  keep_time_key true
+</source>
