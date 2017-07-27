@@ -55,7 +55,10 @@ deltaFields = config['delta_fields']
 new_prev_endtime_epoch = 0
 hostname = socket.getfqdn()
 hostnameShort = socket.gethostname().partition(".")[0]
-csvpath = "/opt/collectd/var/lib/collectd/${prefix}/var/lib/collectd/csv/"+ hostname
+csvpath = "/var/lib/collectd/csv/"+ hostnameShort
+if not os.path.exists(csvpath):
+    csvpath = "/var/lib/collectd/csv/"+ hostname
+
 date = time.strftime("%Y-%m-%d")
 
 def getindex(col_name):

@@ -47,7 +47,7 @@ Update the hostlists to include the host names which you want to monitor. You ca
 
 3) run the following commands to install and use python virtual environment for insightfinder agent:
 ```
-./deployment/checkpackages.sh
+./deployment/checkpackages.sh -env
 ```
 ```
 source pyenv/bin/activate
@@ -58,8 +58,8 @@ source pyenv/bin/activate
 pip install datadog
 ```
 
-5) Run the below command to install agent.
+5) Run the below command to install agent.(The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required)
 ```
-./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
+./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE -w SERVER_URL
 ```
 After using the agent, use command "deactivate" to get out of python virtual environment.
