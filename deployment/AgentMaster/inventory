@@ -1,0 +1,15 @@
+[nodes]
+172.31.50.141
+
+[nodes:vars]
+ansible_user=
+ansible_ssh_private_key_file=
+
+[all:vars]
+ifUserName=
+ifProjectName=
+ifLicenseKey=
+ifSamplingInterval=1
+ifReportingInterval=1
+ifAgent=
+ifReportingUrl=https://app-data.insightfinder.com

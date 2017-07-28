@@ -43,6 +43,14 @@ def getindex(colName):
         return 4003
     elif colName == "MemUsed":
         return 4004
+    elif "InOctets" in colName or "OutOctets" in colName:
+        return 4005
+    elif "InDiscards" in colName or "OutDiscards" in colName:
+        return 4006
+    elif "InErrors" in colName or "OutErrors" in colName:
+        return 4007
+    elif colName == "SwapUsed" or colName == "SwapTotal":
+        return 4008
 
 metricResults = {}
 def toJson (header, values):
@@ -55,6 +63,7 @@ def toJson (header, values):
         metricResults[headerFields[i]] = valueFields[i]
 
 def updateResults():
+    print "In Function updateResults()" 
     global metricResults
     if not metricResults:
         return
@@ -62,6 +71,7 @@ def updateResults():
         json.dump(metricResults,f)
 
 def initPreviousResults():
+    print "In Function initPreviousResults()" 
     global numlines
     global date
     global hostname
@@ -80,8 +90,9 @@ def initPreviousResults():
             if isJson(eachline) == True:
                 metricData = json.loads(eachline)
                 break
+        #Generating the header line for the data file
         if(numlines < 1):
-            fields = ["timestamp","CPU","DiskRead","DiskWrite","NetworkIn","NetworkOut","MemUsed"]
+            fields = ["timestamp","CPU","DiskRead","DiskWrite","NetworkIn","NetworkOut","MemUsed","SwapTotal","SwapUsed"]
             if i == 0:
                 fieldnames = fields[0]
             host = dockers[i]
@@ -95,7 +106,9 @@ def initPreviousResults():
             fieldnames = linecache.getline(os.path.join(homepath,datadir+date+".csv"),1)
         timestamp = metricData['read'][:19]
         timestamp =  int(time.mktime(datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S").timetuple())*1000)
+
         try:
+            networkInterfaceMetrics = []
             if 'network' in metricData or 'networks' in metricData:
                 networkRx = round(float(float(metricData['network']['rx_bytes'])/(1024*1024)),4) #MB
                 networkTx = round(float(float(metricData['network']['tx_bytes'])/(1024*1024)),4) #MB
@@ -108,6 +121,40 @@ def initPreviousResults():
                 networkRx = 0
                 networkTx = 0
                 for key in networkMetrics:
+                    # Append New Field Headers for specific Interface
+                    if (numlines < 1 or newInstanceAvailable == True):
+                        nextfield = "InOctets-" + key + "[" + host + "_" + hostname + "]" + ":" + str(
+                            getindex("InOctets"))
+                        fieldnames = fieldnames + "," + nextfield
+                        nextfield = "OutOctets-" + key + "[" + host + "_" + hostname + "]" + ":" + str(
+                            getindex("OutOctets"))
+                        fieldnames = fieldnames + "," + nextfield
+                        nextfield = "InDiscards-" + key + "[" + host + "_" + hostname + "]" + ":" + str(
+                            getindex("InDiscards"))
+                        fieldnames = fieldnames + "," + nextfield
+                        nextfield = "OutDiscards-" + key + "[" + host + "_" + hostname + "]" + ":" + str(
+                            getindex("OutDiscards"))
+                        fieldnames = fieldnames + "," + nextfield
+                        nextfield = "InErrors-" + key + "[" + host + "_" + hostname + "]" + ":" + str(
+                            getindex("InErrors"))
+                        fieldnames = fieldnames + "," + nextfield
+                        nextfield = "OutErrors-" + key + "[" + host + "_" + hostname + "]" + ":" + str(
+                            getindex("OutErrors"))
+                        fieldnames = fieldnames + "," + nextfield
+
+                    metricVal = float(networkMetrics[key]['rx_bytes'])
+                    networkInterfaceMetrics.append(round(float(metricVal / (1024 * 1024)), 4))
+                    metricVal = float(networkMetrics[key]['tx_bytes'])
+                    networkInterfaceMetrics.append(round(float(metricVal / (1024 * 1024)), 4))
+                    metricVal = float(networkMetrics[key]['rx_dropped'])
+                    networkInterfaceMetrics.append(round(float(metricVal / (1024 * 1024)), 4))
+                    metricVal = float(networkMetrics[key]['tx_dropped'])
+                    networkInterfaceMetrics.append(round(float(metricVal / (1024 * 1024)), 4))
+                    metricVal = float(networkMetrics[key]['rx_errors'])
+                    networkInterfaceMetrics.append(round(float(metricVal / (1024 * 1024)), 4))
+                    metricVal = float(networkMetrics[key]['tx_errors'])
+                    networkInterfaceMetrics.append(round(float(metricVal / (1024 * 1024)), 4))
+                    #Adding up values for all interfaces to get the total
                     networkRx += float(networkMetrics[key]['rx_bytes'])
                     networkTx += float(networkMetrics[key]['tx_bytes'])
                 networkRx = round(float(networkRx/(1024*1024)),4) #MB
@@ -137,9 +184,18 @@ def initPreviousResults():
             print "Couldn't fetch disk information for container: " + dockers[i]
             diskRead = "NaN"
             diskWrite = "NaN"
+        try:
+            swapTotal = round(float(float(metricData['memory_stats']['stats']['total_swap'])/(1024*1024)),4) #MB
+            swapUsed = round(float(float(metricData['memory_stats']['stats']['swap'])/(1024*1024)),4) #MB
+        except KeyError, e:
+            print "Couldn't fetch swap information for container: " + dockerInstances[i]
+            swapUsed = "NaN"
+            swapTotal = "NaN"
         if i == 0:
             log = log + str(timestamp)
-        log = log + "," + str(cpu) + "," + str(diskRead) + "," + str(diskWrite) + "," + str(networkRx) + "," + str(networkTx) + "," + str(memUsed)
+        log = log + "," + str(cpu) + "," + str(diskRead) + "," + str(diskWrite) + "," + str(networkRx) + "," + str(networkTx) + "," + str(memUsed) + "," + str(swapTotal)+ "," + str(swapUsed)
+        if networkInterfaceMetrics:
+            log = log + "," + ",".join(map(str, networkInterfaceMetrics))
     toJson(fieldnames,log)
     updateResults()
     time.sleep(1)
@@ -147,10 +203,12 @@ def initPreviousResults():
     (out,err) = proc.communicate()
 
 def getPreviousResults():
+    print "In Function getPreviousResults()" 
     with open(os.path.join(homepath,datadir+"previous_results.json"),'r') as f:
         return json.load(f)
 
 def isJson(jsonString):
+    print "In Function isJson()" 
     try:
         jsonObject = json.loads(jsonString)
         if jsonObject['read'] != "":
@@ -162,14 +220,16 @@ def isJson(jsonString):
     return False
 
 def checkDelta(fd):
-    deltaFields = ["CPU", "DiskRead", "DiskWrite", "NetworkIn", "NetworkOut"]
+    print "In Function checkDelta()" 
+    deltaFields = ["CPU", "DiskRead", "DiskWrite", "NetworkIn", "NetworkOut","InOctets", "OutOctets", "InErrors", "OutErrors", "InDiscards", "OutDiscards"]
     for eachfield in deltaFields:
-        if(eachfield == fd):
+        if(eachfield == fd or fd.startswith(eachfield)):
             return True
     return False
 
 precpu={}
 def calculateDelta():
+    print "In Function calculateDelta()" 
     global fieldnames
     global metricResults
     finallogList = []
@@ -211,6 +271,7 @@ def calculateDelta():
     return finallogList
 
 def removeStatFiles():
+    print "In Function removeStatFiles()" 
     global dockerInstances
     for i in range(len(dockerInstances)):
         statfile = "stat%s.txt"%dockerInstances[i]
@@ -219,6 +280,7 @@ def removeStatFiles():
 
 dockerInstances = []
 def update_docker():
+    print "In Function update_docker()" 
     global dockers
     global newInstanceAvailable
     global dockerInstances
@@ -226,14 +288,14 @@ def update_docker():
     (out, err) = proc.communicate()
     dockers = out.split("\n")
     cronfile = open(os.path.join(homepath,datadir+"getmetrics_docker.sh"),'w')
-    cronfile.write("#!/bin/sh\nDATADIR='data/'\ncd $DATADIR\n")
+    cronfile.write("#!/bin/bash\nDATADIR='data/'\ncd $DATADIR\n")
     cronfile.write("now=$(date +%M)\n")
     containerCount = 0
     for container in dockers:
         if container == "":
             continue
         containerCount+=1
-        command = "echo -e \"GET /containers/"+container+"/stats?stream=0 HTTP/1.1\\r\\n\" | nc -U -i 10 /var/run/docker.sock > stat"+container+".txt & PID"+str(containerCount)+"=$!"
+        command = "echo -e \"GET /containers/"+container+"/stats?stream=0 HTTP/1.1\\r\\nHost: localhost\\r\\n\" | nc -U -i 10 /var/run/docker.sock > stat"+container+".txt & PID"+str(containerCount)+"=$!"
         cronfile.write(command+"\n")
     for i in range(1,containerCount+1):
         cronfile.write("wait $PID"+str(i)+"\n")
@@ -264,19 +326,37 @@ def update_docker():
     else:
         with open(os.path.join(homepath,datadir+"totalInstances.json"),'r') as f:
             dockerInstances = json.load(f)["overallDockerInstances"]
+    dockers = filter(None, dockers)
     for eachDocker in dockers:
-        if eachDocker == "":
-            continue
+        print ("Searching for",eachDocker)
         if eachDocker not in dockerInstances:
-            towritePreviousInstances = {}
-            dockerInstances.append(eachDocker)
-            towritePreviousInstances["overallDockerInstances"] = dockerInstances
-            with open(os.path.join(homepath,datadir+"totalInstances.json"),'w') as f:
-                json.dump(towritePreviousInstances,f)
             newInstanceAvailable = True
+    if newInstanceAvailable or (len(dockers) != len(dockerInstances)):
+        newInstanceAvailable = True
+        print ("Making the call to the server for update instance information.",len(dockers),len(dockerInstances))
+        writeInsatanceFile("currentInstances", dockers)
+        writeInsatanceFile("previousInstances", dockerInstances)
+        towritePreviousInstances = {}
+        towritePreviousInstances["overallDockerInstances"] = dockers
+        dockerInstances = dockers
+        with open(os.path.join(homepath,datadir+"totalInstances.json"),'w') as f:
+            json.dump(towritePreviousInstances,f)
+
+def writeInsatanceFile(filename, instanceList):
+    global hostname
+    jsonData = {}
+    print "In Function writeInsatanceFile()"
+    print instanceList
+    newInstanceList = []
+    for index in range(len(instanceList)):
+        newInstanceList.append(instanceList[index] + "_" + hostname)
+    jsonData["instanceList"] = newInstanceList
+    with open(os.path.join(homepath, datadir + filename + ".json"), 'w') as f:
+        json.dump(jsonData, f)
 
 metricData = {}
 def getmetrics():
+    print "In Function getmetrics()" 
     global dockerInstances
     global numlines
     global date
@@ -288,7 +368,7 @@ def getmetrics():
     global metricData
     try:
         while True:
-            fields = ["timestamp","CPU","DiskRead","DiskWrite","NetworkIn","NetworkOut","MemUsed"]
+            fields = ["timestamp","CPU","DiskRead","DiskWrite","NetworkIn","NetworkOut","MemUsed","SwapTotal","SwapUsed"]
             if newInstanceAvailable == True:
                 oldFile = os.path.join(homepath,datadir+date+".csv")
                 newFile = os.path.join(homepath,datadir+date+"."+time.strftime("%Y%m%d%H%M%S")+".csv")
@@ -328,6 +408,7 @@ def getmetrics():
                         if(fieldnames != ""):
                             fieldnames = fieldnames + ","
                         groupid = getindex(fields[j])
+                        #Creating the header/first line for the data file
                         nextfield = fields[j] + "[" +host+"_"+hostname+"]"+":"+str(groupid)
                         fieldnames = fieldnames + nextfield
                 else:
@@ -342,6 +423,7 @@ def getmetrics():
                 timestamp = metricData['read'][:19]
                 timestamp =  int(time.mktime(datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S").timetuple())*1000)
                 try:
+                    networkInterfaceMetrics = []
                     if "network" in metricData or "networks" in metricData:
                         networkRx = round(float(float(metricData['network']['rx_bytes'])/(1024*1024)),4) #MB
                         networkTx = round(float(float(metricData['network']['tx_bytes'])/(1024*1024)),4) #MB
@@ -354,8 +436,42 @@ def getmetrics():
                         networkRx = 0
                         networkTx = 0
                         for key in networkMetrics:
+                            #Append New Field Headers for specific Interface
+                            if (numlines < 1 or newInstanceAvailable == True):
+                                nextfield = "InOctets-" +key+ "[" +host+"_"+hostname+"]"+":"+str(getindex("InOctets"))
+                                fieldnames = fieldnames + "," + nextfield
+                                nextfield = "OutOctets-" + key + "[" + host + "_" + hostname + "]" + ":" + str(
+                                getindex("OutOctets"))
+                                fieldnames = fieldnames + "," + nextfield
+                                nextfield = "InDiscards-" + key + "[" + host + "_" + hostname + "]" + ":" + str(
+                                getindex("InDiscards"))
+                                fieldnames = fieldnames + "," + nextfield
+                                nextfield = "OutDiscards-" + key + "[" + host + "_" + hostname + "]" + ":" + str(
+                                getindex("OutDiscards"))
+                                fieldnames = fieldnames + "," + nextfield
+                                nextfield = "InErrors-" + key + "[" + host + "_" + hostname + "]" + ":" + str(
+                                getindex("InErrors"))
+                                fieldnames = fieldnames + "," + nextfield
+                                nextfield = "OutErrors-" + key + "[" + host + "_" + hostname + "]" + ":" + str(
+                                getindex("OutErrors"))
+                                fieldnames = fieldnames + "," + nextfield
+
+                            metricVal = float(networkMetrics[key]['rx_bytes'])
+                            networkInterfaceMetrics.append(round(float(metricVal/(1024*1024)),4))
+                            metricVal = float(networkMetrics[key]['tx_bytes'])
+                            networkInterfaceMetrics.append(round(float(metricVal/(1024*1024)),4))
+                            metricVal = float(networkMetrics[key]['rx_dropped'])
+                            networkInterfaceMetrics.append(round(float(metricVal/(1024*1024)),4))
+                            metricVal = float(networkMetrics[key]['tx_dropped'])
+                            networkInterfaceMetrics.append(round(float(metricVal/(1024*1024)),4))
+                            metricVal = float(networkMetrics[key]['rx_errors'])
+                            networkInterfaceMetrics.append(round(float(metricVal/(1024*1024)),4))
+                            metricVal = float(networkMetrics[key]['tx_errors'])
+                            networkInterfaceMetrics.append(round(float(metricVal/(1024*1024)),4))
+                            #Adding up values for all interfaces to get the total
                             networkRx += float(networkMetrics[key]['rx_bytes'])
                             networkTx += float(networkMetrics[key]['tx_bytes'])
+
                         networkRx = round(float(networkRx/(1024*1024)),4) #MB
                         networkTx = round(float(networkTx/(1024*1024)),4) #MB
                     except KeyError, e:
@@ -385,13 +501,24 @@ def getmetrics():
                     print "Couldn't fetch disk information for container: " + dockerInstances[i]
                     diskRead = "NaN"
                     diskWrite = "NaN"
+                #Adding Swap Metrics
+                try:
+                    swapTotal = round(float(float(metricData['memory_stats']['stats']['total_swap'])/(1024*1024)),4) #MB
+                    swapUsed = round(float(float(metricData['memory_stats']['stats']['swap'])/(1024*1024)),4) #MB
+                except KeyError, e:
+                    print "Couldn't fetch swap information for container: " + dockerInstances[i]
+                    swapUsed = "NaN"
+                    swapTotal = "NaN"
+
                 if timestampAvailable == False:
                     if log == "":
                         log = str(timestamp)
                     else:
                         log = str(timestamp) + "," + log
                     timestampAvailable = True
-                log = log + "," + str(cpu) + "," + str(diskRead) + "," + str(diskWrite) + "," + str(networkRx) + "," + str(networkTx) + "," + str(memUsed)
+                log = log + "," + str(cpu) + "," + str(diskRead) + "," + str(diskWrite) + "," + str(networkRx) + "," + str(networkTx) + "," + str(memUsed) +  "," + str(swapTotal)+  "," + str(swapUsed)
+                if networkInterfaceMetrics:
+                    log = log + "," + ",".join(map(str, networkInterfaceMetrics))
             if timestampAvailable == False and fieldnames != "":
                 log = "NaN" + "," + log
                 csvFile.close()
@@ -399,6 +526,7 @@ def getmetrics():
             toJson(fieldnames,log)
             deltaList = calculateDelta()
             updateResults()
+            #Writing the fieldnames header in the csv file
             if numlines < 1 or newInstanceAvailable == True:
                 if fieldnames != "":
                     csvFile.write("%s\n"%(fieldnames))

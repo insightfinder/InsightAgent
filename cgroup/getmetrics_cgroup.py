@@ -168,12 +168,33 @@ def update_docker():
             continue
         newInstances.append(eachDocker)
     if cmp(newInstances,dockerInstances) != 0:
+        try:
+            writeInsatanceFile("currentInstances", newInstances)
+            writeInsatanceFile("previousInstances", dockerInstances)
+        except Exception as e:
+            print e
         towritePreviousInstances = {}
         towritePreviousInstances["overallDockerInstances"] = newInstances
         with open(os.path.join(homepath,datadir+"totalInstances.json"),'w') as f:
             json.dump(towritePreviousInstances,f)
         newInstanceAvailable = True
         dockerInstances = newInstances
+
+def writeInsatanceFile(filename, instanceList):
+    global hostname
+    jsonData = {}
+    print "In Function writeInsatanceFile()"
+    print instanceList
+    print os.path.join(homepath, datadir + filename + ".json")
+    newInstanceList = []
+    for index in range(len(instanceList)):
+        dockerID = instanceList[index]
+        if len(instanceList[index]) > 12:
+            dockerID = instanceList[index][:12]
+        newInstanceList.append(dockerID + "_" + hostname)
+    jsonData["instanceList"] = newInstanceList
+    with open(os.path.join(homepath, datadir + filename + ".json"), 'w') as f:
+        json.dump(jsonData, f)
 
 fields = []
 filenames = ["timestamp.txt","cpumetrics.txt","diskmetricsread.txt","diskmetricswrite.txt","networkmetrics.txt","memmetrics.txt", "networkinterfacemetrics.txt", "diskusedmetrics.txt"]

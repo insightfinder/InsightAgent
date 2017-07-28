@@ -104,7 +104,7 @@ USER_NAME_IN_HOST - username used to login into the host machines
 PASSWORD - password or name of the identity file along with path
 ```
 
-##### To install agent on local machine
+##### To install agent on local machine:
 1) Use the following command to download the insightfinder agent code.
 ```
 wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
@@ -114,19 +114,17 @@ Untar using this command.
 tar -xvf insightagent.tar.gz
 ```
 
-2) **In InsightAgent-master directory,** run the following commands to install and use python virtual environment for insightfinder agent:
+2) In InsightAgent-master directory, run the following commands to install dependencies for insightfinder agent (If -env flag is used then a seperate virtual environment is created):
 ```
-./deployment/checkpackages.sh
-```
-```
-source pyenv/bin/activate
+sudo ./deployment/checkpackages.sh  
+OR
+./deployment/checkpackages.sh -env
 ```
 
-3) Run the below command to install agent.
+3) Run the below command to install agent.(The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required)
 ```
-./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
+./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE -w SERVER_URL
 ```
-After using the agent, use command "deactivate" to get out of python virtual environment.
 
 ##### To check raw data in host machines
 - Login into the individual host machines.
