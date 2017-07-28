@@ -19,6 +19,7 @@ def get_args():
     parser.add_argument('-s', '--SAMPLING_INTERVAL_MINUTE', type=str, help='Sampling Interval Minutes', required=True)
     parser.add_argument('-r', '--REPORTING_INTERVAL_MINUTE', type=str, help='Reporting Interval Minutes', required=True)
     parser.add_argument('-t', '--AGENT_TYPE', type=str, help='Agent type: proc or cadvisor or docker_remote_api or cgroup or daemonset or elasticsearch or collectd or hypervisor or ec2monitoring or jolokia or kafka', choices=['proc', 'cadvisor', 'docker_remote_api', 'cgroup', 'daemonset', 'elasticsearch', 'collectd', 'hypervisor', 'ec2monitoring', 'jolokia', 'kafka', 'elasticsearch-storage'],required=True)
+    parser.add_argument('-w', '--SERVER_URL', type=str, help='Password for hosts', required=False)
     args = parser.parse_args()
     projectName = args.PROJECT_NAME_IN_INSIGHTFINDER
     user = args.USER_NAME_IN_HOST
@@ -27,7 +28,8 @@ def get_args():
     samplingInterval = args.SAMPLING_INTERVAL_MINUTE
     reportingInterval = args.REPORTING_INTERVAL_MINUTE
     agentType = args.AGENT_TYPE
-    return projectName, user, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType
+    serverUrl = args.SERVER_URL
+    return projectName, user, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, serverUrl
 
 downloadFiles = ["installInsightAgent.py", "startcron.py", "get-pip.py"]
 homepath = os.getcwd()
@@ -95,7 +97,7 @@ if __name__ == '__main__':
     global reportingInterval
     global agentType
 
-    projectName, user, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType = get_args()
+    projectName, user, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, serverUrl = get_args()
     retryOptionAttempts = 3
     retryKeyAttempts = 3
     while retryOptionAttempts:
@@ -133,7 +135,10 @@ if __name__ == '__main__':
         sys.exit(out)
     print out
     print "Proceeding to Deployment"
-    proc = subprocess.Popen(["pyenv/bin/python "+os.path.join(homepath,"startcron.py")+ " -i " +projectName+" -n "+user+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    if serverUrl is None:
+        proc = subprocess.Popen(["pyenv/bin/python "+os.path.join(homepath,"startcron.py")+ " -i " +projectName+" -n "+user+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -p "+password], cwd=homepath, stdout=subprocess.PIPE, shell=True)
+    else:
+        proc = subprocess.Popen(["pyenv/bin/python "+os.path.join(homepath,"startcron.py")+ " -i " +projectName+" -n "+user+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -p "+password+" -w "+serverUrl], cwd=homepath, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
     print out
     clearDownloads()

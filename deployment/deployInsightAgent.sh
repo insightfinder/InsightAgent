@@ -34,6 +34,9 @@ while [ "$1" != "" ]; do
 		-t )	shift
 			AGENT_TYPE=$1
 			;;
+        -w )	shift
+			SERVER_URL=$1
+			;;
 		* )	usage
 			exit 1
 	esac
@@ -112,7 +115,14 @@ rm requirements
 rm get-pip.py
 
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/verifyInsightCredentials.py
-if ! python verifyInsightCredentials.py -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY
+
+if [ -z "$SERVER_URL" ]; then
+	VERIFY_PARAM="-i $PROJECTNAME -u $USERNAME -k $LICENSEKEY"
+else
+    VERIFY_PARAM="-i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -w $SERVER_URL"
+fi
+
+if ! python verifyInsightCredentials.py $VERIFY_PARAM
 then
     rm verifyInsightCredentials.py
     rm -rf pyenv
@@ -122,7 +132,13 @@ fi
 rm verifyInsightCredentials.py
 
 wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/InsightAgent/master/deployment/deployInsightAgent.py
-python deployInsightAgent.py -n $INSIGHTFINDER_USERNAME -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE
+
+if [ -z "$SERVER_URL" ]; then
+	python deployInsightAgent.py -n $INSIGHTFINDER_USERNAME -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE
+else
+    python deployInsightAgent.py -n $INSIGHTFINDER_USERNAME -i $PROJECTNAME -u $USERNAME -k $LICENSEKEY -s $SAMPLING_INTERVAL -r $REPORTING_INTERVAL -t $AGENT_TYPE -w $SERVER_URL
+fi
+
 deactivate
-rm -rf pyenv
 rm deployInsightAgent.sh
+rm -rf pyenv

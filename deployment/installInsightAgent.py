@@ -39,7 +39,7 @@ def sshInstall(retry,hostname):
         session.exec_command("sudo rm -rf insightagent* InsightAgent* \n \
         wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz && \
         tar xzvf insightagent.tar.gz && \
-        cd InsightAgent-master && deployment/checkpackages.sh\n")
+        cd InsightAgent-master && deployment/checkpackages.sh -env\n")
         stdin = session.makefile('wb', -1)
         stdout = session.makefile('rb', -1)
         stdin.write(password+'\n')
