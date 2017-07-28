@@ -20,7 +20,7 @@
     dest: /home/{{ ansible_user }}
     remote_src: True
 - name: Check packages
-  command: ./deployment/checkpackages.sh
+  command: ./deployment/checkpackages.sh -env
   args:
     chdir: /home/{{ ansible_user }}/InsightAgent-master/
 - name: Install agent

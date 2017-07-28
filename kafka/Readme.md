@@ -41,7 +41,7 @@ wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/Insi
 - Get IP address of all machines (or hosts) on which InsightFinder agent needs to be installed.
 - All machines should have same login username and password.
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
-- To deploy run the following command:
+- To deploy run the following command(The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required)
 ```
 ./deployInsightAgent.sh -n USER_NAME_IN_HOST
                         -i PROJECT_NAME_IN_INSIGHTFINDER
@@ -50,6 +50,7 @@ wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/Insi
                         -s SAMPLING_INTERVAL_MINUTE
                         -r REPORTING_INTERVAL_MINUTE
                         -t AGENT_TYPE
+                        -w SERVER_URL
 AGENT_TYPE is *kafka*.
 ```
 - When the above script is run, if prompted for password, enter either the password or the name of the identity file along with file path.
