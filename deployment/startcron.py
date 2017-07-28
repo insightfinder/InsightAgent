@@ -40,7 +40,10 @@ def sshDeploy(retry,hostname):
         if agentType == "hypervisor":
             command="cd InsightAgent-master && ./hypervisor/install.sh -i "+projectName+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType
         else:
-            command="cd InsightAgent-master && sudo ./deployment/install.sh -i "+projectName+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType
+            if serverUrl is None:
+                command="cd InsightAgent-master && sudo ./deployment/install.sh -i "+projectName+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType
+            else:
+                command="cd InsightAgent-master && sudo ./deployment/install.sh -i "+projectName+" -u "+userInsightfinder+" -k "+licenseKey+" -s "+samplingInterval+" -r "+reportingInterval+" -t "+agentType+" -w "+serverUrl
         session.exec_command(command)
         stdin = session.makefile('wb', -1)
         stdout = session.makefile('rb', -1)
@@ -82,6 +85,7 @@ def get_args():
         '-t', '--AGENT_TYPE', type=str, help='Agent type: proc or cadvisor or docker_remote_api or cgroup or daemonset or elasticsearch or collectd or hypervisor or ec2monitoring or jolokia', choices=['proc', 'cadvisor', 'docker_remote_api', 'cgroup', 'daemonset', 'elasticsearch', 'collectd', 'hypervisor', 'ec2monitoring', 'jolokia'], required=True)
     parser.add_argument(
         '-p', '--PASSWORD', type=str, help='Password for hosts', required=True)
+    parser.add_argument('-w', '--SERVER_URL', type=str, help='Password for hosts', required=False)
     args = parser.parse_args()
     projectName = args.PROJECT_NAME_IN_INSIGHTFINDER
     user = args.USER_NAME_IN_HOST
@@ -91,7 +95,8 @@ def get_args():
     reportingInterval = args.REPORTING_INTERVAL_MINUTE
     agentType = args.AGENT_TYPE
     password = args.PASSWORD
-    return projectName, user, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password
+    serverUrl = args.SERVER_URL
+    return projectName, user, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password, serverUrl
 
 
 if __name__ == '__main__':
@@ -104,8 +109,9 @@ if __name__ == '__main__':
     global samplingInterval
     global reportingInterval
     global agentType
+    global serverUrl
     hostfile="hostlist.txt"
-    projectName, user, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password = get_args()
+    projectName, user, userInsightfinder, licenseKey, samplingInterval, reportingInterval, agentType, password, serverUrl = get_args()
     q = Queue.Queue()
     try:
         with open(os.getcwd()+"/"+hostfile, 'rb') as f:
