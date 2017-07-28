@@ -22,12 +22,12 @@ Python 2.7.
 Python 2.7 must be installed in order to launch deployInsightAgent.sh. For Debian and Ubuntu, the following command will ensure that the required dependencies are present
 ```
 sudo apt-get update
-sudo apt-get install build-essential libssl-dev libffi-dev python-dev
+sudo apt-get install build-essential libssl-dev libffi-dev python-dev wget
 ```
 For Fedora and RHEL-derivatives
 ```
 sudo yum update
-sudo yum install gcc libffi-devel python-devel openssl-devel
+sudo yum install gcc libffi-devel python-devel openssl-devel wget
 ```
 
 ##### To deploy agent on multiple hosts
@@ -43,7 +43,7 @@ and change the permissions with the command
 -Ensure all machines have the same login username and password.
 -Obtain the IP address for every machine (or host) the InsightFinder agent will be installed on.
 -Include the IP address of all hosts in hostlist.txt, entering one IP address per line.
--To deploy run the following command
+- To deploy run the following command(The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required)
 ```
 ./deployInsightAgent.sh -n USER_NAME_IN_HOST
                         -i PROJECT_NAME_IN_INSIGHTFINDER
@@ -52,6 +52,7 @@ and change the permissions with the command
                         -s SAMPLING_INTERVAL_MINUTE
                         -r REPORTING_INTERVAL_MINUTE
                         -t AGENT_TYPE
+                        -w SERVER_URL
 AGENT_TYPE is *cgroup*.
 ```
 ##### To view command in terminal, run
