@@ -40,7 +40,7 @@ and change the permissions with the command
 ```
  chmod 755 deployInsightAgent.sh
 ```
--Ensure all machines have the same login username and password.
+-**Ensure all machines have the same login username and password.**  
 -Obtain the IP address for every machine (or host) the InsightFinder agent will be installed on.
 -Include the IP address of all hosts in hostlist.txt, entering one IP address per line.
 - To deploy run the following command(The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required)
