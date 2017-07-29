@@ -45,7 +45,7 @@ and change the permissions with the command
 -Include the IP address of all hosts in hostlist.txt, entering one IP address per line.
 - To deploy run the following command(The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required)
 ```
-./deployInsightAgent.sh -n USER_NAME_IN_HOST
+sudo ./deployInsightAgent.sh -n USER_NAME_IN_HOST
                         -i PROJECT_NAME_IN_INSIGHTFINDER
                         -u USER_NAME_IN_INSIGHTFINDER
                         -k LICENSE_KEY
@@ -74,10 +74,10 @@ and change the permissions with the command
 - Include IP address of all hosts in hostlist.txt and enter one IP address per line.
 - To stop the agent run the following command
 ```
-./stopcron.sh -n USER_NAME_IN_HOST -p PASSWORD
+sudo ./stopcron.sh -n USER_NAME_IN_HOST -p SSH_KEY_FILE_PATH
 
 USER_NAME_IN_HOST - username used to login into the host machines
-PASSWORD - password or name of the identity file along with path
+SSH_KEY_FILE_PATH - ssh key file path
 ```
 
 ##### To install agent on local machine:
