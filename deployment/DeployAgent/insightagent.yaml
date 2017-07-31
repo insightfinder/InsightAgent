@@ -1,0 +1,34 @@
+---
+ - hosts: nodes
+   vars:
+     projectName: "{{ ifProjectName }}"
+     userName: "{{ ifUserName }}"
+     samplingInterval: "{{ ifSamplingInterval }}"
+     reportingInterval: "{{ ifReportingInterval }}"
+     agentType: "{{ ifAgent }}"
+     reportingUrl: "{{ ifReportingUrl }}"
+     licenseKey: "{{ ifLicenseKey }}"
+     action: "{{ ifAction }}"
+   become: yes
+   gather_facts: no
+   pre_tasks:
+   #Install python on remote host as it is required by ansible as well as the agent code
+   - name: Install Python - APT
+     raw: test -e /usr/bin/python || (command -v apt && (apt -y update && apt install -y build-essential libssl-dev libffi-dev python-dev))
+   - name: Install Python - YUM
+     raw: test -e /usr/bin/python || (command -v yum && (yum -y update && yum install -y build-essential libssl-dev libffi-dev python-dev))
+   - name: Gather Facts
+     setup:
+   - name : Check Mandatory Variable(ifAction)
+     debug:
+       msg: 
+         - Action:{{ action | mandatory }}
+   - name : Validate Value Of Variable(ifAction)
+     fail: msg="Please enter correct Params"
+     when: 
+       - action !="install"
+       - action !="uninstall"
+   roles:
+     - { role: install, when: action=="install" }
+     - { role: uninstall, when: action=="uninstall" }
+   
