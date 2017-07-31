@@ -1,0 +1,73 @@
+---
+- name : Check Mandatory Variables For Install
+  debug:
+    msg: 
+      - ProjectName:{{ projectName | mandatory }} 
+      - UserName:{{ userName | mandatory }}
+      - Sampling Interval:{{ samplingInterval | mandatory }}
+      - Reporting Interval:{{ reportingInterval | mandatory }}
+      - Agent Type:{{ agentType | mandatory }}
+      - License Key:{{ licenseKey | mandatory }}
+- name: install package dependencies - YUM
+  package: 
+    name: "{{item}}" 
+    state: latest
+  with_items:
+    - gcc
+    - wget
+    - libffi-devel
+    - python-devel
+    - openssl-devel
+  when: ansible_pkg_mgr == 'yum'
+- name: install package dependencies - APT
+  apt: 
+    name: "{{item}}" 
+    state: latest
+    update_cache: yes
+  with_items:
+    - build-essential
+    - libssl-dev
+    - libffi-dev
+    - python-dev
+    - wget
+  when: ansible_pkg_mgr == 'apt'
+- name: Delete Old Tar bundle for agent if present
+  file:
+    state: absent
+    path: /home/{{ ansible_user }}/insightagent.tar.gz
+- name: Delete Old Agent if present
+  file:
+    state: absent
+    path: /home/{{ ansible_user }}/InsightAgent-master
+- name: download package
+  get_url: 
+    url: https://github.com/insightfinder/InsightAgent/archive/master.tar.gz 
+    dest: /home/{{ ansible_user }}/insightagent.tar.gz
+    force: yes
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+- name: untar
+  unarchive: 
+    src: /home/{{ ansible_user }}/insightagent.tar.gz
+    dest: /home/{{ ansible_user }}
+    remote_src: True
+- name: Check packages
+  command: ./deployment/checkpackages.sh -env
+  args:
+    chdir: /home/{{ ansible_user }}/InsightAgent-master/
+- name: Install agent
+  command: >
+    ./deployment/install.sh 
+    -i {{ projectName }} 
+    -u {{ userName }} 
+    -k {{ licenseKey }} 
+    -s {{ samplingInterval }} 
+    -r {{ reportingInterval }} 
+    -t {{ agentType }}
+    -w {{ reportingUrl }}
+  args:  
+    chdir: /home/{{ ansible_user }}/InsightAgent-master/
+- name: Delete Tar bundle for agent if present
+  file:
+    state: absent
+    path: /home/{{ ansible_user }}/insightagent.tar.gz
