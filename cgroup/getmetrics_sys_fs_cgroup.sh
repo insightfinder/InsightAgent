@@ -20,7 +20,7 @@ for container in $dockers; do
     cat /sys/fs/cgroup/cpuacct/docker/$container/cpuacct.stat | awk 'BEGIN{cpu=0} {cpu+=$2} END{print "CPU="cpu}' > cpumetrics_$container.txt & PID6=$!
 
     # Get Filesystem metrics
-    docker exec $container df -k | awk 'BEGIN{diskusedspace=0}{if(NR!=1)print "DiskUsed"$6"="$3; diskusedspace += $3}END{print "DiskUsed="diskusedspace}' > diskusedmetrics_$container.txt & PID7=$!
+    docker exec $container df -k | awk 'BEGIN{diskusedspace=0}{if(NR!=1)if($3!="")print "DiskUsed"$6"="$3; diskusedspace += $3}END{print "DiskUsed="diskusedspace}' > diskusedmetrics_$container.txt & PID7=$!
 
     # Get Per-Interface Network metrics
     rm networkinterfacemetrics_$container.txt
