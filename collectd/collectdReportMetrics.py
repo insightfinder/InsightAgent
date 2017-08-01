@@ -58,6 +58,10 @@ hostnameShort = socket.gethostname().partition(".")[0]
 csvpath = "/var/lib/collectd/csv/"+ hostnameShort
 if not os.path.exists(csvpath):
     csvpath = "/var/lib/collectd/csv/"+ hostname
+if not os.path.exists(csvpath):
+    directoryList = os.listdir("/var/lib/collectd/csv")
+    if len(directoryList)>0:
+        csvpath = "/var/lib/collectd/csv/"+ directoryList[0]
 
 date = time.strftime("%Y-%m-%d")
 
