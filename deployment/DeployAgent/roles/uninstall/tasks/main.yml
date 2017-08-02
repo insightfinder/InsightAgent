@@ -9,12 +9,13 @@
 - name: Delete Tar bundle (insightagent.tar.gz)
   file:
     state: absent
-    path: /home/{{ ansible_user }}/insightagent.tar.gz
+    path: "{{ansible_env.HOME}}/insightagent.tar.gz"
 - name: Delete Old Agent Folder (InsightAgent-master)
   file:
     state: absent
-    path: /home/{{ ansible_user }}/InsightAgent-master
+    path: "{{ansible_env.HOME}}/InsightAgent-master"
 - name: Delete ifagent Cron Configuration
+  become: yes
   file:
     state: absent
     path: /etc/cron.d/ifagent

@@ -8,7 +8,8 @@
       - Reporting Interval:{{ reportingInterval | mandatory }}
       - Agent Type:{{ agentType | mandatory }}
       - License Key:{{ licenseKey | mandatory }}
-- name: install package dependencies - YUM
+- name: Install package dependencies - YUM
+  become: yes
   package: 
     name: "{{item}}" 
     state: latest
@@ -19,7 +20,8 @@
     - python-devel
     - openssl-devel
   when: ansible_pkg_mgr == 'yum'
-- name: install package dependencies - APT
+- name: Install package dependencies - APT
+  become: yes
   apt: 
     name: "{{item}}" 
     state: latest
@@ -31,31 +33,39 @@
     - python-dev
     - wget
   when: ansible_pkg_mgr == 'apt'
-- name: Delete Old Tar bundle for agent if present
+- name: Delete Old Tar Bundle for Agent
   file:
     state: absent
-    path: /home/{{ ansible_user }}/insightagent.tar.gz
-- name: Delete Old Agent if present
+    path: "{{ansible_env.HOME}}/insightagent.tar.gz"
+- name: Delete Old Agent Code
   file:
     state: absent
-    path: /home/{{ ansible_user }}/InsightAgent-master
-- name: download package
-  get_url: 
-    url: https://github.com/insightfinder/InsightAgent/archive/master.tar.gz 
-    dest: /home/{{ ansible_user }}/insightagent.tar.gz
-    force: yes
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-- name: untar
+    path: "{{ansible_env.HOME}}/InsightAgent-master"
+#- name: download package
+#  get_url: 
+#    url: https://github.com/insightfinder/InsightAgent/archive/master.tar.gz 
+#    dest: /home/{{ ansible_user }}/insightagent.tar.gz
+#    force: yes
+#    owner: "{{ ansible_user }}"
+#    group: "{{ ansible_user }}"
+- name: Copy Agent Code on Machines
+  become: yes
+  copy:
+    src: files/insightagent.tar.gz
+    dest: "{{ansible_env.HOME}}"
+    owner: root
+    group: root
+    mode: 0644
+- name: Untar the Agent Code
   unarchive: 
-    src: /home/{{ ansible_user }}/insightagent.tar.gz
-    dest: /home/{{ ansible_user }}
+    src: "{{ansible_env.HOME}}/insightagent.tar.gz"
+    dest: "{{ansible_env.HOME}}"
     remote_src: True
-- name: Check packages
+- name: Create Python Virtual Environment for Agent
   command: ./deployment/checkpackages.sh -env
   args:
-    chdir: /home/{{ ansible_user }}/InsightAgent-master/
-- name: Install agent
+    chdir: "{{ansible_env.HOME}}/InsightAgent-master"
+- name: Deploy Agent
   command: >
     ./deployment/install.sh 
     -i {{ projectName }} 
@@ -66,8 +76,8 @@
     -t {{ agentType }}
     -w {{ reportingUrl }}
   args:  
-    chdir: /home/{{ ansible_user }}/InsightAgent-master/
-- name: Delete Tar bundle for agent if present
+    chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
+- name: Delete Tar Bundle for Agent
   file:
     state: absent
-    path: /home/{{ ansible_user }}/insightagent.tar.gz
+    path: "{{ansible_env.HOME}}/insightagent.tar.gz"
