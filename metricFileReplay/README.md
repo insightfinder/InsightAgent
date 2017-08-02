@@ -51,7 +51,7 @@ Make sure each file is .csv formatted, starts with a row of headers and the head
 
 4) Run the following command for each data file.
 ```
-python common/reportMetrics.py -m metricFileReplay -f PATH_TO_CSVFILENAME
+pyenv/bin/python common/reportMetrics.py -m metricFileReplay -f PATH_TO_CSVFILENAME
 ```
 Where PATH_TO_CSVFILENAME is the path and filename of the csv file.
 
