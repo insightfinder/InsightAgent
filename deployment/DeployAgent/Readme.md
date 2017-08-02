@@ -4,12 +4,12 @@
 #### For Debian and Ubuntu
 ```
 sudo apt-get update
-sudo wget
+sudo apt-get install wget
 ```
 #### For Fedora and RHEL-derivatives
 ```
 sudo yum update
-sudo yum wget
+sudo yum install wget
 ```
 
 
