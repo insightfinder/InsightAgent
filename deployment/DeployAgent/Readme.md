@@ -27,7 +27,13 @@ cd InsightAgent-master/deployment/DeployAgent/
 sudo ./installAnsible.sh
 ```
 2) Open and modify the inventory file
-3) Run the playbook
+3) Download the agent Code which will be distributed to other machines
 ```
+cd roles/install/files
+sudo ./downloadAgent.sh
+```
+4) Run the playbook(Go back to the DeployAgent directory)
+```
+cd ../../..
 ansible-playbook insightagent.yaml
 ```

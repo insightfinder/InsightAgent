@@ -9,7 +9,7 @@
      reportingUrl: "{{ ifReportingUrl }}"
      licenseKey: "{{ ifLicenseKey }}"
      action: "{{ ifAction }}"
-   become: yes
+   #become: yes
    gather_facts: no
    pre_tasks:
    #Install python on remote host as it is required by ansible as well as the agent code
