@@ -34,10 +34,12 @@
     - wget
   when: ansible_pkg_mgr == 'apt'
 - name: Delete Old Tar Bundle for Agent
+  become: yes
   file:
     state: absent
     path: "{{ansible_env.HOME}}/insightagent.tar.gz"
 - name: Delete Old Agent Code
+  become: yes
   file:
     state: absent
     path: "{{ansible_env.HOME}}/InsightAgent-master"
