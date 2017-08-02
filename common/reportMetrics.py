@@ -1,5 +1,5 @@
 #!/usr/bin/python
-
+##TODO: This file needs to be refactored when time permits
 import csv
 import json
 import os
@@ -10,7 +10,6 @@ import socket
 from optparse import OptionParser
 import math
 import reportCustomMetrics
-import requests
 
 '''
 this script reads reporting interval and prev endtime config2
@@ -20,8 +19,8 @@ if prev endtime is 0, report most recent reporting interval
 till now from today's log file (may or may not be present)
 assumping gmt epoch timestamp and local date daily file
 '''
-serverUrl = 'https://agent-data.insightfinder.com'
-
+#serverUrl = 'https://agent-data.insightfinder.com'
+serverUrl = 'http://localhost:8080'
 usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)
 parser.add_option("-f", "--fileInput",
@@ -34,6 +33,10 @@ parser.add_option("-t", "--agentType",
     action="store", dest="agentType", help="Agent type")
 parser.add_option("-w", "--serverUrl",
     action="store", dest="serverUrl", help="Server Url")
+parser.add_option("-s", "--splitID",
+    action="store", dest="splitID", help="The split ID to use when grouping results on the server")
+parser.add_option("-g", "--splitBy",
+    action="store", dest="splitBy", help="The 'split by' to use when grouping results on the server. Examples: splitByEnv, splitByGroup")
 (options, args) = parser.parse_args()
 
 if options.homepath is None:
@@ -50,6 +53,15 @@ else:
     agentType = options.agentType
 if options.serverUrl != None:
     serverUrl = options.serverUrl
+##Optional split id and split by for metric file replay
+if options.splitID is None:
+    splitID = None 
+else:
+    splitID = options.splitID
+if options.splitBy is None:
+    splitBy = None
+else:
+    splitBy = options.splitBy
 
 datadir = 'data/'
 
@@ -126,6 +138,10 @@ def sendData():
     global totalChunks
     global currentChunk
     global totalSize
+    global minTimestampEpoch
+    global maxTimestampEpoch
+    global splitID
+    global splitBy
     if len(metricData) == 0:
         return
     #update projectKey, userName in dict
@@ -145,13 +161,23 @@ def sendData():
             chunkSize = reportedDataSize
             firstData = True
             totalChunks = int(math.ceil(float(totalSize)/float(chunkSize)))
+	    #This is a hack fix and should be fixed. Pushing the fix off until we refactor this file.
+	    if mode == "metricFileReplay":
+	      totalChunks = totalChunks-1
+    	alldata["minTimestamp"] = minTimestampEpoch
+    	alldata["maxTimestamp"] = maxTimestampEpoch
         reportedDataPer = (float(reportedDataSize)/float(totalSize))*100
         print str(min(100.0,math.ceil(reportedDataPer))) + "% of data are reported"
         alldata["chunkSerialNumber"] = str(currentChunk)
         alldata["chunkTotalNumber"] = str(totalChunks)
+	if(not splitID == None and not splitBy == None):
+	  alldata["splitID"] = splitID
+	  alldata["splitBy"] = splitBy
         currentChunk += 1
         if mode == "logFileReplay":
             alldata["agentType"] = "LogFileReplay"
+        if mode == "metricFileReplay":
+            alldata["agentType"] = "MetricFileReplay"
     else:
         print str(len(bytearray(json_data))) + " bytes data are reported"
     #print the json
@@ -177,6 +203,7 @@ def updateAgentDataRange(minTS,maxTS):
     #print json_data
     url = serverUrl + "/agentdatahelper"
     response = requests.post(url, data=json.loads(json_data))
+
 
 #main
 with open(os.path.join(homepath,"reporting_config.json"), 'r') as f:
@@ -331,28 +358,6 @@ else:
             sendData()
         file.close()
         updateAgentDataRange(minTimestampEpoch,maxTimestampEpoch)
-'''
-This function checks for the sendInstanceUpdateCount file and if the count is >0 then makes a get request and decrements the count by 1.
-This count is set to a default value of 5 by various agents when they detect a change in number of instances they are reporting for.
-'''
-def checkAndSendInstanceUpdate():
-    if os.path.isfile(os.path.join(homepath,datadir+"previousInstances.json")) and os.path.isfile(os.path.join(homepath,datadir+"currentInstances.json")):
-        currentInstances = []
-        previousInstances = []
-        with open(os.path.join(homepath,datadir+"currentInstances.json"),'r') as f:
-            currentInstances = json.load(f)["instanceList"]
-        with open(os.path.join(homepath,datadir+"previousInstances.json"),'r') as f:
-            previousInstances = json.load(f)["instanceList"]
-        os.remove(os.path.join(homepath,datadir+"currentInstances.json"))
-        os.remove(os.path.join(homepath,datadir+"previousInstances.json"))
-        jsonDataToSend = {}
-        jsonDataToSend["userName"]=USERNAME
-        jsonDataToSend["projectName"]=PROJECTNAME
-        jsonDataToSend["currentInstanceList"]=currentInstances
-        jsonDataToSend["previousInstanceList"]=previousInstances
-        requestUrl = serverUrl+'/agentEvents'
-        requests.post(requestUrl,data=jsonDataToSend)
-  
 
 #old file cleaning
 for dirpath, dirnames, filenames in os.walk(os.path.join(homepath,datadir)):
@@ -367,7 +372,6 @@ for dirpath, dirnames, filenames in os.walk(os.path.join(homepath,datadir)):
 #Update custom Metrics
 reported = reportCustomMetrics.getcustommetrics(serverUrl, PROJECTNAME, USERNAME, LICENSEKEY, homepath)
 if reported:
-    checkAndSendInstanceUpdate()
     print "Custom metrics sent"
 else:
     print "Failed to send custom metrics"
