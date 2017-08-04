@@ -169,7 +169,7 @@ def sendData():
         reportedDataPer = (float(reportedDataSize)/float(totalSize))*100
         print str(min(100.0,math.ceil(reportedDataPer))) + "% of data are reported"
         alldata["chunkSerialNumber"] = str(currentChunk)
-        alldata["chunkTotalNumber"] = str(totalChunks)
+        alldata["chunkTotalNumber"] = str(totalChunkCount)
 	if(not splitID == None and not splitBy == None):
 	  alldata["splitID"] = splitID
 	  alldata["splitBy"] = splitBy
@@ -239,7 +239,9 @@ idxdate = 0
 hostname = socket.gethostname().partition(".")[0]
 minTimestampEpoch = 0
 maxTimestampEpoch = 0
-
+totalChunkCount = 0
+chunkMaxSize = 7000000
+chunkingPadding = 30000
 if options.inputFile is None:
     for i in range(0,2+int(float(reporting_interval)/24/60)):
         dates.append(time.strftime("%Y%m%d", time.localtime(start_time_epoch/1000 + 60*60*24*i)))
@@ -298,6 +300,13 @@ else:
         if mode == "logFileReplay":
             jsonData = json.load(file)
             numlines = len(jsonData)
+            maxSize = 0
+            for row in jsonData:
+               #calculate largest log
+               if len(bytearray(json.dumps(row))) > maxSize:
+                   maxSize = len(bytearray(json.dumps(row)))
+            maxAmount = chunkMaxSize/(maxSize + chunkingPadding)
+            totalChunkCount = int(math.ceil(float(numlines) / float(maxAmount))) 
             for row in jsonData:
                 new_prev_endtime_epoch = row[row.keys()[0]]
                 if minTimestampEpoch == 0 or minTimestampEpoch > long(new_prev_endtime_epoch):
@@ -309,7 +318,7 @@ else:
                     metricdataSize = len(bytearray(json.dumps(metricData)))
                     metricdataSizeKnown = True
                     totalSize = getTotalSize(options.inputFile)
-                if ((len(bytearray(json.dumps(metricData))) + metricdataSize) < 700000):  # Not using exact 750KB as some data will be padded later
+                if ((len(metricData)) < maxAmount):  # Not using exact 750KB as some data will be padded later
                     continue
                 else:
                     sendData()
@@ -317,6 +326,7 @@ else:
             sendData()
         else:
             fileReader = csv.reader(file)
+            metricDatas = []
             for row in fileReader:
                 if fileReader.line_num == 1:
                     #Get all the metric names
@@ -344,17 +354,26 @@ else:
                                 groupid = i
                                 colname = colname+":"+str(groupid)
                             thisData[colname] = row[i]
-                    metricData.append(thisData)
-                    if metricdataSizeKnown == False:
-                        metricdataSize = len(bytearray(json.dumps(metricData)))
-                        metricdataSizeKnown = True
-                        totalSize = metricdataSize * (numlines - 1) # -1 for header
-                if ((len(bytearray(json.dumps(metricData))) + metricdataSize) < 700000): #Not using exact 750KB as some data will be padded later
-                    continue
+                    metricDatas.append(thisData)
+            if metricdataSizeKnown == False:
+                    metricdataSize = len(bytearray(json.dumps(metricData)))
+                    metricdataSizeKnown = True
+                    totalSize = metricdataSize * (numlines - 1) # -1 for header
+            maxSize = 0
+            numlines = len(metricDatas)
+            for entry in metricDatas:
+                if len(bytearray(json.dumps(row))) > maxSize:
+                    maxSize = len(bytearray(json.dumps(row)))
+            maxAmount = chunkMaxSize/(maxSize + chunkingPadding)
+            totalChunkCount = int(math.ceil(float(numlines) / float(maxAmount)))
+            
+            for entry in metricDatas:
+                metricData.append(entry)
+                if len(metricData) < maxAmount:
+                    continue;
                 else:
                     sendData()
                     metricData = []
-                    alldata = {}
             sendData()
         file.close()
         updateAgentDataRange(minTimestampEpoch,maxTimestampEpoch)
