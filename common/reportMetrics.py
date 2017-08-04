@@ -162,8 +162,8 @@ def sendData():
             firstData = True
             totalChunks = int(math.ceil(float(totalSize)/float(chunkSize)))
 	    #This is a hack fix and should be fixed. Pushing the fix off until we refactor this file.
-	    if mode == "metricFileReplay":
-	      totalChunks = totalChunks-1
+	#    if mode == "metricFileReplay":
+	 #     totalChunks = totalChunks-1
     	alldata["minTimestamp"] = minTimestampEpoch
     	alldata["maxTimestamp"] = maxTimestampEpoch
         reportedDataPer = (float(reportedDataSize)/float(totalSize))*100
