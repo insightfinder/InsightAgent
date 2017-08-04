@@ -131,6 +131,7 @@ def ec2InstanceType():
     instanceType = response.text
     return instanceType
 #send data to insightfinder
+reportedChunks = 0
 def sendData():
     global reportedDataSize
     global firstData
@@ -142,6 +143,7 @@ def sendData():
     global maxTimestampEpoch
     global splitID
     global splitBy
+    global reportedChunks
     if len(metricData) == 0:
         return
     #update projectKey, userName in dict
@@ -167,7 +169,8 @@ def sendData():
     	alldata["minTimestamp"] = minTimestampEpoch
     	alldata["maxTimestamp"] = maxTimestampEpoch
         reportedDataPer = (float(reportedDataSize)/float(totalSize))*100
-        print str(min(100.0,math.ceil(reportedDataPer))) + "% of data are reported"
+        reportedChunks += 1
+        print str(reportedChunks) + " out of " + str(totalChunkCount)+" are reported"
         alldata["chunkSerialNumber"] = str(currentChunk)
         alldata["chunkTotalNumber"] = str(totalChunkCount)
 	if(not splitID == None and not splitBy == None):
@@ -356,7 +359,7 @@ else:
                             thisData[colname] = row[i]
                     metricDatas.append(thisData)
             if metricdataSizeKnown == False:
-                    metricdataSize = len(bytearray(json.dumps(metricData)))
+                    metricdataSize = len(bytearray(json.dumps(metricDatas)))
                     metricdataSizeKnown = True
                     totalSize = metricdataSize * (numlines - 1) # -1 for header
             maxSize = 0
@@ -394,3 +397,4 @@ if reported:
     print "Custom metrics sent"
 else:
     print "Failed to send custom metrics"
+
