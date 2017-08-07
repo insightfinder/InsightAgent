@@ -77,7 +77,6 @@ licenseKey abcdef1234567890abcdef1234567890abc
     time_format %b %e %H:%M:%S
     path /var/log/messages 
     tag "#{Socket.gethostname}"
-    #message_key data
     keep_time_key true
   </source>
 ~~~~
