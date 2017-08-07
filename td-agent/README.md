@@ -76,7 +76,7 @@ licenseKey abcdef1234567890abcdef1234567890abc
     format /^(?<time>[A-Z][a-z][a-z] (([1-3][0-9])| [1-9]) [0-9][0-9]:[0-9][0-9]:[0-9][0-9]) (?<data>.*)$/
     time_format %b %e %H:%M:%S
     path /var/log/messages 
-    tag if-worker-messages-log
+    tag "#{Socket.gethostname}"
     #message_key data
     keep_time_key true
   </source>
