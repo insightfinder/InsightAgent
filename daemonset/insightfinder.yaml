@@ -10,21 +10,22 @@ spec:
     spec:
       containers:
         - name: insightfinder
-          image: insightfinderagent/kubernetes-daemon-set:latest
-          command: [ "bash", "-c", "/startup.sh" ]
+          image: insightfinderagent/kubernetes-daemon-set:v2
           env:
             - name: INSIGHTFINDER_PROJECTNAME
-              value: "projectname"
+              value: "project"
             - name: INSIGHTFINDER_PROJECTKEY
-              value: "licensekey"
+              value: "license key"
             - name: INSIGHTFINDER_USERNAME
-              value: "insightuser"
+              value: "username"
             - name: SAMPLING_INTERVAL
               value: "1"
             - name: REPORTING_INTERVAL
               value: "2"
             - name: AGENT
               value: "daemonset"
+            - name: SERVER_URL
+              value: "https://agent-data.insightfinder.com"
           volumeMounts:
             - name: run
               mountPath: /var/run/docker.sock
