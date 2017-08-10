@@ -148,7 +148,7 @@ def update_docker():
     global dockerInstances
 
 
-    proc = subprocess.Popen(["docker ps --no-trunc | awk '{if(NR!=1) print $1}'"], stdout=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen(["docker ps --no-trunc | awk '{if(NR>1) print $NF}'"], stdout=subprocess.PIPE, shell=True)
     (out, err) = proc.communicate()
     dockers = out.split("\n")
     if os.path.isfile(os.path.join(homepath,datadir+"totalInstances.json")) == False:
