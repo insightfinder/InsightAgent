@@ -4,7 +4,7 @@ cd $DATADIR
 
 dockers=$(docker ps --no-trunc | awk '{if(NR>1) print $1":"$NF}')
 for container in $dockers; do
-    CONTAINER_ID=$(echo "$container" | awk '{split($0,a,":"); print a[2]}')
+    CONTAINER_ID=$(echo "$container" | awk '{split($0,a,":"); print a[1]}')
     CONTAINER_NAME=$(echo "$container" | awk '{split($0,a,":"); print a[2]}')
     CONTAINER_PID=`docker inspect -f '{{ .State.Pid }}' $CONTAINER_ID`
     date +%s%3N | awk '{print "timestamp="$1}' > timestamp.txt & PID1=$!
