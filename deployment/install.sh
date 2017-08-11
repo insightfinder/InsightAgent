@@ -6,6 +6,19 @@ function usage()
 AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or metricFileReplay or logFileReplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia or kvm or kafka or elasticsearch-storage. Samping interval also supports 10s i.e 10 seconds as a valid value"
 }
 
+function createCronMinute() {
+	echo "*/$1 * * * * root $2" >> $3
+}
+
+function createCronSeconds() {
+	echo "* * * * * root sleep 0; $1" >> $2
+	echo "* * * * * root sleep 10; $1" >> $2
+	echo "* * * * * root sleep 20; $1" >> $2
+	echo "* * * * * root sleep 30; $1" >> $2
+	echo "* * * * * root sleep 40; $1" >> $2
+	echo "* * * * * root sleep 50; $1" >> $2
+}
+
 if [ "$#" -lt 12 ]; then
 	usage
 	exit 1
@@ -44,17 +57,32 @@ while [ "$1" != "" ]; do
 done
 
 #Check if sampling interval is in seconds
-lastChar=${SAMPLING_INTERVAL: -1}
-IS_SECOND=false
-if [ $lastChar == 's' ];then
-	IS_SECOND=true
-	SECONDS_VALUE=${SAMPLING_INTERVAL:0:-1}
+lastCharSampling=${SAMPLING_INTERVAL: -1}
+IS_SECOND_SAMPLING=false
+if [ $lastCharSampling == 's' ];then
+	IS_SECOND_SAMPLING=true
+	SECONDS_VALUE_SAMPLING=${SAMPLING_INTERVAL:0:-1}
 	#Only allowed seconds value is 10
-	if [ $SECONDS_VALUE != '10' ];then
+	if [ $SECONDS_VALUE_SAMPLING != '10' ];then
 		usage
 		exit 1
 	fi
 fi
+
+#Check if reporting interval is in seconds
+lastCharReporting=${REPORTING_INTERVAL: -1}
+IS_SECOND_REPORTING=false
+if [ $lastCharReporting == 's' ];then
+	IS_SECOND_REPORTING=true
+	SECONDS_VALUE_REPORTING=${REPORTING_INTERVAL:0:-1}
+	#Only allowed seconds value is 10
+	if [ $SECONDS_VALUE_REPORTING != '10' ];then
+		usage
+		exit 1
+	fi
+fi
+
+
 
 if [ -z "$SERVER_URL" ]; then
 	SERVER_URL='https://agent-data.insightfinder.com'
@@ -79,7 +107,7 @@ if [[ $INSIGHTAGENTDIR != *"InsightAgent-master" ]] && [[ $INSIGHTAGENTDIR != *"
         exit 1
 fi
 #Checking for pyenv folder. If it exists then use that else use default python
-echo $INSIGHTAGENTDIR
+#echo $INSIGHTAGENTDIR
 PYTHONPATH=$INSIGHTAGENTDIR/pyenv
 if [[ -d $PYTHONPATH ]]
 then
@@ -141,17 +169,18 @@ USER=`whoami`
 
 
 if [ $AGENT_TYPE == 'daemonset' ]; then
-	if [ "$IS_SECOND" = true ] ; then
-		echo "* * * * * root sleep 0;$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-		echo "* * * * * root sleep 10;$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-		echo "* * * * * root sleep 20;$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-		echo "* * * * * root sleep 30;$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-		echo "* * * * * root sleep 40;$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-		echo "* * * * * root sleep 50;$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
+	COMMAND_SAMPLING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out"
+	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/common/reportMetrics.py -d $INSIGHTAGENTDIR -t $AGENT_TYPE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
+	if [ "$IS_SECOND_SAMPLING" = true ] ; then
+		createCronSeconds "${COMMAND_SAMPLING}" $TEMPCRON
 	else
-		echo "*/$SAMPLING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
+		createCronMinute $SAMPLING_INTERVAL "${COMMAND_SAMPLING}" $TEMPCRON
 	fi
-	echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportMetrics.py -d $INSIGHTAGENTDIR -t $AGENT_TYPE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
+	if [ "$IS_SECOND_REPORTING" = true ] ; then
+		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
+	else
+		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
+	fi
 elif [ $AGENT_TYPE == 'collectd' ]; then
 	echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/collectdReportMetrics.py -d $INSIGHTAGENTDIR -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
 
@@ -159,17 +188,18 @@ elif [ $AGENT_TYPE == 'logStreaming' ]; then
 	echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportLog.py -d $INSIGHTAGENTDIR -w $SERVER_URL -m logStreaming 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
 
 else
-	if [ "$IS_SECOND" = true ] ; then
-		echo "* * * * * root sleep 0;$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-		echo "* * * * * root sleep 10;$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-		echo "* * * * * root sleep 20;$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-		echo "* * * * * root sleep 30;$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-		echo "* * * * * root sleep 40;$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-		echo "* * * * * root sleep 50;$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
+	COMMAND_SAMPLING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out"
+	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/common/reportMetrics.py -d $INSIGHTAGENTDIR -t $AGENT_TYPE -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
+	if [ "$IS_SECOND_SAMPLING" = true ] ; then
+		createCronSeconds "${COMMAND_SAMPLING}" $TEMPCRON
 	else
-		echo "*/$SAMPLING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
+		createCronMinute $SAMPLING_INTERVAL "${COMMAND_SAMPLING}" $TEMPCRON
 	fi
-	echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportMetrics.py -d $INSIGHTAGENTDIR -t $AGENT_TYPE -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
+	if [ "$IS_SECOND_REPORTING" = true ] ; then
+		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
+	else
+		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
+	fi
 fi
 
 #echo "*/$SAMPLING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/topology.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling_topology.err 1>$INSIGHTAGENTDIR/log/sampling_topology.out" >> $TEMPCRON
@@ -178,5 +208,6 @@ fi
 sudo chown root:root $TEMPCRON
 sudo chmod 644 $TEMPCRON
 sudo mv $TEMPCRON /etc/cron.d/
-
 echo "Agent configuration completed. Two cron jobs are created via /etc/cron.d/ifagent"
+
+
