@@ -19,7 +19,7 @@ Python 2.7 must be installed in order to launch deployInsightAgent.sh. For Debia
 
 Libvirt should be installed on the system. The download link can be found here:
 https://libvirt.org/
- 
+
 Also, the python package libvirt-python should be installed on the system. We have tested with the version 1.3.1. You can follow the link to download and install libvirt-python.
 https://pypi.python.org/pypi/libvirt-python
 
@@ -51,9 +51,9 @@ tar -xvf insightagent.tar.gz
 source pyenv/bin/activate
 ```
 
-3) Run the below command to install agent.
+3) Run the below command to install agent. The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required. The SAMPLING_INTERVAL and REPORTING_INTERVAL vaules support 10 second granularity along with minute granularity. Minute granularity can be set with a single integer whereas the 10 second granularity is set by using the value **10s**. e.g. **-s 10s -r 2**
 ```
-./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
+./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL -r REPORTING_INTERVAL -t AGENT_TYPE
 ```
 AGENT_TYPE = kvm
 After using the agent, use command "deactivate" to get out of python virtual environment.

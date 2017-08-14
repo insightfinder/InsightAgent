@@ -60,7 +60,7 @@ wget --no-check-certificate https://raw.githubusercontent.com/insightfinder/Insi
 ```
 and change the permissions with the command.
 ```
- chmod 755 deployInsightAgent.sh 
+ chmod 755 deployInsightAgent.sh
 ```
 - Ensure all machines have the same login username and password.
 - Obtain the IP address for every machine (or host) the InsightFinder agent will be installed on.
@@ -82,7 +82,7 @@ SAMPLING_INTERVAL_MINUTE and REPORTING_INTERVAL_MINUTE should be greater than or
 Example: /home/insight/.ssh/id_rsa
 
 
-##### To get more details on the command, run 
+##### To get more details on the command, run
 ```
 ./deployInsightAgent.sh
 ```
@@ -122,13 +122,12 @@ OR
 ./deployment/checkpackages.sh -env
 ```
 
-3) Run the below command to install agent.(The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required)
+3) Run the below command to install agent.The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required. The SAMPLING_INTERVAL and REPORTING_INTERVAL vaules support 10 second granularity along with minute granularity. Minute granularity can be set with a single integer whereas the 10 second granularity is set by using the value **10s**. e.g. **-s 10s -r 2**
 ```
-./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE -w SERVER_URL
+./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL -r REPORTING_INTERVAL -t AGENT_TYPE -w SERVER_URL
 ```
 
 ##### To check raw data in host machines
 - Login into the individual host machines.
 - In the InsightAgent-master/data folder, all raw data will be stored in csv files. csv files older than 5 days are moved to /tmp folder.
 - To change the retention period, edit the InsightAgent-master/reporting_config.json and change the "keep_file_days" to the required value.
-

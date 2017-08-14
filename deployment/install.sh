@@ -2,8 +2,8 @@
 
 function usage()
 {
-	echo "Usage: ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
-AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or metricFileReplay or logFileReplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia or kvm or kafka or elasticsearch-storage. Samping interval also supports 10s i.e 10 seconds as a valid value"
+	echo "Usage: ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL -r REPORTING_INTERVAL -t AGENT_TYPE
+AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or metricFileReplay or logFileReplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia or kvm or kafka or elasticsearch-storage. Reporting/Sampling interval supports integer value denoting minutes and 10s i.e 10 seconds as a valid value"
 }
 
 function createCronMinute() {
@@ -209,5 +209,3 @@ sudo chown root:root $TEMPCRON
 sudo chmod 644 $TEMPCRON
 sudo mv $TEMPCRON /etc/cron.d/
 echo "Agent configuration completed. Two cron jobs are created via /etc/cron.d/ifagent"
-
-
