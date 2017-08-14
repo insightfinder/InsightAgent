@@ -56,10 +56,10 @@ licenseKey abcdef1234567890abcdef1234567890abc
     userName guest
     projectName WorkerSysLogs
     # License Key
-    licenseKey b697f8711004d32fb2e4086dc5ea0a6d8f7df947 
+    licenseKey b697f8711004d32fb2e4086dc5ea0a6d8f7df947
     # instancename (OPTIONAL - leave blank to use hostname)
-    instanceName 
-    # Instance Type 
+    instanceName
+    # Instance Type
     instanceType AWS    
     # Begin td-agent & http_output_plugin configuration values
     flush_interval 60s
@@ -75,7 +75,9 @@ licenseKey abcdef1234567890abcdef1234567890abc
     @type tail
     format /^(?<time>[A-Z][a-z][a-z] (([1-3][0-9])| [1-9]) [0-9][0-9]:[0-9][0-9]:[0-9][0-9]) (?<data>.*)$/
     time_format %b %e %H:%M:%S
-    path /var/log/messages 
+    path /var/log/messages
+    encoding ISO-8859-1
+    pos_file /var/log/td-agent/messages.pos
     tag "#{Socket.gethostname}"
     keep_time_key true
   </source>
