@@ -49,7 +49,7 @@ licenseKey abcdef1234567890abcdef1234567890abc
 ~~~~
 6. An example configuration is provided below:
 ~~~~
-  <match *>
+  <match iflog.**>
     type InsightFinder
     # Endpoint for messages
     destinationHost https://agent-data.insightfinder.com/customprojectrawdata
@@ -63,7 +63,7 @@ licenseKey abcdef1234567890abcdef1234567890abc
     instanceType AWS    
     # Begin td-agent & http_output_plugin configuration values
     flush_interval 60s
-    buffer_chunk_limit 200k
+    buffer_chunk_limit 400k
     # Comma separated list of http statuses which need to be retried
     http_retry_statuses 500,403
     # Read timeout in seconds, supports floats
@@ -78,7 +78,7 @@ licenseKey abcdef1234567890abcdef1234567890abc
     path /var/log/messages
     encoding ISO-8859-1
     pos_file /var/log/td-agent/messages.pos
-    tag "#{Socket.gethostname}"
+    tag "iflog.#{Socket.gethostname}"
     keep_time_key true
   </source>
 ~~~~

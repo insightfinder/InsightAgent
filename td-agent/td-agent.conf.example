@@ -1,7 +1,7 @@
-<match *>
+<match iflog.**>
   type InsightFinder
   flush_interval 60s
-  buffer_chunk_limit 200k
+  buffer_chunk_limit 400k
   # Endpoint for messages
   destinationHost https://agent-data.insightfinder.com/customprojectrawdata
   # Comma separated list of http statuses which need to be retried
@@ -26,6 +26,6 @@
   path /var/log/messages
   encoding ISO-8859-1
   pos_file /var/log/td-agent/messages.pos
-  tag "#{Socket.gethostname}"
+  tag "iflog.#{Socket.gethostname}"
   keep_time_key true
 </source>
