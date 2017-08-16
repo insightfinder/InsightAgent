@@ -183,7 +183,11 @@ if [ $AGENT_TYPE == 'daemonset' ]; then
 	fi
 elif [ $AGENT_TYPE == 'collectd' ]; then
 	echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/collectdReportMetrics.py -d $INSIGHTAGENTDIR -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
-
+	if [ "$IS_SECOND_REPORTING" = true ] ; then
+		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
+	else
+		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
+	fi
 elif [ $AGENT_TYPE == 'logStreaming' ]; then
 	echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportLog.py -d $INSIGHTAGENTDIR -w $SERVER_URL -m logStreaming 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
 
