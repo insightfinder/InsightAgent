@@ -9,6 +9,7 @@ import collections
 import sys
 import subprocess
 import requests
+import datetime
 
 serverUrl = 'https://agent-data.insightfinder.com'
 usage = "Usage: %prog [options]"
@@ -64,6 +65,30 @@ if not os.path.exists(csvpath):
         csvpath = "/var/lib/collectd/csv/"+ directoryList[0]
 
 date = time.strftime("%Y-%m-%d")
+
+#deletes old csv files from a directory
+def remove_old_files(directory, filetype):
+    now = datetime.datetime.now()
+    now_time = now.time()
+    # time between which each day the deletion is done
+    if now_time >= datetime.time(06,30) and now_time <= datetime.time(20,35):
+        # data directory path
+        data_file_path = directory
+        # data_file_path = os.path.join(homepath,datadir)
+        now = time.time()
+        for f in os.listdir(data_file_path):
+            data_file = os.path.join(data_file_path, f)
+            #check files older than 3 days
+            if os.stat(data_file).st_mtime < now - 2 * 86400:
+                #only delete csv files
+                if filetype is None:
+                    if os.path.isfile(data_file):
+                        os.remove(data_file)
+                else:
+                    if str(filetype) in str(os.path.splitext(data_file)[1]):
+                        print data_file
+                        if os.path.isfile(data_file):
+                            os.remove(data_file)
 
 def getindex(col_name):
     if col_name == "CPU":
@@ -139,8 +164,11 @@ filenames = {'cpu/percent-active-': ['CPU'], 'memory/memory-used-': ['MemUsed'],
              'processes/ps_state-blocked-': ['BlockedProcess'], 'processes/ps_state-paging-': ['PagingProcess'], 'processes/ps_state-running-': ['RunningProcess'], \
              'processes/ps_state-sleeping-': ['SleepingProcess'], 'processes/ps_state-stopped-': ['StoppedProcess'], 'processes/ps_state-zombies-': ['ZombieProcess']}
 allDirectories = os.listdir(csvpath)
-
+# remove old csv files in datadir
+remove_old_files(os.path.join(homepath,datadir), 'csv')
 for eachdir in allDirectories:
+    # remove old collectd log files
+    remove_old_files(os.path.join(csvpath, eachdir), None)
     if "disk" in eachdir:
         filenames[eachdir+"/disk_octets-"] = [eachdir+'_DiskWrite', eachdir+'_DiskRead']
     if "interface" in eachdir:
