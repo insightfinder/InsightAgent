@@ -2,7 +2,7 @@
 
 function usage()
 {
-	echo "Usage: ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL -r REPORTING_INTERVAL -t AGENT_TYPE
+	echo "Usage: ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL -t AGENT_TYPE
 AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or metricFileReplay or logFileReplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia or kvm or kafka or elasticsearch-storage. Reporting/Sampling interval supports integer value denoting minutes and 10s i.e 10 seconds as a valid value"
 }
 
@@ -41,9 +41,6 @@ while [ "$1" != "" ]; do
 		-s )	shift
 			SAMPLING_INTERVAL=$1
 			;;
-		-r )	shift
-			REPORTING_INTERVAL=$1
-			;;
 		-t )	shift
 			AGENT_TYPE=$1
 			;;
@@ -55,6 +52,8 @@ while [ "$1" != "" ]; do
 	esac
 	shift
 done
+
+REPORTING_INTERVAL=$SAMPLING_INTERVAL
 
 #Check if sampling interval is in seconds
 lastCharSampling=${SAMPLING_INTERVAL: -1}
