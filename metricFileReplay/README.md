@@ -44,7 +44,7 @@ tar -xvf insightagent.tar.gz
 source pyenv/bin/activate
 ```
 ```
-./deployment/install.sh -i PROJECT_NAME -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 1 -r 1 -t metricFileReplay
+./deployment/install.sh -i PROJECT_NAME -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 1 -t metricFileReplay
 ```
 3) Put data files in InsightAgent-master/data/
 Make sure each file is .csv formatted, starts with a row of headers and the headers should have "timestamp" field in it.
