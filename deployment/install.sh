@@ -210,5 +210,5 @@ fi
 
 sudo chown root:root $TEMPCRON
 sudo chmod 644 $TEMPCRON
-sudo echo $TEMPCRON >> /etc/cron.d/ifagent
+sudo cat $TEMPCRON >> /etc/cron.d/ifagent
 echo "Agent configuration completed. Two cron jobs are created via /etc/cron.d/ifagent"
