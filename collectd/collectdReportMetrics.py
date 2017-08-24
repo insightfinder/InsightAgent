@@ -258,7 +258,7 @@ for eachtimestamp in rawData:
             newResult[finalMetricName] = thisData[finalMetricName]
             if eachmetric in deltaFields:
                 if finalMetricName in previousResult:
-                    thisData[finalMetricName] = str(float(thisData[finalMetricName]) - float(previousResult[finalMetricName]))
+                    thisData[finalMetricName] = str(abs(float(thisData[finalMetricName]) - float(previousResult[finalMetricName])))
                 else:
                     thisData[finalMetricName] = "NaN"
     previousResult = newResult
