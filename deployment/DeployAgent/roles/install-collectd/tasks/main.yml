@@ -65,18 +65,18 @@
   stat: path=/etc/collectd/collectd.conf
   register: collectd_conf_other
 - name: Copy collectd configuration file to "/etc/collectd/collectd.conf"
-  become: yes
+  become: true
   copy:
-    src: "{{ansible_env.HOME}}/InsightAgent-master/collectd/collectdsample.conf"
+    src: ../files/collectdsample.conf
     dest: "/etc/collectd/collectd.conf"
     owner: root
     group: root
     mode: 0644
   when: collectd_conf_ubuntu.stat.exists
 - name: Copy collectd configuration file to "/etc/collectd.conf"
-  become: yes
+  become: true
   copy:
-    src: "{{ansible_env.HOME}}/InsightAgent-master/collectd/collectdsample.conf"
+    src: ../files/collectdsample.conf
     dest: "/etc/collectd.conf"
     owner: root
     group: root
