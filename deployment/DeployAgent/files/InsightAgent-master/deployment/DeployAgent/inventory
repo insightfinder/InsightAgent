@@ -1,6 +1,4 @@
 [nodes]
-10.39.15.91 ansible_user=djdean ansible_ssh_pass=InsightFinder2423!
-#10.39.108.10 ansible_user=djdean ansible_shh_private_key_file=/home/djdean/id_rsa
 ###We can specify the host name with ssh details like this for each host
 ##If you have the ssh key
 #192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
@@ -24,21 +22,20 @@
 ifAction=install
 
 ##Login User In Insightfinder Application
-ifUserName=admin
+ifUserName=user_name
 
 ##Project Name In Insightfinder Application
-ifProjectName=TestAgentCD
+ifProjectName=project_name
 
 ##User's License Key in Application
-ifLicenseKey=c683c54d0713c0a9ed0cfd322c1b6bbf256e240e
+ifLicenseKey=license_key
 
 ifSamplingInterval=1
 
 ifReportingInterval=1
 
-##Valid Agents are cgroup, collectd
-#ifAgent=collectd
+##Valid Agents are cgroup
 ifAgent=cgroup
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
-ifReportingUrl=http://localhost:8080
+ifReportingUrl=https://agent-data.insightfinder.com

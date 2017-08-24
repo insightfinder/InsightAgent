@@ -1,0 +1,21 @@
+---
+#- name: Check If Agent Installed
+#  stat:
+#    path: /etc/cron.d/ifagent
+#  register: uninstall_agent_stat
+#- name: Move ifagent File
+#  command: mv /etc/cron.d/ifagent /home/{{ ansible_user }}/InsightAgent-master/ifagent_{{ ansible_date_time.epoch }}
+#  when: uninstall_agent_stat.stat.exists == True
+- name: Delete Tar bundle (insightagent.tar.gz)
+  file:
+    state: absent
+    path: "{{ansible_env.HOME}}/insightagent.tar.gz"
+- name: Delete Old Agent Folder (InsightAgent-master)
+  file:
+    state: absent
+    path: "{{ansible_env.HOME}}/InsightAgent-master"
+- name: Delete ifagent Cron Configuration
+  become: yes
+  file:
+    state: absent
+    path: /etc/cron.d/ifagent

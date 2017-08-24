@@ -1,0 +1,30 @@
+---
+ - hosts: nodes
+   vars:
+     projectName: "{{ ifProjectName }}"
+     userName: "{{ ifUserName }}"
+     samplingInterval: "{{ifSamplingInterval}}"
+     reportingInterval: "{{ifReportingInterval}}"
+     agentType: "{{ifAgent}}"
+     reportingUrl: "{{ ifReportingUrl }}"
+     licenseKey: "{{ifLicenseKey}}"
+   become: yes
+   gather_facts: no
+   pre_tasks:
+   #Install python on remote host as it is required by ansible as well as the agent code
+   - name: Install Python - APT
+     raw: test -e /usr/bin/python || (command -v apt && (apt -y update && apt install -y build-essential libssl-dev libffi-dev python-dev))
+   - name: Install Python - YUM
+     raw: test -e /usr/bin/python || (command -v yum && (yum -y update && yum install -y build-essential libssl-dev libffi-dev python-dev))
+   - name: Gather Facts
+     setup:
+   - name: Check if agent is already installed
+     stat:
+       path: /etc/cron.d/ifagent
+     register: agent_stat
+   - name: Set Install Fact
+     set_fact: install_agent={{agent_stat.stat.exists == False}}
+   
+   roles:
+     - { role: install, when: "install_agent" }
+   

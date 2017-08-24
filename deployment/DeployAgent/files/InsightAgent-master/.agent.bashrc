@@ -1,0 +1,6 @@
+export INSIGHTFINDER_LICENSE_KEY=c683c54d0713c0a9ed0cfd322c1b6bbf256e240e
+export INSIGHTFINDER_PROJECT_NAME=TestAgentCD
+export INSIGHTFINDER_USER_NAME=admin
+export INSIGHTAGENTDIR=/home/djdean/InsightAgentRepo/InsightAgent/deployment/DeployAgent/files/InsightAgent-master
+export SAMPLING_INTERVAL=1
+export REPORTING_INTERVAL=1

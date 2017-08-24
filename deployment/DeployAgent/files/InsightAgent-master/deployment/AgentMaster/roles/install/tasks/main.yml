@@ -1,0 +1,41 @@
+---
+- name: install gcc
+  package: 
+    name: gcc 
+    state: latest
+- name: install wget
+  package: 
+    name: wget 
+    state: latest
+- name: download package
+  get_url: 
+    url: https://github.com/insightfinder/InsightAgent/archive/master.tar.gz 
+    dest: /home/{{ ansible_user }}/insightagent.tar.gz
+    force: yes
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+- name: untar
+  unarchive: 
+    src: /home/{{ ansible_user }}/insightagent.tar.gz
+    dest: /home/{{ ansible_user }}
+    remote_src: True
+- name: Check packages
+  command: ./deployment/checkpackages.sh -env
+  args:
+    chdir: /home/{{ ansible_user }}/InsightAgent-master/
+- name: Install agent
+  command: >
+    ./deployment/install.sh 
+    -i {{ projectName }} 
+    -u {{ userName }} 
+    -k {{ licenseKey }} 
+    -s {{ samplingInterval }} 
+    -r {{ reportingInterval }} 
+    -t {{ agentType }}
+    -w {{ reportingUrl }}
+  args:  
+    chdir: /home/{{ ansible_user }}/InsightAgent-master/
+- name: Check Agent Config
+  shell: cat .agent.bashrc
+  args:
+    chdir: /home/{{ ansible_user }}/InsightAgent-master

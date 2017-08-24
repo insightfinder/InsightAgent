@@ -2,7 +2,7 @@
 
 function usage()
 {
-	echo "Usage: ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL -t AGENT_TYPE
+	echo "Usage: ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL -t AGENT_TYPE -w SERVER_URL
 AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or metricFileReplay or logFileReplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia or kvm or kafka or elasticsearch-storage. Reporting/Sampling interval supports integer value denoting minutes and 10s i.e 10 seconds as a valid value"
 }
 
@@ -20,6 +20,7 @@ function createCronSeconds() {
 }
 
 if [ "$#" -lt 12 ]; then
+	echo "Failed 4"
 	usage
 	exit 1
 fi
@@ -64,6 +65,7 @@ if [ $lastCharSampling == 's' ];then
 	#Only allowed seconds value is 10
 	if [ $SECONDS_VALUE_SAMPLING != '10' ];then
 		usage
+		echo "Failed 1"
 		exit 1
 	fi
 fi
@@ -76,6 +78,7 @@ if [ $lastCharReporting == 's' ];then
 	SECONDS_VALUE_REPORTING=${REPORTING_INTERVAL:0:-1}
 	#Only allowed seconds value is 10
 	if [ $SECONDS_VALUE_REPORTING != '10' ];then
+		echo "Failed 2"
 		usage
 		exit 1
 	fi
@@ -89,11 +92,13 @@ fi
 
 if [ -z "$AGENT_TYPE" ] || [ -z "$REPORTING_INTERVAL" ] || [ -z "$SAMPLING_INTERVAL" ] || [ -z "$LICENSEKEY" ] || [ -z "$USERNAME" ] || [ -z "$PROJECTNAME" ]; then
 	usage
+	echo "Failed 5"
 	exit 1
 fi
 
 if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ] && [ $AGENT_TYPE != 'metricFileReplay' ] && [ $AGENT_TYPE != 'logFileReplay' ] && [ $AGENT_TYPE != 'daemonset' ] && [ $AGENT_TYPE != 'hypervisor' ] && [ $AGENT_TYPE != 'elasticsearch' ] && [ $AGENT_TYPE != 'collectd' ] && [ $AGENT_TYPE != 'ec2monitoring' ] && [ $AGENT_TYPE != 'jolokia'  ] && [ $AGENT_TYPE != 'datadog' ] && [ $AGENT_TYPE != 'newrelic' ] && [ $AGENT_TYPE != 'kvm' ] && [ $AGENT_TYPE != 'logStreaming' ] && [ $AGENT_TYPE != 'kafka' ] && [ $AGENT_TYPE != 'elasticsearch-storage' ]; then
 	usage
+	echo "Failed 3"
 	exit 1
 fi
 
@@ -210,5 +215,5 @@ fi
 
 sudo chown root:root $TEMPCRON
 sudo chmod 644 $TEMPCRON
-sudo echo $TEMPCRON >> /etc/cron.d/ifagent
+sudo cat $TEMPCRON >> /etc/cron.d/ifagent
 echo "Agent configuration completed. Two cron jobs are created via /etc/cron.d/ifagent"

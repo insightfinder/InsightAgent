@@ -29,7 +29,6 @@
        - action !="install"
        - action !="uninstall"
    roles:
-     - { role: install-cgroup, when: agentType=="cgroup" }
-     - { role: install-collectd, when: agentType=="collectd" }
+     - { role: install, when: action=="install" }
      - { role: uninstall, when: action=="uninstall" }
    

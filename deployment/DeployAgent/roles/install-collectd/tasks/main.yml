@@ -1,0 +1,110 @@
+---
+- name : Check Mandatory Variables For Install
+  debug:
+    msg: 
+      - ProjectName:{{ projectName | mandatory }} 
+      - UserName:{{ userName | mandatory }}
+      - Sampling Interval:{{ samplingInterval | mandatory }}
+      - Reporting Interval:{{ reportingInterval | mandatory }}
+      - Agent Type:{{ agentType | mandatory }}
+      - License Key:{{ licenseKey | mandatory }}
+- name: Install package dependencies - YUM
+  become: yes
+  package: 
+    name: "{{item}}" 
+    state: latest
+  with_items:
+    - gcc
+    - wget
+    - libffi-devel
+    - python-devel
+    - openssl-devel
+    - collectd
+  when: ansible_pkg_mgr == 'yum'
+- name: Install package dependencies - APT
+  become: yes
+  apt: 
+    name: "{{item}}" 
+    state: latest
+    #update_cache: yes
+  with_items:
+    - build-essential
+    - libssl-dev
+    - libffi-dev
+    - python-dev
+    - wget
+    - collectd
+  when: ansible_pkg_mgr == 'apt'
+- name: Delete Old Tar Bundle for Agent
+  become: yes
+  file:
+    state: absent
+    path: "{{ansible_env.HOME}}/insightagent.tar.gz"
+- name: Delete Old Agent Code
+  become: yes
+  file:
+    state: absent
+    path: "{{ansible_env.HOME}}/InsightAgent-master"
+- name: Copy Agent Code on Machines
+  become: yes
+  copy:
+    src: ../files/insightagent.tar.gz
+    dest: "{{ansible_env.HOME}}"
+    owner: root
+    group: root
+    mode: 0644
+- name: Untar the Agent Code
+  unarchive: 
+    src: "{{ansible_env.HOME}}/insightagent.tar.gz"
+    dest: "{{ansible_env.HOME}}"
+    remote_src: True
+- name: Check for /etc/collectd/collectd.conf
+  stat: path=/etc/collectd/collectd.conf
+  register: collectd_conf_ubuntu
+- name: Check for /etc/collectd/collectd.conf
+  stat: path=/etc/collectd/collectd.conf
+  register: collectd_conf_other
+- name: Copy collectd configuration file to "/etc/collectd/collectd.conf"
+  become: yes
+  copy:
+    src: "{{ansible_env.HOME}}/InsightAgent-master/collectd/collectdsample.conf"
+    dest: "/etc/collectd/collectd.conf"
+    owner: root
+    group: root
+    mode: 0644
+  when: collectd_conf_ubuntu.stat.exists
+- name: Copy collectd configuration file to "/etc/collectd.conf"
+  become: yes
+  copy:
+    src: "{{ansible_env.HOME}}/InsightAgent-master/collectd/collectdsample.conf"
+    dest: "/etc/collectd.conf"
+    owner: root
+    group: root
+    mode: 0644
+  when: collectd_conf_other.stat.exists
+
+- name: Restart collectd
+  service:
+   name: collectd
+   state: restarted
+  become: true
+- name: Create Python Virtual Environment for Agent
+  command: ./deployment/checkpackages.sh -env
+  args:
+    chdir: "{{ansible_env.HOME}}/InsightAgent-master"
+- name: Deploy collectd Agent
+  command: >
+    ./deployment/install.sh 
+    -i {{ projectName }} 
+    -u {{ userName }} 
+    -k {{ licenseKey }} 
+    -s {{ samplingInterval }} 
+    -t {{ agentType }}
+    -w {{ reportingUrl }}
+  become: true
+  args:  
+    chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
+- name: Delete Tar Bundle for Agent
+  file:
+    state: absent
+    path: "{{ansible_env.HOME}}/insightagent.tar.gz"
