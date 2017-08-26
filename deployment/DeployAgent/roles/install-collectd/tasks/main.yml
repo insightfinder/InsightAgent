@@ -58,30 +58,16 @@
     src: "{{ansible_env.HOME}}/insightagent.tar.gz"
     dest: "{{ansible_env.HOME}}"
     remote_src: True
-- name: Check for /etc/collectd/collectd.conf
-  stat: path=/etc/collectd/collectd.conf
-  register: collectd_conf_ubuntu
-- name: Check for /etc/collectd/collectd.conf
-  stat: path=/etc/collectd/collectd.conf
-  register: collectd_conf_other
+- name: Check for /etc/collectd
+  stat: path=/etc/collectd
+  register: collectd_dir
 - name: Copy collectd configuration file to "/etc/collectd/collectd.conf"
-  become: true
-  copy:
-    src: ../files/collectdsample.conf
-    dest: "/etc/collectd/collectd.conf"
-    owner: root
-    group: root
-    mode: 0644
-  when: collectd_conf_ubuntu.stat.exists
+  become: yes
+  command: mv {{ansible_env.HOME}}/InsightAgent-master/deployment/DeployAgent/files/collectdsample.conf /etc/collectd/collectd.conf
+  when: collectd_dir.stat.exists
 - name: Copy collectd configuration file to "/etc/collectd.conf"
-  become: true
-  copy:
-    src: ../files/collectdsample.conf
-    dest: "/etc/collectd.conf"
-    owner: root
-    group: root
-    mode: 0644
-  when: collectd_conf_other.stat.exists
+  become: yes
+  command: mv {{ansible_env.HOME}}/InsightAgent-master/deployment/DeployAgent/files/collectdsample.conf /etc/collectd.conf
 
 - name: Restart collectd
   service:
