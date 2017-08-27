@@ -51,19 +51,8 @@ source pyenv/bin/activate
 ./deployment/install.sh -i PROJECT_NAME -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 1 -r 1 -t logFileReplay
 ```
 Note: If running from a different server, add the -w SERVER_NAME option.
-3) Put data files in InsightAgent-master/data/
-Make sure the contents of the file are in json format.
 
-Example:
-```
-[
-  {
-    "eventId": 1000100001,
-    "Root cause": "RC ID-00001\nMissing Feature"
-  }
-]
-```
-4) Run the following command for each data file.
+3) Run the following command for each data file.
 ```
 python common/reportMetrics.py -m logFileReplay -f PATH_TO_JSON_FILE
 ```
