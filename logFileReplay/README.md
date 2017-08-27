@@ -6,7 +6,7 @@ Platform: Linux
 InsightAgent support replay mode of json log files in which the data from the json file is read and sent to insightfinder server. A sample log file is as follows:
 
 ```json
-[{"eventId": 1480750759682, "Data": " INFO org.apache.hadoop.hdfs.server.namenode.TransferFsImage: Downloaded file fsimage.ckpt_0000000000000000020 size 120 bytes.\n"}, {"eventId": 1480750759725, "Data": " INFO org.apache.hadoop.hdfs.server.namenode.NNStorageRetentionManager: Going to retain 2 images with txid >= 18\n"}, {"eventId": 1480754359850, "Data": " INFO org.apache.hadoop.hdfs.server.namenode.FSNamesystem: Roll Edit Log from 127.0.0.1\n"}]
+[{"eventId": 1480750759682, "data": " INFO org.apache.hadoop.hdfs.server.namenode.TransferFsImage: Downloaded file fsimage.ckpt_0000000000000000020 size 120 bytes.\n"}, {"eventId": 1480750759725, "Data": " INFO org.apache.hadoop.hdfs.server.namenode.NNStorageRetentionManager: Going to retain 2 images with txid >= 18\n"}, {"eventId": 1480754359850, "Data": " INFO org.apache.hadoop.hdfs.server.namenode.FSNamesystem: Roll Edit Log from 127.0.0.1\n"}]
 ```
 
 ##### Instructions to register a project in Insightfinder.com
