@@ -37,18 +37,18 @@ HOST ansible_user=USER ansible_shh_private_key_file=SOMETHING
 #192.168.33.20 ansible_user=vagrant ansible_ssh_pass=ssh_password
 
 
-##We can also specify the host names here and the ssh details under [nodes:vars] if they have have the same ssh credentials
+##We can also specify the host names here and the ssh details under [nodes:vars] if they have the same ssh credentials
 ##(Only one of ansible_ssh_pass OR ansible_ssh_private_key_file is required)
 #192.168.33.10
 #192.168.33.15
 
 ```
 
-3) Open and modify the td-agent.yaml file
+3) Open and modify the td-agent.yaml file and replace the values PROJECT_NAME, USERNAME, LICENSE_KEY and APP_SERVER with appropiate values. The USERNAME and LICENSE_KEY values can be found on your Insightfinder account profile section. PROJECT_NAME is the name of the project created in the Insightfinder app and the APP_SERVER is the data receiving server URL (e.g. https://agent-data.insightfinder.com if you use our SaaS solution or your application server address if you use our on-prem solution). 
  
  ```
- - hosts: workers
-  vars:
+ - hosts: nodes
+   vars:
     projectName: PROJECT_NAME
     userName: USERNAME
     samplingInterval: 60
@@ -56,7 +56,6 @@ HOST ansible_user=USER ansible_shh_private_key_file=SOMETHING
     licenseKey: LICENSE_KEY
 
   ```
-  The samplingInterval unit is seconds and we support values 10 and multiple of 60 i.e. 60, 120 etc.
 
   4) Run the deployment script
   ```
@@ -69,7 +68,7 @@ HOST ansible_user=USER ansible_shh_private_key_file=SOMETHING
 2. Download [InsightFinder's fluentd output plugin](https://raw.githubusercontent.com/insightfinder/InsightAgent/master/td-agent/out_InsightFinder.rb).  Right-click on this link and choose "Save" to download it to your system.
 3. Copy the output plugin to td-agent's plugin directory.  By default in package installs, this is /etc/td-agent/plugins
 4. Add an appropriate configuration to your /etc/td-agent/td-agent.conf file that includes a [match directive](http://docs.fluentd.org/v0.12/articles/config-file#2-ldquomatchrdquo-tell-fluentd-what-to-do) that includes the following InsightFinder-REQUIRED values:
-- A "type" that specifies the InsightFinder output plugin, a la:
+- A "type" that specifies the InsightFinder output plugin:
 ~~~~
   type InsightFinder
 ~~~~
@@ -94,7 +93,7 @@ licenseKey abcdef1234567890abcdef1234567890abc
 ~~~~
   instanceName mycustomhostname
 ~~~~
-- An "instanceType" to leverage external meta-data about this node.  Note:  The only current supported value for this is "AWS".
+- An "instanceType" to leverage external meta-data about this node. 
 ~~~~
   instanceType AWS
 ~~~~
