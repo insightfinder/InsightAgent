@@ -79,7 +79,9 @@ ifReportingUrl=https://agent-data.insightfinder.com
 3) Download the agent Code which will be distributed to other machines
 ```
 cd roles/install/files
-sudo ./downloadAgent.sh
+sudo ./downloadAgentSSL.sh
+or
+sudo ./downloadAgentNoSSL.sh
 ```
 4) Run the playbook(Go back to the DeployAgent directory)
 ```
