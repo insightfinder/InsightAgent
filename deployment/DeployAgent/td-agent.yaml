@@ -1,0 +1,53 @@
+---
+ - hosts: nodes
+   vars:
+     projectName: tdagent
+     userName: moharnab
+     samplingInterval: 60
+     deploymentServerUrl: "https://agent-data.insightfinder.com"
+     licenseKey: afca3051b0fcf4cafaaef27bdd8d4eefcac27e54
+   remote_user: "{{ remoteUser }}"
+   become: yes
+   become_method: sudo
+   tasks:
+   - name: td-agent | Correct file permissions
+     file:
+       path: /var/log/messages
+       owner: root
+       group: root
+       mode: 0645
+     tags:
+     - plugin-fix
+   - name: Yum Repo | Add insightfinder repo
+     yum_repository:
+       name: insightrepo
+       description: Insightfinder Repo
+       baseurl: ftp://{{ groups['coordinator'][0] }}/pub/insightRepo
+       enabled: yes
+       gpgcheck: no
+   - name: td-agent | Install td-agent
+     yum:
+       name: td-agent
+       state: latest
+       disablerepo: '*'
+       enablerepo: insightrepo
+   - name: td-agent | copy Insightfinder plugin
+     copy:
+       src: out_InsightFinder.rb
+       dest: /etc/td-agent/plugin/out_InsightFinder.rb
+       owner: root
+       group: root
+       mode: 0644
+   - name: Install Jetty | Add config_file
+     template:
+       src: td-agent.conf.template
+       dest: /etc/td-agent/td-agent.conf
+       mode: 0644
+     tags:
+     - td-agent-conig
+   - name: td-agent | Start td-agent daemon
+     service:
+      name: td-agent
+      enabled: yes
+      daemon_reload: yes
+      state: restarted
