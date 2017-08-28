@@ -11,7 +11,8 @@ Tested with td-agent version 2 (v0.12) (installer package versions 2.5 and up).
 - Go to [insightfinder.com](https://insightfinder.com/)
 - Sign in with the user credentials or sign up for a new account.
 - Go to Settings and register a new project with the New Project wizard.
-##Steps to install td-agent on multiple hosts
+## Steps to install td-agent on multiple hosts
+
 1) Use the following command to download the insightfinder agent code.
 ```
 wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
@@ -22,7 +23,7 @@ Untar using this command.
 ```
 tar -xvf insightagent.tar.gz
 ```
-```
+
 2) Open and modify the inventory file
 
 ```
@@ -41,7 +42,10 @@ HOST ansible_user=USER ansible_shh_private_key_file=SOMETHING
 #192.168.33.10
 #192.168.33.15
 
+```
+
 3) Open and modify the td-agent.yaml file
+ 
  ```
  - hosts: workers
   vars:
@@ -56,7 +60,7 @@ HOST ansible_user=USER ansible_shh_private_key_file=SOMETHING
 
   4) Run the deployment script
   ```
-  sudo install_td-agent.sh
+  sudo ./install_td-agent.sh
 
   ```
 ## Installing td-agent on single host
