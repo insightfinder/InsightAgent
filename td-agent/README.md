@@ -11,8 +11,55 @@ Tested with td-agent version 2 (v0.12) (installer package versions 2.5 and up).
 - Go to [insightfinder.com](https://insightfinder.com/)
 - Sign in with the user credentials or sign up for a new account.
 - Go to Settings and register a new project with the New Project wizard.
+##Steps to install td-agent on multiple hosts
+1) Use the following command to download the insightfinder agent code.
+```
+wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
+or
+wget http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
+```
+Untar using this command.
+```
+tar -xvf insightagent.tar.gz
+```
+```
+2) Open and modify the inventory file
 
-## Installing td-agent with the InsightFinder output plugin
+```
+[nodes]
+HOST ansible_user=USER ansible_shh_private_key_file=SOMETHING
+###We can specify the host name with ssh details like this for each host
+##If you have the ssh key
+#192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
+
+##If you have the password
+#192.168.33.20 ansible_user=vagrant ansible_ssh_pass=ssh_password
+
+
+##We can also specify the host names here and the ssh details under [nodes:vars] if they have have the same ssh credentials
+##(Only one of ansible_ssh_pass OR ansible_ssh_private_key_file is required)
+#192.168.33.10
+#192.168.33.15
+
+3) Open and modify the td-agent.yaml file
+ ```
+ - hosts: workers
+  vars:
+    projectName: PROJECT_NAME
+    userName: USERNAME
+    samplingInterval: 60
+    deploymentServerUrl: APP_SERVER
+    licenseKey: LICENSE_KEY
+
+  ```
+  The samplingInterval unit is seconds and we support values 10 and multiple of 60 i.e. 60, 120 etc.
+
+  4) Run the deployment script
+  ```
+  sudo install_td-agent.sh
+
+  ```
+## Installing td-agent on single host
 
 1. Install td-agent per the [fluentd installation documentation](http://docs.fluentd.org/v0.12/categories/installation).
 2. Download [InsightFinder's fluentd output plugin](https://raw.githubusercontent.com/insightfinder/InsightAgent/master/td-agent/out_InsightFinder.rb).  Right-click on this link and choose "Save" to download it to your system.
