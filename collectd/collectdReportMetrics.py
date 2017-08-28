@@ -48,7 +48,15 @@ USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
 
 with open(os.path.join(homepath,"reporting_config.json"), 'r') as f:
     config = json.load(f)
-reporting_interval = int(config['reporting_interval'])
+
+reporting_interval_string = config['reporting_interval']
+is_second_reporting = False
+if reporting_interval_string[-1:]=='s':
+    is_second_reporting = True
+    reporting_interval = float(config['reporting_interval'][:-1])
+    reporting_interval = float(reporting_interval/60)
+else:
+    reporting_interval = int(config['reporting_interval'])
 keep_file_days = int(config['keep_file_days'])
 prev_endtime = config['prev_endtime']
 deltaFields = config['delta_fields']
