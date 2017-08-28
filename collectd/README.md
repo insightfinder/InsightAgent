@@ -62,8 +62,10 @@ ifProjectName=
 ##User's License Key in Application
 ifLicenseKey=
 
-ifSamplingInterval=1
+##Sampling interval could be an integer indicating the number of minutes or "10s" indicating 10 seconds.
+ifSamplingInterval=1 
 
+##Agent type
 ifAgent=collectd
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
