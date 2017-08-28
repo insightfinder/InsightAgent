@@ -17,6 +17,9 @@ sudo yum install wget
 1) Use the following command to download the insightfinder agent code.
 ```
 wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
+or
+wget http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
+
 ```
 Untar using this command.
 ```
