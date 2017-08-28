@@ -7,6 +7,16 @@
       - Sampling Interval:{{ samplingInterval | mandatory }}
       - Agent Type:{{ agentType | mandatory }}
       - License Key:{{ licenseKey | mandatory }}
+- name: SELinux | Check for SELinux
+  become: yes
+  stat:
+    path: /etc/selinux/config
+  register: p
+- name: SELinux | Disable SELinux 
+  become: yes
+  selinux:
+    state: disabled
+  when: p.stat.exists == True
 - name: Install package dependencies - YUM
   become: yes
   package: 
@@ -18,6 +28,7 @@
     - libffi-devel
     - python-devel
     - openssl-devel
+    - epel-release
     - collectd
   when: ansible_pkg_mgr == 'yum'
 - name: Install package dependencies - APT
