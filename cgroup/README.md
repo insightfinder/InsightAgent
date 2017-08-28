@@ -66,7 +66,7 @@ ifLicenseKey=
 ifSamplingInterval=1 
 
 ##Agent type
-ifAgent=collectd
+ifAgent=cgroup
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
 ifReportingUrl=https://agent-data.insightfinder.com
