@@ -68,7 +68,7 @@ HOST ansible_user=USER ansible_shh_private_key_file=SOMETHING
 2. Download [InsightFinder's fluentd output plugin](https://raw.githubusercontent.com/insightfinder/InsightAgent/master/td-agent/out_InsightFinder.rb).  Right-click on this link and choose "Save" to download it to your system.
 3. Copy the output plugin to td-agent's plugin directory.  By default in package installs, this is /etc/td-agent/plugins
 4. Add an appropriate configuration to your /etc/td-agent/td-agent.conf file that includes a [match directive](http://docs.fluentd.org/v0.12/articles/config-file#2-ldquomatchrdquo-tell-fluentd-what-to-do) that includes the following InsightFinder-REQUIRED values:
-- A "type" that specifies the InsightFinder output plugin, a la:
+- A "type" that specifies the InsightFinder output plugin:
 ~~~~
   type InsightFinder
 ~~~~
