@@ -44,11 +44,11 @@ HOST ansible_user=USER ansible_shh_private_key_file=SOMETHING
 
 ```
 
-3) Open and modify the td-agent.yaml file
+3) Open and modify the td-agent.yaml file and replace the values PROJECT_NAME, USERNAME, LICENSE_KEY and APP_SERVER with appropiate values. The USERNAME and LICENSE_KEY values can be found on your Insightfinder account profile section. PROJECT_NAME is the name of the project created the in Insightfinder app and the APP_SERVER is The server reporting Url(Do not change unless you have on-prem deployment). 
  
  ```
- - hosts: workers
-  vars:
+ - hosts: nodes
+   vars:
     projectName: PROJECT_NAME
     userName: USERNAME
     samplingInterval: 60
@@ -56,7 +56,6 @@ HOST ansible_user=USER ansible_shh_private_key_file=SOMETHING
     licenseKey: LICENSE_KEY
 
   ```
-  The samplingInterval unit is seconds and we support values 10 and multiple of 60 i.e. 60, 120 etc.
 
   4) Run the deployment script
   ```
