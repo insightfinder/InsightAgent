@@ -37,14 +37,14 @@ HOST ansible_user=USER ansible_shh_private_key_file=SOMETHING
 #192.168.33.20 ansible_user=vagrant ansible_ssh_pass=ssh_password
 
 
-##We can also specify the host names here and the ssh details under [nodes:vars] if they have have the same ssh credentials
+##We can also specify the host names here and the ssh details under [nodes:vars] if they have the same ssh credentials
 ##(Only one of ansible_ssh_pass OR ansible_ssh_private_key_file is required)
 #192.168.33.10
 #192.168.33.15
 
 ```
 
-3) Open and modify the td-agent.yaml file and replace the values PROJECT_NAME, USERNAME, LICENSE_KEY and APP_SERVER with appropiate values. The USERNAME and LICENSE_KEY values can be found on your Insightfinder account profile section. PROJECT_NAME is the name of the project created the in Insightfinder app and the APP_SERVER is The server reporting Url(Do not change unless you have on-prem deployment). 
+3) Open and modify the td-agent.yaml file and replace the values PROJECT_NAME, USERNAME, LICENSE_KEY and APP_SERVER with appropiate values. The USERNAME and LICENSE_KEY values can be found on your Insightfinder account profile section. PROJECT_NAME is the name of the project created the in Insightfinder app and the APP_SERVER is The server reporting Url(e.g. https://agent-data.insightfinder.com if you are creating a project in insightfinder.com). For on-prem installations, this is the application server's address.
  
  ```
  - hosts: nodes
