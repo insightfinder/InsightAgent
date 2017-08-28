@@ -93,7 +93,7 @@ licenseKey abcdef1234567890abcdef1234567890abc
 ~~~~
   instanceName mycustomhostname
 ~~~~
-- An "instanceType" to leverage external meta-data about this node.  Note:  The only current supported value for this is "AWS".
+- An "instanceType" to leverage external meta-data about this node. 
 ~~~~
   instanceType AWS
 ~~~~
