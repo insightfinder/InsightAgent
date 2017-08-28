@@ -33,8 +33,6 @@ ifLicenseKey=
 
 ifSamplingInterval=1
 
-ifReportingInterval=1
-
 ##Valid Agents are cgroup, collectd
 #ifAgent=collectd
 ifAgent=cgroup

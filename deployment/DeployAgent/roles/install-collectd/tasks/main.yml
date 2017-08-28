@@ -5,7 +5,6 @@
       - ProjectName:{{ projectName | mandatory }} 
       - UserName:{{ userName | mandatory }}
       - Sampling Interval:{{ samplingInterval | mandatory }}
-      - Reporting Interval:{{ reportingInterval | mandatory }}
       - Agent Type:{{ agentType | mandatory }}
       - License Key:{{ licenseKey | mandatory }}
 - name: Install package dependencies - YUM

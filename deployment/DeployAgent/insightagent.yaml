@@ -4,7 +4,6 @@
      projectName: "{{ ifProjectName }}"
      userName: "{{ ifUserName }}"
      samplingInterval: "{{ ifSamplingInterval }}"
-     reportingInterval: "{{ ifReportingInterval }}"
      agentType: "{{ ifAgent }}"
      reportingUrl: "{{ ifReportingUrl }}"
      licenseKey: "{{ ifLicenseKey }}"
