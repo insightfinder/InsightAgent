@@ -22,6 +22,7 @@ wget http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insig
 Untar using this command.
 ```
 tar -xvf insightagent.tar.gz
+cd InsightAgent-master/deployment/DeployAgent/
 ```
 
 2) Open and modify the inventory file
