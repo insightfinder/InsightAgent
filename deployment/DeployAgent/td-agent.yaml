@@ -1,11 +1,11 @@
 ---
  - hosts: nodes
    vars:
-     projectName: PROJECT_NAME
-     userName: USERNAME
+     projectName: "{{ ifProjectName }}"
+     userName: "{{ ifUserName }}"
      samplingInterval: 60
-     deploymentServerUrl: APP_SERVER
-     licenseKey: LICENSE_KEY
+     deploymentServerUrl: "{{ ifReportingUrl }}"
+     licenseKey: "{{ ifLicenseKey }}"
    become: yes
    become_method: sudo
    tasks:

@@ -13,6 +13,21 @@ HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
 #192.168.33.10
 #192.168.33.15
 
+[coordinator]
+HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
+###We can specify the host name with ssh details like this for each host
+##If you have the ssh key
+#192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
+
+##If you have the password
+#192.168.33.20 ansible_user=vagrant ansible_ssh_pass=ssh_password
+
+
+##We can also specify the host names here and the ssh details under [nodes:vars] if they have have the same ssh credentials
+##(Only one of ansible_ssh_pass OR ansible_ssh_private_key_file is required)
+#192.168.33.10
+#192.168.33.15
+
 [nodes:vars]
 #ansible_user=vagrant
 #ansible_ssh_pass=ssh_password

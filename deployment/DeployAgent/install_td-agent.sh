@@ -1,3 +1,3 @@
 #!/bin/bash
 
-sudo ansible-playbook -i /etc/ansible/hosts td-agent.yaml
+sudo ansible-playbook -i inventory td-agent.yaml
