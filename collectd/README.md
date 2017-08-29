@@ -1,5 +1,9 @@
 ## Use this script to deploy cgroup Agent on multiple Hosts
 
+### Prerequisites:
+
+If there are any proxy settings required for your environment, make sure they are defined for both the installation user and the root user. The InsightFinder collectd agent requires internet access to download the packages needed for the installation process. After installation is complete, any proxy should be disabled to allow our agents to send data using the correct port.
+
 ### Install wget to download the required files :
 #### For Debian and Ubuntu
 ```
