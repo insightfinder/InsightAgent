@@ -6,31 +6,38 @@ Platform: Linux
 fluentd/td-agent, in conjunction with the InsightFinder output plugin, can be configured to monitor your log files and forward log entries to InsightFinder for anomaly detection, keyword analysis, sequencing/clustering, and more.
 
 Tested with td-agent version 2 (v0.12) (installer package versions 2.5 and up).
+### Prerequisites:
+
+If there are any proxy settings required for your environment, make sure they are defined for both the installation user and the root user. The InsightFinder collectd agent requires internet access to download the packages needed for the installation process. After installation is complete, any proxy should be disabled to allow our agents to send data using the correct port.
 
 ##### Instructions to register a log streaming project in Insightfinder.com
 - Go to [insightfinder.com](https://insightfinder.com/)
 - Sign in with the user credentials or sign up for a new account.
 - Go to Settings and register a new project with the New Project wizard.
 ## Steps to install td-agent on multiple hosts
-The installation requires the Insightfinder repository(insightrepo) to be set up. The current installation supports Centos 7.
 
 1) Use the following command to download the insightfinder agent code.
 ```
 wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
 or
 wget --no-check-certificate http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
+
 ```
 Untar using this command.
 ```
 tar -xvf insightagent.tar.gz
+```
+```
 cd InsightAgent-master/deployment/DeployAgent/
+sudo ./installAnsible.sh
 ```
 
-2) Open and modify the inventory file in /etc/ansible/hosts and add the following lines. The values HOST, USER and KEY_FILE need to set according to the configuration of the machines you need to install the agent in.
+2) Open and modify the inventory file. You only need to change the values mentioned below and leave other values unchanged.
 
+-- Add the nodes to install td-agent on
 ```
 [nodes]
-HOST ansible_user=USER ansible_shh_private_key_file=KEY_FILE
+HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
 ###We can specify the host name with ssh details like this for each host
 ##If you have the ssh key
 #192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
@@ -39,26 +46,47 @@ HOST ansible_user=USER ansible_shh_private_key_file=KEY_FILE
 #192.168.33.20 ansible_user=vagrant ansible_ssh_pass=ssh_password
 
 
-##We can also specify the host names here and the ssh details under [nodes:vars] if they have the same ssh credentials
+##We can also specify the host names here and the ssh details under [nodes:vars] if they have have the same ssh credentials
 ##(Only one of ansible_ssh_pass OR ansible_ssh_private_key_file is required)
 #192.168.33.10
 #192.168.33.15
+```
+-- Add the node where the insightrepo exists
 
 ```
+[coordinator]
+HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
+###We can specify the host name with ssh details like this for each host
+##If you have the ssh key
+#192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
 
-3) Open and modify the td-agent.yaml file and replace the values PROJECT_NAME, USERNAME, LICENSE_KEY and APP_SERVER with appropiate values. The USERNAME and LICENSE_KEY values can be found on your Insightfinder account profile section. PROJECT_NAME is the name of the project created in the Insightfinder app and the APP_SERVER is the data receiving server URL (e.g. "https://agent-data.insightfinder.com" if you use our SaaS solution or your application server address if you use our on-prem solution). The APP_SERVER value needs to be enclosed in quotes as shown in the previous line.
+##If you have the password
+#192.168.33.20 ansible_user=vagrant ansible_ssh_pass=ssh_password
 
- ```
- - hosts: nodes
-   vars:
-    projectName: PROJECT_NAME
-    userName: USERNAME
-    samplingInterval: 60
-    deploymentServerUrl: APP_SERVER
-    licenseKey: LICENSE_KEY
 
-  ```
+##We can also specify the host names here and the ssh details under [nodes:vars] if they have have the same ssh credentials
+##(Only one of ansible_ssh_pass OR ansible_ssh_private_key_file is required)
+#192.168.33.10
+#192.168.33.15
+```
 
+-- Add the user and project details
+```
+##Login User In Insightfinder Application
+ifUserName=
+
+##Project Name In Insightfinder Application
+ifProjectName=
+
+##User's License Key in Application
+ifLicenseKey=
+```
+-- Add the server where the data needs to be reported
+
+```
+##The server reporting Url(Do not change unless you have on-prem deployment)
+ifReportingUrl=https://agent-data.insightfinder.com
+```
   4) Run the deployment script
   ```
   sudo ./install_td-agent.sh
