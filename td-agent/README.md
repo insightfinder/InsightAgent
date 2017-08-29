@@ -12,6 +12,7 @@ Tested with td-agent version 2 (v0.12) (installer package versions 2.5 and up).
 - Sign in with the user credentials or sign up for a new account.
 - Go to Settings and register a new project with the New Project wizard.
 ## Steps to install td-agent on multiple hosts
+The installation requires the Insightfinder repository(insightrepo) to be set up. The current installation supports Centos 7. 
 
 1) Use the following command to download the insightfinder agent code.
 ```
@@ -44,8 +45,8 @@ HOST ansible_user=USER ansible_shh_private_key_file=SOMETHING
 
 ```
 
-3) Open and modify the td-agent.yaml file and replace the values PROJECT_NAME, USERNAME, LICENSE_KEY and APP_SERVER with appropiate values. The USERNAME and LICENSE_KEY values can be found on your Insightfinder account profile section. PROJECT_NAME is the name of the project created in the Insightfinder app and the APP_SERVER is the data receiving server URL (e.g. https://agent-data.insightfinder.com if you use our SaaS solution or your application server address if you use our on-prem solution). 
- 
+3) Open and modify the td-agent.yaml file and replace the values PROJECT_NAME, USERNAME, LICENSE_KEY and APP_SERVER with appropiate values. The USERNAME and LICENSE_KEY values can be found on your Insightfinder account profile section. PROJECT_NAME is the name of the project created in the Insightfinder app and the APP_SERVER is the data receiving server URL (e.g. https://agent-data.insightfinder.com if you use our SaaS solution or your application server address if you use our on-prem solution).
+
  ```
  - hosts: nodes
    vars:
@@ -93,7 +94,7 @@ licenseKey abcdef1234567890abcdef1234567890abc
 ~~~~
   instanceName mycustomhostname
 ~~~~
-- An "instanceType" to leverage external meta-data about this node. 
+- An "instanceType" to leverage external meta-data about this node.
 ~~~~
   instanceType AWS
 ~~~~
