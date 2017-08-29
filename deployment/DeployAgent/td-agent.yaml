@@ -1,11 +1,11 @@
 ---
  - hosts: nodes
    vars:
-     projectName: tdagent
-     userName: moharnab
+     projectName: PROJECT_NAME
+     userName: USERNAME
      samplingInterval: 60
-     deploymentServerUrl: "https://agent-data.insightfinder.com"
-     licenseKey: afca3051b0fcf4cafaaef27bdd8d4eefcac27e54
+     deploymentServerUrl: APP_SERVER
+     licenseKey: LICENSE_KEY
    become: yes
    become_method: sudo
    tasks:
@@ -32,14 +32,14 @@
        enablerepo: insightrepo
    - name: td-agent | copy Insightfinder plugin
      copy:
-       src: out_InsightFinder.rb
+       src: files/out_InsightFinder.rb
        dest: /etc/td-agent/plugin/out_InsightFinder.rb
        owner: root
        group: root
        mode: 0644
    - name: Install Jetty | Add config_file
      template:
-       src: td-agent.conf.template
+       src: files/td-agent.conf.template
        dest: /etc/td-agent/td-agent.conf
        mode: 0644
      tags:
