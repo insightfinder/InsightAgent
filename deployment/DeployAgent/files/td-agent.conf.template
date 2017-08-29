@@ -22,13 +22,17 @@
 </match>
 <source>
   @type tail
-  format multiline
-  format_firstline /[A-Z][a-z][a-z] (([1-3][0-9])| [1-9])\, \d{4} ([0-9]|[0-9][0-9]):[0-9][0-9]:[0-9][0-9] (A|P)M/
-  format1 /^(?<time>[A-Z][a-z][a-z] (([1-3][0-9])| [1-9])\, \d{4} ([0-9]|[0-9][0-9]):[0-9][0-9]:[0-9][0-9] (A|P)M) (?<data>.*)$/
-  time_format %b %d, %Y %H:%M:%S %p
-  path /opt/jetty/logs/%Y_%m_%d.stderrout.log
+  format /^(?<time>[A-Z][a-z][a-z] (([1-3][0-9])| [1-9]) [0-9][0-9]:[0-9][0-9]:[0-9][0-9]) (?<data>.*)$/
+  time_format %b %e %H:%M:%S
+  path /var/log/messages 
+  #format multiline
+  #format_firstline /[A-Z][a-z][a-z] (([1-3][0-9])| [1-9])\, \d{4} ([0-9]|[0-9][0-9]):[0-9][0-9]:[0-9][0-9] (A|P)M/
+  #format1 /^(?<time>[A-Z][a-z][a-z] (([1-3][0-9])| [1-9])\, \d{4} ([0-9]|[0-9][0-9]):[0-9][0-9]:[0-9][0-9] (A|P)M) (?<data>.*)$/
+  #time_format %b %d, %Y %H:%M:%S %p
+  #path /opt/jetty/logs/%Y_%m_%d.stderrout.log
   pos_file /var/log/td-agent/jetty.pos
   encoding ISO-8859-1
   tag "iflog.#{Socket.gethostname}"
   keep_time_key true
 </source>
+

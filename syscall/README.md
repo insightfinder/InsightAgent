@@ -3,12 +3,6 @@ Agent Type: syscall
 
 Platform: Linux
 
-##### Instructions to register a project in Insightfinder.com
-- Go to the link https://insightfinder.com/
-- Sign in with the user credentials or sign up for a new account.
-- Go to Settings and Register for a project under "Insight Agent" tab.
-- Give a project name, select Project Type as "Private Cloud". When registered, a License Key is sent to the registered email account.
-
 ##### Pre-requisites:
 This pre-requisite is needed on the machine which launches installLttng.py.
 ```
