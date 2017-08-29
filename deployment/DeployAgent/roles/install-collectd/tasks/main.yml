@@ -19,6 +19,7 @@
   when: p.stat.exists == True
 - name: Install package dependencies - YUM
   become: yes
+  become_flags: '-e'
   package: 
     name: "{{item}}" 
     state: latest
@@ -33,6 +34,7 @@
   when: ansible_pkg_mgr == 'yum'
 - name: Install package dependencies - APT
   become: yes
+  become_flags: '-e'
   apt: 
     name: "{{item}}" 
     state: latest
@@ -73,11 +75,11 @@
   register: collectd_dir
 - name: Copy collectd configuration file to "/etc/collectd/collectd.conf"
   become: yes
-  command: mv {{ansible_env.HOME}}/InsightAgent-master/deployment/DeployAgent/files/collectdsample.conf /etc/collectd/collectd.conf
+  command: cp -rf {{ansible_env.HOME}}/InsightAgent-master/deployment/DeployAgent/files/collectdsample.conf /etc/collectd/collectd.conf
   when: collectd_dir.stat.exists
 - name: Copy collectd configuration file to "/etc/collectd.conf"
   become: yes
-  command: mv {{ansible_env.HOME}}/InsightAgent-master/deployment/DeployAgent/files/collectdsample.conf /etc/collectd.conf
+  command: cp -rf {{ansible_env.HOME}}/InsightAgent-master/deployment/DeployAgent/files/collectdsample.conf /etc/collectd.conf
 
 - name: Restart collectd
   service:
