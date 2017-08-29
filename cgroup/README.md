@@ -75,13 +75,12 @@ ifReportingUrl=https://agent-data.insightfinder.com
 ```
 3) Download the agent Code which will be distributed to other machines
 ```
-cd roles/install/files
-sudo ./downloadAgentSSL.sh
+cd files
+sudo -e ./downloadAgentSSL.sh
 or
-sudo ./downloadAgentNoSSL.sh
+sudo -e ./downloadAgentNoSSL.sh
 ```
 4) Run the playbook(Go back to the DeployAgent directory)
 ```
-cd ../../..
 ansible-playbook insightagent.yaml
 ```
