@@ -19,7 +19,7 @@
   when: p.stat.exists == True
 - name: Install package dependencies - YUM
   become: yes
-  become_flags: '-e'
+  become_flags: '-E'
   package: 
     name: "{{item}}" 
     state: latest
@@ -34,7 +34,7 @@
   when: ansible_pkg_mgr == 'yum'
 - name: Install package dependencies - APT
   become: yes
-  become_flags: '-e'
+  become_flags: '-E'
   apt: 
     name: "{{item}}" 
     state: latest
