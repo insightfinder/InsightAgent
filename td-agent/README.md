@@ -26,11 +26,11 @@ tar -xvf insightagent.tar.gz
 cd InsightAgent-master/deployment/DeployAgent/
 ```
 
-2) Open and modify the inventory file
+2) Open and modify the inventory file in /etc/ansible/hosts and add the following lines. The values HOST, USER and KEY_FILE need to set according to the configuration of the machines you need to install the agent in.
 
 ```
 [nodes]
-HOST ansible_user=USER ansible_shh_private_key_file=SOMETHING
+HOST ansible_user=USER ansible_shh_private_key_file=KEY_FILE
 ###We can specify the host name with ssh details like this for each host
 ##If you have the ssh key
 #192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
