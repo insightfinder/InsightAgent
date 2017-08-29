@@ -3,22 +3,21 @@
 ### Install wget to download the required files :
 #### For Debian and Ubuntu
 ```
-sudo apt-get update
-sudo apt-get install wget
+sudo -E apt-get update
+sudo -E apt-get install wget
 ```
 #### For Fedora and RHEL-derivatives
 ```
-sudo yum update
-sudo yum install wget
+sudo -E yum update
+sudo -E yum install wget
 ```
-
-
+Note: If you are using proxy, the proxy needs to be set for both the current user and root
 #### Get copy of the deployment script:
 1) Use the following command to download the insightfinder agent code.
 ```
 wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
 or
-wget http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
+wget --no-check-certificate http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
 
 ```
 Untar using this command.
@@ -66,7 +65,7 @@ ifProjectName=
 ifLicenseKey=
 
 ##Sampling interval could be an integer indicating the number of minutes or "10s" indicating 10 seconds.
-ifSamplingInterval=1 
+ifSamplingInterval=1
 
 ##Agent type
 ifAgent=collectd
@@ -85,5 +84,6 @@ sudo -e ./downloadAgentNoSSL.sh
 ```
 4) Run the playbook(Go back to the DeployAgent directory)
 ```
+cd ..
 ansible-playbook insightagent.yaml
 ```

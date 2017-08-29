@@ -18,7 +18,7 @@ The installation requires the Insightfinder repository(insightrepo) to be set up
 ```
 wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
 or
-wget http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
+wget --no-check-certificate http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
 ```
 Untar using this command.
 ```
