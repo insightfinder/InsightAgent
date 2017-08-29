@@ -6,7 +6,6 @@
      samplingInterval: 60
      deploymentServerUrl: "https://agent-data.insightfinder.com"
      licenseKey: afca3051b0fcf4cafaaef27bdd8d4eefcac27e54
-   remote_user: "{{ remoteUser }}"
    become: yes
    become_method: sudo
    tasks:

@@ -9,6 +9,7 @@
       - License Key:{{ licenseKey | mandatory }}
 - name: Install package dependencies - YUM
   become: yes
+  become_flags: '-e'
   package: 
     name: "{{item}}" 
     state: latest
@@ -21,6 +22,7 @@
   when: ansible_pkg_mgr == 'yum'
 - name: Install package dependencies - APT
   become: yes
+  become_flags: '-e'
   apt: 
     name: "{{item}}" 
     state: latest

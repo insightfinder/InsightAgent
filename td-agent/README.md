@@ -23,6 +23,7 @@ wget http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insig
 Untar using this command.
 ```
 tar -xvf insightagent.tar.gz
+cd InsightAgent-master/deployment/DeployAgent/
 ```
 
 2) Open and modify the inventory file
@@ -45,8 +46,13 @@ HOST ansible_user=USER ansible_shh_private_key_file=SOMETHING
 
 ```
 
+<<<<<<< HEAD
 3) Open and modify the td-agent.yaml file and replace the values PROJECT_NAME, USERNAME, LICENSE_KEY and APP_SERVER with appropiate values. The USERNAME and LICENSE_KEY values can be found on your Insightfinder account profile section. PROJECT_NAME is the name of the project created in the Insightfinder app and the APP_SERVER is the data receiving server URL (e.g. https://agent-data.insightfinder.com if you use our SaaS solution or your application server address if you use our on-prem solution).
 
+=======
+3) Open and modify the td-agent.yaml file and replace the values PROJECT_NAME, USERNAME, LICENSE_KEY and APP_SERVER with appropiate values. The USERNAME and LICENSE_KEY values can be found on your Insightfinder account profile section. PROJECT_NAME is the name of the project created in the Insightfinder app and the APP_SERVER is the data receiving server URL (e.g. "https://agent-data.insightfinder.com" if you use our SaaS solution or your application server address if you use our on-prem solution). The APP_SERVER value needs to be enclosed in quotes as shown in the previous line.
+ 
+>>>>>>> c93f91a7ee2d6b98712b19d3902856b010991364
  ```
  - hosts: nodes
    vars:
