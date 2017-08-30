@@ -1,5 +1,5 @@
 [nodes]
-stg-ub2.insightfinder.com ansible_user=ubuntu ansible_ssh_private_key_file=/home/djdean/Downloads/shared.pem
+HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
 ###We can specify the host name with ssh details like this for each host
 ##If you have the ssh key
 #192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
@@ -13,8 +13,8 @@ stg-ub2.insightfinder.com ansible_user=ubuntu ansible_ssh_private_key_file=/home
 #192.168.33.10
 #192.168.33.15
 
-#[coordinator]
-#HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
+[coordinator]
+HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
 ###We can specify the host name with ssh details like this for each host
 ##If you have the ssh key
 #192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
@@ -38,22 +38,24 @@ stg-ub2.insightfinder.com ansible_user=ubuntu ansible_ssh_private_key_file=/home
 ifAction=install
 
 ##Login User In Insightfinder Application
-ifUserName=guest
+ifUserName=
 
 ##Project Name In Insightfinder Application
-ifProjectName=ubuntuCgroup10s
+ifProjectName=
 
 ##User's License Key in Application
-ifLicenseKey=b697f8711004d32fb2e4086dc5ea0a6d8f7df947
+ifLicenseKey=
 
-ifSamplingInterval=10s
+ifSamplingInterval=1
 
 ##Valid Agents are cgroup, collectd
-ifAgent=collectd
-#ifAgent=cgroup
+#ifAgent=collectd
+ifAgent=cgroup
 
 ##When yes, we will run the equivalent of 'apt-get update' before installing any packages. 
 ##Valid entries are yes or no. Not used with yum-based installation (e.g., CentOS).
 apt_update=no
+
 ##The server reporting Url(Do not change unless you have on-prem deployment)
 ifReportingUrl=https://agent-data.insightfinder.com
+
