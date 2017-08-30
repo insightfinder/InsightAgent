@@ -7,6 +7,7 @@
       - Sampling Interval:{{ samplingInterval | mandatory }}
       - Agent Type:{{ agentType | mandatory }}
       - License Key:{{ licenseKey | mandatory }}
+      - Update APT:{{ apt_update | mandatory }}
 - name: SELinux | Check for SELinux
   become: yes
   stat:
@@ -38,7 +39,9 @@
   apt: 
     name: "{{item}}" 
     state: latest
-    #update_cache: yes
+    force: yes
+    allow_unauthenticated: yes
+    update_cache: "{{ apt_update }}"
   with_items:
     - build-essential
     - libssl-dev

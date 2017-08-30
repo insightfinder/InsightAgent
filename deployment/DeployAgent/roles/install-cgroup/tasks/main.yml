@@ -26,7 +26,9 @@
   apt: 
     name: "{{item}}" 
     state: latest
-    #update_cache: yes
+    force: yes
+    allow_unauthenticated: yes
+    update_cache: "{{ apt_update }}"
   with_items:
     - build-essential
     - libssl-dev
