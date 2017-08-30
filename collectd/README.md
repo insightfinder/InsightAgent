@@ -2,7 +2,7 @@
 
 ### Prerequisites:
 
-If there are any proxy settings required for your environment, make sure they are defined for both the installation user and the root user. The InsightFinder collectd agent requires internet access to download the packages needed for the installation process. After installation is complete, any proxy should be disabled to allow our agents to send data using the correct port. Make sure your /tmp directory includes sufficient space for holding the unzipped package.
+If there are any proxy settings required for your environment, make sure they are defined for both the installation user and the root user. The InsightFinder collectd agent requires internet access to download the packages needed for the installation process. After installation is complete, any proxy should be disabled to allow our agents to send data using the correct port. Ensure that your /tmp directory has at least 50MB of disk space available because the apt/yum package managers use /tmp as scratch space for package installation (e.g., package inflation).
 
 ### Install wget to download the required files :
 #### For Debian and Ubuntu
