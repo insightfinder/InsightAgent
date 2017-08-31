@@ -184,8 +184,11 @@ for eachdir in allDirectories:
 allLatestTimestamps = []
 
 for eachfile in filenames:
-    csvfile = open(os.path.join(csvpath,eachfile+date))
-    reader = csv.reader(csvfile)
+    try:
+        csvfile = open(os.path.join(csvpath,eachfile+date))
+        reader = csv.reader(csvfile)
+    except IOError:
+        continue
     for row in reader:
         if reader.line_num > 1:
             if long(int(float(row[0]))) < long(start_time_epoch) :
