@@ -76,8 +76,8 @@ def init_previous_results():
     timestampRead = False
     for containers in dockerInstances:
         dockerID = containers
-        if len(dockerID) > 12:
-            dockerID = dockerID[:12]
+        # if len(dockerID) > 12:
+        #     dockerID = dockerID[:12]
         for eachfile in filenames:
             tempfile = eachfile.split(".")
             correctFile = tempfile[0]+"_"+containers+"."+tempfile[1]
@@ -231,8 +231,8 @@ try:
     for containers in dockerInstances:
         tokens = []
         dockerID = containers
-        if len(dockerID) > 12:
-            dockerID = dockerID[:12]
+        # if len(dockerID) > 12:
+        #     dockerID = dockerID[:12]
         for eachfile in filenames:
             tempfile = eachfile.split(".")
             correctFile = tempfile[0]+"_"+containers+"."+tempfile[1]
