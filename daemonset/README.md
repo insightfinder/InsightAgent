@@ -39,8 +39,6 @@ In the env part of insightfinder.yaml, the following parameters are required:
 
 - SAMPLING_INTERVAL - The rate at which the metrics are sampled.
 
-- REPORTING_INTERVAL - The rate at which the collected metrics are reported to insightfinder.
-
 Modify the insightfinder.yaml with the appropriate parameter values.
 
 Example:
@@ -54,8 +52,6 @@ env:
     value: "insightuser"
    - name: SAMPLING_INTERVAL
     value: "1"
-   - name: REPORTING_INTERVAL
-    value: "2"
    - name: AGENT
     value: "daemonset"
 ```
