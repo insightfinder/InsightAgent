@@ -220,7 +220,7 @@ for eachfile in filenames:
 			idle = float(row2[1])
 			result = 1 - round(float(idle/total),4)
 			print "result " + str(round((1 - float(idle/total)),4)) + " T=" + str(total) + " i=" + str(idle) 
-			valueList[filenames[eachfile][0]] = str(round((1 - float(idle/total)),4))
+			valueList[filenames[eachfile][0]] = str(round((1 - float(idle/total))*100,4))
 			#if ("disk" in eachfile) or ("interface" in eachfile):
 			#    valueList[filenames[eachfile][1]] = row[2]
 			#elif "load" in eachfile:
@@ -233,7 +233,7 @@ for eachfile in filenames:
 			idle = float(row2[1])
 			result = 1 - round(float(idle/total),4)
 			print "result " + str(round((1 - float(idle/total)),4)) + " T=" + str(total) + " i=" + str(idle) 
-			valueList[filenames[eachfile][0]] = str(round((1 - float(idle/total)),4))
+			valueList[filenames[eachfile][0]] = str(round((1 - float(idle/total))*100,4))
 			#valueList[filenames[eachfile][0]]= str(int(float(row[1])) + int(float(row1[1])))
 			#if ("disk" in eachfile) or ("interface" in eachfile):
 			#    valueList[filenames[eachfile][1]] = row[2]
