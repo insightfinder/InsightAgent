@@ -7,6 +7,7 @@ import time
 import os
 import socket
 import sys
+import yaml
 from optparse import OptionParser
 
 '''
@@ -76,8 +77,8 @@ def init_previous_results():
     timestampRead = False
     for containers in dockerInstances:
         dockerID = containers
-        # if len(dockerID) > 12:
-        #     dockerID = dockerID[:12]
+        # if len(dockerID) > 20:
+        #     dockerID = dockerID[:20]
         for eachfile in filenames:
             tempfile = eachfile.split(".")
             correctFile = tempfile[0]+"_"+containers+"."+tempfile[1]
@@ -118,10 +119,19 @@ def init_previous_results():
     (out,err) = proc.communicate()
     if "No such file or directory" in err:
         print "Error in fetching metrics for some containers"
+#remove dot from json dockernames which cause parsing error
+def remove_dot_key(obj):
+    for key in obj.keys():
+        new_key = key.replace(".","_")
+        if new_key != key:
+            obj[new_key] = obj[key]
+            del obj[key]
+    return obj
 
 def get_previous_results():
     with open(os.path.join(homepath,datadir+"previous_results.json"),'r') as f:
-        return json.load(f)
+        data=f.read().replace('\n', '')
+        return json.loads(data, object_hook=remove_dot_key)
 
 def check_delta(field):
     deltaFields = ["CPU", "DiskRead", "DiskWrite", "NetworkIn", "NetworkOut"]
@@ -132,6 +142,7 @@ def check_delta(field):
 
 def calculate_delta(fieldname,value):
     previous_result = get_previous_results()
+    fieldname = fieldname.replace(".","_")
     delta = float(value) - previous_result[fieldname]
     delta = abs(delta)
     # If there is an error in fetching data, return 0. Else delta value will be wrong and high.
@@ -231,8 +242,6 @@ try:
     for containers in dockerInstances:
         tokens = []
         dockerID = containers
-        # if len(dockerID) > 12:
-        #     dockerID = dockerID[:12]
         for eachfile in filenames:
             tempfile = eachfile.split(".")
             correctFile = tempfile[0]+"_"+containers+"."+tempfile[1]
