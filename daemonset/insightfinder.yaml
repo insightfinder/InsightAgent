@@ -10,7 +10,7 @@ spec:
     spec:
       containers:
         - name: insightfinder
-          image: insightfinderagent/kubernetes-daemon-set:v2
+          image: insightfinderagent/kubernetes-daemon-set:v3
           env:
             - name: INSIGHTFINDER_PROJECTNAME
               value: "project"
@@ -20,8 +20,6 @@ spec:
               value: "username"
             - name: SAMPLING_INTERVAL
               value: "1"
-            - name: REPORTING_INTERVAL
-              value: "2"
             - name: AGENT
               value: "daemonset"
             - name: SERVER_URL

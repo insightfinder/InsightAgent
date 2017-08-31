@@ -33,7 +33,7 @@ tar -xvf insightagent.tar.gz
 ```
 ```
 cd InsightAgent-master/deployment/DeployAgent/
-sudo ./installAnsible.sh
+sudo -E ./installAnsible.sh
 ```
 2) Open and modify the inventory file
 

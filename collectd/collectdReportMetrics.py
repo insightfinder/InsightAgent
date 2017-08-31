@@ -95,7 +95,6 @@ def remove_old_files(directory, filetype):
                         os.remove(data_file)
                 else:
                     if str(filetype) in str(os.path.splitext(data_file)[1]):
-                        print data_file
                         if os.path.isfile(data_file):
                             os.remove(data_file)
 
@@ -193,7 +192,6 @@ for fEntry in os.walk(os.path.join(csvpath)):
         filenames['aggregation-cpu-average/cpu-system-'] = ['CPU']
 
 for eachfile in filenames:
-    #if aggregateCPU:
     if "cpu/percent-active" in eachfile and aggregateCPU == True:
         continue;
     if "aggregation-cpu-average/cpu-system" in eachfile and aggregateCPU == True:
@@ -204,63 +202,62 @@ for eachfile in filenames:
 	    reader2 = csv.reader(csvfile2)
 	    reader3 = csv.reader(csvfile3)
 	    for row, row1, row2 in itertools.izip(reader1, reader2, reader3):
-    		if reader1.line_num > 1:
-    		    if long(int(float(row[0]))) < long(start_time_epoch) :
-    			    continue
-    		    timestampStr = str(int(float(row[0])))
-    		    new_prev_endtime_epoch = long(timestampStr) * 1000.0
-    		    if timestampStr in rawData:
-        			valueList = rawData[timestampStr]
-        			total = float(row[1]) + float(row1[1]) + float(row2[1])
-        			idle = float(row2[1])
-        			result = 1 - round(float(idle/total),4)
-        			print "result " + str(round((1 - float(idle/total)),4)) + " T=" + str(total) + " i=" + str(idle)
-        			valueList[filenames[eachfile][0]] = str(round((1 - float(idle/total)),4))
-        			rawData[timestampStr] = valueList
-    		    else:
-        			valueList = {}
-        			total = float(row[1]) + float(row1[1]) + float(row2[1])
-        			idle = float(row2[1])
-        			result = 1 - round(float(idle/total),4)
-        			print "result " + str(round((1 - float(idle/total)),4)) + " T=" + str(total) + " i=" + str(idle)
-        			valueList[filenames[eachfile][0]] = str(round((1 - float(idle/total)),4))
-        			rawData[timestampStr] = valueList
-            allLatestTimestamps.append(new_prev_endtime_epoch)
-            aggregateCPU = False
+		if reader1.line_num > 1:
+		    if long(int(float(row[0]))) < long(start_time_epoch) :
+			continue
+		    timestampStr = str(int(float(row[0])))
+		    new_prev_endtime_epoch = long(timestampStr) * 1000.0
+		    if timestampStr in rawData:
+			valueList = rawData[timestampStr]
+			total = float(row[1]) + float(row1[1]) + float(row2[1])
+			idle = float(row2[1])
+			result = 1 - round(float(idle/total),4)
+			print "result " + str(round((1 - float(idle/total)),4)) + " T=" + str(total) + " i=" + str(idle) 
+			valueList[filenames[eachfile][0]] = str(round((1 - float(idle/total))*100,4))
+			rawData[timestampStr] = valueList
+		    else:
+			valueList = {}
+			total = float(row[1]) + float(row1[1]) + float(row2[1])
+			idle = float(row2[1])
+			result = 1 - round(float(idle/total),4)
+			print "result " + str(round((1 - float(idle/total)),4)) + " T=" + str(total) + " i=" + str(idle) 
+			valueList[filenames[eachfile][0]] = str(round((1 - float(idle/total))*100,4))
+			rawData[timestampStr] = valueList
+	    allLatestTimestamps.append(new_prev_endtime_epoch)
+	    aggregateCPU = False
     else:
-        try:
-    	    csvfile = open(os.path.join(csvpath,eachfile+date))
-    	    reader = csv.reader(csvfile)
-        except IOError:
-            continue
+	    try:
+        	csvfile = open(os.path.join(csvpath,eachfile+date))
+        	reader = csv.reader(csvfile)
+    	    except IOError:
+        	continue
 	    for row in reader:
-    		if reader.line_num > 1:
-    		    if long(int(float(row[0]))) < long(start_time_epoch) :
-    			    continue
-    		    timestampStr = str(int(float(row[0])))
-    		    new_prev_endtime_epoch = long(timestampStr) * 1000.0
-    		    if timestampStr in rawData:
-        			valueList = rawData[timestampStr]
-        			valueList[filenames[eachfile][0]] = row[1]
-        			if ("disk" in eachfile) or ("interface" in eachfile):
-        			    valueList[filenames[eachfile][1]] = row[2]
-        			elif "load" in eachfile:
-        			    valueList[filenames[eachfile][1]] = row[2]
-        			    valueList[filenames[eachfile][2]] = row[3]
-        			rawData[timestampStr] = valueList
-    		    else:
-        			valueList = {}
-        			valueList[filenames[eachfile][0]]= row[1]
-        			if ("disk" in eachfile) or ("interface" in eachfile):
-        			    print "Disk " + str(row[2])
-        			    valueList[filenames[eachfile][1]] = row[2]
-        			elif "load" in eachfile:
-        			    print "Load " + str(row[2]) + " " + str(row[3])
-        			    valueList[filenames[eachfile][1]] = row[2]
-        			    valueList[filenames[eachfile][2]] = row[3]
-        			rawData[timestampStr] = valueList
+		if reader.line_num > 1:
+		    if long(int(float(row[0]))) < long(start_time_epoch) :
+			continue
+		    timestampStr = str(int(float(row[0])))
+		    new_prev_endtime_epoch = long(timestampStr) * 1000.0
+		    if timestampStr in rawData:
+			valueList = rawData[timestampStr]
+			valueList[filenames[eachfile][0]] = row[1]
+			if ("disk" in eachfile) or ("interface" in eachfile):
+			    valueList[filenames[eachfile][1]] = row[2]
+			elif "load" in eachfile:
+			    valueList[filenames[eachfile][1]] = row[2]
+			    valueList[filenames[eachfile][2]] = row[3]
+			rawData[timestampStr] = valueList
+		    else:
+			valueList = {}
+			valueList[filenames[eachfile][0]]= row[1]
+			if ("disk" in eachfile) or ("interface" in eachfile):
+			    valueList[filenames[eachfile][1]] = row[2]
+			elif "load" in eachfile:
+			    valueList[filenames[eachfile][1]] = row[2]
+			    valueList[filenames[eachfile][2]] = row[3]
+			rawData[timestampStr] = valueList
 	    allLatestTimestamps.append(new_prev_endtime_epoch)
 new_prev_endtime_epoch = max(allLatestTimestamps)
+
 
 metricData = []
 metricList = ["CPU", "MemUsed", "DiskWrite", "DiskRead", "NetworkIn", "NetworkOut", "LoadAvg1", "LoadAvg5", "LoadAvg15", \
@@ -323,7 +320,6 @@ for eachtimestamp in rawData:
 
 update_results(previousResult)
 
-print metricData
 
 #update endtime in config
 if new_prev_endtime_epoch == 0:
