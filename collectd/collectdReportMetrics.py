@@ -95,7 +95,6 @@ def remove_old_files(directory, filetype):
                         os.remove(data_file)
                 else:
                     if str(filetype) in str(os.path.splitext(data_file)[1]):
-                        print data_file
                         if os.path.isfile(data_file):
                             os.remove(data_file)
 
@@ -189,19 +188,14 @@ aggregateCPU = False
 #Calculate average CPU
 for fEntry in os.walk(os.path.join(csvpath)):
     if "cpu-" in fEntry[0]:
-	#print "Filenames " + str(filenames)
 	aggregateCPU = True
         filenames['aggregation-cpu-average/cpu-system-'] = ['CPU']
 
 for eachfile in filenames:
-    print eachfile
-    #if aggregateCPU:
     if "cpu/percent-active" in eachfile and aggregateCPU == True:
         continue;
     if "aggregation-cpu-average/cpu-system" in eachfile and aggregateCPU == True:
-	    #print "Aggregation needed"
 	    csvfile1 = open(os.path.join(csvpath,eachfile+date))
-	    print csvfile1
 	    csvfile2 = open(os.path.join(csvpath,'aggregation-cpu-average/cpu-user-'+date))
 	    csvfile3 = open(os.path.join(csvpath,'aggregation-cpu-average/cpu-idle-'+date))
 	    reader1 = csv.reader(csvfile1)
@@ -210,7 +204,6 @@ for eachfile in filenames:
 	    for row, row1, row2 in itertools.izip(reader1, reader2, reader3):
 		if reader1.line_num > 1:
 		    if long(int(float(row[0]))) < long(start_time_epoch) :
-			#print "continued aggregation"
 			continue
 		    timestampStr = str(int(float(row[0])))
 		    new_prev_endtime_epoch = long(timestampStr) * 1000.0
@@ -221,11 +214,6 @@ for eachfile in filenames:
 			result = 1 - round(float(idle/total),4)
 			print "result " + str(round((1 - float(idle/total)),4)) + " T=" + str(total) + " i=" + str(idle) 
 			valueList[filenames[eachfile][0]] = str(round((1 - float(idle/total))*100,4))
-			#if ("disk" in eachfile) or ("interface" in eachfile):
-			#    valueList[filenames[eachfile][1]] = row[2]
-			#elif "load" in eachfile:
-			#    valueList[filenames[eachfile][1]] = row[2]
-			#    valueList[filenames[eachfile][2]] = row[3]
 			rawData[timestampStr] = valueList
 		    else:
 			valueList = {}
@@ -234,28 +222,18 @@ for eachfile in filenames:
 			result = 1 - round(float(idle/total),4)
 			print "result " + str(round((1 - float(idle/total)),4)) + " T=" + str(total) + " i=" + str(idle) 
 			valueList[filenames[eachfile][0]] = str(round((1 - float(idle/total))*100,4))
-			#valueList[filenames[eachfile][0]]= str(int(float(row[1])) + int(float(row1[1])))
-			#if ("disk" in eachfile) or ("interface" in eachfile):
-			#    valueList[filenames[eachfile][1]] = row[2]
-			#elif "load" in eachfile:
-			#    valueList[filenames[eachfile][1]] = row[2]
-			#    valueList[filenames[eachfile][2]] = row[3]
 			rawData[timestampStr] = valueList
 	    allLatestTimestamps.append(new_prev_endtime_epoch)
 	    aggregateCPU = False
     else:
-	    #csvfile = open(os.path.join(csvpath,eachfile+date))
 	    try:
         	csvfile = open(os.path.join(csvpath,eachfile+date))
         	reader = csv.reader(csvfile)
     	    except IOError:
         	continue
-	    #print csvfile
-	    #reader = csv.reader(csvfile)
 	    for row in reader:
 		if reader.line_num > 1:
 		    if long(int(float(row[0]))) < long(start_time_epoch) :
-			#print "continued else"
 			continue
 		    timestampStr = str(int(float(row[0])))
 		    new_prev_endtime_epoch = long(timestampStr) * 1000.0
@@ -263,10 +241,8 @@ for eachfile in filenames:
 			valueList = rawData[timestampStr]
 			valueList[filenames[eachfile][0]] = row[1]
 			if ("disk" in eachfile) or ("interface" in eachfile):
-			    print "Disk " + str(row[2])
 			    valueList[filenames[eachfile][1]] = row[2]
 			elif "load" in eachfile:
-			    print "Load " + str(row[2]) + " " + str(row[3])
 			    valueList[filenames[eachfile][1]] = row[2]
 			    valueList[filenames[eachfile][2]] = row[3]
 			rawData[timestampStr] = valueList
@@ -274,17 +250,14 @@ for eachfile in filenames:
 			valueList = {}
 			valueList[filenames[eachfile][0]]= row[1]
 			if ("disk" in eachfile) or ("interface" in eachfile):
-			    print "Disk " + str(row[2])
 			    valueList[filenames[eachfile][1]] = row[2]
 			elif "load" in eachfile:
-			    print "Load " + str(row[2]) + " " + str(row[3])
 			    valueList[filenames[eachfile][1]] = row[2]
 			    valueList[filenames[eachfile][2]] = row[3]
 			rawData[timestampStr] = valueList
 	    allLatestTimestamps.append(new_prev_endtime_epoch)
 new_prev_endtime_epoch = max(allLatestTimestamps)
 
-print rawData
 
 metricData = []
 metricList = ["CPU", "MemUsed", "DiskWrite", "DiskRead", "NetworkIn", "NetworkOut", "LoadAvg1", "LoadAvg5", "LoadAvg15", \
@@ -347,7 +320,6 @@ for eachtimestamp in rawData:
 
 update_results(previousResult)
 
-print metricData
 
 #update endtime in config
 if new_prev_endtime_epoch == 0:
