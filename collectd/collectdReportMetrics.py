@@ -225,8 +225,8 @@ for eachfile in filenames:
         			print "result " + str(round((1 - float(idle/total)),4)) + " T=" + str(total) + " i=" + str(idle)
         			valueList[filenames[eachfile][0]] = str(round((1 - float(idle/total)),4))
         			rawData[timestampStr] = valueList
-    	allLatestTimestamps.append(new_prev_endtime_epoch)
-        aggregateCPU = False
+            allLatestTimestamps.append(new_prev_endtime_epoch)
+            aggregateCPU = False
     else:
         try:
     	    csvfile = open(os.path.join(csvpath,eachfile+date))
