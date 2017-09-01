@@ -21,19 +21,21 @@ Python 2.7.
 
 For Debian and Ubuntu, the following command will ensure that the required dependencies are installed:
 ```
-sudo apt-get upgrade
-sudo apt-get install build-essential libssl-dev libffi-dev python-dev wget
+sudo apt-get -E upgrade
+sudo apt-get -E install build-essential libssl-dev libffi-dev python-dev wget
 ```
 For Fedora and RHEL-derivatives, the following command will ensure that the required dependencies are installed:
 ```
-sudo yum update
-sudo yum install gcc libffi-devel python-devel openssl-devel wget
+sudo -E yum update
+sudo -E yum install gcc libffi-devel python-devel openssl-devel wget
 ```
 
 # Steps to use replay mode:
 1) Use the following command to download the insightfinder agent code.
 ```
 wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
+or
+wget --no-check-certificate http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
 ```
 Untar using this command.
 ```
@@ -48,9 +50,9 @@ tar -xvf insightagent.tar.gz
 source pyenv/bin/activate
 ```
 ```
-./deployment/install.sh -i PROJECT_NAME -u INSIGHTFINDER_USER_NAME -k LICENSE_KEY -s 1 -r 1 -t logFileReplay
+./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL -t logFileReplay -w SERVER_URL
 ```
-Note: If running from a different server, add the -w SERVER_NAME option.
+The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required.
 
 3) Run the following command for each data file.
 ```
@@ -60,4 +62,3 @@ Where PATH_TO_JSON_FILE is the path and filename of the json file.
 Note: If running from a different server, add the -w SERVER_NAME option.
 
 After using the agent, use command "deactivate" to get out of python virtual environment.
-
