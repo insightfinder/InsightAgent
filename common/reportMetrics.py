@@ -250,7 +250,7 @@ hostname = socket.gethostname().partition(".")[0]
 minTimestampEpoch = 0
 maxTimestampEpoch = 0
 totalChunkCount = 0
-chunkMaxSize = 7000000
+chunkMaxSize = 1000000
 chunkingPadding = 30000
 if options.inputFile is None:
     for i in range(0,2+int(float(reporting_interval)/24/60)):
