@@ -179,7 +179,7 @@ allLog = []
 alldata = {}
 contentsNum = 0
 rawData = collections.OrderedDict()
-filenames = {'cpu/percent-active-': ['CPU'], 'memory/memory-used-': ['MemUsed'], 'load/load-': ['LoadAvg1', 'LoadAvg5', 'LoadAvg15'],
+filenames = {'cpu/percent-active-': ['CPU'], 'memory/memory-used-': ['MemUsed'], 'load/load-': ['LoadAvg1', 'LoadAvg5', 'LoadAvg15'], 'df-root/percent_bytes-used-': ['DiskUsed'],
              'processes/ps_state-blocked-': ['BlockedProcess'], 'processes/ps_state-paging-': ['PagingProcess'], 'processes/ps_state-running-': ['RunningProcess'],
              'processes/ps_state-sleeping-': ['SleepingProcess'], 'processes/ps_state-stopped-': ['StoppedProcess'], 'processes/ps_state-zombies-': ['ZombieProcess']}
 allDirectories = os.listdir(csvpath)
@@ -191,6 +191,9 @@ for eachdir in allDirectories:
     if "disk" in eachdir:
         filenames[eachdir + "/disk_octets-"] = [eachdir +
                                                 '_DiskWrite', eachdir + '_DiskRead']
+    # if "df" in eachdir:
+    #     filenames[eachdir + "/df_complex-used-"] = [eachdir +
+    #                                                 '_DiskUsed']
     if "interface" in eachdir:
         filenames[eachdir + "/if_octets-"] = [eachdir +
                                               '_NetworkIn', eachdir + '_NetworkOut']
@@ -260,7 +263,7 @@ for eachfile in filenames:
                     valueList = rawData[timestampStr]
                     valueList[filenames[eachfile][0]] = row[1]
                     # if "cpu/percent-active" in eachfile:
-                    #     print "CPU: " + str(valueList[filenames[eachfile][0]])
+                    # print "CPU: " + str(valueList[filenames[eachfile][0]])
                     if ("disk" in eachfile) or ("interface" in eachfile):
                         valueList[filenames[eachfile][1]] = row[2]
                     elif "load" in eachfile:
@@ -271,7 +274,7 @@ for eachfile in filenames:
                     valueList = {}
                     valueList[filenames[eachfile][0]] = row[1]
                     # if "cpu/percent-active" in eachfile:
-                    #     print "CPU: " + str(valueList[filenames[eachfile][0]])
+                    # print "CPU: " + str(valueList[filenames[eachfile][0]])
                     if ("disk" in eachfile) or ("interface" in eachfile):
                         valueList[filenames[eachfile][1]] = row[2]
                     elif "load" in eachfile:
@@ -282,10 +285,17 @@ for eachfile in filenames:
 
 new_prev_endtime_epoch = max(allLatestTimestamps)
 
+
+def isStrInKeys(mydict, mystr):
+    for key in mydict.keys():
+        if mystr in key:
+            return True
+    return False
+
 # print rawData
 
 metricData = []
-metricList = ["CPU", "MemUsed", "DiskWrite", "DiskRead", "NetworkIn", "NetworkOut", "LoadAvg1", "LoadAvg5", "LoadAvg15",
+metricList = ["CPU", "MemUsed", "DiskWrite", "DiskRead", "DiskUsed", "NetworkIn", "NetworkOut", "LoadAvg1", "LoadAvg5", "LoadAvg15",
               "BlockedProcess", "PagingProcess", "RunningProcess", "SleepingProcess", "StoppedProcess", "ZombieProcess"]
 deltaFields = ["DiskRead", "DiskWrite", "NetworkIn", "NetworkOut"]
 previousResult = {}
@@ -304,11 +314,17 @@ for eachtimestamp in rawData:
     # print "Data: " + str(data)
     thisData = {}
     thisData['timestamp'] = str(int(eachtimestamp) * 1000)
-    diskread = diskwrite = networkin = networkout = 0
+    diskread = diskwrite = networkin = networkout = diskused = 0
     newResult = {}
     for eachmetric in metricList:
         if eachmetric == "DiskWrite" or eachmetric == "DiskRead" or eachmetric == "NetworkIn" or eachmetric == "NetworkOut":
+            # if eachmetric == "DiskWrite" or eachmetric == "DiskRead" or
+            # eachmetric == "DiskUsed" or eachmetric == "NetworkIn" or
+            # eachmetric == "NetworkOut":
             for eachdata in data:
+                # if "DiskUsed" in eachdata:
+                #     print "DiskUsed: " + str(data[eachdata])
+                #     diskused += float(data[eachdata])
                 if "DiskWrite" in eachdata:
                     diskwrite += float(data[eachdata])
                 if "DiskRead" in eachdata:
@@ -317,7 +333,7 @@ for eachtimestamp in rawData:
                     networkin = float(data[eachdata])
                 if "NetworkOut" in eachdata:
                     networkout = float(data[eachdata])
-        if (eachmetric not in data) and eachmetric != "DiskRead" and eachmetric != "DiskWrite" and eachmetric != "NetworkIn" and eachmetric != "NetworkOut":
+        if (isStrInKeys(data, eachmetric) == False) and eachmetric != "DiskRead" and eachmetric != "DiskWrite" and eachmetric != "NetworkIn" and eachmetric != "NetworkOut":
             finalMetricName = str(
                 eachmetric) + "[" + str(hostnameShort) + "]:" + str(getindex(eachmetric))
             thisData[finalMetricName] = "NaN"
@@ -326,6 +342,9 @@ for eachtimestamp in rawData:
         else:
             finalMetricName = str(
                 eachmetric) + "[" + str(hostnameShort) + "]:" + str(getindex(eachmetric))
+            # if eachmetric == "DiskUsed":
+            #     thisData[finalMetricName] = str(
+            #         float(float(diskused) / (1024 * 1024)))
             if eachmetric == "DiskWrite":
                 thisData[finalMetricName] = str(
                     float(float(diskwrite) / (1024 * 1024)))
@@ -355,7 +374,7 @@ for eachtimestamp in rawData:
 
 update_results(previousResult)
 
-print metricData
+# print metricData
 
 # update endtime in config
 if new_prev_endtime_epoch == 0:
