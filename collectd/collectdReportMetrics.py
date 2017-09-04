@@ -355,7 +355,7 @@ for eachtimestamp in rawData:
 
 update_results(previousResult)
 
-# print metricData
+print metricData
 
 # update endtime in config
 if new_prev_endtime_epoch == 0:
