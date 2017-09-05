@@ -3,7 +3,7 @@
   flush_interval {{samplingInterval}}s
   buffer_chunk_limit 200k
 # Endpoint for messages
-  destinationHost {{ deploymentServerUrl }}
+  destinationHost {{ deploymentServerUrl }}/customprojectrawdata
 #Comma separated list of http statuses which need to be retried
   http_retry_statuses 500,403
 #Read timeout in seconds, supports floats
