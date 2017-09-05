@@ -22,7 +22,7 @@ for container in $dockers; do
     cat /sys/fs/cgroup/cpuacct/docker/$CONTAINER_ID/cpuacct.stat | awk 'BEGIN{cpu=0} {cpu+=$2} END{print "CPU="cpu}' > cpumetrics_$CONTAINER_NAME.txt & PID6=$!
 
     # Get Filesystem metrics
-    docker exec $CONTAINER_ID df -k | awk 'BEGIN{diskusedspace=0}{if(NR!=1)if($3!="")print "DiskUsed"$6"="$3; diskusedspace += $3}END{print "DiskUsed="diskusedspace}' > diskusedmetrics_$CONTAINER_NAME.txt & PID7=$!
+    docker exec $CONTAINER_ID df -k | awk 'BEGIN{diskusedspace=0; totalspace=0}{if(NR!=1)if($3!="")print "DiskUsed"$6"="$3; diskusedspace += $3; totalspace += $4}END{print "DiskUsed="(diskusedspace/totalspace)*100}' > diskusedmetrics_$CONTAINER_NAME.txt & PID7=$!
 
     # Get Per-Interface Network metrics
     rm networkinterfacemetrics_$CONTAINER_NAME.txt
