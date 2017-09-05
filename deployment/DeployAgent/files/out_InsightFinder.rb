@@ -111,7 +111,7 @@ module Fluent
           request = create_request(data)
           http.request request
         end
-
+        $log.warn "Response: #{response.body} Code: response.code.to_i"
         if @statuses.include? response.code.to_i
           # Raise an exception so that fluent retries
           fail "Server returned bad status: #{response.code}"

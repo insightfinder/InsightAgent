@@ -8,6 +8,7 @@
      licenseKey: "{{ ifLicenseKey }}"
    become: yes
    become_method: sudo
+   become_flags: '-E'
    tasks:
    - name: td-agent | Correct file permissions
      file:
@@ -17,6 +18,44 @@
        mode: 0645
      tags:
      - plugin-fix
+   - name: td-agent | Install package dependencies - APT
+     become: yes
+     become_flags: '-E'
+     apt: 
+       name: "{{item}}" 
+       state: latest
+       force: yes
+       allow_unauthenticated: yes
+       update_cache: "{{ apt_update }}"
+     with_items:
+       - wget
+     when: ansible_pkg_mgr == 'apt'
+   - name: td-agent | Get TD gpg key
+     become: yes
+     become_flags: '-E'
+     command: wget --no-check-certificate http://packages.treasuredata.com/GPG-KEY-td-agent -P {{ansible_env.HOME}}
+     when: ansible_pkg_mgr == 'apt'
+   - name: td-agent | Add TD gpg key
+     become: yes
+     shell: cat {{ansible_env.HOME}}/GPG-KEY-td-agent | sudo apt-key add -
+     when: ansible_pkg_mgr == 'apt'
+   - name: td-agent | Add TD repository
+     apt_repository:
+      repo: deb http://packages.treasuredata.com/2/ubuntu/xenial/ xenial contrib
+      state: present
+     when: ansible_pkg_mgr == 'apt'
+   - name: td-agent | Install td-agent
+     become: yes
+     become_flags: '-E'
+     apt: 
+       name: "{{item}}" 
+       state: latest
+       force: yes
+       allow_unauthenticated: yes
+       update_cache: yes
+     with_items:
+       - td-agent
+     when: ansible_pkg_mgr == 'apt'
    - name: Yum Repo | Add insightfinder repo
      yum_repository:
        name: insightrepo
@@ -24,12 +63,14 @@
        baseurl: ftp://{{ groups['coordinator'][0] }}/pub/insightRepo
        enabled: yes
        gpgcheck: no
+     when: ansible_pkg_mgr == 'yum'
    - name: td-agent | Install td-agent
      yum:
        name: td-agent
        state: latest
        disablerepo: '*'
        enablerepo: insightrepo
+     when: ansible_pkg_mgr == 'yum'
    - name: td-agent | copy Insightfinder plugin
      copy:
        src: files/out_InsightFinder.rb
@@ -37,7 +78,7 @@
        owner: root
        group: root
        mode: 0644
-   - name: Install Jetty | Add config_file
+   - name: td-agent | Add config_file
      template:
        src: files/td-agent.conf.template
        dest: /etc/td-agent/td-agent.conf
