@@ -10,6 +10,7 @@ import socket
 from optparse import OptionParser
 import math
 import reportCustomMetrics
+import hashlib
 
 '''
 this script reads reporting interval and prev endtime config2
@@ -55,7 +56,7 @@ if options.serverUrl != None:
     serverUrl = options.serverUrl
 ##Optional split id and split by for metric file replay
 if options.splitID is None:
-    splitID = None 
+    splitID = None
 else:
     splitID = options.splitID
 if options.splitBy is None:
@@ -132,7 +133,7 @@ def ec2InstanceType():
     return instanceType
 #send data to insightfinder
 reportedChunks = 0
-def sendData():
+def sendData(fileID):
     global reportedDataSize
     global firstData
     global chunkSize
@@ -152,6 +153,7 @@ def sendData():
     alldata["projectName"] = PROJECTNAME
     alldata["userName"] = USERNAME
     alldata["instanceName"] = hostname
+    alldata["fileID"] = fileID
     if agentType == "ec2monitoring":
         alldata["instanceType"] = ec2InstanceType()
 
@@ -303,11 +305,12 @@ if options.inputFile is None:
         new_prev_endtimeinsec = math.ceil(long(new_prev_endtime_epoch)/1000.0)
         new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtimeinsec)))
         update_timestamp(new_prev_endtime)
-        sendData()
+        sendData(hashlib.md5(os.path.join(homepath, datadir + date + fileadd + ".csv")).hexdigest())
 else:
     if os.path.isfile(os.path.join(homepath,options.inputFile)):
         numlines = len(open(os.path.join(homepath,options.inputFile)).readlines())
         file = open(os.path.join(homepath,options.inputFile))
+        fileMD5 = hashlib.md5(os.path.join(homepath,options.inputFile)).hexdigest()
         metricdataSizeKnown = False
         metricdataSize = 0
         if mode == "logFileReplay":
@@ -319,7 +322,7 @@ else:
                if len(bytearray(json.dumps(row))) > maxSize:
                    maxSize = len(bytearray(json.dumps(row)))
             maxAmount = chunkMaxSize/(maxSize + chunkingPadding)
-            totalChunkCount = int(math.ceil(float(numlines) / float(maxAmount))) 
+            totalChunkCount = int(math.ceil(float(numlines) / float(maxAmount)))
             for row in jsonData:
                 new_prev_endtime_epoch = row[row.keys()[0]]
                 if minTimestampEpoch == 0 or minTimestampEpoch > long(new_prev_endtime_epoch):
@@ -334,9 +337,9 @@ else:
                 if ((len(metricData)) < maxAmount):  # Not using exact 750KB as some data will be padded later
                     continue
                 else:
-                    sendData()
+                    sendData(fileMD5)
                     metricData = []
-            sendData()
+            sendData(fileMD5)
         else:
             fileReader = csv.reader(file)
             metricDatas = []
@@ -379,15 +382,15 @@ else:
                     maxSize = len(bytearray(json.dumps(row)))
             maxAmount = chunkMaxSize/(maxSize + chunkingPadding)
             totalChunkCount = int(math.ceil(float(numlines) / float(maxAmount)))
-            
+
             for entry in metricDatas:
                 metricData.append(entry)
                 if len(metricData) < maxAmount:
                     continue;
                 else:
-                    sendData()
+                    sendData(fileMD5)
                     metricData = []
-            sendData()
+            sendData(fileMD5)
         file.close()
         updateAgentDataRange(minTimestampEpoch,maxTimestampEpoch)
 
@@ -407,4 +410,3 @@ if reported:
     print "Custom metrics sent"
 else:
     print "Failed to send custom metrics"
-
