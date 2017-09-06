@@ -48,14 +48,22 @@ ifLicenseKey=
 
 ifSamplingInterval=1
 
+##Vars for syscall agent
+
+##Directory where insightagent is installed. default is set to <user-home>/InsightAgent-master if projectDir is blank
+projectDir=
+
+##tracing interval for syscall
+tracingInterval=1
+
 ##Valid Agents are cgroup, collectd
 #ifAgent=collectd
 ifAgent=cgroup
+#ifAgent=syscall
 
-##When yes, we will run the equivalent of 'apt-get update' before installing any packages. 
+##When yes, we will run the equivalent of 'apt-get update' before installing any packages.
 ##Valid entries are yes or no. Not used with yum-based installation (e.g., CentOS).
 apt_update=no
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
 ifReportingUrl=https://agent-data.insightfinder.com
-

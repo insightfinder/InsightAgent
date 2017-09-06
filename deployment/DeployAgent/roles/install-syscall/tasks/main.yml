@@ -1,39 +1,41 @@
 ---
 - name: Check for existing project
+  become: yes
+  stat:
+    path: "{{ansible_env.HOME}}/InsightAgent-master"
+  register: project_dir
+  when: projectDir is not defined
+- name: Check for existing project
+  become: yes
   stat:
     path: "{{ projectDir }}"
   register: project_dir
-  when: projectDir != ""
-- name: Check for existing project
-  stat:
-    path: "{{ansible_env.HOME}}/InsightAgent-master"
-  register: default_dir
-  when: projectDir == ""
+  when: projectDir is defined
 - name: Install Syscall Agent
-  command: syscall/installLttng.py -d {{ansible_env.HOME}}/InsightAgent-master/
+  command: syscall/installLttng.py -d {{homeDir}}
   become: true
   become_flags: '-E'
   args:
     chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
-  when: projectDir == "" and default_dir.stat.exists
+  when: project_dir.stat.exists and projectDir is not defined
 - name: Install Syscall Agent
-  command: syscall/installLttng.py -d {{projectDir}}
+  command: syscall/installLttng.py -d {{homeDir}}
   become: true
   become_flags: '-E'
   args:
     chdir: "{{ projectDir }}"
-  when: projectDir != ""  and project_dir.stat.exists
+  when: project_dir.stat.exists and projectDir is defined
 - name: Deploy Syscall Agent
   command: ./getSysTrace.sh -t {{tracingInterval}}
   become: true
   become_flags: '-E'
   args:
     chdir: "{{ projectDir }}/syscall"
-  when: projectDir != "" and project_dir.stat.exists
+  when: project_dir.stat.exists and projectDir is defined
 - name: Deploy Syscall Agent
   command: ./getSysTrace.sh -t {{tracingInterval}}
   become: true
   become_flags: '-E'
   args:
     chdir: "{{ansible_env.HOME}}/InsightAgent-master/syscall"
-  when: projectDir == "" and default_dir.stat.exists
+  when: project_dir.stat.exists and projectDir is not defined
