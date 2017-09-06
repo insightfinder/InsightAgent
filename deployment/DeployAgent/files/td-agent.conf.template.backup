@@ -22,11 +22,11 @@
 <source>
   @type tail
   format multiline
-  format_firstline /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]/
-  format1 /^(?<time>[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]).\d{6} (?<data>.*)$/
-  time_format %F %H:%M:%S
-  path /usr1/paas/log/k8s_etcd_%Y%m%d* , /usr1/paas/log/fed_etcd_%Y%m%d*
-  pos_file /var/log/td-agent/log.pos
+  format_firstline /[A-Z][a-z][a-z] (([0-3][0-9])| [0-9])\, \d{4} ([0-9]|[0-9][0-9]):[0-9][0-9]:[0-9][0-9] (A|P)M/
+  format1 /^(?<time>[A-Z][a-z][a-z] (([0-3][0-9])| [0-9])\, \d{4} ([0-9]|[0-9][0-9]):[0-9][0-9]:[0-9][0-9] (A|P)M) (?<data>.*)$/
+  time_format %b %d, %Y %H:%M:%S %p
+  path /opt/jetty/logs/%Y_%m_%d.stderrout.log
+  pos_file /var/log/td-agent/jetty.pos
   encoding ISO-8859-1
   tag "iflog.#{Socket.gethostname}"
   keep_time_key true
