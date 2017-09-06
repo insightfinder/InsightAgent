@@ -1,54 +1,103 @@
-# InsightAgent: syscall
-Agent Type: syscall
+## Use this script to deploy syscall Agent on multiple Hosts
 
-Platform: Linux
+### Prerequisites:
 
-##### Pre-requisites:
-This pre-requisite is needed on the machine which launches installLttng.py.
-```
-Kernel version >= 2.6.36
-```
-Use `uname -r` to get the current kernel version and check whether it is in `/usr/src` directory. 
-If not, please install `kernel-devel`, `update` and reboot your machine.   
+If there are any proxy settings required for your environment, make sure they are defined for both the installation user and the root user. The InsightFinder syscall agent requires internet access to download the packages needed for the installation process. After installation is complete, any proxy should be disabled to allow our agents to send data using the correct port. Ensure that your /tmp directory has at least 50MB of disk space available because the apt/yum package managers use /tmp as scratch space for package installation (e.g., package inflation).
 
-- For AWS(Amazon Linux AMI):
+Unlike other InsightAgents, this agent is NOT standalone and must be installed on a node with another reporting agent. In addition, the current support platform for this agent is Ubuntu 16.04 kernel version 4.4.0. 
+### Install wget to download the required files :
+#### For Debian and Ubuntu
 ```
-automake, version >= 1.10,
-autoconf, version >= 2.50,
-bison, bison-devel,
-elfutils-libelf, elfutils-libelf-devel,
-flex, flex-devel,
-gcc, version >= 3.2,
-glibc, glibc-devel,
-glib2, glib2-devel,
-git,
-kernel-devel,
-libdwarf, libdwarf-devel,
-libtool, version >= 2.2,
-libxml2-devel, version >= 2.7.6,
-popt, popt-devel, version >= 1.13,
-uuid-devel, libuuid-devel
+sudo -E apt-get update
+sudo -E apt-get install wget
 ```
-- For Ubuntu:
+#### For Fedora and RHEL-derivatives
 ```
-libc6, libc6-dev, 
-libglib2.0-0, libglib2.0-dev,
-bison,
-elfutils, libelf-dev, libdw-dev,
-flex,
-libpopt-dev, version >= 1.13,
-liburcu, version >= 0.8.0,
-libxml2-dev, version >= 2.7.6,
-uuid-dev
+sudo -E yum update
+sudo -E yum install wget
 ```
 
 
-##### To install agent on local machine:
+#### Get copy of the deployment script:
+1) Use the following command to download the insightfinder agent code.
 ```
-syscall/installLttng.py -d HOME_DIR
+wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
+or
+wget --no-check-certificate http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
 ```
+Untar using this command.
+```
+tar -xvf insightagent.tar.gz
+```
+```
+cd InsightAgent-master/deployment/DeployAgent/
+sudo -E ./installAnsible.sh
+```
+2) Open and modify the inventory file
 
-##### After installation, to deploy agent on local machine:
 ```
-./getSysTrace.sh -t TRACING_INTERVAL(min)
+[nodes]
+HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
+###We can specify the host name with ssh details like this for each host
+##If you have the ssh key
+#192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
+
+##If you have the password
+#192.168.33.20 ansible_user=vagrant ansible_ssh_pass=ssh_password
+
+
+##We can also specify the host names here and the ssh details under [nodes:vars] if they have have the same ssh credentials
+##(Only one of ansible_ssh_pass OR ansible_ssh_private_key_file is required)
+#192.168.33.10
+#192.168.33.15
+
+[nodes:vars]
+#ansible_user=vagrant
+#ansible_ssh_pass=ssh_password
+#ansible_ssh_private_key_file=/home/private_key
+
+[all:vars]
+##install or uninstall
+ifAction=install
+
+##Login User In Insightfinder Application
+ifUserName=
+
+##Project Name In Insightfinder Application
+ifProjectName=
+
+##User's License Key in Application
+ifLicenseKey=
+
+##Sampling interval could be an integer indicating the number of minutes or "10s" indicating 10 seconds.
+ifSamplingInterval=1 
+
+##Agent type
+ifAgent=syscall
+
+##The server reporting Url(Do not change unless you have on-prem deployment)
+ifReportingUrl=https://agent-data.insightfinder.com
+
+##Vars for syscall agent##
+##These variables should only be modified if you are installing a syscall agent on a node
+##which already have another metric reporting agent(e.g., collectd) agent installed.
+
+##Directory where metric reporting insightagent is installed. The Default is set to <user-home>/InsightAgent-master if projectDir is blank
+projectDir=
+
+##Tracing interval for syscall
+tracingInterval=1
+
+```
+3) Download the agent Code which will be distributed to other machines
+```
+cd files
+sudo -E ./downloadAgentSSL.sh
+or
+sudo -E ./downloadAgentNoSSL.sh
+```
+4) Run the playbook(Go back to the DeployAgent directory)
+```
+cd ..
+ansible-playbook insightagent.yaml
 ```

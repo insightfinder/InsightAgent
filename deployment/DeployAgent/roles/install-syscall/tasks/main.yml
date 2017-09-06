@@ -41,3 +41,17 @@
   args:
     chdir: "{{ansible_env.HOME}}/InsightAgent-master/syscall"
   when: projectDir == "" and default_dir.stat.exists
+- name: Start Syscall Agent Listener
+  command: "./reporting_sending -d {{projectDir}}/syscall -D {{projectDir}} &"
+  become: true
+  become_flags: '-E'
+  args:
+    chdir: "{{ projectDir }}/syscall"
+  when: projectDir != ""  and project_dir.stat.exists
+- name: Start Syscall Agent Listener
+  command: "./reporting_sending -d {{ansible_env.HOME}}/InsightAgent-master/syscall -D {{ansible_env.HOME}}/InsightAgent-master/ &"
+  become: true
+  become_flags: '-E'
+  args:
+    chdir: "{{ansible_env.HOME}}/InsightAgent-master/syscall"
+  when: projectDir == "" and default_dir.stat.exists
