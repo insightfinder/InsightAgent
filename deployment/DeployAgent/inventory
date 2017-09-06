@@ -48,14 +48,6 @@ ifLicenseKey=
 
 ifSamplingInterval=1
 
-##Vars for syscall agent
-
-##Directory where insightagent is installed. default is set to <user-home>/InsightAgent-master if projectDir is blank
-projectDir=
-
-##tracing interval for syscall
-tracingInterval=1
-
 ##Valid Agents are cgroup, collectd
 #ifAgent=collectd
 ifAgent=cgroup
@@ -67,3 +59,12 @@ apt_update=no
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
 ifReportingUrl=https://agent-data.insightfinder.com
+##Vars for syscall agent##
+##These variables should only be modified if you are installing a syscall agent on a node
+##which already have another metric reporting agent(e.g., collectd) agent installed.
+
+##Directory where metric reporting insightagent is installed. The Default is set to <user-home>/InsightAgent-master if projectDir is blank
+projectDir=
+
+##Tracing interval for syscall
+tracingInterval=1
