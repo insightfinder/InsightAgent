@@ -84,7 +84,7 @@ dependenciesAWSWithVersion = [["popt", "1.13"],
                               ["autoconf", "2.50"]]
 
 packagesDebian = ["lttng-tools",
-                  #"lttng-modules-dkms",
+                  "lttng-modules-dkms",
                   "liblttng-ust-dev"]
 
 def get_args():
