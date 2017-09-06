@@ -446,7 +446,7 @@ def main():
     global System
     checkings()
     if "Ubuntu" in System or "ubuntu" in System:
-        #installPackageForDebian()
+        installPackageForDebian()
         #installLttngModuleFromSource()
         out = testBabeltrace()
         if "error" in out:
