@@ -1,39 +1,35 @@
 ---
-- name: Check for existing project
-  stat:
-    path: "{{ projectDir }}"
-  register: project_dir
-  when: projectDir != ""
-- name: Check for existing project
-  stat:
-    path: "{{ansible_env.HOME}}/InsightAgent-master"
-  register: default_dir
-  when: projectDir == ""
-- name: Install Syscall Agent
-  command: syscall/installLttng.py -d {{ansible_env.HOME}}/InsightAgent-master/
-  become: true
-  become_flags: '-E'
-  args:
-    chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
-  when: projectDir == "" and default_dir.stat.exists
-- name: Install Syscall Agent
-  command: syscall/installLttng.py -d {{projectDir}}
-  become: true
-  become_flags: '-E'
-  args:
-    chdir: "{{ projectDir }}"
-  when: projectDir != ""  and project_dir.stat.exists
-- name: Deploy Syscall Agent
-  command: ./getSysTrace.sh -t {{tracingInterval}}
-  become: true
-  become_flags: '-E'
-  args:
-    chdir: "{{ projectDir }}/syscall"
-  when: projectDir != "" and project_dir.stat.exists
-- name: Deploy Syscall Agent
-  command: ./getSysTrace.sh -t {{tracingInterval}}
-  become: true
-  become_flags: '-E'
-  args:
-    chdir: "{{ansible_env.HOME}}/InsightAgent-master/syscall"
-  when: projectDir == "" and default_dir.stat.exists
+ - hosts: nodes
+   vars:
+     projectName: "{{ ifProjectName }}"
+     userName: "{{ ifUserName }}"
+     samplingInterval: "{{ ifSamplingInterval }}"
+     agentType: "{{ ifAgent }}"
+     reportingUrl: "{{ ifReportingUrl }}"
+     licenseKey: "{{ ifLicenseKey }}"
+     action: "{{ ifAction }}"
+   become: yes
+   become_flags: '-E'
+   gather_facts: no
+   pre_tasks:
+   #Install python on remote host as it is required by ansible as well as the agent code
+   - name: Install Python - APT
+     raw: test -e /usr/bin/python || (command -v apt && (apt -y update && apt install -y build-essential libssl-dev libffi-dev python-dev))
+   - name: Install Python - YUM
+     raw: test -e /usr/bin/python || (command -v yum && (yum -y update && yum install -y build-essential libssl-dev libffi-dev python-dev))
+   - name: Gather Facts
+     setup:
+   - name : Check Mandatory Variable(ifAction)
+     debug:
+       msg:
+         - Action:{{ action | mandatory }}
+   - name : Validate Value Of Variable(ifAction)
+     fail: msg="Please enter correct Params"
+     when:
+       - action !="install"
+       - action !="uninstall"
+   roles:
+     - { role: install-cgroup, when: agentType=="cgroup" }
+     - { role: install-collectd, when: agentType=="collectd" }
+     - { role: install-syscall, when: agentType=="syscall" }
+     - { role: uninstall, when: action=="uninstall" }
