@@ -36,27 +36,27 @@
 - name: Install package dependencies - APT build-essential
   become: yes
   become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated build-essential"
+  shell:"export http_proxy=test; apt-get install -y -f --allow-unauthenticated build-essential"
   when: ansible_pkg_mgr == 'apt'
 - name: Install package dependencies - APT libssl-dev
   become: yes
   become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated libssl-dev"
+  shell:"export http_proxy=test; apt-get install -y -f --allow-unauthenticated libssl-dev"
   when: ansible_pkg_mgr == 'apt'
 - name: Install package dependencies - APT libffi-dev
   become: yes
   become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated libffi-dev"
+  shell:"export http_proxy=test; apt-get install -y -f --allow-unauthenticated libffi-dev"
   when: ansible_pkg_mgr == 'apt'
 - name: Install package dependencies - APT python-dev
   become: yes
   become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated python-dev"
+  shell:"export http_proxy=test; apt-get install -y -f --allow-unauthenticated python-dev"
   when: ansible_pkg_mgr == 'apt'
 - name: Install package dependencies - APT collectd
   become: yes
   become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated collectd"
+  shell:"export http_proxy=test; apt-get install -y -f --allow-unauthenticated collectd"
   when: ansible_pkg_mgr == 'apt'
 - name: Delete Old Tar Bundle for Agent
   become: yes

@@ -33,30 +33,21 @@
     - epel-release
     - collectd
   when: ansible_pkg_mgr == 'yum'
-- name: Install package dependencies - APT build-essential
+- name: Install package dependencies - APT
   become: yes
   become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated build-essential"
-  when: ansible_pkg_mgr == 'apt'
-- name: Install package dependencies - APT libssl-dev
-  become: yes
-  become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated libssl-dev"
-  when: ansible_pkg_mgr == 'apt'
-- name: Install package dependencies - APT libffi-dev
-  become: yes
-  become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated libffi-dev"
-  when: ansible_pkg_mgr == 'apt'
-- name: Install package dependencies - APT python-dev
-  become: yes
-  become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated python-dev"
-  when: ansible_pkg_mgr == 'apt'
-- name: Install package dependencies - APT collectd
-  become: yes
-  become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated collectd"
+  apt: 
+    name: "{{item}}" 
+    force: yes
+    allow_unauthenticated: yes
+    update_cache: "{{ apt_update }}"
+  with_items:
+    - build-essential
+    - libssl-dev
+    - libffi-dev
+    - python-dev
+    - wget
+    - collectd
   when: ansible_pkg_mgr == 'apt'
 - name: Delete Old Tar Bundle for Agent
   become: yes
