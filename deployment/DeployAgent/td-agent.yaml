@@ -30,7 +30,7 @@
      when: ansible_pkg_mgr == 'apt'
    - name: td-agent | Add TD repository
      become: yes
-     shell: "http_proxy={{ http_proxy }} add-apt-repository 'deb http://packages.treasuredata.com/2/ubuntu/xenial/ xenial contrib'"
+     shell: "http_proxy={{ http_proxy }} add-apt-repository 'deb http://packages.treasuredata.com/3/ubuntu/xenial/ xenial contrib'"
      when: ansible_pkg_mgr == 'apt'
    - name: td-agent | Update repo with td-agent info
      become: yes
