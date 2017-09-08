@@ -1,5 +1,5 @@
 [nodes]
-HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
+stg-ub4.insightfinder.com ansible_user=ubuntu ansible_ssh_private_key_file=/home/djdean/Downloads/shared.pem
 ###We can specify the host name with ssh details like this for each host
 ##If you have the ssh key
 #192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
@@ -34,6 +34,13 @@ HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
 #ansible_ssh_private_key_file=/home/private_key
 
 [all:vars]
+#If a proxy is needed to connect to the internet, enter it here
+http_proxy=
+
+#If a http proxy is needed, it should be disabled to allow our agent to talk to the app server.
+#Enter the app server hostname or address here if a proxy is used
+no_proxy=
+
 ##install or uninstall
 ifAction=install
 
@@ -49,8 +56,8 @@ ifLicenseKey=
 ifSamplingInterval=1
 
 ##Valid Agents are cgroup, collectd
-#ifAgent=collectd
-ifAgent=cgroup
+ifAgent=collectd
+#ifAgent=cgroup
 #ifAgent=syscall
 
 ##When yes, we will run the equivalent of 'apt-get update' before installing any packages.

@@ -20,21 +20,25 @@
     - python-devel
     - openssl-devel
   when: ansible_pkg_mgr == 'yum'
-- name: Install package dependencies - APT
+- name: Install package dependencies - APT build-essential
   become: yes
-  become_flags: '-E'
-  apt: 
-    name: "{{item}}" 
-    state: latest
-    force: yes
-    allow_unauthenticated: yes
-    update_cache: "{{ apt_update }}"
-  with_items:
-    - build-essential
-    - libssl-dev
-    - libffi-dev
-    - python-dev
-    - wget
+  shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated build-essential"
+  when: ansible_pkg_mgr == 'apt'
+- name: Install package dependencies - APT libssl-dev
+  become: yes
+  shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated libssl-dev"
+  when: ansible_pkg_mgr == 'apt'
+- name: Install package dependencies - APT libffi-dev
+  become: yes
+  shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated libffi-dev"
+  when: ansible_pkg_mgr == 'apt'
+- name: Install package dependencies - APT python-dev
+  become: yes
+  shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated python-dev"
+  when: ansible_pkg_mgr == 'apt'
+- name: Install package dependencies - APT wget
+  become: yes
+  shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated wget"
   when: ansible_pkg_mgr == 'apt'
 - name: Delete Old Tar Bundle for Agent
   become: yes
@@ -64,14 +68,14 @@
   args:
     chdir: "{{ansible_env.HOME}}/InsightAgent-master"
 - name: Deploy cgroup Agent
-  command: >
-    ./deployment/install.sh 
+  become: true
+  shell: "no_proxy={{ no_proxy }} ./deployment/install.sh 
     -i {{ projectName }} 
     -u {{ userName }} 
     -k {{ licenseKey }} 
     -s {{ samplingInterval }} 
     -t {{ agentType }}
-    -w {{ reportingUrl }}
+    -w {{ reportingUrl }}"
   become: true
   args:  
     chdir: "{{ansible_env.HOME}}/InsightAgent-master/"

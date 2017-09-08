@@ -35,28 +35,23 @@
   when: ansible_pkg_mgr == 'yum'
 - name: Install package dependencies - APT build-essential
   become: yes
-  become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated build-essential"
+  shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated build-essential"
   when: ansible_pkg_mgr == 'apt'
 - name: Install package dependencies - APT libssl-dev
   become: yes
-  become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated libssl-dev"
+  shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated libssl-dev"
   when: ansible_pkg_mgr == 'apt'
 - name: Install package dependencies - APT libffi-dev
   become: yes
-  become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated libffi-dev"
+  shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated libffi-dev"
   when: ansible_pkg_mgr == 'apt'
 - name: Install package dependencies - APT python-dev
   become: yes
-  become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated python-dev"
+  shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated python-dev"
   when: ansible_pkg_mgr == 'apt'
 - name: Install package dependencies - APT collectd
   become: yes
-  become_flags: '-E'
-  shell: "export http_proxy=test; apt-get install -y -f --allow-unauthenticated collectd"
+  shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated collectd"
   when: ansible_pkg_mgr == 'apt'
 - name: Delete Old Tar Bundle for Agent
   become: yes
@@ -102,14 +97,13 @@
   args:
     chdir: "{{ansible_env.HOME}}/InsightAgent-master"
 - name: Deploy collectd Agent
-  command: >
-    ./deployment/install.sh 
+  shell: "no_proxy={{ no_proxy }} ./deployment/install.sh 
     -i {{ projectName }} 
     -u {{ userName }} 
     -k {{ licenseKey }} 
     -s {{ samplingInterval }} 
     -t {{ agentType }}
-    -w {{ reportingUrl }}
+    -w {{ reportingUrl }}"
   become: true
   args:  
     chdir: "{{ansible_env.HOME}}/InsightAgent-master/"

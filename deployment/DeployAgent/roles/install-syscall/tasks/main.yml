@@ -14,16 +14,14 @@
   register: default_dir
   when: projectDir == ""
 - name: Install Syscall Agent
-  command: syscall/installLttng.py -d {{ansible_env.HOME}}/InsightAgent-master/
+  shell: "http_proxy={{ http_proxy }} syscall/installLttng.py -d {{ansible_env.HOME}}/InsightAgent-master/"
   become: true
-  become_flags: '-E'
   args:
     chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
   when: projectDir == "" and default_dir.stat.exists
 - name: Install Syscall Agent
-  command: syscall/installLttng.py -d {{projectDir}}
+  shell: "http_proxy={{ http_proxy }} syscall/installLttng.py -d {{projectDir}}"
   become: true
-  become_flags: '-E'
   args:
     chdir: "{{ projectDir }}"
   when: projectDir != ""  and project_dir.stat.exists
@@ -42,7 +40,7 @@
     chdir: "{{ansible_env.HOME}}/InsightAgent-master/syscall"
   when: projectDir == "" and default_dir.stat.exists
 - name: Start Syscall Agent Listener
-  shell: "(./reporting_send.py -d {{projectDir}}/syscall -D {{projectDir}} &)"
+  shell: "(no_proxy= {{ no_proxy }} ./reporting_send.py -d {{projectDir}}/syscall -D {{projectDir}} &)"
   become: true
   async: 10
   poll: 0
@@ -51,7 +49,7 @@
     chdir: "{{ projectDir }}/syscall"
   when: projectDir != ""  and project_dir.stat.exists
 - name: Start Syscall Agent Listener
-  shell: "(./reporting_send.py -d {{ansible_env.HOME}}/InsightAgent-master/syscall -D {{ansible_env.HOME}}/InsightAgent-master &)"
+  shell: "(no_proxy={{ no_proxy }} ./reporting_send.py -d {{ansible_env.HOME}}/InsightAgent-master/syscall -D {{ansible_env.HOME}}/InsightAgent-master &)"
   become: true
   async: 10
   poll: 0
