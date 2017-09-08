@@ -10,43 +10,30 @@
    become_method: sudo
    become_flags: '-E'
    tasks:
-   - name: td-agent | Install package dependencies - APT
+   - name: Install package dependencies - APT wget
      become: yes
-     become_flags: '-E'
-     apt: 
-       name: "{{item}}" 
-       state: latest
-       force: yes
-       allow_unauthenticated: yes
-       update_cache: "{{ apt_update }}"
-     with_items:
-       - wget
+     shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated wget"
+     when: ansible_pkg_mgr == 'apt'
+   - name: Install package dependencies - APT python-software-properties
+     become: yes
+     ignore_errors: yes
+     shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated python-software-properties"
      when: ansible_pkg_mgr == 'apt'
    - name: td-agent | Get TD gpg key
      become: yes
-     become_flags: '-E'
-     command: wget --no-check-certificate http://packages.treasuredata.com/GPG-KEY-td-agent -P {{ansible_env.HOME}}
+     shell: "http_proxy={{ http_proxy }} wget --no-check-certificate http://packages.treasuredata.com/GPG-KEY-td-agent -P {{ansible_env.HOME}}"
      when: ansible_pkg_mgr == 'apt'
    - name: td-agent | Add TD gpg key
      become: yes
      shell: cat {{ansible_env.HOME}}/GPG-KEY-td-agent | sudo apt-key add -
      when: ansible_pkg_mgr == 'apt'
    - name: td-agent | Add TD repository
-     apt_repository:
-      repo: deb http://packages.treasuredata.com/2/ubuntu/xenial/ xenial contrib
-      state: present
+     become: yes
+     shell: "http_proxy={{ http_proxy }} add-apt-repository 'deb http://packages.treasuredata.com/2/ubuntu/xenial/ xenial contrib'"
      when: ansible_pkg_mgr == 'apt'
    - name: td-agent | Install td-agent
      become: yes
-     become_flags: '-E'
-     apt: 
-       name: "{{item}}" 
-       state: latest
-       force: yes
-       allow_unauthenticated: yes
-       update_cache: yes
-     with_items:
-       - td-agent
+     shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated td-agent"
      when: ansible_pkg_mgr == 'apt'
    - name: Yum Repo | Add insightfinder repo
      yum_repository:
