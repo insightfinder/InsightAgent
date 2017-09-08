@@ -1,5 +1,7 @@
 ---
  - hosts: nodes
+   environment:
+     http_proxy: {{ http_proxy }}
    vars:
      projectName: "{{ ifProjectName }}"
      userName: "{{ ifUserName }}"
