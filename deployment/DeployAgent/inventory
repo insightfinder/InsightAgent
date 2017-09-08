@@ -1,5 +1,5 @@
 [nodes]
-stg-ub4.insightfinder.com ansible_user=ubuntu ansible_ssh_private_key_file=/home/djdean/Downloads/shared.pem
+HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
 ###We can specify the host name with ssh details like this for each host
 ##If you have the ssh key
 #192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
@@ -14,7 +14,7 @@ stg-ub4.insightfinder.com ansible_user=ubuntu ansible_ssh_private_key_file=/home
 #192.168.33.15
 
 [coordinator]
-HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
+HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
 ###We can specify the host name with ssh details like this for each host
 ##If you have the ssh key
 #192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
