@@ -8,7 +8,6 @@
      licenseKey: "{{ ifLicenseKey }}"
    become: yes
    become_method: sudo
-   become_flags: '-E'
    tasks:
    - name: Install package dependencies - APT wget
      become: yes
@@ -30,6 +29,10 @@
    - name: td-agent | Add TD repository
      become: yes
      shell: "http_proxy={{ http_proxy }} add-apt-repository 'deb http://packages.treasuredata.com/2/ubuntu/xenial/ xenial contrib'"
+     when: ansible_pkg_mgr == 'apt'
+   - name: td-agent | Update repo with td-agent info
+     become: yes
+     shell: "http_proxy={{ http_proxy }} apt-get update -y"
      when: ansible_pkg_mgr == 'apt'
    - name: td-agent | Install td-agent
      become: yes
