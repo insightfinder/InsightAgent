@@ -1,0 +1,14 @@
+[Unit]
+Description=statistics collection daemon
+After=local-fs.target network.target
+Requires=local-fs.target network.target
+
+[Service]
+ExecStart={{collectd_prefix_sbin}}/collectd -C {{collectd_prefix_conf}}/collectd.conf -f
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,75 @@
+---
+
+collectd_enabled: yes               # Enable the role
+collectd_version: 5.5.2             # Set version
+collectd_service: upstart
+collectd_service_autodetect: true   # try to detect collectd_service
+
+# PPA options
+collectd_use_ppa: no                # Use the collectd PPA
+collectd_use_ppa_latest: no         # Don't fix package version to collectd_version
+collectd_ppa_source: 'ppa:collectd/collectd-5.5'
+
+# Source options
+collectd_prefix: /opt/collectd      # The place where Collectd will be installed
+collectd_prefix_type: "{{collectd_prefix}}/etc"
+collectd_prefix_conf: "{{collectd_prefix}}/etc"
+collectd_prefix_sbin: "{{collectd_prefix}}/sbin"
+collectd_plugins_prefix: "{{collectd_prefix_conf}}/conf.d"
+
+# General options
+collectd_interval: 10
+collectd_readthreads: 7
+collectd_hostname: "{{ inventory_hostname }}"
+collectd_fdqnlookup: false
+
+# Collectd plugins
+collectd_plugins: []                # Ex. [nginx, memcached]
+collectd_plugins_options: {}        # See below for examples.
+
+# Collectd default plugins
+collectd_default_plugins: [cpu, df, interface, load, memory, swap]
+collectd_default_plugins_options:
+  swap:
+  - ReportByDevice false
+  interface:
+  - Interface lo
+  - IgnoreSelected true
+
+# Additional types
+# format: { name: ..., value: ... }
+collectd_types: []
+
+# Collectd graphite options
+collectd_write_graphite: no
+collectd_write_graphite_options:    # Setup write_graphite (https://collectd.org/wiki/index.php/Plugin:Write_Graphite)
+  Host: "{{inventory_hostname}}"
+  Port: 2003
+  Prefix: stats.
+  # Postfix: .collectd
+  Protocol: tcp
+  AlwaysAppendDS: 'false'
+  EscapeCharacter: _
+  LogSendErrors: 'true'
+  StoreRates: 'true'
+
+# Setup logs
+collectd_logpath:                   # If it is not empty, will be used logfile
+collectd_loglevel: info
+collectd_logrotate: yes
+collectd_type: yes
+collectd_logrotate_options:
+  - compress
+  - copytruncate
+  - daily
+  - dateext
+  - rotate 7
+  - size 10M
+
+# Paths
+collectd_types_db_path: "{{ '/usr/share/collectd/types.db' if collectd_use_ppa else collectd_prefix + '/share/collectd/types.db' }}"
+collectd_additional_types_db_path: "{{ '/usr/share/collectd/additional-types.db' if collectd_use_ppa else collectd_prefix_type + '/types.db' }}"
+collectd_config_file: "{{ '/etc/collectd/collectd.conf' if collectd_use_ppa else collectd_prefix_conf + '/collectd.conf' }}"
+collectd_config_dir: "{{ '/etc/collectd/collectd.conf.d' if collectd_use_ppa else collectd_plugins_prefix }}"
+collectd_plugins_dir: "{{ '/usr/lib/collectd' if collectd_use_ppa else collectd_prefix + '/lib/collectd' }}"
+collectd_sbin_path: "{{ '/usr/sbin' if collectd_use_ppa else collectd_prefix_sbin }}"

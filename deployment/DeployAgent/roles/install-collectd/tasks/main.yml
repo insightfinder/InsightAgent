@@ -1,8 +1,8 @@
 ---
 - name : Check Mandatory Variables For Install
-  debug: 
-    msg: 
-      - ProjectName:{{ projectName | mandatory }} 
+  debug:
+    msg:
+      - ProjectName:{{ projectName | mandatory }}
       - UserName:{{ userName | mandatory }}
       - Sampling Interval:{{ samplingInterval | mandatory }}
       - Agent Type:{{ agentType | mandatory }}
@@ -13,7 +13,7 @@
   stat:
     path: /etc/selinux/config
   register: p
-- name: SELinux | Disable SELinux 
+- name: SELinux | Disable SELinux
   become: yes
   selinux:
     state: disabled
@@ -21,8 +21,8 @@
 - name: Install package dependencies - YUM
   become: yes
   become_flags: '-E'
-  package: 
-    name: "{{item}}" 
+  package:
+    name: "{{item}}"
     state: latest
   with_items:
     - gcc
@@ -37,6 +37,62 @@
   become: yes
   shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated build-essential"
   when: ansible_pkg_mgr == 'apt'
+- name: Install package dependencies - Add Open SUSE Backports Repo
+  become: yes
+  shell: "http_proxy={{ http_proxy }} zypper rr openSUSE_Backports_SLE-12-SP2 && zypper addrepo http://download.opensuse.org/repositories/openSUSE:/Backports:/SLE-12-SP2/standard/openSUSE:Backports:SLE-12-SP2.repo"
+  when: ansible_pkg_mgr == 'zypper'
+- name: Install package dependencies - Add Open SUSE Server Monitoring Repo
+  become: yes
+  shell: "http_proxy={{ http_proxy }} zypper rr server_monitoring && zypper addrepo http://download.opensuse.org/repositories/server:monitoring/SLE_12_SP3/server:monitoring.repo"
+  when: ansible_pkg_mgr == 'zypper'
+- name: Install package dependencies - Add Open SUSE OSS Repo
+  become: yes
+  shell: "http_proxy={{ http_proxy }} zypper rr OpenSUSE-12.1-OSS && zypper ar http://download.opensuse.org/distribution/12.1/repo/oss/ OpenSUSE-12.1-OSS"
+  when: ansible_pkg_mgr == 'zypper'
+- name: Install package dependencies - Refresh Repos
+  become: yes
+  shell: "http_proxy={{ http_proxy }} zypper --no-gpg-checks refresh"
+  when: ansible_pkg_mgr == 'zypper'
+- name: Install package dependencies - Basis-Devel
+  become: yes
+  shell: "http_proxy={{ http_proxy }} zypper install --auto-agree-with-licenses -y --type pattern Basis-Devel"
+  when: ansible_pkg_mgr == 'zypper'
+- name: Install package dependencies - libpcap-devel, libyajl-devel, libgnutls-openssl-devel
+  become: yes
+  shell: "http_proxy={{ http_proxy }} zypper install --auto-agree-with-licenses -y libpcap-devel libyajl-devel libgnutls-openssl-devel"
+  when: ansible_pkg_mgr == 'zypper'
+- name: collectd-install | Get Collectd
+  become: yes
+  shell: "http_proxy={{ http_proxy }} wget http://collectd.org/files/collectd-{{collectd_version}}.tar.gz"
+  register: collectd_source
+  when: ansible_pkg_mgr == 'zypper'
+- name: collectd-install | Extract Collectd
+  shell: "tar xvf collectd-{{collectd_version}}.tar.gz -C /usr/src"
+  when: collectd_source.changed and ansible_pkg_mgr == 'zypper'
+- name: collectd-install | Install Collectd
+  shell: ./configure --prefix={{collectd_prefix}} && make all install
+  args:
+    chdir: /usr/src/collectd-{{collectd_version}}
+    creates: "{{collectd_prefix}}"
+  when: collectd_source.changed and ansible_pkg_mgr == 'zypper'
+- name: collectd-configure | Configure Collectd
+  template: src=collectdsample.conf dest={{collectd_config_file}} validate='{{collectd_sbin_path}}/collectd -t -C %s'
+  when: ansible_pkg_mgr == 'zypper'
+- name: collectd-configure | Ensure conf.d directory
+  file: path={{collectd_config_dir}} state=directory
+  when: ansible_pkg_mgr == 'zypper'
+- name: collectd-configure | Configure additional types
+  template: src=types.db.j2 dest={{collectd_additional_types_db_path}}
+  when: ansible_pkg_mgr == 'zypper'
+- name: collectd-configure | Setup Collectd service
+  template: src=systemd.service.j2 dest=/etc/systemd/system/collectd.service
+  when: ansible_pkg_mgr == 'zypper'
+- name: collectd-configure | Ensure the Collectd is enabled and started
+  service: name=collectd state=started enabled=yes
+  when: ansible_pkg_mgr == 'zypper'
+- name: collectd-configure | Setup logs rotation
+  template: src=logrotate.conf.j2 dest=/etc/logrotate.d/collectd.conf
+  when: collectd_logpath and collectd_logrotate and ansible_pkg_mgr == 'zypper'
 - name: Install package dependencies - APT libssl-dev
   become: yes
   shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated libssl-dev"
@@ -72,7 +128,7 @@
     group: root
     mode: 0644
 - name: Untar the Agent Code
-  unarchive: 
+  unarchive:
     src: "{{ansible_env.HOME}}/insightagent.tar.gz"
     dest: "{{ansible_env.HOME}}"
     remote_src: True
@@ -82,11 +138,11 @@
 - name: Copy collectd configuration file to "/etc/collectd/collectd.conf"
   become: yes
   command: cp -rf {{ansible_env.HOME}}/InsightAgent-master/deployment/DeployAgent/files/collectdsample.conf /etc/collectd/collectd.conf
-  when: collectd_dir.stat.exists
+  when: collectd_dir.stat.exists and ansible_pkg_mgr != 'zypper'
 - name: Copy collectd configuration file to "/etc/collectd.conf"
   become: yes
   command: cp -rf {{ansible_env.HOME}}/InsightAgent-master/deployment/DeployAgent/files/collectdsample.conf /etc/collectd.conf
-
+  when: ansible_pkg_mgr != 'zypper'
 - name: Restart collectd
   service:
    name: collectd
@@ -97,15 +153,15 @@
   args:
     chdir: "{{ansible_env.HOME}}/InsightAgent-master"
 - name: Deploy collectd Agent
-  shell: "no_proxy={{ no_proxy }} ./deployment/install.sh 
-    -i {{ projectName }} 
-    -u {{ userName }} 
-    -k {{ licenseKey }} 
-    -s {{ samplingInterval }} 
+  shell: "no_proxy={{ no_proxy }} ./deployment/install.sh
+    -i {{ projectName }}
+    -u {{ userName }}
+    -k {{ licenseKey }}
+    -s {{ samplingInterval }}
     -t {{ agentType }}
     -w {{ reportingUrl }}"
   become: true
-  args:  
+  args:
     chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
 - name: Delete Tar Bundle for Agent
   file:

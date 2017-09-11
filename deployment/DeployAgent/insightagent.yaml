@@ -8,6 +8,8 @@
      reportingUrl: "{{ ifReportingUrl }}"
      licenseKey: "{{ ifLicenseKey }}"
      action: "{{ ifAction }}"
+   vars_files:
+    - defaults/main.yml
    become: yes
    gather_facts: no
    pre_tasks:
