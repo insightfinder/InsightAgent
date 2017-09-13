@@ -60,9 +60,9 @@
   become: yes
   shell: "http_proxy={{ http_proxy }} zypper install --auto-agree-with-licenses -y --type pattern Basis-Devel"
   when: ansible_pkg_mgr == 'zypper'
-- name: Install package dependencies - libpcap-devel, libyajl-devel, libgnutls-openssl-devel python-pip
+- name: Install package dependencies - python-pip
   become: yes
-  shell: "http_proxy={{ http_proxy }} zypper install --auto-agree-with-licenses -y libpcap-devel libgnutls-openssl-devel python-pip"
+  shell: "http_proxy={{ http_proxy }} zypper install --auto-agree-with-licenses -y python-pip"
   when: ansible_pkg_mgr == 'zypper'
 # - name: Install package dependencies - pexpect
 #   become: yes
@@ -101,6 +101,10 @@
   command: ./deployment/checkpackages.sh -env
   args:
     chdir: "{{ansible_env.HOME}}/InsightAgent-master"
+  when: ansible_pkg_mgr != 'zypper'
+- name: Download pip packages for Agent
+  shell: http_proxy={{ http_proxy }} pip install requests
+  when: ansible_pkg_mgr == 'zypper'
 - name: Deploy cgroup Agent
   become: true
   shell: "no_proxy={{ no_proxy }} ./deployment/install.sh
