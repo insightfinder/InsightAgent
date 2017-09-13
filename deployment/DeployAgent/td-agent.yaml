@@ -34,7 +34,7 @@
      when: ansible_pkg_mgr == 'apt'
    - name: td-agent | Update repo with td-agent info
      become: yes
-     shell: "http_proxy={{ http_proxy }} apt-get update -y"
+     shell: "http_proxy={{ http_proxy }} apt-get update --allow-unauthenticated -y"
      when: ansible_pkg_mgr == 'apt'
    - name: td-agent | Install td-agent
      become: yes
