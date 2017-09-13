@@ -57,9 +57,9 @@
   become: yes
   shell: "http_proxy={{ http_proxy }} zypper install --auto-agree-with-licenses -y --type pattern Basis-Devel"
   when: ansible_pkg_mgr == 'zypper'
-- name: Install package dependencies - libpcap-devel, libyajl-devel, libgnutls-openssl-devel
+- name: Install package dependencies - libpcap-devel, libyajl-devel, python-pip, libgnutls-openssl-devel
   become: yes
-  shell: "http_proxy={{ http_proxy }} zypper install --auto-agree-with-licenses -y libpcap-devel libyajl-devel libgnutls-openssl-devel"
+  shell: "http_proxy={{ http_proxy }} zypper install --auto-agree-with-licenses -y libpcap-devel python-pip libgnutls-openssl-devel"
   when: ansible_pkg_mgr == 'zypper'
 - name: collectd-install | Get Collectd
   become: yes
