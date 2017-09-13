@@ -1,5 +1,5 @@
 # InsightAgent: ElasticSearch
-Agent Type: ElasticSearch
+Agent Type: Getting metrics about ElasticSearch server
 
 Platform: Linux
 
