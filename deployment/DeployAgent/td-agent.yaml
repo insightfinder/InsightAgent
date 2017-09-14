@@ -11,6 +11,68 @@
    become: yes
    become_method: sudo
    tasks:
+   - name: Install package dependencies - Add Open SUSE Ruby Devel Repo
+     become: yes
+     shell: "http_proxy={{ http_proxy }} zypper rr devel_languages_ruby_extensions && zypper addrepo http://download.opensuse.org/repositories/devel:/languages:/ruby:/extensions/SLE_12/devel:languages:ruby:extensions.repo"
+     when: ansible_pkg_mgr == 'zypper'
+   - name: Install package dependencies - Refresh Repos
+     become: yes
+     shell: "http_proxy={{ http_proxy }} zypper --no-gpg-checks refresh"
+     when: ansible_pkg_mgr == 'zypper'
+   - name: Install package dependencies - Ruby development libraries
+     become: yes
+     shell: "http_proxy={{ http_proxy }} zypper install --auto-agree-with-licenses -y {{item}}"
+     with_items:
+       - ruby
+       - ruby2.1
+       - ruby2.1-devel
+       - ruby2.1-rubygem-bundler
+       - nodejs4
+       - git
+       - gcc
+       - make
+       - libopenssl-devel
+       - sqlite3-devel
+     when: ansible_pkg_mgr == 'zypper'
+   - name: Delete Old Fluentd Code
+     become: yes
+     file:
+       state: absent
+       path: "{{ansible_env.HOME}}/fluentd"
+     register: folder_delete
+   - debug:
+       var: folder_delete
+   - name: Install package dependencies - Clone fluentd git repo
+     become: yes
+     shell: "http_proxy={{ http_proxy }} git clone https://github.com/fluent/fluentd.git {{ansible_env.HOME}}/fluentd"
+     when: ansible_pkg_mgr == 'zypper'
+   - name: Install package dependencies - Checkout branch origin/v0.12
+     become: yes
+     shell: "git checkout -b v0.12 origin/v0.12"
+     args:
+       chdir: "{{ansible_env.HOME}}/fluentd"
+     when: ansible_pkg_mgr == 'zypper'
+   - name: Install package dependencies - Execute bundle command
+     become: yes
+     shell: "bundle install"
+     args:
+       chdir: "{{ansible_env.HOME}}/fluentd"
+     when: ansible_pkg_mgr == 'zypper'
+   - name: Install package dependencies - Build fluentd gem
+     become: yes
+     shell: "bundle exec rake build"
+     args:
+       chdir: "{{ansible_env.HOME}}/fluentd"
+     when: ansible_pkg_mgr == 'zypper'
+   - name: Install package dependencies - Install fluentd gem
+     become: yes
+     shell: "http_proxy={{ http_proxy }} gem install pkg/fluentd-0.12.40.gem"
+     args:
+       chdir: "{{ansible_env.HOME}}/fluentd"
+   - name: Install package dependencies - Update environment
+     become: yes
+     shell: 'echo "PATH=/usr/lib64/ruby/gems/2.1.0/bin/:$PATH" >> {{ansible_env.HOME}}/.bashrc && source {{ansible_env.HOME}}/.bashrc'
+     when: ansible_pkg_mgr == 'zypper'
    - name: Install package dependencies - APT wget
      become: yes
      shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated wget"
@@ -55,6 +117,16 @@
        disablerepo: '*'
        enablerepo: insightrepo
      when: ansible_pkg_mgr == 'yum'
+   - name: td-agent | Copy setup script
+     template:
+       src: files/td-agent-setup.sh
+       dest: /tmp/td-agent-setup.sh
+       mode: 0755
+     when: ansible_pkg_mgr == 'zypper'
+   - name: td-agent | Run setup script
+     become: yes
+     shell: /tmp/td-agent-setup.sh
+     when: ansible_pkg_mgr == 'zypper'
    - name: td-agent | copy Insightfinder plugin
      copy:
        src: files/out_InsightFinder.rb
@@ -62,15 +134,53 @@
        owner: root
        group: root
        mode: 0644
+     when: ansible_pkg_mgr != 'zypper'
+   - name: td-agent | copy Insightfinder plugin SUSE
+     copy:
+       src: files/out_InsightFinder.rb
+       dest: /etc/fluent/plugin/out_InsightFinder.rb
+       owner: root
+       group: root
+       mode: 0644
+     when: ansible_pkg_mgr == 'zypper'
    - name: td-agent | Add config_file
      template:
        src: files/td-agent.conf.template
        dest: /etc/td-agent/td-agent.conf
        mode: 0644
+     when: ansible_pkg_mgr != 'zypper'
      tags:
-     - td-agent-conig
+     - td-agent-config
+   - name: td-agent | Add config_file SUSE
+     template:
+       src: files/td-agent.conf.template
+       dest: /etc/fluent/fluent.conf
+       mode: 0644
+     when: ansible_pkg_mgr == 'zypper'
+     tags:
+     - td-agent-config
+   - name: td-agent | processes td-agent
+     become: yes
+     shell: ps -ef | grep fluent | awk '{printf "%s ",$2}'
+     register: awk_test
+   - name: td-agent | Stop td-agent daemon
+     become: yes
+     shell: "kill -9 {{item}}"
+     ignore_errors: yes
+     with_items:
+       - "{{ awk_test.stdout_lines }}"
+     when: ansible_pkg_mgr == 'zypper'
+   - name: td-agent | Install fluentd gem dependency
+     become: yes
+     shell: "http_proxy={{ http_proxy }} /usr/lib64/ruby/gems/2.1.0/bin/fluent-gem install fluent-mixin-type-converter"
+     when: ansible_pkg_mgr == 'zypper'
+   - name: td-agent | Start td-agent daemon
+     become: yes
+     shell: /usr/lib64/ruby/gems/2.1.0/bin/fluentd -c /etc/fluent/fluent.conf -p /etc/fluent/plugin/ -o /var/log/fluent/fluent.log -d /var/run/fluent/fluent.pid
+     when: ansible_pkg_mgr == 'zypper'
    - name: td-agent | Start td-agent daemon
      service:
       name: td-agent
       enabled: yes
       state: restarted
+     when: ansible_pkg_mgr != 'zypper'
