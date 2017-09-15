@@ -34,7 +34,7 @@
      with_items:
        - ruby
        - ruby2.1
-       - ruby2.1-devel
+       - ruby-devel
        - ruby2.1-rubygem-bundler
        - nodejs4
        - git
