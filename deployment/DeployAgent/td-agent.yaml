@@ -15,12 +15,21 @@
      become: yes
      shell: "http_proxy={{ http_proxy }} zypper rr devel_languages_ruby_extensions && zypper addrepo http://download.opensuse.org/repositories/devel:/languages:/ruby:/extensions/SLE_12/devel:languages:ruby:extensions.repo"
      when: ansible_pkg_mgr == 'zypper'
+   - name: Install package dependencies - Add Open SUSE Perl Repo
+     become: yes
+     shell: "http_proxy={{ http_proxy }} zypper rr devel_languages_perl && zypper addrepo http://download.opensuse.org/repositories/devel:/languages:/perl/SLE_12_SP3/devel:languages:perl.repo "
+     when: ansible_pkg_mgr == 'zypper'
+   - name: Install package dependencies - Add Open SUSE Dev Tools Repo
+     become: yes
+     shell: "http_proxy={{ http_proxy }} zypper rr devel_tools_scm && zypper addrepo http://download.opensuse.org/repositories/devel:/tools:/scm/SLE_12_SP3/devel:tools:scm.repo"
+     when: ansible_pkg_mgr == 'zypper'
    - name: Install package dependencies - Refresh Repos
      become: yes
      shell: "http_proxy={{ http_proxy }} zypper --no-gpg-checks refresh"
      when: ansible_pkg_mgr == 'zypper'
    - name: Install package dependencies - Ruby development libraries
      become: yes
+     ignore_errors: yes
      shell: "http_proxy={{ http_proxy }} zypper install --auto-agree-with-licenses -y {{item}}"
      with_items:
        - ruby
@@ -42,6 +51,10 @@
      register: folder_delete
    - debug:
        var: folder_delete
+   - name: Install package dependencies - Change git ssl settings
+     become: yes
+     shell: "git config --global http.sslVerify false"
+     when: ansible_pkg_mgr == 'zypper'
    - name: Install package dependencies - Clone fluentd git repo
      become: yes
      shell: "http_proxy={{ http_proxy }} git clone https://github.com/fluent/fluentd.git {{ansible_env.HOME}}/fluentd"
@@ -51,6 +64,10 @@
      shell: "git checkout -b v0.12 origin/v0.12"
      args:
        chdir: "{{ansible_env.HOME}}/fluentd"
+     when: ansible_pkg_mgr == 'zypper'
+   - name: Install package dependencies - Change git ssl settings
+     become: yes
+     shell: "git config --global http.sslVerify true"
      when: ansible_pkg_mgr == 'zypper'
    - name: Install package dependencies - Execute bundle command
      become: yes
