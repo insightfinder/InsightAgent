@@ -69,6 +69,7 @@
      shell: "http_proxy={{ http_proxy }} gem install pkg/fluentd-0.12.40.gem"
      args:
        chdir: "{{ansible_env.HOME}}/fluentd"
+     when: ansible_pkg_mgr == 'zypper'
    - name: Install package dependencies - Update environment
      become: yes
      shell: 'echo "PATH=/usr/lib64/ruby/gems/2.1.0/bin/:$PATH" >> {{ansible_env.HOME}}/.bashrc && source {{ansible_env.HOME}}/.bashrc'
