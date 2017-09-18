@@ -8,8 +8,8 @@
      samplingInterval: 60
      deploymentServerUrl: "{{ ifReportingUrl }}"
      licenseKey: "{{ ifLicenseKey }}"
-  #  become: yes
-  #  become_method: sudo
+   become: yes
+   become_method: sudo
    tasks:
    - name: Install package dependencies - Add Open SUSE Ruby Devel Repo SLES
      become: yes
@@ -36,48 +36,28 @@
      ignore_errors: yes
      shell: "http_proxy={{ http_proxy }} zypper install --auto-agree-with-licenses -y {{item}}"
      with_items:
-      #  - ruby
-      #  - ruby2.1
-      #  - ruby-devel
-      #  - ruby2.1-rubygem-bundler
-      #  - nodejs4
-      #  - git
        - gcc
        - curl
        - make
        - libopenssl-devel
        - sqlite3-devel
      when: ansible_pkg_mgr == 'zypper'
-  #  - name: Delete Old Fluentd Code
-  #    become: yes
-  #    file:
-  #      state: absent
-  #      path: "{{ansible_env.HOME}}/fluentd"
-  #    register: folder_delete
-  #  - debug:
-  #      var: folder_delete
    - name: checking that RVM is installed
      stat:
        path: /etc/profile.d/rvm.sh
      ignore_errors: True
      register: rvm_install_result
      when: ansible_pkg_mgr == 'zypper'
-  #  - name: Install RVM
-  #   #  become: yes
-  #    shell: "http_proxy={{ http_proxy }} curl -sSL  --insecure https://get.rvm.io | bash"
-  #    when: ansible_pkg_mgr == 'zypper'
    - name: Check for mpapis gpg key as root
      shell: gpg --list-keys mpapis
      sudo: true
      register: mpapis_gpg_key_exists
      ignore_errors: true
      when: ansible_pkg_mgr == 'zypper'
-
    - name: receiving key as root
      shell: "http_proxy={{ http_proxy }} curl -sSL -k https://rvm.io/mpapis.asc | gpg --import -"
      sudo: true
      when: ansible_pkg_mgr == 'zypper' and mpapis_gpg_key_exists is defined and mpapis_gpg_key_exists.rc is defined and mpapis_gpg_key_exists.rc != 0
-
    - name: Get rvm Installer
      become: yes
      shell: "http_proxy={{ http_proxy }} wget --no-check-certificate -O /tmp/rvm-installer.sh https://get.rvm.io | bash"
@@ -124,66 +104,14 @@
      ignore_errors: True
      changed_when: False
      when: ansible_pkg_mgr == 'zypper'
-  #  - name: Update RVM path
-  #    shell: "source ~/.rvm/scripts/rvm"
-  #    when: ansible_pkg_mgr == 'zypper'
-  #  - name: RVM install ruby
-    #  become: yes
-  #    shell: "{{ansible_env.HOME}}/.rvm/bin/rvm install 2.2"
-  #    when: ansible_pkg_mgr == 'zypper'
-  #  - name: RVM use ruby
-    #  become: yes
-    #  shell: "{{ansible_env.HOME}}/.rvm/bin/rvm use 2.2"
-    #  when: ansible_pkg_mgr == 'zypper'
    - name: RVM install fluentd
      become: yes
-    #  shell: "http_proxy={{ http_proxy }} gem install fluentd"
      shell: http_proxy={{ http_proxy }} bash -lc "gem install fluentd"
      environment:
        PATH: "{{ ansible_env.PATH }}:/usr/local/rvm/gems/ruby-2.2.2/bin:/usr/local/rvm/gems/ruby-2.2.2@global/bin:/usr/local/rvm/rubies/ruby-2.2.2/bin:/usr/lib/mit/bin:/usr/local/rvm/bin"
        MY_RUBY_HOME: /usr/local/rvm/rubies/ruby-2.2.2
        GEM_HOME: /usr/local/rvm/gems/ruby-2.2.2
      when: ansible_pkg_mgr == 'zypper'
-  #  - name: Install package dependencies - Change git ssl settings
-  #    become: yes
-  #    shell: "git config --global http.sslVerify false"
-  #    when: ansible_pkg_mgr == 'zypper'
-  #  - name: Install package dependencies - Clone fluentd git repo
-  #    become: yes
-  #    shell: "http_proxy={{ http_proxy }} git clone https://github.com/fluent/fluentd.git {{ansible_env.HOME}}/fluentd"
-  #    when: ansible_pkg_mgr == 'zypper'
-  #  - name: Install package dependencies - Checkout branch origin/v0.12
-  #    become: yes
-  #    shell: "git checkout -b v0.12 origin/v0.12"
-  #    args:
-  #      chdir: "{{ansible_env.HOME}}/fluentd"
-  #    when: ansible_pkg_mgr == 'zypper'
-  #  - name: Install package dependencies - Change git ssl settings
-  #    become: yes
-  #    shell: "git config --global http.sslVerify true"
-  #    when: ansible_pkg_mgr == 'zypper'
-  #  - name: Install package dependencies - Execute bundle command
-  #    become: yes
-  #    shell: "bundle install"
-  #    args:
-  #      chdir: "{{ansible_env.HOME}}/fluentd"
-  #    when: ansible_pkg_mgr == 'zypper'
-  #  - name: Install package dependencies - Build fluentd gem
-  #    become: yes
-  #    shell: "bundle exec rake build"
-  #    args:
-  #      chdir: "{{ansible_env.HOME}}/fluentd"
-  #    when: ansible_pkg_mgr == 'zypper'
-  #  - name: Install package dependencies - Install fluentd gem
-  #    become: yes
-  #    shell: "http_proxy={{ http_proxy }} gem install pkg/fluentd-0.12.40.gem"
-  #    args:
-  #      chdir: "{{ansible_env.HOME}}/fluentd"
-  #    when: ansible_pkg_mgr == 'zypper'
-  #  - name: Install package dependencies - Update environment
-  #    become: yes
-  #    shell: 'echo "PATH=/usr/lib64/ruby/gems/2.1.0/bin/:$PATH" >> {{ansible_env.HOME}}/.bashrc && source {{ansible_env.HOME}}/.bashrc'
-  #    when: ansible_pkg_mgr == 'zypper'
    - name: Install package dependencies - APT wget
      become: yes
      shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated wget"
@@ -286,18 +214,10 @@
      with_items:
        - "{{ awk_test.stdout_lines }}"
      when: ansible_pkg_mgr == 'zypper'
-  #  - name: td-agent | Install fluentd gem dependency
-  #    become: yes
-  #    shell: "http_proxy={{ http_proxy }} /usr/lib64/ruby/gems/2.1.0/bin/fluent-gem install fluent-mixin-type-converter"
-  #    when: ansible_pkg_mgr == 'zypper'
    - name: td-agent | Install fluentd gem dependency
      become: yes
      shell: http_proxy={{ http_proxy }} bash -lc "fluent-gem install fluent-mixin-type-converter"
      when: ansible_pkg_mgr == 'zypper'
-  #  - name: td-agent | Start td-agent daemon
-  #    become: yes
-  #    shell: /usr/lib64/ruby/gems/2.1.0/bin/fluentd -c /etc/fluent/fluent.conf -p /etc/fluent/plugin/ -o /var/log/fluent/fluent.log -d /var/run/fluent/fluent.pid
-  #    when: ansible_pkg_mgr == 'zypper'
    - name: td-agent | Start td-agent daemon
      become: yes
      shell: bash -lc "fluentd -c /etc/fluent/fluent.conf -p /etc/fluent/plugin/ -o /var/log/fluent/fluent.log -d /var/run/fluent/fluent.pid"
