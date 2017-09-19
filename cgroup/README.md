@@ -69,7 +69,7 @@ ifProjectName=
 ifLicenseKey=
 
 ##Sampling interval could be an integer indicating the number of minutes or "10s" indicating 10 seconds.
-ifSamplingInterval=1 
+ifSamplingInterval=1
 
 ##Agent type
 ifAgent=cgroup
@@ -87,5 +87,24 @@ sudo -E ./downloadAgentNoSSL.sh
 4) Run the playbook(Go back to the DeployAgent directory)
 ```
 cd ..
+ansible-playbook insightagent.yaml
+```
+
+### Uninstallation:
+Note: Uninstallation is required before you can install any other Metric agent(e.g. collectd) or you want to reinstall the current cgroup agent.
+
+1) Open and modify the inventory file
+```
+[all:vars]
+##install or uninstall
+ifAction=uninstall
+```
+
+```
+##Agent type
+ifAgent=cgroup
+```
+2) Run the playbook
+```
 ansible-playbook insightagent.yaml
 ```

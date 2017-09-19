@@ -95,7 +95,7 @@
      sudo: true
      when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists == true
    - name: setting default Ruby version as root
-     shell: "source /etc/profile.d/rvm.sh && rvm use ruby-2.2.2 --default executable=/bin/bash"
+     shell: "source /etc/profile.d/rvm.sh && rvm use ruby-2.2.2"
      register: rvm_select_ruby_version_root
      ignore_errors: True
      changed_when: False
@@ -105,14 +105,14 @@
      sudo: true
      when: ansible_pkg_mgr == 'zypper' and rvm_select_ruby_version_root|failed
    - name: setting default Ruby version as root
-     shell: "source /etc/profile.d/rvm.sh && rvm use ruby-2.2.2 --default executable=/bin/bash"
+     shell: "source /etc/profile.d/rvm.sh && rvm use ruby-2.2.2"
      register: rvm_select_ruby_version_root
      ignore_errors: True
      changed_when: False
      when: ansible_pkg_mgr == 'zypper'
    - name: RVM install fluentd
      become: yes
-     shell: http_proxy={{ http_proxy }} bash -lc "gem install fluentd"
+     shell: http_proxy={{ http_proxy }} bash -lc "gem install fluentd -v '~> 0.12.0' --no-ri --no-rdoc"
      environment:
        PATH: "{{ ansible_env.PATH }}:/usr/local/rvm/gems/ruby-2.2.2/bin:/usr/local/rvm/gems/ruby-2.2.2@global/bin:/usr/local/rvm/rubies/ruby-2.2.2/bin:/usr/lib/mit/bin:/usr/local/rvm/bin"
        MY_RUBY_HOME: /usr/local/rvm/rubies/ruby-2.2.2
