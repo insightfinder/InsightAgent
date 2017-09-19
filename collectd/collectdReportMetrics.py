@@ -165,8 +165,8 @@ def sendData():
     alldata["projectName"] = PROJECTNAME
     alldata["userName"] = USERNAME
     alldata["instanceName"] = hostname
-    alldata["agentType"] = 'collectd'
-    alldata["reportingInterval"] = config['reporting_interval']
+    alldata["insightAgentType"] = 'collectd'
+    alldata["samplingInterval"] = str(int(reporting_interval*60))
     # print the json
     json_data = json.dumps(alldata)
     print json_data
@@ -394,4 +394,3 @@ if reported:
     print "Custom metrics sent"
 else:
     print "Failed to send custom metrics"
-
