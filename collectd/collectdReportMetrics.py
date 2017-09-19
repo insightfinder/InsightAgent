@@ -165,10 +165,11 @@ def sendData():
     alldata["projectName"] = PROJECTNAME
     alldata["userName"] = USERNAME
     alldata["instanceName"] = hostname
-
+    alldata["agentType"] = 'collectd'
+    alldata["reportingInterval"] = config['reporting_interval']
     # print the json
     json_data = json.dumps(alldata)
-    # print json_data
+    print json_data
     print str(len(bytearray(json_data))) + " Bytes data are reported"
     url = serverUrl + "/customprojectrawdata"
     response = requests.post(url, data=json.loads(json_data))
