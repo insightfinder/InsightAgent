@@ -1,0 +1,17 @@
+cffi
+cryptography
+enum34
+idna
+ipaddress
+paramiko
+pyasn1
+pycparser
+requests
+six
+kafka
+elasticsearch
+netifaces
+pyOpenSSL
+ndg-httpsclient
+pyasn1
+pyyaml

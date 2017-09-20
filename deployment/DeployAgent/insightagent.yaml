@@ -33,6 +33,7 @@
      - { role: install-cgroup, when: agentType=="cgroup" }
      - { role: install-collectd, when: agentType=="collectd" }
      - { role: install-syscall, when: agentType=="syscall" }
+     - { role: install-cadvisor, when: agentType=="cadvisor" }
      - { role: uninstall, when: action=="uninstall" }
    environment:
      http_proxy: "{{ http_proxy }}"
