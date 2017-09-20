@@ -147,6 +147,18 @@ def sendData(fileID):
     global reportedChunks
     if len(metricData) == 0:
         return
+
+    with open(os.path.join(homepath, "reporting_config.json"), 'r') as f:
+        config = json.load(f)
+
+    reporting_interval_string = config['reporting_interval']
+    is_second_reporting = False
+    if reporting_interval_string[-1:] == 's':
+        is_second_reporting = True
+        reporting_interval = float(config['reporting_interval'][:-1])
+        reporting_interval = float(reporting_interval / 60)
+    else:
+        reporting_interval = int(config['reporting_interval'])
     #update projectKey, userName in dict
     alldata["metricData"] = json.dumps(metricData)
     alldata["licenseKey"] = LICENSEKEY
@@ -154,9 +166,10 @@ def sendData(fileID):
     alldata["userName"] = USERNAME
     alldata["instanceName"] = hostname
     alldata["fileID"] = fileID
+    alldata["samplingInterval"] = str(int(reporting_interval*60))
     if agentType == "ec2monitoring":
         alldata["instanceType"] = ec2InstanceType()
-
+    alldata["insightAgentType"] = agentType
     #print the json
     json_data = json.dumps(alldata)
     if "FileReplay" in mode:
@@ -181,13 +194,15 @@ def sendData(fileID):
         currentChunk += 1
         if mode == "logFileReplay":
             alldata["agentType"] = "LogFileReplay"
+            alldata["insightAgentType"] = "LogFileReplay"
         if mode == "metricFileReplay":
             alldata["agentType"] = "MetricFileReplay"
+            alldata["insightAgentType"] = "MetricFileReplay"
     else:
         print str(len(bytearray(json_data))) + " bytes data are reported"
     #print the json
     json_data = json.dumps(alldata)
-    #print json_data
+    # print json_data
     url = serverUrl + "/customprojectrawdata"
     if agentType == "hypervisor":
         response = urllib.urlopen(url, data=urllib.urlencode(alldata))
