@@ -78,7 +78,7 @@ ifSamplingInterval=1
 ifAgent=collectd
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
-ifReportingUrl=https://agent-data.insightfinder.com
+ifReportingUrl=https://app.insightfinder.com
 ```
 
 
