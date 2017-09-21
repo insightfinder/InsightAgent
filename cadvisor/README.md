@@ -57,39 +57,48 @@ sudo -E ./installAnsible.sh
 
 ```
 [nodes]
-
 HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
-
 ###We can specify the host name with ssh details like this for each host
-
 ##If you have the ssh key
-
 #192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
 
 ##If you have the password
-
 #192.168.33.20 ansible_user=vagrant ansible_ssh_pass=ssh_password
-@xiaohuigu
-Commit changes
 
-Update README.md
 
-Add an optional extended description…
-  Commit directly to the master branch.
-  Create a new branch for this commit and start a pull request. Learn more about pull requests.
-Commit changes  Cancel
-© 2017 GitHub, Inc.
-Terms
-Privacy
-Security
-Status
-Help
-Contact GitHub
-API
-Training
-Shop
-Blog
-About
+##We can also specify the host names here and the ssh details under [nodes:vars] if they have have the same ssh credentials
+##(Only one of ansible_ssh_pass OR ansible_ssh_private_key_file is required)
+#192.168.33.10
+#192.168.33.15
+
+[nodes:vars]
+#ansible_user=vagrant
+#ansible_ssh_pass=ssh_password
+#ansible_ssh_private_key_file=/home/private_key
+
+[all:vars]
+##install or uninstall
+ifAction=install
+
+##Login User In Insightfinder Application
+ifUserName=
+
+##Project Name In Insightfinder Application
+ifProjectName=
+
+##User's License Key in Application
+ifLicenseKey=
+
+##Sampling interval could be an integer indicating the number of minutes or "10s" indicating 10 seconds.
+ifSamplingInterval=1
+
+##Agent type
+ifAgent=collectd
+
+##The server reporting Url(Do not change unless you have on-prem deployment)
+ifReportingUrl=https://app.insightfinder.com
+```
+
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the [insightfinder.com](https://insightfinder.com/)
