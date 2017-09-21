@@ -111,7 +111,24 @@ sudo -E ./downloadAgentNoSSL.sh
 cd ..
 ansible-playbook insightagent.yaml
 ```
+### Uninstallation:
+Note: Uninstallation is required before you can install any other Metric agent(e.g. collectd) or you want to reinstall the current cgroup agent.
 
+1) Open and modify the inventory file
+```
+[all:vars]
+##install or uninstall
+ifAction=uninstall
+```
+
+```
+##Agent type
+ifAgent=cgroup
+```
+2) Run the playbook
+```
+ansible-playbook insightagent.yaml
+```
 
 ##### To check raw data in host machines
 - Login into the individual host machines.
