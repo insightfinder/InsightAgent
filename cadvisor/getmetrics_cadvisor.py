@@ -148,7 +148,11 @@ def getmetric():
             numlines = len(resource_usage_file.readlines())
             for i in range(len(dockers)-1):
                 #get cpu
-                index = len(r.json()[jsonStruct[0]+dockers[i]+jsonStruct[1]]["stats"])-1
+                try:
+                    index = len(r.json()[jsonStruct[0]+dockers[i]+jsonStruct[1]]["stats"])-1
+                except KeyError, e:
+                    print "Failed to get stats for " + str(docker[i])
+                    continue
                 if index-int(samplingInterval) < 0:
                     samplingInterval = 1
                 try:
