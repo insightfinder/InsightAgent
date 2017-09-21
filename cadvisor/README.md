@@ -11,6 +11,117 @@ Required docker version: 1.9.1 and later.
 
 Required cadvisor version: 0.19.3 and later.
 
+## Use this script to deploy cgroup Agent on multiple Hosts
+2
+​
+3
+### Prerequisites:
+4
+​
+5
+If there are any proxy settings required for your environment, make sure they are defined for both the installation user and the root user. The InsightFinder cgroup agent requires internet access to download the packages needed for the installation process. After installation is complete, any proxy should be disabled to allow our agents to send data using the correct port. Ensure that your /tmp directory has at least 50MB of disk space available because the apt/yum package managers use /tmp as scratch space for package installation (e.g., package inflation).
+6
+​
+7
+### Install wget to download the required files :
+8
+#### For Debian and Ubuntu
+9
+```
+10
+sudo -E apt-get update
+11
+sudo -E apt-get install wget
+12
+```
+13
+#### For Fedora and RHEL-derivatives
+14
+```
+15
+sudo -E yum update
+16
+sudo -E yum install wget
+17
+```
+18
+​
+19
+​
+20
+#### Get copy of the deployment script:
+21
+1) Use the following command to download the insightfinder agent code.
+22
+```
+23
+wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
+24
+or
+25
+wget --no-check-certificate http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
+26
+```
+27
+Untar using this command.
+28
+```
+29
+tar -xvf insightagent.tar.gz
+30
+```
+31
+```
+32
+cd InsightAgent-master/deployment/DeployAgent/
+33
+sudo -E ./installAnsible.sh
+34
+```
+35
+2) Open and modify the inventory file
+36
+​
+37
+```
+38
+[nodes]
+39
+HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
+40
+###We can specify the host name with ssh details like this for each host
+41
+##If you have the ssh key
+42
+#192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
+43
+​
+44
+##If you have the password
+45
+#192.168.33.20 ansible_user=vagrant ansible_ssh_pass=ssh_password
+@xiaohuigu
+Commit changes
+
+Update README.md
+
+Add an optional extended description…
+  Commit directly to the master branch.
+  Create a new branch for this commit and start a pull request. Learn more about pull requests.
+Commit changes  Cancel
+© 2017 GitHub, Inc.
+Terms
+Privacy
+Security
+Status
+Help
+Contact GitHub
+API
+Training
+Shop
+Blog
+About
+
 ##### Instructions to register a project in Insightfinder.com
 - Go to the [insightfinder.com](https://insightfinder.com/)
 - Sign in with the user credentials or sign up for a new account.
