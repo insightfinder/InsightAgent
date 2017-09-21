@@ -76,7 +76,7 @@ ifSamplingInterval=1
 ifAgent=syscall
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
-ifReportingUrl=https://agent-data.insightfinder.com
+ifReportingUrl=https://app.insightfinder.com
 
 ##Vars for syscall agent##
 ##These variables should only be modified if you are installing a syscall agent on a node

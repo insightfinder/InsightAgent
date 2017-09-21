@@ -75,7 +75,7 @@ ifSamplingInterval=1
 ifAgent=cgroup
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
-ifReportingUrl=https://agent-data.insightfinder.com
+ifReportingUrl=https://app.insightfinder.com
 ```
 3) Download the agent Code which will be distributed to other machines
 ```

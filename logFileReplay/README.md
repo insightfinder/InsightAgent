@@ -50,7 +50,7 @@ tar -xvf insightagent.tar.gz
 source pyenv/bin/activate
 ```
 ```
-./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL -t logFileReplay -w SERVER_URL
+./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s logFileReplay -w SERVER_URL
 ```
 The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required.
 

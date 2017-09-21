@@ -132,7 +132,7 @@ licenseKey abcdef1234567890abcdef1234567890abc
   <match iflog.**>
     type InsightFinder
     # Endpoint for messages
-    destinationHost https://agent-data.insightfinder.com/customprojectrawdata
+    destinationHost https://app.insightfinder.com/customprojectrawdata
     userName guest
     projectName WorkerSysLogs
     # License Key
