@@ -15,6 +15,15 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
   # The URL to send logs to.
   config :url, :validate => :string, :required => true
 
+  # The project number user is using
+  config :projectName, :validate => :string, :required => true
+
+  # user's user name
+  config :userName, :validate => :string, :required => true
+
+  # user's licenseKey
+  config :licenseKey, :validate => :string, :required => true
+
   # Include extra HTTP headers on request if needed
   config :extra_headers, :validate => :hash, :default => []
 
@@ -67,9 +76,8 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
       puts(interval)
       puts(now - @timer)
       if now - @timer > @interval # ready to send
-        header = {"agentType" => "Logstash", "licenseKey" => "44bff6f37b0032a0392f5b5561181627569b8cf1", "projectName" => "logstash", "userName" => "jiaxi"}
-        dataBody = @pile.join($/)
-        send_request(LogStash::Json.dump(header) + "/" + dataBody)
+        dataBody = {"agentType" => "Logstash", "licenseKey" => @licenseKey, "projectName" => @projectName, "userName" => @userName, "metricData" => @pile}
+        send_request(LogStash::Json.dump(dataBody))
         @timer = now
         @pile.clear
       end
