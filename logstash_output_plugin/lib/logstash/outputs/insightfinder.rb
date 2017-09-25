@@ -73,8 +73,6 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
     @semaphore.synchronize {
       now = Time.now
       @pile << content
-      puts(interval)
-      puts(now - @timer)
       if now - @timer > @interval # ready to send
         dataBody = {"agentType" => "Logstash", "licenseKey" => @licenseKey, "projectName" => @projectName, "userName" => @userName, "metricData" => @pile}
         send_request(LogStash::Json.dump(dataBody))
