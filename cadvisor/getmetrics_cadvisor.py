@@ -40,7 +40,6 @@ counter_time_map = {}
 counter = 0
 ##the default value it 60-1, when cAdvisor started, the code need to calculate the index because of the sliding window
 index = 59
-newInstanceAvailable = False
 
 
 def getindex(colName):
@@ -54,7 +53,7 @@ def getindex(colName):
         return 3004
 
 
-def update_container_count(cadvisor_json):
+def update_container_count(cadvisor_json, date):
     if os.path.isfile(os.path.join(homepath, datadir + "totalInstances.json")) == False:
         towritePreviousInstances = {}
         towritePreviousInstances["overallDockerInstances"] = len(cadvisor_json)
@@ -64,12 +63,18 @@ def update_container_count(cadvisor_json):
         with open(os.path.join(homepath, datadir + "totalInstances.json"), 'r') as f:
             dockerInstances = json.load(f)["overallDockerInstances"]
         diff = len(cadvisor_json) - int(dockerInstances)
+        # print "diff " + str(diff)
         if len(cadvisor_json) - dockerInstances != 0:
             towritePreviousInstances = {}
             towritePreviousInstances["overallDockerInstances"] = len(cadvisor_json)
+            # print "instances: " + str(len(cadvisor_json))
             with open(os.path.join(homepath, datadir + "totalInstances.json"), 'w') as f:
                 json.dump(towritePreviousInstances, f)
-            newInstanceAvailable = True
+            if os.path.isfile(os.path.join(homepath, datadir + date + ".csv")) == True:
+                # print "rename files"
+                oldFile = os.path.join(homepath, datadir + date + ".csv")
+                newFile = os.path.join(homepath, datadir + date + "." + time.strftime("%Y%m%d%H%M%S") + ".csv")
+                os.rename(oldFile, newFile)
 
 
 def getmetric():
@@ -92,11 +97,7 @@ def getmetric():
                     print "unable to get requests from ", cAdvisoraddress
                     sys.exit()
                 continue
-            update_container_count(r.json())
-            if newInstanceAvailable == True and os.path.isfile(os.path.join(homepath, datadir + date + ".csv")) == True:
-                oldFile = os.path.join(homepath, datadir + date + ".csv")
-                newFile = os.path.join(homepath, datadir + date + "." + time.strftime("%Y%m%d%H%M%S") + ".csv")
-                os.rename(oldFile, newFile)
+            update_container_count(r.json(), date)
             try:
                 for key, value in r.json().items():
                     index = len(r.json()[key]["stats"]) - 1
@@ -191,10 +192,19 @@ def getmetric():
                         if (fieldnames != ""):
                             fieldnames = fieldnames + ","
                         groupid = getindex(fields[k])
-                        dockerID = r.json()[key]["aliases"][0]
+
+                        docker_id_split = r.json()[key]["aliases"][0].rsplit('_', 1)
+                        print "split: " + str(docker_id_split)
+                        if len(docker_id_split) == 1:
+                            dockerID = r.json()[key]["aliases"][0]
+                        elif len(docker_id_split[0]) > len(docker_id_split[1]):
+                            dockerID = docker_id_split[0]
+                        else:
+                            dockerID = r.json()[key]["aliases"][0]
+                        # print "docker id: " + str(dockerID)
                         metric = fields[k] + "[" + dockerID + "_" + host + "]"
                         fieldnames = fieldnames + metric + ":" + str(groupid)
-                        print fieldnames
+                        # print fieldnames
                 i = i + 1
             if (numlines < 1):
                 resource_usage_file.write("%s\n" % (fieldnames))
