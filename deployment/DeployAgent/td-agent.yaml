@@ -8,6 +8,7 @@
      samplingInterval: 60
      deploymentServerUrl: "{{ ifReportingUrl }}"
      licenseKey: "{{ ifLicenseKey }}"
+     manual_start: "{{ manualStart }}"
    become: yes
    become_method: sudo
    tasks:
@@ -209,17 +210,29 @@
      when: ansible_pkg_mgr == 'zypper'
      tags:
      - td-agent-config
-   - name: td-agent | processes td-agent
+   - name: td-agent | check processes fluent
      become: yes
      shell: ps -ef | grep fluent | awk '{printf "%s ",$2}'
      register: awk_test
-   - name: td-agent | Stop td-agent daemon
+   - name: td-agent | Stop fluentd daemon
      become: yes
      shell: "kill -9 {{item}}"
      ignore_errors: yes
      with_items:
        - "{{ awk_test.stdout_lines }}"
      when: ansible_pkg_mgr == 'zypper'
+   - name: td-agent | check processes td-agent
+     become: yes
+     shell: ps -ef | grep td-agent | awk '{printf "%s ",$2}'
+     register: td_process
+     when: manual_start == 'yes' and ansible_pkg_mgr != 'zypper'
+   - name: td-agent | Stop td-agent daemon
+     become: yes
+     shell: "kill -9 {{item}}"
+     ignore_errors: yes
+     with_items:
+       - "{{ td_process.stdout_lines }}"
+     when: manual_start == 'yes' and ansible_pkg_mgr != 'zypper'
    - name: td-agent | Install fluentd gem dependency
      become: yes
      shell: http_proxy={{ http_proxy }} bash -lc "fluent-gem install fluent-mixin-type-converter"
@@ -230,10 +243,16 @@
      environment:
        PATH: "{{ ansible_env.PATH }}:/usr/local/rvm/gems/ruby-2.2.2/bin:/usr/local/rvm/gems/ruby-2.2.2@global/bin:/usr/local/rvm/rubies/ruby-2.2.2/bin:/usr/lib/mit/bin:/usr/local/rvm/bin"
      when: ansible_pkg_mgr == 'zypper'
+   - name: td-agent | Start td-agent daemon(manual)
+     become: yes
+     shell: bash -lc "td-agent -c /etc/td-agent/td-agent.conf -p /etc/td-agent/plugin/ -o /var/log/td-agent/td-agent.log --use-v1-config &"
+     async: 45
+     poll: 0
+     when: manual_start == 'yes' and ansible_pkg_mgr != 'zypper'
    - name: td-agent | Start td-agent daemon
      become: yes
      service:
       name: td-agent
       enabled: yes
       state: restarted
-     when: ansible_pkg_mgr != 'zypper'
+     when: manual_start == 'no' and ansible_pkg_mgr != 'zypper'
