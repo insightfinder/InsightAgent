@@ -17,11 +17,21 @@ bin/logstash-plugin install <path of .gem>
 ```
 
 ### 4. Start Logstash and send log
-In the Logstash home, running:
-```sh
-bin/logstash -e 'input{stdin{}}output{sumologic{url=>"<url from step 1>"}}'
+Add following output config in your logstash config file:
+```yml
+output {
+    insightfinder {
+      url => "https://app.insightfinder.com/api/v1/customprojectrawdata"
+      format => "%{@json}"
+      interval => 10
+      compress => false
+      projectName => "YOUR PROJECT NAME"
+      userName => "YOUR USER NAME"
+      licenseKey => "YOUR LICENSE KEY"
+    }
+}
 ```
-This will send any stdin input from console to insightfinder server
+This will send any input to insightfinder server. Noticed that the input for the plugin should be formatted in json.
 
 ### Furthermore
 - Try it with different input/filter/codec plugins
