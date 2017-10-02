@@ -41,7 +41,6 @@ counter = 0
 ##the default value it 60-1, when cAdvisor started, the code need to calculate the index because of the sliding window
 index = 59
 
-
 def getindex(colName):
     if colName == "CPU":
         return 3001
@@ -63,15 +62,12 @@ def update_container_count(cadvisor_json, date):
         with open(os.path.join(homepath, datadir + "totalInstances.json"), 'r') as f:
             dockerInstances = json.load(f)["overallDockerInstances"]
         diff = len(cadvisor_json) - int(dockerInstances)
-        # print "diff " + str(diff)
         if len(cadvisor_json) - dockerInstances != 0:
             towritePreviousInstances = {}
             towritePreviousInstances["overallDockerInstances"] = len(cadvisor_json)
-            # print "instances: " + str(len(cadvisor_json))
             with open(os.path.join(homepath, datadir + "totalInstances.json"), 'w') as f:
                 json.dump(towritePreviousInstances, f)
             if os.path.isfile(os.path.join(homepath, datadir + date + ".csv")) == True:
-                # print "rename files"
                 oldFile = os.path.join(homepath, datadir + date + ".csv")
                 newFile = os.path.join(homepath, datadir + date + "." + time.strftime("%Y%m%d%H%M%S") + ".csv")
                 os.rename(oldFile, newFile)
@@ -180,7 +176,6 @@ def getmetric():
                     network_r = "NaN"
                 log = log + "," + str(cur_cpu) + "," + str(io_read) + "," + str(io_write) + "," + str(
                     network_r) + "," + str(network_t) + "," + str(mem)
-                # print "values: " + log
                 if (numlines < 1):
                     fields = ["timestamp", "CPU", "DiskRead", "DiskWrite", "NetworkIn", "NetworkOut", "MemUsed"]
                     if i == 0:
@@ -193,18 +188,19 @@ def getmetric():
                             fieldnames = fieldnames + ","
                         groupid = getindex(fields[k])
 
-                        docker_id_split = r.json()[key]["aliases"][0].rsplit('_', 1)
-                        print "split: " + str(docker_id_split)
-                        if len(docker_id_split) == 1:
-                            dockerID = r.json()[key]["aliases"][0]
-                        elif len(docker_id_split[0]) > len(docker_id_split[1]):
+                        dockerID = r.json()[key]["aliases"][0]
+                        docker_id_split = []
+                        for c in reversed(dockerID):
+                            if c == '_':
+                                docker_id_split = dockerID.rsplit('_', 1)
+                                break
+                            if c == '.':
+                                docker_id_split = dockerID.rsplit('.', 1)
+                                break
+                        if len(docker_id_split) != 0:
                             dockerID = docker_id_split[0]
-                        else:
-                            dockerID = r.json()[key]["aliases"][0]
-                        # print "docker id: " + str(dockerID)
                         metric = fields[k] + "[" + dockerID + "_" + host + "]"
                         fieldnames = fieldnames + metric + ":" + str(groupid)
-                        # print fieldnames
                 i = i + 1
             if (numlines < 1):
                 resource_usage_file.write("%s\n" % (fieldnames))
