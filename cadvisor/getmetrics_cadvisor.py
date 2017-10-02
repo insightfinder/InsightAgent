@@ -53,18 +53,25 @@ def getindex(colName):
 
 
 def update_container_count(cadvisor_json, date):
+    dockerInstances = []
+    newInstances = []
     if os.path.isfile(os.path.join(homepath, datadir + "totalInstances.json")) == False:
         towritePreviousInstances = {}
-        towritePreviousInstances["overallDockerInstances"] = len(cadvisor_json)
+        for containers in cadvisor_json:
+            if containers != "":
+                dockerInstances.append(containers)
+        towritePreviousInstances["overallDockerInstances"] = dockerInstances
         with open(os.path.join(homepath, datadir + "totalInstances.json"), 'w') as f:
             json.dump(towritePreviousInstances, f)
     else:
         with open(os.path.join(homepath, datadir + "totalInstances.json"), 'r') as f:
             dockerInstances = json.load(f)["overallDockerInstances"]
-        diff = len(cadvisor_json) - int(dockerInstances)
-        if len(cadvisor_json) - dockerInstances != 0:
+        for containers in cadvisor_json:
+            if containers != "":
+                newInstances.append(containers)
+        if cmp(newInstances,dockerInstances) != 0:
             towritePreviousInstances = {}
-            towritePreviousInstances["overallDockerInstances"] = len(cadvisor_json)
+            towritePreviousInstances["overallDockerInstances"] = newInstances
             with open(os.path.join(homepath, datadir + "totalInstances.json"), 'w') as f:
                 json.dump(towritePreviousInstances, f)
             if os.path.isfile(os.path.join(homepath, datadir + date + ".csv")) == True:
