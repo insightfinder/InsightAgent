@@ -17,7 +17,7 @@ bin/logstash-plugin install <path of .gem>
 ```
 
 ### 4. Start Logstash and send log
-Add following output config in your logstash config file:
+Add following output config in your logstash config file (replace projectName, userName, licenseKey with your own!):
 ```yml
 output {
     insightfinder {
