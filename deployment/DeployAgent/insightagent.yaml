@@ -1,0 +1,41 @@
+---
+ - hosts: nodes
+   vars:
+     projectName: "{{ ifProjectName }}"
+     userName: "{{ ifUserName }}"
+     samplingInterval: "{{ ifSamplingInterval }}"
+     agentType: "{{ ifAgent }}"
+     reportingUrl: "{{ ifReportingUrl }}"
+     licenseKey: "{{ ifLicenseKey }}"
+     action: "{{ ifAction }}"
+   vars_files:
+    - defaults/main.yml
+   become: yes
+   gather_facts: no
+   pre_tasks:
+   #Install python on remote host as it is required by ansible as well as the agent code
+   - name: Install Python - APT
+     raw: "test -e /usr/bin/python || (http_proxy={{ http_proxy }} command -v apt && (http_proxy={{ http_proxy }} apt -y update && apt install -y build-essential libssl-dev libffi-dev python-dev))"
+   - name: Install Python - YUM
+     raw: test -e /usr/bin/python || (command -v yum && (yum -y update && yum install -y build-essential libssl-dev libffi-dev python-dev))
+   - name: Gather Facts
+     setup:
+   - name : Check Mandatory Variable(ifAction)
+     debug:
+       msg:
+         - Action:{{ action | mandatory }}
+   - name : Validate Value Of Variable(ifAction)
+     fail: msg="Please enter correct Params"
+     when:
+       - action !="install"
+       - action !="uninstall"
+   roles:
+     - { role: install-cgroup, when: agentType=="cgroup" }
+     - { role: install-collectd, when: agentType=="collectd" }
+     - { role: install-syscall, when: agentType=="syscall" }
+     - { role: install-cadvisor, when: agentType=="cadvisor" }
+     - { role: uninstall, when: action=="uninstall" }
+   environment:
+     http_proxy: "{{ http_proxy }}"
+     https_proxy: "{{ http_proxy }}"
+     no_proxy: "{{ no_proxy }}"
