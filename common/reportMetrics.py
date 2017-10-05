@@ -178,19 +178,19 @@ def sendData(fileID):
             chunkSize = reportedDataSize
             firstData = True
             totalChunks = int(math.ceil(float(totalSize)/float(chunkSize)))
-	    #This is a hack fix and should be fixed. Pushing the fix off until we refactor this file.
-	#    if mode == "metricFileReplay":
-	 #     totalChunks = totalChunks-1
-    	alldata["minTimestamp"] = minTimestampEpoch
-    	alldata["maxTimestamp"] = maxTimestampEpoch
+        #This is a hack fix and should be fixed. Pushing the fix off until we refactor this file.
+    #    if mode == "metricFileReplay":
+     #     totalChunks = totalChunks-1
+        alldata["minTimestamp"] = minTimestampEpoch
+        alldata["maxTimestamp"] = maxTimestampEpoch
         reportedDataPer = (float(reportedDataSize)/float(totalSize))*100
         reportedChunks += 1
         print str(reportedChunks) + " out of " + str(totalChunkCount)+" are reported"
         alldata["chunkSerialNumber"] = str(currentChunk)
         alldata["chunkTotalNumber"] = str(totalChunkCount)
-	if(not splitID == None and not splitBy == None):
-	  alldata["splitID"] = splitID
-	  alldata["splitBy"] = splitBy
+    if(not splitID == None and not splitBy == None):
+        alldata["splitID"] = splitID
+        alldata["splitBy"] = splitBy
         currentChunk += 1
         if mode == "logFileReplay":
             alldata["agentType"] = "LogFileReplay"
@@ -261,7 +261,6 @@ else: # prev_endtime == 0
 alldata = {}
 helperdata = {}
 metricData = []
-fieldnames = []
 idxdate = 0
 hostname = socket.gethostname().partition(".")[0]
 minTimestampEpoch = 0
@@ -270,8 +269,12 @@ totalChunkCount = 0
 chunkMaxSize = 1000000
 chunkingPadding = 30000
 if options.inputFile is None:
-    for i in range(0,2+int(float(reporting_interval)/24/60)):
+    for i in range(0,3+int(float(reporting_interval)/24/60)):
         dates.append(time.strftime("%Y%m%d", time.localtime(start_time_epoch/1000 + 60*60*24*i)))
+    #append current date to dates to read data
+    current_date = time.strftime("%Y%m%d", time.gmtime())
+    if current_date not in dates:
+        dates.append(current_date)
     for date in dates:
         if agentType == "kafka":
             fileadd = "_kafka"
@@ -282,20 +285,25 @@ if options.inputFile is None:
 
         if os.path.isfile(os.path.join(homepath, datadir + date + fileadd + ".csv")):
             dailyFile = open(os.path.join(homepath, datadir + date + fileadd + ".csv"))
-            dailyFileReader = csv.reader(dailyFile)
+            try:
+                dailyFileReader = csv.reader(dailyFile)
+            except IOError:
+                print "No data-file for " + str(date)+"!"
+                continue
+            fieldnames = []
             for row in dailyFileReader:
-                if idxdate == 0 and dailyFileReader.line_num == 1:
+                if dailyFileReader.line_num == 1:
                     #Get all the metric names
                     fieldnames = row
                     for i in range(0,len(fieldnames)):
                         if fieldnames[i] == "timestamp":
                             timestamp_index = i
                 elif dailyFileReader.line_num > 1:
-		    try:
+                    try:
                         if long(row[timestamp_index]) < long(start_time_epoch) :
                             continue
                     except ValueError:
-                            continue
+                        continue
                     #Read each line from csv and generate a json
                     thisData = {}
                     for i in range(0,len(row)):
@@ -312,7 +320,6 @@ if options.inputFile is None:
                             thisData[colname] = row[i]
                     metricData.append(thisData)
             dailyFile.close()
-            idxdate += 1
     #update endtime in config
     if new_prev_endtime_epoch == 0:
         print "No data is reported"
