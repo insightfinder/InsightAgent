@@ -30,10 +30,10 @@
        - action !="install"
        - action !="uninstall"
    roles:
-     - { role: install-cgroup, when: agentType=="cgroup" }
-     - { role: install-collectd, when: agentType=="collectd" }
-     - { role: install-syscall, when: agentType=="syscall" }
-     - { role: install-cadvisor, when: agentType=="cadvisor" }
+     - { role: install-cgroup, when: agentType=="cgroup" and action=="install"}
+     - { role: install-collectd, when: agentType=="collectd" and action=="install"}
+     - { role: install-syscall, when: agentType=="syscall" and action=="install"}
+     - { role: install-cadvisor, when: agentType=="cadvisor" and action=="install"}
      - { role: uninstall, when: action=="uninstall" }
    environment:
      http_proxy: "{{ http_proxy }}"
