@@ -8,6 +8,7 @@
       - Agent Type:{{ agentType | mandatory }}
       - License Key:{{ licenseKey | mandatory }}
       - Update APT:{{ apt_update | mandatory }}
+      - CAdvisor Port:{{ cadvisorPort | mandatory }}
 - name: SELinux | Check for SELinux
   become: yes
   stat:
@@ -94,10 +95,14 @@
   debug:
     var: "cadvisor.stdout"
   when: '"cadvisor" not in cadvisor.stdout'
+- name: Remove old container
+  become: true
+  shell: 'docker rm cadvisor --force'
+  when: '"cadvisor" in cadvisor.stdout'
 - name: Install cadvisor container
   become: yes
-  shell: 'http_proxy={{ http_proxy }} docker run --volume=/:/rootfs:ro --volume=/var/run:/var/run:rw --volume=/sys:/sys:ro --volume=/var/lib/docker/:/var/lib/docker:ro --publish=8080:8080 --detach=true --name=cadvisor google/cadvisor:latest'
-  when: '"cadvisor" not in cadvisor.stdout and not docker_install|failed'
+  shell: 'http_proxy={{ http_proxy }} docker run --volume=/:/rootfs:ro --volume=/var/run:/var/run:rw --volume=/sys:/sys:ro --volume=/var/lib/docker/:/var/lib/docker:ro --publish={{ cadvisorPort }}:8080 --detach=true --name=cadvisor google/cadvisor:latest'
+  when: not docker_install|failed
 - name: Delete Old Tar Bundle for Agent
   become: yes
   file:
@@ -108,6 +113,11 @@
   file:
     state: absent
     path: "{{ansible_env.HOME}}/InsightAgent-master"
+- name: Delete ifagent Cron Configuration
+  become: yes
+  file:
+    state: absent
+    path: /etc/cron.d/ifagent
 - name: Copy Agent Code on Machines
   become: yes
   copy:
@@ -121,6 +131,11 @@
     src: "{{ansible_env.HOME}}/insightagent.tar.gz"
     dest: "{{ansible_env.HOME}}"
     remote_src: True
+- name: "Configure cadvisor port"
+  lineinfile:
+    dest: "{{ansible_env.HOME}}/InsightAgent-master/cadvisor/getmetrics_cadvisor.py"
+    regexp: "^cAdvisoraddress ="
+    line: 'cAdvisoraddress = "http://" + hostname + ":{{ cadvisorPort }}/api/v1.3/docker/"'
 - name: Create Python Virtual Environment for Agent
   command: ./deployment/checkpackages.sh -env
   args:

@@ -11,3 +11,4 @@ six==1.10.0
 kafka==1.3.2
 elasticsearch
 netifaces
+pyyaml
