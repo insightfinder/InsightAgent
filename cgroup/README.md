@@ -4,6 +4,8 @@
 
 If there are any proxy settings required for your environment, make sure they are defined for both the installation user and the root user. The InsightFinder cgroup agent requires internet access to download the packages needed for the installation process. After installation is complete, any proxy should be disabled to allow our agents to send data using the correct port. Ensure that your /tmp directory has at least 50MB of disk space available because the apt/yum package managers use /tmp as scratch space for package installation (e.g., package inflation).
 
+Tested with ansible version 2.2.3.0
+
 ### Install wget to download the required files :
 #### For Debian and Ubuntu
 ```

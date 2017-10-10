@@ -6,6 +6,7 @@ Platform: Linux
 InsightFinder agent can be used to monitor system metrics of docker containers using cadvisor.
 
 Tested with Ubuntu 14.04, Redhat 7.2, Centos 7.2.
+Tested with ansible version 2.2.3.0
 
 Required docker version: 1.9.1 and later.
 
