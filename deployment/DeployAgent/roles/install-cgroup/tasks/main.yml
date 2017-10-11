@@ -84,6 +84,11 @@
   file:
     state: absent
     path: "{{ansible_env.HOME}}/InsightAgent-master"
+- name: Delete ifagent Cron Configuration
+  become: yes
+  file:
+    state: absent
+    path: /etc/cron.d/ifagent
 - name: Copy Agent Code on Machines
   become: yes
   copy:

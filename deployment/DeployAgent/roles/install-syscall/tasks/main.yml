@@ -66,7 +66,7 @@
   with_items:
     - "{{ awk_test.stdout_lines }}"
 - name: Start Syscall Agent Listener
-  shell: "(no_proxy= {{ no_proxy }} ./reporting_send.py -d {{projectDir}}/syscall -D {{projectDir}} &) -w {{ifReportingUrl}}"
+  shell: "no_proxy= {{ no_proxy }} ./reporting_send.py -d {{projectDir}}/syscall -D {{projectDir}} -w {{ifReportingUrl}} &"
   become: true
   async: 10
   poll: 0
@@ -75,7 +75,7 @@
     chdir: "{{ projectDir }}/syscall"
   when: projectDir != ""  and project_dir.stat.exists
 - name: Start Syscall Agent Listener
-  shell: "(no_proxy={{ no_proxy }} ./reporting_send.py -d {{ansible_env.HOME}}/InsightAgent-master/syscall -D {{ansible_env.HOME}}/InsightAgent-master &) -w {{ifReportingUrl}}"
+  shell: "no_proxy={{ no_proxy }} ./reporting_send.py -d {{ansible_env.HOME}}/InsightAgent-master/syscall -D {{ansible_env.HOME}}/InsightAgent-master -w {{ifReportingUrl}} &"
   become: true
   async: 10
   poll: 0
