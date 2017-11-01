@@ -34,6 +34,7 @@
      - { role: install-collectd, when: agentType=="collectd" and action=="install"}
      - { role: install-syscall, when: agentType=="syscall" and action=="install"}
      - { role: install-cadvisor, when: agentType=="cadvisor" and action=="install"}
+     - { role: install-mreplay, when: (agentType=="metricFileReplay" or agentType=="logFileReplay") and action=="install"}
      - { role: uninstall, when: action=="uninstall" }
    environment:
      http_proxy: "{{ http_proxy }}"

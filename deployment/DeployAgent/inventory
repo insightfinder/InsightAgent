@@ -1,11 +1,12 @@
 [nodes]
-HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
+#HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
 ###We can specify the host name with ssh details like this for each host
 ##If you have the ssh key
 #192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
 
 ##If you have the password
 #192.168.33.20 ansible_user=vagrant ansible_ssh_pass=ssh_password
+127.0.0.1 ansible_user=moharnab ansible_ssh_pass=1 ansible_port=3022 ansible_become_pass=1
 
 
 ##We can also specify the host names here and the ssh details under [nodes:vars] if they have have the same ssh credentials
@@ -14,7 +15,7 @@ HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
 #192.168.33.15
 
 [coordinator]
-HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
+#HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
 ###We can specify the host name with ssh details like this for each host
 ##If you have the ssh key
 #192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
@@ -45,13 +46,13 @@ no_proxy=
 ifAction=install
 
 ##Login User In Insightfinder Application
-ifUserName=
+ifUserName=moharnab
 
 ##Project Name In Insightfinder Application
-ifProjectName=
+ifProjectName=test-mreplay
 
 ##User's License Key in Application
-ifLicenseKey=
+ifLicenseKey=afca3051b0fcf4cafaaef27bdd8d4eefcac27e54
 
 ifSamplingInterval=1
 
@@ -60,6 +61,8 @@ ifAgent=collectd
 #ifAgent=cgroup
 #ifAgent=syscall
 #ifAgent=cadvisor
+#ifAgent=metricFileReplay
+ifAgent=logFileReplay
 
 ##When yes, we will run the equivalent of 'apt-get update' before installing any packages.
 ##Valid entries are yes or no. Not used with yum-based installation (e.g., CentOS).
