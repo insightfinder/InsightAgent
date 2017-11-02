@@ -82,7 +82,6 @@ if [ $lastCharReporting == 's' ];then
 fi
 
 
-
 if [ -z "$SERVER_URL" ]; then
 	SERVER_URL='https://agent-data.insightfinder.com'
 fi
