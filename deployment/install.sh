@@ -155,7 +155,7 @@ echo "export SAMPLING_INTERVAL=$SAMPLING_INTERVAL" >> $AGENTRC
 echo "export REPORTING_INTERVAL=$REPORTING_INTERVAL" >> $AGENTRC
 
 if [ $AGENT_TYPE == 'metricFileReplay' ] || [ $AGENT_TYPE == 'logFileReplay' ]; then
-	exit 1
+	exit 0
 fi
 
 TEMPCRON=$INSIGHTAGENTDIR/ifagent
