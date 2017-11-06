@@ -41,7 +41,7 @@
   format_firstline /[A-Z][a-z][a-z] (([0-3][0-9])| [0-9])\, \d{4} ([0-9]|[0-9][0-9]):[0-9][0-9]:[0-9][0-9] (A|P)M/
   format1 /^(?<time>[A-Z][a-z][a-z] (([0-3][0-9])| [0-9])\, \d{4} ([0-9]|[0-9][0-9]):[0-9][0-9]:[0-9][0-9] (A|P)M) (?<data>.*)$/
   time_format %b %d, %Y %H:%M:%S %p
-  path /opt/jetty/logs/%Y_%m_%d.stderrout.log
+  path /opt/jetty/logs/%Y_%m_*.stderrout.log
   #############################################
   pos_file /tmp/log.pos
   encoding ISO-8859-1
