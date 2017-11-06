@@ -9,6 +9,7 @@
      deploymentServerUrl: "{{ ifReportingUrl }}"
      licenseKey: "{{ ifLicenseKey }}"
      manual_start: "{{ manualStart }}"
+     disable_td_proxy: "{{ disableTdProxy }}"
    become: yes
    become_method: sudo
    tasks:
@@ -195,6 +196,20 @@
        group: root
        mode: 0644
      when: ansible_pkg_mgr == 'zypper'
+   - name: td-agent | Modify Insightfinder plugin
+     lineinfile:
+       path: /etc/td-agent/plugin/out_InsightFinder.rb
+       regexp: '@http = Net::HTTP.new'
+       line: '@http = Net::HTTP.new(@uri.host, @uri.port, nil)'
+       state: present
+     when: ansible_pkg_mgr != 'zypper' and disable_td_proxy == 'yes'
+   - name: td-agent | Modify Insightfinder plugin SUSE
+     lineinfile:
+       path: /etc/fluent/plugin/out_InsightFinder.rb
+       regexp: '@http = Net::HTTP.new'
+       line: '@http = Net::HTTP.new(@uri.host, @uri.port, nil)'
+       state: present
+     when: ansible_pkg_mgr == 'zypper' and disable_td_proxy == 'yes'
    - name: td-agent | Add config_file
      become: yes
      template:
