@@ -83,5 +83,11 @@ tracingInterval=1
 ##The port number for the cadvisor agent
 cadvisorPort=8080
 
-##If td-agent can't be started as a service then change this value to yes
+##Vars for td-agent##
+
+# If td-agent can't be started as a service then change this value to yes
 manualStart=no
+
+# If set to yes will disable the system proxy settings for the insightfinder td-agent output plugin
+# By default the output plugin uses the the http proxy settings defined in the environment
+disableTdProxy=no
