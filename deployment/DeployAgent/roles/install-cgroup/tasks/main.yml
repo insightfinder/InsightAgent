@@ -112,7 +112,7 @@
   when: ansible_pkg_mgr == 'zypper'
 - name: Deploy cgroup Agent
   become: true
-  shell: "no_proxy={{ no_proxy }} ./deployment/install.sh
+  shell: "unset http_proxy https_proxy && ./deployment/install.sh
     -i {{ projectName }}
     -u {{ userName }}
     -k {{ licenseKey }}
