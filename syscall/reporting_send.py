@@ -111,7 +111,7 @@ def sendFile(self):
         thread.start()
         thread.join()
 
-        command = "cd " + rootpath +" && python common/reportBinary.py -f syscall/data/" + fnameSeg + ".tar.gz -m binaryFileReplay -T 1 -S " + sysTrace_timestamp + " -w "+serverUrl
+        command = "cd " + rootpath +" && unset http_proxy https_proxy && python common/reportBinary.py -f syscall/data/" + fnameSeg + ".tar.gz -m binaryFileReplay -T 1 -S " + sysTrace_timestamp + " -w "+serverUrl
         print command
         thread = prepareThreads(command,rootpath)
         thread.start()

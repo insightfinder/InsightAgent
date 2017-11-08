@@ -72,7 +72,7 @@
 - name: Install pip packages for Agent
   shell: "pip install --no-index --find-links='{{ansible_env.HOME}}/pip_packages/' requests"
 - name: Deploy Replay Agent
-  shell: "no_proxy={{ no_proxy }} ./deployment/install.sh
+  shell: "unset http_proxy https_proxy && ./deployment/install.sh
     -i {{ projectName }}
     -u {{ userName }}
     -k {{ licenseKey }}

@@ -162,7 +162,7 @@
   shell: http_proxy={{ http_proxy }} pip install requests
   when: ansible_pkg_mgr == 'zypper'
 - name: Deploy collectd Agent
-  shell: "no_proxy={{ no_proxy }} ./deployment/install.sh
+  shell: "unset http_proxy https_proxy && ./deployment/install.sh
     -i {{ projectName }}
     -u {{ userName }}
     -k {{ licenseKey }}
