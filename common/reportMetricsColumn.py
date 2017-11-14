@@ -215,6 +215,125 @@ def sendData(fileID):
     else:
         response = requests.post(url, data=json.loads(json_data))
 
+def groupByTimestamp(fileReader):
+    global reportedDataSize
+    global firstData
+    global chunkSize
+    global totalChunks
+    global currentChunk
+    global totalSize
+    global minTimestampEpoch
+    global maxTimestampEpoch
+    global splitID
+    global splitBy
+    global reportedChunks
+    groupedByTimestampData = {}
+    for row in fileReader:
+        if fileReader.line_num == 1:
+            #Get all the metric names
+            fieldnames = row
+            for i in range(0,len(fieldnames)):
+                currentFieldNameStripped = fieldnames[i].strip()
+                if currentFieldNameStripped == "timestamp":
+                    timestamp_index = i
+		if not hostColumn is None and currentFieldNameStripped == hostColumn:
+	            hostIndex = i
+	else:
+	    rowTimestamp = row[timestamp_index]
+            for i in range(0,len(row)):
+                if fieldnames[i] == "timestamp":
+		    if not rowTimestamp in groupedByTimestampData:
+		        groupedByTimestampData[rowTimestamp] = {}
+		    groupedByTimestampData[rowTimestamp]["timestamp"] = row[i]
+                    new_prev_endtime_epoch = row[timestamp_index]
+                    # update min/max timestamp epoch
+                    if minTimestampEpoch == 0 or minTimestampEpoch > long(new_prev_endtime_epoch):
+                        minTimestampEpoch = long(new_prev_endtime_epoch)
+                    if maxTimestampEpoch == 0 or maxTimestampEpoch < long(new_prev_endtime_epoch):
+                        maxTimestampEpoch = long(new_prev_endtime_epoch)
+                else: 
+		    #Vertical layout
+                    if not hostColumn is None: 	
+	                if not i == hostIndex:
+		            colname = fieldnames[i].strip()+"["+row[hostIndex]+"]"
+                            if colname.find(":") == -1:
+                                groupid = i
+                                colname = colname+":"+str(groupid)
+		            if not rowTimestamp in groupedByTimestampData:
+		                groupedByTimestampData[rowTimestamp] = {}
+		            groupedByTimestampData[rowTimestamp][colname] = row[i]
+    return groupedByTimestampData
+
+
+def runHorizontalLayoutCode(fileReader):
+    global reportedDataSize
+    global firstData
+    global chunkSize
+    global totalChunks
+    global currentChunk
+    global totalSize
+    global minTimestampEpoch
+    global maxTimestampEpoch
+    global splitID
+    global splitBy
+    global reportedChunks
+    metricDatas = []
+    verticalData = {}
+    for row in fileReader:
+        if fileReader.line_num == 1:
+            #Get all the metric names
+            fieldnames = row
+            for i in range(0,len(fieldnames)):
+	        currentFieldNameStripped = fieldnames[i].strip()
+                if currentFieldNameStripped == "timestamp":
+                    timestamp_index = i
+		if not hostColumn is None and currentFieldNameStripped == hostColumn:
+	            hostIndex = i
+        elif fileReader.line_num > 1:
+            #Read each line from csv and generate a json
+            thisData = {}
+	    rowTimestamp = row[timestamp_index]
+            for i in range(0,len(row)):
+                if fieldnames[i] == "timestamp":
+                    new_prev_endtime_epoch = row[timestamp_index]
+                    thisData[fieldnames[i]] = row[i]
+                    # update min/max timestamp epoch
+                    if minTimestampEpoch == 0 or minTimestampEpoch > long(new_prev_endtime_epoch):
+                        minTimestampEpoch = long(new_prev_endtime_epoch)
+                    if maxTimestampEpoch == 0 or maxTimestampEpoch < long(new_prev_endtime_epoch):
+                        maxTimestampEpoch = long(new_prev_endtime_epoch)
+                else:
+	            colname = fieldnames[i].strip()
+                    if colname.find("]") == -1:
+                        colname = colname+"[-]"
+                    if colname.find(":") == -1:
+                        groupid = i
+                        colname = colname+":"+str(groupid)
+                    thisData[colname] = row[i]
+                metricDatas.append(thisData)
+        if metricdataSizeKnown == False:
+                metricdataSize = len(bytearray(json.dumps(metricDatas)))
+                metricdataSizeKnown = True
+                totalSize = metricdataSize * (numlines - 1) # -1 for header
+        maxSize = 0
+        numlines = len(metricDatas)
+        for entry in metricDatas:
+            if len(bytearray(json.dumps(row))) > maxSize:
+                maxSize = len(bytearray(json.dumps(row)))
+        maxAmount = chunkMaxSize/(maxSize + chunkingPadding)
+        totalChunkCount = int(math.ceil(float(numlines) / float(maxAmount)))
+
+        for entry in metricDatas:
+            metricData.append(entry)
+            if len(metricData) < maxAmount:
+                continue;
+            else:
+                sendData(fileMD5)
+                metricData = []
+        sendData(fileMD5)
+    file.close()
+    updateAgentDataRange(minTimestampEpoch,maxTimestampEpoch)
+
 def updateAgentDataRange(minTS,maxTS):
     #update projectKey, userName in dict
     helperdata["licenseKey"] = LICENSEKEY
@@ -341,97 +460,35 @@ else:
         fileMD5 = hashlib.md5(os.path.join(homepath,options.inputFile)).hexdigest()
         metricdataSizeKnown = False
         metricdataSize = 0
-        if mode == "logFileReplay":
-            jsonData = json.load(file)
-            numlines = len(jsonData)
-            maxSize = 0
-            for row in jsonData:
-               #calculate largest log
-               if len(bytearray(json.dumps(row))) > maxSize:
-                   maxSize = len(bytearray(json.dumps(row)))
-            maxAmount = chunkMaxSize/(maxSize + chunkingPadding)
-            totalChunkCount = int(math.ceil(float(numlines) / float(maxAmount)))
-            for row in jsonData:
-                new_prev_endtime_epoch = row[row.keys()[0]]
-                if minTimestampEpoch == 0 or minTimestampEpoch > long(new_prev_endtime_epoch):
-                    minTimestampEpoch = long(new_prev_endtime_epoch)
-                if maxTimestampEpoch == 0 or maxTimestampEpoch < long(new_prev_endtime_epoch):
-                    maxTimestampEpoch = long(new_prev_endtime_epoch)
-                metricData.append(row)
-                if metricdataSizeKnown == False:
-                    metricdataSize = len(bytearray(json.dumps(metricData)))
-                    metricdataSizeKnown = True
-                    totalSize = getTotalSize(options.inputFile)
-                if ((len(metricData)) < maxAmount):  # Not using exact 750KB as some data will be padded later
-                    continue
-                else:
-                    sendData(fileMD5)
-                    metricData = []
-            sendData(fileMD5)
-        else:
-            fileReader = csv.reader(file)
-            metricDatas = []
-            for row in fileReader:
-                if fileReader.line_num == 1:
-                    #Get all the metric names
-                    fieldnames = row
-                    for i in range(0,len(fieldnames)):
-		        currentFieldNameStripped = fieldnames[i].strip()
-                        if currentFieldNameStripped == "timestamp":
-                            timestamp_index = i
-			if not hostColumn is None and currentFieldNameStripped == hostColumn:
-			    hostIndex = i
-                elif fileReader.line_num > 1:
-                    #Read each line from csv and generate a json
-                    thisData = {}
-                    for i in range(0,len(row)):
-                        if fieldnames[i] == "timestamp":
-                            new_prev_endtime_epoch = row[timestamp_index]
-                            thisData[fieldnames[i]] = row[i]
-                            # update min/max timestamp epoch
-                            if minTimestampEpoch == 0 or minTimestampEpoch > long(new_prev_endtime_epoch):
-                                minTimestampEpoch = long(new_prev_endtime_epoch)
-                            if maxTimestampEpoch == 0 or maxTimestampEpoch < long(new_prev_endtime_epoch):
-                                maxTimestampEpoch = long(new_prev_endtime_epoch)
-                        else:
-			    #Vertical layout
-			    if not hostColumn is None: 
-				if not i == hostIndex:
-				    colname = fieldnames[i].strip()+"["+row[hostIndex]+"]"
-				else:
-				    continue
-			    else:
-			        colname = fieldnames[i].strip()
-                                if colname.find("]") == -1:
-                                    colname = colname+"[-]"
-                            if colname.find(":") == -1:
-                                groupid = i
-                                colname = colname+":"+str(groupid)
-			    print colname+","+row[i]
-                            thisData[colname] = row[i]
-                    metricDatas.append(thisData)
-            if metricdataSizeKnown == False:
-                    metricdataSize = len(bytearray(json.dumps(metricDatas)))
-                    metricdataSizeKnown = True
-                    totalSize = metricdataSize * (numlines - 1) # -1 for header
-            maxSize = 0
-            numlines = len(metricDatas)
-            for entry in metricDatas:
-                if len(bytearray(json.dumps(row))) > maxSize:
-                    maxSize = len(bytearray(json.dumps(row)))
-            maxAmount = chunkMaxSize/(maxSize + chunkingPadding)
-            totalChunkCount = int(math.ceil(float(numlines) / float(maxAmount)))
+        fileReader = csv.reader(file)
+        metricDatas = []
+	#Vertical layout
+	if not hostColumn is None:
+	    groupedByTimestampData = groupByTimestamp(fileReader)
+	    for timestamp in groupedByTimestampData:
+	        metricDatas.append(groupedByTimestampData[timestamp])
+        if metricdataSizeKnown == False:
+            metricdataSize = len(bytearray(json.dumps(metricDatas)))
+            metricdataSizeKnown = True
+            totalSize = metricdataSize * (numlines - 1) # -1 for header
+        maxSize = 0
+        numlines = len(metricDatas)
+        for entry in metricDatas:
+            if len(bytearray(json.dumps(entry))) > maxSize:
+                maxSize = len(bytearray(json.dumps(entry)))
+        maxAmount = chunkMaxSize/(maxSize + chunkingPadding)
+        totalChunkCount = int(math.ceil(float(numlines) / float(maxAmount)))
 
-            for entry in metricDatas:
-                metricData.append(entry)
-                if len(metricData) < maxAmount:
-                    continue;
-                else:
-                    sendData(fileMD5)
-                    metricData = []
-            sendData(fileMD5)
-        file.close()
-        updateAgentDataRange(minTimestampEpoch,maxTimestampEpoch)
+        for entry in metricDatas:
+            metricData.append(entry)
+            if len(metricData) < maxAmount:
+                continue;
+            else:
+                sendData(fileMD5)
+                metricData = []
+        sendData(fileMD5)
+    file.close()
+    updateAgentDataRange(minTimestampEpoch,maxTimestampEpoch)
 
 #old file cleaning
 for dirpath, dirnames, filenames in os.walk(os.path.join(homepath,datadir)):
