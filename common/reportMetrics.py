@@ -20,8 +20,8 @@ if prev endtime is 0, report most recent reporting interval
 till now from today's log file (may or may not be present)
 assumping gmt epoch timestamp and local date daily file
 '''
-serverUrl = 'https://agent-data.insightfinder.com'
-#serverUrl = 'http://localhost:8080'
+#serverUrl = 'https://agent-data.insightfinder.com'
+serverUrl = 'http://localhost:8080'
 usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)
 parser.add_option("-f", "--fileInput",
@@ -36,6 +36,8 @@ parser.add_option("-w", "--serverUrl",
     action="store", dest="serverUrl", help="Server Url")
 parser.add_option("-s", "--splitID",
     action="store", dest="splitID", help="The split ID to use when grouping results on the server")
+parser.add_option("-c", "--hostColumn",
+    action="store", dest="hostColumn", help="Hostnames are in a column given as the argument to this option.")
 parser.add_option("-g", "--splitBy",
     action="store", dest="splitBy", help="The 'split by' to use when grouping results on the server. Examples: splitByEnv, splitByGroup")
 (options, args) = parser.parse_args()
@@ -63,6 +65,10 @@ if options.splitBy is None:
     splitBy = None
 else:
     splitBy = options.splitBy
+if options.hostColumn is None:
+    hostColumn = None
+else:
+    hostColumn = options.hostColumn
 
 datadir = 'data/'
 
@@ -147,7 +153,6 @@ def sendData(fileID):
     global reportedChunks
     if len(metricData) == 0:
         return
-
     with open(os.path.join(homepath, "reporting_config.json"), 'r') as f:
         config = json.load(f)
 
@@ -170,6 +175,7 @@ def sendData(fileID):
     if agentType == "ec2monitoring":
         alldata["instanceType"] = ec2InstanceType()
     alldata["insightAgentType"] = agentType
+    alldata["agentType"] = agentType
     #print the json
     json_data = json.dumps(alldata)
     if "FileReplay" in mode:
@@ -202,7 +208,7 @@ def sendData(fileID):
         print str(len(bytearray(json_data))) + " bytes data are reported"
     #print the json
     json_data = json.dumps(alldata)
-    # print json_data
+    print json_data
     url = serverUrl + "/customprojectrawdata"
     if agentType == "hypervisor":
         response = urllib.urlopen(url, data=urllib.urlencode(alldata))
@@ -297,7 +303,7 @@ if options.inputFile is None:
                     fieldnames = row
                     for i in range(0,len(fieldnames)):
                         if fieldnames[i] == "timestamp":
-                            timestamp_index = i
+        		    timestamp_index = i
                 elif dailyFileReader.line_num > 1:
                     try:
                         if long(row[timestamp_index]) < long(start_time_epoch) :
@@ -370,8 +376,11 @@ else:
                     #Get all the metric names
                     fieldnames = row
                     for i in range(0,len(fieldnames)):
-                        if fieldnames[i] == "timestamp":
+		        currentFieldNameStripped = fieldnames[i].strip()
+                        if currentFieldNameStripped == "timestamp":
                             timestamp_index = i
+			if not hostColumn is None and currentFieldNameStripped == hostColumn:
+			    hostIndex = i
                 elif fileReader.line_num > 1:
                     #Read each line from csv and generate a json
                     thisData = {}
@@ -385,12 +394,20 @@ else:
                             if maxTimestampEpoch == 0 or maxTimestampEpoch < long(new_prev_endtime_epoch):
                                 maxTimestampEpoch = long(new_prev_endtime_epoch)
                         else:
-                            colname = fieldnames[i]
-                            if colname.find("]") == -1:
-                                colname = colname+"[-]"
+			    #Vertical layout
+			    if not hostColumn is None: 
+				if not i == hostIndex:
+				    colname = fieldnames[i].strip()+"["+row[hostIndex]+"]"
+				else:
+				    continue
+			    else:
+			        colname = fieldnames[i].strip()
+                                if colname.find("]") == -1:
+                                    colname = colname+"[-]"
                             if colname.find(":") == -1:
                                 groupid = i
                                 colname = colname+":"+str(groupid)
+			    print colname+","+row[i]
                             thisData[colname] = row[i]
                     metricDatas.append(thisData)
             if metricdataSizeKnown == False:
