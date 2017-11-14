@@ -122,7 +122,7 @@ Make sure each file is .csv formatted, starts with a row of headers and the head
 
 2) Run the following command for each data file.
 ```
-sudo python /root/InsightAgent-master/common/reportMetrics.py -m metricFileReplay -f PATH_TO_CSVFILENAME
+sudo python /root/InsightAgent-master/common/reportMetrics.py -t metricFileReplay -m metricFileReplay -f PATH_TO_CSVFILENAME
 ```
 Where PATH_TO_CSVFILENAME is the path and filename of the csv file.
 
@@ -139,7 +139,7 @@ ifAction=uninstall
 
 ```
 ##Agent type
-ifAgent=collectd
+ifAgent=metricFileReplay
 ```
 2) Run the playbook
 ```
