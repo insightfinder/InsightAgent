@@ -114,7 +114,7 @@ ansible-playbook insightagent.yaml
 ### Sending Data
 Run the following command for each log json file. You should be inside InsightAgent-master directory while running the command.
 ```
-python common/reportMetrics.py -m logFileReplay -f PATH_TO_JSON_FILE -w https://app.insightfinder.com
+python common/reportMetrics.py -m logFileReplay -t LogFileReplay -f PATH_TO_JSON_FILE -w https://app.insightfinder.com
 ```
 Where PATH_TO_JSON_FILE is the path and filename of the json file.
 Note: If running from a different server(on-prem installation), add the server ip and port after the -w option.
