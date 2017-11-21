@@ -24,6 +24,9 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
   # user's licenseKey
   config :licenseKey, :validate => :string, :required => true
 
+  # project type
+  config :projectType, :validate => :string, :default => "Log"
+
   # Include extra HTTP headers on request if needed
   config :extra_headers, :validate => :hash, :default => []
 
@@ -74,7 +77,7 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
       now = Time.now
       @pile << content
       if now - @timer > @interval # ready to send
-        dataBody = {"agentType" => "Logstash", "licenseKey" => @licenseKey, "projectName" => @projectName, "userName" => @userName, "metricData" => @pile}
+        dataBody = {"agentType" => "Logstash", "licenseKey" => @licenseKey, "projectName" => @projectName, "userName" => @userName, "projectType" => @projectType, "metricData" => @pile}
         send_request(LogStash::Json.dump(dataBody))
         @timer = now
         @pile.clear
