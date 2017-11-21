@@ -188,18 +188,18 @@ def sendData(fileID):
         print str(reportedChunks) + " out of " + str(totalChunkCount)+" are reported"
         alldata["chunkSerialNumber"] = str(currentChunk)
         alldata["chunkTotalNumber"] = str(totalChunkCount)
-    if(not splitID == None and not splitBy == None):
-        alldata["splitID"] = splitID
-        alldata["splitBy"] = splitBy
-        currentChunk += 1
         if mode == "logFileReplay":
             alldata["agentType"] = "LogFileReplay"
             alldata["insightAgentType"] = "LogFileReplay"
         if mode == "metricFileReplay":
             alldata["agentType"] = "MetricFileReplay"
             alldata["insightAgentType"] = "MetricFileReplay"
+        if(not splitID == None and not splitBy == None):
+            alldata["splitID"] = splitID
+            alldata["splitBy"] = splitBy
     else:
         print str(len(bytearray(json_data))) + " bytes data are reported"
+    currentChunk += 1
     #print the json
     json_data = json.dumps(alldata)
     # print json_data
@@ -266,7 +266,7 @@ hostname = socket.gethostname().partition(".")[0]
 minTimestampEpoch = 0
 maxTimestampEpoch = 0
 totalChunkCount = 0
-chunkMaxSize = 23000000
+chunkMaxSize = 100000
 chunkingPadding = 30000
 if options.inputFile is None:
     for i in range(0,3+int(float(reporting_interval)/24/60)):
