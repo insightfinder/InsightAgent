@@ -116,7 +116,10 @@ def check_delta(field):
 def calculate_delta(fieldname,value):
 #     print fieldname
     previous_result = get_previous_results()
-    delta = float(value) - previous_result[fieldname]
+    if fieldname in previous_result.keys():
+        delta = float(value) - previous_result[fieldname]
+    else:
+        delta = float(value)
     delta = abs(delta)
     return round(delta,4)
 
@@ -207,6 +210,9 @@ try:
                     field = tokens[0]+"["+hostname+"]:"+str(groupid)
                 else:
                     field = tokens[0]
+
+                if(tokens[1].isdigit() is False):
+                    continue
                 fields.append(field)
                 if(eachfile == "diskmetrics.txt"):
                     tokens[1] = float(float(tokens[1])*512/(1024*1024))
@@ -244,4 +250,5 @@ try:
     update_results(dict)
 except KeyboardInterrupt:
     print "Interrupt from keyboard"
+
 
