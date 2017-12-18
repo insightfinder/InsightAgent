@@ -80,9 +80,12 @@ for line in proc.stdout:
 proc.communicate()
 
 LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
-PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
+PROJECTNAME = ""
 USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
 
+with open(os.path.join(homepath,".agent.bashrc"), 'r') as f:
+    t = f.readlines()
+    PROJECTNAME = t[1].split("=")[1].strip()
 
 reportedDataSize = 0
 totalSize = 0
