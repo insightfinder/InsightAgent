@@ -230,4 +230,10 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+.idea/
+data/
+log/
+.agent.bashrc
+reporting_config.json
+
 # End of https://www.gitignore.io/api/python,eclipse,ansible,intellij
