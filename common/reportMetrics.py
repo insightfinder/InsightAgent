@@ -11,6 +11,7 @@ from optparse import OptionParser
 import math
 import reportCustomMetrics
 import hashlib
+import pytz
 
 '''
 this script reads reporting interval and prev endtime config2
@@ -38,6 +39,8 @@ parser.add_option("-s", "--splitID",
     action="store", dest="splitID", help="The split ID to use when grouping results on the server")
 parser.add_option("-g", "--splitBy",
     action="store", dest="splitBy", help="The 'split by' to use when grouping results on the server. Examples: splitByEnv, splitByGroup")
+parser.add_option("-z", "--timeZone",
+    action="store", dest="timeZone", help="Time Zone")
 (options, args) = parser.parse_args()
 
 if options.homepath is None:
@@ -63,6 +66,10 @@ if options.splitBy is None:
     splitBy = None
 else:
     splitBy = options.splitBy
+if options.timeZone is None:
+    timeZone = "GMT"
+else:
+    timeZone = options.timeZone
 
 datadir = 'data/'
 
@@ -104,6 +111,13 @@ def getindex(col_name):
         return 4
     elif col_name == "MemUsed":
         return 5
+
+def getTimestampForZone(dateString, timeZone, format):
+    dtexif = datetime.datetime.strptime(dateString, format)
+    tz = pytz.timezone(timeZone)
+    tztime = tz.localize(dtexif)
+    epoch = long((tztime - datetime.datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
+    return epoch
 
 #update prev_endtime in config file
 def update_timestamp(prev_endtime):
@@ -250,7 +264,8 @@ dates = []
 if "FileReplay" in mode and prev_endtime != "0" and len(prev_endtime) >= 8:
     start_time = prev_endtime
     # pad a second after prev_endtime
-    start_time_epoch = 1000+long(1000*time.mktime(time.strptime(start_time, "%Y%m%d%H%M%S")));
+    start_time_epoch = 1000 + getTimestampForZone(start_time, timeZone, "%Y%m%d%H%M%S")
+    # start_time_epoch = 1000+long(1000*time.mktime(time.strptime(start_time, "%Y%m%d%H%M%S")));
     end_time_epoch = start_time_epoch + 1000*60*reporting_interval
 elif prev_endtime != "0":
     start_time = prev_endtime
@@ -435,3 +450,4 @@ if reported:
     print "Custom metrics sent"
 else:
     print "Failed to send custom metrics"
+
