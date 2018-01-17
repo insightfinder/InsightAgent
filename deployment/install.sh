@@ -19,13 +19,13 @@ function createCronSeconds() {
 	echo "* * * * * root sleep 50; $1" >> $2
 }
 
-if [ "$#" -lt 12 ]; then
+if [ "$#" -lt 10 ]; then
 	usage
 	exit 1
 fi
 
 
-DEFAULT_SERVER_URL='https://agent-data.insightfinder.com'
+DEFAULT_SERVER_URL='https://app.insightfinder.com'
 
 while [ "$1" != "" ]; do
 	case $1 in
@@ -83,7 +83,7 @@ fi
 
 
 if [ -z "$SERVER_URL" ]; then
-	SERVER_URL='https://agent-data.insightfinder.com'
+	SERVER_URL='https://app.insightfinder.com'
 fi
 
 if [ -z "$AGENT_TYPE" ] || [ -z "$REPORTING_INTERVAL" ] || [ -z "$SAMPLING_INTERVAL" ] || [ -z "$LICENSEKEY" ] || [ -z "$USERNAME" ] || [ -z "$PROJECTNAME" ]; then
