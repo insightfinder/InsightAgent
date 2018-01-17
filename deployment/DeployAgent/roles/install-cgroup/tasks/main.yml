@@ -108,7 +108,7 @@
     chdir: "{{ansible_env.HOME}}/InsightAgent-master"
   when: ansible_pkg_mgr != 'zypper'
 - name: Download pip packages for Agent
-  shell: http_proxy={{ http_proxy }} pip install requests pyyaml
+  shell: http_proxy={{ http_proxy }} pip install requests pyyaml pytz
   when: ansible_pkg_mgr == 'zypper'
 - name: Deploy cgroup Agent
   become: true
