@@ -70,7 +70,7 @@
   become: yes
   shell: "http_proxy={{ http_proxy }} python {{ansible_env.HOME}}/get-pip.py --no-index --find-links={{ansible_env.HOME}}/pip_packages/"
 - name: Install pip packages for Agent
-  shell: "pip install --no-index --find-links='{{ansible_env.HOME}}/pip_packages/' requests"
+  shell: "pip install --no-index --find-links='{{ansible_env.HOME}}/pip_packages/' requests pytz"
 - name: Deploy Replay Agent
   shell: "no_proxy={{ no_proxy }} ./deployment/install.sh
     -i {{ projectName }}

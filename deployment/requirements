@@ -12,3 +12,4 @@ kafka==1.3.2
 elasticsearch
 netifaces
 pyyaml
+pytz
