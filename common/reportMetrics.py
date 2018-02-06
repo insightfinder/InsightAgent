@@ -22,25 +22,25 @@ till now from today's log file (may or may not be present)
 assumping gmt epoch timestamp and local date daily file
 '''
 serverUrl = 'https://app.insightfinder.com'
-#serverUrl = 'http://localhost:8080'
 usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)
 parser.add_option("-f", "--fileInput",
-    action="store", dest="inputFile", help="Input data file (overriding daily data file)")
+                  action="store", dest="inputFile", help="Input data file (overriding daily data file)")
 parser.add_option("-m", "--mode",
-    action="store", dest="mode", help="Running mode: live or metricFileReplay or logFileReplay")
+                  action="store", dest="mode", help="Running mode: live or metricFileReplay or logFileReplay")
 parser.add_option("-d", "--directory",
-    action="store", dest="homepath", help="Directory to run from")
+                  action="store", dest="homepath", help="Directory to run from")
 parser.add_option("-t", "--agentType",
-    action="store", dest="agentType", help="Agent type")
+                  action="store", dest="agentType", help="Agent type")
 parser.add_option("-w", "--serverUrl",
-    action="store", dest="serverUrl", help="Server Url")
+                  action="store", dest="serverUrl", help="Server Url")
 parser.add_option("-s", "--splitID",
-    action="store", dest="splitID", help="The split ID to use when grouping results on the server")
+                  action="store", dest="splitID", help="The split ID to use when grouping results on the server")
 parser.add_option("-g", "--splitBy",
-    action="store", dest="splitBy", help="The 'split by' to use when grouping results on the server. Examples: splitByEnv, splitByGroup")
+                  action="store", dest="splitBy",
+                  help="The 'split by' to use when grouping results on the server. Examples: splitByEnv, splitByGroup")
 parser.add_option("-z", "--timeZone",
-    action="store", dest="timeZone", help="Time Zone")
+                  action="store", dest="timeZone", help="Time Zone")
 (options, args) = parser.parse_args()
 
 if options.homepath is None:
@@ -75,22 +75,24 @@ datadir = 'data/'
 
 if agentType == "hypervisor":
     import urllib
+
     command = ['sh', '-c', 'source ' + str(homepath) + '/.agent.bashrc && env']
 else:
     import requests
+
     command = ['bash', '-c', 'source ' + str(homepath) + '/.agent.bashrc && env']
 
-proc = subprocess.Popen(command, stdout = subprocess.PIPE)
+proc = subprocess.Popen(command, stdout=subprocess.PIPE)
 for line in proc.stdout:
-  (key, _, value) = line.partition("=")
-  os.environ[key] = value.strip()
+    (key, _, value) = line.partition("=")
+    os.environ[key] = value.strip()
 proc.communicate()
 
 LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
 PROJECTNAME = ""
 USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
 
-with open(os.path.join(homepath,".agent.bashrc"), 'r') as f:
+with open(os.path.join(homepath, ".agent.bashrc"), 'r') as f:
     t = f.readlines()
     PROJECTNAME = t[1].split("=")[1].strip()
 
@@ -100,6 +102,8 @@ firstData = False
 chunkSize = 0
 totalChunks = 0
 currentChunk = 1
+
+
 def getindex(col_name):
     if col_name == "CPU":
         return 1
@@ -112,6 +116,7 @@ def getindex(col_name):
     elif col_name == "MemUsed":
         return 5
 
+
 def getTimestampForZone(dateString, timeZone, format):
     dtexif = datetime.datetime.strptime(dateString, format)
     tz = pytz.timezone(timeZone)
@@ -119,13 +124,15 @@ def getTimestampForZone(dateString, timeZone, format):
     epoch = long((tztime - datetime.datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
     return epoch
 
-#update prev_endtime in config file
+
+# update prev_endtime in config file
 def update_timestamp(prev_endtime):
-    with open(os.path.join(homepath,"reporting_config.json"), 'r') as f:
+    with open(os.path.join(homepath, "reporting_config.json"), 'r') as f:
         config = json.load(f)
     config['prev_endtime'] = prev_endtime
-    with open(os.path.join(homepath,"reporting_config.json"),"w") as f:
+    with open(os.path.join(homepath, "reporting_config.json"), "w") as f:
         json.dump(config, f)
+
 
 def getTotalSize(iFile):
     filejson = open(os.path.join(homepath, iFile))
@@ -135,6 +142,7 @@ def getTotalSize(iFile):
         allJsonData.append(row)
     filejson.close()
     return len(bytearray(json.dumps(allJsonData)))
+
 
 def ec2InstanceType():
     url = "http://169.254.169.254/latest/meta-data/instance-type"
@@ -148,8 +156,12 @@ def ec2InstanceType():
         return
     instanceType = response.text
     return instanceType
-#send data to insightfinder
+
+
+# send data to insightfinder
 reportedChunks = 0
+
+
 def sendData(fileID):
     global reportedDataSize
     global firstData
@@ -176,33 +188,33 @@ def sendData(fileID):
         reporting_interval = float(reporting_interval / 60)
     else:
         reporting_interval = int(config['reporting_interval'])
-    #update projectKey, userName in dict
+    # update projectKey, userName in dict
     alldata["metricData"] = json.dumps(metricData)
     alldata["licenseKey"] = LICENSEKEY
     alldata["projectName"] = PROJECTNAME
     alldata["userName"] = USERNAME
     alldata["instanceName"] = hostname
     alldata["fileID"] = fileID
-    alldata["samplingInterval"] = str(int(reporting_interval*60))
+    alldata["samplingInterval"] = str(int(reporting_interval * 60))
     if agentType == "ec2monitoring":
         alldata["instanceType"] = ec2InstanceType()
     alldata["insightAgentType"] = agentType
-    #print the json
+    # print the json
     json_data = json.dumps(alldata)
     if "FileReplay" in mode:
         reportedDataSize += len(bytearray(json.dumps(metricData)))
         if firstData == False:
             chunkSize = reportedDataSize
             firstData = True
-            totalChunks = int(math.ceil(float(totalSize)/float(chunkSize)))
-        #This is a hack fix and should be fixed. Pushing the fix off until we refactor this file.
-    #    if mode == "metricFileReplay":
-     #     totalChunks = totalChunks-1
+            totalChunks = int(math.ceil(float(totalSize) / float(chunkSize)))
+            # This is a hack fix and should be fixed. Pushing the fix off until we refactor this file.
+            #    if mode == "metricFileReplay":
+            #     totalChunks = totalChunks-1
         alldata["minTimestamp"] = minTimestampEpoch
         alldata["maxTimestamp"] = maxTimestampEpoch
-        reportedDataPer = (float(reportedDataSize)/float(totalSize))*100
+        reportedDataPer = (float(reportedDataSize) / float(totalSize)) * 100
         reportedChunks += 1
-        print str(reportedChunks) + " out of " + str(totalChunkCount)+" are reported"
+        print str(reportedChunks) + " out of " + str(totalChunkCount) + " are reported"
         alldata["chunkSerialNumber"] = str(currentChunk)
         alldata["chunkTotalNumber"] = str(totalChunkCount)
         if mode == "logFileReplay":
@@ -211,13 +223,13 @@ def sendData(fileID):
         if mode == "metricFileReplay":
             alldata["agentType"] = "MetricFileReplay"
             alldata["insightAgentType"] = "MetricFileReplay"
-        if(not splitID == None and not splitBy == None):
+        if (not splitID == None and not splitBy == None):
             alldata["splitID"] = splitID
             alldata["splitBy"] = splitBy
     else:
         print str(len(bytearray(json_data))) + " bytes data are reported"
     currentChunk += 1
-    #print the json
+    # print the json
     json_data = json.dumps(alldata)
     # print json_data
     url = serverUrl + "/customprojectrawdata"
@@ -226,8 +238,9 @@ def sendData(fileID):
     else:
         response = requests.post(url, data=json.loads(json_data))
 
-def updateAgentDataRange(minTS,maxTS):
-    #update projectKey, userName in dict
+
+def updateAgentDataRange(minTS, maxTS):
+    # update projectKey, userName in dict
     helperdata["licenseKey"] = LICENSEKEY
     helperdata["projectName"] = PROJECTNAME
     helperdata["userName"] = USERNAME
@@ -235,29 +248,29 @@ def updateAgentDataRange(minTS,maxTS):
     helperdata["minTimestamp"] = minTS
     helperdata["maxTimestamp"] = maxTS
 
-    #print the json
+    # print the json
     json_data = json.dumps(helperdata)
-    #print json_data
+    # print json_data
     url = serverUrl + "/agentdatahelper"
     response = requests.post(url, data=json.loads(json_data))
 
 
-#main
-with open(os.path.join(homepath,"reporting_config.json"), 'r') as f:
+# main
+with open(os.path.join(homepath, "reporting_config.json"), 'r') as f:
     config = json.load(f)
 reporting_interval_string = config['reporting_interval']
 is_second_reporting = False
-if reporting_interval_string[-1:]=='s':
+if reporting_interval_string[-1:] == 's':
     is_second_reporting = True
     reporting_interval = float(config['reporting_interval'][:-1])
-    reporting_interval = float(reporting_interval/60)
+    reporting_interval = float(reporting_interval / 60)
 else:
     reporting_interval = int(config['reporting_interval'])
 keep_file_days = int(config['keep_file_days'])
 prev_endtime = config['prev_endtime']
 deltaFields = config['delta_fields']
 
-#locate time range and date range
+# locate time range and date range
 new_prev_endtime = prev_endtime
 new_prev_endtime_epoch = 0
 dates = []
@@ -266,15 +279,15 @@ if "FileReplay" in mode and prev_endtime != "0" and len(prev_endtime) >= 8:
     # pad a second after prev_endtime
     start_time_epoch = 1000 + getTimestampForZone(start_time, timeZone, "%Y%m%d%H%M%S")
     # start_time_epoch = 1000+long(1000*time.mktime(time.strptime(start_time, "%Y%m%d%H%M%S")));
-    end_time_epoch = start_time_epoch + 1000*60*reporting_interval
+    end_time_epoch = start_time_epoch + 1000 * 60 * reporting_interval
 elif prev_endtime != "0":
     start_time = prev_endtime
     # pad a second after prev_endtime
-    start_time_epoch = 1000+long(1000*time.mktime(time.strptime(start_time, "%Y%m%d%H%M%S")));
-    end_time_epoch = start_time_epoch + 1000*60*reporting_interval
-else: # prev_endtime == 0
-    end_time_epoch = int(time.time())*1000
-    start_time_epoch = end_time_epoch - 1000*60*reporting_interval
+    start_time_epoch = 1000 + long(1000 * time.mktime(time.strptime(start_time, "%Y%m%d%H%M%S")));
+    end_time_epoch = start_time_epoch + 1000 * 60 * reporting_interval
+else:  # prev_endtime == 0
+    end_time_epoch = int(time.time()) * 1000
+    start_time_epoch = end_time_epoch - 1000 * 60 * reporting_interval
 
 alldata = {}
 helperdata = {}
@@ -287,9 +300,9 @@ totalChunkCount = 0
 chunkMaxSize = 100000
 chunkingPadding = 30000
 if options.inputFile is None:
-    for i in range(0,3+int(float(reporting_interval)/24/60)):
-        dates.append(time.strftime("%Y%m%d", time.localtime(start_time_epoch/1000 + 60*60*24*i)))
-    #append current date to dates to read data
+    for i in range(0, 3 + int(float(reporting_interval) / 24 / 60)):
+        dates.append(time.strftime("%Y%m%d", time.localtime(start_time_epoch / 1000 + 60 * 60 * 24 * i)))
+    # append current date to dates to read data
     current_date = time.strftime("%Y%m%d", time.gmtime())
     if current_date not in dates:
         dates.append(current_date)
@@ -306,64 +319,80 @@ if options.inputFile is None:
             try:
                 dailyFileReader = csv.reader(dailyFile)
             except IOError:
-                print "No data-file for " + str(date)+"!"
+                print "No data-file for " + str(date) + "!"
                 continue
             fieldnames = []
             for row in dailyFileReader:
                 if dailyFileReader.line_num == 1:
-                    #Get all the metric names
+                    # Get all the metric names
                     fieldnames = row
-                    for i in range(0,len(fieldnames)):
+                    for i in range(0, len(fieldnames)):
                         if fieldnames[i] == "timestamp":
                             timestamp_index = i
                 elif dailyFileReader.line_num > 1:
                     try:
-                        if long(row[timestamp_index]) < long(start_time_epoch) :
+                        if long(row[timestamp_index]) < long(start_time_epoch):
                             continue
                     except ValueError:
                         continue
-                    #Read each line from csv and generate a json
+                    # Read each line from csv and generate a json
                     thisData = {}
-                    for i in range(0,len(row)):
+                    for i in range(0, len(row)):
                         if fieldnames[i] == "timestamp":
                             new_prev_endtime_epoch = row[timestamp_index]
                             thisData[fieldnames[i]] = row[i]
                         else:
                             colname = fieldnames[i]
                             if colname.find("]") == -1:
-                                colname = colname+"["+hostname+"]"
+                                colname = colname + "[" + hostname + "]"
                             if colname.find(":") == -1:
                                 groupid = getindex(fieldnames[i])
-                                colname = colname+":"+str(groupid)
+                                colname = colname + ":" + str(groupid)
                             thisData[colname] = row[i]
                     metricData.append(thisData)
             dailyFile.close()
-    #update endtime in config
+    # update endtime in config
     if new_prev_endtime_epoch == 0:
         print "No data is reported"
     else:
-        new_prev_endtimeinsec = math.ceil(long(new_prev_endtime_epoch)/1000.0)
+        new_prev_endtimeinsec = math.ceil(long(new_prev_endtime_epoch) / 1000.0)
         new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtimeinsec)))
         update_timestamp(new_prev_endtime)
         sendData(hashlib.md5(os.path.join(homepath, datadir + date + fileadd + ".csv")).hexdigest())
 else:
-    if os.path.isfile(os.path.join(homepath,options.inputFile)):
-        numlines = len(open(os.path.join(homepath,options.inputFile)).readlines())
-        file = open(os.path.join(homepath,options.inputFile))
-        fileMD5 = hashlib.md5(os.path.join(homepath,options.inputFile)).hexdigest()
+    if os.path.isfile(os.path.join(homepath, options.inputFile)):
+        numlines = len(open(os.path.join(homepath, options.inputFile)).readlines())
+        file = open(os.path.join(homepath, options.inputFile))
+        fileMD5 = hashlib.md5(os.path.join(homepath, options.inputFile)).hexdigest()
         metricdataSizeKnown = False
         metricdataSize = 0
         if mode == "logFileReplay":
             jsonData = json.load(file)
             numlines = len(jsonData)
             maxSize = 0
+            bigLines = []
+            rowIndex = 0
             for row in jsonData:
-               #calculate largest log
-               if len(bytearray(json.dumps(row))) > maxSize:
-                   maxSize = len(bytearray(json.dumps(row)))
-            maxAmount = chunkMaxSize/(maxSize + chunkingPadding)
+                # calculate largest log
+                if len(bytearray(json.dumps(row))) > maxSize:
+                    jsonDataLen = len(bytearray(json.dumps(row)))
+                    if jsonDataLen > chunkMaxSize:
+                        bigLines.append(rowIndex)
+                        rowIndex += 1
+                        continue
+                    rowIndex += 1
+                    maxSize = jsonDataLen
+
+            maxAmount = chunkMaxSize / (maxSize + chunkingPadding)
+
+            if maxAmount == 0:
+                print "All JSON objects are bigger than " + str(chunkMaxSize)
+                exit()
             totalChunkCount = int(math.ceil(float(numlines) / float(maxAmount)))
-            for row in jsonData:
+            for index in range(len(jsonData)):
+                if index in bigLines:
+                    print "JSON number " + str(index) + " bigger than " + chunkMaxSize + "B and is skipped"
+                row = jsonData[index]
                 new_prev_endtime_epoch = row[row.keys()[0]]
                 if minTimestampEpoch == 0 or minTimestampEpoch > long(new_prev_endtime_epoch):
                     minTimestampEpoch = long(new_prev_endtime_epoch)
@@ -385,15 +414,15 @@ else:
             metricDatas = []
             for row in fileReader:
                 if fileReader.line_num == 1:
-                    #Get all the metric names
+                    # Get all the metric names
                     fieldnames = row
-                    for i in range(0,len(fieldnames)):
+                    for i in range(0, len(fieldnames)):
                         if fieldnames[i] == "timestamp":
                             timestamp_index = i
                 elif fileReader.line_num > 1:
-                    #Read each line from csv and generate a json
+                    # Read each line from csv and generate a json
                     thisData = {}
-                    for i in range(0,len(row)):
+                    for i in range(0, len(row)):
                         if fieldnames[i] == "timestamp":
                             new_prev_endtime_epoch = row[timestamp_index]
                             thisData[fieldnames[i]] = row[i]
@@ -405,22 +434,22 @@ else:
                         else:
                             colname = fieldnames[i]
                             if colname.find("]") == -1:
-                                colname = colname+"[-]"
+                                colname = colname + "[-]"
                             if colname.find(":") == -1:
                                 groupid = i
-                                colname = colname+":"+str(groupid)
+                                colname = colname + ":" + str(groupid)
                             thisData[colname] = row[i]
                     metricDatas.append(thisData)
             if metricdataSizeKnown == False:
-                    metricdataSize = len(bytearray(json.dumps(metricDatas)))
-                    metricdataSizeKnown = True
-                    totalSize = metricdataSize * (numlines - 1) # -1 for header
+                metricdataSize = len(bytearray(json.dumps(metricDatas)))
+                metricdataSizeKnown = True
+                totalSize = metricdataSize * (numlines - 1)  # -1 for header
             maxSize = 0
             numlines = len(metricDatas)
             for entry in metricDatas:
                 if len(bytearray(json.dumps(row))) > maxSize:
                     maxSize = len(bytearray(json.dumps(row)))
-            maxAmount = chunkMaxSize/(maxSize + chunkingPadding)
+            maxAmount = chunkMaxSize / (maxSize + chunkingPadding)
             totalChunkCount = int(math.ceil(float(numlines) / float(maxAmount)))
 
             for entry in metricDatas:
@@ -432,22 +461,21 @@ else:
                     metricData = []
             sendData(fileMD5)
         file.close()
-        updateAgentDataRange(minTimestampEpoch,maxTimestampEpoch)
+        updateAgentDataRange(minTimestampEpoch, maxTimestampEpoch)
 
-#old file cleaning
-for dirpath, dirnames, filenames in os.walk(os.path.join(homepath,datadir)):
+# old file cleaning
+for dirpath, dirnames, filenames in os.walk(os.path.join(homepath, datadir)):
     for file in filenames:
         if ".csv" not in file:
             continue
         curpath = os.path.join(dirpath, file)
         file_modified = datetime.datetime.fromtimestamp(os.path.getmtime(curpath))
         if datetime.datetime.now() - file_modified > datetime.timedelta(days=keep_file_days):
-            os.rename(curpath,os.path.join("/tmp",file))
+            os.rename(curpath, os.path.join("/tmp", file))
 
-#Update custom Metrics
+# Update custom Metrics
 reported = reportCustomMetrics.getcustommetrics(serverUrl, PROJECTNAME, USERNAME, LICENSEKEY, homepath)
 if reported:
     print "Custom metrics sent"
 else:
     print "Failed to send custom metrics"
-
