@@ -10,7 +10,8 @@ import csv
 
 COMMA_DELIMITER = ","
 NEWLINE_DELIMITER = "\n"
-metrics = {'Memory':{'NonHeapMemoryUsage':['max','committed', 'init', 'used'],'HeapMemoryUsage':['max','committed', 'init', 'used']},'OperatingSystem':['ProcessCpuLoad','SystemCpuLoad']}
+metrics = {'Memory':{'NonHeapMemoryUsage':['max','committed', 'init', 'used'],'HeapMemoryUsage':['max','committed', 'init', 'used']},'OperatingSystem':['ProcessCpuLoad','SystemCpuLoad','MaxFileDescriptorCount','OpenFileDescriptorCount'],
+           'Threading':['TotalStartedThreadCount','ThreadCount']}
 
 
 
@@ -98,6 +99,10 @@ if( not (os.path.isfile(filename)) or (os.stat(filename).st_size == 0)):
             header = header + COMMA_DELIMITER
             header = header + cpuMetric + "["+instance[0]+"]:"+str(getindex(cpuMetric))
 
+        for threadMetric in metrics['Threading']:
+            header = header + COMMA_DELIMITER
+            header = header + threadMetric + "["+instance[0]+"]:"+str(getindex(threadMetric))
+
     header += NEWLINE_DELIMITER
 
     print header
@@ -125,7 +130,14 @@ with open(filename, "a+") as csvFile:
 
         for cpuMetric in metrics['OperatingSystem']:
             line += COMMA_DELIMITER
-            line += str(output['value']['java.lang:type=OperatingSystem'][cpuMetric]*100)
+            if "Count" not in cpuMetric:
+                line += str(output['value']['java.lang:type=OperatingSystem'][cpuMetric]*100)
+            else:
+                line += str(output['value']['java.lang:type=OperatingSystem'][cpuMetric])
+
+        for threadMetric in metrics['Threading']:
+            line += COMMA_DELIMITER
+            line += str(output['value']['java.lang:type=Threading'][threadMetric])
 
     line += NEWLINE_DELIMITER
     print line
