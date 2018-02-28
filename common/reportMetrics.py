@@ -41,6 +41,8 @@ parser.add_option("-g", "--splitBy",
                   help="The 'split by' to use when grouping results on the server. Examples: splitByEnv, splitByGroup")
 parser.add_option("-z", "--timeZone",
                   action="store", dest="timeZone", help="Time Zone")
+parser.add_option("-c", "--chunkSize",
+                  action="store", dest="chunkSize", help="Max chunk size")
 (options, args) = parser.parse_args()
 
 if options.homepath is None:
@@ -70,6 +72,10 @@ if options.timeZone is None:
     timeZone = "GMT"
 else:
     timeZone = options.timeZone
+if options.chunkSize is None:
+    chunkMaxSize = 5000000
+else:
+    chunkMaxSize = int(options.chunkSize) * 1000
 
 datadir = 'data/'
 
@@ -297,8 +303,8 @@ hostname = socket.gethostname().partition(".")[0]
 minTimestampEpoch = 0
 maxTimestampEpoch = 0
 totalChunkCount = 0
-chunkMaxSize = 100000
 chunkingPadding = 30000
+
 if options.inputFile is None:
     for i in range(0, 3 + int(float(reporting_interval) / 24 / 60)):
         dates.append(time.strftime("%Y%m%d", time.localtime(start_time_epoch / 1000 + 60 * 60 * 24 * i)))
