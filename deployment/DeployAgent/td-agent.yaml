@@ -19,7 +19,7 @@
      when: ansible_pkg_mgr == 'zypper'
    - name: Install package dependencies - Add Open SUSE Ruby Devel Repo
      become: yes
-     shell: "http_proxy={{ http_proxy }} zypper rr devel_languages_ruby && zypper addrepo http://download.opensuse.org/repositories/devel:/languages:/ruby/openSUSE_Leap_42.1/devel:languages:ruby.repo"
+     shell: "http_proxy={{ http_proxy }} zypper rr devel_languages_ruby && zypper addrepo http://download.opensuse.org/repositories/devel:/languages:/ruby/SLE_12/devel:languages:ruby.repo"
      when: ansible_pkg_mgr == 'zypper'
    - name: Install package dependencies - Add Open OSS Repo
      become: yes
@@ -53,72 +53,77 @@
        path: /etc/profile.d/rvm.sh
      ignore_errors: True
      register: rvm_install_result
-     when: ansible_pkg_mgr == 'zypper'
+     when: ansible_pkg_mgr == 'zypper' and ansible_os_family == "SLES" and ansible_lsb.major_release|int == 11
    - name: Check for mpapis gpg key as root
      shell: gpg --list-keys mpapis
      sudo: true
      register: mpapis_gpg_key_exists
+     when: ansible_os_family == "SLES" and ansible_lsb.major_release|int == 11
      ignore_errors: true
      when: ansible_pkg_mgr == 'zypper'
    - name: Curl insecure fix
      become: yes
      shell: "echo insecure >> ~/.curlrc"
-   - name: receiving key as root
-     shell: "https_proxy={{ http_proxy }} curl -sSL -k https://rvm.io/mpapis.asc | gpg --import -"
-     sudo: true
-     when: ansible_pkg_mgr == 'zypper' and mpapis_gpg_key_exists is defined and mpapis_gpg_key_exists.rc is defined and mpapis_gpg_key_exists.rc != 0 and rvm_install_result.stat.exists != true
-   - name: Get rvm Installer
+  #  - name: receiving key as root
+  #    shell: "https_proxy={{ http_proxy }} curl -sSL -k https://rvm.io/mpapis.asc | gpg --import -"
+  #    sudo: true
+  #    when: ansible_pkg_mgr == 'zypper' and mpapis_gpg_key_exists is defined and mpapis_gpg_key_exists.rc is defined and mpapis_gpg_key_exists.rc != 0 and rvm_install_result.stat.exists != true
+  #  - name: Get rvm Installer
+  #    become: yes
+  #    shell: "https_proxy={{ http_proxy }} wget --no-check-certificate -O /tmp/rvm-installer.sh https://get.rvm.io"
+  #    when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists != true
+  #  - name: set executable RVM installer
+  #    become: true
+  #    file:
+  #      path: /tmp/rvm-installer.sh
+  #      mode: 0755
+  #    when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists != true
+  #  - name: installing RVM as root
+  #    command: "/tmp/rvm-installer.sh --path /usr/local/rvm stable"
+  #    become: true
+  #    when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists != true
+  #  - name: removing RVM installer
+  #    become: true
+  #    file:
+  #      path: /tmp/rvm-installer.sh
+  #      state: absent
+  #    when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists != true
+  #  - name: setting RVM autolibs on as root
+  #    command: "/usr/local/rvm/bin/rvm autolibs 3"
+  #    sudo: true
+  #    when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists != true
+  #  - name: updating RVM as root
+  #    shell: "source /etc/profile.d/rvm.sh && rvm get stable executable=/bin/bash"
+  #    sudo: true
+  #    when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists == true
+  #  - name: setting default Ruby version as root
+  #    shell: "source /etc/profile.d/rvm.sh && rvm use ruby-2.2.2"
+  #    register: rvm_select_ruby_version_root
+  #    ignore_errors: True
+  #    changed_when: False
+  #    when: ansible_pkg_mgr == 'zypper'
+  #  - name: installing Ruby as root
+  #    command: "/usr/local/rvm/bin/rvm install ruby-2.2.2"
+  #    sudo: true
+  #    when: ansible_pkg_mgr == 'zypper' and rvm_select_ruby_version_root|failed
+  #  - name: setting default Ruby version as root
+  #    shell: "source /etc/profile.d/rvm.sh && rvm use ruby-2.2.2"
+  #    register: rvm_select_ruby_version_root
+  #    ignore_errors: True
+  #    changed_when: False
+  #    when: ansible_pkg_mgr == 'zypper'
+  #  - name: RVM install fluentd
+  #    become: yes
+  #    shell: http_proxy={{ http_proxy }} bash -lc "gem install fluentd -v '~> 0.12.0' --no-ri --no-rdoc"
+  #    environment:
+  #      PATH: "{{ ansible_env.PATH }}:/usr/local/rvm/gems/ruby-2.2.2/bin:/usr/local/rvm/gems/ruby-2.2.2@global/bin:/usr/local/rvm/rubies/ruby-2.2.2/bin:/usr/lib/mit/bin:/usr/local/rvm/bin"
+  #      MY_RUBY_HOME: /usr/local/rvm/rubies/ruby-2.2.2
+  #      GEM_HOME: /usr/local/rvm/gems/ruby-2.2.2
+  #    when: ansible_pkg_mgr == 'zypper'
+   - name: Install package dependencies - ruby2.4-rubygem-fluentd
      become: yes
-     shell: "https_proxy={{ http_proxy }} wget --no-check-certificate -O /tmp/rvm-installer.sh https://get.rvm.io"
-     when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists != true
-   - name: set executable RVM installer
-     become: true
-     file:
-       path: /tmp/rvm-installer.sh
-       mode: 0755
-     when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists != true
-   - name: installing RVM as root
-     command: "/tmp/rvm-installer.sh --path /usr/local/rvm stable"
-     become: true
-     when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists != true
-   - name: removing RVM installer
-     become: true
-     file:
-       path: /tmp/rvm-installer.sh
-       state: absent
-     when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists != true
-   - name: setting RVM autolibs on as root
-     command: "/usr/local/rvm/bin/rvm autolibs 3"
-     sudo: true
-     when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists != true
-   - name: updating RVM as root
-     shell: "source /etc/profile.d/rvm.sh && rvm get stable executable=/bin/bash"
-     sudo: true
-     when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists == true
-   - name: setting default Ruby version as root
-     shell: "source /etc/profile.d/rvm.sh && rvm use ruby-2.2.2"
-     register: rvm_select_ruby_version_root
-     ignore_errors: True
-     changed_when: False
-     when: ansible_pkg_mgr == 'zypper'
-   - name: installing Ruby as root
-     command: "/usr/local/rvm/bin/rvm install ruby-2.2.2"
-     sudo: true
-     when: ansible_pkg_mgr == 'zypper' and rvm_select_ruby_version_root|failed
-   - name: setting default Ruby version as root
-     shell: "source /etc/profile.d/rvm.sh && rvm use ruby-2.2.2"
-     register: rvm_select_ruby_version_root
-     ignore_errors: True
-     changed_when: False
-     when: ansible_pkg_mgr == 'zypper'
-   - name: RVM install fluentd
-     become: yes
-     shell: http_proxy={{ http_proxy }} bash -lc "gem install fluentd -v '~> 0.12.0' --no-ri --no-rdoc"
-     environment:
-       PATH: "{{ ansible_env.PATH }}:/usr/local/rvm/gems/ruby-2.2.2/bin:/usr/local/rvm/gems/ruby-2.2.2@global/bin:/usr/local/rvm/rubies/ruby-2.2.2/bin:/usr/lib/mit/bin:/usr/local/rvm/bin"
-       MY_RUBY_HOME: /usr/local/rvm/rubies/ruby-2.2.2
-       GEM_HOME: /usr/local/rvm/gems/ruby-2.2.2
-     when: ansible_pkg_mgr == 'zypper'
+     shell: "http_proxy={{ http_proxy }} zypper install -y -f ruby2.4-rubygem-fluentd"
+     when: ansible_pkg_mgr == 'zypper' and ansible_os_family == "SLES" and ansible_lsb.major_release|int > 11
    - name: Install package dependencies - APT wget
      become: yes
      shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated wget"
