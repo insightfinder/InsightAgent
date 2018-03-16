@@ -1,0 +1,34 @@
+<match iflog.**>
+  type InsightFinder
+  flush_interval {{samplingInterval}}s
+  buffer_chunk_limit 200k
+# Endpoint for messages
+  destinationHost {{ deploymentServerUrl }}/customprojectrawdata
+#Comma separated list of http statuses which need to be retried
+  http_retry_statuses 500,403
+#Read timeout in seconds, supports floats
+  http_read_timeout 2.2
+#Open timeout in seconds, supports floats
+  http_open_timeout 2.34
+  userName {{ userName }}
+  projectName {{ projectName }}
+ #instancename (leave blank to use hostname)
+  instanceName
+ #License Key
+  licenseKey {{ licenseKey }}
+ #Instance Type
+  instanceType AWS
+</match>
+<source>
+  @type tail
+  format multiline
+  format_firstline /[A-Z][a-z][a-z] [A-Z][a-z][a-z] (([0-3][0-9])| [0-9]) ([0-9]|[0-9][0-9]):[0-9][0-9]:[0-9][0-9] \d{4}/
+  format1 /^(?<time>[A-Z][a-z][a-z] [A-Z][a-z][a-z] (([0-3][0-9])| [0-9]) ([0-9]|[0-9][0-9]):[0-9][0-9]:[0-9][0-9] \d{4})(?<data>.*)$/
+  time_format %a %b %d %H:%M:%S %Y
+  path {{ default_oracle_path }}/alert*.log
+#  path /u01/app/oracle/diag/rdbms/xe/XE/trace/alert*.log
+  pos_file /tmp/log.pos
+  encoding ISO-8859-1
+  tag "iflog.#{Socket.gethostname}"
+  keep_time_key true
+</source>

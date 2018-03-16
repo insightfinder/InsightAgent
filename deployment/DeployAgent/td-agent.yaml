@@ -10,9 +10,27 @@
      licenseKey: "{{ ifLicenseKey }}"
      manual_start: "{{ manualStart }}"
      disable_td_proxy: "{{ disableTdProxy }}"
+     default_oracle_path: "/u01/app/oracle/diag/rdbms/xe/XE/trace"
+   vars_prompt:
+   - name: "version"
+     prompt: "Which td-agent parser do you want to install?\n1. Jetty logs(/opt/jetty/logs) \n2. System Logs(/var/log/messages) \n3. Oracle alert logs"
+     default: '2'
    become: yes
    become_method: sudo
    tasks:
+   - name: Get user defined oracle alert log path 
+     pause:
+      prompt: "Plase provide a path for oracle alert logs( Press Enter to keep default value: /u01/app/oracle/diag/rdbms/xe/XE/trace )\n"
+     when: version == '3'
+     register: alert_log_path
+   - name: Set user defined oracle alert log path 
+     set_fact:
+      default_oracle_path: "{{ alert_log_path['user_input'] }}"
+     when: version == '3' and alert_log_path['user_input']|length > 0
+   - name: Show Log Path
+     debug:
+      msg: "{{ default_oracle_path }}"
+     when: version == '3'
    - name: Curl insecure fix
      become: yes
      shell: "echo insecure >> ~/.curlrc"
@@ -35,7 +53,7 @@
      when: ansible_pkg_mgr == 'apt'
    - name: td-agent | Add TD repository
      become: yes
-     shell: "http_proxy={{ http_proxy }} add-apt-repository 'deb http://packages.treasuredata.com/3/ubuntu/xenial/ xenial contrib'"
+     shell: "http_proxy={{ http_proxy }} add-apt-repository 'deb http://packages.treasuredata.com/2/ubuntu/xenial/ xenial contrib'"
      when: ansible_pkg_mgr == 'apt'
    - name: td-agent | Update repo with td-agent info
      become: yes
@@ -92,22 +110,58 @@
        line: '@http = Net::HTTP.new(@uri.host, @uri.port, nil)'
        state: present
      when: ansible_pkg_mgr == 'zypper' and disable_td_proxy == 'yes'
-   - name: td-agent | Add config_file
+   - name: td-agent | Add config_file(syslog)
      become: yes
      template:
-       src: files/td-agent.conf.template
+       src: files/td-agent.conf.syslog.template
        dest: /etc/td-agent/td-agent.conf
        mode: 0644
-     when: ansible_pkg_mgr != 'zypper'
+     when: ansible_pkg_mgr != 'zypper' and version == '2'
      tags:
      - td-agent-config
-   - name: td-agent | Add config_file SUSE
+   - name: td-agent | Add config_file SUSE(syslog)
      become: yes
      template:
-       src: files/td-agent.conf.template
+       src: files/td-agent.conf.syslog.template
        dest: /etc/fluent/fluent.conf
        mode: 0644
-     when: ansible_pkg_mgr == 'zypper'
+     when: ansible_pkg_mgr == 'zypper' and version == '2'
+     tags:
+     - td-agent-config
+   - name: td-agent | Add config_file(jetty)
+     become: yes
+     template:
+       src: files/td-agent.conf.jetty.template
+       dest: /etc/td-agent/td-agent.conf
+       mode: 0644
+     when: ansible_pkg_mgr != 'zypper' and version == '1'
+     tags:
+     - td-agent-config
+   - name: td-agent | Add config_file SUSE(jetty)
+     become: yes
+     template:
+       src: files/td-agent.conf.jetty.template
+       dest: /etc/fluent/fluent.conf
+       mode: 0644
+     when: ansible_pkg_mgr == 'zypper' and version == '1'
+     tags:
+     - td-agent-config
+   - name: td-agent | Add config_file(oracle)
+     become: yes
+     template:
+       src: files/td-agent.conf.oracle.template
+       dest: /etc/td-agent/td-agent.conf
+       mode: 0644
+     when: ansible_pkg_mgr != 'zypper' and version == '3'
+     tags:
+     - td-agent-config
+   - name: td-agent | Add config_file SUSE(oracle)
+     become: yes
+     template:
+       src: files/td-agent.conf.oracle.template
+       dest: /etc/fluent/fluent.conf
+       mode: 0644
+     when: ansible_pkg_mgr == 'zypper' and version == '3'
      tags:
      - td-agent-config
    - name: td-agent | check processes fluent
