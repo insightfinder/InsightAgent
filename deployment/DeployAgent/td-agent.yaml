@@ -187,10 +187,10 @@
      with_items:
        - "{{ td_process.stdout_lines }}"
      when: manual_start == 'yes' and ansible_pkg_mgr != 'zypper'
-   - name: td-agent | Install fluentd gem dependency
-     become: yes
-     shell: http_proxy={{ http_proxy }} bash -lc "fluent-gem install fluent-mixin-type-converter"
-     when: ansible_pkg_mgr == 'zypper'
+  #  - name: td-agent | Install fluentd gem dependency
+  #    become: yes
+  #    shell: http_proxy={{ http_proxy }} bash -lc "fluent-gem install fluent-mixin-type-converter"
+  #    when: ansible_pkg_mgr == 'zypper'
    - name: td-agent | Start td-agent daemon
      become: yes
      shell: bash -lc "fluentd -c /etc/fluent/fluent.conf -p /etc/fluent/plugin/ -o /var/log/fluent/fluent.log -d /var/run/fluent/fluent.pid --use-v1-config"
