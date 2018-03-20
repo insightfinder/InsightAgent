@@ -14,7 +14,8 @@
    vars_prompt:
    - name: "version"
      prompt: "Which td-agent parser do you want to install?\n1. Jetty logs(/opt/jetty/logs) \n2. System Logs(/var/log/messages) \n3. Oracle alert logs"
-     default: '2'
+     default: '1'
+     private: no
    become: yes
    become_method: sudo
    tasks:
@@ -59,6 +60,162 @@
      become: yes
      shell: "http_proxy={{ http_proxy }} apt-get update --allow-unauthenticated -y"
      when: ansible_pkg_mgr == 'apt'
+   - name: checking that RVM is installed
+     stat:
+       path: /etc/profile.d/rvm.sh
+     ignore_errors: True
+     register: rvm_install_result
+     when: ansible_distribution == 'SLES'
+   - name: Copy RPM dependencies for RVM
+     become: yes
+     copy:
+      src: files/rvm-deps.tar.gz
+      dest: "/tmp"
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+   - name: Untar the RPM dependencies for RVM
+     unarchive:
+       src: "/tmp/rvm-deps.tar.gz"
+       dest: "/tmp"
+       remote_src: True
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+   - name: Add the RPM dependencies local repo
+     become: yes
+     shell: 'http_proxy={{ http_proxy }} zypper rr rvm-repo && zypper ar -C -n "rvm-repo" --no-gpgcheck /tmp/rvm-dependencies/ "rvm-repo"'
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+   - name: Create directory for rvm
+     file:
+       path: /tmp/rvm
+       state: directory
+       mode: 0755 
+   - name: Untar RVM
+     unarchive:
+       src: "files/rvm-stable.tar.gz"
+       extra_opts: ['--strip-components=1']
+       dest: "/tmp/rvm"
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+   - name: Install RVM
+     become: yes
+     shell: 'http_proxy={{ http_proxy }} ./install --auto-dotfiles'
+     args:
+       chdir: /tmp/rvm
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+   - name: setting RVM autolibs on as root
+     command: "/usr/local/rvm/bin/rvm autolibs read-fail"
+     sudo: true
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+   - name: Copy Ruby2.2 dependencies for RVM
+     become: yes
+     copy:
+      src: files/ruby-2.2.0.tar.bz2 
+      dest: "/usr/local/rvm/archives"
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+   - name: Copy Rubygem 2.4.6 dependencies for RVM
+     become: yes
+     copy:
+      src: files/rubygems-2.4.6.tgz
+      dest: "/usr/local/rvm/archives"
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+   - name: Copy yaml for RVM
+     become: yes
+     copy:
+      src: files/yaml-0.1.6.tar.gz
+      dest: "/usr/local/rvm/archives"
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+   - name: Reset RVM default.gems
+     copy:
+       content: ""
+       dest: /usr/local/rvm/gemsets/default.gems 
+       force: yes
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+   - name: Reset RVM global.gems
+     copy:
+       content: ""
+       dest: /usr/local/rvm/gemsets/global.gems 
+       force: yes
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+   - name: setting default Ruby version as root
+     shell: "source /etc/profile.d/rvm.sh && rvm use ruby-2.2.0"
+     register: rvm_select_ruby_version_root
+     ignore_errors: True
+     changed_when: False
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+   - name: Install RVM dependencies
+     become: yes
+     ignore_errors: yes
+     shell: "http_proxy={{ http_proxy }} zypper install --auto-agree-with-licenses -y {{item}}"
+     with_items:
+       - automake
+       - bison
+       - glibc-devel
+       - libffi-devel
+       - libopenssl-devel
+       - readline-devel
+       - zlib-devel
+       - sqlite3-devel
+       - gcc
+       - gcc-c++
+       - pkg-config
+       - ruby2.2-rubygem-fluentd
+       - glibc-devel
+       - linux-kernel-headers
+       - autoconf
+       - automake
+       - bison
+       - gcc
+       - gcc43
+       - gcc43-c++
+       - gcc-c++
+       - libffi43
+       - libffi43-devel
+       - libffi-devel
+       - libncurses6
+       - libopenssl-devel
+       - libstdc++43-devel
+       - ncurses-devel
+       - pkg-config
+       - readline-devel
+       - sqlite3-devel
+       - tack
+       - zlib-devel
+       - libyaml-devel
+       - gdbm-devel-32bit
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11' and rvm_select_ruby_version_root|failed
+   - name: installing Ruby as root
+     command: "/usr/local/rvm/bin/rvm install ruby-2.2.0 --rubygems 2.4.6"
+     sudo: true
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11' and rvm_select_ruby_version_root|failed
+   - name: setting default Ruby version as root
+     shell: "source /etc/profile.d/rvm.sh && /usr/local/rvm/bin/rvm use ruby-2.2.0 --default"
+     register: rvm_select_ruby_version_root
+     ignore_errors: True
+     changed_when: False
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+   - name: Copy fluent-mixin-type-converter files
+     become: yes
+     unarchive:
+      src: files/fluent-mixin-type-converter-master.zip
+      dest: "/tmp"
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+     tags:
+       - mixin
+   - name: Create fluent-mixin-type-converter gem
+     become: yes
+     shell: bash -lc "cd /tmp/fluent-mixin-type-converter-master && gem build fluent-mixin-type-converter.gemspec"
+     environment:
+       PATH: "{{ ansible_env.PATH }}:/usr/local/rvm/gems/ruby-2.2.0/bin:/usr/local/rvm/gems/ruby-2.2.0@global/bin:/usr/local/rvm/rubies/ruby-2.2.0/bin:/usr/lib/mit/bin:/usr/local/rvm/bin"    
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+     tags:
+       - mixin 
+   - name: Install fluent-mixin-type-converter gem
+     become: yes
+     shell: http_proxy={{ http_proxy }} bash -lc "/usr/bin/fluent-gem install /tmp/fluent-mixin-type-converter-master/fluent-mixin-type-converter-0.1.0.gem"
+     environment:
+       PATH: "{{ ansible_env.PATH }}:/usr/local/rvm/gems/ruby-2.2.0/bin:/usr/local/rvm/gems/ruby-2.2.0@global/bin:/usr/local/rvm/rubies/ruby-2.2.0/bin:/usr/lib/mit/bin:/usr/local/rvm/bin"
+       MY_RUBY_HOME: /usr/local/rvm/rubies/ruby-2.2.0
+       GEM_HOME: /usr/local/rvm/gems/ruby-2.2.0
+     when: ansible_distribution == 'SLES' and ansible_distribution_major_version == '11'
+     tags:
+       - mixin
    - name: td-agent | Install td-agent
      become: yes
      shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated td-agent"
@@ -195,7 +352,7 @@
      become: yes
      shell: bash -lc "fluentd -c /etc/fluent/fluent.conf -p /etc/fluent/plugin/ -o /var/log/fluent/fluent.log -d /var/run/fluent/fluent.pid --use-v1-config"
      environment:
-       PATH: "{{ ansible_env.PATH }}:/usr/local/rvm/gems/ruby-2.2.2/bin:/usr/local/rvm/gems/ruby-2.2.2@global/bin:/usr/local/rvm/rubies/ruby-2.2.2/bin:/usr/lib/mit/bin:/usr/local/rvm/bin"
+       PATH: "{{ ansible_env.PATH }}:/usr/local/rvm/gems/ruby-2.2.0/bin:/usr/local/rvm/gems/ruby-2.2.0@global/bin:/usr/local/rvm/rubies/ruby-2.2.0/bin:/usr/lib/mit/bin:/usr/local/rvm/bin"
      when: ansible_pkg_mgr == 'zypper'
    - name: td-agent | Start td-agent daemon(manual)
      become: yes

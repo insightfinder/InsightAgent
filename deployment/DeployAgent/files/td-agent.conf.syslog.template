@@ -21,8 +21,8 @@
 </match>
 <source>
   @type tail
-  format /^(?<time>[A-Z][a-z][a-z] (([1-3][0-9])| [1-9]) [0-9][0-9]:[0-9][0-9]:[0-9][0-9]) (?<data>.*)$/
-  time_format %b %e %H:%M:%S
+  format /^(?<time>[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].\d{6}\+[0-9][0-9]:[0-9][0-9])(?<data>.*)$/
+  time_format %Y-%m-%dT%H:%M:%S.%N%:z
   path /var/log/messages
   pos_file /tmp/log.pos
   encoding ISO-8859-1
