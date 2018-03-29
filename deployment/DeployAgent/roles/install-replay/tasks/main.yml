@@ -17,6 +17,25 @@
   selinux:
     state: disabled
   when: p.stat.exists == True
+- name: Copy jq rpm file to server
+  copy:
+     src: files/jq-1.5-1.el7.x86_64.rpm
+     dest: /tmp/jq-1.5-1.el7.x86_64.rpm
+  when: ansible_pkg_mgr == 'yum'
+- name: Install jq package.
+  yum:
+     name: /tmp/jq-1.5-1.el7.x86_64.rpm
+     state: present
+  when: ansible_pkg_mgr == 'yum'
+- name: Copy jq deb file to server
+  copy:
+     src: files/jq_1.5+dfsg-1_amd64.deb
+     dest: /tmp/jq_1.5+dfsg-1_amd64.deb
+  when: ansible_pkg_mgr == 'apt'
+- name: Install jq package.
+  apt:
+     deb: /tmp/jq_1.5+dfsg-1_amd64.deb
+  when: ansible_pkg_mgr == 'apt'
 - name: Delete Old Tar Bundle for Agent
   become: yes
   file:
