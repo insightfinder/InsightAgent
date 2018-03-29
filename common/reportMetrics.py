@@ -17,14 +17,15 @@ import subprocess
 import random
 
 '''
-this script reads reporting interval and prev endtime config2
-and opens daily log file and reports header + rows within
+This script reads reporting_config.json and .agent.bashrc
+and opens daily metric file and reports header + rows within
 window of reporting interval after prev endtime
 if prev endtime is 0, report most recent reporting interval
-till now from today's log file (may or may not be present)
-assumping gmt epoch timestamp and local date daily file
-'''
+till now from today's metric file (may or may not be present)
+assumping gmt epoch timestamp and local date daily file. 
 
+This also allows you to replay old log and metric files 
+'''
 
 def getParameters():
     usage = "Usage: %prog [options]"
@@ -94,7 +95,6 @@ def getParameters():
         parameters['splitBy'] = options.splitBy
     return parameters
 
-
 def getAgentConfigVars():
     configVars = {}
     with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as configFile:
@@ -128,13 +128,14 @@ def getAgentConfigVars():
         configVars['samplingInterval'] = samplingIntervalLine[1].split("=")[1].strip()
     return configVars
 
-
 def getReportingConfigVars():
     reportingConfigVars = {}
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
         config = json.load(f)
     reporting_interval_string = config['reporting_interval']
+    is_second_reporting = False
     if reporting_interval_string[-1:] == 's':
+        is_second_reporting = True
         reporting_interval = float(config['reporting_interval'][:-1])
         reportingConfigVars['reporting_interval'] = float(reporting_interval / 60.0)
     else:
@@ -144,14 +145,12 @@ def getReportingConfigVars():
         reportingConfigVars['deltaFields'] = config['delta_fields']
     return reportingConfigVars
 
-
 def getTimestampForZone(dateString, timeZone, format):
     dtexif = datetime.datetime.strptime(dateString, format)
     tz = pytz.timezone(timeZone)
     tztime = tz.localize(dtexif)
     epoch = long((tztime - datetime.datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
     return epoch
-
 
 def updateDataStartTime():
     if "FileReplay" in parameters['mode'] and reportingConfigVars['prev_endtime'] != "0" and len(
@@ -170,7 +169,6 @@ def updateDataStartTime():
         startTimeEpoch = end_time_epoch - 1000 * 60 * reportingConfigVars['reporting_interval']
     return startTimeEpoch
 
-
 # update prev_endtime in config file
 def update_timestamp(prev_endtime):
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
@@ -178,7 +176,6 @@ def update_timestamp(prev_endtime):
     config['prev_endtime'] = prev_endtime
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), "w") as f:
         json.dump(config, f)
-
 
 def getIndexForColumnName(col_name):
     if col_name == "CPU":
@@ -192,7 +189,6 @@ def getIndexForColumnName(col_name):
     elif col_name == "MemUsed":
         return 5
 
-
 def getEC2InstanceType():
     url = "http://169.254.169.254/latest/meta-data/instance-type"
     try:
@@ -204,7 +200,6 @@ def getEC2InstanceType():
         logger.error("Error finding instance-type")
         return
     return response.text
-
 
 def sendData(metricDataDict):
     # prepare data for metric streaming agent
@@ -219,11 +214,12 @@ def sendData(metricDataDict):
     toSendDataDict["userName"] = agentConfigVars['userName']
     toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
     toSendDataDict["samplingInterval"] = str(int(reportingConfigVars['reporting_interval'] * 60))
-    toSendDataDict["fileID"] = hashlib.md5(os.path.join(parameters['homepath'], parameters['inputFile'])).hexdigest()
     if parameters['agentType'] == "ec2monitoring":
         toSendDataDict["instanceType"] = getEC2InstanceType()
-
+    #additional data to send for replay agents
     if "FileReplay" in parameters['mode']:
+        toSendDataDict["fileID"] = hashlib.md5(
+            os.path.join(parameters['homepath'], parameters['inputFile'])).hexdigest()
         if parameters['mode'] == "logFileReplay":
             toSendDataDict["agentType"] = "LogFileReplay"
             toSendDataDict["minTimestamp"] = ""
@@ -247,7 +243,7 @@ def sendData(metricDataDict):
         import urllib
         response = urllib.urlopen(postUrl, data=urllib.urlencode(toSendDataDict))
         if response.getcode() == 200:
-            logger.info(str(len(bytearray(toSendDataJSON))) + " bytes data are reported.")
+            logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
         else:
             # retry once for failed data and set chunkLines to half if succeeded
             logger.error("Failed to send data. Retrying once.")
@@ -255,7 +251,7 @@ def sendData(metricDataDict):
             toSendDataDict["metricData"] = json.dumps(dataSplit1)
             response = urllib.urlopen(postUrl, data=urllib.urlencode(toSendDataDict))
             if response.getcode() == 200:
-                logger.info(str(len(bytearray(toSendDataJSON))) + " bytes data are reported.")
+                logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
                 parameters['chunkLines'] = parameters['chunkLines'] / 2
                 # since succeeded send the rest of the chunk
                 dataSplit2 = metricDataDict[len(metricDataDict) / 2:]
@@ -267,7 +263,7 @@ def sendData(metricDataDict):
     else:
         response = requests.post(postUrl, data=json.loads(toSendDataJSON))
         if response.status_code == 200:
-            logger.info(str(len(bytearray(toSendDataJSON))) + " bytes data are reported.")
+            logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
         else:
             logger.info("Failed to send data.")
             dataSplit1 = metricDataDict[0:len(metricDataDict) / 2]
@@ -275,14 +271,15 @@ def sendData(metricDataDict):
             toSendDataJSON = json.dumps(toSendDataDict)
             response = requests.post(postUrl, data=json.loads(toSendDataJSON))
             if response.status_code == 200:
-                logger.info(str(len(bytearray(toSendDataJSON))) + " bytes data are reported.")
+                logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
                 parameters['chunkLines'] = parameters['chunkLines'] / 2
                 # since succeeded send the rest of the chunk
                 dataSplit2 = metricDataDict[len(metricDataDict) / 2:]
                 toSendDataDict["metricData"] = json.dumps(dataSplit2)
                 toSendDataJSON = json.dumps(toSendDataDict)
                 response = requests.post(postUrl, data=json.loads(toSendDataJSON))
-
+            else:
+                logger.info("Failed to send data.")
 
 def processStreaming(newPrevEndtimeEpoch):
     metricData = []
@@ -349,7 +346,6 @@ def processStreaming(newPrevEndtimeEpoch):
         new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(newPrevEndtimeInSec)))
         update_timestamp(new_prev_endtime)
         sendData(metricData)
-
 
 def processReplay():
     if os.path.isfile(os.path.join(parameters['homepath'], parameters['inputFile'])):
@@ -427,11 +423,34 @@ def processReplay():
                     chunkCount += 1
                 logger.debug("Total chunks created: " + str(chunkCount))
 
+def setloggerConfig():
+    # Get the root logger
+    logger = logging.getLogger(__name__)
+    # Have to set the root logger level, it defaults to logging.WARNING
+    logger.setLevel(logging.INFO)
+    # route INFO and DEBUG logging to stdout from stderr
+    logging_handler_out = logging.StreamHandler(sys.stdout)
+    logging_handler_out.setLevel(logging.DEBUG)
+    logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
+    logger.addHandler(logging_handler_out)
+
+    logging_handler_err = logging.StreamHandler(sys.stderr)
+    logging_handler_err.setLevel(logging.WARNING)
+    logger.addHandler(logging_handler_err)
+    return logger
+
+class LessThanFilter(logging.Filter):
+    def __init__(self, exclusive_maximum, name=""):
+        super(LessThanFilter, self).__init__(name)
+        self.max_level = exclusive_maximum
+
+    def filter(self, record):
+        #non-zero return means we log this message
+        return 1 if record.levelno < self.max_level else 0
 
 if __name__ == '__main__':
     prog_start_time = time.time()
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
+    logger = setloggerConfig()
     dataDirectory = 'data/'
     parameters = getParameters()
     agentConfigVars = getAgentConfigVars()
@@ -442,9 +461,8 @@ if __name__ == '__main__':
     newPrevEndtimeEpoch = 0
     startTimeEpoch = 0
     startTimeEpoch = updateDataStartTime()
-    dates = []
-    currentDate = time.strftime("%Y%m%d")
-    if not parameters.has_key('inputFile'):
+
+    if parameters['inputFile'] is None:
         processStreaming(newPrevEndtimeEpoch)
     else:
         processReplay()
