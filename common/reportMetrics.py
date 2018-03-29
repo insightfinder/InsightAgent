@@ -447,6 +447,6 @@ if __name__ == '__main__':
     if not parameters.has_key('inputFile'):
         processStreaming(newPrevEndtimeEpoch)
     else:
-        processReplay(parameters['chunkMaxSize'])
+        processReplay()
 
     logger.info("--- Total runtime: %s seconds ---" % (time.time() - prog_start_time))
