@@ -32,6 +32,8 @@ def getParameters():
     parser = OptionParser(usage=usage)
     parser.add_option("-f", "--fileInput",
                       action="store", dest="inputFile", help="Input data file (overriding daily data file)")
+    parser.add_option("-r", "--logFolder",
+                      action="store", dest="logFolder", help="Folder to read log files from")
     parser.add_option("-m", "--mode",
                       action="store", dest="mode", help="Running mode: live or metricFileReplay or logFileReplay")
     parser.add_option("-d", "--directory",
@@ -74,6 +76,10 @@ def getParameters():
         parameters['inputFile'] = None
     else:
         parameters['inputFile'] = options.inputFile
+    if options.logFolder is None:
+        parameters['logFolder'] = None
+    else:
+        parameters['logFolder'] = options.logFolder
     if options.timeZone is None:
         parameters['timeZone'] = "GMT"
     else:
@@ -201,7 +207,8 @@ def getEC2InstanceType():
         return
     return response.text
 
-def sendData(metricDataDict):
+def sendData(metricDataDict, filePath):
+    sendDataTime = time.time()
     # prepare data for metric streaming agent
     toSendDataDict = {}
     if parameters['mode'] == "metricFileReplay":
@@ -218,8 +225,7 @@ def sendData(metricDataDict):
         toSendDataDict["instanceType"] = getEC2InstanceType()
     #additional data to send for replay agents
     if "FileReplay" in parameters['mode']:
-        toSendDataDict["fileID"] = hashlib.md5(
-            os.path.join(parameters['homepath'], parameters['inputFile'])).hexdigest()
+        toSendDataDict["fileID"] = hashlib.md5(filePath).hexdigest()
         if parameters['mode'] == "logFileReplay":
             toSendDataDict["agentType"] = "LogFileReplay"
             toSendDataDict["minTimestamp"] = ""
@@ -280,6 +286,7 @@ def sendData(metricDataDict):
                 response = requests.post(postUrl, data=json.loads(toSendDataJSON))
             else:
                 logger.info("Failed to send data.")
+    logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
 
 def processStreaming(newPrevEndtimeEpoch):
     metricData = []
@@ -345,38 +352,41 @@ def processStreaming(newPrevEndtimeEpoch):
         newPrevEndtimeInSec = math.ceil(long(newPrevEndtimeEpoch) / 1000.0)
         new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(newPrevEndtimeInSec)))
         update_timestamp(new_prev_endtime)
-        sendData(metricData)
+        sendData(metricData, None)
 
-def processReplay():
-    if os.path.isfile(os.path.join(parameters['homepath'], parameters['inputFile'])):
+def processReplay(filePath):
+    if os.path.isfile(filePath):
+        logger.info("Replaying file: " + filePath)
         # log file replay processing
         if parameters['mode'] == "logFileReplay":
             output = subprocess.check_output(
-                'cat ' + os.path.join(parameters['homepath'],
-                                      parameters['inputFile']) + ' | jq -c ".[]" > ' + os.path.join(
-                    parameters['homepath'], parameters['inputFile'] + ".mod"),
+                'cat ' + filePath + ' | jq -c ".[]" > ' + filePath + ".mod",
                 shell=True)
-            with open(os.path.join(parameters['homepath'], parameters['inputFile'] + ".mod")) as logfile:
+            with open(filePath + ".mod") as logfile:
                 lineCount = 0
                 chunkCount = 0
                 currentRow = []
                 start_time = time.time()
                 for line in logfile:
                     if lineCount == parameters['chunkLines']:
-                        logger.debug("--- %s seconds ---" % (time.time() - start_time))
-                        sendData(currentRow)
+                        logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                        sendData(currentRow, filePath)
                         currentRow = []
                         chunkCount += 1
                         lineCount = 0
+                        start_time = time.time()
                     currentRow.append(json.loads(line.rstrip()))
                     lineCount += 1
                 if len(currentRow) != 0:
-                    logger.debug("--- %s seconds ---" % (time.time() - start_time))
-                    sendData(currentRow)
+                    logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                    sendData(currentRow, filePath)
                     chunkCount += 1
                 logger.debug("Total chunks created: " + str(chunkCount))
+            output = subprocess.check_output(
+                "rm " + filePath + ".mod",
+                shell=True)
         else:  # metric file replay processing
-            with open(os.path.join(parameters['homepath'], parameters['inputFile'])) as metricFile:
+            with open(filePath) as metricFile:
                 metricCSVReader = csv.reader(metricFile)
                 toSendMetricData = []
                 fieldnames = []
@@ -396,7 +406,7 @@ def processReplay():
                         # Read each line from csv and generate a json
                         currentRow = {}
                         if currentLineCount == parameters['chunkLines']:
-                            sendData([toSendMetricData, minTimestampEpoch, maxTimestampEpoch])
+                            sendData([toSendMetricData, minTimestampEpoch, maxTimestampEpoch], filePath)
                             toSendMetricData = []
                             currentLineCount = 0
                             chunkCount += 1
@@ -419,7 +429,7 @@ def processReplay():
                         currentLineCount += 1
                 # send final chunk
                 if len(toSendMetricData) != 0:
-                    sendData([toSendMetricData, minTimestampEpoch, maxTimestampEpoch])
+                    sendData([toSendMetricData, minTimestampEpoch, maxTimestampEpoch], filePath)
                     chunkCount += 1
                 logger.debug("Total chunks created: " + str(chunkCount))
 
@@ -448,6 +458,15 @@ class LessThanFilter(logging.Filter):
         #non-zero return means we log this message
         return 1 if record.levelno < self.max_level else 0
 
+def getFileListForDirectory(rootPath):
+    fileList = []
+    for path, subdirs, files in os.walk(rootPath):
+        for name in files:
+            if parameters['agentType'] == "metricFileReplay" and "csv" in name:
+                fileList.append(os.path.join(path, name))
+            if parameters['agentType'] == "LogFileReplay" and "json" in name:
+                fileList.append(os.path.join(path, name))
+    return fileList
 if __name__ == '__main__':
     prog_start_time = time.time()
     logger = setloggerConfig()
@@ -462,9 +481,15 @@ if __name__ == '__main__':
     startTimeEpoch = 0
     startTimeEpoch = updateDataStartTime()
 
-    if parameters['inputFile'] is None:
+    if parameters['inputFile'] is None and parameters['logFolder'] is None:
         processStreaming(newPrevEndtimeEpoch)
     else:
-        processReplay()
+        if parameters['logFolder'] is None:
+            inputFilePath = os.path.join(parameters['homepath'], parameters['inputFile'])
+            processReplay(inputFilePath)
+        else:
+            fileList = getFileListForDirectory(parameters['logFolder'])
+            for filePath in fileList:
+                processReplay(filePath)
 
     logger.info("--- Total runtime: %s seconds ---" % (time.time() - prog_start_time))
