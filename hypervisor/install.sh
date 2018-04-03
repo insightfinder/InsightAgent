@@ -2,7 +2,7 @@
 
 usage()
 {
-	echo "Usage: ./install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE
+	echo "Usage: ./install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -w REPORTING_SERVER_URL -t AGENT_TYPE
 AGENT_TYPE = hypervisor"
 }
 
@@ -10,7 +10,7 @@ if [ "$#" -lt 12 ]; then
 	usage
 	exit 1
 fi
-
+DEFAULT_SERVER_URL='https://app.insightfinder.com'
 while [ "$1" != "" ]; do
 	case $1 in
 		-k )	shift
@@ -28,6 +28,9 @@ while [ "$1" != "" ]; do
 		-r )	shift
 			REPORTING_INTERVAL=$1
 			;;
+		-w )	shift
+			SERVER_URL=$1
+			;;
 		-t )	shift
 			AGENT_TYPE=$1
 			;;
@@ -44,6 +47,10 @@ fi
 
 if [ -z "$INSIGHTAGENTDIR" ]; then
 	export INSIGHTAGENTDIR=`pwd`
+fi
+
+if [ -z "$SERVER_URL" ]; then
+	SERVER_URL='https://app.insightfinder.com'
 fi
 
 if [ $AGENT_TYPE == 'hypervisor' ]; then
@@ -85,7 +92,7 @@ fi
 	
 if [ $AGENT_TYPE == 'hypervisor' ]; then
 	echo "*/$SAMPLING_INTERVAL * * * * python $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
-	echo "*/$REPORTING_INTERVAL * * * * python $INSIGHTAGENTDIR/common/reportMetrics.py -d $INSIGHTAGENTDIR -t $AGENT_TYPE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
+	echo "*/$REPORTING_INTERVAL * * * * python $INSIGHTAGENTDIR/common/reportMetrics.py -d $INSIGHTAGENTDIR -t $AGENT_TYPE -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
 else
 	echo "*/$SAMPLING_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out" >> $TEMPCRON
 	echo "*/$REPORTING_INTERVAL * * * * root $INSIGHTAGENTDIR/pyenv/bin/python $INSIGHTAGENTDIR/common/reportMetrics.py -d $INSIGHTAGENTDIR -t $AGENT_TYPE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
