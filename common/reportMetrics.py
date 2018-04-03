@@ -8,7 +8,6 @@ import logging
 import sys
 import json
 import datetime
-import pytz
 import csv
 import math
 import socket
@@ -150,19 +149,12 @@ def getReportingConfigVars():
         reportingConfigVars['deltaFields'] = config['delta_fields']
     return reportingConfigVars
 
-def getTimestampForZone(dateString, timeZone, format):
-    dtexif = datetime.datetime.strptime(dateString, format)
-    tz = pytz.timezone(timeZone)
-    tztime = tz.localize(dtexif)
-    epoch = long((tztime - datetime.datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
-    return epoch
-
 def updateDataStartTime():
     if "FileReplay" in parameters['mode'] and reportingConfigVars['prev_endtime'] != "0" and len(
             reportingConfigVars['prev_endtime']) >= 8:
         startTime = reportingConfigVars['prev_endtime']
         # pad a second after prev_endtime
-        startTimeEpoch = 1000 + getTimestampForZone(startTime, parameters['timeZone'], "%Y%m%d%H%M%S")
+        startTimeEpoch = 1000 + long(1000 * time.mktime(time.strptime(startTime, "%Y%m%d%H%M%S")));
         end_time_epoch = startTimeEpoch + 1000 * 60 * reportingConfigVars['reporting_interval']
     elif reportingConfigVars['prev_endtime'] != "0":
         startTime = reportingConfigVars['prev_endtime']
