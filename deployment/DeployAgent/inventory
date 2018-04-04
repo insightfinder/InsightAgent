@@ -61,7 +61,8 @@ ifSamplingInterval=1
 #ifAgent=syscall
 #ifAgent=cadvisor
 #ifAgent=metricFileReplay
-ifAgent=logFileReplay
+#ifAgent=logFileReplay
+#ifAgent=hypervisor
 
 ##When yes, we will run the equivalent of 'apt-get update' before installing any packages.
 ##Valid entries are yes or no. Not used with yum-based installation (e.g., CentOS).
