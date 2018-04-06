@@ -32,7 +32,7 @@ def getParameters():
     else:
         parameters['serverUrl'] = options.serverUrl
     if options.profilePath == None:
-        parameters['profilePath'] = '/data/nfsen/profiles-data/zone1_profile/'
+        parameters['profilePath'] = '/data/nfsen/profiles-data/live'
     else:
         parameters['profilePath'] = options.profilePath
 
