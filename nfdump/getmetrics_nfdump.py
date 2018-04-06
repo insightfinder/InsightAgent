@@ -157,11 +157,11 @@ def closestNumber(n, m) :
 
 #generate filename for current timestamp and  sampling interval
 def getFileNameList():
-    currentDate = time.strftime("%Y/%m/%d", time.gmtime())
+    currentDate = time.strftime("%Y/%m/%d", time.localtime())
     fileNameList = []
     start_time_epoch = long(time.time())
     chunks = int(reportingConfigVars['reporting_interval'] / 5)
-    startMin = time.strftime("%Y%m%d%H%M", time.gmtime(start_time_epoch))
+    startMin = time.strftime("%Y%m%d%H%M", time.localtime(start_time_epoch))
     closestMinute = closestNumber(int(startMin[-2:]), 5)
     if closestMinute < 10:
         closestMinStr = '0' + str(closestMinute)
