@@ -63,6 +63,7 @@ ifSamplingInterval=1
 #ifAgent=metricFileReplay
 #ifAgent=logFileReplay
 #ifAgent=hypervisor
+#ifagent=nfdump
 
 ##When yes, we will run the equivalent of 'apt-get update' before installing any packages.
 ##Valid entries are yes or no. Not used with yum-based installation (e.g., CentOS).
@@ -83,6 +84,9 @@ tracingInterval=1
 
 ##The port number for the cadvisor agent
 cadvisorPort=8080
+
+##Vars for NFSen/NFDump
+nfsenProfile=/data/nfsen/profiles-data/live
 
 ##Vars for td-agent##
 
