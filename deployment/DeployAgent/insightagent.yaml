@@ -35,6 +35,7 @@
      - { role: install-syscall, when: agentType=="syscall" and action=="install"}
      - { role: install-cadvisor, when: agentType=="cadvisor" and action=="install"}
      - { role: install-hypervisor, when: agentType=="hypervisor" and action=="install"}
+     - { role: install-nfdump, when: agentType=="nfdump" and action=="install"}
      - { role: install-replay, when: (agentType=="metricFileReplay" or agentType=="logFileReplay") and action=="install"}
      - { role: uninstall, when: action=="uninstall" }
    environment:
