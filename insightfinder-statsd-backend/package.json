@@ -1,0 +1,31 @@
+{
+    "name": "insightfinder-statsd-backend",
+    "version": "1.0.1",
+    "description": "A StatsD backend that send metrics to InsightFinder",
+    "main": "lib/insightfinderstatsd.js",
+    "scripts": {
+      "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/insightfinder/InsightAgent.git"
+    },
+    "keywords": [
+      "insightfinder",
+      "metrics",
+      "statsd"
+    ],
+    "engines": {
+        "node": ">=0.8"
+    },
+    "dependencies": {
+        "request": ">=2.53.0"
+    },
+    "devDependencies": {},
+    "author": "InsightFinder Inc. <support@insightfinder.com>",
+    "license": "MIT",
+    "bugs": {
+      "url": "https://github.com/insightfinder/InsightAgent/issues"
+    },
+    "homepage": "https://github.com/insightfinder/InsightAgent/blob/master/insightfinder-statsd-backend/README.md"
+  }
