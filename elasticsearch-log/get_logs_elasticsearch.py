@@ -11,6 +11,7 @@ import requests
 import datetime
 import pytz
 import logging
+import sys
 
 def getParameters():
     usage = "Usage: %prog [options]"
@@ -69,7 +70,7 @@ def getReportingConfigVars():
     return reportingConfigVars
 
 
-def sendData(metricData):
+def sendData(metricData, minTimestamp, maxTimestamp):
     sendDataTime = time.time()
     # prepare data for metric streaming agent
     toSendDataDict = {}
@@ -79,6 +80,9 @@ def sendData(metricData):
     toSendDataDict["userName"] = agentConfigVars['userName']
     toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
     toSendDataDict["samplingInterval"] = str(int(reportingConfigVars['reporting_interval'] * 60))
+    toSendDataDict['agentType'] = 'LogStreaming'
+    toSendDataDict['minTimestamp'] = str(minTimestamp)
+    toSendDataDict['maxTimestamp'] = str(maxTimestamp)
     toSendDataJSON = json.dumps(toSendDataDict)
     logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))))
 
@@ -93,7 +97,11 @@ def sendData(metricData):
 
 
 def getElasticSearchConnection(elasticsearchConfigVars):
-    es = Elasticsearch([{'host': elasticsearchConfigVars['elasticsearchHost'], 'port': elasticsearchConfigVars['elasticsearchPort']}])
+    try:
+        es = Elasticsearch([{'host': elasticsearchConfigVars['elasticsearchHost'], 'port': elasticsearchConfigVars['elasticsearchPort']}])
+    except:
+        logger.error("Unable to get data connect to elasticsearch.")
+        exit()
     return es
 
 # change python timestamp to unix timestamp in millis
@@ -145,22 +153,29 @@ def getLogsFromElastic(elasticsearch, elasticsearchConfigVars):
             ],
             "size": 1440 # max number or records per min per day
         }
-
-    res2 = elasticsearch.search(index=elasticsearchConfigVars['elasticsearchIndex'], body=query_body)
+    try:
+        res2 = elasticsearch.search(index=elasticsearchConfigVars['elasticsearchIndex'], body=query_body)
+    except:
+        logger.error("Unable to get data from elasticsearch. Check config file.")
+        exit()
     jsonData = []
+    minTimeStamp = sys.maxsize+1
+    maxTimeStamp = 0
     if len(res2['hits']['hits']) != 0: # if there are updated values after the last read record
         currentLog = {}
         latest_time = res2['hits']['hits'][0]["_source"][elasticsearchConfigVars['timeFieldName']] # update the last read record timestamp
         header_fields = res2['hits']['hits'][0]["_source"]['message']
         currentLog['eventId'] = latest_time
+        minTimeStamp = min(minTimeStamp, long(latest_time))
+        maxTimeStamp = max(maxTimeStamp, long(latest_time))
         currentLog['data'] = json.dumps(res2['hits']['hits'][0]["_source"])
-        currentLog['tag'] =  res2['hits']['hits'][0]["_source"][elasticsearchConfigVars['hostNameField']]
+        currentLog['tag'] = res2['hits']['hits'][0]["_source"][elasticsearchConfigVars['hostNameField']]
         jsonData.append(currentLog)
     if len(jsonData) != 0:
         newPrevEndtimeInSec = math.ceil(long(end_time) / 1000.0)
         newPrevEndtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(newPrevEndtimeInSec)))
         update_timestamp(newPrevEndtime)
-    return jsonData
+    return jsonData, minTimeStamp, maxTimeStamp
 
 # update prev_endtime in config file
 def update_timestamp(prev_endtime):
@@ -181,17 +196,42 @@ def getDataStartTime():
         startTimeEpoch = end_time_epoch - 1000 * 60 * reportingConfigVars['reporting_interval']
     return startTimeEpoch
 
+def setloggerConfig():
+    # Get the root logger
+    logger = logging.getLogger(__name__)
+    # Have to set the root logger level, it defaults to logging.WARNING
+    logger.setLevel(logging.DEBUG)
+    # route INFO and DEBUG logging to stdout from stderr
+    logging_handler_out = logging.StreamHandler(sys.stdout)
+    logging_handler_out.setLevel(logging.DEBUG)
+    logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
+    logger.addHandler(logging_handler_out)
+
+    logging_handler_err = logging.StreamHandler(sys.stderr)
+    logging_handler_err.setLevel(logging.WARNING)
+    logger.addHandler(logging_handler_err)
+    return logger
+
+class LessThanFilter(logging.Filter):
+    def __init__(self, exclusive_maximum, name=""):
+        super(LessThanFilter, self).__init__(name)
+        self.max_level = exclusive_maximum
+
+    def filter(self, record):
+        #non-zero return means we log this message
+        return 1 if record.levelno < self.max_level else 0
+
 if __name__ == '__main__':
-    logger = ifLogger.setloggerConfig()
+    logger = setloggerConfig()
     parameters = getParameters()
     agentConfigVars = configReader.getAgentConfigVars(parameters['homepath'])
     elasticsearchConfigVars = getElasticConfigVars()
     reportingConfigVars = getReportingConfigVars()
     elasticsearch = getElasticSearchConnection(elasticsearchConfigVars)
-    logData = getLogsFromElastic(elasticsearch, elasticsearchConfigVars)
+    logData, minTimestamp, maxTimestamp = getLogsFromElastic(elasticsearch, elasticsearchConfigVars)
 
     if len(logData) == 0:
         logger.info("No data to send.")
     else:
-        sendData(logData)
+        sendData(logData, minTimestamp, maxTimestamp)
 
