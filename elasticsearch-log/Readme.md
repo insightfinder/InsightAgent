@@ -54,13 +54,23 @@ OR
 1. ***elasticsearch-log/config.json***
 
    Use this file to configure the agent for your elasticsearch installation. The description of the different fields are:
+    
     **"elasticsearchHost"** - Hostname of the elasticsearch installation
+    
     **"elasticsearchPort"** - Port of the elasticsearch installation
+    
     **"elasticsearchIndex"** - Index for the logs to send to InsightFinder
+    
     **"timeFieldName"** - Field in elasticsearch documents containing timestamp/date
+    
     **"isTimestamp"** - If log time field is datestring then **false** and if timestamp then **true**
+    
     **"hostNameField"** - Field in elasticsearch documents containing hostname
+    
     **"dateFormatInJodaTime"** - e.g "yyyy-MM-dd'T'HH:mm:ss",
+    
     **"dateFormatInStrptime"** - e.g "%Y-%m-%dT%H:%M:%S",
+    
     **"dataTimeZone"** - Timsezone of the logs e.g. Asia/Shanghai
+    
     **"localTimeZone"** - Timsezone of the machine running the agent e.g. US/Eastern
