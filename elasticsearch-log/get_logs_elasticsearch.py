@@ -32,10 +32,6 @@ def getParameters():
         parameters['serverUrl'] = 'https://app.insightfinder.com'
     else:
         parameters['serverUrl'] = options.serverUrl
-    if options.timeZone is None:
-        parameters['timeZone'] = "GMT"
-    else:
-        parameters['timeZone'] = options.timeZone
     return parameters
 
 
