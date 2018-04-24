@@ -198,7 +198,8 @@ def getEC2InstanceType():
         return
     return response.text
 
-def sendData(metricDataDict, filePath):
+
+def sendData(metricDataDict, filePath, chunkSerialNumber):
     sendDataTime = time.time()
     # prepare data for metric streaming agent
     toSendDataDict = {}
@@ -225,7 +226,7 @@ def sendData(metricDataDict, filePath):
             toSendDataDict["agentType"] = "MetricFileReplay"
             toSendDataDict["minTimestamp"] = str(metricDataDict[1])
             toSendDataDict["maxTimestamp"] = str(metricDataDict[2])
-            toSendDataDict["chunkSerialNumber"] = str(random.randint(1,10))
+            toSendDataDict["chunkSerialNumber"] = str(chunkSerialNumber)
         if ('splitID' in parameters.keys() and 'splitBy' in parameters.keys()):
             toSendDataDict["splitID"] = parameters['splitID']
             toSendDataDict["splitBy"] = parameters['splitBy']
@@ -342,7 +343,7 @@ def processStreaming(newPrevEndtimeEpoch):
         newPrevEndtimeInSec = math.ceil(long(newPrevEndtimeEpoch) / 1000.0)
         new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(newPrevEndtimeInSec)))
         update_timestamp(new_prev_endtime)
-        sendData(metricData, None)
+        sendData(metricData, None, None)
 
 def processReplay(filePath):
     if os.path.isfile(filePath):
@@ -360,7 +361,7 @@ def processReplay(filePath):
                 for line in logfile:
                     if lineCount == parameters['chunkLines']:
                         logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                        sendData(currentRow, filePath)
+                        sendData(currentRow, filePath, None)
                         currentRow = []
                         chunkCount += 1
                         lineCount = 0
@@ -369,7 +370,7 @@ def processReplay(filePath):
                     lineCount += 1
                 if len(currentRow) != 0:
                     logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                    sendData(currentRow, filePath)
+                    sendData(currentRow, filePath, None)
                     chunkCount += 1
                 logger.debug("Total chunks created: " + str(chunkCount))
             output = subprocess.check_output(
@@ -396,7 +397,7 @@ def processReplay(filePath):
                         # Read each line from csv and generate a json
                         currentRow = {}
                         if currentLineCount == parameters['chunkLines']:
-                            sendData([toSendMetricData, minTimestampEpoch, maxTimestampEpoch], filePath)
+                            sendData([toSendMetricData, minTimestampEpoch, maxTimestampEpoch], filePath, chunkCount + 1)
                             toSendMetricData = []
                             currentLineCount = 0
                             chunkCount += 1
@@ -419,7 +420,7 @@ def processReplay(filePath):
                         currentLineCount += 1
                 # send final chunk
                 if len(toSendMetricData) != 0:
-                    sendData([toSendMetricData, minTimestampEpoch, maxTimestampEpoch], filePath)
+                    sendData([toSendMetricData, minTimestampEpoch, maxTimestampEpoch], filePath, chunkCount + 1)
                     chunkCount += 1
                 logger.debug("Total chunks created: " + str(chunkCount))
 
