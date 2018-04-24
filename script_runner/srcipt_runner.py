@@ -126,10 +126,7 @@ def main(parameters):
 
 
 if __name__ == "__main__":
-    # global homepath
-    # global rootpath
-    # # checkPrivilege()
-    # homepath = get_args()
+    # checkPrivilege()
     logger = setloggerConfig()
     parameters = getParameters()
     main(parameters)
