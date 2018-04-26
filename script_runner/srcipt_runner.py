@@ -8,6 +8,8 @@ import subprocess
 import time
 from optparse import OptionParser
 import logging
+import json
+import requests
 
 
 def getParameters():
@@ -16,7 +18,10 @@ def getParameters():
     parser.add_option("-d", "--directory",
                       action="store", dest="homepath", help="Directory to run from")
     parser.add_option("-p", "--port",
-                      action="store", dest="listenPort", help="Directory to run from")
+                      action="store", dest="listenPort", help="Port to listen for script requests")
+    parser.add_option("-w", "--serverUrl",
+                      action="store", dest="serverUrl", help="Server to verify credentials from.")
+
     (options, args) = parser.parse_args()
 
     parameters = {}
@@ -25,10 +30,43 @@ def getParameters():
     else:
         parameters['homepath'] = options.homepath
     if options.listenPort is None:
-        parameters['listenPort'] = 4445
+        parameters['listenPort'] = 4446
     else:
         parameters['listenPort'] = options.listenPort
+    if options.serverUrl is None:
+        parameters['serverUrl'] = "https://app.insightfinder.com"
+    else:
+        parameters['serverUrl'] = options.serverUrl
     return parameters
+
+
+def verifyUser(username, licenseKey, projectName):
+    alldata = {}
+    alldata["userName"] = username
+    alldata["operation"] = "verify"
+    alldata["licenseKey"] = licenseKey
+    alldata["projectName"] = projectName
+    toSendDataJSON = json.dumps(alldata)
+
+    url = parameters['serverUrl'] + "/api/v1/agentdatahelper"
+
+    try:
+        response = requests.post(url, data=json.loads(toSendDataJSON))
+    except requests.ConnectionError, e:
+        logger.error("Connection failure : " + str(e))
+        logger.error("Verification with InsightFinder credentials Failed")
+        return False
+    if response.status_code != 200:
+        logger.error("Response from server: " + str(response.status_code))
+        logger.error("Verification with InsightFinder credentials Failed")
+        return False
+    try:
+        jsonResponse = response.json()
+    except ValueError:
+        logger.error("Not a valid response from server")
+        logger.error("Verification with InsightFinder credentials Failed")
+        return False
+    return True
 
 
 def checkPrivilege():
@@ -38,33 +76,27 @@ def checkPrivilege():
         os.execlpe('sudo', *args)
 
 
-class prepareThreads(threading.Thread):
-    def __init__(self, command, path):
-        super(prepareThreads, self).__init__()
-        self.command = command
-        self.path = path
-
-    def run(self):
-        proc = subprocess.Popen(self.command, cwd=self.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-        (out, err) = proc.communicate()
-        if "failed" in str(err) or "ERROR" in str(err):
-            logger.error("Task failed.")
-            sys.exit()
-        logger.info(out)
-
-
-def sendFile(self, parameters):
-    request = self.recv(1024)
+def sendFile(clientSocket, parameters):
+    request = clientSocket.recv(1024)
     logger.debug("Request: " + str(request))
     requestParts = shlex.split(request)
-    msgType = requestParts[0]
-    if msgType != "GET":
-        return
-    command = parameters['homepath'] + "/script_runner/clean_disk.sh"
-    logger.debug(command)
-    thread = prepareThreads(command, parameters['homepath'])
-    thread.start()
-    thread.join()
+    if len(requestParts) == 4:
+        action = requestParts[0]
+        userName = requestParts[1]
+        licenseKey = requestParts[2]
+        projectName = requestParts[3]
+        if verifyUser(userName, licenseKey, projectName) and str(action).lower() == "cleandisk":
+            command = parameters['homepath'] + "/script_runner/clean_disk.sh &> /var/log/insightfinder-diskcleanup.log"
+            logger.debug(command)
+            proc = subprocess.Popen(command, cwd=parameters['homepath'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    shell=True)
+            (out, err) = proc.communicate()
+            if "failed" in str(err) or "ERROR" in str(err):
+                logger.error("Task failed.")
+                clientSocket.send("Disk cleanup failed.")
+            logger.info(out)
+            clientSocket.send("Disk cleanup succeeded.")
+    clientSocket.close()
 
 
 def acceptThread(parameters):
@@ -80,7 +112,7 @@ def acceptThread(parameters):
         print "==== Output Request ====="
         msg = "Connected to " + str(clientAddr[0]) + ":" + str(clientAddr[1])
         logger.info(msg)
-        thread3 = threading.Thread(target=sendFile(clientSock, parameters))
+        thread3 = threading.Thread(target=sendFile, args=(clientSock, parameters))
         thread3.daemon = True
         thread3.start()
     acceptor.close()
@@ -123,7 +155,6 @@ def main(parameters):
             time.sleep(.1)
     except KeyboardInterrupt:
         sys.exit(0)
-
 
 if __name__ == "__main__":
     # checkPrivilege()

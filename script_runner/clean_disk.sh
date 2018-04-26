@@ -9,8 +9,8 @@
 
 TO_DELETE_TMP_DIRS="/tmp /opt/jetty/temp"
 DEFAULT_FILE_AGE=+2
-DEFAULT_LINK_AGE=+2
-DEFAULT_SOCK_AGE=+2
+DEFAULT_LINK_AGE=+4
+DEFAULT_SOCK_AGE=+4
 
 # Make EMPTYFILES true to delete zero-length files
 EMPTYFILES=false
