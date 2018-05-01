@@ -16,14 +16,14 @@ DEFAULT_SOCK_AGE=+4
 EMPTYFILES=false
 #EMPTYFILES=true
 
-cd
-/tmp/log "cleantmp.sh[$$] - Begin cleaning tmp directories"
+RUN_TIME=$(/bin/date)
+echo "$RUN_TIME Begin cleaning tmp directories"
 
 echo ""
 echo "delete any tmp files that are more than 2 days old"
-/usr/bin/find $TO_DELETE_TMP_DIRS                               \
+sudo /usr/bin/find $TO_DELETE_TMP_DIRS                               \
      -depth                                                     \
-     -type f -a -ctime $DEFAULT_FILE_AGE                        \
+     -type f -a -mtime $DEFAULT_FILE_AGE                        \
      -print -delete
 echo ""
 
@@ -64,4 +64,6 @@ echo ""
 
 echo ""
 echo "Diskcleanup Script Successfully Executed"
+END_TIME=$(/bin/date)
+echo "$END_TIME End cleaning tmp directories"
 exit 0
