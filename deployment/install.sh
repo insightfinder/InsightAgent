@@ -226,7 +226,8 @@ fi
 
 #echo "*/$SAMPLING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/topology.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling_topology.err 1>$INSIGHTAGENTDIR/log/sampling_topology.out" >> $TEMPCRON
 #echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportTopology.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/reporting_topology.err 1>$INSIGHTAGENTDIR/log/reporting_topology.out" >> $TEMPCRON
-sudo nohup $PYTHONPATH $INSIGHTAGENTDIR/script_runner/srcipt_runner.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/script_runner.log &
+sudo /usr/bin/pkill -f "script_runner.py"
+sudo nohup $PYTHONPATH $INSIGHTAGENTDIR/script_runner/script_runner.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/script_runner.log &
 sudo chown root:root $TEMPCRON
 sudo chmod 644 $TEMPCRON
 sudo cat $TEMPCRON >> /etc/cron.d/ifagent
