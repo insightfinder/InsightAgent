@@ -3,7 +3,7 @@
 function usage()
 {
 	echo "Usage: ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL -p NFSEN_FOLDER -t AGENT_TYPE
-AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or metricFileReplay or logFileReplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia or nfdump or kvm or kafka or elasticsearch-storage. Reporting/Sampling interval supports integer value denoting minutes and 10s i.e 10 seconds as a valid value"
+AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or metricFileReplay or logFileReplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia or nfdump or kvm or kafka or elasticsearch-storage or elasticsearch-log. Reporting/Sampling interval supports integer value denoting minutes and 10s i.e 10 seconds as a valid value"
 }
 
 function createCronMinute() {
@@ -189,6 +189,13 @@ elif [ $AGENT_TYPE == 'collectd' ]; then
 	else
 		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
 	fi
+elif [ $AGENT_TYPE == 'elasticsearch-log' ]; then
+	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/elasticsearch-log/get_logs_elasticsearch.py -d $INSIGHTAGENTDIR -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
+	if [ "$IS_SECOND_REPORTING" = true ] ; then
+		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
+	else
+		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
+	fi
 elif [ $AGENT_TYPE == 'nfdump' ]; then
     if [ -z "$NFSEN_FOLDER" ]; then
 	    NFSEN_FOLDER='/data/nfsen/profiles-data/live'
@@ -219,7 +226,8 @@ fi
 
 #echo "*/$SAMPLING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/topology.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling_topology.err 1>$INSIGHTAGENTDIR/log/sampling_topology.out" >> $TEMPCRON
 #echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportTopology.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/reporting_topology.err 1>$INSIGHTAGENTDIR/log/reporting_topology.out" >> $TEMPCRON
-sudo $PYTHONPATH $INSIGHTAGENTDIR/script_runner/srcipt_runner.py -d $INSIGHTAGENTDIR -w $SERVER_URL &
+sudo /usr/bin/pkill -f "script_runner.py"
+sudo nohup $PYTHONPATH $INSIGHTAGENTDIR/script_runner/script_runner.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/script_runner.log &
 sudo chown root:root $TEMPCRON
 sudo chmod 644 $TEMPCRON
 sudo cat $TEMPCRON >> /etc/cron.d/ifagent
