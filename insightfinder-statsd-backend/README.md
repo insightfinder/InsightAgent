@@ -17,7 +17,7 @@ insightFinderApiHost: "hostname_to_send_data_to" // Its https://app.insightfinde
 ```
 
 ## How to enable
-Add statsd-datadog-backend to your list of statsd backends:
+Add insightfinder-statsd-backend to your list of statsd backends:
 
 ```js
 backends: ["insightfinder-statsd-backend"]
