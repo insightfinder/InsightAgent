@@ -16,6 +16,7 @@ The following types of agents are available:
 - Jolokia
 - KVM
 - Metric File Replay
+- insightfinder-statsd-backend (statsD)
 
 More details on the agents and installation details are in the wiki: https://github.com/insightfinder/InsightAgent/wiki
 
