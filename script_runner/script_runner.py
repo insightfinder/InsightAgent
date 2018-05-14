@@ -108,11 +108,12 @@ def runCommand(command, clientSocket):
     proc = subprocess.Popen(command, cwd=parameters['homepath'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             shell=True)
     (out, err) = proc.communicate()
-    if "failed" in str(err).lower() or "error" in str(err).lower() or "no such" in str(err).lower():
+    logger.info(out)
+    if len(str(out)) == 0 and ("failed" in str(err).lower() or "error" in str(err).lower() or "no such" in str(err).lower()):
         logger.info("Task failed.")
         clientSocket.send("Status: 500")
-    logger.info(out)
-    clientSocket.send("Status: 200")
+    else:
+        clientSocket.send("Status: 200")
 
 
 def acceptThread(parameters):
@@ -139,7 +140,7 @@ def setloggerConfig():
     # Get the root logger
     logger = logging.getLogger(__name__)
     # Have to set the root logger level, it defaults to logging.WARNING
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     # route INFO and DEBUG logging to stdout from stderr
     logging_handler_out = logging.StreamHandler(sys.stdout)
     logging_handler_out.setLevel(logging.DEBUG)
