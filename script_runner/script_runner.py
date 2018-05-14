@@ -80,23 +80,39 @@ def sendFile(clientSocket, parameters):
     request = clientSocket.recv(1024)
     logger.debug("Request: " + str(request))
     requestParts = shlex.split(request)
-    if len(requestParts) == 4:
-        action = requestParts[0]
-        userName = requestParts[1]
-        licenseKey = requestParts[2]
-        projectName = requestParts[3]
-        if verifyUser(userName, licenseKey, projectName) and str(action).lower() == "cleandisk":
-            command = parameters['homepath'] + "/script_runner/clean_disk.sh"
-            logger.debug(command)
-            proc = subprocess.Popen(command, cwd=parameters['homepath'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    shell=True)
-            (out, err) = proc.communicate()
-            if "failed" in str(err) or "ERROR" in str(err):
-                logger.info("Task failed.")
-                clientSocket.send("Disk cleanup failed.")
-            logger.info(out)
-            clientSocket.send("Disk cleanup succeeded.")
+    if len(requestParts) >= 4:
+        if requestParts[0] == 'CUSTOM':
+            action = " ".join(requestParts[1:-3])
+            userName = requestParts[len(requestParts) - 3]
+            licenseKey = requestParts[len(requestParts) - 2]
+            projectName = requestParts[len(requestParts) - 1]
+        else:
+            action = requestParts[0]
+            userName = requestParts[1]
+            licenseKey = requestParts[2]
+            projectName = requestParts[3]
+            if str(action).lower() == "cleandisk":
+                action = "clean_disk.sh"
+        command = os.path.join(parameters['homepath'], "script_runner", action)
+        if verifyUser(userName, licenseKey, projectName):
+            runCommand(command, clientSocket)
+        else:
+            clientSocket.send("Status: 500")
+    else:
+        clientSocket.send("Status: 500")
     clientSocket.close()
+
+
+def runCommand(command, clientSocket):
+    logger.debug(command)
+    proc = subprocess.Popen(command, cwd=parameters['homepath'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            shell=True)
+    (out, err) = proc.communicate()
+    if "failed" in str(err).lower() or "error" in str(err).lower() or "no such" in str(err).lower():
+        logger.info("Task failed.")
+        clientSocket.send("Status: 500")
+    logger.info(out)
+    clientSocket.send("Status: 200")
 
 
 def acceptThread(parameters):
