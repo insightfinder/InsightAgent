@@ -245,7 +245,7 @@ class InsightfinderStore(object):
         to_send_data_json = json.dumps(to_send_data_dict)
         self.logger.debug(
             "TotalData: " + str(len(bytearray(to_send_data_json))))
-        self.logger.debug("To send: " + str(to_send_data_json))
+
         # send the data
         postUrl = self.url + "/customprojectrawdata"
         response = requests.post(postUrl, data=json.loads(to_send_data_json))
