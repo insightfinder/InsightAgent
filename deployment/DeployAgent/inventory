@@ -47,7 +47,8 @@ ifAction=install
 ##Login User In Insightfinder Application
 ifUserName=
 
-##Project Name In Insightfinder Application
+##Project Name In Insightfinder Application(for individial agent install)
+# When agent type is log-metric, this signifies metric project name(collectd)
 ifProjectName=
 # Set this when agent type is log-metric
 logProjectName=
