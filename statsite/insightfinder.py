@@ -4,15 +4,13 @@ Supports flushing metrics to InsightFinder
 
 import re
 import sys
-import socket
 import logging
-import pickle
-import struct
 import socket
 import requests
 import json
 import time
 import os
+import random
 
 ##
 # InsightFinder sink for statsite
@@ -48,6 +46,8 @@ import os
 SPACES = re.compile(r"\s+")
 SLASHES = re.compile(r"\/+")
 NON_ALNUM = re.compile(r"[^a-zA-Z_\-0-9\.]")
+GROUPING_START = 10000
+GROUPING_END = 20000
 
 
 class InsightfinderStore(object):
@@ -63,7 +63,7 @@ class InsightfinderStore(object):
                 - `cfg` (optional) : INI configuration file.
                 - `lvl` (optional) : logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
                 - `attempts` (optional) : The number of re-connect retries before failing.
-		"""
+        """
         if attempts < 1:
             raise ValueError("Must have at least 1 attempt!")
 
@@ -76,6 +76,7 @@ class InsightfinderStore(object):
         self.cfg = cfg
         self.load(cfg)
         self.temp_group_id = 10000
+        self._load_grouping()
 
     def load(self, cfg):
         """Loads configuration from an INI format file"""
@@ -109,44 +110,55 @@ class InsightfinderStore(object):
         if ini.has_option(sect, 'sampling_interval'):
             self.sampling_interval = int(ini.get(sect, 'sampling_interval'))
 
-    def get_grouping_id(self, metric_key, temp_id):
+    def _load_grouping(self):
+        if (os.path.isfile('grouping.json')):
+            self.logger.debug("Grouping file exists. Loading..")
+            with open('grouping.json', 'r+') as f:
+                try:
+                    self.grouping_map = json.loads(f.read())
+                except ValueError:
+                    self.grouping_map = json.loads("{}")
+                    self.logger.debug("Error parsing grouping.json.")
+        else:
+            self.grouping_map = json.loads("{}")
+
+    def _get_grouping_id(self, metric_key):
         """
-        Get grouping id for a metric key 
+        Get grouping id for a metric key
 
         Parameters:
         - `metric_key` : metric key str to get group id.
         - `temp_id` : proposed group id integer
         """
-        if(os.path.isfile('grouping.json')):
-            self.logger.debug("Grouping file exists. Continuing..")
-        else:
-            self.logger.debug(
-                "Grouping file doesn't exist. Creating new file.")
-            grouping_file = open('grouping.json', "w")
-            grouping_file.write('{}')
-            grouping_file.close()
-        grouping_id = 0
-        with open('grouping.json', 'r+') as f:
-            grouping_obj = json.loads(f.read())
-            if metric_key in grouping_obj.keys():
-                grouping_id = int(grouping_obj[metric_key])
+        for i in range(3):
+            grouping_candidate = random.randint(GROUPING_START, GROUPING_END)
+            if metric_key in self.grouping_map:
+                grouping_id = int(self.grouping_map[metric_key])
+                return grouping_id
             else:
-                grouping_id = temp_id
-            grouping_obj[metric_key] = grouping_id
-            f.seek(0)
-            f.write(json.dumps(grouping_obj))
-            f.truncate()
-        return grouping_id
+                grouping_id = grouping_candidate
+                self.grouping_map[metric_key] = grouping_id
+                return grouping_id
+        return GROUPING_START
+
+    def save_grouping(self):
+        """
+        Saves the grouping data to grouping.json
+
+        :return: None
+        """
+        with open('grouping.json', 'w+') as f:
+            f.write(json.dumps(self.grouping_map))
 
     def normalize_key(self, key):
         """
-		Take a single key string and return the same string with spaces, slashes and
-		non-alphanumeric characters subbed out and prefixed by self.prefix.
+        Take a single key string and return the same string with spaces, slashes and
+        non-alphanumeric characters subbed out and prefixed by self.prefix.
         """
         key = SPACES.sub("_", key)
         key = SLASHES.sub("-", key)
         key = NON_ALNUM.sub("", key)
-    	# key = "%s%s" % (self.prefix, key)
+        # key = "%s%s" % (self.prefix, key)
         return key
 
     def append(self, metric):
@@ -172,7 +184,7 @@ class InsightfinderStore(object):
                 value_map = {}
 
             value_map[metric_key + '[' + hostname + ']:' +
-                      str(self.get_grouping_id(metric_key, self.temp_group_id))] = metric_value
+                      str(self._get_grouping_id(metric_key))] = metric_value
             self.temp_group_id += 1
             self.metrics_map[timestamp] = value_map
 
@@ -234,7 +246,7 @@ class InsightfinderStore(object):
         self.logger.debug(
             "TotalData: " + str(len(bytearray(to_send_data_json))))
 
-    	# send the data
+        # send the data
         postUrl = self.url + "/customprojectrawdata"
         response = requests.post(postUrl, data=json.loads(to_send_data_json))
         if response.status_code == 200:
@@ -264,6 +276,7 @@ def main():
         insightfinder.append(line.strip())
 
     insightfinder.send_metrics()
+    insightfinder.save_grouping()
 
 
 if __name__ == "__main__":
