@@ -1,4 +1,50 @@
 ---
+   - name: Yum Repo | Make insightRepo Directory
+     file:
+       path: /var/insightRepo
+       state: directory
+     when: ansible_pkg_mgr == 'yum'
+   - name: Yum Repo | Copy RPM packages(This might take a while...)
+     copy:
+       src: ../files/packages/rpm/
+       dest: /var/insightRepo/
+       directory_mode: yes
+     when: ansible_pkg_mgr == 'yum'
+   - name: Yum Repo | Install RPM package libxml2-python
+     yum:
+       name: /var/insightRepo/libxml2-python-2.9.1-6.el7_2.3.x86_64.rpm
+       state: present
+       disablerepo: '*'
+     when: ansible_pkg_mgr == 'yum'
+   - name: Yum Repo | Install RPM package deltarpm
+     yum:
+       name: /var/insightRepo/deltarpm-3.6-3.el7.x86_64.rpm
+       state: present
+       disablerepo: '*'
+     when: ansible_pkg_mgr == 'yum'
+   - name: Yum Repo | Install RPM package python-deltarpm
+     yum:
+       name: /var/insightRepo/python-deltarpm-3.6-3.el7.x86_64.rpm
+       state: present
+       disablerepo: '*'
+     when: ansible_pkg_mgr == 'yum'
+   - name: Yum Repo | Install RPM package createrepo
+     yum:
+       name: /var/insightRepo/createrepo-0.9.9-26.el7.noarch.rpm
+       state: present
+       disablerepo: '*'
+     when: ansible_pkg_mgr == 'yum'
+   - name : Yum Repo | Run Create Repo Command
+     command: sudo createrepo /var/insightRepo
+     when: ansible_pkg_mgr == 'yum'
+   - name: Yum Repo | Add insightfinder repo
+     yum_repository:
+       name: insightrepo
+       description: Insightfinder Repo
+       baseurl: file:///var/insightRepo
+       enabled: yes
+       gpgcheck: no
+     when: ansible_pkg_mgr == 'yum'
    - name: Install package dependencies - Add Open SUSE Ruby Devel Repo SLES
      become: yes
      shell: "http_proxy={{ http_proxy }} zypper rr devel_languages_ruby_extensions && zypper addrepo http://download.opensuse.org/repositories/devel:/languages:/ruby:/extensions/SLE_12/devel:languages:ruby:extensions.repo"
@@ -134,9 +180,12 @@
      become: yes
      shell: "http_proxy={{ http_proxy }} apt-get install -y -f --allow-unauthenticated td-agent"
      when: ansible_pkg_mgr == 'apt'
-   - name: td-agent | Install td-agent
-     become: yes
-     shell: "http_proxy={{ http_proxy }} curl -k -L https://toolbelt.treasuredata.com/sh/install-redhat-td-agent2.sh | sh"
+   - name: td-agent | Install td-agent(insightrepo)
+     yum:
+       name: td-agent
+       state: latest
+       disablerepo: '*'
+       enablerepo: insightrepo
      when: ansible_pkg_mgr == 'yum'
    - name: td-agent | Copy setup script
      become: yes
