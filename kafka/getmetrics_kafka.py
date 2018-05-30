@@ -9,9 +9,10 @@ import requests
 import json
 import collections
 import sys
+import random
 
 '''
-this script gathers system info from kafka and add to daily csv file
+this script gathers metrics from kafka and send to InsightFinder
 '''
 
 def getParameters():
@@ -46,6 +47,45 @@ def getParameters():
         parameters['timeout'] = int(options.timeout)
 
     return parameters
+
+def save_grouping(grouping_map):
+    """
+    Saves the grouping data to grouping.json
+    :return: None
+    """
+    with open('grouping.json', 'w+') as f:
+        f.write(json.dumps(grouping_map))
+
+def load_grouping():
+    if (os.path.isfile('grouping.json')):
+        logger.debug("Grouping file exists. Loading..")
+        with open('grouping.json', 'r+') as f:
+            try:
+                grouping_map = json.loads(f.read())
+            except ValueError:
+                grouping_map = json.loads("{}")
+                logger.debug("Error parsing grouping.json.")
+    else:
+        grouping_map = json.loads("{}")
+    return grouping_map
+
+def get_grouping_id(metric_key, grouping_map):
+    """
+    Get grouping id for a metric key
+    Parameters:
+    - `metric_key` : metric key str to get group id.
+    - `temp_id` : proposed group id integer
+    """
+    for i in range(3):
+        grouping_candidate = random.randint(GROUPING_START, GROUPING_END)
+        if metric_key in grouping_map:
+            grouping_id = int(grouping_map[metric_key])
+            return grouping_id
+        else:
+            grouping_id = grouping_candidate
+            grouping_map[metric_key] = grouping_id
+            return grouping_id
+    return GROUPING_START
 
 def getAgentConfigVars():
     configVars = {}
@@ -125,30 +165,6 @@ def get_kafka_config():
         topic = 'insightfinder_csv'
     return (host, port, topic)
 
-def get_normalisation_id_from_metric(metric_name):
-    if "cpu" in metric_name.lower():
-        return '2001'
-    elif "disk" in metric_name.lower() and ("read" in metric_name.lower() or "write" in metric_name.lower()):
-        return '2002'
-    elif "disk" in metric_name.lower():
-        return '2003'
-    elif "network" in metric_name.lower():
-        return '2004'
-    elif "memory" in metric_name.lower():
-        return '2005'
-    elif "load" in metric_name.lower():
-        return '2007'
-    elif "octet" in metric_name.lower():
-        return '2008'
-    elif "discards" in metric_name.lower():
-        return '2009'
-    elif "errors" in metric_name.lower():
-        return '2010'
-    elif "swap" in metric_name.lower():
-        return '2011'
-    else:
-        return '2500'
-
 def sendData(metricData):
     sendDataTime = time.time()
     # prepare data for metric streaming agent
@@ -175,7 +191,7 @@ def sendData(metricData):
     logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
 
 
-def parseConsumerMessages(consumer):
+def parseConsumerMessages(consumer, grouping_map):
     rawDataMap = collections.OrderedDict()
     for message in consumer:
         json_message = json.loads(message.value)
@@ -197,10 +213,9 @@ def parseConsumerMessages(consumer):
             if not metric_name:
                 continue
             if len(instance_name) == 0:
-                header_field = metric_name + "[" + host_name + "]:" + get_normalisation_id_from_metric(metric_name)
+                header_field = metric_name + "[" + host_name + "]:" + str(get_grouping_id(metric_name, grouping_map))
             else:
-                header_field = metric_name + "_" + instance_name + "[" + host_name + "]:" + get_normalisation_id_from_metric(
-                    metric_name)
+                header_field = metric_name + "_" + instance_name + "[" + host_name + "]:" + str(get_grouping_id(metric_name, grouping_map))
             valueMap[header_field] = str(value)
             rawDataMap[timestamp] = valueMap
     return rawDataMap
@@ -232,10 +247,13 @@ class LessThanFilter(logging.Filter):
 
 if __name__ == "__main__":
     CHUNK_SIZE = 4000000
+    GROUPING_START = 15000
+    GROUPING_END = 20000
     logger = setloggerConfig()
     parameters = getParameters()
     agentConfigVars = getAgentConfigVars()
     reportingConfigVars = getReportingConfigVars()
+    grouping_map = load_grouping()
 
 
     # path to write the daily csv file
@@ -248,7 +266,7 @@ if __name__ == "__main__":
         consumer = KafkaConsumer(bootstrap_servers=[host + ':' + port],
                                  auto_offset_reset='earliest', consumer_timeout_ms=1000 * parameters['timeout'], group_id="if_consumers")
         consumer.subscribe([topic])
-        rawDataMap = parseConsumerMessages(consumer)
+        rawDataMap = parseConsumerMessages(consumer, grouping_map)
 
         # format the collectd data to send to insightfinder
         metricData = []
@@ -275,5 +293,6 @@ if __name__ == "__main__":
             logger.debug("Sending Final Chunk: " + str(chunkNumber))
             sendData(metricData)
         consumer.close()
+        save_grouping(grouping_map)
     except KeyboardInterrupt:
         print "Interrupt from keyboard"
