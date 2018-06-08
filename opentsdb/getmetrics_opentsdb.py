@@ -152,7 +152,7 @@ def sendData(metricData):
     toSendDataDict["agentType"] = "custom"
 
     toSendDataJSON = json.dumps(toSendDataDict)
-    logger.info("TotalData: " + str(len(bytearray(toSendDataJSON)))) + "Bytes"
+    logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))) + " Bytes")
 
     # send the data
     postUrl = parameters['serverUrl'] + "/opentsdbdata"
