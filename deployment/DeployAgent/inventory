@@ -47,8 +47,11 @@ ifAction=install
 ##Login User In Insightfinder Application
 ifUserName=
 
-##Project Name In Insightfinder Application
+##Project Name In Insightfinder Application(for individial agent install)
+# When agent type is log-metric, this signifies metric project name(collectd)
 ifProjectName=
+# Set this when agent type is log-metric
+logProjectName=
 
 ##User's License Key in Application
 ifLicenseKey=
@@ -64,6 +67,8 @@ ifSamplingInterval=1
 #ifAgent=logFileReplay
 #ifAgent=hypervisor
 #ifAgent=nfdump
+# This project type installs both collectd and td-agent.
+#ifAgent=metric-log
 
 ##When yes, we will run the equivalent of 'apt-get update' before installing any packages.
 ##Valid entries are yes or no. Not used with yum-based installation (e.g., CentOS).
@@ -87,6 +92,9 @@ cadvisorPort=8080
 
 ##Vars for NFSen/NFDump
 nfsenProfile=/data/nfsen/profiles-data/live
+
+##Vars for Open TSDB
+openTsdbUrl=http://localhost:4242
 
 ##Vars for td-agent##
 
