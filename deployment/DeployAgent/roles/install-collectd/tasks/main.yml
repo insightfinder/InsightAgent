@@ -8,6 +8,52 @@
       - Agent Type:{{ agentType | mandatory }}
       - License Key:{{ licenseKey | mandatory }}
       - Update APT:{{ apt_update | mandatory }}
+- name: Yum Repo | Make insightRepo Directory
+  file:
+    path: /var/insightRepo
+    state: directory
+  when: ansible_pkg_mgr == 'yum'
+- name: Yum Repo | Copy RPM packages(This might take a while...)
+  copy:
+    src: ../files/packages/rpm/
+    dest: /var/insightRepo/
+    directory_mode: yes
+  when: ansible_pkg_mgr == 'yum'
+- name: Yum Repo | Install RPM package libxml2-python
+  yum:
+    name: /var/insightRepo/libxml2-python-2.9.1-6.el7_2.3.x86_64.rpm
+    state: present
+    disablerepo: '*'
+  when: ansible_pkg_mgr == 'yum'
+- name: Yum Repo | Install RPM package deltarpm
+  yum:
+    name: /var/insightRepo/deltarpm-3.6-3.el7.x86_64.rpm
+    state: present
+    disablerepo: '*'
+  when: ansible_pkg_mgr == 'yum'
+- name: Yum Repo | Install RPM package python-deltarpm
+  yum:
+    name: /var/insightRepo/python-deltarpm-3.6-3.el7.x86_64.rpm
+    state: present
+    disablerepo: '*'
+  when: ansible_pkg_mgr == 'yum'
+- name: Yum Repo | Install RPM package createrepo
+  yum:
+    name: /var/insightRepo/createrepo-0.9.9-26.el7.noarch.rpm
+    state: present
+    disablerepo: '*'
+  when: ansible_pkg_mgr == 'yum'
+- name : Yum Repo | Run Create Repo Command
+  command: sudo createrepo /var/insightRepo
+  when: ansible_pkg_mgr == 'yum'
+- name: Yum Repo | Add insightfinder repo
+  yum_repository:
+    name: insightrepo
+    description: Insightfinder Repo
+    baseurl: file:///var/insightRepo
+    enabled: yes
+    gpgcheck: no
+  when: ansible_pkg_mgr == 'yum'
 - name: SELinux | Check for SELinux
   become: yes
   stat:
@@ -21,15 +67,17 @@
 - name: Install package dependencies - YUM
   become: yes
   become_flags: '-E'
-  package:
+  yum:
     name: "{{item}}"
     state: latest
+    disablerepo: '*'
+    enablerepo: insightrepo
   with_items:
     - gcc
     - wget
     - libffi-devel
     - python-devel
-    - openssl-devel
+    - openssl
     - epel-release
     - collectd
   when: ansible_pkg_mgr == 'yum'
@@ -153,11 +201,47 @@
    name: collectd
    state: restarted
   become: true
-- name: Create Python Virtual Environment for Agent
-  command: ./deployment/checkpackages.sh -env
-  args:
-    chdir: "{{ansible_env.HOME}}/InsightAgent-master"
-  when: ansible_pkg_mgr != 'zypper'
+- name: Untar the Agent Code
+  unarchive:
+    src: "{{ansible_env.HOME}}/insightagent.tar.gz"
+    dest: "{{ansible_env.HOME}}"
+    remote_src: True
+- name: Copy Pip packages on Machines
+  become: yes
+  copy:
+    src: ../files/pip_packages.tar.gz
+    dest: "{{ansible_env.HOME}}"
+    owner: root
+    group: root
+    mode: 0644
+  when: ansible_pkg_mgr == 'yum'
+- name: Untar the Pip packages
+  unarchive:
+    src: "{{ansible_env.HOME}}/pip_packages.tar.gz"
+    dest: "{{ansible_env.HOME}}"
+    remote_src: True
+  when: ansible_pkg_mgr == 'yum'
+- name: Copy get-pip.py on Machines
+  become: yes
+  copy:
+    src: ../files/get-pip.py
+    dest: "{{ansible_env.HOME}}"
+    owner: root
+    group: root
+    mode: 0644
+  when: ansible_pkg_mgr == 'yum'
+- name: Install pip
+  become: yes
+  shell: "http_proxy={{ http_proxy }} python {{ansible_env.HOME}}/get-pip.py --no-index --find-links={{ansible_env.HOME}}/pip_packages/"
+  when: ansible_pkg_mgr == 'yum'
+- name: Install pip packages for Agent
+  shell: "pip install --no-index --find-links='{{ansible_env.HOME}}/pip_packages/' requests pytz"
+  when: ansible_pkg_mgr == 'yum'
+#- name: Create Python Virtual Environment for Agent
+#  command: ./deployment/checkpackages.sh -env
+#  args:
+#    chdir: "{{ansible_env.HOME}}/InsightAgent-master"
+#  when: ansible_pkg_mgr != 'zypper'
 - name: Download pip packages for Agent
   shell: http_proxy={{ http_proxy }} pip install requests pytz
   when: ansible_pkg_mgr == 'zypper'
