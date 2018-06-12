@@ -167,7 +167,7 @@
     -u {{ userName }}
     -k {{ licenseKey }}
     -s {{ samplingInterval }}
-    -t {{ agentType }}
+    -t collectd
     -w {{ reportingUrl }}"
   become: true
   args:
