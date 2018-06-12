@@ -4,12 +4,19 @@
 Create an ini file as shown in the example below and give it as an option in the stream_command.
 ```ini
 [insightfinder]
-username = user
-project_name = statsite
-license_key = c123439662ad1edf64e99e97e4b776112345678
-sampling_interval = 10
-url = https://app.insightfinder.com
+username = <insightfinder_username>
+project_name = <insightfinder_project_name>
+license_key = <insightfinder_license_key>
+sampling_interval = <statsite_flushing_interval>
+url = <insightfinder_app_url>
 ```
+**Options:**
+
+    - username:  Insightfinder application user-name. You can get it from this page: https://app.insightfinder.com/account-info
+    - project_name: InsightFinder project to send data to
+    - license_key: InsightFinder license key. You can get it from this page: https://app.insightfinder.com/account-info
+    - sampling_interval: statsite sampling interval in seconds
+    - url (optional) : Host url to send data to. Its https://app.insightfinder.com by default
 
 
 ## How to enable
