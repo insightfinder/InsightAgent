@@ -41,6 +41,8 @@ import random
 #  - license_key: InsightFinder license key. You can get it from this page: https://app.insightfinder.com/account-info
 #  - sampling_interval: statsite sampling interval
 #  - url (optional) : Host url to send data to. Its https://app.insightfinder.com by default
+#  - host_get: point index of host start to host end, Its 2,4 by default
+#  - metric_name_get: point index of metric start to metric end, Its 4,5 by default
 ###
 
 SPACES = re.compile(r"\s+")
@@ -51,7 +53,6 @@ GROUPING_END = 20000
 
 
 class InsightfinderStore(object):
-
     def __init__(self, cfg="/etc/insightfinder.ini", lvl="INFO", attempts=3):
         """
         Implements an interface that allows metrics to be persisted to InsightFinder.
@@ -109,6 +110,14 @@ class InsightfinderStore(object):
         self.sampling_interval = 10
         if ini.has_option(sect, 'sampling_interval'):
             self.sampling_interval = int(ini.get(sect, 'sampling_interval'))
+
+        self.host_get = '2,4'
+        if ini.has_option(sect, 'host_get'):
+            self.host_get = ini.get(sect, 'host_get')
+
+        self.metric_name_get = '4,5'
+        if ini.has_option(sect, 'metric_name_get'):
+            self.metric_name_get = ini.get(sect, 'metric_name_get')
 
     def _load_grouping(self):
         if (os.path.isfile('grouping.json')):
@@ -178,85 +187,106 @@ class InsightfinderStore(object):
             metric_value = metric_split[1]
             timestamp = int(metric_split[2])
 
+            hostname = self.get_details_by_metric(metric_key, self.host_get, hostname)
+            metric_name = self.get_details_by_metric(metric_key, self.metric_name_get, metric_key)
+
             if timestamp in self.metrics_map:
                 value_map = self.metrics_map[timestamp]
             else:
                 value_map = {}
 
-            value_map[metric_key + '[' + hostname + ']:' +
-                      str(self._get_grouping_id(metric_key))] = metric_value
+            value_map[metric_name + '[' + hostname + ']:' +
+                      str(self._get_grouping_id(metric_name))] = metric_value
             self.temp_group_id += 1
             self.metrics_map[timestamp] = value_map
 
-    def send_metrics(self):
-        self.logger.info("Outputting %d metrics", sum(len(v)
-                                                      for v in self.metrics_map.itervalues()))
-        self._flush_lines()
-        self.metrics_map = {}
-        self.to_send_metrics = []
-
-    def _flush_lines(self):
-        """ Flushes the metrics provided to InsightFinder. """
-        if not self.metrics_map:
-            return
-        # reformat data as a list of JSON Objects for each timestamp
-        for timestamp in self.metrics_map.keys():
-            value_map = self.metrics_map[timestamp]
-            value_map['timestamp'] = str(timestamp) + '000'
-            self.to_send_metrics.append(value_map)
-
+    @staticmethod
+    def get_details_by_metric(metric_key, get_key, default):
+        res = default
         try:
-            self._write_metric(self.to_send_metrics)
-        except StandardError:
-            self.logger.exception("Failed to write out the metrics!")
+            if metric_key and get_key:
+                spl_list = get_key.split(',')
+                spl_left = int(spl_list[0])
+                spl_right = int(spl_list[1])
+                metric_info = metric_key.split('.')
+                if len(metric_info) > spl_right:
+                    res = '.'.join(metric_info[spl_left:spl_right])
+        except:
+            pass
+        return res
 
-    def _write_metric(self, metric):
-        """Tries to create a JSON message and send to the InsightFinder URL, reconnecting on any errors"""
-        for _ in xrange(self.attempts):
-            try:
-                self._send_data(metric)
-                return
-            except IOError:
-                self.logger.exception(
-                    "Error while flushing to InsightFinder. Reattempting...")
 
-        self.logger.critical(
-            "Failed to flush to Insightfinder! Gave up after %d attempts.", self.attempts)
+def send_metrics(self):
+    self.logger.info("Outputting %d metrics", sum(len(v)
+                                                  for v in self.metrics_map.itervalues()))
+    self._flush_lines()
+    self.metrics_map = {}
+    self.to_send_metrics = []
 
-    def _send_data(self, metric_data):
 
-        if not metric_data or len(metric_data) == 0:
-            self.logger.warning("No data to send for this flush.")
+def _flush_lines(self):
+    """ Flushes the metrics provided to InsightFinder. """
+    if not self.metrics_map:
+        return
+    # reformat data as a list of JSON Objects for each timestamp
+    for timestamp in self.metrics_map.keys():
+        value_map = self.metrics_map[timestamp]
+        value_map['timestamp'] = str(timestamp) + '000'
+        self.to_send_metrics.append(value_map)
+
+    try:
+        self._write_metric(self.to_send_metrics)
+    except StandardError:
+        self.logger.exception("Failed to write out the metrics!")
+
+
+def _write_metric(self, metric):
+    """Tries to create a JSON message and send to the InsightFinder URL, reconnecting on any errors"""
+    for _ in xrange(self.attempts):
+        try:
+            self._send_data(metric)
             return
+        except IOError:
+            self.logger.exception(
+                "Error while flushing to InsightFinder. Reattempting...")
 
-        send_data_time = time.time()
+    self.logger.critical(
+        "Failed to flush to Insightfinder! Gave up after %d attempts.", self.attempts)
 
-        # prepare data for metric streaming agent
-        to_send_data_dict = {}
-        to_send_data_dict["metricData"] = json.dumps(metric_data)
-        to_send_data_dict["licenseKey"] = self.license_key
-        to_send_data_dict["projectName"] = self.project_name
-        to_send_data_dict["userName"] = self.username
-        to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[
-            0]
-        to_send_data_dict["samplingInterval"] = str(self.sampling_interval)
-        to_send_data_dict["agentType"] = "custom"
 
-        to_send_data_json = json.dumps(to_send_data_dict)
-        self.logger.debug(
-            "TotalData: " + str(len(bytearray(to_send_data_json))))
+def _send_data(self, metric_data):
+    if not metric_data or len(metric_data) == 0:
+        self.logger.warning("No data to send for this flush.")
+        return
 
-        # send the data
-        postUrl = self.url + "/customprojectrawdata"
-        response = requests.post(postUrl, data=json.loads(to_send_data_json))
-        if response.status_code == 200:
-            self.logger.info(str(len(bytearray(to_send_data_json))
-                                 ) + " bytes of data are reported.")
-        else:
-            self.logger.exception("Failed to send data.")
-            raise IOError("Failed to send request to " + postUrl)
-        self.logger.debug("--- Send data time: %s seconds ---" %
-                          (time.time() - send_data_time))
+    send_data_time = time.time()
+
+    # prepare data for metric streaming agent
+    to_send_data_dict = {}
+    to_send_data_dict["metricData"] = json.dumps(metric_data)
+    to_send_data_dict["licenseKey"] = self.license_key
+    to_send_data_dict["projectName"] = self.project_name
+    to_send_data_dict["userName"] = self.username
+    to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[
+        0]
+    to_send_data_dict["samplingInterval"] = str(self.sampling_interval)
+    to_send_data_dict["agentType"] = "custom"
+
+    to_send_data_json = json.dumps(to_send_data_dict)
+    self.logger.debug(
+        "TotalData: " + str(len(bytearray(to_send_data_json))))
+
+    # send the data
+    postUrl = self.url + "/customprojectrawdata"
+    response = requests.post(postUrl, data=json.loads(to_send_data_json))
+    if response.status_code == 200:
+        self.logger.info(str(len(bytearray(to_send_data_json))
+                             ) + " bytes of data are reported.")
+    else:
+        self.logger.exception("Failed to send data.")
+        raise IOError("Failed to send request to " + postUrl)
+    self.logger.debug("--- Send data time: %s seconds ---" %
+                      (time.time() - send_data_time))
 
 
 def main():
@@ -281,4 +311,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
