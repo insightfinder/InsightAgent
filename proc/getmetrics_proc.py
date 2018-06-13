@@ -217,7 +217,10 @@ try:
                 if(eachfile == "diskmetrics.txt"):
                     tokens[1] = float(float(tokens[1])*512/(1024*1024))
                 elif(eachfile == "diskusedmetrics.txt" or eachfile == "memmetrics.txt"):
-                    tokens[1] = float(float(tokens[1])/1024)
+                    if tokens[0] == "DiskUsed":
+                        tokens[1] = float(tokens[1])
+                    else:
+                        tokens[1] = float(float(tokens[1])/1024)
                 elif(eachfile == "networkmetrics.txt" or eachfile == "networkinterfacemetrics.txt"):#Change
                     tokens[1] = float(float(tokens[1])/(1024*1024))
                 if check_delta(tokens[0]) is True:
