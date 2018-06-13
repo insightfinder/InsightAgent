@@ -41,8 +41,8 @@ import random
 #  - license_key: InsightFinder license key. You can get it from this page: https://app.insightfinder.com/account-info
 #  - sampling_interval: statsite sampling interval
 #  - url (optional) : Host url to send data to. Its https://app.insightfinder.com by default
-#  - host_get: point index of host start to host end, Its 2,4 by default
-#  - metric_name_get: point index of metric start to metric end, Its 4,5 by default
+#  - host_range: point index of host start to host end, Its 2,4 by default
+#  - metric_name_range: point index of metric start to metric end, Its 4,5 by default
 ###
 
 SPACES = re.compile(r"\s+")
@@ -111,13 +111,13 @@ class InsightfinderStore(object):
         if ini.has_option(sect, 'sampling_interval'):
             self.sampling_interval = int(ini.get(sect, 'sampling_interval'))
 
-        self.host_get = '2,4'
-        if ini.has_option(sect, 'host_get'):
-            self.host_get = ini.get(sect, 'host_get')
+        self.host_range = '2,4'
+        if ini.has_option(sect, 'host_range'):
+            self.host_range = ini.get(sect, 'host_range')
 
-        self.metric_name_get = '4,5'
-        if ini.has_option(sect, 'metric_name_get'):
-            self.metric_name_get = ini.get(sect, 'metric_name_get')
+        self.metric_name_range = '4,5'
+        if ini.has_option(sect, 'metric_name_range'):
+            self.metric_name_range = ini.get(sect, 'metric_name_range')
 
     def _load_grouping(self):
         if (os.path.isfile('grouping.json')):
@@ -187,8 +187,8 @@ class InsightfinderStore(object):
             metric_value = metric_split[1]
             timestamp = int(metric_split[2])
 
-            hostname = self.get_details_by_metric(metric_key, self.host_get, hostname)
-            metric_name = self.get_details_by_metric(metric_key, self.metric_name_get, metric_key)
+            hostname = self.get_details_by_metric(metric_key, self.host_range, hostname)
+            metric_name = self.get_details_by_metric(metric_key, self.metric_name_range, metric_key)
 
             if timestamp in self.metrics_map:
                 value_map = self.metrics_map[timestamp]

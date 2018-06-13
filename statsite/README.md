@@ -9,8 +9,8 @@ project_name = <insightfinder_project_name>
 license_key = <insightfinder_license_key>
 sampling_interval = <statsite_flushing_interval>
 url = <insightfinder_app_url>
-host_get = <point index of host start>,<point index of host end>
-metric_name_get = <point index of metric start>,<point index of metric end>
+host_range = <point index of host start>,<point index of host end>
+metric_name_range = <point index of metric start>,<point index of metric end>
 ```
 **Options:**
 
