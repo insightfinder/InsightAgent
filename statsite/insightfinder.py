@@ -41,6 +41,8 @@ import random
 #  - license_key: InsightFinder license key. You can get it from this page: https://app.insightfinder.com/account-info
 #  - sampling_interval: statsite sampling interval
 #  - url (optional) : Host url to send data to. Its https://app.insightfinder.com by default
+#  - host_range: point index of host start to host end, Its 2,4 by default
+#  - metric_name_range: point index of metric start to metric end(end is till the metric key end by default), Its 4 by default
 ###
 
 SPACES = re.compile(r"\s+")
@@ -51,14 +53,11 @@ GROUPING_END = 20000
 
 
 class InsightfinderStore(object):
-
     def __init__(self, cfg="/etc/insightfinder.ini", lvl="INFO", attempts=3):
         """
         Implements an interface that allows metrics to be persisted to InsightFinder.
-
         Raises a :class:`ValueError` on bad arguments or `Exception` on missing
         configuration section.
-
         :Parameters:
                 - `cfg` (optional) : INI configuration file.
                 - `lvl` (optional) : logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -110,6 +109,14 @@ class InsightfinderStore(object):
         if ini.has_option(sect, 'sampling_interval'):
             self.sampling_interval = int(ini.get(sect, 'sampling_interval'))
 
+        self.host_range = '1,4'
+        if ini.has_option(sect, 'host_range'):
+            self.host_range = ini.get(sect, 'host_range')
+
+        self.metric_name_range = '4'
+        if ini.has_option(sect, 'metric_name_range'):
+            self.metric_name_range = ini.get(sect, 'metric_name_range')
+
     def _load_grouping(self):
         if (os.path.isfile('grouping.json')):
             self.logger.debug("Grouping file exists. Loading..")
@@ -125,7 +132,6 @@ class InsightfinderStore(object):
     def _get_grouping_id(self, metric_key):
         """
         Get grouping id for a metric key
-
         Parameters:
         - `metric_key` : metric key str to get group id.
         - `temp_id` : proposed group id integer
@@ -144,7 +150,6 @@ class InsightfinderStore(object):
     def save_grouping(self):
         """
         Saves the grouping data to grouping.json
-
         :return: None
         """
         with open('grouping.json', 'w+') as f:
@@ -164,7 +169,6 @@ class InsightfinderStore(object):
     def append(self, metric):
         """
         Flushes the metrics provided to InsightFinder.
-
         Parameters:
         - `metric` : A string entry with format key|value|timestamp.
         """
@@ -178,15 +182,38 @@ class InsightfinderStore(object):
             metric_value = metric_split[1]
             timestamp = int(metric_split[2])
 
+            hostname = self._get_detail_from_metric(metric_key, self.host_range)
+            metric_name = self._get_detail_from_metric(metric_key, self.metric_name_range)
+
             if timestamp in self.metrics_map:
                 value_map = self.metrics_map[timestamp]
             else:
                 value_map = {}
 
-            value_map[metric_key + '[' + hostname + ']:' +
-                      str(self._get_grouping_id(metric_key))] = metric_value
+            value_map[metric_name + '[' + hostname + ']:' +
+                      str(self._get_grouping_id(metric_name))] = metric_value
             self.temp_group_id += 1
             self.metrics_map[timestamp] = value_map
+
+
+    def _get_detail_from_metric(self, metric_key, split_range):
+        """ Extracts the details from metric key with provided range """
+        parsed_metric = metric_key
+        try:
+            if metric_key and split_range:
+                metric_info = metric_key.split('.')
+                spl_list = split_range.split(',')
+                spl_left = int(spl_list[0])
+                if len(spl_list) == 2:
+                    spl_right = int(spl_list[1])
+                    if len(metric_info) > spl_right:
+                        parsed_metric = '.'.join(metric_info[spl_left:spl_right])
+                else:
+                    parsed_metric = '.'.join(metric_info[spl_left:])
+        except:
+            self.logger.warn("Unable to parse metric key")
+        return parsed_metric
+
 
     def send_metrics(self):
         self.logger.info("Outputting %d metrics", sum(len(v)
@@ -194,6 +221,7 @@ class InsightfinderStore(object):
         self._flush_lines()
         self.metrics_map = {}
         self.to_send_metrics = []
+
 
     def _flush_lines(self):
         """ Flushes the metrics provided to InsightFinder. """
@@ -210,6 +238,7 @@ class InsightfinderStore(object):
         except StandardError:
             self.logger.exception("Failed to write out the metrics!")
 
+
     def _write_metric(self, metric):
         """Tries to create a JSON message and send to the InsightFinder URL, reconnecting on any errors"""
         for _ in xrange(self.attempts):
@@ -223,8 +252,8 @@ class InsightfinderStore(object):
         self.logger.critical(
             "Failed to flush to Insightfinder! Gave up after %d attempts.", self.attempts)
 
-    def _send_data(self, metric_data):
 
+    def _send_data(self, metric_data):
         if not metric_data or len(metric_data) == 0:
             self.logger.warning("No data to send for this flush.")
             return
@@ -281,4 +310,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
