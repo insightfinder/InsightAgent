@@ -11,6 +11,7 @@ import json
 import time
 import os
 import random
+import logging.handlers
 
 ##
 # InsightFinder sink for statsite
@@ -18,7 +19,7 @@ import random
 #
 # Use with the following stream command:
 #
-#  stream_command = python sinks/insightfinder.py insightfinder.ini INFO 3
+#  stream_command = python sinks/insightfinder.py insightfinder.ini INFO 3 3000
 #
 # The InsightFinder sink takes an INI format configuration file as a first
 # argument , log level as a second argument and no. of re-connect attempts as the third argument.
@@ -49,11 +50,11 @@ SPACES = re.compile(r"\s+")
 SLASHES = re.compile(r"\/+")
 NON_ALNUM = re.compile(r"[^a-zA-Z_\-0-9\.]")
 GROUPING_START = 10000
-GROUPING_END = 20000
+GROUPING_END = 11000
 
 
 class InsightfinderStore(object):
-    def __init__(self, cfg="/etc/insightfinder.ini", lvl="INFO", attempts=3):
+    def __init__(self, cfg="/etc/insightfinder.ini", lvl="INFO", attempts=1, flush_kb=3000):
         """
         Implements an interface that allows metrics to be persisted to InsightFinder.
         Raises a :class:`ValueError` on bad arguments or `Exception` on missing
@@ -62,19 +63,34 @@ class InsightfinderStore(object):
                 - `cfg` (optional) : INI configuration file.
                 - `lvl` (optional) : logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
                 - `attempts` (optional) : The number of re-connect retries before failing.
+                - `flush_kb` (optional) : The size of metric data to send in KB(The actual metrics will have a few statsite metrics too)
         """
         if attempts < 1:
             raise ValueError("Must have at least 1 attempt!")
 
         attempts = int(attempts)
-        self.logger = logging.getLogger("statsite.insightfinderstore")
+
+        #Set up logging
+        self.logger = logging.getLogger(__name__)
+        # create a file handler
+        handler = logging.handlers.RotatingFileHandler('insightfinder.log', mode='w', maxBytes=5*1024*1024,
+                                 backupCount=2, encoding=None, delay=0)
+        # handler = logging.FileHandler('insightfinder.log')
+        handler.setLevel(lvl)
+        # create a logging format
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(process)d - %(threadName)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        # add the handlers to the logger
+        self.logger.addHandler(handler)
         self.logger.setLevel(lvl)
+
         self.attempts = attempts
         self.metrics_map = {}
         self.to_send_metrics = []
         self.cfg = cfg
         self.load(cfg)
         self.temp_group_id = 10000
+        self.flush_kb = int(flush_kb)
         self._load_grouping()
 
     def load(self, cfg):
@@ -109,14 +125,19 @@ class InsightfinderStore(object):
         if ini.has_option(sect, 'sampling_interval'):
             self.sampling_interval = int(ini.get(sect, 'sampling_interval'))
 
-        self.host_range = '1,4'
+        self.host_range = '2,5'
         if ini.has_option(sect, 'host_range'):
             self.host_range = ini.get(sect, 'host_range')
 
-        self.metric_name_range = '4'
+        self.metric_name_range = '5'
         if ini.has_option(sect, 'metric_name_range'):
             self.metric_name_range = ini.get(sect, 'metric_name_range')
 
+        self.filter_string = 'rn_app.all'
+        if ini.has_option(sect, 'filter_string'):
+            self.filter_string = ini.get(sect, 'filter_string')
+
+    
     def _load_grouping(self):
         if (os.path.isfile('grouping.json')):
             self.logger.debug("Grouping file exists. Loading..")
@@ -128,6 +149,7 @@ class InsightfinderStore(object):
                     self.logger.debug("Error parsing grouping.json.")
         else:
             self.grouping_map = json.loads("{}")
+
 
     def _get_grouping_id(self, metric_key):
         """
@@ -182,7 +204,7 @@ class InsightfinderStore(object):
             metric_value = metric_split[1]
             timestamp = int(metric_split[2])
 
-            hostname = self._get_detail_from_metric(metric_key, self.host_range)
+            hostname = self._get_detail_from_metric(metric_key, self.host_range).replace("_", "-")
             metric_name = self._get_detail_from_metric(metric_key, self.metric_name_range)
 
             if timestamp in self.metrics_map:
@@ -211,7 +233,7 @@ class InsightfinderStore(object):
                 else:
                     parsed_metric = '.'.join(metric_info[spl_left:])
         except:
-            self.logger.warn("Unable to parse metric key")
+            self.logger.warning("Unable to parse metric key")
         return parsed_metric
 
 
@@ -273,7 +295,7 @@ class InsightfinderStore(object):
 
         to_send_data_json = json.dumps(to_send_data_dict)
         self.logger.debug(
-            "TotalData: " + str(len(bytearray(to_send_data_json))))
+            "TotalData: " + str(len(bytearray(to_send_data_json))) + "bytes")
 
         # send the data
         postUrl = self.url + "/customprojectrawdata"
@@ -284,7 +306,7 @@ class InsightfinderStore(object):
         else:
             self.logger.exception("Failed to send data.")
             raise IOError("Failed to send request to " + postUrl)
-        self.logger.debug("--- Send data time: %s seconds ---" %
+        self.logger.debug("Send data time: %s seconds " %
                           (time.time() - send_data_time))
 
 
@@ -295,17 +317,22 @@ def main():
     # Intialize from our arguments
     insightfinder = InsightfinderStore(*sys.argv[1:])
 
-    METRICS_BYTES_PER_FLUSH = 3000000
+    current_chunk = 0
 
     # Get all the inputs
     for line in sys.stdin:
+        if insightfinder.filter_string not in line:
+            continue
         map_size = len(bytearray(json.dumps(insightfinder.metrics_map)))
-        if map_size >= METRICS_BYTES_PER_FLUSH:
+        if map_size >= insightfinder.flush_kb * 1000:
+            insightfinder.logger.debug("Flushing chunk number: " + str(current_chunk))
             insightfinder.send_metrics()
+            current_chunk += 1
         insightfinder.append(line.strip())
-
+    insightfinder.logger.debug("Flushing chunk number: " + str(current_chunk))
     insightfinder.send_metrics()
     insightfinder.save_grouping()
+    insightfinder.logger.debug("Finished sending all chunks to InsightFinder")
 
 
 if __name__ == "__main__":
