@@ -137,6 +137,7 @@ class InsightfinderStore(object):
         if ini.has_option(sect, 'filter_string'):
             self.filter_string = ini.get(sect, 'filter_string')
 
+    
     def _load_grouping(self):
         if (os.path.isfile('grouping.json')):
             self.logger.debug("Grouping file exists. Loading..")
