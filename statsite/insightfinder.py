@@ -18,7 +18,7 @@ import random
 #
 # Use with the following stream command:
 #
-#  stream_command = python sinks/insightfinder.py insightfinder.ini INFO 3
+#  stream_command = python sinks/insightfinder.py insightfinder.ini INFO 3 3000
 #
 # The InsightFinder sink takes an INI format configuration file as a first
 # argument , log level as a second argument and no. of re-connect attempts as the third argument.
@@ -49,11 +49,11 @@ SPACES = re.compile(r"\s+")
 SLASHES = re.compile(r"\/+")
 NON_ALNUM = re.compile(r"[^a-zA-Z_\-0-9\.]")
 GROUPING_START = 10000
-GROUPING_END = 20000
+GROUPING_END = 11000
 
 
 class InsightfinderStore(object):
-    def __init__(self, cfg="/etc/insightfinder.ini", lvl="INFO", attempts=3):
+    def __init__(self, cfg="/etc/insightfinder.ini", lvl="INFO", attempts=1, flush_kb=3000):
         """
         Implements an interface that allows metrics to be persisted to InsightFinder.
         Raises a :class:`ValueError` on bad arguments or `Exception` on missing
@@ -62,6 +62,7 @@ class InsightfinderStore(object):
                 - `cfg` (optional) : INI configuration file.
                 - `lvl` (optional) : logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
                 - `attempts` (optional) : The number of re-connect retries before failing.
+                - `flush_kb` (optional) : The size of metric data to send in KB(The actual metrics will have a few statsite metrics too)
         """
         if attempts < 1:
             raise ValueError("Must have at least 1 attempt!")
@@ -75,6 +76,7 @@ class InsightfinderStore(object):
         self.cfg = cfg
         self.load(cfg)
         self.temp_group_id = 10000
+        self.flush_kb = int(flush_kb)
         self._load_grouping()
 
     def load(self, cfg):
@@ -186,7 +188,7 @@ class InsightfinderStore(object):
             metric_value = metric_split[1]
             timestamp = int(metric_split[2])
 
-            hostname = self._get_detail_from_metric(metric_key, self.host_range)
+            hostname = self._get_detail_from_metric(metric_key, self.host_range).replace("_", "-")
             metric_name = self._get_detail_from_metric(metric_key, self.metric_name_range)
 
             if timestamp in self.metrics_map:
@@ -278,6 +280,8 @@ class InsightfinderStore(object):
         to_send_data_json = json.dumps(to_send_data_dict)
         self.logger.debug(
             "TotalData: " + str(len(bytearray(to_send_data_json))))
+        self.logger.debug(
+            "TotalData: " + str(to_send_data_json))
 
         # send the data
         postUrl = self.url + "/customprojectrawdata"
@@ -299,14 +303,18 @@ def main():
     # Intialize from our arguments
     insightfinder = InsightfinderStore(*sys.argv[1:])
 
-    METRICS_BYTES_PER_FLUSH = 3000000
+    current_chunk_lines = 0
 
     # Get all the inputs
     for line in sys.stdin:
         if insightfinder.filter_string not in line:
             continue
         map_size = len(bytearray(json.dumps(insightfinder.metrics_map)))
-        if map_size >= METRICS_BYTES_PER_FLUSH:
+        # insightfinder.logger.debug("Size: " + str(map_size))
+        # insightfinder.logger.debug("Flush Size: " + str(insightfinder.flush_kb))
+        if map_size >= insightfinder.flush_kb * 1000:
+            current_chunk_lines += 1
+            # insightfinder.logger.debug("Flushed " + str(current_chunk_lines))
             insightfinder.send_metrics()
         insightfinder.append(line.strip())
 
