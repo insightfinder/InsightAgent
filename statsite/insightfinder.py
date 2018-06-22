@@ -11,6 +11,7 @@ import json
 import time
 import os
 import random
+import logging.handlers
 
 ##
 # InsightFinder sink for statsite
@@ -68,8 +69,21 @@ class InsightfinderStore(object):
             raise ValueError("Must have at least 1 attempt!")
 
         attempts = int(attempts)
-        self.logger = logging.getLogger("statsite.insightfinderstore")
+
+        #Set up logging
+        self.logger = logging.getLogger(__name__)
+        # create a file handler
+        handler = logging.handlers.RotatingFileHandler('insightfinder.log', mode='w', maxBytes=5*1024*1024,
+                                 backupCount=2, encoding=None, delay=0)
+        # handler = logging.FileHandler('insightfinder.log')
+        handler.setLevel(lvl)
+        # create a logging format
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(process)d - %(threadName)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        # add the handlers to the logger
+        self.logger.addHandler(handler)
         self.logger.setLevel(lvl)
+
         self.attempts = attempts
         self.metrics_map = {}
         self.to_send_metrics = []
@@ -134,6 +148,7 @@ class InsightfinderStore(object):
                     self.logger.debug("Error parsing grouping.json.")
         else:
             self.grouping_map = json.loads("{}")
+
 
     def _get_grouping_id(self, metric_key):
         """
@@ -217,7 +232,7 @@ class InsightfinderStore(object):
                 else:
                     parsed_metric = '.'.join(metric_info[spl_left:])
         except:
-            self.logger.warn("Unable to parse metric key")
+            self.logger.warning("Unable to parse metric key")
         return parsed_metric
 
 
@@ -279,9 +294,7 @@ class InsightfinderStore(object):
 
         to_send_data_json = json.dumps(to_send_data_dict)
         self.logger.debug(
-            "TotalData: " + str(len(bytearray(to_send_data_json))))
-        self.logger.debug(
-            "TotalData: " + str(to_send_data_json))
+            "TotalData: " + str(len(bytearray(to_send_data_json))) + "bytes")
 
         # send the data
         postUrl = self.url + "/customprojectrawdata"
@@ -292,7 +305,7 @@ class InsightfinderStore(object):
         else:
             self.logger.exception("Failed to send data.")
             raise IOError("Failed to send request to " + postUrl)
-        self.logger.debug("--- Send data time: %s seconds ---" %
+        self.logger.debug("Send data time: %s seconds " %
                           (time.time() - send_data_time))
 
 
@@ -303,23 +316,22 @@ def main():
     # Intialize from our arguments
     insightfinder = InsightfinderStore(*sys.argv[1:])
 
-    current_chunk_lines = 0
+    current_chunk = 0
 
     # Get all the inputs
     for line in sys.stdin:
         if insightfinder.filter_string not in line:
             continue
         map_size = len(bytearray(json.dumps(insightfinder.metrics_map)))
-        # insightfinder.logger.debug("Size: " + str(map_size))
-        # insightfinder.logger.debug("Flush Size: " + str(insightfinder.flush_kb))
         if map_size >= insightfinder.flush_kb * 1000:
-            current_chunk_lines += 1
-            # insightfinder.logger.debug("Flushed " + str(current_chunk_lines))
+            insightfinder.logger.debug("Flushing chunk number: " + str(current_chunk))
             insightfinder.send_metrics()
+            current_chunk += 1
         insightfinder.append(line.strip())
-
+    insightfinder.logger.debug("Flushing chunk number: " + str(current_chunk))
     insightfinder.send_metrics()
     insightfinder.save_grouping()
+    insightfinder.logger.debug("Finished sending all chunks to InsightFinder")
 
 
 if __name__ == "__main__":
