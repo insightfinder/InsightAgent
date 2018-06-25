@@ -9,7 +9,7 @@ project_name = <insightfinder_project_name>
 license_key = <insightfinder_license_key>
 sampling_interval = <statsite_flushing_interval>
 url = <insightfinder_app_url>
-filter_string = <string_to_filter_metric_keys>
+filter_string = <string_to_filter_metric_keys> (optional)
 ```
 **Options:**
 ```
