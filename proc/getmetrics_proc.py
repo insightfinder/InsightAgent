@@ -174,6 +174,13 @@ def get_cpuusage(filename,field_values,which_dict):
         totalresult += float(result)
     field_values.append(totalresult*100)
 
+def is_number(s):
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+
 filenames = ["timestamp.txt", "cpumetrics.txt","diskmetrics.txt","diskusedmetrics.txt","diskpercent.txt","networkmetrics.txt","networkinterfacemetrics.txt","memmetrics.txt","loadavg.txt"]
 fields = []
 try:
@@ -215,7 +222,7 @@ try:
                 else:
                     field = tokens[0]
 
-                if(tokens[1].isdigit() is False):
+                if not is_number(tokens[1]):
                     continue
                 fields.append(field)
                 if(eachfile == "diskmetrics.txt"):
