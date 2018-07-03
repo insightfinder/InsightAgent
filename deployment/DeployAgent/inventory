@@ -93,6 +93,9 @@ cadvisorPort=8080
 ##Vars for NFSen/NFDump
 nfsenProfile=/data/nfsen/profiles-data/live
 
+##Vars for Open TSDB
+openTsdbUrl=http://localhost:4242
+
 ##Vars for td-agent##
 
 # If td-agent can't be started as a service then change this value to yes

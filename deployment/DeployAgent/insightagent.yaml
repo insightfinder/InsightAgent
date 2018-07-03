@@ -40,6 +40,7 @@
      - { role: install-nfdump, when: agentType=="nfdump" and action=="install"}
      - { role: install-replay, when: (agentType=="metricFileReplay" or agentType=="logFileReplay") and action=="install"}
      - { role: install-tdagent, when: (agentType=="tdagent" or agentType=="metric-log") and action=="install"}
+     - { role: install-opentsdb, when: (agentType=="opentsdb") and action=="install"}
      - { role: uninstall, when: action=="uninstall" }
    environment:
      http_proxy: "{{ http_proxy }}"
