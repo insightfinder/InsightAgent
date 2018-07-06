@@ -147,10 +147,10 @@ class InsightfinderStore(object):
         self.prev_endtime = config['prev_endtime']
         self.deltaFields = config['delta_fields']
 
-    def parse_topology_file(self, file_path):
+    def parse_topology_file(self):
         topology_list = []
-        if os.path.isfile(file_path):
-            with open(file_path) as topology_file:
+        if os.path.isfile(self.file_path):
+            with open(self.file_path) as topology_file:
                 topology_file_csv = csv.reader(topology_file)
                 for row in topology_file_csv:
                     map_size = len(bytearray(json.dumps(topology_list)))
@@ -188,9 +188,11 @@ class InsightfinderStore(object):
         to_send_data_dict["userName"] = self.user_name
         to_send_data_dict["fileType"] = self.file_type
         if self.file_type == "topology":
+            post_url = self.server_url + "/api/v1/customtopology"
             to_send_data_dict["topologyData"] = json.dumps(metric_data_list)
             to_send_data_dict["causalKey"] = self.causal_key
         else:
+            post_url = self.server_url + "/api/v1/customgrouping"
             to_send_data_dict["instanceName"] = socket.gethostname()
             to_send_data_dict["groupingData"] = json.dumps(metric_data_list)
             to_send_data_dict["isMetricAgent"] = "true"
@@ -202,7 +204,6 @@ class InsightfinderStore(object):
             "TotalData: " + str(len(bytearray(to_send_data_json))))
 
         # send the data
-        post_url = self.server_url + "/api/v1/customgrouping"
         try:
             response = requests.post(post_url, data=json.loads(to_send_data_json))
             if response.status_code == 200:
@@ -216,33 +217,35 @@ class InsightfinderStore(object):
         except requests.exceptions.ConnectionError:
             self.logger.error("Failed to send request to " + post_url)
 
-    # def parseCsvfile(filePath, instanceColumn, groupColumn):
-    #     if os.path.isfile(filePath):
-    #         grouping_file = open(filePath)
-    #         try:
-    #             grouping_file_csv = csv.reader(grouping_file)
-    #         except IOError:
-    #             print "No meta-data file!"
-    #         fieldnames = []
-    #         grouping_dict = {}
-    #         for row in grouping_file_csv:
-    #             print grouping_file_csv.line_num
-    #             if grouping_file_csv.line_num == 1:
-    #                 fieldnames = row
-    #                 instance_column_index = fieldnames.index(instanceColumn)
-    #                 group_column_index = fieldnames.index(groupColumn)
-    #             else:
-    #                 group_name = row[group_column_index]
-    #                 instance_name = row[instance_column_index]
-    #                 if group_name not in grouping_dict:
-    #                     grouping_dict[group_name] = ""
-    #                     grouping_dict[group_name] = grouping_dict[group_name] + instance_name
-    #                 else:
-    #                     grouping_dict[group_name] = grouping_dict[group_name] + "," + instance_name
-    #         return grouping_dict
+    def parse_grouping_csv_file(self):
+        if os.path.isfile(self.file_path):
+            grouping_file = open(self.file_path)
+            try:
+                grouping_file_csv = csv.reader(grouping_file)
+            except IOError:
+                self.logger.error("No meta-data file!")
+            field_names = []
+            grouping_dict = {}
+            for row in grouping_file_csv:
+                print grouping_file_csv.line_num
+                if grouping_file_csv.line_num == 1:
+                    field_names = row
+                    instance_column_index = field_names.index(self.instance_col)
+                    group_column_index = field_names.index(self.group_col)
+                else:
+                    group_name = row[group_column_index]
+                    instance_name = row[instance_column_index]
+                    if group_name not in grouping_dict:
+                        grouping_dict[group_name] = ""
+                        grouping_dict[group_name] = grouping_dict[group_name] + instance_name
+                    else:
+                        grouping_dict[group_name] = grouping_dict[group_name] + "," + instance_name
+            self._send_data(grouping_dict)
 
 if __name__ == "__main__":
     BYTES_PER_FLUSH = 3000000
     insightfinder = InsightfinderStore(*sys.argv[1:])
-    insightfinder.parse_topology_file(insightfinder.file_path)
-    insightfinder.logger.debug("File parsing done")
+    if insightfinder.file_type == "topology":
+        insightfinder.parse_topology_file()
+    elif insightfinder.file_type == "grouping":
+        insightfinder.parse_grouping_csv_file()
