@@ -43,6 +43,12 @@
   time_format %b %d, %Y %H:%M:%S %p
   path /opt/jetty/logs/%Y_%m_*.stderrout.log
   #############################################
+#  format multiline
+#  format_firstline /(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}),(\d{3})/
+#  format1 /^(?<time>(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}),(\d{3})) (?<data>.*)$/
+#  time_format %Y-%m-%d %H:%M:%S,%N
+#  path /usr/local/HBase/logs/*.log
+  #############################################
   pos_file /tmp/log.pos
   encoding ISO-8859-1
   tag "iflog.#{Socket.gethostname}"
