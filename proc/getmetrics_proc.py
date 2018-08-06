@@ -86,6 +86,8 @@ def init_previous_results():
                     tokens[1] = float(float(tokens[1])*512/(1024*1024))
                 elif(eachfile == "diskusedmetrics.txt" or eachfile == "memmetrics.txt"):
                     tokens[1] = float(float(tokens[1])/1024)
+                elif eachfile == "diskpercent.txt":
+                    tokens[1] = float(tokens[1])
                 elif(eachfile == "networkmetrics.txt" or eachfile == "networkinterfacemetrics.txt"):#Change
                     tokens[1] = float(float(tokens[1])/(1024*1024))
                 first_result[tokens[0]] = float(tokens[1])
@@ -149,6 +151,8 @@ def get_cpuusage(filename,field_values,which_dict):
     cpuusage_file = open(os.path.join(homepath,datadir,filename))
     lines = cpuusage_file.read().split("\n")
     cpu_dict={}
+    if len(lines) == 1:
+        return
     cpu_count = multiprocessing.cpu_count()
     for i in range(0,cpu_count):
         cpucore = "cpu"+str(i)
@@ -170,7 +174,14 @@ def get_cpuusage(filename,field_values,which_dict):
         totalresult += float(result)
     field_values.append(totalresult*100)
 
-filenames = ["timestamp.txt", "cpumetrics.txt","diskmetrics.txt","diskusedmetrics.txt","networkmetrics.txt","networkinterfacemetrics.txt","memmetrics.txt","loadavg.txt"]
+def is_number(s):
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+
+filenames = ["timestamp.txt", "cpumetrics.txt","diskmetrics.txt","diskusedmetrics.txt","diskpercent.txt","networkmetrics.txt","networkinterfacemetrics.txt","memmetrics.txt","loadavg.txt"]
 fields = []
 try:
     date = time.strftime("%Y%m%d")
@@ -211,13 +222,15 @@ try:
                 else:
                     field = tokens[0]
 
-                if(tokens[1].isdigit() is False):
+                if not is_number(tokens[1]):
                     continue
                 fields.append(field)
                 if(eachfile == "diskmetrics.txt"):
                     tokens[1] = float(float(tokens[1])*512/(1024*1024))
                 elif(eachfile == "diskusedmetrics.txt" or eachfile == "memmetrics.txt"):
                     tokens[1] = float(float(tokens[1])/1024)
+                elif eachfile == "diskpercent.txt":
+                    tokens[1] = float(tokens[1])
                 elif(eachfile == "networkmetrics.txt" or eachfile == "networkinterfacemetrics.txt"):#Change
                     tokens[1] = float(float(tokens[1])/(1024*1024))
                 if check_delta(tokens[0]) is True:
