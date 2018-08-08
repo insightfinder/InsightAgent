@@ -1,0 +1,4 @@
+[zabbix]
+ZABBIX_URL = {{ ZabbixUrl }}
+ZABBIX_USER = {{ ZabbixUser }}
+ZABBIX_PASSWORD = {{ ZabbixPassword }}
