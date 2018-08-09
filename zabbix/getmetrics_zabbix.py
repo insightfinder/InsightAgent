@@ -210,7 +210,7 @@ def getMetricData(config, hosts, startTime, endTime):
                 "host": log.get('host')
             },
             "aggregatedTags": [],
-            "dps": log.get('value')
+            "dps": {v[0]: v[1] for v in log.get('value', [])}
         })
 
     logger.info("Get metric data from zabbix: " + str(len(zabbixMetricList)))
