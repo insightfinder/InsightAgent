@@ -141,12 +141,18 @@ def getMetricData(config, metricList, startTime, endTime):
                 metricDataList.extend(datas)
 
     # change data to opentsdb api format:
+    filterHosts = ['localhost']
     metricOTDataList = []
     for log in metricDataList:
+        host = log.get('metric').get('instance', '').split(':')[0]
+
+        if host in filterHosts:
+            continue
+
         metricOTDataList.append({
             "metric": log.get('metric').get('__name__'),
             "tags": {
-                "host": log.get('metric').get('instance')
+                "host": host
             },
             "aggregatedTags": [],
             "dps": map(lambda v: [str(v[0]), float(v[1])], log.get('values', []))
