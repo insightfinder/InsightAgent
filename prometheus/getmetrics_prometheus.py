@@ -155,7 +155,7 @@ def getMetricData(config, metricList, startTime, endTime):
                 "host": host
             },
             "aggregatedTags": [],
-            "dps": map(lambda v: [str(v[0]), float(v[1])], log.get('values', []))
+            "dps": {str(v[0]): float(v[1]) for v in log.get('values', [])}
         })
 
     return metricOTDataList
