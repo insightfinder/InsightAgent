@@ -123,7 +123,7 @@ def getInstanceListFromFile(config):
     return list(dataList)
 
 
-def getMetricData(config, hosts, startTime, endTime):
+def getMetricData(config, parameters, hosts, startTime, endTime):
     """Get metric data from Zabbix API"""
     # connection to zabbix
     logger.info(
@@ -182,28 +182,31 @@ def getMetricData(config, hosts, startTime, endTime):
 
     # get metric data
     metrics_data = {}
-    result = zapi.do_request('history.get', {
-        "history": 3,
-        "hostids": hosts_ids,
-        "itemids": items_ids,
-        'time_from': startTime,
-        'time_till': endTime,
-        'output': 'extend'
-    })
-    for info in result['result']:
-        itemid = info['itemid']
-        host = items_map.get(itemid, {}).get('host')
-        item_name = items_map.get(itemid, {}).get('name')
-        ts = info['clock']
-        value = float(info['value'])
-        if itemid in metrics_data:
-            metrics_data[itemid]["value"].append([str(ts), value])
-        else:
-            metrics_data[itemid] = {
-                'metric': item_name,
-                'host': host,
-                "value": [[str(ts), value]],
-            }
+    chunked_list = chunks(items_ids, parameters['chunkSize'])
+    for sub_list in chunked_list:
+        result = zapi.do_request('history.get', {
+            "history": 3,
+            "hostids": hosts_ids,
+            "itemids": sub_list,
+            'time_from': startTime,
+            'time_till': endTime,
+            'output': 'extend'
+        })
+        logger.info("Get metric data: " + str(len(result['result'])))
+        for info in result['result']:
+            itemid = info['itemid']
+            host = items_map.get(itemid, {}).get('host')
+            item_name = items_map.get(itemid, {}).get('name')
+            ts = info['clock']
+            value = float(info['value'])
+            if itemid in metrics_data:
+                metrics_data[itemid]["value"].append([str(ts), value])
+            else:
+                metrics_data[itemid] = {
+                    'metric': item_name,
+                    'host': host,
+                    "value": [[str(ts), value]],
+                }
 
     # parse data to opentsdb format
     zabbixMetricList = []
@@ -218,7 +221,7 @@ def getMetricData(config, hosts, startTime, endTime):
         })
 
     logger.info("Get metric data from zabbix: " + str(len(zabbixMetricList)))
-    return metrics_data
+    return zabbixMetricList
 
 
 def sendData(metricData):
@@ -310,7 +313,7 @@ if __name__ == "__main__":
         chunked_list = chunks(instanceList, parameters['chunkSize'])
         for sub_list in chunked_list:
             # get metric data from zabbix every SAMPLING_INTERVAL
-            metricDataList = getMetricData(agent_config, sub_list, dataStartTimestamp, dataEndTimestamp)
+            metricDataList = getMetricData(agent_config, parameters, sub_list, dataStartTimestamp, dataEndTimestamp)
             if len(metricDataList) == 0:
                 logger.error("No data for metrics received from Zabbix.")
                 sys.exit()
