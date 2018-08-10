@@ -95,6 +95,7 @@ ifReportingUrl=https://app.insightfinder.com
 ZabbixUrl=http://localhost:80
 ZabbixUser=Admin
 ZabbixPassword=zabbix
+ZabbixInstancesFile=/root/if/instances.txt
 ```
 
 

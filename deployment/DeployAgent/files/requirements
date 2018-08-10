@@ -16,3 +16,4 @@ ndg-httpsclient
 pyasn1
 pyyaml
 pytz
+py-zabbix

@@ -107,14 +107,15 @@ def getZabbixConfig(parameters, datadir):
             "ZABBIX_URL": cp.get('zabbix', 'ZABBIX_URL'),
             "ZABBIX_USER": cp.get('zabbix', 'ZABBIX_USER'),
             "ZABBIX_PASSWORD": cp.get('zabbix', 'ZABBIX_PASSWORD'),
+            "ZABBIX_INSTANCES_FILE": cp.get('zabbix', 'ZABBIX_INSTANCES_FILE'),
         }
     return zabbixConfig
 
 
-def getInstanceListFromFile(config, filePath):
+def getInstanceListFromFile(config):
     """Get available instance list from File"""
     dataList = set()
-    with open(filePath, 'r') as f:
+    with open(config['ZABBIX_INSTANCES_FILE'], 'r') as f:
         for line in f:
             if line:
                 dataList.add(line.replace('\n', ''))
@@ -125,6 +126,9 @@ def getInstanceListFromFile(config, filePath):
 def getMetricData(config, hosts, startTime, endTime):
     """Get metric data from Zabbix API"""
     # connection to zabbix
+    logger.info(
+        "Begin to connect to zabbix:{} User/Pwd:{}/{}".format(str(config['ZABBIX_URL']), str(config['ZABBIX_USER']),
+                                                              str(config['ZABBIX_PASSWORD'])))
     zapi = ZabbixAPI(url=config['ZABBIX_URL'], user=config['ZABBIX_USER'], password=config['ZABBIX_PASSWORD'])
     logger.info("Get connection from zabbix success")
 
@@ -298,8 +302,7 @@ if __name__ == "__main__":
     try:
         logger.debug("Start to send metric data: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
         # get instance list from file
-        filePath = '/tmp/instances.txt'
-        instanceList = getInstanceListFromFile(agent_config, filePath)
+        instanceList = getInstanceListFromFile(agent_config)
         if len(instanceList) == 0:
             logger.error("No instances to get data for.")
             sys.exit()
