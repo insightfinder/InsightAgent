@@ -96,6 +96,8 @@ ZabbixUrl=http://localhost:80
 ZabbixUser=Admin
 ZabbixPassword=zabbix
 ZabbixInstancesFile=/root/if/instances.txt
+# if need cache the items(metrics) for instances, set ZabbixCacheFilePath.
+ZabbixCacheFilePath=
 ```
 
 

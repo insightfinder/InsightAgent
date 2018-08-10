@@ -3,3 +3,4 @@ ZABBIX_URL = {{ ZabbixUrl }}
 ZABBIX_USER = {{ ZabbixUser }}
 ZABBIX_PASSWORD = {{ ZabbixPassword }}
 ZABBIX_INSTANCES_FILE = {{ ZabbixInstancesFile }}
+ZABBIX_CACHEFILE_PATH = {{ ZabbixCacheFilePath }}

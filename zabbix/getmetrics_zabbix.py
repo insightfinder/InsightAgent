@@ -6,6 +6,7 @@ import ConfigParser
 import os
 import requests
 import json
+import hashlib
 import logging
 from pyzabbix.api import ZabbixAPI
 
@@ -108,6 +109,7 @@ def getZabbixConfig(parameters, datadir):
             "ZABBIX_USER": cp.get('zabbix', 'ZABBIX_USER'),
             "ZABBIX_PASSWORD": cp.get('zabbix', 'ZABBIX_PASSWORD'),
             "ZABBIX_INSTANCES_FILE": cp.get('zabbix', 'ZABBIX_INSTANCES_FILE'),
+            "ZABBIX_CACHEFILE_PATH": cp.get('zabbix', 'ZABBIX_CACHEFILE_PATH'),
         }
     return zabbixConfig
 
@@ -152,32 +154,58 @@ def getMetricData(config, parameters, hosts, startTime, endTime):
     # get items by hosts
     items_map = {}
     items_ids = []
-    items_res = zapi.do_request('item.get', {
-        'filter': {
-            "host": hosts,
-            # "type": "0"
-        },
-        "search": {
-            # "key_": "system"
-        },
-        "sortfield": "name",
-        'output': 'extend'
-    })
-    for item in items_res['result']:
-        item_id = item['itemid']
-        host_id = item['hostid']
-        items_ids.append(item_id)
-        name = item['name']
-        key = item['key_']
-        if '[' in key:
-            keys = key.split('[')[1].split(']')[0].split(',')
-            if len(keys) > 0:
-                for i, k in enumerate(keys):
-                    name = name.replace('$' + str(i + 1), keys[i])
-        items_map[item_id] = {
-            "name": name,
-            "host": hosts_map.get(host_id)
-        }
+    # read items from cache if exist
+    hostsHash = hashlib.sha256(str(hosts)).hexdigest()
+    cachePath = config['ZABBIX_CACHEFILE_PATH']
+    if cachePath and os.path.exists(cachePath):
+        with open(cachePath, 'r') as f:
+            try:
+                res = json.loads(f.read())
+                items_map = res.get(hostsHash).get('items_map', items_map)
+                items_ids = res.get(hostsHash).get('items_ids', items_ids)
+            except:
+                pass
+
+    if len(items_ids) == 0:
+        items_res = zapi.do_request('item.get', {
+            'filter': {
+                "host": hosts,
+                # "type": "0"
+            },
+            "search": {
+                # "key_": "system"
+            },
+            "sortfield": "name",
+            'output': 'extend'
+        })
+        for item in items_res['result']:
+            item_id = item['itemid']
+            host_id = item['hostid']
+            items_ids.append(item_id)
+            name = item['name']
+            key = item['key_']
+            if '[' in key:
+                keys = key.split('[')[1].split(']')[0].split(',')
+                if len(keys) > 0:
+                    for i, k in enumerate(keys):
+                        name = name.replace('$' + str(i + 1), keys[i])
+            items_map[item_id] = {
+                "name": name,
+                "host": hosts_map.get(host_id)
+            }
+
+        # cache the items
+        if cachePath:
+            try:
+                res = {}
+                if cachePath and os.path.exists(cachePath):
+                    with open(cachePath, 'r') as f:
+                        res = json.loads(f.read())
+                with open(cachePath, 'w+') as f:
+                    res[hostsHash] = {"items_map": items_map, "items_ids": items_ids}
+                    f.write(json.dumps(res))
+            except:
+                pass
     logger.info("Get items from zabbix: " + str(len(items_ids)))
 
     # get metric data
