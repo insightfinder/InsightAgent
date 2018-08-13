@@ -93,6 +93,7 @@ ifReportingUrl=https://app.insightfinder.com
 
 ##Vars for Prometheus
 PrometheusUrl=http://localhost:9090
+PrometheusMetricsFile=/root/if/metrics.txt
 ```
 
 

@@ -106,14 +106,15 @@ def getPrometheusConfig(parameters, datadir):
         cp.read(os.path.join(parameters['homepath'], datadir, "config.txt"))
         prometheusConfig = {
             "PROMETHEUS_URL": cp.get('prometheus', 'PROMETHEUS_URL'),
+            "PROMETHEUS_METRICS_FILE": cp.get('prometheus', 'PROMETHEUS_METRICS_FILE'),
         }
     return prometheusConfig
 
 
-def getMetricListFromFile(config, filePath):
+def getMetricListFromFile(config):
     """Get available metric list from File"""
     metricList = set()
-    with open(filePath, 'r') as f:
+    with open(config['PROMETHEUS_METRICS_FILE'], 'r') as f:
         for line in f:
             if line:
                 metricList.add(line.replace('\n', ''))
@@ -242,8 +243,7 @@ if __name__ == "__main__":
     try:
         logger.debug("Start to send metric data: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
         # get metric list from prometheus
-        filePath = './metrics.txt'
-        metricList = getMetricListFromFile(agent_config, filePath)
+        metricList = getMetricListFromFile(agent_config)
         if len(metricList) == 0:
             logger.error("No metrics to get data for.")
             sys.exit()
