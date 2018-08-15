@@ -213,7 +213,7 @@ def getMetricData(config, parameters, hosts, startTime, endTime):
     chunked_list = chunks(items_ids, parameters['chunkSize'])
     for sub_list in chunked_list:
         result = zapi.do_request('history.get', {
-            "history": 3,
+            "history": 0,
             "hostids": hosts_ids,
             "itemids": sub_list,
             'time_from': startTime,
