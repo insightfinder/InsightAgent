@@ -1,0 +1,5 @@
+[rizhiyi]
+RIZHIYI_URL = {{ rizhiyiUrl }}
+RIZHIYI_SECURE_KEY = {{ rizhiyiSecureKey }}
+RIZHIYI_ACCESS_KEY = {{ rizhiyiAccessKey }}
+RIZHIYI_SOURCE_GROUP = {{ rizhiyiSourceGroup }}
