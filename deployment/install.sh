@@ -52,6 +52,7 @@ while [ "$1" != "" ]; do
 			;;
 		-c )	shift
 			CHUNK_SIZE=$1
+			;;
 		-l )	shift
 			CHUNK_LINES=$1
 			;;
@@ -221,8 +222,8 @@ elif [ $AGENT_TYPE == 'opentsdb' ]; then
 	else
 		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
 	fi
-elif [ $AGENT_TYPE == 'kafka-log' ]; then
-    if [ -l "$CHUNK_LINES" ]; then
+elif [ $AGENT_TYPE == 'kafka-logs' ]; then
+    if [ -z "$CHUNK_LINES" ]; then
 	    CHUNK_LINES='1000'
     fi
 	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -c $CHUNK_LINES 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
