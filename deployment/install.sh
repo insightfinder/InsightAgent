@@ -109,10 +109,6 @@ if [ -z "$INSIGHTAGENTDIR" ]; then
 	export INSIGHTAGENTDIR=`pwd`
 fi
 
-if [[ $INSIGHTAGENTDIR != *"InsightAgent-master" ]] && [[ $INSIGHTAGENTDIR != *"InsightAgent-master/" ]];then
-        echo "Wrong home directory. Run ./deployment/install.sh from InsightAgent-master folder"
-        exit 1
-fi
 #Checking for pyenv folder. If it exists then use that else use default python
 #echo $INSIGHTAGENTDIR
 PYTHONPATH=$INSIGHTAGENTDIR/pyenv
@@ -226,7 +222,7 @@ elif [ $AGENT_TYPE == 'kafka-logs' ]; then
     if [ -z "$CHUNK_LINES" ]; then
 	    CHUNK_LINES='1000'
     fi
-	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -c $CHUNK_LINES 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
+	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
 	if [ "$IS_SECOND_REPORTING" = true ] ; then
 		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
 	else
