@@ -79,14 +79,14 @@
     -u {{ userName }}
     -k {{ licenseKey }}
     -s {{ samplingInterval }}
-    -t td-agent
+    -t {{ agentType }}
     -w {{ reportingUrl }}"
   become: true
   args:
     chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
 - name: td-agent | Copy setup script
   become: yes
-  template: src=config.ini dest={{ansible_env.HOME}}/InsightAgent-master/kafka-logs/config.ini
+  template: src=config.ini dest={{ansible_env.HOME}}/InsightAgent-master/kafka_logs/config.ini
 - name: Delete Tar Bundle for Agent
   file:
     state: absent
