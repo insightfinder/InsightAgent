@@ -118,9 +118,9 @@ def getReportingConfigVars():
 
 
 def getKafkaConfig():
-    if os.path.exists(os.path.join(parameters['homepath'], "kafka", "config.ini")):
+    if os.path.exists(os.path.join(parameters['homepath'], "kafka_logs", "config.ini")):
         parser = SafeConfigParser()
-        parser.read(os.path.join(parameters['homepath'], "kafka", "config.ini"))
+        parser.read(os.path.join(parameters['homepath'], "kafka_logs", "config.ini"))
         bootstrap_servers = parser.get('kafka', 'bootstrap_servers').split(",")
         topic = parser.get('kafka', 'topic')
         if len(bootstrap_servers) == 0:
