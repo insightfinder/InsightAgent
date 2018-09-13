@@ -7,8 +7,11 @@ import random
 import socket
 import sys
 import time
+from ConfigParser import SafeConfigParser
+from datetime import datetime
 from optparse import OptionParser
 
+import pytz
 import requests
 from kafka import KafkaConsumer
 
@@ -17,7 +20,7 @@ this script gathers metrics from kafka and send to InsightFinder
 '''
 
 
-def getParameters():
+def get_parameters():
     usage = "Usage: %prog [options]"
     parser = OptionParser(usage=usage)
     parser.add_option("-d", "--directory",
@@ -28,6 +31,8 @@ def getParameters():
                       action="store", dest="topic", help="Kafka topic to read data from")
     parser.add_option("-w", "--serverUrl",
                       action="store", dest="serverUrl", help="Server Url")
+    parser.add_option("-l", "--chunkLines",
+                      action="store", dest="chunkLines", help="Max number of lines in chunk")
     (options, args) = parser.parse_args()
 
     parameters = {}
@@ -47,6 +52,10 @@ def getParameters():
         parameters['timeout'] = 30
     else:
         parameters['timeout'] = int(options.timeout)
+    if options.chunkLines is None:
+        parameters['chunkLines'] = 100
+    else:
+        parameters['chunkLines'] = int(options.chunkLines)
 
     return parameters
 
@@ -93,48 +102,49 @@ def get_grouping_id(metric_key, grouping_map):
     return GROUPING_START
 
 
-def getAgentConfigVars():
+def get_agent_config_vars():
     configVars = {}
-    with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as configFile:
-        fileContent = configFile.readlines()
-        if len(fileContent) < 6:
-            logger.error("Agent not correctly configured. Check .agent.bashrc file.")
-            sys.exit(1)
-        # get license key
-        licenseKeyLine = fileContent[0].split(" ")
-        if len(licenseKeyLine) != 2:
-            logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['licenseKey'] = licenseKeyLine[1].split("=")[1].strip()
-        # get project name
-        projectNameLine = fileContent[1].split(" ")
-        if len(projectNameLine) != 2:
-            logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['projectName'] = projectNameLine[1].split("=")[1].strip()
-        # get username
-        userNameLine = fileContent[2].split(" ")
-        if len(userNameLine) != 2:
-            logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['userName'] = userNameLine[1].split("=")[1].strip()
-        # get sampling interval
-        samplingIntervalLine = fileContent[4].split(" ")
-        if len(samplingIntervalLine) != 2:
-            logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['samplingInterval'] = samplingIntervalLine[1].split("=")[1].strip()
+    try:
+        with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as configFile:
+            fileContent = configFile.readlines()
+            if len(fileContent) < 6:
+                logger.error("Agent not correctly configured. Check .agent.bashrc file.")
+                sys.exit(1)
+            # get license key
+            licenseKeyLine = fileContent[0].split(" ")
+            if len(licenseKeyLine) != 2:
+                logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
+                sys.exit(1)
+            configVars['licenseKey'] = licenseKeyLine[1].split("=")[1].strip()
+            # get project name
+            projectNameLine = fileContent[1].split(" ")
+            if len(projectNameLine) != 2:
+                logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
+                sys.exit(1)
+            configVars['projectName'] = projectNameLine[1].split("=")[1].strip()
+            # get username
+            userNameLine = fileContent[2].split(" ")
+            if len(userNameLine) != 2:
+                logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
+                sys.exit(1)
+            configVars['userName'] = userNameLine[1].split("=")[1].strip()
+            # get sampling interval
+            samplingIntervalLine = fileContent[4].split(" ")
+            if len(samplingIntervalLine) != 2:
+                logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
+                sys.exit(1)
+            configVars['samplingInterval'] = samplingIntervalLine[1].split("=")[1].strip()
+    except IOError:
+        logger.error("Agent not correctly configured. Missing .agent.bashrc file.")
     return configVars
 
 
-def getReportingConfigVars():
+def get_reporting_config_vars():
     reportingConfigVars = {}
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
         config = json.load(f)
     reporting_interval_string = config['reporting_interval']
-    is_second_reporting = False
     if reporting_interval_string[-1:] == 's':
-        is_second_reporting = True
         reporting_interval = float(config['reporting_interval'][:-1])
         reportingConfigVars['reporting_interval'] = float(reporting_interval / 60.0)
     else:
@@ -149,29 +159,22 @@ def getReportingConfigVars():
     return reportingConfigVars
 
 
-def get_kafka_config():
-    if os.path.exists(os.path.join(parameters['homepath'], datadir + "config.txt")):
-        config_file = open(os.path.join(parameters['homepath'], datadir + "config.txt"), "r")
-        host = config_file.readline()
-        host = host.strip('\n\r')  # remove newline character from read line
-        if len(host) == 0:
-            print "using default host"
-            host = 'localhost'
-        port = config_file.readline()
-        port = port.strip('\n\r')
-        if len(port) == 0:
-            print "using default port"
-            port = '9092'
-        topic = config_file.readline()
-        topic = topic.strip('\n\r')
+def getKafkaConfig():
+    if os.path.exists(os.path.join(parameters['homepath'], "kafka", "config.ini")):
+        parser = SafeConfigParser()
+        parser.read(os.path.join(parameters['homepath'], "kafka", "config.ini"))
+        bootstrap_servers = parser.get('kafka', 'bootstrap_servers').split(",")
+        topic = parser.get('kafka', 'topic')
+        if len(bootstrap_servers) == 0:
+            logger.info("Using default server localhost:9092")
+            bootstrap_servers = ['localhost:9092']
         if len(topic) == 0:
             print "using default topic"
-            topic = 'insightfinder_csv'
+            topic = 'insightfinder_metric'
     else:
-        host = '127.0.0.1'
-        port = '9092'
-        topic = 'insightfinder_csv'
-    return (host, port, topic)
+        bootstrap_servers = ['localhost:9092']
+        topic = 'insightfinder_metrics'
+    return (bootstrap_servers, topic)
 
 
 def sendData(metricData):
@@ -179,11 +182,11 @@ def sendData(metricData):
     # prepare data for metric streaming agent
     toSendDataDict = {}
     toSendDataDict["metricData"] = json.dumps(metricData)
-    toSendDataDict["licenseKey"] = agentConfigVars['licenseKey']
-    toSendDataDict["projectName"] = agentConfigVars['projectName']
-    toSendDataDict["userName"] = agentConfigVars['userName']
+    toSendDataDict["licenseKey"] = agent_config_vars['licenseKey']
+    toSendDataDict["projectName"] = agent_config_vars['projectName']
+    toSendDataDict["userName"] = agent_config_vars['userName']
     toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
-    toSendDataDict["samplingInterval"] = str(int(reportingConfigVars['reporting_interval'] * 60))
+    toSendDataDict["samplingInterval"] = str(int(reporting_config_vars['reporting_interval'] * 60))
     toSendDataDict["agentType"] = "kafka"
 
     toSendDataJSON = json.dumps(toSendDataDict)
@@ -200,38 +203,92 @@ def sendData(metricData):
     logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
 
 
+def isTimeFormat(timeString, format):
+    """
+    Determines the validity of the input date-time string according to the given format
+    Parameters:
+    - `timeString` : datetime string to check validity
+    - `temp_id` : datetime format to compare with
+    """
+    try:
+        datetime.strptime(str(timeString), format)
+        return True
+    except ValueError:
+        return False
+
+
+def getTimestampForZone(dateString, timeZone, format):
+    dtexif = datetime.strptime(dateString, format)
+    tz = pytz.timezone(timeZone)
+    tztime = tz.localize(dtexif)
+    epoch = long((tztime - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
+    return epoch
+
+
 def parseConsumerMessages(consumer, grouping_map):
     rawDataMap = collections.OrderedDict()
     for message in consumer:
-        json_message = json.loads(message.value)
-        metric_json_array = json_message.get('content', {}).get('metrics', [])
-        timestamp = json_message.get('content', {}).get('ts', 0)
+        try:
+            json_message = json.loads(message.value)
+            timestamp = json_message.get('@timestamp', {})[:-5]
+            host_name = json_message.get('beat', {}).get('hostname', {})
+            metric_module = json_message.get('metricset', {}).get('module', {})
+            metric_class = json_message.get('metricset', {}).get('name', {})
 
-        if timestamp in rawDataMap:
-            valueMap = rawDataMap[timestamp]
-        else:
-            valueMap = {}
+            pattern = "%Y-%m-%dT%H:%M:%S"
+            if isTimeFormat(timestamp, pattern):
+                epoch = getTimestampForZone(timestamp, "GMT", pattern)
 
-        # instance_name = info.get('tag', '')
-        instance_name = ''
-        host_name = json_message.get('agentSN', '')
-        # read metrics for each instance
-        for metric_json in metric_json_array:
-            value = metric_json.get('v', '')
-            metric_name = metric_json.get('m', None)
-            if not metric_name:
-                continue
-            if len(instance_name) == 0:
-                header_field = metric_name + "[" + host_name + "]:" + str(get_grouping_id(metric_name, grouping_map))
+            # get previous collected values for timestamp if available
+            if epoch in rawDataMap:
+                valueMap = rawDataMap[epoch]
             else:
-                header_field = metric_name + "_" + instance_name + "[" + host_name + "]:" + str(
-                    get_grouping_id(metric_name, grouping_map))
-            valueMap[header_field] = str(value)
-            rawDataMap[timestamp] = valueMap
+                valueMap = {}
+
+            if metric_module == "system":
+                if metric_class == "cpu":
+                    cpuMetricsList = ["idle", "iowait", "irq", "nice", "softirq", "steal", "system", "user"]
+                    for metric in cpuMetricsList:
+                        metric_value = json_message.get('system', {}).get('cpu', {}).get(metric, {}).get('pct', '')
+                        metric_name = "cpu_" + metric
+                        header_field = metric_name + "[" + host_name + "]:" + str(
+                            get_grouping_id(metric_name, grouping_map))
+                        valueMap[header_field] = str(metric_value)
+                        rawDataMap[epoch] = valueMap
+                elif metric_class == "memory":
+                    memoryMetricsList = ["actual", "swap"]
+                    for metric in memoryMetricsList:
+                        metric_value = json_message.get('system', {}).get('memory', {}).get(metric, {}).get('used',
+                                                                                                            {}).get(
+                            'bytes', '')
+                        metric_name = "memory_" + metric
+                        header_field = metric_name + "[" + host_name + "]:" + str(
+                            get_grouping_id(metric_name, grouping_map))
+                        valueMap[header_field] = str(metric_value)
+                        rawDataMap[epoch] = valueMap
+                elif metric_class == "filesystem":
+                    metric_value_bytes = json_message.get('system', {}).get('filesystem', {}).get('used', {}).get(
+                        'bytes', '')
+                    metric_value_pct = json_message.get('system', {}).get('filesystem', {}).get('used', {}).get(
+                        'pct', '')
+                    metric_name_bytes = "filesystem_" + json_message.get('system', {}).get('filesystem', {}).get(
+                        'device_name', {}) + "_used_bytes"
+                    metric_name_pct = "filesystem_" + json_message.get('system', {}).get('filesystem', {}).get(
+                        'device_name', {}) + "_used_pct"
+                    header_field_bytes = metric_name_bytes + "[" + host_name + "]:" + str(
+                        get_grouping_id(metric_name_bytes, grouping_map))
+                    header_field_pct = metric_name_pct + "[" + host_name + "]:" + str(
+                        get_grouping_id(metric_name_pct, grouping_map))
+                    valueMap[header_field_bytes] = str(metric_value_bytes)
+                    valueMap[header_field_pct] = str(metric_value_pct)
+                    rawDataMap[epoch] = valueMap
+        except ValueError:
+            logger.error("Error parsing metric json")
+            continue
     return rawDataMap
 
 
-def setloggerConfig():
+def set_logger_config():
     # Get the root logger
     logger = logging.getLogger(__name__)
     # Have to set the root logger level, it defaults to logging.WARNING
@@ -262,20 +319,20 @@ if __name__ == "__main__":
     CHUNK_SIZE = 4000000
     GROUPING_START = 15000
     GROUPING_END = 20000
-    logger = setloggerConfig()
-    parameters = getParameters()
-    agentConfigVars = getAgentConfigVars()
-    reportingConfigVars = getReportingConfigVars()
+    logger = set_logger_config()
+    parameters = get_parameters()
+    agent_config_vars = get_agent_config_vars()
+    reporting_config_vars = get_reporting_config_vars()
     grouping_map = load_grouping()
 
     # path to write the daily csv file
-    datadir = 'data/'
+    data_directory = 'data/'
     prev_csv_header_list = "timestamp,"
     hostname = socket.gethostname().partition(".")[0]
     try:
         # Kafka consumer configuration
-        (host, port, topic) = get_kafka_config()
-        consumer = KafkaConsumer(bootstrap_servers=[host + ':' + port],
+        (brokers, topic) = getKafkaConfig()
+        consumer = KafkaConsumer(bootstrap_servers=brokers,
                                  auto_offset_reset='earliest', consumer_timeout_ms=1000 * parameters['timeout'],
                                  group_id="if_consumers")
         consumer.subscribe([topic])
