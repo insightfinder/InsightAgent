@@ -1,4 +1,5 @@
 [nodes]
+#localhost ansible_connection=local
 HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
 ###We can specify the host name with ssh details like this for each host
 ##If you have the ssh key
@@ -70,6 +71,7 @@ ifSamplingInterval=1
 # This project type installs both collectd and td-agent.
 #ifAgent=metric-log
 #ifAgent=kafka-logs
+#ifAgent=kafka
 
 ##When yes, we will run the equivalent of 'apt-get update' before installing any packages.
 ##Valid entries are yes or no. Not used with yum-based installation (e.g., CentOS).
@@ -85,6 +87,8 @@ ifReportingUrl=https://app.insightfinder.com
 kafkaBootstrapServers = localhost:9092
 
 kafkaLogTopic = insightfinder_logs
+
+kafkaMetricTopic = insightfinder_metrics
 
 ##Vars for syscall agent##
 ##These variables should only be modified if you are installing a syscall agent on a node
