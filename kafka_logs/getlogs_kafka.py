@@ -189,7 +189,6 @@ def parseConsumerMessages(consumer):
     currentRow = []
     start_time = time.time()
     for message in consumer:
-        logger.info(message.value)
         try:
             json_message = json.loads(message.value)
             host_name = json_message.get('beat', {}).get('hostname', {})
