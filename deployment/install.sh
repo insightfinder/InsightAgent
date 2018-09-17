@@ -219,25 +219,11 @@ elif [ $AGENT_TYPE == 'opentsdb' ]; then
 		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
 	fi
 elif [ $AGENT_TYPE == 'kafka-logs' ]; then
-    if [ -z "$CHUNK_LINES" ]; then
-	    CHUNK_LINES='1000'
-    fi
-	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
-	if [ "$IS_SECOND_REPORTING" = true ] ; then
-		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
-	else
-		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
-	fi
+    sudo nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out &
 elif [ $AGENT_TYPE == 'kafka' ]; then
-	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
-	if [ "$IS_SECOND_REPORTING" = true ] ; then
-		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
-	else
-		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
-	fi
+    sudo nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out &
 elif [ $AGENT_TYPE == 'logStreaming' ]; then
 	echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportLog.py -d $INSIGHTAGENTDIR -w $SERVER_URL -m logStreaming 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
-
 else
 	COMMAND_SAMPLING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/sampling.err 1>$INSIGHTAGENTDIR/log/sampling.out"
 	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/common/reportMetrics.py -d $INSIGHTAGENTDIR -t $AGENT_TYPE -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
