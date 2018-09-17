@@ -49,7 +49,7 @@ def get_parameters():
     else:
         parameters['topic'] = options.topic
     if options.timeout == None:
-        parameters['timeout'] = 30
+        parameters['timeout'] = 300
     else:
         parameters['timeout'] = int(options.timeout)
     if options.chunkLines is None:
@@ -165,16 +165,20 @@ def getKafkaConfig():
         parser.read(os.path.join(parameters['homepath'], "kafka", "config.ini"))
         bootstrap_servers = parser.get('kafka', 'bootstrap_servers').split(",")
         topic = parser.get('kafka', 'topic')
+        filter_hosts = parser.get('kafka', 'filter_hosts').split(",")
         if len(bootstrap_servers) == 0:
             logger.info("Using default server localhost:9092")
             bootstrap_servers = ['localhost:9092']
         if len(topic) == 0:
             print "using default topic"
             topic = 'insightfinder_metric'
+        if len(filter_hosts[0]) == 0:
+            filter_hosts = []
     else:
         bootstrap_servers = ['localhost:9092']
         topic = 'insightfinder_metrics'
-    return (bootstrap_servers, topic)
+        filter_hosts = []
+    return (bootstrap_servers, topic, filter_hosts)
 
 
 def sendData(metricData):
@@ -238,7 +242,8 @@ def parseConsumerMessages(consumer, grouping_map):
             host_name = json_message.get('beat', {}).get('hostname', {})
             metric_module = json_message.get('metricset', {}).get('module', {})
             metric_class = json_message.get('metricset', {}).get('name', {})
-
+            if len(filter_hosts) != 0 and host_name not in filter_hosts:
+                continue
             pattern = "%Y-%m-%dT%H:%M:%S"
             if isTimeFormat(timestamp, pattern):
                 epoch = getTimestampForZone(timestamp, "GMT", pattern)
@@ -254,7 +259,7 @@ def parseConsumerMessages(consumer, grouping_map):
                     cpuMetricsList = ["idle", "iowait", "irq", "nice", "softirq", "steal", "system", "user"]
                     for metric in cpuMetricsList:
                         metric_value = json_message.get('system', {}).get('cpu', {}).get(metric, {}).get('pct', '')
-                        metric_name = "cpu_" + metric
+                        metric_name = "cpu-" + metric.re
                         header_field = metric_name + "[" + host_name + "]:" + str(
                             get_grouping_id(metric_name, grouping_map))
                         valueMap[header_field] = str(metric_value)
@@ -266,7 +271,7 @@ def parseConsumerMessages(consumer, grouping_map):
                         metric_value = json_message.get('system', {}).get('memory', {}).get(metric, {}).get('used',
                                                                                                             {}).get(
                             'bytes', '')
-                        metric_name = "memory_" + metric
+                        metric_name = "memory-" + metric
                         header_field = metric_name + "[" + host_name + "]:" + str(
                             get_grouping_id(metric_name, grouping_map))
                         valueMap[header_field] = str(metric_value)
@@ -277,10 +282,10 @@ def parseConsumerMessages(consumer, grouping_map):
                         'bytes', '')
                     metric_value_pct = json_message.get('system', {}).get('filesystem', {}).get('used', {}).get(
                         'pct', '')
-                    metric_name_bytes = "filesystem_" + json_message.get('system', {}).get('filesystem', {}).get(
-                        'device_name', {}) + "_used_bytes"
+                    metric_name_bytes = "filesystem-" + json_message.get('system', {}).get('filesystem', {}).get(
+                        'device_name', {}) + "-used-bytes"
                     metric_name_pct = "filesystem_" + json_message.get('system', {}).get('filesystem', {}).get(
-                        'device_name', {}) + "_used_pct"
+                        'device_name', {}) + "-used-pct"
                     header_field_bytes = metric_name_bytes + "[" + host_name + "]:" + str(
                         get_grouping_id(metric_name_bytes, grouping_map))
                     header_field_pct = metric_name_pct + "[" + host_name + "]:" + str(
@@ -301,6 +306,7 @@ def parseConsumerMessages(consumer, grouping_map):
                 sendData(metricData)
                 metricData = []
                 rawDataMap = collections.OrderedDict()
+                collectedValues = 0
 
         except ValueError:
             logger.error("Error parsing metric json")
@@ -347,7 +353,7 @@ class LessThanFilter(logging.Filter):
 
 
 if __name__ == "__main__":
-    CHUNK_METRIC_VALUES = 490
+    CHUNK_METRIC_VALUES = 1000
     GROUPING_START = 15000
     GROUPING_END = 20000
     logger = set_logger_config()
@@ -362,9 +368,8 @@ if __name__ == "__main__":
     hostname = socket.gethostname().partition(".")[0]
     try:
         # Kafka consumer configuration
-        (brokers, topic) = getKafkaConfig()
-        consumer = KafkaConsumer(bootstrap_servers=brokers,
-                                 auto_offset_reset='earliest', consumer_timeout_ms=1000 * parameters['timeout'],
+        (brokers, topic, filter_hosts) = getKafkaConfig()
+        consumer = KafkaConsumer(bootstrap_servers=brokers, consumer_timeout_ms=1000 * parameters['timeout'],
                                  group_id="if_consumers")
         consumer.subscribe([topic])
         parseConsumerMessages(consumer, grouping_map)

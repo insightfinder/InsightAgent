@@ -90,6 +90,8 @@ kafkaLogTopic = insightfinder_logs
 
 kafkaMetricTopic = insightfinder_metrics
 
+filterHosts =
+
 ##Vars for syscall agent##
 ##These variables should only be modified if you are installing a syscall agent on a node
 ##which already have another metric reporting agent(e.g., collectd) agent installed.
