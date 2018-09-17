@@ -91,6 +91,12 @@
   yum:
     name: monit
     state: present
+  when: ansible_pkg_mgr == 'yum'
+- name: Monit | Install Monit
+  apt:
+    name: monit
+    state: present
+  when: ansible_pkg_mgr == 'apt'
 - name: Monit | Start Monit daemon
   systemd:
     name: monit.service
