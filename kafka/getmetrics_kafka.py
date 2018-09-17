@@ -227,6 +227,10 @@ def getTimestampForZone(dateString, timeZone, format):
 
 def parseConsumerMessages(consumer, grouping_map):
     rawDataMap = collections.OrderedDict()
+    metricData = []
+    chunkNumber = 0
+    collectedValues = 0
+
     for message in consumer:
         try:
             json_message = json.loads(message.value)
@@ -255,6 +259,7 @@ def parseConsumerMessages(consumer, grouping_map):
                             get_grouping_id(metric_name, grouping_map))
                         valueMap[header_field] = str(metric_value)
                         rawDataMap[epoch] = valueMap
+                        collectedValues += 1
                 elif metric_class == "memory":
                     memoryMetricsList = ["actual", "swap"]
                     for metric in memoryMetricsList:
@@ -266,6 +271,7 @@ def parseConsumerMessages(consumer, grouping_map):
                             get_grouping_id(metric_name, grouping_map))
                         valueMap[header_field] = str(metric_value)
                         rawDataMap[epoch] = valueMap
+                        collectedValues += 1
                 elif metric_class == "filesystem":
                     metric_value_bytes = json_message.get('system', {}).get('filesystem', {}).get('used', {}).get(
                         'bytes', '')
@@ -282,10 +288,35 @@ def parseConsumerMessages(consumer, grouping_map):
                     valueMap[header_field_bytes] = str(metric_value_bytes)
                     valueMap[header_field_pct] = str(metric_value_pct)
                     rawDataMap[epoch] = valueMap
+                    collectedValues += 1
+
+            if collectedValues >= CHUNK_METRIC_VALUES:
+                for timestamp in rawDataMap.keys():
+                    valueMap = rawDataMap[timestamp]
+                    valueMap['timestamp'] = str(timestamp)
+                    metricData.append(valueMap)
+
+                chunkNumber += 1
+                logger.debug("Sending Chunk Number: " + str(chunkNumber))
+                sendData(metricData)
+                metricData = []
+                rawDataMap = collections.OrderedDict()
+
         except ValueError:
             logger.error("Error parsing metric json")
             continue
-    return rawDataMap
+
+    # send final chunk
+    for timestamp in rawDataMap.keys():
+        valueMap = rawDataMap[timestamp]
+        valueMap['timestamp'] = str(timestamp)
+        metricData.append(valueMap)
+    if len(metricData) == 0:
+        logger.info("No data remaining to send")
+    else:
+        chunkNumber += 1
+        logger.debug("Sending Final Chunk: " + str(chunkNumber))
+        sendData(metricData)
 
 
 def set_logger_config():
@@ -316,7 +347,7 @@ class LessThanFilter(logging.Filter):
 
 
 if __name__ == "__main__":
-    CHUNK_SIZE = 4000000
+    CHUNK_METRIC_VALUES = 490
     GROUPING_START = 15000
     GROUPING_END = 20000
     logger = set_logger_config()
@@ -336,32 +367,8 @@ if __name__ == "__main__":
                                  auto_offset_reset='earliest', consumer_timeout_ms=1000 * parameters['timeout'],
                                  group_id="if_consumers")
         consumer.subscribe([topic])
-        rawDataMap = parseConsumerMessages(consumer, grouping_map)
+        parseConsumerMessages(consumer, grouping_map)
 
-        # format the collectd data to send to insightfinder
-        metricData = []
-        chunkNumber = 0
-
-        if len(rawDataMap) == 0:
-            logger.info("No data to send")
-            exit(1)
-
-        for timestamp in rawDataMap.keys():
-            if len(bytearray(json.dumps(metricData))) >= CHUNK_SIZE:
-                chunkNumber += 1
-                logger.debug("Sending Chunk Number: " + str(chunkNumber))
-                sendData(metricData)
-                metricData = []
-            valueMap = rawDataMap[timestamp]
-            valueMap['timestamp'] = str(timestamp)
-            metricData.append(valueMap)
-
-        if len(metricData) == 0:
-            logger.info("No data remaining to send")
-        else:
-            chunkNumber += 1
-            logger.debug("Sending Final Chunk: " + str(chunkNumber))
-            sendData(metricData)
         consumer.close()
         save_grouping(grouping_map)
     except KeyboardInterrupt:
