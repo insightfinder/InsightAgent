@@ -84,9 +84,39 @@
   become: true
   args:
     chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
-- name: td-agent | Copy setup script
+- name: Copy setup script
   become: yes
   template: src=config.ini dest={{ansible_env.HOME}}/InsightAgent-master/kafka_logs/config.ini
+- name: Monit | Install Monit
+  yum:
+    name: monit
+    state: present
+- name: Monit | Start Monit daemon
+  systemd:
+    name: monit.service
+    enabled: yes
+    daemon_reload: yes
+    state: started
+- name: Monit | Add Monit config
+  template:
+    src: monitrc
+    dest: /etc/monitrc
+    owner: root
+    group: root
+    mode: 0600
+- name: Monit | Add Monit config
+  template:
+    src: monitrc
+    dest: /etc/monit.conf
+    owner: root
+    group: root
+    mode: 0600
+- name: Monit | Restart Monit daemon
+  systemd:
+    name: monit.service
+    enabled: yes
+    daemon_reload: yes
+    state: restarted
 - name: Delete Tar Bundle for Agent
   file:
     state: absent
