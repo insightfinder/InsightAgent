@@ -219,9 +219,9 @@ elif [ $AGENT_TYPE == 'opentsdb' ]; then
 		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
 	fi
 elif [ $AGENT_TYPE == 'kafka-logs' ]; then
-    sudo nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out &
+    sudo nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES &>$INSIGHTAGENTDIR/log/kafka-logs.log &
 elif [ $AGENT_TYPE == 'kafka' ]; then
-    sudo nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out &
+    sudo nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &
 elif [ $AGENT_TYPE == 'logStreaming' ]; then
 	echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportLog.py -d $INSIGHTAGENTDIR -w $SERVER_URL -m logStreaming 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
 else
@@ -243,7 +243,11 @@ fi
 #echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportTopology.py -d $INSIGHTAGENTDIR 2>$INSIGHTAGENTDIR/log/reporting_topology.err 1>$INSIGHTAGENTDIR/log/reporting_topology.out" >> $TEMPCRON
 sudo /usr/bin/pkill -f "script_runner.py"
 sudo nohup $PYTHONPATH $INSIGHTAGENTDIR/script_runner/script_runner.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/script_runner.log &
-sudo chown root:root $TEMPCRON
-sudo chmod 644 $TEMPCRON
-sudo cat $TEMPCRON >> /etc/cron.d/ifagent
-echo "Agent configuration completed. Two cron jobs are created via /etc/cron.d/ifagent"
+
+if [ "$AGENT_TYPE" != 'kafka-logs' ] && [ "$AGENT_TYPE" != 'kafka' ]; then
+	sudo chown root:root $TEMPCRON
+    sudo chmod 644 $TEMPCRON
+    sudo cat $TEMPCRON >> /etc/cron.d/ifagent
+    echo "Agent configuration completed. Two cron jobs are created via /etc/cron.d/ifagent"
+fi
+
