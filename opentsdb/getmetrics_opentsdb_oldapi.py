@@ -7,13 +7,12 @@ import os
 import requests
 import json
 import logging
-import socket
-import random
 import re
+import time
 from datetime import datetime
 
 '''
-this script gathers system info from prometheus and use http api to send to server
+this script gathers system info from opentsdb and use http api to send to server
 '''
 
 
@@ -100,121 +99,90 @@ def getReportingConfigVars():
     return reportingConfigVars
 
 
-def getPrometheusConfig(parameters, datadir):
-    """Read and parse Prometheus config from config.txt"""
-    prometheusConfig = {}
+def getOpentsdbConfig(parameters, datadir):
+    """Read and parse Open TSDB config from config.txt"""
+    openTsdbConfig = {}
     if os.path.exists(os.path.join(parameters['homepath'], datadir, "config.txt")):
         cp = ConfigParser.SafeConfigParser()
         cp.read(os.path.join(parameters['homepath'], datadir, "config.txt"))
-        prometheusConfig = {
-            "GROUPING_START": cp.getint('prometheus', 'GROUPING_START'),
-            "GROUPING_END": cp.getint('prometheus', 'GROUPING_END'),
-            "PROMETHEUS_URL": cp.get('prometheus', 'PROMETHEUS_URL'),
-            "PROMETHEUS_METRICS_FILE": cp.get('prometheus', 'PROMETHEUS_METRICS_FILE'),
+        openTsdbConfig = {
+            "OPENTSDB_URL": cp.get('opentsdb', 'OPENTSDB_URL'),
         }
-    return prometheusConfig
+    return openTsdbConfig
 
 
-def save_grouping(grouping_map):
-    """
-    Saves the grouping data to grouping.json
-    :return: None
-    """
-    with open('grouping.json', 'w+') as f:
-        f.write(json.dumps(grouping_map))
+def getMetricList(config):
+    """Get available metric list from Open TSDB API"""
+    metricList = []
+    url = config["OPENTSDB_URL"] + "/api/suggest?type=metrics&q="
+    response = requests.get(url)
+    if response.status_code == 200:
+        metricList = response.json()
+        logger.debug("Get metric list from opentsdb: " + str(metricList))
+    return metricList
 
 
-def load_grouping():
-    if (os.path.isfile('grouping.json')):
-        logger.debug("Grouping file exists. Loading..")
-        with open('grouping.json', 'r+') as f:
-            try:
-                grouping_map = json.loads(f.read())
-            except ValueError:
-                grouping_map = json.loads("{}")
-                logger.debug("Error parsing grouping.json.")
-    else:
-        grouping_map = json.loads("{}")
-    return grouping_map
-
-
-def get_grouping_id(config, metric_key, grouping_map):
-    """
-    Get grouping id for a metric key
-    Parameters:
-    - `metric_key` : metric key str to get group id.
-    - `temp_id` : proposed group id integer
-    """
-    for i in range(3):
-        grouping_candidate = random.randint(config["GROUPING_START"], config["GROUPING_END"])
-        if metric_key in grouping_map:
-            grouping_id = int(grouping_map[metric_key])
-            return grouping_id
-        else:
-            grouping_id = grouping_candidate
-            grouping_map[metric_key] = grouping_id
-            return grouping_id
-    return config["GROUPING_START"]
-
-
-def getMetricListFromFile(config):
+def getMetricListFromFile(config, filePath):
     """Get available metric list from File"""
     metricList = set()
-    with open(config['PROMETHEUS_METRICS_FILE'], 'r') as f:
+    with open(filePath, 'r') as f:
         for line in f:
-            if line:
-                metricList.add(line.replace('\n', ''))
-        logger.debug("Get metric list from file: " + str(metricList))
+            m = re.search(r'(?P<metric>\d\.\d\..+):', line)
+            if m:
+                metric = m.groupdict().get('metric')
+                metricList.add(metric)
+                logger.debug("Get metric list from file: " + str(metricList))
     return list(metricList)
 
 
-def getMetricData(config, metricList, grouping_map, startTime, endTime):
-    """Get metric data from Prometheus API"""
-    metricDataList = []
+def getMetricData(config, metricList, startTime, endTime):
+    """Get metric data from Open TSDB API"""
 
-    for m in metricList:
-        params = {
-            "query": m,
-            "start": startTime,
-            "end": endTime,
-            "step": '60s',
-        }
-        url = config["PROMETHEUS_URL"] + "/api/v1/query_range"
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            res = response.json()
-            if res and res.get('status') == 'success':
-                datas = res.get('data', {}).get('result', [])
-                metricDataList.extend(datas)
+    def fullData(d, ts):
+        if len(d.get('dps', {}).keys()) == 0:
+            d['dps'] = {
+                str(ts): 0
+            }
+        return d
 
-    # change data to opentsdb api format:
-    filterHosts = ['localhost']
-    metricOTDataList = []
-    for log in metricDataList:
-        host = log.get('metric').get('instance', '').split(':')[0]
+    openTsdbMetricList = []
+    json_data = {
+        "token": '77b96664b77b110e01ff6fa8199ac262acfb62ca',
+        "start": startTime,
+        "end": endTime,
+        "queries": map(lambda m: {
+            "aggregator": "avg",
+            "downsample": "1m-avg",
+            "metric": m.encode('ascii')
+        }, metricList)
+    }
 
-        if host in filterHosts:
-            continue
+    url = config["OPENTSDB_URL"] + "/api/query"
+    response = requests.post(url, data=json.dumps(json_data))
+    if response.status_code == 200:
+        openTsdbMetricList = response.json()
+        logger.debug("Get metric data from opentsdb: " + str(len(openTsdbMetricList)))
 
-        valueMap = {}
-        metric_name = log.get('metric').get('__name__')
-        host_name = host
-        metric_value = None
-        header_field = metric_name + "[" + host_name + "]:" + str(get_grouping_id(config, metric_name, grouping_map))
-        mtime = 0
-        for stime, val in log.get('values', []):
-            if int(stime) > mtime:
-                metric_value = val
-                mtime = int(stime)
+        # completion metric data
+        openTsdbMetricList = map(lambda d: fullData(d, startTime), openTsdbMetricList)
+        resMetricList = map(lambda d: d.get('metric'), openTsdbMetricList)
+        for metric in list(set(metricList) ^ set(resMetricList)):
+            openTsdbMetricList.append({
+                "metric": metric,
+                "tags": {},
+                "aggregatedTags": [
+                    "host"
+                ],
+                "dps": {
+                    str(startTime): 0
+                }
+            })
 
-        valueMap[header_field] = str(metric_value)
-        valueMap['timestamp'] = str(mtime * 1000)
-        metricOTDataList.append(valueMap)
-
-    return metricOTDataList
+    return openTsdbMetricList
 
 
 def sendData(metricData):
+    """Send Open TSDB metric data to the InsightFinder application"""
     sendDataTime = time.time()
     # prepare data for metric streaming agent
     toSendDataDict = {}
@@ -222,7 +190,6 @@ def sendData(metricData):
     toSendDataDict["licenseKey"] = agentConfigVars['licenseKey']
     toSendDataDict["projectName"] = agentConfigVars['projectName']
     toSendDataDict["userName"] = agentConfigVars['userName']
-    toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
     toSendDataDict["samplingInterval"] = str(int(reportingConfigVars['reporting_interval'] * 60))
     toSendDataDict["agentType"] = "custom"
 
@@ -230,13 +197,13 @@ def sendData(metricData):
     logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))) + " Bytes")
 
     # send the data
-    postUrl = parameters['serverUrl'] + "/customprojectrawdata"
+    postUrl = parameters['serverUrl'] + "/opentsdbdata"
     response = requests.post(postUrl, data=json.loads(toSendDataJSON))
     if response.status_code == 200:
         logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
+        logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
     else:
         logger.info("Failed to send data.")
-    logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
 
 
 def chunks(l, n):
@@ -280,38 +247,52 @@ if __name__ == "__main__":
     parameters = getParameters()
     agentConfigVars = getAgentConfigVars()
     reportingConfigVars = getReportingConfigVars()
-    grouping_map = load_grouping()
 
     # get agent configuration details
-    agent_config = getPrometheusConfig(parameters, dataDirectory)
+    agent_config = getOpentsdbConfig(parameters, dataDirectory)
     for item in agent_config.values():
         if not item:
             logger.error("config error, check data/config.txt")
             sys.exit("config error, check config.txt")
 
+    # get data by cron
     dataEndTimestamp = int(time.time())
     intervalInSecs = int(reportingConfigVars['reporting_interval'] * 60)
     dataStartTimestamp = dataEndTimestamp - intervalInSecs
+    timeList = [(dataStartTimestamp, dataEndTimestamp)]
 
-    try:
-        logger.debug("Start to send metric data: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
-        # get metric list from prometheus
-        metricList = getMetricListFromFile(agent_config)
-        if len(metricList) == 0:
-            logger.error("No metrics to get data for.")
-            sys.exit()
+    # get data from special date
+    # startDay = '2018-06-1'
+    # endDay = '2018-06-3'
+    # startDayObj = datetime.strptime(startDay, "%Y-%m-%d")
+    # startTimeStamp = int(time.mktime(startDayObj.timetuple()))
+    # endDayObj = datetime.strptime(endDay, "%Y-%m-%d")
+    # endTimeStamp = int(time.mktime(endDayObj.timetuple()))
+    # timeInterval = (endTimeStamp - startTimeStamp) / 60
+    # timeList = [(startTimeStamp + i * 60, startTimeStamp + (i + 1) * 60) for i in range(timeInterval)]
 
-        chunked_metric_list = chunks(metricList, parameters['chunkSize'])
-        for sub_list in chunked_metric_list:
-            # get metric data from prometheus every SAMPLING_INTERVAL
-            metricDataList = getMetricData(agent_config, metricList, grouping_map, dataStartTimestamp, dataEndTimestamp)
-            if len(metricDataList) == 0:
-                logger.error("No data for metrics received from Prometheus.")
+    for dataStartTimestamp, dataEndTimestamp in timeList:
+        try:
+            logger.debug("Start to send metric data: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
+            # get metric list from opentsdb
+            # metricList = getMetricList(agent_config)
+            filePath = './metrics.txt'
+            metricList = getMetricListFromFile(agent_config, filePath)
+            if len(metricList) == 0:
+                logger.error("No metrics to get data for.")
                 sys.exit()
-            # send metric data to insightfinder
-            sendData(metricDataList)
-            save_grouping(grouping_map)
 
-    except Exception as e:
-        logger.error("Error send metric data to insightfinder: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
-        logger.error(e)
+            chunked_metric_list = chunks(metricList, parameters['chunkSize'])
+            for sub_list in chunked_metric_list:
+                # get metric data from opentsdb every SAMPLING_INTERVAL
+                metricDataList = getMetricData(agent_config, metricList, dataStartTimestamp, dataEndTimestamp)
+                if len(metricDataList) == 0:
+                    logger.error("No data for metrics received from Open TSDB.")
+                    sys.exit()
+                # send metric data to insightfinder
+                sendData(metricDataList)
+
+            logger.info("Send metric date for {} - {}.".format(dataStartTimestamp, dataEndTimestamp))
+        except Exception as e:
+            logger.error("Error send metric data to insightfinder: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
+            logger.error(e)

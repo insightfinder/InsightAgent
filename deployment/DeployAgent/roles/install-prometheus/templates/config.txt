@@ -1,3 +1,5 @@
 [prometheus]
-PROMETHEUS_URL = {{ PrometheusUrl }}
-PROMETHEUS_METRICS_FILE = {{ PrometheusMetricsFile }}
+GROUPING_START = {{ grouping_start }}
+GROUPING_END = {{ grouping_end }}
+PROMETHEUS_URL = {{ prometheusUrl }}
+PROMETHEUS_METRICS_FILE = {{ prometheusMetricsFile }}
