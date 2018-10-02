@@ -323,7 +323,7 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics):
             if (not isReceivedAllMetrics(collectedMetricsSet, all_metrics)):
                 continue
             print "All metrics collected for timestamp " + str(epoch)
-            if collectedValues >= len(all_metrics):
+            if collectedValues >= CHUNK_METRIC_VALUES:
                 for timestamp in rawDataMap.keys():
                     valueMap = rawDataMap[timestamp]
                     valueMap['timestamp'] = str(timestamp)
