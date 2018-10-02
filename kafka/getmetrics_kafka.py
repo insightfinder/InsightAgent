@@ -166,6 +166,7 @@ def getKafkaConfig():
         bootstrap_servers = parser.get('kafka', 'bootstrap_servers').split(",")
         topic = parser.get('kafka', 'topic')
         filter_hosts = parser.get('kafka', 'filter_hosts').split(",")
+        all_metrics = parser.get('kafka', 'all_metrics').split(",")
         if len(bootstrap_servers) == 0:
             logger.info("Using default server localhost:9092")
             bootstrap_servers = ['localhost:9092']
@@ -174,11 +175,13 @@ def getKafkaConfig():
             topic = 'insightfinder_metric'
         if len(filter_hosts[0]) == 0:
             filter_hosts = []
+        if len(all_metrics[0]) == 0:
+            all_metrics = []
     else:
         bootstrap_servers = ['localhost:9092']
         topic = 'insightfinder_metrics'
         filter_hosts = []
-    return (bootstrap_servers, topic, filter_hosts)
+    return (bootstrap_servers, topic, filter_hosts, all_metrics)
 
 
 def sendData(metricData):
@@ -228,12 +231,20 @@ def getTimestampForZone(dateString, timeZone, format):
     epoch = long((tztime - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
     return epoch
 
+def isReceivedAllMetrics(collectedMetrics, all_metrics):
+    if len(all_metrics) == 0:
+        return True
+    for metric in all_metrics:
+        if metric not in collectedMetrics:
+            return False
+    return True
 
-def parseConsumerMessages(consumer, grouping_map):
+def parseConsumerMessages(consumer, grouping_map, all_metrics):
     rawDataMap = collections.OrderedDict()
     metricData = []
     chunkNumber = 0
     collectedValues = 0
+    collectedMetricsMap = {}
 
     for message in consumer:
         try:
@@ -249,34 +260,43 @@ def parseConsumerMessages(consumer, grouping_map):
                 epoch = getTimestampForZone(timestamp, "GMT", pattern)
 
             # get previous collected values for timestamp if available
+            # get previous collected metrics name for timestamp if available
             if epoch in rawDataMap:
                 valueMap = rawDataMap[epoch]
+                collectedMetricsSet = collectedMetricsMap[epoch]
             else:
                 valueMap = {}
-
+                collectedMetricsSet = set()
             if metric_module == "system":
                 if metric_class == "cpu":
                     cpuMetricsList = ["idle", "iowait", "irq", "nice", "softirq", "steal", "system", "user"]
                     for metric in cpuMetricsList:
                         metric_value = json_message.get('system', {}).get('cpu', {}).get(metric, {}).get('pct', '')
-                        metric_name = "cpu-" + metric.re
+                        metric_name = "cpu-" + metric
                         header_field = metric_name + "[" + host_name + "]:" + str(
                             get_grouping_id(metric_name, grouping_map))
                         valueMap[header_field] = str(metric_value)
                         rawDataMap[epoch] = valueMap
+                        # add collected metric name
                         collectedValues += 1
+                        collectedMetricsSet.add(metric_name)
+                        # update the collected metrics for this timestamp
+                        collectedMetricsMap[epoch] = collectedMetricsSet
                 elif metric_class == "memory":
                     memoryMetricsList = ["actual", "swap"]
                     for metric in memoryMetricsList:
-                        metric_value = json_message.get('system', {}).get('memory', {}).get(metric, {}).get('used',
-                                                                                                            {}).get(
+                        metric_value = json_message.get('system', {}).get('memory', {}).get(metric, {}).get('used',{}).get(
                             'bytes', '')
                         metric_name = "memory-" + metric
                         header_field = metric_name + "[" + host_name + "]:" + str(
                             get_grouping_id(metric_name, grouping_map))
                         valueMap[header_field] = str(metric_value)
                         rawDataMap[epoch] = valueMap
+                        # add collected metric name
                         collectedValues += 1
+                        collectedMetricsSet.add(metric_name)
+                        # update the collected metrics for this timestamp
+                        collectedMetricsMap[epoch] = collectedMetricsSet
                 elif metric_class == "filesystem":
                     metric_value_bytes = json_message.get('system', {}).get('filesystem', {}).get('used', {}).get(
                         'bytes', '')
@@ -293,9 +313,17 @@ def parseConsumerMessages(consumer, grouping_map):
                     valueMap[header_field_bytes] = str(metric_value_bytes)
                     valueMap[header_field_pct] = str(metric_value_pct)
                     rawDataMap[epoch] = valueMap
+                    # add collected metric name
                     collectedValues += 1
+                    collectedMetricsSet.add(metric_name_pct)
+                    # update the collected metrics for this timestamp
+                    collectedMetricsMap[epoch] = collectedMetricsSet
 
-            if collectedValues >= CHUNK_METRIC_VALUES:
+            # check whether collected all metrics basd on the config file
+            if (not isReceivedAllMetrics(collectedMetricsSet, all_metrics)):
+                continue
+            print "All metrics collected for timestamp " + str(epoch)
+            if collectedValues >= len(all_metrics):
                 for timestamp in rawDataMap.keys():
                     valueMap = rawDataMap[timestamp]
                     valueMap['timestamp'] = str(timestamp)
@@ -368,11 +396,11 @@ if __name__ == "__main__":
     hostname = socket.gethostname().partition(".")[0]
     try:
         # Kafka consumer configuration
-        (brokers, topic, filter_hosts) = getKafkaConfig()
+        (brokers, topic, filter_hosts, all_metrics) = getKafkaConfig()
         consumer = KafkaConsumer(bootstrap_servers=brokers, consumer_timeout_ms=1000 * parameters['timeout'],
                                  group_id="if_consumers")
         consumer.subscribe([topic])
-        parseConsumerMessages(consumer, grouping_map)
+        parseConsumerMessages(consumer, grouping_map, all_metrics)
 
         consumer.close()
         save_grouping(grouping_map)
