@@ -2,7 +2,7 @@
 
 function usage()
 {
-	echo "Usage: ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL -p NFSEN_FOLDER -t AGENT_TYPE
+	echo "Usage: ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL -t AGENT_TYPE
 AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or metricFileReplay or logFileReplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia or nfdump or kvm or kafka or elasticsearch-storage or elasticsearch-log or opentsdb. Reporting/Sampling interval supports integer value denoting minutes and 10s i.e 10 seconds as a valid value"
 }
 
