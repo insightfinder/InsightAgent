@@ -245,6 +245,8 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics):
     chunkNumber = 0
     collectedValues = 0
     collectedMetricsMap = {}
+    completedRowsTimestampSet = set()
+
 
     for message in consumer:
         try:
@@ -302,10 +304,8 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics):
                         'bytes', '')
                     metric_value_pct = json_message.get('system', {}).get('filesystem', {}).get('used', {}).get(
                         'pct', '')
-                    metric_name_bytes = "filesystem-" + json_message.get('system', {}).get('filesystem', {}).get(
-                        'device_name', {}) + "-used-bytes"
-                    metric_name_pct = "filesystem_" + json_message.get('system', {}).get('filesystem', {}).get(
-                        'device_name', {}) + "-used-pct"
+                    metric_name_bytes = "filesystem/used-bytes"
+                    metric_name_pct = "filesystem/used-pct"
                     header_field_bytes = metric_name_bytes + "[" + host_name + "]:" + str(
                         get_grouping_id(metric_name_bytes, grouping_map))
                     header_field_pct = metric_name_pct + "[" + host_name + "]:" + str(
@@ -316,24 +316,34 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics):
                     # add collected metric name
                     collectedValues += 1
                     collectedMetricsSet.add(metric_name_pct)
+                    collectedMetricsSet.add(metric_name_bytes)
                     # update the collected metrics for this timestamp
                     collectedMetricsMap[epoch] = collectedMetricsSet
 
             # check whether collected all metrics basd on the config file
-            if (not isReceivedAllMetrics(collectedMetricsSet, all_metrics)):
-                continue
-            print "All metrics collected for timestamp " + str(epoch)
-            if collectedValues >= CHUNK_METRIC_VALUES:
-                for timestamp in rawDataMap.keys():
-                    valueMap = rawDataMap[timestamp]
+            if (isReceivedAllMetrics(collectedMetricsSet, all_metrics)):
+                # add the completed timestamp into set
+                completedRowsTimestampSet.add(epoch)
+                print "All metrics collected for timestamp " + str(epoch) + " Completed rows count: " + str(len(completedRowsTimestampSet))
+            
+            numberOfCompletedRows = len(completedRowsTimestampSet)
+            # check whether the number of completed rows is greater than 100
+            if numberOfCompletedRows >= CHUNK_METRIC_VALUES:
+                # go through all completed timesamp data and add to the buffer
+                for timestamp in completedRowsTimestampSet:
+                    # get and delete the data of the timestamp
+                    valueMap = rawDataMap.pop(timestamp)
+                    # remove recorded metric for the timestamp
+                    collectedMetricsMap.pop(timestamp)
                     valueMap['timestamp'] = str(timestamp)
                     metricData.append(valueMap)
 
                 chunkNumber += 1
                 logger.debug("Sending Chunk Number: " + str(chunkNumber))
                 sendData(metricData)
+                # clean the buffer and completed row set
                 metricData = []
-                rawDataMap = collections.OrderedDict()
+                completedRowsTimestampSet = set()
                 collectedValues = 0
 
         except ValueError:
@@ -381,7 +391,7 @@ class LessThanFilter(logging.Filter):
 
 
 if __name__ == "__main__":
-    CHUNK_METRIC_VALUES = 1000
+    CHUNK_METRIC_VALUES = 100
     GROUPING_START = 15000
     GROUPING_END = 20000
     logger = set_logger_config()
