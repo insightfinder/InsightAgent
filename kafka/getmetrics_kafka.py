@@ -167,6 +167,7 @@ def getKafkaConfig():
         topic = parser.get('kafka', 'topic')
         filter_hosts = parser.get('kafka', 'filter_hosts').split(",")
         all_metrics = parser.get('kafka', 'all_metrics').split(",")
+        all_metrics_set = set()
         if len(bootstrap_servers) == 0:
             logger.info("Using default server localhost:9092")
             bootstrap_servers = ['localhost:9092']
@@ -175,13 +176,14 @@ def getKafkaConfig():
             topic = 'insightfinder_metric'
         if len(filter_hosts[0]) == 0:
             filter_hosts = []
-        if len(all_metrics[0]) == 0:
-            all_metrics = []
+        if len(all_metrics[0]) != 0:
+            for metric in all_metrics:
+                all_metrics_set.add(metric)
     else:
         bootstrap_servers = ['localhost:9092']
         topic = 'insightfinder_metrics'
         filter_hosts = []
-    return (bootstrap_servers, topic, filter_hosts, all_metrics)
+    return (bootstrap_servers, topic, filter_hosts, all_metrics_set)
 
 
 def sendData(metricData):
@@ -239,7 +241,7 @@ def isReceivedAllMetrics(collectedMetrics, all_metrics):
             return False
     return True
 
-def parseConsumerMessages(consumer, grouping_map, all_metrics):
+def parseConsumerMessages(consumer, grouping_map, all_metrics_set):
     rawDataMap = collections.OrderedDict()
     metricData = []
     chunkNumber = 0
@@ -275,6 +277,9 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics):
                     for metric in cpuMetricsList:
                         metric_value = json_message.get('system', {}).get('cpu', {}).get(metric, {}).get('pct', '')
                         metric_name = "cpu-" + metric
+                        # skip the metric that are not in the config file
+                        if metric_name not in all_metrics_set:
+                            continue
                         header_field = metric_name + "[" + host_name + "]:" + str(
                             get_grouping_id(metric_name, grouping_map))
                         valueMap[header_field] = str(metric_value)
@@ -290,6 +295,9 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics):
                         metric_value = json_message.get('system', {}).get('memory', {}).get(metric, {}).get('used',{}).get(
                             'bytes', '')
                         metric_name = "memory-" + metric
+                        # skip the metric that are not in the config file
+                        if metric_name not in all_metrics_set:
+                            continue
                         header_field = metric_name + "[" + host_name + "]:" + str(
                             get_grouping_id(metric_name, grouping_map))
                         valueMap[header_field] = str(metric_value)
@@ -303,36 +311,48 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics):
                     if  json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}) != "/":
                         #logger.info("Skipping: " +  json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}))
                         continue
-                    metric_value_bytes = json_message.get('system', {}).get('filesystem', {}).get('used', {}).get(
-                        'bytes', '')
-                    metric_value_pct = json_message.get('system', {}).get('filesystem', {}).get('used', {}).get(
-                        'pct', '')
+                    # add used-bytes
                     metric_name_bytes = "filesystem/used-bytes"
+                    # skip the metric that are not in the config file
+                    if metric_name_bytes in all_metrics_set:
+                        metric_value_bytes = json_message.get('system', {}).get(
+                            'filesystem', {}).get('used', {}).get('bytes', '')
+                        header_field_bytes = metric_name_bytes + "[" + host_name + "]:" + str(
+                            get_grouping_id(metric_name_bytes, grouping_map))
+                        valueMap[header_field_bytes] = str(metric_value_bytes)
+                        # add collected metric name
+                        collectedMetricsSet.add(metric_name_bytes)
+
+                    # add used-pct
                     metric_name_pct = "filesystem/used-pct"
-                    header_field_bytes = metric_name_bytes + "[" + host_name + "]:" + str(
-                        get_grouping_id(metric_name_bytes, grouping_map))
-                    header_field_pct = metric_name_pct + "[" + host_name + "]:" + str(
-                        get_grouping_id(metric_name_pct, grouping_map))
-                    valueMap[header_field_bytes] = str(metric_value_bytes)
-                    valueMap[header_field_pct] = str(metric_value_pct)
+                    # skip the metric that are not in the config file
+                    if metric_name_pct in all_metrics_set:
+                        metric_value_pct = json_message.get('system', {}).get(
+                            'filesystem', {}).get('used', {}).get('pct', '')
+                        header_field_pct = metric_name_pct + "[" + host_name + "]:" + str(
+                            get_grouping_id(metric_name_pct, grouping_map))
+                        valueMap[header_field_pct] = str(metric_value_pct)
+                        # add collected metric name
+                        collectedMetricsSet.add(metric_name_pct)
+                    
+                    # add to raw data map
                     rawDataMap[epoch] = valueMap
-                    # add collected metric name
                     collectedValues += 1
-                    collectedMetricsSet.add(metric_name_pct)
-                    collectedMetricsSet.add(metric_name_bytes)
                     # update the collected metrics for this timestamp
                     collectedMetricsMap[epoch] = collectedMetricsSet
 
             # check whether collected all metrics basd on the config file
-            if (isReceivedAllMetrics(collectedMetricsSet, all_metrics)):
+            if (isReceivedAllMetrics(collectedMetricsSet, all_metrics_set)):
                 # add the completed timestamp into set
                 completedRowsTimestampSet.add(epoch)
-                print "All metrics collected for timestamp " + str(epoch) + " Completed rows count: " + str(len(completedRowsTimestampSet))
+                # print "All metrics collected for timestamp " + str(epoch) + " Completed rows count: " + str(len(completedRowsTimestampSet))
             
             numberOfCompletedRows = len(completedRowsTimestampSet)
             # check whether the number of completed rows is greater than 100
             if numberOfCompletedRows >= CHUNK_METRIC_VALUES:
                 # go through all completed timesamp data and add to the buffer
+                start = str(min(completedRowsTimestampSet))
+                end = str(max(completedRowsTimestampSet))
                 for timestamp in completedRowsTimestampSet:
                     # get and delete the data of the timestamp
                     valueMap = rawDataMap.pop(timestamp)
@@ -342,7 +362,7 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics):
                     metricData.append(valueMap)
 
                 chunkNumber += 1
-                logger.debug("Sending Chunk Number: " + str(chunkNumber))
+                logger.debug("Sending Chunk Number: " + str(chunkNumber) + " from " + start + " to " + end)
                 sendData(metricData)
                 # clean the buffer and completed row set
                 metricData = []
@@ -362,7 +382,7 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics):
         logger.info("No data remaining to send")
     else:
         chunkNumber += 1
-        logger.debug("Sending Final Chunk: " + str(chunkNumber))
+        logger.debug("Sending Final Chunk: " + str(chunkNumber) + " from " + start + " to " + end)
         sendData(metricData)
 
 
@@ -394,7 +414,7 @@ class LessThanFilter(logging.Filter):
 
 
 if __name__ == "__main__":
-    CHUNK_METRIC_VALUES = 100
+    CHUNK_METRIC_VALUES = 10
     GROUPING_START = 15000
     GROUPING_END = 20000
     logger = set_logger_config()
@@ -409,11 +429,11 @@ if __name__ == "__main__":
     hostname = socket.gethostname().partition(".")[0]
     try:
         # Kafka consumer configuration
-        (brokers, topic, filter_hosts, all_metrics) = getKafkaConfig()
+        (brokers, topic, filter_hosts, all_metrics_set) = getKafkaConfig()
         consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
                                  group_id="if_consumers_new")
         consumer.subscribe([topic])
-        parseConsumerMessages(consumer, grouping_map, all_metrics)
+        parseConsumerMessages(consumer, grouping_map, all_metrics_set)
 
         consumer.close()
         save_grouping(grouping_map)
