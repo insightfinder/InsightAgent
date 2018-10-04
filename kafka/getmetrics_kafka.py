@@ -300,6 +300,9 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics):
                         # update the collected metrics for this timestamp
                         collectedMetricsMap[epoch] = collectedMetricsSet
                 elif metric_class == "filesystem":
+                    if  json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}) != "/":
+                        #logger.info("Skipping: " +  json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}))
+                        continue
                     metric_value_bytes = json_message.get('system', {}).get('filesystem', {}).get('used', {}).get(
                         'bytes', '')
                     metric_value_pct = json_message.get('system', {}).get('filesystem', {}).get('used', {}).get(
@@ -407,8 +410,8 @@ if __name__ == "__main__":
     try:
         # Kafka consumer configuration
         (brokers, topic, filter_hosts, all_metrics) = getKafkaConfig()
-        consumer = KafkaConsumer(bootstrap_servers=brokers, consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id="if_consumers")
+        consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
+                                 group_id="if_consumers_new")
         consumer.subscribe([topic])
         parseConsumerMessages(consumer, grouping_map, all_metrics)
 
