@@ -296,15 +296,15 @@ if __name__ == "__main__":
     try:
         logger.debug("Start to send metric data: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
         # get metric list from prometheus
-        metricList = getMetricListFromFile(agent_config)
-        if len(metricList) == 0:
+        metricListAll = getMetricListFromFile(agent_config)
+        if len(metricListAll) == 0:
             logger.error("No metrics to get data for.")
             sys.exit()
 
-        chunked_metric_list = chunks(metricList, parameters['chunkSize'])
+        chunked_metric_list = chunks(metricListAll, parameters['chunkSize'])
         for sub_list in chunked_metric_list:
             # get metric data from prometheus every SAMPLING_INTERVAL
-            metricDataList = getMetricData(agent_config, metricList, grouping_map, dataStartTimestamp, dataEndTimestamp)
+            metricDataList = getMetricData(agent_config, sub_list, grouping_map, dataStartTimestamp, dataEndTimestamp)
             if len(metricDataList) == 0:
                 logger.error("No data for metrics received from Prometheus.")
                 sys.exit()
