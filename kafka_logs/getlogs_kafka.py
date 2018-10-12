@@ -18,7 +18,7 @@ this script gathers logs from kafka and send to InsightFinder
 '''
 
 
-def getParameters():
+def get_parameters():
     usage = "Usage: %prog [options]"
     parser = OptionParser(usage=usage)
     parser.add_option("-d", "--directory",
@@ -58,7 +58,7 @@ def getParameters():
     return parameters
 
 
-def getAgentConfigVars():
+def get_agent_config_vars():
     configVars = {}
     try:
         with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as configFile:
@@ -118,21 +118,26 @@ def getReportingConfigVars():
 
 
 def getKafkaConfig():
-    if os.path.exists(os.path.join(parameters['homepath'], "kafka_logs", "config.ini")):
+    if os.path.exists(os.path.join(parameters['homepath'], "kafka", "config.ini")):
         parser = SafeConfigParser()
-        parser.read(os.path.join(parameters['homepath'], "kafka_logs", "config.ini"))
+        parser.read(os.path.join(parameters['homepath'], "kafka", "config.ini"))
         bootstrap_servers = parser.get('kafka', 'bootstrap_servers').split(",")
         topic = parser.get('kafka', 'topic')
+        filter_hosts = parser.get('kafka', 'filter_hosts').split(",")
+
         if len(bootstrap_servers) == 0:
             logger.info("Using default server localhost:9092")
             bootstrap_servers = ['localhost:9092']
         if len(topic) == 0:
             print "using default topic"
-            topic = 'insightfinder_logs'
+            topic = 'insightfinder_metric'
+        if len(filter_hosts[0]) == 0:
+            filter_hosts = []
     else:
         bootstrap_servers = ['localhost:9092']
-        topic = 'insightfinder_logs'
-    return (bootstrap_servers, topic)
+        topic = 'insightfinder_metrics'
+        filter_hosts = []
+    return (bootstrap_servers, topic, filter_hosts)
 
 
 def isTimeFormat(timeString, format):
@@ -195,6 +200,10 @@ def parseConsumerMessages(consumer):
             message = json_message.get('message', {})
             timestamp = json_message.get('@timestamp', {})[:-5]
 
+            if len(filter_hosts) != 0 and host_name.upper() not in (filter_host.upper() for filter_host in
+                                                                    filter_hosts):
+                continue
+
             if lineCount == parameters['chunkLines']:
                 logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
                 sendData(currentRow)
@@ -256,16 +265,16 @@ class LessThanFilter(logging.Filter):
 if __name__ == "__main__":
     CHUNK_SIZE = 4000000
     logger = setloggerConfig()
-    parameters = getParameters()
-    agentConfigVars = getAgentConfigVars()
+    parameters = get_parameters()
+    agentConfigVars = get_agent_config_vars()
     reportingConfigVars = getReportingConfigVars()
 
     try:
         # Kafka consumer configuration
         datadir = 'data/'
-        (brokers, topic) = getKafkaConfig()
+        (brokers, topic, filter_hosts) = getKafkaConfig()
         consumer = KafkaConsumer(bootstrap_servers=brokers,
-                                 auto_offset_reset='earliest', consumer_timeout_ms=1000 * parameters['timeout'],
+                                 auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
                                  group_id="if_consumers")
         consumer.subscribe([topic])
         parseConsumerMessages(consumer)
