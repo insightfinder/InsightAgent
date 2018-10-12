@@ -118,9 +118,9 @@ def getReportingConfigVars():
 
 
 def getKafkaConfig():
-    if os.path.exists(os.path.join(parameters['homepath'], "kafka", "config.ini")):
+    if os.path.exists(os.path.join(parameters['homepath'], "kafka_logs", "config.ini")):
         parser = SafeConfigParser()
-        parser.read(os.path.join(parameters['homepath'], "kafka", "config.ini"))
+        parser.read(os.path.join(parameters['homepath'], "kafka_logs", "config.ini"))
         bootstrap_servers = parser.get('kafka', 'bootstrap_servers').split(",")
         topic = parser.get('kafka', 'topic')
         filter_hosts = parser.get('kafka', 'filter_hosts').split(",")
@@ -130,12 +130,12 @@ def getKafkaConfig():
             bootstrap_servers = ['localhost:9092']
         if len(topic) == 0:
             print "using default topic"
-            topic = 'insightfinder_metric'
+            topic = 'insightfinder_logs'
         if len(filter_hosts[0]) == 0:
             filter_hosts = []
     else:
         bootstrap_servers = ['localhost:9092']
-        topic = 'insightfinder_metrics'
+        topic = 'insightfinder_logs'
         filter_hosts = []
     return (bootstrap_servers, topic, filter_hosts)
 
