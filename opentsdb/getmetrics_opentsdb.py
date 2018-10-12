@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import time
 import sys
 from optparse import OptionParser
 import ConfigParser
@@ -8,6 +7,8 @@ import requests
 import json
 import logging
 import re
+import socket
+import random
 import time
 from datetime import datetime
 
@@ -111,6 +112,48 @@ def getOpentsdbConfig(parameters, datadir):
     return openTsdbConfig
 
 
+def save_grouping(grouping_map):
+    """
+    Saves the grouping data to grouping.json
+    :return: None
+    """
+    with open('grouping.json', 'w+') as f:
+        f.write(json.dumps(grouping_map))
+
+
+def load_grouping():
+    if (os.path.isfile('grouping.json')):
+        logger.debug("Grouping file exists. Loading..")
+        with open('grouping.json', 'r+') as f:
+            try:
+                grouping_map = json.loads(f.read())
+            except ValueError:
+                grouping_map = json.loads("{}")
+                logger.debug("Error parsing grouping.json.")
+    else:
+        grouping_map = json.loads("{}")
+    return grouping_map
+
+
+def get_grouping_id(metric_key, grouping_map):
+    """
+    Get grouping id for a metric key
+    Parameters:
+    - `metric_key` : metric key str to get group id.
+    - `temp_id` : proposed group id integer
+    """
+    for i in range(3):
+        grouping_candidate = random.randint(GROUPING_START, GROUPING_END)
+        if metric_key in grouping_map:
+            grouping_id = int(grouping_map[metric_key])
+            return grouping_id
+        else:
+            grouping_id = grouping_candidate
+            grouping_map[metric_key] = grouping_id
+            return grouping_id
+    return GROUPING_START
+
+
 def getMetricList(config):
     """Get available metric list from Open TSDB API"""
     metricList = []
@@ -135,15 +178,26 @@ def getMetricListFromFile(config, filePath):
     return list(metricList)
 
 
-def getMetricData(config, metricList, startTime, endTime):
+def getMetricData(config, metricList, grouping_map, startTime, endTime):
     """Get metric data from Open TSDB API"""
 
-    def fullData(d, ts):
-        if len(d.get('dps', {}).keys()) == 0:
-            d['dps'] = {
-                str(ts): 0
-            }
-        return d
+    def fullData(d):
+        valueMap = {}
+        metric_name = d.get('metric')
+        host_name = d.get('tags', {}).get('host') or 'unknownApplication'
+        dps = d.get('dps', {})
+        metric_value = None
+        header_field = metric_name + "[" + host_name + "]:" + str(get_grouping_id(metric_name, grouping_map))
+        mtime = 0
+        for stime, val in dps.items():
+            if int(stime) > mtime:
+                metric_value = val
+                mtime = int(stime)
+
+        valueMap[header_field] = str(metric_value)
+        valueMap['timestamp'] = str(mtime * 1000)
+
+        return valueMap
 
     openTsdbMetricList = []
     json_data = {
@@ -160,29 +214,16 @@ def getMetricData(config, metricList, startTime, endTime):
     url = config["OPENTSDB_URL"] + "/api/query"
     response = requests.post(url, data=json.dumps(json_data))
     if response.status_code == 200:
-        openTsdbMetricList = response.json()
-        logger.debug("Get metric data from opentsdb: " + str(len(openTsdbMetricList)))
+        rawDataList = response.json()
+        logger.debug("Get metric data from opentsdb: " + str(len(rawDataList)))
 
         # completion metric data
-        openTsdbMetricList = map(lambda d: fullData(d, startTime), openTsdbMetricList)
-        resMetricList = map(lambda d: d.get('metric'), openTsdbMetricList)
-        for metric in list(set(metricList) ^ set(resMetricList)):
-            openTsdbMetricList.append({
-                "metric": metric,
-                "tags": {},
-                "aggregatedTags": [
-                    "host"
-                ],
-                "dps": {
-                    str(startTime): 0
-                }
-            })
+        openTsdbMetricList = map(lambda d: fullData(d), rawDataList)
 
     return openTsdbMetricList
 
 
 def sendData(metricData):
-    """Send Open TSDB metric data to the InsightFinder application"""
     sendDataTime = time.time()
     # prepare data for metric streaming agent
     toSendDataDict = {}
@@ -190,20 +231,21 @@ def sendData(metricData):
     toSendDataDict["licenseKey"] = agentConfigVars['licenseKey']
     toSendDataDict["projectName"] = agentConfigVars['projectName']
     toSendDataDict["userName"] = agentConfigVars['userName']
+    toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
     toSendDataDict["samplingInterval"] = str(int(reportingConfigVars['reporting_interval'] * 60))
     toSendDataDict["agentType"] = "custom"
 
     toSendDataJSON = json.dumps(toSendDataDict)
-    logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))) + " Bytes")
+    logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))))
 
     # send the data
-    postUrl = parameters['serverUrl'] + "/opentsdbdata"
+    postUrl = parameters['serverUrl'] + "/customprojectrawdata"
     response = requests.post(postUrl, data=json.loads(toSendDataJSON))
     if response.status_code == 200:
         logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
-        logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
     else:
         logger.info("Failed to send data.")
+    logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
 
 
 def chunks(l, n):
@@ -241,12 +283,16 @@ class LessThanFilter(logging.Filter):
 
 
 if __name__ == "__main__":
+    GROUPING_START = 15000
+    GROUPING_END = 20000
+
     logLevel = logging.INFO
     logger = setloggerConfig(logLevel)
     dataDirectory = 'data'
     parameters = getParameters()
     agentConfigVars = getAgentConfigVars()
     reportingConfigVars = getReportingConfigVars()
+    grouping_map = load_grouping()
 
     # get agent configuration details
     agent_config = getOpentsdbConfig(parameters, dataDirectory)
@@ -277,20 +323,22 @@ if __name__ == "__main__":
             # get metric list from opentsdb
             # metricList = getMetricList(agent_config)
             filePath = './metrics.txt'
-            metricList = getMetricListFromFile(agent_config, filePath)
-            if len(metricList) == 0:
+            metricListAll = getMetricListFromFile(agent_config, filePath)
+            if len(metricListAll) == 0:
                 logger.error("No metrics to get data for.")
                 sys.exit()
 
-            chunked_metric_list = chunks(metricList, parameters['chunkSize'])
+            chunked_metric_list = chunks(metricListAll, parameters['chunkSize'])
             for sub_list in chunked_metric_list:
                 # get metric data from opentsdb every SAMPLING_INTERVAL
-                metricDataList = getMetricData(agent_config, metricList, dataStartTimestamp, dataEndTimestamp)
+                metricDataList = getMetricData(agent_config, sub_list, grouping_map, dataStartTimestamp,
+                                               dataEndTimestamp)
                 if len(metricDataList) == 0:
                     logger.error("No data for metrics received from Open TSDB.")
                     sys.exit()
                 # send metric data to insightfinder
                 sendData(metricDataList)
+                save_grouping(grouping_map)
 
             logger.info("Send metric date for {} - {}.".format(dataStartTimestamp, dataEndTimestamp))
         except Exception as e:
