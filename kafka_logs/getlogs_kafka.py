@@ -7,6 +7,7 @@ import sys
 import time
 from ConfigParser import SafeConfigParser
 from datetime import datetime
+from multiprocessing import Process
 from optparse import OptionParser
 
 import pytz
@@ -25,12 +26,12 @@ def get_parameters():
                       action="store", dest="homepath", help="Directory to run from")
     parser.add_option("-t", "--timeout",
                       action="store", dest="timeout", help="Timeout in seconds. Default is 30")
-    parser.add_option("-p", "--topic",
-                      action="store", dest="topic", help="Kafka topic to read data from")
     parser.add_option("-w", "--serverUrl",
                       action="store", dest="serverUrl", help="Server Url")
     parser.add_option("-l", "--chunkLines",
                       action="store", dest="chunkLines", help="Max number of lines in chunk")
+    parser.add_option("-p", "--project",
+                      action="store", dest="project", help="Insightfinder Project to send data to")
     (options, args) = parser.parse_args()
 
     parameters = {}
@@ -38,86 +39,84 @@ def get_parameters():
         parameters['homepath'] = os.getcwd()
     else:
         parameters['homepath'] = options.homepath
-    if options.serverUrl == None:
+    if options.serverUrl is None:
         parameters['serverUrl'] = 'https://app.insightfinder.com'
     else:
         parameters['serverUrl'] = options.serverUrl
-    if options.topic == None:
-        parameters['topic'] = 'insightfinder_csv'
-    else:
-        parameters['topic'] = options.topic
-    if options.timeout == None:
-        parameters['timeout'] = 30
+    if options.timeout is None:
+        parameters['timeout'] = 300
     else:
         parameters['timeout'] = int(options.timeout)
     if options.chunkLines is None:
-        parameters['chunkLines'] = 1000
+        parameters['chunk_lines'] = 1000
     else:
-        parameters['chunkLines'] = int(options.chunkLines)
+        parameters['chunk_lines'] = int(options.chunkLines)
+    if options.project is None:
+        parameters['project'] = None
+    else:
+        parameters['project'] = options.project
 
     return parameters
 
 
 def get_agent_config_vars():
-    configVars = {}
+    config_vars = {}
     try:
-        with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as configFile:
-            fileContent = configFile.readlines()
-            if len(fileContent) < 6:
+        with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as config_file:
+            file_content = config_file.readlines()
+            if len(file_content) < 6:
                 logger.error("Agent not correctly configured. Check .agent.bashrc file.")
                 sys.exit(1)
             # get license key
-            licenseKeyLine = fileContent[0].split(" ")
-            if len(licenseKeyLine) != 2:
+            license_key_line = file_content[0].split(" ")
+            if len(license_key_line) != 2:
                 logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
                 sys.exit(1)
-            configVars['licenseKey'] = licenseKeyLine[1].split("=")[1].strip()
+            config_vars['licenseKey'] = license_key_line[1].split("=")[1].strip()
             # get project name
-            projectNameLine = fileContent[1].split(" ")
-            if len(projectNameLine) != 2:
+            project_name_line = file_content[1].split(" ")
+            if len(project_name_line) != 2:
                 logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
                 sys.exit(1)
-            configVars['projectName'] = projectNameLine[1].split("=")[1].strip()
+            config_vars['projectName'] = project_name_line[1].split("=")[1].strip()
             # get username
-            userNameLine = fileContent[2].split(" ")
-            if len(userNameLine) != 2:
+            user_name_line = file_content[2].split(" ")
+            if len(user_name_line) != 2:
                 logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
                 sys.exit(1)
-            configVars['userName'] = userNameLine[1].split("=")[1].strip()
+            config_vars['userName'] = user_name_line[1].split("=")[1].strip()
             # get sampling interval
-            samplingIntervalLine = fileContent[4].split(" ")
-            if len(samplingIntervalLine) != 2:
+            sampling_interval_line = file_content[4].split(" ")
+            if len(sampling_interval_line) != 2:
                 logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
                 sys.exit(1)
-            configVars['samplingInterval'] = samplingIntervalLine[1].split("=")[1].strip()
+            config_vars['samplingInterval'] = sampling_interval_line[1].split("=")[1].strip()
     except IOError:
         logger.error("Agent not correctly configured. Missing .agent.bashrc file.")
-    return configVars
+    return config_vars
 
 
-def getReportingConfigVars():
-    reportingConfigVars = {}
+def get_reporting_config_vars():
+    reporting_config_vars = {}
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
         config = json.load(f)
     reporting_interval_string = config['reporting_interval']
-    is_second_reporting = False
     if reporting_interval_string[-1:] == 's':
-        is_second_reporting = True
         reporting_interval = float(config['reporting_interval'][:-1])
-        reportingConfigVars['reporting_interval'] = float(reporting_interval / 60.0)
+        reporting_config_vars['reporting_interval'] = float(reporting_interval / 60.0)
     else:
-        reportingConfigVars['reporting_interval'] = int(config['reporting_interval'])
-        reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
-        reportingConfigVars['prev_endtime'] = config['prev_endtime']
-        reportingConfigVars['deltaFields'] = config['delta_fields']
+        reporting_config_vars['reporting_interval'] = int(config['reporting_interval'])
+        reporting_config_vars['keep_file_days'] = int(config['keep_file_days'])
+        reporting_config_vars['prev_endtime'] = config['prev_endtime']
+        reporting_config_vars['deltaFields'] = config['delta_fields']
 
-    reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
-    reportingConfigVars['prev_endtime'] = config['prev_endtime']
-    reportingConfigVars['deltaFields'] = config['delta_fields']
-    return reportingConfigVars
+    reporting_config_vars['keep_file_days'] = int(config['keep_file_days'])
+    reporting_config_vars['prev_endtime'] = config['prev_endtime']
+    reporting_config_vars['deltaFields'] = config['delta_fields']
+    return reporting_config_vars
 
 
-def getKafkaConfig():
+def get_kafka_config():
     if os.path.exists(os.path.join(parameters['homepath'], "kafka_logs", "config.ini")):
         parser = SafeConfigParser()
         parser.read(os.path.join(parameters['homepath'], "kafka_logs", "config.ini"))
@@ -137,10 +136,10 @@ def getKafkaConfig():
         bootstrap_servers = ['localhost:9092']
         topic = 'insightfinder_logs'
         filter_hosts = []
-    return (bootstrap_servers, topic, filter_hosts)
+    return bootstrap_servers, topic, filter_hosts
 
 
-def isTimeFormat(timeString, format):
+def is_time_format(time_string, datetime_format):
     """
     Determines the validity of the input date-time string according to the given format
     Parameters:
@@ -148,54 +147,59 @@ def isTimeFormat(timeString, format):
     - `temp_id` : datetime format to compare with
     """
     try:
-        datetime.strptime(str(timeString), format)
+        datetime.strptime(str(time_string), datetime_format)
         return True
     except ValueError:
         return False
 
 
-def getTimestampForZone(dateString, timeZone, format):
-    dtexif = datetime.strptime(dateString, format)
-    tz = pytz.timezone(timeZone)
+def get_timestamp_for_zone(date_string, time_zone, datetime_format):
+    dtexif = datetime.strptime(date_string, datetime_format)
+    tz = pytz.timezone(time_zone)
     tztime = tz.localize(dtexif)
     epoch = long((tztime - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
     return epoch
 
 
-def sendData(metricData):
+def send_data(metric_data):
     """ Sends parsed metric data to InsightFinder """
-    sendDataTime = time.time()
+    send_data_time = time.time()
     # prepare data for metric streaming agent
-    toSendDataDict = {}
-    toSendDataDict["metricData"] = json.dumps(metricData)
-    toSendDataDict["licenseKey"] = agentConfigVars['licenseKey']
-    toSendDataDict["projectName"] = agentConfigVars['projectName']
-    toSendDataDict["userName"] = agentConfigVars['userName']
-    toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
-    toSendDataDict["samplingInterval"] = str(int(reportingConfigVars['reporting_interval'] * 60))
-    toSendDataDict["agentType"] = "LogStreaming"
+    to_send_data_dict = dict()
+    to_send_data_dict["metricData"] = json.dumps(metric_data)
+    to_send_data_dict["licenseKey"] = agentConfigVars['licenseKey']
+    if parameters['project'] is None:
+        to_send_data_dict["projectName"] = agentConfigVars['projectName']
+    else:
+        to_send_data_dict["projectName"] = parameters['project']
+    to_send_data_dict["userName"] = agentConfigVars['userName']
+    to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
+    to_send_data_dict["samplingInterval"] = str(int(reportingConfigVars['reporting_interval'] * 60))
+    to_send_data_dict["agentType"] = "LogStreaming"
 
-    toSendDataJSON = json.dumps(toSendDataDict)
-    logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))))
+    to_send_data_json = json.dumps(to_send_data_dict)
+    logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
+    logger.debug("Data: " + str(to_send_data_json))
 
     # send the data
-    postUrl = parameters['serverUrl'] + "/customprojectrawdata"
-    response = requests.post(postUrl, data=json.loads(toSendDataJSON))
+    post_url = parameters['serverUrl'] + "/customprojectrawdata"
+    response = requests.post(post_url, data=json.loads(to_send_data_json))
     if response.status_code == 200:
-        logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
+        logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
     else:
         logger.info("Failed to send data.")
-    logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
+    logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
 
 
-def parseConsumerMessages(consumer):
-    lineCount = 0
-    chunkCount = 0
-    currentRow = []
+def parse_consumer_messages(consumer, filter_hosts):
+    line_count = 0
+    chunk_count = 0
+    current_row = []
     start_time = time.time()
     for message in consumer:
         try:
             json_message = json.loads(message.value)
+            logger.info(json_message)
             host_name = json_message.get('beat', {}).get('hostname', {})
             message = json_message.get('message', {})
             timestamp = json_message.get('@timestamp', {})[:-5]
@@ -204,38 +208,38 @@ def parseConsumerMessages(consumer):
                                                                     filter_hosts):
                 continue
 
-            if lineCount == parameters['chunkLines']:
+            if line_count == parameters['chunk_lines']:
                 logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                sendData(currentRow)
-                currentRow = []
-                chunkCount += 1
-                lineCount = 0
+                send_data(current_row)
+                current_row = []
+                chunk_count += 1
+                line_count = 0
                 start_time = time.time()
 
             pattern = "%Y-%m-%dT%H:%M:%S"
-            if isTimeFormat(timestamp, pattern):
+            if is_time_format(timestamp, pattern):
                 try:
-                    epoch = getTimestampForZone(timestamp, "GMT", pattern)
+                    epoch = get_timestamp_for_zone(timestamp, "GMT", pattern)
                 except ValueError:
                     continue
 
-            currentLogMsg = {}
-            currentLogMsg['timestamp'] = epoch
-            currentLogMsg['tag'] = host_name
-            currentLogMsg['data'] = message
-            currentRow.append(currentLogMsg)
-            lineCount += 1
+            current_log_msg = dict()
+            current_log_msg['timestamp'] = epoch
+            current_log_msg['tag'] = host_name
+            current_log_msg['data'] = message
+            current_row.append(current_log_msg)
+            line_count += 1
         except:
             continue
 
-    if len(currentRow) != 0:
+    if len(current_row) != 0:
         logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-        sendData(currentRow)
-        chunkCount += 1
-    logger.debug("Total chunks created: " + str(chunkCount))
+        send_data(current_row)
+        chunk_count += 1
+    logger.debug("Total chunks created: " + str(chunk_count))
 
 
-def setloggerConfig():
+def set_logger_config():
     # Get the root logger
     logger = logging.getLogger(__name__)
     # Have to set the root logger level, it defaults to logging.WARNING
@@ -262,23 +266,29 @@ class LessThanFilter(logging.Filter):
         return 1 if record.levelno < self.max_level else 0
 
 
+def kafka_data_consumer(consumer_id):
+    logger.info("Started log consumer number " + consumer_id)
+    # Kafka consumer configuration
+    (brokers, topic, filter_hosts) = get_kafka_config()
+    consumer = KafkaConsumer(bootstrap_servers=brokers,
+                             auto_offset_reset='earliest', consumer_timeout_ms=1000 * parameters['timeout'],
+                             group_id="if_consumers")
+    consumer.subscribe([topic])
+    parse_consumer_messages(consumer, filter_hosts)
+    consumer.close()
+    logger.info("Closed log consumer number " + consumer_id)
+
+
 if __name__ == "__main__":
-    CHUNK_SIZE = 4000000
-    logger = setloggerConfig()
+    logger = set_logger_config()
     parameters = get_parameters()
     agentConfigVars = get_agent_config_vars()
-    reportingConfigVars = getReportingConfigVars()
+    reportingConfigVars = get_reporting_config_vars()
 
     try:
-        # Kafka consumer configuration
-        datadir = 'data/'
-        (brokers, topic, filter_hosts) = getKafkaConfig()
-        consumer = KafkaConsumer(bootstrap_servers=brokers,
-                                 auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id="if_consumers")
-        consumer.subscribe([topic])
-        parseConsumerMessages(consumer)
-        consumer.close()
-
+        t1 = Process(target=kafka_data_consumer, args=('1',))
+        t2 = Process(target=kafka_data_consumer, args=('2',))
+        t1.start()
+        t2.start()
     except KeyboardInterrupt:
         print "Interrupt from keyboard"
