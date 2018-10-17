@@ -6,6 +6,9 @@ require "logstash/plugin_mixins/http_client"
 require 'thread'
 require "uri"
 require "zlib"
+require "net/https"
+require "uri"
+require 'net/http'
 
 class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
   include LogStash::PluginMixins::HttpClient
@@ -51,12 +54,18 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
     @timer = Time.now
     @pile = Array.new
     @semaphore = Mutex.new
+    @uri = URI.parse(@url)
+    @http = Net::HTTP.new(@uri.host, @uri.port)
+    if @url.include? 'https'
+      @http.use_ssl = true
+      @http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+    end
+    @logger.debug("Client", :client => @client.inspect)
   end # def register
 
   public
   def multi_receive(events)
     events.each { |event| receive(event) }
-    client.execute!
   end # def multi_receive
 
   public
@@ -66,8 +75,6 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
       return
     end
 
-    content = format_event(event)
-
     if @interval <= 0 # means send immediately
       send_request(content)
       return
@@ -75,10 +82,16 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
 
     @semaphore.synchronize {
       now = Time.now
-      @pile << content
+      #Modify the event
+      dd_event = Hash.new
+      dd_event['eventId'] = event.timestamp.to_i * 1000
+      dd_event['tag'] = event.sprintf(event.get('host'))
+      dd_event['data'] = event.sprintf(event.get('message'))
+      event_json = LogStash::Json.dump(dd_event)
+      @pile << dd_event
       if now - @timer > @interval # ready to send
-        dataBody = {"agentType" => "Logstash", "licenseKey" => @licenseKey, "projectName" => @projectName, "userName" => @userName, "projectType" => @projectType, "metricData" => @pile}
-        send_request(LogStash::Json.dump(dataBody))
+        dataBody = {"agentType" => "LogStreaming", "licenseKey" => @licenseKey, "projectName" => @projectName, "userName" => @userName, "projectType" => @projectType, "metricData" => LogStash::Json.dump(@pile)}
+        send_request(dataBody)
         @timer = now
         @pile.clear
       end
@@ -91,7 +104,7 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
       send_request(@pile.join($/))
       @pile.clear
     }
-    client.close
+    @http.finish
   end # def close
 
   private
@@ -102,70 +115,19 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
     else
       content
     end
-    headers = get_headers()
 
-    request = client.send(:parallel).send(:post, @url, :body => body, :headers => headers)
-    request.on_complete do
-      @request_tokens << token
+    #format data and send request
+    request = Net::HTTP::Post.new(@uri.request_uri)
+    begin
+      request.set_form_data(content)
+      response = @http.start {|http| http.request(request) }
+      @logger.info("DD convo", :request => request.inspect, :response => response.inspect)
+      raise unless response.code =~ /^2\d\d$/
+    rescue Exception => e
+      @logger.warn("Unhandled exception", :request => request.inspect, :response => response.inspect, :exception => e.inspect)
     end
 
-    request.on_success do |response|
-      if response.code < 200 || response.code > 299
-        log_failure(
-          "HTTP response #{response.code}",
-          :body => body,
-          :headers => headers
-      )
-      end
-    end
-
-    request.on_failure do |exception|
-      log_failure(
-        "Could not fetch URL",
-        :body => body,
-        :headers => headers,
-        :message => exception.message,
-        :class => exception.class.name,
-        :backtrace => exception.backtrace
-      )
-    end
-
-    request.call
   end # def send_request
-
-  private
-  def get_headers()
-    base = { "Content-Type" => "text/plain" }
-    base["Content-Encoding"] = "deflate" if @compress
-    base.merge(@extra_headers)
-  end # def get_headers
-
-  private
-  def format_event(event)
-    if @format.to_s.strip.length == 0
-      LogStash::Json.dump(map_event(event))
-    else
-      f = if @format.include? "%{@json}"
-        @format.gsub("%{@json}", LogStash::Json.dump(map_event(event)))
-      else
-        @format
-      end
-      event.sprintf(f)
-    end
-  end # def format_event
-
-  private
-  def map_event(event)
-    if @json_mapping
-      @json_mapping.reduce({}) do |acc, kv|
-        k, v = kv
-        acc[k] = event.sprintf(v)
-        acc
-      end
-    else
-      event.to_hash
-    end
-  end # def map_event
 
   private
   def log_failure(message, opts)
