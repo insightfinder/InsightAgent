@@ -83,12 +83,12 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
     @semaphore.synchronize {
       now = Time.now
       #Modify the event
-      dd_event = Hash.new
-      dd_event['eventId'] = event.timestamp.to_i * 1000
-      dd_event['tag'] = event.sprintf(event.get('host'))
-      dd_event['data'] = event.sprintf(event.get('message'))
-      event_json = LogStash::Json.dump(dd_event)
-      @pile << dd_event
+      if_event = Hash.new
+      if_event['eventId'] = event.timestamp.to_i * 1000
+      if_event['tag'] = event.sprintf(event.get('host'))
+      if_event['data'] = event.sprintf(event.get('message'))
+      event_json = LogStash::Json.dump(if_event)
+      @pile << if_event
       if now - @timer > @interval # ready to send
         dataBody = {"agentType" => "LogStreaming", "licenseKey" => @licenseKey, "projectName" => @projectName, "userName" => @userName, "projectType" => @projectType, "metricData" => LogStash::Json.dump(@pile)}
         send_request(dataBody)
@@ -121,10 +121,10 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
     begin
       request.set_form_data(content)
       response = @http.start {|http| http.request(request) }
-      @logger.info("DD convo", :request => request.inspect, :response => response.inspect)
+      @logger.info("Successfully sent data to InsightFinder: ", :request => request.inspect, :response => response.inspect)
       raise unless response.code =~ /^2\d\d$/
     rescue Exception => e
-      @logger.warn("Unhandled exception", :request => request.inspect, :response => response.inspect, :exception => e.inspect)
+      @logger.warn("Data sending failure.", :request => request.inspect, :response => response.inspect, :exception => e.inspect)
     end
 
   end # def send_request
