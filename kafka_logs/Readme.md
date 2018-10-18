@@ -1,5 +1,5 @@
 # InsightAgent: Kafka
-Agent Type: Kafka
+Agent Type: Kafka Log
 
 Platform: Linux
 
