@@ -1,4 +1,4 @@
-# InsightAgent: Kafka
+# InsightAgent: Kafka Log
 Agent Type: Kafka Log
 
 Platform: Linux
