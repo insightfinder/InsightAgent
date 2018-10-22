@@ -44,7 +44,7 @@ def get_parameters():
     else:
         parameters['serverUrl'] = options.serverUrl
     if options.timeout is None:
-        parameters['timeout'] = 300
+        parameters['timeout'] = 86400
     else:
         parameters['timeout'] = int(options.timeout)
     if options.chunkLines is None:
