@@ -6,9 +6,6 @@ require "logstash/plugin_mixins/http_client"
 require 'thread'
 require "uri"
 require "zlib"
-require "net/https"
-require "uri"
-require 'net/http'
 
 class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
   include LogStash::PluginMixins::HttpClient
@@ -54,18 +51,12 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
     @timer = Time.now
     @pile = Array.new
     @semaphore = Mutex.new
-    @uri = URI.parse(@url)
-    @http = Net::HTTP.new(@uri.host, @uri.port)
-    if @url.include? 'https'
-      @http.use_ssl = true
-      @http.verify_mode = OpenSSL::SSL::VERIFY_NONE
-    end
-    @logger.debug("Client", :client => @client.inspect)
   end # def register
 
   public
   def multi_receive(events)
     events.each { |event| receive(event) }
+    client.execute!
   end # def multi_receive
 
   public
@@ -76,24 +67,24 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
     end
 
     if @interval <= 0 # means send immediately
-      send_request(content)
+      send_request(event)
       return
     end
 
     @semaphore.synchronize {
-      now = Time.now
-      #Modify the event
-      if_event = Hash.new
-      if_event['eventId'] = event.timestamp.to_i * 1000
-      if_event['tag'] = event.sprintf(event.get('host'))
-      if_event['data'] = event.sprintf(event.get('message'))
-      event_json = LogStash::Json.dump(if_event)
-      @pile << if_event
-      if now - @timer > @interval # ready to send
-        dataBody = {"agentType" => "LogStreaming", "licenseKey" => @licenseKey, "projectName" => @projectName, "userName" => @userName, "projectType" => @projectType, "metricData" => LogStash::Json.dump(@pile)}
-        send_request(dataBody)
-        @timer = now
-        @pile.clear
+        now = Time.now
+        #Modify the event
+        if_event = Hash.new
+        if_event['eventId'] = event.timestamp.to_i * 1000
+        if_event['tag'] = event.sprintf(event.get('host'))
+        if_event['data'] = event.sprintf(event.get('message'))
+        event_json = LogStash::Json.dump(if_event)
+        @pile << if_event
+        if now - @timer > @interval # ready to send
+            dataBody = {"agentType" => "LogStreaming", "licenseKey" => @licenseKey, "projectName" => @projectName, "userName" => @userName, "projectType" => @projectType, "metricData" => LogStash::Json.dump(@pile)}
+            send_request(LogStash::Json.dump(dataBody))
+            @timer = now
+            @pile.clear
       end
     }
   end # def receive
@@ -104,7 +95,7 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
       send_request(@pile.join($/))
       @pile.clear
     }
-    @http.finish
+    client.close
   end # def close
 
   private
@@ -115,19 +106,43 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
     else
       content
     end
-
-    #format data and send request
-    request = Net::HTTP::Post.new(@uri.request_uri)
-    begin
-      request.set_form_data(content)
-      response = @http.start {|http| http.request(request) }
-      @logger.info("Successfully sent data to InsightFinder: ", :request => request.inspect, :response => response.inspect)
-      raise unless response.code =~ /^2\d\d$/
-    rescue Exception => e
-      @logger.warn("Data sending failure.", :request => request.inspect, :response => response.inspect, :exception => e.inspect)
+    headers = get_headers()
+    request = client.send(:parallel).send(:post, @url, :body => body, :headers => headers)
+    request.on_complete do
+      @request_tokens << token
     end
 
+    request.on_success do |response|
+      if response.code < 200 || response.code > 299
+        log_failure(
+          "HTTP response #{response.code}",
+          :body => body,
+          :headers => headers
+      )
+      end
+      @logger.info("Successfully sent data.")
+    end
+
+    request.on_failure do |exception|
+      log_failure(
+        "Could not fetch URL",
+        :body => body,
+        :headers => headers,
+        :message => exception.message,
+        :class => exception.class.name,
+        :backtrace => exception.backtrace
+      )
+    end
+
+    request.call
   end # def send_request
+
+  private
+  def get_headers()
+    base = { "Content-Type" => "application/x-www-form-urlencoded" }
+    base["Content-Encoding"] = "deflate" if @compress
+    base.merge(@extra_headers)
+  end # def get_headers
 
   private
   def log_failure(message, opts)
