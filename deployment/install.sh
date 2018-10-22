@@ -240,3 +240,4 @@ fi
 
 sudo /usr/bin/pkill -f "script_runner.py"
 sudo nohup $PYTHONPATH $INSIGHTAGENTDIR/script_runner/script_runner.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/script_runner.log &
+
