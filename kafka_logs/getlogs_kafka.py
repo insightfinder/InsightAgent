@@ -58,44 +58,6 @@ def get_parameters():
 
     return parameters
 
-
-# def get_agent_config_vars():
-#     config_vars = {}
-#     try:
-#         with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as config_file:
-#             file_content = config_file.readlines()
-#             if len(file_content) < 6:
-#                 logger.error("Agent not correctly configured. Check .agent.bashrc file.")
-#                 sys.exit(1)
-#             # get license key
-#             license_key_line = file_content[0].split(" ")
-#             if len(license_key_line) != 2:
-#                 logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
-#                 sys.exit(1)
-#             config_vars['licenseKey'] = license_key_line[1].split("=")[1].strip()
-#             # get project name
-#             project_name_line = file_content[1].split(" ")
-#             if len(project_name_line) != 2:
-#                 logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
-#                 sys.exit(1)
-#             config_vars['projectName'] = project_name_line[1].split("=")[1].strip()
-#             # get username
-#             user_name_line = file_content[2].split(" ")
-#             if len(user_name_line) != 2:
-#                 logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
-#                 sys.exit(1)
-#             config_vars['userName'] = user_name_line[1].split("=")[1].strip()
-#             # get sampling interval
-#             sampling_interval_line = file_content[4].split(" ")
-#             if len(sampling_interval_line) != 2:
-#                 logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
-#                 sys.exit(1)
-#             config_vars['samplingInterval'] = sampling_interval_line[1].split("=")[1].strip()
-#     except IOError:
-#         logger.error("Agent not correctly configured. Missing .agent.bashrc file.")
-#     return config_vars
-
-
 def get_reporting_config_vars():
     reporting_config_vars = {}
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
