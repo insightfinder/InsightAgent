@@ -126,6 +126,7 @@ def get_agent_config_vars():
             insightFinder_project_name = parser.get('kafka', 'insightFinder_project_name')
             insightFinder_user_name = parser.get('kafka', 'insightFinder_user_name')
             sampling_interval = parser.get('kafka', 'sampling_interval')
+            group_id = parser.get('kafka', 'group_id')
             if len(insightFinder_license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
@@ -138,10 +139,14 @@ def get_agent_config_vars():
             if len(sampling_interval) == 0:
                 logger.error("Agent not correctly configured(sampling interval). Check config file.")
                 sys.exit(1)
+            if len(group_id) == 0:
+                logger.error("Agent not correctly configured(group id). Check config file.")
+                sys.exit(1)
             config_vars['licenseKey'] = insightFinder_license_key
             config_vars['projectName'] = insightFinder_project_name
             config_vars['userName'] = insightFinder_user_name
             config_vars['samplingInterval'] = sampling_interval
+            config_vars['groupId'] = group_id
     except IOError:
         logger.error("config.ini file is missing")
     return config_vars
@@ -303,7 +308,7 @@ def kafka_data_consumer(consumer_id):
     (brokers, topic, filter_hosts) = get_kafka_config()
     consumer = KafkaConsumer(bootstrap_servers=brokers,
                              auto_offset_reset='earliest', consumer_timeout_ms=1000 * parameters['timeout'],
-                             group_id="if_consumers")
+                             group_id=agentConfigVars['groupId'])
     consumer.subscribe([topic])
     parse_consumer_messages(consumer, filter_hosts)
     consumer.close()
