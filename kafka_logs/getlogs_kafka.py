@@ -59,41 +59,41 @@ def get_parameters():
     return parameters
 
 
-def get_agent_config_vars():
-    config_vars = {}
-    try:
-        with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as config_file:
-            file_content = config_file.readlines()
-            if len(file_content) < 6:
-                logger.error("Agent not correctly configured. Check .agent.bashrc file.")
-                sys.exit(1)
-            # get license key
-            license_key_line = file_content[0].split(" ")
-            if len(license_key_line) != 2:
-                logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
-                sys.exit(1)
-            config_vars['licenseKey'] = license_key_line[1].split("=")[1].strip()
-            # get project name
-            project_name_line = file_content[1].split(" ")
-            if len(project_name_line) != 2:
-                logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
-                sys.exit(1)
-            config_vars['projectName'] = project_name_line[1].split("=")[1].strip()
-            # get username
-            user_name_line = file_content[2].split(" ")
-            if len(user_name_line) != 2:
-                logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
-                sys.exit(1)
-            config_vars['userName'] = user_name_line[1].split("=")[1].strip()
-            # get sampling interval
-            sampling_interval_line = file_content[4].split(" ")
-            if len(sampling_interval_line) != 2:
-                logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
-                sys.exit(1)
-            config_vars['samplingInterval'] = sampling_interval_line[1].split("=")[1].strip()
-    except IOError:
-        logger.error("Agent not correctly configured. Missing .agent.bashrc file.")
-    return config_vars
+# def get_agent_config_vars():
+#     config_vars = {}
+#     try:
+#         with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as config_file:
+#             file_content = config_file.readlines()
+#             if len(file_content) < 6:
+#                 logger.error("Agent not correctly configured. Check .agent.bashrc file.")
+#                 sys.exit(1)
+#             # get license key
+#             license_key_line = file_content[0].split(" ")
+#             if len(license_key_line) != 2:
+#                 logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
+#                 sys.exit(1)
+#             config_vars['licenseKey'] = license_key_line[1].split("=")[1].strip()
+#             # get project name
+#             project_name_line = file_content[1].split(" ")
+#             if len(project_name_line) != 2:
+#                 logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
+#                 sys.exit(1)
+#             config_vars['projectName'] = project_name_line[1].split("=")[1].strip()
+#             # get username
+#             user_name_line = file_content[2].split(" ")
+#             if len(user_name_line) != 2:
+#                 logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
+#                 sys.exit(1)
+#             config_vars['userName'] = user_name_line[1].split("=")[1].strip()
+#             # get sampling interval
+#             sampling_interval_line = file_content[4].split(" ")
+#             if len(sampling_interval_line) != 2:
+#                 logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
+#                 sys.exit(1)
+#             config_vars['samplingInterval'] = sampling_interval_line[1].split("=")[1].strip()
+#     except IOError:
+#         logger.error("Agent not correctly configured. Missing .agent.bashrc file.")
+#     return config_vars
 
 
 def get_reporting_config_vars():
@@ -114,6 +114,42 @@ def get_reporting_config_vars():
     reporting_config_vars['prev_endtime'] = config['prev_endtime']
     reporting_config_vars['deltaFields'] = config['delta_fields']
     return reporting_config_vars
+
+
+def get_agent_config_vars():
+    config_vars = {}
+    try:
+        if os.path.exists(os.path.join(parameters['homepath'], "kafka_logs", "config.ini")):
+            parser = SafeConfigParser()
+            parser.read(os.path.join(parameters['homepath'], "kafka_logs", "config.ini"))
+            insightFinder_license_key = parser.get('kafka', 'insightFinder_license_key')
+            insightFinder_project_name = parser.get('kafka', 'insightFinder_project_name')
+            insightFinder_user_name = parser.get('kafka', 'insightFinder_user_name')
+            sampling_interval = parser.get('kafka', 'sampling_interval')
+            group_id = parser.get('kafka', 'group_id')
+            if len(insightFinder_license_key) == 0:
+                logger.error("Agent not correctly configured(license key). Check config file.")
+                sys.exit(1)
+            if len(insightFinder_project_name) == 0:
+                logger.error("Agent not correctly configured(project name). Check config file.")
+                sys.exit(1)
+            if len(insightFinder_user_name) == 0:
+                logger.error("Agent not correctly configured(username). Check config file.")
+                sys.exit(1)
+            if len(sampling_interval) == 0:
+                logger.error("Agent not correctly configured(sampling interval). Check config file.")
+                sys.exit(1)
+            if len(group_id) == 0:
+                logger.error("Agent not correctly configured(group id). Check config file.")
+                sys.exit(1)
+            config_vars['licenseKey'] = insightFinder_license_key
+            config_vars['projectName'] = insightFinder_project_name
+            config_vars['userName'] = insightFinder_user_name
+            config_vars['samplingInterval'] = sampling_interval
+            config_vars['groupId'] = group_id
+    except IOError:
+        logger.error("config.ini file is missing")
+    return config_vars
 
 
 def get_kafka_config():
@@ -178,8 +214,8 @@ def send_data(metric_data):
     to_send_data_dict["agentType"] = "LogStreaming"
 
     to_send_data_json = json.dumps(to_send_data_dict)
-    logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
-    logger.debug("Data: " + str(to_send_data_json))
+    # logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
+    # logger.debug("Data: " + str(to_send_data_json))
 
     # send the data
     post_url = parameters['serverUrl'] + "/customprojectrawdata"
@@ -199,7 +235,7 @@ def parse_consumer_messages(consumer, filter_hosts):
     for message in consumer:
         try:
             json_message = json.loads(message.value)
-            logger.info(json_message)
+            # logger.info(json_message)
             host_name = json_message.get('beat', {}).get('hostname', {})
             message = json_message.get('message', {})
             timestamp = json_message.get('@timestamp', {})[:-5]
@@ -272,7 +308,7 @@ def kafka_data_consumer(consumer_id):
     (brokers, topic, filter_hosts) = get_kafka_config()
     consumer = KafkaConsumer(bootstrap_servers=brokers,
                              auto_offset_reset='earliest', consumer_timeout_ms=1000 * parameters['timeout'],
-                             group_id="if_consumers")
+                             group_id=agentConfigVars['groupId'])
     consumer.subscribe([topic])
     parse_consumer_messages(consumer, filter_hosts)
     consumer.close()
