@@ -209,8 +209,8 @@ def send_data(metric_data):
     to_send_data_dict["agentType"] = "LogStreaming"
 
     to_send_data_json = json.dumps(to_send_data_dict)
-    logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
-    logger.debug("Data: " + str(to_send_data_json))
+    # logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
+    # logger.debug("Data: " + str(to_send_data_json))
 
     # send the data
     post_url = parameters['serverUrl'] + "/customprojectrawdata"
@@ -230,7 +230,7 @@ def parse_consumer_messages(consumer, filter_hosts):
     for message in consumer:
         try:
             json_message = json.loads(message.value)
-            logger.info(json_message)
+            # logger.info(json_message)
             host_name = json_message.get('beat', {}).get('hostname', {})
             message = json_message.get('message', {})
             timestamp = json_message.get('@timestamp', {})[:-5]
