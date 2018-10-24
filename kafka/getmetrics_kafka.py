@@ -71,7 +71,7 @@ def save_grouping(grouping_map):
 
 def load_grouping():
     if (os.path.isfile('grouping.json')):
-        logger.debug("Grouping file exists. Loading..")
+        # logger.debug("Grouping file exists. Loading..")
         with open('grouping.json', 'r+') as f:
             try:
                 grouping_map = json.loads(f.read())
@@ -103,40 +103,39 @@ def get_grouping_id(metric_key, grouping_map):
 
 
 def get_agent_config_vars():
-    configVars = {}
+    config_vars = {}
     try:
-        with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as configFile:
-            fileContent = configFile.readlines()
-            if len(fileContent) < 6:
-                logger.error("Agent not correctly configured. Check .agent.bashrc file.")
+        if os.path.exists(os.path.join(parameters['homepath'], "kafka", "config.ini")):
+            parser = SafeConfigParser()
+            parser.read(os.path.join(parameters['homepath'], "kafka", "config.ini"))
+            insightFinder_license_key = parser.get('kafka', 'insightFinder_license_key')
+            insightFinder_project_name = parser.get('kafka', 'insightFinder_project_name')
+            insightFinder_user_name = parser.get('kafka', 'insightFinder_user_name')
+            sampling_interval = parser.get('kafka', 'sampling_interval')
+            group_id = parser.get('kafka', 'group_id')
+            if len(insightFinder_license_key) == 0:
+                logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
-            # get license key
-            licenseKeyLine = fileContent[0].split(" ")
-            if len(licenseKeyLine) != 2:
-                logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
+            if len(insightFinder_project_name) == 0:
+                logger.error("Agent not correctly configured(project name). Check config file.")
                 sys.exit(1)
-            configVars['licenseKey'] = licenseKeyLine[1].split("=")[1].strip()
-            # get project name
-            projectNameLine = fileContent[1].split(" ")
-            if len(projectNameLine) != 2:
-                logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
+            if len(insightFinder_user_name) == 0:
+                logger.error("Agent not correctly configured(username). Check config file.")
                 sys.exit(1)
-            configVars['projectName'] = projectNameLine[1].split("=")[1].strip()
-            # get username
-            userNameLine = fileContent[2].split(" ")
-            if len(userNameLine) != 2:
-                logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
+            if len(sampling_interval) == 0:
+                logger.error("Agent not correctly configured(sampling interval). Check config file.")
                 sys.exit(1)
-            configVars['userName'] = userNameLine[1].split("=")[1].strip()
-            # get sampling interval
-            samplingIntervalLine = fileContent[4].split(" ")
-            if len(samplingIntervalLine) != 2:
-                logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
+            if len(group_id) == 0:
+                logger.error("Agent not correctly configured(group id). Check config file.")
                 sys.exit(1)
-            configVars['samplingInterval'] = samplingIntervalLine[1].split("=")[1].strip()
+            config_vars['licenseKey'] = insightFinder_license_key
+            config_vars['projectName'] = insightFinder_project_name
+            config_vars['userName'] = insightFinder_user_name
+            config_vars['samplingInterval'] = sampling_interval
+            config_vars['groupId'] = group_id
     except IOError:
-        logger.error("Agent not correctly configured. Missing .agent.bashrc file.")
-    return configVars
+        logger.error("config.ini file is missing")
+    return config_vars
 
 
 def get_reporting_config_vars():
@@ -199,7 +198,7 @@ def sendData(metricData):
     toSendDataDict["agentType"] = "kafka"
 
     toSendDataJSON = json.dumps(toSendDataDict)
-    logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))))
+    # logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))))
 
     # send the data
     postUrl = parameters['serverUrl'] + "/customprojectrawdata"
@@ -209,7 +208,7 @@ def sendData(metricData):
         # updateLastSentFiles(pcapFileList)
     else:
         logger.info("Failed to send data.")
-    logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
+    # logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
 
 
 def isTimeFormat(timeString, format):
@@ -248,7 +247,6 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics_set):
     collectedValues = 0
     collectedMetricsMap = {}
     completedRowsTimestampSet = set()
-
 
     for message in consumer:
         try:
@@ -308,8 +306,8 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics_set):
                         # update the collected metrics for this timestamp
                         collectedMetricsMap[epoch] = collectedMetricsSet
                 elif metric_class == "filesystem":
-                    if  json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}) != "/":
-                        #logger.info("Skipping: " +  json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}))
+                    if json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}) != "/":
+                        # logger.info("Skipping: " +  json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}))
                         continue
                     # add used-bytes
                     metric_name_bytes = "filesystem/used-bytes"
@@ -334,7 +332,6 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics_set):
                         valueMap[header_field_pct] = str(metric_value_pct)
                         # add collected metric name
                         collectedMetricsSet.add(metric_name_pct)
-                    
                     # add to raw data map
                     rawDataMap[epoch] = valueMap
                     collectedValues += 1
@@ -346,7 +343,6 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics_set):
                 # add the completed timestamp into set
                 completedRowsTimestampSet.add(epoch)
                 # print "All metrics collected for timestamp " + str(epoch) + " Completed rows count: " + str(len(completedRowsTimestampSet))
-            
             numberOfCompletedRows = len(completedRowsTimestampSet)
             # check whether the number of completed rows is greater than 100
             if numberOfCompletedRows >= CHUNK_METRIC_VALUES:
@@ -362,7 +358,7 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics_set):
                     metricData.append(valueMap)
 
                 chunkNumber += 1
-                logger.debug("Sending Chunk Number: " + str(chunkNumber) + " from " + start + " to " + end)
+                # logger.debug("Sending Chunk Number: " + str(chunkNumber) + " from " + start + " to " + end)
                 sendData(metricData)
                 # clean the buffer and completed row set
                 metricData = []
@@ -382,7 +378,7 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics_set):
         logger.info("No data remaining to send")
     else:
         chunkNumber += 1
-        logger.debug("Sending Final Chunk: " + str(chunkNumber) + " from " + start + " to " + end)
+        # logger.debug("Sending Final Chunk: " + str(chunkNumber) + " from " + start + " to " + end)
         sendData(metricData)
 
 
@@ -431,11 +427,12 @@ if __name__ == "__main__":
         # Kafka consumer configuration
         (brokers, topic, filter_hosts, all_metrics_set) = getKafkaConfig()
         consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id="if_consumers_new")
+                                 group_id=agent_config_vars['groupId'])
         consumer.subscribe([topic])
         parseConsumerMessages(consumer, grouping_map, all_metrics_set)
 
         consumer.close()
         save_grouping(grouping_map)
     except KeyboardInterrupt:
-        print "Interrupt from keyboard"
+        print
+        "Interrupt from keyboard"
