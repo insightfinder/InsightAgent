@@ -269,7 +269,7 @@ def kafka_data_consumer(consumer_id):
     # Kafka consumer configuration
     (brokers, topic, filter_hosts) = get_kafka_config()
     consumer = KafkaConsumer(bootstrap_servers=brokers,
-                             auto_offset_reset='earliest', consumer_timeout_ms=1000 * parameters['timeout'],
+                             auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
                              group_id=agentConfigVars['groupId'])
     consumer.subscribe([topic])
     parse_consumer_messages(consumer, filter_hosts)
