@@ -60,40 +60,18 @@ def get_parameters():
     return parameters
 
 
-def save_grouping(grouping_map):
-    """
-    Saves the grouping data to grouping.json
-    :return: None
-    """
-    with open('grouping.json', 'w+') as f:
-        f.write(json.dumps(grouping_map))
 
 
-def load_grouping():
-    if (os.path.isfile('grouping.json')):
-        # logger.debug("Grouping file exists. Loading..")
-        with open('grouping.json', 'r+') as f:
-            try:
-                grouping_map = json.loads(f.read())
-            except ValueError:
-                grouping_map = json.loads("{}")
-                logger.debug("Error parsing grouping.json.")
-    else:
-        grouping_map = json.loads("{}")
-    return grouping_map
 
 
-def get_grouping_id(metric_key, grouping_map, normalization_ids_map):
+def get_grouping_id(metric_key, normalization_ids_map):
     """
     Get grouping id for a metric key
     Parameters:
     - `metric_key` : metric key str to get group id.
     - `temp_id` : proposed group id integer
     """
-    if metric_key in grouping_map:
-        grouping_id = int(grouping_map[metric_key])
-    else:
-        grouping_id = int(normalization_ids_map[metric_key])
+    grouping_id = int(normalization_ids_map[metric_key])
     return grouping_id
 
 
@@ -251,7 +229,7 @@ def isReceivedAllMetrics(collectedMetrics, all_metrics):
             return False
     return True
 
-def parseConsumerMessages(consumer, grouping_map, all_metrics_set, normalization_ids_map):
+def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map):
     rawDataMap = collections.OrderedDict()
     metricData = []
     chunkNumber = 0
@@ -290,7 +268,7 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics_set, normalization
                         if metric_name not in all_metrics_set:
                             continue
                         header_field = metric_name + "[" + host_name + "]:" + str(
-                            get_grouping_id(metric_name, grouping_map, normalization_ids_map))
+                            get_grouping_id(metric_name, normalization_ids_map))
                         valueMap[header_field] = str(metric_value)
                         rawDataMap[epoch] = valueMap
                         # add collected metric name
@@ -308,7 +286,7 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics_set, normalization
                         if metric_name not in all_metrics_set:
                             continue
                         header_field = metric_name + "[" + host_name + "]:" + str(
-                            get_grouping_id(metric_name, grouping_map, normalization_ids_map))
+                            get_grouping_id(metric_name, normalization_ids_map))
                         valueMap[header_field] = str(metric_value)
                         rawDataMap[epoch] = valueMap
                         # add collected metric name
@@ -327,7 +305,7 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics_set, normalization
                         metric_value_bytes = json_message.get('system', {}).get(
                             'filesystem', {}).get('used', {}).get('bytes', '')
                         header_field_bytes = metric_name_bytes + "[" + host_name + "]:" + str(
-                            get_grouping_id(metric_name_bytes, grouping_map, normalization_ids_map))
+                            get_grouping_id(metric_name_bytes, normalization_ids_map))
                         valueMap[header_field_bytes] = str(metric_value_bytes)
                         # add collected metric name
                         collectedMetricsSet.add(metric_name_bytes)
@@ -339,7 +317,7 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics_set, normalization
                         metric_value_pct = json_message.get('system', {}).get(
                             'filesystem', {}).get('used', {}).get('pct', '')
                         header_field_pct = metric_name_pct + "[" + host_name + "]:" + str(
-                            get_grouping_id(metric_name_pct, grouping_map, normalization_ids_map))
+                            get_grouping_id(metric_name_pct, normalization_ids_map))
                         valueMap[header_field_pct] = str(metric_value_pct)
                         # add collected metric name
                         collectedMetricsSet.add(metric_name_pct)
@@ -428,7 +406,6 @@ if __name__ == "__main__":
     parameters = get_parameters()
     agent_config_vars = get_agent_config_vars(normalization_ids_map)
     reporting_config_vars = get_reporting_config_vars()
-    grouping_map = load_grouping()
 
     # path to write the daily csv file
     data_directory = 'data/'
@@ -440,9 +417,8 @@ if __name__ == "__main__":
         consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
                                  group_id=agent_config_vars['groupId'])
         consumer.subscribe([topic])
-        parseConsumerMessages(consumer, grouping_map, all_metrics_set, normalization_ids_map)
+        parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map)
 
         consumer.close()
-        save_grouping(grouping_map)
     except KeyboardInterrupt:
         print "Interrupt from keyboard"
