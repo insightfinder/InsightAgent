@@ -245,7 +245,7 @@ elif [ $AGENT_TYPE == 'kafka-logs' ]; then
 elif [ $AGENT_TYPE == 'kafka' ]; then
 	MONITRCLOC=/etc/monit/monitrc
 	echo "check process kafka matching \"kafka/getmetrics_kafka.py\"
-			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l &>$INSIGHTAGENTDIR/log/kafka-metrics.log &\"
+			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &\"
      		" >> $MONITRCLOC
     /usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &
     service monit restart
