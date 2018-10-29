@@ -237,16 +237,24 @@ elif [ $AGENT_TYPE == 'opentsdb' ]; then
 	fi
 elif [ $AGENT_TYPE == 'kafka-logs' ]; then
 	MONITRCLOC=/etc/monit/monitrc
+	MONITCONFIGLOC=/etc/monit/monit.conf
 	echo "check process kafka-logs matching \"kafka_logs/getlogs_kafka.py\"
 			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES &>$INSIGHTAGENTDIR/log/kafka-logs.log &\"
      		" >> $MONITRCLOC
+    echo "check process kafka-logs matching \"kafka_logs/getlogs_kafka.py\"
+			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES &>$INSIGHTAGENTDIR/log/kafka-logs.log &\"
+     		" >> MONITCONFIGLOC
     /usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES &>$INSIGHTAGENTDIR/log/kafka-logs.log &
     service monit restart
 elif [ $AGENT_TYPE == 'kafka' ]; then
 	MONITRCLOC=/etc/monit/monitrc
+	MONITCONFIGLOC=/etc/monit/monit.conf
 	echo "check process kafka matching \"kafka/getmetrics_kafka.py\"
 			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &\"
      		" >> $MONITRCLOC
+    echo "check process kafka matching \"kafka/getmetrics_kafka.py\"
+			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &\"
+     		" >> $MONITCONFIGLOC
     /usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &
     service monit restart
 elif [ $AGENT_TYPE == 'logStreaming' ]; then
