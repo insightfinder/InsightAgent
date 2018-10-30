@@ -139,8 +139,9 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
 
   private
   def get_headers()
-    base = { "Content-Type" => "application/x-www-form-urlencoded" }
-    base = { "agent-type" => "Logstash" }
+    base = {}
+    base["Content-Type"] = "application/x-www-form-urlencoded"
+    base["agent-type"] ="Logstash"
     base["Content-Encoding"] = "deflate" if @compress
     base.merge(@extra_headers)
   end # def get_headers
