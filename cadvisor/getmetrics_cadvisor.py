@@ -8,6 +8,7 @@ import subprocess
 import socket
 from optparse import OptionParser
 import json
+from ConfigParser import SafeConfigParser
 
 usage = "Usage: %prog [options]"
 parser = OptionParser(usage=usage)
@@ -24,12 +25,15 @@ datadir = 'data/'
 hostname = socket.gethostname()
 cAdvisoraddress = "http://" + hostname + ":8080/api/v1.3/docker/"
 
-command = ['bash', '-c', 'source ' + str(homepath) + '/.agent.bashrc && env']
-proc = subprocess.Popen(command, stdout=subprocess.PIPE)
-for line in proc.stdout:
-    (key, _, value) = line.partition("=")
-    os.environ[key] = value.strip()
-proc.communicate()
+try:
+    if os.path.exists(os.path.join(homepath, "cadvisor", "config.ini")):
+        parser = SafeConfigParser()
+        parser.read(os.path.join(homepath, "cadvisor", "config.ini"))
+        sampling_interval = parser.get('cadvisor', 'sampling_interval')
+        os.environ["SAMPLING_INTERVAL"] = sampling_interval
+except IOError:
+        print("config.ini file is missing")
+
 samplingInterval = os.environ["SAMPLING_INTERVAL"]
 if samplingInterval[-1:] == 's':
     samplingInterval = int(samplingInterval[:-1])
