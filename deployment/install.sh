@@ -151,12 +151,30 @@ then
 	rm $AGENTRC
 fi
 
-echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> $AGENTRC
-echo "export INSIGHTFINDER_PROJECT_NAME=$PROJECTNAME" >> $AGENTRC
-echo "export INSIGHTFINDER_USER_NAME=$USERNAME" >> $AGENTRC
-echo "export INSIGHTAGENTDIR=$INSIGHTAGENTDIR" >> $AGENTRC
-echo "export SAMPLING_INTERVAL=$SAMPLING_INTERVAL" >> $AGENTRC
-echo "export REPORTING_INTERVAL=$REPORTING_INTERVAL" >> $AGENTRC
+if [ $AGENT_TYPE == 'kafka' ]; then
+	if [ ! -f $INSIGHTAGENTDIR/kafka/config.ini ]; then
+		touch $INSIGHTAGENTDIR/kafka/config.ini
+		echo "insightFinder_license_key=$LICENSEKEY" >> $INSIGHTAGENTDIR/kafka/config.ini
+		echo "insightFinder_project_nameE=$PROJECTNAME" >> $INSIGHTAGENTDIR/kafka/config.ini
+		echo "insightFinder_user_name=$USERNAME" >> $INSIGHTAGENTDIR/kafka/config.ini
+		echo "sampling_interval=$SAMPLING_INTERVAL" >> $INSIGHTAGENTDIR/kafka/config.ini
+	fi
+elif [ $AGENT_TYPE == 'kafka-logs' ]; then
+	if [ ! -f $INSIGHTAGENTDIR/kafka_logs/config.ini ]; then
+		touch $INSIGHTAGENTDIR/kafka_logs/config.ini
+		echo "insightFinder_license_key=$LICENSEKEY" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
+		echo "insightFinder_project_nameE=$PROJECTNAME" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
+		echo "insightFinder_user_name=$USERNAME" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
+		echo "sampling_interval=$SAMPLING_INTERVAL" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
+	fi
+else
+	echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> $AGENTRC
+	echo "export INSIGHTFINDER_PROJECT_NAME=$PROJECTNAME" >> $AGENTRC
+	echo "export INSIGHTFINDER_USER_NAME=$USERNAME" >> $AGENTRC
+	echo "export INSIGHTAGENTDIR=$INSIGHTAGENTDIR" >> $AGENTRC
+	echo "export SAMPLING_INTERVAL=$SAMPLING_INTERVAL" >> $AGENTRC
+	echo "export REPORTING_INTERVAL=$REPORTING_INTERVAL" >> $AGENTRC
+fi
 
 if [ $AGENT_TYPE == 'metricFileReplay' ] || [ $AGENT_TYPE == 'logFileReplay' ]; then
 	exit 0
@@ -218,9 +236,27 @@ elif [ $AGENT_TYPE == 'opentsdb' ]; then
 		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
 	fi
 elif [ $AGENT_TYPE == 'kafka-logs' ]; then
-    sudo /usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES &>$INSIGHTAGENTDIR/log/kafka-logs.log &
+	MONITRCLOC=/etc/monit/monitrc
+	MONITCONFIGLOC=/etc/monit/monit.conf
+	echo "check process kafka-logs matching \"kafka_logs/getlogs_kafka.py\"
+			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES &>$INSIGHTAGENTDIR/log/kafka-logs.log &\"
+     		" >> $MONITRCLOC
+    echo "check process kafka-logs matching \"kafka_logs/getlogs_kafka.py\"
+			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES &>$INSIGHTAGENTDIR/log/kafka-logs.log &\"
+     		" >> MONITCONFIGLOC
+    /usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES &>$INSIGHTAGENTDIR/log/kafka-logs.log &
+    service monit restart
 elif [ $AGENT_TYPE == 'kafka' ]; then
-    sudo /usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &
+	MONITRCLOC=/etc/monit/monitrc
+	MONITCONFIGLOC=/etc/monit/monit.conf
+	echo "check process kafka matching \"kafka/getmetrics_kafka.py\"
+			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &\"
+     		" >> $MONITRCLOC
+    echo "check process kafka matching \"kafka/getmetrics_kafka.py\"
+			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &\"
+     		" >> $MONITCONFIGLOC
+    /usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &
+    service monit restart
 elif [ $AGENT_TYPE == 'logStreaming' ]; then
 	echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportLog.py -d $INSIGHTAGENTDIR -w $SERVER_URL -m logStreaming 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
 else
