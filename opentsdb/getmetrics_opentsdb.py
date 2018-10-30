@@ -7,6 +7,7 @@ import os
 import requests
 import json
 import logging
+from ConfigParser import SafeConfigParser
 
 '''
 this script gathers system info from opentsdb and use http api to send to server
@@ -42,35 +43,32 @@ def getParameters():
 
 def getAgentConfigVars():
     configVars = {}
-    with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as configFile:
-        fileContent = configFile.readlines()
-        if len(fileContent) < 6:
-            logger.error("Agent not correctly configured. Check .agent.bashrc file.")
-            sys.exit(1)
-        # get license key
-        licenseKeyLine = fileContent[0].split(" ")
-        if len(licenseKeyLine) != 2:
-            logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['licenseKey'] = licenseKeyLine[1].split("=")[1].strip()
-        # get project name
-        projectNameLine = fileContent[1].split(" ")
-        if len(projectNameLine) != 2:
-            logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['projectName'] = projectNameLine[1].split("=")[1].strip()
-        # get username
-        userNameLine = fileContent[2].split(" ")
-        if len(userNameLine) != 2:
-            logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['userName'] = userNameLine[1].split("=")[1].strip()
-        # get sampling interval
-        samplingIntervalLine = fileContent[4].split(" ")
-        if len(samplingIntervalLine) != 2:
-            logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['samplingInterval'] = samplingIntervalLine[1].split("=")[1].strip()
+    try:
+        if os.path.exists(os.path.join(parameters['homepath'], "opentsdb", "config.ini")):
+            parser = SafeConfigParser()
+            parser.read(os.path.join(parameters['homepath'], "opentsdb", "config.ini"))
+            insightFinder_license_key = parser.get('opentsdb', 'insightFinder_license_key')
+            insightFinder_project_name = parser.get('opentsdb', 'insightFinder_project_name')
+            insightFinder_user_name = parser.get('opentsdb', 'insightFinder_user_name')
+            sampling_interval = parser.get('opentsdb', 'sampling_interval')
+            if len(insightFinder_license_key) == 0:
+                logger.error("Agent not correctly configured(license key). Check config file.")
+                sys.exit(1)
+            if len(insightFinder_project_name) == 0:
+                logger.error("Agent not correctly configured(project name). Check config file.")
+                sys.exit(1)
+            if len(insightFinder_user_name) == 0:
+                logger.error("Agent not correctly configured(username). Check config file.")
+                sys.exit(1)
+            if len(sampling_interval) == 0:
+                logger.error("Agent not correctly configured(sampling interval). Check config file.")
+                sys.exit(1)
+            configVars['licenseKey'] = insightFinder_license_key
+            configVars['projectName'] = insightFinder_project_name
+            configVars['userName'] = insightFinder_user_name
+            configVars['samplingInterval'] = sampling_interval
+    except IOError:
+        logger.error("config.ini file is missing")
     return configVars
 
 
