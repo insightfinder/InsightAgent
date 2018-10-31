@@ -8,6 +8,7 @@ import requests
 import logging
 import sys
 import time
+from ConfigParser import SafeConfigParser
 
 
 class InsightfinderStore(object):
@@ -98,35 +99,32 @@ class InsightfinderStore(object):
             self.causal_key = options.causal_key
 
     def _get_agent_config_vars(self):
-        with open(os.path.join(self.homepath, ".agent.bashrc"), 'r') as configFile:
-            file_content = configFile.readlines()
-            if len(file_content) < 6:
-                self.logger.error("Agent not correctly configured. Check .agent.bashrc file.")
-                sys.exit(1)
-            # get license key
-            license_key_line = file_content[0].split(" ")
-            if len(license_key_line) != 2:
-                self.logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
-                sys.exit(1)
-            self.license_key = license_key_line[1].split("=")[1].strip()
-            # get project name
-            project_name_line = file_content[1].split(" ")
-            if len(project_name_line) != 2:
-                self.logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
-                sys.exit(1)
-            self.project_name = project_name_line[1].split("=")[1].strip()
-            # get username
-            user_name_line = file_content[2].split(" ")
-            if len(user_name_line) != 2:
-                self.logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
-                sys.exit(1)
-            self.user_name = user_name_line[1].split("=")[1].strip()
-            # get sampling interval
-            sampling_interval_line = file_content[4].split(" ")
-            if len(sampling_interval_line) != 2:
-                self.logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
-                sys.exit(1)
-            self.sampling_interval = sampling_interval_line[1].split("=")[1].strip()
+        try:
+            if os.path.exists(os.path.join(self.homepath, "metadata", "config.ini")):
+                parser = SafeConfigParser()
+                parser.read(os.path.join(self.homepath, "metadata", "config.ini"))
+                insightFinder_license_key = parser.get('metadata', 'insightFinder_license_key')
+                insightFinder_project_name = parser.get('metadata', 'insightFinder_project_name')
+                insightFinder_user_name = parser.get('metadata', 'insightFinder_user_name')
+                sampling_interval = parser.get('metadata', 'sampling_interval')
+                if len(insightFinder_license_key) == 0:
+                    self.logger.error("Agent not correctly configured(license key). Check config file.")
+                    sys.exit(1)
+                if len(insightFinder_project_name) == 0:
+                    self.logger.error("Agent not correctly configured(project name). Check config file.")
+                    sys.exit(1)
+                if len(insightFinder_user_name) == 0:
+                    self.logger.error("Agent not correctly configured(username). Check config file.")
+                    sys.exit(1)
+                if len(sampling_interval) == 0:
+                    self.logger.error("Agent not correctly configured(sampling interval). Check config file.")
+                    sys.exit(1)
+                self.license_key = insightFinder_license_key
+                self.project_name = insightFinder_project_name
+                self.user_name = insightFinder_user_name
+                self.sampling_interval = sampling_interval
+        except IOError:
+            self.logger.error("config.ini file is missing")
 
     def _get_reporting_config_vars(self):
         with open(os.path.join(self.homepath, "reporting_config.json"), 'r') as f:
