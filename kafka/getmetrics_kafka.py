@@ -10,7 +10,7 @@ import time
 from ConfigParser import SafeConfigParser
 from datetime import datetime
 from optparse import OptionParser
-
+from multiprocessing import Process
 import pytz
 import requests
 from kafka import KafkaConsumer
@@ -398,6 +398,18 @@ class LessThanFilter(logging.Filter):
         return 1 if record.levelno < self.max_level else 0
 
 
+
+def kafka_data_consumer(consumer_id):
+    logger.info("Started log consumer number " + consumer_id)
+    (brokers, topic, filter_hosts, all_metrics_set) = getKafkaConfig()
+    consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
+                                 group_id=agent_config_vars['groupId'])
+    consumer.subscribe([topic])
+    parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map)
+    consumer.close()
+    logger.info("Closed log consumer number " + consumer_id)
+
+
 if __name__ == "__main__":
     CHUNK_METRIC_VALUES = 10
     GROUPING_START = 15000
@@ -412,13 +424,9 @@ if __name__ == "__main__":
     prev_csv_header_list = "timestamp,"
     hostname = socket.gethostname().partition(".")[0]
     try:
-        # Kafka consumer configuration
-        (brokers, topic, filter_hosts, all_metrics_set) = getKafkaConfig()
-        consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id=agent_config_vars['groupId'])
-        consumer.subscribe([topic])
-        parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map)
-
-        consumer.close()
+        t1 = Process(target=kafka_data_consumer, args=('1',))
+        t2 = Process(target=kafka_data_consumer, args=('2',))
+        t1.start()
+        t2.start()
     except KeyboardInterrupt:
         print "Interrupt from keyboard"
