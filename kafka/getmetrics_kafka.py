@@ -229,7 +229,7 @@ def isReceivedAllMetrics(collectedMetrics, all_metrics):
             return False
     return True
 
-def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map):
+def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filter_hosts):
     rawDataMap = collections.OrderedDict()
     metricData = []
     chunkNumber = 0
@@ -405,7 +405,7 @@ def kafka_data_consumer(consumer_id):
     consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
                                  group_id=agent_config_vars['groupId'])
     consumer.subscribe([topic])
-    parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map)
+    parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filter_hosts)
     consumer.close()
     logger.info("Closed log consumer number " + consumer_id)
 
