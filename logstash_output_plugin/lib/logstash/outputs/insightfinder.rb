@@ -66,21 +66,25 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
       return
     end
 
-    content = format_event(event)
-
     if @interval <= 0 # means send immediately
-      send_request(content)
+      send_request(event)
       return
     end
 
     @semaphore.synchronize {
-      now = Time.now
-      @pile << content
-      if now - @timer > @interval # ready to send
-        dataBody = {"agentType" => "Logstash", "licenseKey" => @licenseKey, "projectName" => @projectName, "userName" => @userName, "projectType" => @projectType, "metricData" => @pile}
-        send_request(LogStash::Json.dump(dataBody))
-        @timer = now
-        @pile.clear
+        now = Time.now
+        #Modify the event
+        if_event = Hash.new
+        if_event['eventId'] = event.timestamp.to_i * 1000
+        if_event['tag'] = event.sprintf(event.get('host'))
+        if_event['data'] = event.sprintf(event.get('message'))
+        event_json = LogStash::Json.dump(if_event)
+        @pile << if_event
+        if now - @timer > @interval # ready to send
+            dataBody = {"agentType" => "LogStreaming", "licenseKey" => @licenseKey, "projectName" => @projectName, "userName" => @userName, "projectType" => @projectType, "metricData" => LogStash::Json.dump(@pile)}
+            send_request(LogStash::Json.dump(dataBody))
+            @timer = now
+            @pile.clear
       end
     }
   end # def receive
@@ -103,7 +107,6 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
       content
     end
     headers = get_headers()
-
     request = client.send(:parallel).send(:post, @url, :body => body, :headers => headers)
     request.on_complete do
       @request_tokens << token
@@ -117,6 +120,7 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
           :headers => headers
       )
       end
+      @logger.info("Successfully sent data.")
     end
 
     request.on_failure do |exception|
@@ -135,37 +139,12 @@ class LogStash::Outputs::Insightfinder < LogStash::Outputs::Base
 
   private
   def get_headers()
-    base = { "Content-Type" => "text/plain" }
+    base = {}
+    base["Content-Type"] = "application/x-www-form-urlencoded"
+    base["agent-type"] ="Logstash"
     base["Content-Encoding"] = "deflate" if @compress
     base.merge(@extra_headers)
   end # def get_headers
-
-  private
-  def format_event(event)
-    if @format.to_s.strip.length == 0
-      LogStash::Json.dump(map_event(event))
-    else
-      f = if @format.include? "%{@json}"
-        @format.gsub("%{@json}", LogStash::Json.dump(map_event(event)))
-      else
-        @format
-      end
-      event.sprintf(f)
-    end
-  end # def format_event
-
-  private
-  def map_event(event)
-    if @json_mapping
-      @json_mapping.reduce({}) do |acc, kv|
-        k, v = kv
-        acc[k] = event.sprintf(v)
-        acc
-      end
-    else
-      event.to_hash
-    end
-  end # def map_event
 
   private
   def log_failure(message, opts)
