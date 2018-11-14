@@ -198,16 +198,37 @@ def parse_consumer_messages(consumer, filter_hosts):
     start_time = time.time()
     for message in consumer:
         try:
+            #logger.info(message)
             json_message = json.loads(message.value)
-            # logger.info(json_message)
-            host_name = json_message.get('beat', {}).get('hostname', {})
-            message = json_message.get('message', {})
-            timestamp = json_message.get('@timestamp', {})[:-5]
+            #logger.info(json_message)
+            # host_name = json_message.get('beat', {}).get('hostname', {})
+            # message = json_message.get('message', {})
+            # timestamp = json_message.get('@timestamp', {})[:-5]
+            # logger.info(timestamp)
+
+            u_payload = json_message.get('u_payload', {})
+            if 'ci_item_dv' in u_payload:
+                host_name = u_payload.get('ci_item_dv', {}).split(" - ",1)[1]
+            elif 'cmdb_ci_dv' in u_payload:
+                host_name = u_payload.get('cmdb_ci_dv', {}).split(" - ", 1)[1]
+            else:
+                host_name = 'UnKnown'
+            # host_name = json_message.get('u_payload', {}).get('ci_item_dv', {}).split(" - ",1)[1]
+            # if len(host_name) == 0:
+            #     host_name = json_message.get('u_payload', {}).get('cmdb_ci_dv', {}).split(" - ", 1)[1]
+            # if len(host_name) == 0:
+            #     host_name = "unknown"
+            #logger('asdasdsadasdsadasdasdas')
+            #logger.info(host_name.upper())
+            message = json_message.get('u_payload', {})
+            timestamp = json_message.get('u_payload',{}).get('sys_updated_on',{})
+            timestamp = timestamp.replace(" ", "T")
+            #logger.info(timestamp)
 
             if len(filter_hosts) != 0 and host_name.upper() not in (filter_host.upper() for filter_host in
                                                                     filter_hosts):
                 continue
-
+            #logger.info(host_name.upper())
             if line_count == parameters['chunk_lines']:
                 logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
                 send_data(current_row)
@@ -222,13 +243,14 @@ def parse_consumer_messages(consumer, filter_hosts):
                     epoch = get_timestamp_for_zone(timestamp, "GMT", pattern)
                 except ValueError:
                     continue
-
+            #logger.info(epoch)
             current_log_msg = dict()
             current_log_msg['timestamp'] = epoch
             current_log_msg['tag'] = host_name
             current_log_msg['data'] = message
             current_row.append(current_log_msg)
             line_count += 1
+            #logger.info(len(current_row))
         except:
             continue
 
@@ -275,7 +297,7 @@ def kafka_data_consumer(consumer_id):
                              auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
                              group_id=agentConfigVars['groupId'])
     else:
-        logger.info(agentConfigVars["clientId"])
+        #logger.info(agentConfigVars["clientId"])
         consumer = KafkaConsumer(bootstrap_servers=brokers,
                                  auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
                                  group_id=agentConfigVars['groupId'], client_id = agentConfigVars["clientId"])
