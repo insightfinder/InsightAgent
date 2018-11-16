@@ -242,6 +242,7 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
     for message in consumer:
         try:
             json_message = json.loads(message.value)
+            #logger.info(json_message)
             timestamp = json_message.get('@timestamp', {})[:-5]
             host_name = json_message.get('beat', {}).get('hostname', {})
             metric_module = json_message.get('metricset', {}).get('module', {})
@@ -349,7 +350,7 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
                     metricData.append(valueMap)
 
                 chunkNumber += 1
-                # logger.debug("Sending Chunk Number: " + str(chunkNumber) + " from " + start + " to " + end)
+                logger.debug("Sending Chunk Number: " + str(chunkNumber) + " from " + start + " to " + end)
                 sendData(metricData)
                 # clean the buffer and completed row set
                 metricData = []
@@ -369,7 +370,7 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
         logger.info("No data remaining to send")
     else:
         chunkNumber += 1
-        # logger.debug("Sending Final Chunk: " + str(chunkNumber) + " from " + start + " to " + end)
+        logger.debug("Sending Final Chunk: " + str(chunkNumber) + " from " + start + " to " + end)
         sendData(metricData)
 
 
@@ -402,7 +403,7 @@ class LessThanFilter(logging.Filter):
 
 
 def kafka_data_consumer(consumer_id):
-    logger.info("Started log consumer number " + consumer_id)
+    logger.info("Started metric consumer number " + consumer_id)
     (brokers, topic, filter_hosts, all_metrics_set) = getKafkaConfig()
     if agent_config_vars["clientId"] == "":
         consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest',
