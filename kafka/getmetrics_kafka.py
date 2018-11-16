@@ -87,6 +87,7 @@ def get_agent_config_vars(normalization_ids_map):
             sampling_interval = parser.get('kafka', 'sampling_interval')
             group_id = parser.get('kafka', 'group_id')
             all_metrics = parser.get('kafka', 'all_metrics').split(",")
+            client_id = parser.get('kafka', 'client_id')
             normalization_ids = parser.get('kafka', 'normalization_id').split(",")
             if len(insightFinder_license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
@@ -122,6 +123,7 @@ def get_agent_config_vars(normalization_ids_map):
             config_vars['userName'] = insightFinder_user_name
             config_vars['samplingInterval'] = sampling_interval
             config_vars['groupId'] = group_id
+            config_vars['clientId'] = client_id
     except IOError:
         logger.error("config.ini file is missing")
     return config_vars
@@ -402,8 +404,14 @@ class LessThanFilter(logging.Filter):
 def kafka_data_consumer(consumer_id):
     logger.info("Started log consumer number " + consumer_id)
     (brokers, topic, filter_hosts, all_metrics_set) = getKafkaConfig()
-    consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
+    if agent_config_vars["clientId"] == "":
+        consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest',
+                                 consumer_timeout_ms=1000 * parameters['timeout'],
                                  group_id=agent_config_vars['groupId'])
+    else:
+        consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest',
+                                 consumer_timeout_ms=1000 * parameters['timeout'],
+                                 group_id=agent_config_vars['groupId'], client_id=agentConfigVars["clientId"])
     consumer.subscribe([topic])
     parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filter_hosts)
     consumer.close()
