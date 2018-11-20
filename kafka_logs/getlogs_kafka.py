@@ -84,11 +84,11 @@ def get_agent_config_vars():
         if os.path.exists(os.path.join(parameters['homepath'], "kafka_logs", "config.ini")):
             parser = SafeConfigParser()
             parser.read(os.path.join(parameters['homepath'], "kafka_logs", "config.ini"))
-            insightFinder_license_key = parser.get('kafka', 'insightFinder_license_key')
-            insightFinder_project_name = parser.get('kafka', 'insightFinder_project_name')
-            insightFinder_user_name = parser.get('kafka', 'insightFinder_user_name')
-            sampling_interval = parser.get('kafka', 'sampling_interval')
-            group_id = parser.get('kafka', 'group_id')
+            licenseKey = parser.get('kafka', 'insightFinder_license_key')
+            projectName = parser.get('kafka', 'insightFinder_project_name')
+            userName = parser.get('kafka', 'insightFinder_user_name')
+            samplingInterval = parser.get('kafka', 'sampling_interval')
+            groupId = parser.get('kafka', 'group_id')
             if len(insightFinder_license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
@@ -104,11 +104,11 @@ def get_agent_config_vars():
             if len(group_id) == 0:
                 logger.error("Agent not correctly configured(group id). Check config file.")
                 sys.exit(1)
-            config_vars['licenseKey'] = insightFinder_license_key
-            config_vars['projectName'] = insightFinder_project_name
-            config_vars['userName'] = insightFinder_user_name
-            config_vars['samplingInterval'] = sampling_interval
-            config_vars['groupId'] = group_id
+            config_vars['licenseKey'] = licenseKey
+            config_vars['projectName'] = projectName
+            config_vars['userName'] = userName
+            config_vars['samplingInterval'] = samplingInterval
+            config_vars['groupId'] = groupId
     except IOError:
         logger.error("config.ini file is missing")
     return config_vars
