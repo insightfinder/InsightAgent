@@ -10,7 +10,7 @@ import time
 from ConfigParser import SafeConfigParser
 from datetime import datetime
 from optparse import OptionParser
-
+from multiprocessing import Process
 import pytz
 import requests
 from kafka import KafkaConsumer
@@ -87,6 +87,7 @@ def get_agent_config_vars(normalization_ids_map):
             samplingInterval = parser.get('kafka', 'sampling_interval')
             groupId = parser.get('kafka', 'group_id')
             all_metrics = parser.get('kafka', 'all_metrics').split(",")
+            clientId = parser.get('kafka', 'client_id')
             normalization_ids = parser.get('kafka', 'normalization_id').split(",")
             if len(insightFinder_license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
@@ -122,6 +123,7 @@ def get_agent_config_vars(normalization_ids_map):
             config_vars['userName'] = userName
             config_vars['samplingInterval'] = samplingInterval
             config_vars['groupId'] = groupId
+            config_vars['clientId'] = clientId
     except IOError:
         logger.error("config.ini file is missing")
     return config_vars
@@ -229,7 +231,7 @@ def isReceivedAllMetrics(collectedMetrics, all_metrics):
             return False
     return True
 
-def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map):
+def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filter_hosts):
     rawDataMap = collections.OrderedDict()
     metricData = []
     chunkNumber = 0
@@ -240,6 +242,7 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map):
     for message in consumer:
         try:
             json_message = json.loads(message.value)
+            #logger.info(json_message)
             timestamp = json_message.get('@timestamp', {})[:-5]
             host_name = json_message.get('beat', {}).get('hostname', {})
             metric_module = json_message.get('metricset', {}).get('module', {})
@@ -347,7 +350,7 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map):
                     metricData.append(valueMap)
 
                 chunkNumber += 1
-                # logger.debug("Sending Chunk Number: " + str(chunkNumber) + " from " + start + " to " + end)
+                logger.debug("Sending Chunk Number: " + str(chunkNumber) + " from " + start + " to " + end)
                 sendData(metricData)
                 # clean the buffer and completed row set
                 metricData = []
@@ -367,7 +370,7 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map):
         logger.info("No data remaining to send")
     else:
         chunkNumber += 1
-        # logger.debug("Sending Final Chunk: " + str(chunkNumber) + " from " + start + " to " + end)
+        logger.debug("Sending Final Chunk: " + str(chunkNumber) + " from " + start + " to " + end)
         sendData(metricData)
 
 
@@ -398,6 +401,24 @@ class LessThanFilter(logging.Filter):
         return 1 if record.levelno < self.max_level else 0
 
 
+
+def kafka_data_consumer(consumer_id):
+    logger.info("Started metric consumer number " + consumer_id)
+    (brokers, topic, filter_hosts, all_metrics_set) = getKafkaConfig()
+    if agent_config_vars["clientId"] == "":
+        consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest',
+                                 consumer_timeout_ms=1000 * parameters['timeout'],
+                                 group_id=agent_config_vars['groupId'])
+    else:
+        consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest',
+                                 consumer_timeout_ms=1000 * parameters['timeout'],
+                                 group_id=agent_config_vars['groupId'], client_id=agentConfigVars["clientId"])
+    consumer.subscribe([topic])
+    parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filter_hosts)
+    consumer.close()
+    logger.info("Closed log consumer number " + consumer_id)
+
+
 if __name__ == "__main__":
     CHUNK_METRIC_VALUES = 10
     GROUPING_START = 15000
@@ -412,13 +433,9 @@ if __name__ == "__main__":
     prev_csv_header_list = "timestamp,"
     hostname = socket.gethostname().partition(".")[0]
     try:
-        # Kafka consumer configuration
-        (brokers, topic, filter_hosts, all_metrics_set) = getKafkaConfig()
-        consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id=agent_config_vars['groupId'])
-        consumer.subscribe([topic])
-        parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map)
-
-        consumer.close()
+        t1 = Process(target=kafka_data_consumer, args=('1',))
+        t2 = Process(target=kafka_data_consumer, args=('2',))
+        t1.start()
+        t2.start()
     except KeyboardInterrupt:
         print "Interrupt from keyboard"
