@@ -232,10 +232,10 @@ def getAgentConfigVars(homepath=os.getcwd()):
         if os.path.exists(os.path.join(homepath, "elasticsearch-log", "config.ini")):
             parser = SafeConfigParser()
             parser.read(os.path.join(homepath, "elasticsearch-log", "config.ini"))
-            insightFinder_license_key = parser.get('elasticsearch-log', 'insightFinder_license_key')
-            insightFinder_project_name = parser.get('elasticsearch-log', 'insightFinder_project_name')
-            insightFinder_user_name = parser.get('elasticsearch-log', 'insightFinder_user_name')
-            sampling_interval = parser.get('elasticsearch-log', 'sampling_interval')
+            licenseKey = parser.get('elasticsearch-log', 'insightFinder_license_key')
+            projectName = parser.get('elasticsearch-log', 'insightFinder_project_name')
+            userName = parser.get('elasticsearch-log', 'insightFinder_user_name')
+            samplingInterval = parser.get('elasticsearch-log', 'sampling_interval')
             if len(insightFinder_license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
@@ -248,10 +248,10 @@ def getAgentConfigVars(homepath=os.getcwd()):
             if len(sampling_interval) == 0:
                 logger.error("Agent not correctly configured(sampling interval). Check config file.")
                 sys.exit(1)
-            configVars['licenseKey'] = insightFinder_license_key
-            configVars['projectName'] = insightFinder_project_name
-            configVars['userName'] = insightFinder_user_name
-            configVars['samplingInterval'] = sampling_interval
+            configVars['licenseKey'] = licenseKey
+            configVars['projectName'] = projectName
+            configVars['userName'] = userName
+            configVars['samplingInterval'] = samplingInterval
     except IOError:
         logger.error("config.ini file is missing")
     return configVars
