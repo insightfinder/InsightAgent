@@ -155,7 +155,7 @@ def parseXlsx():
         current_log_msg = dict()
         current_log_msg['timestamp'] = epoch
         current_log_msg['tag'] = host_name
-        current_log_msg['data'] = str(event_content)+ "   " + str(cmdb_application)
+        current_log_msg['data'] = str(event_content)+ "@" + str(cmdb_application)
         if host_name not in collectedLogsMap:
             collectedLogsMap[host_name] = []
         collectedLogsMap[host_name].append(current_log_msg)
