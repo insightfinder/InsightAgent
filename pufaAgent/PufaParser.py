@@ -52,7 +52,8 @@ def get_parameters():
     else:
         parameters['homepath'] = options.homepath
     if options.serverUrl == None:
-        parameters['serverUrl'] = 'http://127.0.0.1:8080'
+        parameters['serverUrl'] = 'http://stg.insightfinder.com'
+        #parameters['serverUrl'] = 'http://127.0.0.1:8080'
     else:
         parameters['serverUrl'] = options.serverUrl
     if options.timeout == None:
@@ -143,9 +144,10 @@ def parseXlsx():
         host_name = df['host_name'][i]
         event_content = df['event_content'][i]
         cmdb_application = df['cmdb_application'][i]
-        timestamp = "2018-11-05 13:26:41"
+        # timestamp = str(df['createtime'][i]).replace("/", "-")
+        # timestamp = timestamp.replace(" ","T")
+        timestamp = "2018-11-25 13:26:41"
         timestamp = timestamp.replace(" ", "T")
-
         pattern = "%Y-%m-%dT%H:%M:%S"
         if is_time_format(timestamp, pattern):
             try:
@@ -154,14 +156,14 @@ def parseXlsx():
                 continue
         current_log_msg = dict()
         current_log_msg['timestamp'] = epoch
-        current_log_msg['tag'] = host_name
-        current_log_msg['data'] = str(event_content)+ "@" + str(cmdb_application)
-        if host_name not in collectedLogsMap:
-            collectedLogsMap[host_name] = []
-        collectedLogsMap[host_name].append(current_log_msg)
-        if len(collectedLogsMap[host_name])>=200:
-            send_data(collectedLogsMap[host_name])
-            collectedLogsMap.pop(host_name)
+        current_log_msg['tag'] = str(cmdb_application)
+        current_log_msg['data'] = "event content:" + str(event_content) + " host address:" + str(host_address) + " host name:" + str(host_name)
+        if cmdb_application not in collectedLogsMap:
+            collectedLogsMap[cmdb_application] = []
+        collectedLogsMap[cmdb_application].append(current_log_msg)
+        if len(collectedLogsMap[cmdb_application])>=200:
+            send_data(collectedLogsMap[cmdb_application])
+            collectedLogsMap.pop(cmdb_application)
         elif len(collectedLogsMap)>=2000:
             for key in collectedLogsMap:
                 send_data(collectedLogsMap[key])
@@ -205,8 +207,9 @@ if __name__ == "__main__":
     # logger = set_logger_config()
     parameters = get_parameters()
     config_vars = {}
-    config_vars['licenseKey'] = '42761d1f3286aae33e1ddff48fc30db48d5a0ae3'
-    config_vars['projectName'] = 'logTest12'
+    #config_vars['licenseKey'] = '42761d1f3286aae33e1ddff48fc30db48d5a0ae3'
+    config_vars['licenseKey'] = '566e00303ade3d4e1c31355aea68364fbe3d922f'
+    config_vars['projectName'] = 'pufaTest2'
     config_vars['userName'] = 'yqian10'
     config_vars['samplingInterval'] = '1000'
     try:
