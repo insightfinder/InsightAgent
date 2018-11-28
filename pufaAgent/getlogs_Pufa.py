@@ -163,7 +163,7 @@ def parseMessage():
             except ValueError:
                 continue
         currentLogMsg = dict()
-        currentLogMsg['timeStamp'] = epoch
+        currentLogMsg['timestamp'] = epoch
         currentLogMsg['tag'] = str(tag)
         currentLogMsg['data'] = "event content:" + str(eventContent) + " host address:" + str(hostAddress) + " host name:" + str(hostName)
         if tag not in collectedLogsMap:
