@@ -17,42 +17,43 @@ import pandas as pd
 import pytz
 from time import gmtime, strftime
 
-def setLoggerConfig():
+def set_logger_config():
     # Get the root logger
     logger = logging.getLogger(__name__)
     # Have to set the root logger level, it defaults to logging.WARNING
     logger.setLevel(logging.DEBUG)
     # route INFO and DEBUG logging to stdout from stderr
-    loggingHandlerOut = logging.StreamHandler(sys.stdout)
-    loggingHandlerOut.setLevel(logging.DEBUG)
-    loggingHandlerOut.addFilter(LessThanFilter(logging.WARNING))
-    logger.addHandler(loggingHandlerOut)
+    logging_handler_out = logging.StreamHandler(sys.stdout)
+    logging_handler_out.setLevel(logging.INFO)
+    logging_handler_out.addFilter(less_than_filter(logging.WARNING))
+    logger.addHandler(logging_handler_out)
 
-    loggingHandlerErr = logging.StreamHandler(sys.stderr)
-    loggingHandlerErr.setLevel(logging.WARNING)
-    logger.addHandler(loggingHandlerErr)
+    logging_handler_err = logging.StreamHandler(sys.stderr)
+    logging_handler_err.setLevel(logging.WARNING)
+    logger.addHandler(logging_handler_err)
     return logger
 
-class LessThanFilter(logging.Filter):
+
+class less_than_filter(logging.Filter):
     def __init__(self, exclusive_maximum, name=""):
-        super(LessThanFilter, self).__init__(name)
+        super(less_than_filter, self).__init__(name)
         self.max_level = exclusive_maximum
 
     def filter(self, record):
         # non-zero return means we log this message
         return 1 if record.levelno < self.max_level else 0
 
-def getParameters():
+def get_parameters():
     usage = "Usage: %prog [options]"
     parser = OptionParser(usage=usage)
     parser.add_option("-d", "--directory",
                       action="store", dest="homepath", help="Directory to run from")
-    parser.add_option("-w", "--serverUrl",
-                      action="store", dest="serverUrl", help="Server Url")
-    parser.add_option("-l", "--chunkLines",
-                      action="store", dest="chunkLines", help="Max number of lines in chunk")
-    parser.add_option("-m", "--MaxInTag",
-                      action="store", dest="MaxInTag", help="Max number of one tag can have")
+    parser.add_option("-w", "--server_url",
+                      action="store", dest="server_url", help="Server Url")
+    parser.add_option("-l", "--chunk_lines",
+                      action="store", dest="chunk_lines", help="Max number of lines in chunk")
+    parser.add_option("-m", "--max_in_tag",
+                      action="store", dest="max_in_tag", help="Max number of one tag can have")
     (options, args) = parser.parse_args()
 
     parameters = {}
@@ -60,19 +61,18 @@ def getParameters():
         parameters['homepath'] = os.getcwd()
     else:
         parameters['homepath'] = options.homepath
-    if options.serverUrl == None:
-        #parameters['serverUrl'] = 'http://stg.insightfinder.com'
-        parameters['serverUrl'] = 'http://127.0.0.1:8080'
+    if options.server_url == None:
+        parameters['server_url'] = 'https://app.insightfinder.com'
     else:
-        parameters['serverUrl'] = options.serverUrl
-    if options.chunkLines is None:
-        parameters['chunkLines'] = 1000
+        parameters['server_url'] = options.server_url
+    if options.chunk_lines is None:
+        parameters['chunk_lines'] = 1000
     else:
-        parameters['chunkLines'] = int(options.chunkLines)
-    if options.MaxInTag is None:
-        parameters['MaxInTag'] = 200
+        parameters['chunk_lines'] = int(options.chunk_lines)
+    if options.max_in_tag is None:
+        parameters['max_in_tag'] = 200
     else:
-        parameters['MaxInTag'] = int(options.MaxInTag)
+        parameters['max_in_tag'] = int(options.max_in_tag)
     return parameters
 
 
@@ -97,124 +97,123 @@ def get_timestamp_for_zone(date_string, time_zone, datetime_format):
     epoch = long((tztime - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
     return epoch
 
-def getAgentConfigVars():
-    configVars = {}
+def get_agent_config_vars():
+    config_vars = {}
     try:
         if os.path.exists(os.path.join(parameters['homepath'], "pufaAgent", "config.ini")):
             parser = SafeConfigParser()
             parser.read(os.path.join(parameters['homepath'], "pufaAgent", "config.ini"))
             tag = parser.get('pufa', 'tag')
-            fileName = parser.get('pufa', 'file_name')
-            licenseKey = parser.get('pufa', 'insightFinder_license_key')
-            projectName = parser.get('pufa', 'insightFinder_project_name')
-            userName = parser.get('pufa', 'insightFinder_user_name')
-            samplingInterval = parser.get('pufa', 'sampling_interval')
+            file_name = parser.get('pufa', 'file_name')
+            license_key = parser.get('pufa', 'insightFinder_license_key')
+            project_name = parser.get('pufa', 'insightFinder_project_name')
+            user_name = parser.get('pufa', 'insightFinder_user_name')
+            sampling_interval = parser.get('pufa', 'sampling_interval')
             if len(tag) == 0:
                 logger.error("Agent not correctly configured(tag name). Check config file.")
                 sys.exit(1)
-            if len(fileName) == 0:
+            if len(file_name) == 0:
                 logger.error("Agent not correctly configured(file name). Check config file.")
                 sys.exit(1)
-            if len(licenseKey) == 0:
+            if len(license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
-            if len(projectName) == 0:
+            if len(project_name) == 0:
                 logger.error("Agent not correctly configured(project name). Check config file.")
                 sys.exit(1)
-            if len(userName) == 0:
+            if len(user_name) == 0:
                 logger.error("Agent not correctly configured(user name). Check config file.")
                 sys.exit(1)
-            if len(samplingInterval) == 0:
+            if len(sampling_interval) == 0:
                 logger.error("Agent not correctly configured(sampling interval). Check config file.")
                 sys.exit(1)
-            configVars['tag'] = tag
-            configVars['fileName'] = fileName
-            configVars['licenseKey'] = licenseKey
-            configVars['projectName'] = projectName
-            configVars['userName'] = userName
-            if samplingInterval[-1:] == 's':
-                configVars['samplingInterval'] = float(float(samplingInterval[:-1]) / 60.0)
+            config_vars['tag'] = tag
+            config_vars['file_name'] = file_name
+            config_vars['license_key'] = license_key
+            config_vars['project_name'] = project_name
+            config_vars['user_name'] = user_name
+            if sampling_interval[-1:] == 's':
+                config_vars['sampling_interval'] = float(float(sampling_interval[:-1]) / 60.0)
             else:
-                configVars['samplingInterval'] = int(samplingInterval)
+                config_vars['sampling_interval'] = int(sampling_interval)
     except IOError:
         logger.error("config.ini file is missing")
-    return configVars
+    return config_vars
 
 
-def parseMessage():
-    collectedLogsMap = {}
+def read_message():
+    collected_logs_map = {}
 
-    file = parameters['homepath'] + '/data/' + configVars['fileName']
+    file = parameters['homepath'] + '/data/' + config_vars['file_name']
 
-    readFile = pd.read_excel(file, sheet_name='Sheet1')
+    read_file = pd.read_excel(file, sheet_name='Sheet1')
 
-    for i in readFile.index:
-        tag = readFile[configVars['tag']][i]
-        hostAddress = readFile['host_address'][i]
-        hostName = readFile['host_name'][i]
-        eventContent = readFile['event_content'][i]
-        timeStamp = strftime("%Y-%m-%d %H:%M:%S", gmtime())
-        timeStamp = timeStamp.replace(" ", "T")
+    for i in read_file.index:
+        tag = read_file[config_vars['tag']][i]
+        host_address = read_file['host_address'][i]
+        host_name = read_file['host_name'][i]
+        event_content = read_file['event_content'][i]
+        timestamp = strftime("%Y-%m-%d %H:%M:%S", gmtime())
+        timestamp = timestamp.replace(" ", "T")
         pattern = "%Y-%m-%dT%H:%M:%S"
 
-        if is_time_format(timeStamp, pattern):
+        if is_time_format(timestamp, pattern):
             try:
-                epoch = get_timestamp_for_zone(timeStamp, "GMT", pattern)
+                epoch = get_timestamp_for_zone(timestamp, "GMT", pattern)
             except ValueError:
                 continue
-        currentLogMsg = dict()
-        currentLogMsg['timestamp'] = epoch
-        currentLogMsg['tag'] = str(tag)
-        currentLogMsg['data'] = "event content:" + str(eventContent) + " host address:" + str(hostAddress) + " host name:" + str(hostName)
-        if tag not in collectedLogsMap:
-            collectedLogsMap[tag] = []
-        collectedLogsMap[tag].append(currentLogMsg)
-        if len(collectedLogsMap[tag])>=parameters['MaxInTag']:
-            sendData(collectedLogsMap[tag])
-            collectedLogsMap.pop(tag)
-        elif len(collectedLogsMap)>=parameters['chunkLines']:
-            for key in collectedLogsMap:
-                sendData(collectedLogsMap[key])
-            collectedLogsMap = {}
+        current_log_msg = dict()
+        current_log_msg['timestamp'] = epoch
+        current_log_msg['tag'] = str(tag)
+        current_log_msg['data'] = "event content:" + str(event_content) + " host address:" + str(host_address) + " host name:" + str(host_name)
+        if tag not in collected_logs_map:
+            collected_logs_map[tag] = []
+        collected_logs_map[tag].append(current_log_msg)
+        if len(collected_logs_map[tag])>=parameters['max_in_tag']:
+            send_data(collected_logs_map[tag])
+            collected_logs_map.pop(tag)
+        elif len(collected_logs_map)>=parameters['chunk_lines']:
+            for key in collected_logs_map:
+                send_data(collected_logs_map[key])
+            collected_logs_map = {}
 
-    for key in collectedLogsMap:
-        sendData(collectedLogsMap[key])
+    for key in collected_logs_map:
+        send_data(collected_logs_map[key])
 
 
-def sendData(metric_data):
+def send_data(metric_data):
     """ Sends parsed metric data to InsightFinder """
-    sendDataTime = time.time()
+    send_data_time = time.time()
     # prepare data for metric streaming agent
-    toSendDataDict = dict()
-    toSendDataDict["metricData"] = json.dumps(metric_data)
-    toSendDataDict["licenseKey"] = configVars['licenseKey']
-    toSendDataDict["projectName"] = configVars['projectName']
-    toSendDataDict["userName"] = configVars['userName']
-    toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
-    toSendDataDict["samplingInterval"] = str(int(configVars['samplingInterval'] * 60))
-    toSendDataDict["agentType"] = "LogStreaming"
+    to_send_data_dict = dict()
+    #for backend so this is the camel case in to_send_data_dict
+    to_send_data_dict["metricData"] = json.dumps(metric_data)
+    to_send_data_dict["licenseKey"] = config_vars['license_key']
+    to_send_data_dict["projectName"] = config_vars['project_name']
+    to_send_data_dict["userName"] = config_vars['user_name']
+    to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
+    to_send_data_dict["samplingInterval"] = str(int(config_vars['sampling_interval'] * 60))
+    to_send_data_dict["agentType"] = "LogStreaming"
 
-    toSendDataJson = json.dumps(toSendDataDict)
-    # logger.debug("TotalData: " + str(len(bytearray(toSendDataJson))))
-    # logger.debug("Data: " + str(toSendDataJson))
+    to_send_data_json = json.dumps(to_send_data_dict)
 
     # send the data
-    postUrl = parameters['serverUrl'] + "/customprojectrawdata"
-    response = requests.post(postUrl, data=json.loads(toSendDataJson))
+    post_url = parameters['server_url'] + "/customprojectrawdata"
+    response = requests.post(post_url, data=json.loads(to_send_data_json))
     if response.status_code == 200:
-        logger.info(str(len(bytearray(toSendDataJson))) + " bytes of data are reported.")
+        logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
     else:
         logger.info("Failed to send data.")
-    logger.info("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
+    logger.info("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
 
 
 if __name__ == "__main__":
     reload(sys)
     sys.setdefaultencoding('utf-8')
-    logger = setLoggerConfig()
-    parameters = getParameters()
-    configVars = getAgentConfigVars()
+    logger = set_logger_config()
+    parameters = get_parameters()
+    config_vars = get_agent_config_vars()
     try:
-        parseMessage()
+        read_message()
     except KeyboardInterrupt:
         print "Interrupt from keyboard"
