@@ -80,8 +80,8 @@ def is_time_format(time_string, datetime_format):
     """
     Determines the validity of the input date-time string according to the given format
     Parameters:
-    - `timeString` : datetime string to check validity
-    - `temp_id` : datetime format to compare with
+    - `time_string` : datetime string to check validity
+    - `datetime_format` : datetime format to compare with
     """
     try:
         datetime.strptime(str(time_string), datetime_format)
@@ -203,7 +203,7 @@ def send_data(metric_data):
     if response.status_code == 200:
         logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
     else:
-        logger.info("Failed to send data.")
+        logger.error("Failed to send data.")
     logger.info("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
 
 
@@ -216,4 +216,4 @@ if __name__ == "__main__":
     try:
         read_message()
     except KeyboardInterrupt:
-        print "Interrupt from keyboard"
+        logger.info("Interrupt from keyboard")
