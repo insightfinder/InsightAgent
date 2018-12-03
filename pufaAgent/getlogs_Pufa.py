@@ -145,18 +145,26 @@ def read_message():
     collected_logs_map = {}
 
     file = parameters['homepath'] + '/data/' + config_vars['file_name']
-
-    read_file = pd.read_excel(file, sheet_name='Sheet1')
-
+    extension_name = config_vars['file_name'].split(".")[1]
+    if extension_name == "xlsx":
+        read_file = pd.read_excel(file)
+    else:
+        read_file = pd.read_csv(file)
     for i in read_file.index:
         tag = read_file[config_vars['tag']][i]
         host_address = read_file['host_address'][i]
         host_name = read_file['host_name'][i]
         event_content = read_file['event_content'][i]
-        timestamp = strftime("%Y-%m-%d %H:%M:%S", gmtime())
+        timestamp = str(read_file['createtime'][i])
+        if "/" in timestamp:
+            timestamps = timestamp.split()
+            month_date_year = timestamps[0].split("/")
+            month = month_date_year[0]
+            date = month_date_year[1]
+            year = month_date_year[2]
+            timestamp = year + "-" + month + "-" + date + " " + timestamps[1]
         timestamp = timestamp.replace(" ", "T")
         pattern = "%Y-%m-%dT%H:%M:%S"
-
         if is_time_format(timestamp, pattern):
             try:
                 epoch = get_timestamp_for_zone(timestamp, "GMT", pattern)
