@@ -199,15 +199,20 @@ def parse_consumer_messages(consumer, filter_hosts):
     for message in consumer:
         try:
             json_message = json.loads(message.value)
-            # logger.info(json_message)
-            host_name = json_message.get('beat', {}).get('hostname', {})
-            message = json_message.get('message', {})
-            timestamp = json_message.get('@timestamp', {})[:-5]
+            u_payload = json_message.get('u_payload', {})
+            if 'ci_item_dv' in u_payload:
+                host_name = u_payload.get('ci_item_dv', {}).split(" - ",1)[1].strip()
+            elif 'cmdb_ci_dv' in u_payload:
+                host_name = u_payload.get('cmdb_ci_dv', {}).split(" - ", 1)[1].strip()
+            message = json_message.get('u_payload', {})
+            timestamp = json_message.get('u_payload',{}).get('sys_updated_on',{})
+            timestamp = timestamp.replace(" ", "T")
 
+            if len(host_name) ==0:
+                continue
             if len(filter_hosts) != 0 and host_name.upper() not in (filter_host.upper() for filter_host in
                                                                     filter_hosts):
                 continue
-
             if line_count == parameters['chunk_lines']:
                 logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
                 send_data(current_row)
@@ -222,7 +227,6 @@ def parse_consumer_messages(consumer, filter_hosts):
                     epoch = get_timestamp_for_zone(timestamp, "GMT", pattern)
                 except ValueError:
                     continue
-
             current_log_msg = dict()
             current_log_msg['timestamp'] = epoch
             current_log_msg['tag'] = host_name
@@ -237,6 +241,7 @@ def parse_consumer_messages(consumer, filter_hosts):
         send_data(current_row)
         chunk_count += 1
     logger.debug("Total chunks created: " + str(chunk_count))
+
 
 
 def set_logger_config():
