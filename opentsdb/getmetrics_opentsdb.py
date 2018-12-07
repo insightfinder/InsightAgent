@@ -1,23 +1,24 @@
 #!/usr/bin/env python
 import sys
-from optparse import OptionParser
-import ConfigParser
 import os
-import requests
-import json
-import logging
 import re
-import socket
-import random
 import time
+import json
+import random
+import socket
+import logging
+import ConfigParser
 from datetime import datetime
+from optparse import OptionParser
+
+import requests
 
 '''
-this script gathers system info from opentsdb and use http api to send to server
+this script gathers metric info from opentsdb and use http api to send to server
 '''
 
 
-def getParameters():
+def get_parameters():
     usage = "Usage: %prog [options]"
     parser = OptionParser(usage=usage)
     parser.add_option("-d", "--directory",
@@ -28,88 +29,88 @@ def getParameters():
                       action="store", dest="chunkSize", help="Metrics per chunk")
     (options, args) = parser.parse_args()
 
-    parameters = {}
+    params = {}
     if options.homepath is None:
-        parameters['homepath'] = os.getcwd()
+        params['homepath'] = os.getcwd()
     else:
-        parameters['homepath'] = options.homepath
-    if options.serverUrl == None:
-        parameters['serverUrl'] = 'https://app.insightfinder.com'
+        params['homepath'] = options.homepath
+    if options.serverUrl is None:
+        params['serverUrl'] = 'https://app.insightfinder.com'
     else:
-        parameters['serverUrl'] = options.serverUrl
+        params['serverUrl'] = options.serverUrl
     if options.chunkSize is None:
-        parameters['chunkSize'] = 50
+        params['chunkSize'] = 50
     else:
-        parameters['chunkSize'] = int(options.chunkSize)
-    return parameters
+        params['chunkSize'] = int(options.chunkSize)
+    return params
 
 
-def getAgentConfigVars():
-    configVars = {}
+def get_agent_config_vars():
+    config_vars = {}
     with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as configFile:
-        fileContent = configFile.readlines()
-        if len(fileContent) < 6:
+        file_content = configFile.readlines()
+        if len(file_content) < 6:
             logger.error("Agent not correctly configured. Check .agent.bashrc file.")
             sys.exit(1)
         # get license key
-        licenseKeyLine = fileContent[0].split(" ")
-        if len(licenseKeyLine) != 2:
+        license_key_line = file_content[0].split(" ")
+        if len(license_key_line) != 2:
             logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
             sys.exit(1)
-        configVars['licenseKey'] = licenseKeyLine[1].split("=")[1].strip()
+        config_vars['licenseKey'] = license_key_line[1].split("=")[1].strip()
         # get project name
-        projectNameLine = fileContent[1].split(" ")
-        if len(projectNameLine) != 2:
+        project_name_line = file_content[1].split(" ")
+        if len(project_name_line) != 2:
             logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
             sys.exit(1)
-        configVars['projectName'] = projectNameLine[1].split("=")[1].strip()
+        config_vars['projectName'] = project_name_line[1].split("=")[1].strip()
         # get username
-        userNameLine = fileContent[2].split(" ")
-        if len(userNameLine) != 2:
+        user_name_line = file_content[2].split(" ")
+        if len(user_name_line) != 2:
             logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
             sys.exit(1)
-        configVars['userName'] = userNameLine[1].split("=")[1].strip()
+        config_vars['userName'] = user_name_line[1].split("=")[1].strip()
         # get sampling interval
-        samplingIntervalLine = fileContent[4].split(" ")
-        if len(samplingIntervalLine) != 2:
+        sampling_interval_line = file_content[4].split(" ")
+        if len(sampling_interval_line) != 2:
             logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
             sys.exit(1)
-        configVars['samplingInterval'] = samplingIntervalLine[1].split("=")[1].strip()
-    return configVars
+        config_vars['samplingInterval'] = sampling_interval_line[1].split("=")[1].strip()
+    return config_vars
 
 
-def getReportingConfigVars():
-    reportingConfigVars = {}
+def get_reporting_config_vars():
+    reporting_config = {}
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
         config = json.load(f)
     reporting_interval_string = config['reporting_interval']
-    is_second_reporting = False
     if reporting_interval_string[-1:] == 's':
-        is_second_reporting = True
         reporting_interval = float(config['reporting_interval'][:-1])
-        reportingConfigVars['reporting_interval'] = float(reporting_interval / 60.0)
+        reporting_config['reporting_interval'] = float(reporting_interval / 60.0)
     else:
-        reportingConfigVars['reporting_interval'] = int(config['reporting_interval'])
-        reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
-        reportingConfigVars['prev_endtime'] = config['prev_endtime']
-        reportingConfigVars['deltaFields'] = config['delta_fields']
+        reporting_config['reporting_interval'] = int(config['reporting_interval'])
+        reporting_config['keep_file_days'] = int(config['keep_file_days'])
+        reporting_config['prev_endtime'] = config['prev_endtime']
+        reporting_config['deltaFields'] = config['delta_fields']
 
-    reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
-    reportingConfigVars['prev_endtime'] = config['prev_endtime']
-    reportingConfigVars['deltaFields'] = config['delta_fields']
-    return reportingConfigVars
+    reporting_config['keep_file_days'] = int(config['keep_file_days'])
+    reporting_config['prev_endtime'] = config['prev_endtime']
+    reporting_config['deltaFields'] = config['delta_fields']
+    return reporting_config
 
 
-def getOpentsdbConfig(parameters, datadir):
+def get_opentsdb_config(params, datadir):
     """Read and parse Open TSDB config from config.txt"""
-    openTsdbConfig = {}
-    if os.path.exists(os.path.join(parameters['homepath'], datadir, "config.txt")):
+    opentsdb_config = {}
+    if os.path.exists(os.path.join(params['homepath'], datadir, "config.txt")):
         cp = ConfigParser.SafeConfigParser()
-        cp.read(os.path.join(parameters['homepath'], datadir, "config.txt"))
-        openTsdbConfig = {
+        cp.read(os.path.join(params['homepath'], datadir, "config.txt"))
+        opentsdb_config = {
             "OPENTSDB_URL": cp.get('opentsdb', 'OPENTSDB_URL'),
+            "OPENTSDB_METRIC_FILEPATH": cp.get('opentsdb', 'OPENTSDB_METRIC_FILEPATH'),
+            "OPENTSDB_TOKEN": cp.get('opentsdb', 'OPENTSDB_TOKEN'),
         }
-    return openTsdbConfig
+    return opentsdb_config
 
 
 def save_grouping(grouping_map):
@@ -122,17 +123,17 @@ def save_grouping(grouping_map):
 
 
 def load_grouping():
-    if (os.path.isfile('grouping.json')):
+    if os.path.isfile('grouping.json'):
         logger.debug("Grouping file exists. Loading..")
         with open('grouping.json', 'r+') as f:
             try:
-                grouping_map = json.loads(f.read())
+                grouping_json = json.loads(f.read())
             except ValueError:
-                grouping_map = json.loads("{}")
+                grouping_json = json.loads("{}")
                 logger.debug("Error parsing grouping.json.")
     else:
-        grouping_map = json.loads("{}")
-    return grouping_map
+        grouping_json = json.loads("{}")
+    return grouping_json
 
 
 def get_grouping_id(metric_key, grouping_map):
@@ -154,35 +155,35 @@ def get_grouping_id(metric_key, grouping_map):
     return GROUPING_START
 
 
-def getMetricList(config):
+def get_metric_list(config):
     """Get available metric list from Open TSDB API"""
-    metricList = []
+    metric_list = []
     url = config["OPENTSDB_URL"] + "/api/suggest?type=metrics&q="
     response = requests.get(url)
     if response.status_code == 200:
-        metricList = response.json()
-        logger.debug("Get metric list from opentsdb: " + str(metricList))
-    return metricList
+        metric_list = response.json()
+        logger.debug("Get metric list from opentsdb: " + str(metric_list))
+    return metric_list
 
 
-def getMetricListFromFile(config, filePath):
+def get_metric_list_from_file(config, filePath):
     """Get available metric list from File"""
-    metricList = set()
+    metric_list = set()
     with open(filePath, 'r') as f:
         for line in f:
             m = re.search(r'(?P<metric>\d\.\d\..+):', line)
             if m:
                 metric = m.groupdict().get('metric')
-                metricList.add(metric)
-                logger.debug("Get metric list from file: " + str(metricList))
-    return list(metricList)
+                metric_list.add(metric)
+                logger.debug("Get metric list from file: " + str(metric_list))
+    return list(metric_list)
 
 
-def getMetricData(config, metricList, grouping_map, startTime, endTime):
+def get_metric_data(config, metric_list, grouping_map, startTime, endTime):
     """Get metric data from Open TSDB API"""
 
-    def fullData(d):
-        valueMap = {}
+    def full_data(d):
+        value_map = {}
         metric_name = d.get('metric')
         host_name = d.get('tags', {}).get('host') or 'unknownApplication'
         dps = d.get('dps', {})
@@ -194,58 +195,58 @@ def getMetricData(config, metricList, grouping_map, startTime, endTime):
                 metric_value = val
                 mtime = int(stime)
 
-        valueMap[header_field] = str(metric_value)
-        valueMap['timestamp'] = str(mtime * 1000)
+        value_map[header_field] = str(metric_value)
+        value_map['timestamp'] = str(mtime * 1000)
 
-        return valueMap
+        return value_map
 
-    openTsdbMetricList = []
+    opentsdb_metric_list = []
     json_data = {
-        "token": '77b96664b77b110e01ff6fa8199ac262acfb62ca',
+        "token": config['OPENTSDB_TOKEN'],
         "start": startTime,
         "end": endTime,
         "queries": map(lambda m: {
             "aggregator": "avg",
             "downsample": "1m-avg",
             "metric": m.encode('ascii')
-        }, metricList)
+        }, metric_list)
     }
 
     url = config["OPENTSDB_URL"] + "/api/query"
     response = requests.post(url, data=json.dumps(json_data))
     if response.status_code == 200:
-        rawDataList = response.json()
-        logger.debug("Get metric data from opentsdb: " + str(len(rawDataList)))
+        rawdata_list = response.json()
+        logger.debug("Get metric data from opentsdb: " + str(len(rawdata_list)))
 
         # completion metric data
-        openTsdbMetricList = map(lambda d: fullData(d), rawDataList)
+        opentsdb_metric_list = map(lambda d: full_data(d), rawdata_list)
 
-    return openTsdbMetricList
+    return opentsdb_metric_list
 
 
-def sendData(metricData):
-    sendDataTime = time.time()
+def send_data(metric_data):
+    send_data_time = time.time()
     # prepare data for metric streaming agent
-    toSendDataDict = {}
-    toSendDataDict["metricData"] = json.dumps(metricData)
-    toSendDataDict["licenseKey"] = agentConfigVars['licenseKey']
-    toSendDataDict["projectName"] = agentConfigVars['projectName']
-    toSendDataDict["userName"] = agentConfigVars['userName']
-    toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
-    toSendDataDict["samplingInterval"] = str(int(reportingConfigVars['reporting_interval'] * 60))
-    toSendDataDict["agentType"] = "custom"
+    to_send_data_dict = {}
+    to_send_data_dict["metric_data"] = json.dumps(metric_data)
+    to_send_data_dict["licenseKey"] = agent_config_ars['licenseKey']
+    to_send_data_dict["projectName"] = agent_config_ars['projectName']
+    to_send_data_dict["userName"] = agent_config_ars['userName']
+    to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
+    to_send_data_dict["samplingInterval"] = str(int(reporting_config_vars['reporting_interval'] * 60))
+    to_send_data_dict["agentType"] = "custom"
 
-    toSendDataJSON = json.dumps(toSendDataDict)
-    logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))))
+    to_send_data_json = json.dumps(to_send_data_dict)
+    logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
 
     # send the data
-    postUrl = parameters['serverUrl'] + "/customprojectrawdata"
-    response = requests.post(postUrl, data=json.loads(toSendDataJSON))
+    post_url = parameters['serverUrl'] + "/customprojectrawdata"
+    response = requests.post(post_url, data=json.loads(to_send_data_json))
     if response.status_code == 200:
-        logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
+        logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
     else:
         logger.info("Failed to send data.")
-    logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
+    logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
 
 
 def chunks(l, n):
@@ -254,22 +255,22 @@ def chunks(l, n):
         yield l[i:i + n]
 
 
-def setloggerConfig(logLevel):
+def set_logger_config(level):
     """Set up logging according to the defined log level"""
     # Get the root logger
-    logger = logging.getLogger(__name__)
+    logger_obj = logging.getLogger(__name__)
     # Have to set the root logger level, it defaults to logging.WARNING
-    logger.setLevel(logLevel)
+    logger_obj.setLevel(level)
     # route INFO and DEBUG logging to stdout from stderr
     logging_handler_out = logging.StreamHandler(sys.stdout)
     logging_handler_out.setLevel(logging.DEBUG)
     logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
-    logger.addHandler(logging_handler_out)
+    logger_obj.addHandler(logging_handler_out)
 
     logging_handler_err = logging.StreamHandler(sys.stderr)
     logging_handler_err.setLevel(logging.WARNING)
-    logger.addHandler(logging_handler_err)
-    return logger
+    logger_obj.addHandler(logging_handler_err)
+    return logger_obj
 
 
 class LessThanFilter(logging.Filter):
@@ -286,44 +287,45 @@ if __name__ == "__main__":
     GROUPING_START = 15000
     GROUPING_END = 20000
 
-    logLevel = logging.INFO
-    logger = setloggerConfig(logLevel)
-    dataDirectory = 'data'
-    parameters = getParameters()
-    agentConfigVars = getAgentConfigVars()
-    reportingConfigVars = getReportingConfigVars()
+    log_level = logging.INFO
+    logger = set_logger_config(log_level)
+    data_dir = 'data'
+    parameters = get_parameters()
+    agent_config_ars = get_agent_config_vars()
+    reporting_config_vars = get_reporting_config_vars()
     grouping_map = load_grouping()
 
     # get agent configuration details
-    agent_config = getOpentsdbConfig(parameters, dataDirectory)
+    agent_config = get_opentsdb_config(parameters, data_dir)
     for item in agent_config.values():
         if not item:
             logger.error("config error, check data/config.txt")
             sys.exit("config error, check config.txt")
 
-    # get data by cron
-    dataEndTimestamp = int(time.time())
-    intervalInSecs = int(reportingConfigVars['reporting_interval'] * 60)
-    dataStartTimestamp = dataEndTimestamp - intervalInSecs
-    timeList = [(dataStartTimestamp, dataEndTimestamp)]
+    time_list = []
+    if agent_config['OPENTSDB_MODE'] == 'streaming':
+        # get data by cron
+        data_end_ts = int(time.time())
+        interval_in_secs = int(reporting_config_vars['reporting_interval'] * 60)
+        data_start_ts = data_end_ts - interval_in_secs
+        time_list = [(data_start_ts, data_end_ts)]
+    else:
+        # get data from history date
+        start_day = agent_config['OPENTSDB_HIS_START_DAY']
+        end_day = agent_config['OPENTSDB_HIS_END_DAY']
+        start_day_obj = datetime.strptime(start_day, "%Y-%m-%d")
+        start_ts = int(time.mktime(start_day_obj.timetuple()))
+        end_day_obj = datetime.strptime(end_day, "%Y-%m-%d")
+        end_ts = int(time.mktime(end_day_obj.timetuple()))
+        timeInterval = (end_ts - start_ts) / 60
+        time_list = [(start_ts + i * 60, start_ts + (i + 1) * 60) for i in range(timeInterval)]
 
-    # get data from special date
-    # startDay = '2018-06-1'
-    # endDay = '2018-06-3'
-    # startDayObj = datetime.strptime(startDay, "%Y-%m-%d")
-    # startTimeStamp = int(time.mktime(startDayObj.timetuple()))
-    # endDayObj = datetime.strptime(endDay, "%Y-%m-%d")
-    # endTimeStamp = int(time.mktime(endDayObj.timetuple()))
-    # timeInterval = (endTimeStamp - startTimeStamp) / 60
-    # timeList = [(startTimeStamp + i * 60, startTimeStamp + (i + 1) * 60) for i in range(timeInterval)]
-
-    for dataStartTimestamp, dataEndTimestamp in timeList:
+    for data_start_ts, data_end_ts in time_list:
         try:
-            logger.debug("Start to send metric data: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
+            logger.debug("Start to send metric data: {}-{}".format(data_start_ts, data_end_ts))
             # get metric list from opentsdb
-            # metricList = getMetricList(agent_config)
-            filePath = './metrics.txt'
-            metricListAll = getMetricListFromFile(agent_config, filePath)
+            # metric_list = get_metric_list(agent_config)
+            metricListAll = get_metric_list_from_file(agent_config, agent_config['OPENTSDB_METRIC_FILEPATH'])
             if len(metricListAll) == 0:
                 logger.error("No metrics to get data for.")
                 sys.exit()
@@ -331,16 +333,16 @@ if __name__ == "__main__":
             chunked_metric_list = chunks(metricListAll, parameters['chunkSize'])
             for sub_list in chunked_metric_list:
                 # get metric data from opentsdb every SAMPLING_INTERVAL
-                metricDataList = getMetricData(agent_config, sub_list, grouping_map, dataStartTimestamp,
-                                               dataEndTimestamp)
-                if len(metricDataList) == 0:
+                metric_data_list = get_metric_data(agent_config, sub_list, grouping_map, data_start_ts,
+                                                   data_end_ts)
+                if len(metric_data_list) == 0:
                     logger.error("No data for metrics received from Open TSDB.")
                     sys.exit()
                 # send metric data to insightfinder
-                sendData(metricDataList)
+                send_data(metric_data_list)
                 save_grouping(grouping_map)
 
-            logger.info("Send metric date for {} - {}.".format(dataStartTimestamp, dataEndTimestamp))
+            logger.info("Send metric date for {} - {}.".format(data_start_ts, data_end_ts))
         except Exception as e:
-            logger.error("Error send metric data to insightfinder: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
+            logger.error("Error send metric data to insightfinder: {}-{}".format(data_start_ts, data_end_ts))
             logger.error(e)

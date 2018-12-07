@@ -91,8 +91,13 @@ ifAgent=opentsdb
 ##The server reporting Url(Do not change unless you have on-prem deployment)
 ifReportingUrl=https://app.insightfinder.com
 
-##Vars for Open TSDB
+##Vars for OpenTSDB
 openTsdbUrl=http://localhost:4242
+openTsdbMetricFilePath=./metrics.txt
+openTsdbToken=xxxx
+openTsdbMode=[streaming/history]
+openTsdbHisStartDay=2018-06-01
+openTsdbHisEndDay=2018-06-03
 ```
 
 

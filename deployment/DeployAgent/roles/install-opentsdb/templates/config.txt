@@ -1,2 +1,8 @@
 [opentsdb]
+OPENTSDB_MODE = {{ openTsdbMode }}
 OPENTSDB_URL = {{ openTsdbUrl }}
+OPENTSDB_TOKEN = {{ openTsdbToken }}
+OPENTSDB_METRIC_FILEPATH = {{ openTsdbMetricFilePath }}
+OPENTSDB_HIS_START_DAY = {{ openTsdbHisStartDay }}
+OPENTSDB_HIS_END_DAY = {{ openTsdbHisEndDay }}
+
