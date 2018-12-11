@@ -148,8 +148,11 @@ def read_message():
     extension_name = config_vars['file_name'].split(".")[1]
     if extension_name == "xlsx":
         read_file = pd.read_excel(file)
-    else:
+    elif extension_name == "csv":
         read_file = pd.read_csv(file)
+    else:
+        logger.error("The input file extension is not either csv or xlsx")
+        sys.exit(1)
     for i in read_file.index:
         tag = read_file[config_vars['tag']][i]
         host_address = read_file['host_address'][i]
