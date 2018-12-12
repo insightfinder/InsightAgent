@@ -1,13 +1,13 @@
 #!/usr/bin/env python
-import sys
-import os
-import re
-import time
-import json
-import random
-import socket
-import logging
 import ConfigParser
+import json
+import logging
+import os
+import random
+import re
+import socket
+import sys
+import time
 from datetime import datetime
 from optparse import OptionParser
 
@@ -99,17 +99,69 @@ def get_reporting_config_vars():
     return reporting_config
 
 
-def get_opentsdb_config(params, datadir):
+def get_opentsdb_config():
     """Read and parse Open TSDB config from config.txt"""
     opentsdb_config = {}
-    if os.path.exists(os.path.join(params['homepath'], datadir, "config.txt")):
-        cp = ConfigParser.SafeConfigParser()
-        cp.read(os.path.join(params['homepath'], datadir, "config.txt"))
+    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
+        config_parser = ConfigParser.SafeConfigParser()
+        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
+
+        try:
+            opentsdb_url = config_parser.get('opentsdb', 'OPENTSDB_URL')
+            opentsdb_token = config_parser.get('opentsdb', 'OPENTSDB_TOKEN')
+            opentsdb_mode = config_parser.get('opentsdb', 'OPENTSDB_MODE')
+            opentsdb_metrics = config_parser.get('opentsdb', 'OPENTSDB_METRICS').split(",")
+            opentsdb_history_start_date = config_parser.get('opentsdb', 'OPENTSDB_HIS_START_DAY')
+            opentsdb_history_end_date = config_parser.get('opentsdb', 'OPENTSDB_HIS_END_DAY')
+        except ConfigParser.NoOptionError:
+            logger.error(
+                "Agent not correctly configured. Check config file.")
+            sys.exit(1)
+
+        if len(opentsdb_url) == 0:
+            logger.warning(
+                "Agent not correctly configured(OPENTSDB_URL). Check config file. Using \"127.0.0.1:4242\" as default.")
+            opentsdb_url = "http://127.0.0.1:4242"
+
+        if len(opentsdb_mode) == 0:
+            logger.warning(
+                "Agent not correctly configured(OPENTSDB_MODE). Check config file. Using \"streaming\" as default.")
+            opentsdb_mode = "streaming"
+        else:
+            if not (opentsdb_mode == 'streaming' or opentsdb_mode == 'historical'):
+                logger.warning(
+                    "Agent not correctly configured(OPENTSDB_MODE). Check config file. Using \"streaming\" as default.")
+                opentsdb_mode = "streaming"
+
+        if opentsdb_mode == 'historical':
+            if len(opentsdb_history_start_date) == 0:
+                logger.error(
+                    "Agent not correctly configured(OPENTSDB_HIS_START_DAY). Check config file.")
+                sys.exit(1)
+            if len(opentsdb_history_end_date) == 0:
+                logger.error(
+                    "Agent not correctly configured(OPENTSDB_HIS_END_DAY). Check config file.")
+                sys.exit(1)
+
         opentsdb_config = {
-            "OPENTSDB_URL": cp.get('opentsdb', 'OPENTSDB_URL'),
-            "OPENTSDB_METRIC_FILEPATH": cp.get('opentsdb', 'OPENTSDB_METRIC_FILEPATH'),
-            "OPENTSDB_TOKEN": cp.get('opentsdb', 'OPENTSDB_TOKEN'),
+            "OPENTSDB_URL": opentsdb_url,
+            "OPENTSDB_METRICS": opentsdb_metrics,
+            "OPENTSDB_TOKEN": opentsdb_token,
+            "OPENTSDB_MODE": opentsdb_mode,
+            "OPENTSDB_HIS_START_DAY": opentsdb_history_start_date,
+            "OPENTSDB_HIS_END_DAY": opentsdb_history_end_date
         }
+    else:
+        logger.warning("No config file found. Using defaults.")
+        opentsdb_config = {
+            "OPENTSDB_URL": "http://127.0.0.1:4242",
+            "OPENTSDB_METRICS": "",
+            "OPENTSDB_TOKEN": "",
+            "OPENTSDB_MODE": "streaming",
+            "OPENTSDB_HIS_START_DAY": "",
+            "OPENTSDB_HIS_END_DAY": ""
+        }
+
     return opentsdb_config
 
 
@@ -169,13 +221,16 @@ def get_metric_list(config):
 def get_metric_list_from_file(config, filePath):
     """Get available metric list from File"""
     metric_list = set()
-    with open(filePath, 'r') as f:
-        for line in f:
-            m = re.search(r'(?P<metric>\d\.\d\..+):', line)
-            if m:
-                metric = m.groupdict().get('metric')
-                metric_list.add(metric)
-                logger.debug("Get metric list from file: " + str(metric_list))
+    try:
+        with open(filePath, 'r') as f:
+            for line in f:
+                m = re.search(r'(?P<metric>\d\.\d\..+):', line)
+                if m:
+                    metric = m.groupdict().get('metric')
+                    metric_list.add(metric)
+                    logger.debug("Get metric list from file: " + str(metric_list))
+    except:
+        logger.error("No metrics.txt file found.")
     return list(metric_list)
 
 
@@ -264,23 +319,15 @@ def set_logger_config(level):
     # route INFO and DEBUG logging to stdout from stderr
     logging_handler_out = logging.StreamHandler(sys.stdout)
     logging_handler_out.setLevel(logging.DEBUG)
-    logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
+    # create a logging format
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(process)d - %(threadName)s - %(levelname)s - %(message)s')
+    logging_handler_out.setFormatter(formatter)
     logger_obj.addHandler(logging_handler_out)
 
     logging_handler_err = logging.StreamHandler(sys.stderr)
     logging_handler_err.setLevel(logging.WARNING)
     logger_obj.addHandler(logging_handler_err)
     return logger_obj
-
-
-class LessThanFilter(logging.Filter):
-    def __init__(self, exclusive_maximum, name=""):
-        super(LessThanFilter, self).__init__(name)
-        self.max_level = exclusive_maximum
-
-    def filter(self, record):
-        # non-zero return means we log this message
-        return 1 if record.levelno < self.max_level else 0
 
 
 if __name__ == "__main__":
@@ -296,11 +343,7 @@ if __name__ == "__main__":
     grouping_map = load_grouping()
 
     # get agent configuration details
-    agent_config = get_opentsdb_config(parameters, data_dir)
-    for item in agent_config.values():
-        if not item:
-            logger.error("config error, check data/config.txt")
-            sys.exit("config error, check config.txt")
+    agent_config = get_opentsdb_config()
 
     time_list = []
     if agent_config['OPENTSDB_MODE'] == 'streaming':
@@ -325,12 +368,13 @@ if __name__ == "__main__":
             logger.debug("Start to send metric data: {}-{}".format(data_start_ts, data_end_ts))
             # get metric list from opentsdb
             # metric_list = get_metric_list(agent_config)
-            metricListAll = get_metric_list_from_file(agent_config, agent_config['OPENTSDB_METRIC_FILEPATH'])
-            if len(metricListAll) == 0:
+            # all_metrics_list = get_metric_list_from_file(agent_config, agent_config['OPENTSDB_METRIC_FILEPATH'])
+            if len(all_metrics_list) == 0:
+                all_metrics_list = get_metric_list(agent_config)
                 logger.error("No metrics to get data for.")
-                sys.exit()
+                # sys.exit()
 
-            chunked_metric_list = chunks(metricListAll, parameters['chunkSize'])
+            chunked_metric_list = chunks(all_metrics_list, parameters['chunkSize'])
             for sub_list in chunked_metric_list:
                 # get metric data from opentsdb every SAMPLING_INTERVAL
                 metric_data_list = get_metric_data(agent_config, sub_list, grouping_map, data_start_ts,
