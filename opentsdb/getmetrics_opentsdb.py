@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import ConfigParser
+import collections
 import json
 import logging
 import os
@@ -14,40 +15,62 @@ from optparse import OptionParser
 import requests
 
 '''
-this script gathers metric info from opentsdb and use http api to send to server
+This script gathers metric data from opentsdb and use http api to send to Insightfinder
 '''
 
 
 def get_parameters():
     usage = "Usage: %prog [options]"
     parser = OptionParser(usage=usage)
-    parser.add_option("-d", "--directory",
-                      action="store", dest="homepath", help="Directory to run from")
     parser.add_option("-w", "--serverUrl",
                       action="store", dest="serverUrl", help="Server Url")
-    parser.add_option("-c", "--chunkSize",
-                      action="store", dest="chunkSize", help="Metrics per chunk")
+    parser.add_option("-c", "--chunkLines",
+                      action="store", dest="chunkLines", help="Timestamps per chunk for historical data.")
+    parser.add_option("-m", "--mode",
+                      action="store", dest="mode", help="Data sending mode(streaming/historical)")
+    parser.add_option("-s", "--startDate",
+                      action="store", dest="startDate", help="Historical data start date")
+    parser.add_option("-e", "--endDate",
+                      action="store", dest="endDate", help="Historical data end date")
+    parser.add_option("-l", "--logLevel",
+                      action="store", dest="logLevel", help="Change log verbosity(WARNING: 0, INFO: 1, DEBUG: 2)")
     (options, args) = parser.parse_args()
 
     params = {}
-    if options.homepath is None:
-        params['homepath'] = os.getcwd()
-    else:
-        params['homepath'] = options.homepath
     if options.serverUrl is None:
         params['serverUrl'] = 'https://app.insightfinder.com'
     else:
         params['serverUrl'] = options.serverUrl
-    if options.chunkSize is None:
-        params['chunkSize'] = 50
+    if options.chunkLines is None:
+        params['chunkLines'] = 50
     else:
-        params['chunkSize'] = int(options.chunkSize)
+        params['chunkLines'] = int(options.chunkLines)
+    if options.mode is None or options.mode != "historical":
+        params['mode'] = "streaming"
+    else:
+        params['mode'] = "historical"
+    if options.startDate is None or options.mode == "streaming":
+        params['startDate'] = ""
+    else:
+        params['startDate'] = options.startDate
+    if options.endDate is None or options.mode == "streaming":
+        params['endDate'] = ""
+    else:
+        params['endDate'] = options.endDate
+    params['logLevel'] = logging.INFO
+    if options.logLevel == '0':
+        params['logLevel'] = logging.WARNING
+    elif options.logLevel == '1':
+        params['logLevel'] = logging.INFO
+    elif options.logLevel >= '2':
+        params['logLevel'] = logging.DEBUG
+
     return params
 
 
 def get_agent_config_vars():
     config_vars = {}
-    with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as configFile:
+    with open(os.path.abspath(os.path.join(__file__, os.pardir, os.pardir, ".agent.bashrc")), 'r') as configFile:
         file_content = configFile.readlines()
         if len(file_content) < 6:
             logger.error("Agent not correctly configured. Check .agent.bashrc file.")
@@ -81,7 +104,7 @@ def get_agent_config_vars():
 
 def get_reporting_config_vars():
     reporting_config = {}
-    with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
+    with open(os.path.abspath(os.path.join(__file__, os.pardir, os.pardir, "reporting_config.json")), 'r') as f:
         config = json.load(f)
     reporting_interval_string = config['reporting_interval']
     if reporting_interval_string[-1:] == 's':
@@ -100,19 +123,15 @@ def get_reporting_config_vars():
 
 
 def get_opentsdb_config():
-    """Read and parse Open TSDB config from config.txt"""
+    """Read and parse Open TSDB config from config.ini"""
     opentsdb_config = {}
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
-
         try:
             opentsdb_url = config_parser.get('opentsdb', 'OPENTSDB_URL')
             opentsdb_token = config_parser.get('opentsdb', 'OPENTSDB_TOKEN')
-            opentsdb_mode = config_parser.get('opentsdb', 'OPENTSDB_MODE')
-            opentsdb_metrics = config_parser.get('opentsdb', 'OPENTSDB_METRICS').split(",")
-            opentsdb_history_start_date = config_parser.get('opentsdb', 'OPENTSDB_HIS_START_DAY')
-            opentsdb_history_end_date = config_parser.get('opentsdb', 'OPENTSDB_HIS_END_DAY')
+            opentsdb_metrics = config_parser.get('opentsdb', 'OPENTSDB_METRICS')
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
@@ -122,44 +141,22 @@ def get_opentsdb_config():
             logger.warning(
                 "Agent not correctly configured(OPENTSDB_URL). Check config file. Using \"127.0.0.1:4242\" as default.")
             opentsdb_url = "http://127.0.0.1:4242"
-
-        if len(opentsdb_mode) == 0:
-            logger.warning(
-                "Agent not correctly configured(OPENTSDB_MODE). Check config file. Using \"streaming\" as default.")
-            opentsdb_mode = "streaming"
+        if len(opentsdb_metrics) != 0:
+            opentsdb_metrics = opentsdb_metrics.split(",")
         else:
-            if not (opentsdb_mode == 'streaming' or opentsdb_mode == 'historical'):
-                logger.warning(
-                    "Agent not correctly configured(OPENTSDB_MODE). Check config file. Using \"streaming\" as default.")
-                opentsdb_mode = "streaming"
-
-        if opentsdb_mode == 'historical':
-            if len(opentsdb_history_start_date) == 0:
-                logger.error(
-                    "Agent not correctly configured(OPENTSDB_HIS_START_DAY). Check config file.")
-                sys.exit(1)
-            if len(opentsdb_history_end_date) == 0:
-                logger.error(
-                    "Agent not correctly configured(OPENTSDB_HIS_END_DAY). Check config file.")
-                sys.exit(1)
+            opentsdb_metrics = []
 
         opentsdb_config = {
             "OPENTSDB_URL": opentsdb_url,
             "OPENTSDB_METRICS": opentsdb_metrics,
-            "OPENTSDB_TOKEN": opentsdb_token,
-            "OPENTSDB_MODE": opentsdb_mode,
-            "OPENTSDB_HIS_START_DAY": opentsdb_history_start_date,
-            "OPENTSDB_HIS_END_DAY": opentsdb_history_end_date
+            "OPENTSDB_TOKEN": opentsdb_token
         }
     else:
         logger.warning("No config file found. Using defaults.")
         opentsdb_config = {
             "OPENTSDB_URL": "http://127.0.0.1:4242",
             "OPENTSDB_METRICS": "",
-            "OPENTSDB_TOKEN": "",
-            "OPENTSDB_MODE": "streaming",
-            "OPENTSDB_HIS_START_DAY": "",
-            "OPENTSDB_HIS_END_DAY": ""
+            "OPENTSDB_TOKEN": ""
         }
 
     return opentsdb_config
@@ -168,6 +165,8 @@ def get_opentsdb_config():
 def save_grouping(grouping_map):
     """
     Saves the grouping data to grouping.json
+    Parameters:
+        - `grouping_map` : metric_name-grouping_id dict
     :return: None
     """
     with open('grouping.json', 'w+') as f:
@@ -175,6 +174,10 @@ def save_grouping(grouping_map):
 
 
 def load_grouping():
+    """
+    Loads the grouping data from grouping.json
+    :return: grouping JSON string
+    """
     if os.path.isfile('grouping.json'):
         logger.debug("Grouping file exists. Loading..")
         with open('grouping.json', 'r+') as f:
@@ -195,7 +198,7 @@ def get_grouping_id(metric_key, grouping_map):
     - `metric_key` : metric key str to get group id.
     - `temp_id` : proposed group id integer
     """
-    for i in range(3):
+    for index in range(3):
         grouping_candidate = random.randint(GROUPING_START, GROUPING_END)
         if metric_key in grouping_map:
             grouping_id = int(grouping_map[metric_key])
@@ -218,48 +221,38 @@ def get_metric_list(config):
     return metric_list
 
 
-def get_metric_list_from_file(config, filePath):
-    """Get available metric list from File"""
-    metric_list = set()
-    try:
-        with open(filePath, 'r') as f:
-            for line in f:
-                m = re.search(r'(?P<metric>\d\.\d\..+):', line)
-                if m:
-                    metric = m.groupdict().get('metric')
-                    metric_list.add(metric)
-                    logger.debug("Get metric list from file: " + str(metric_list))
-    except:
-        logger.error("No metrics.txt file found.")
-    return list(metric_list)
-
-
-def get_metric_data(config, metric_list, grouping_map, startTime, endTime):
+def get_metric_data(config, metric_list, grouping_map, start_time, end_time, raw_data_map):
     """Get metric data from Open TSDB API"""
 
-    def full_data(d):
-        value_map = {}
-        metric_name = d.get('metric')
-        host_name = d.get('tags', {}).get('host') or 'unknownApplication'
-        dps = d.get('dps', {})
+    def format_data_entry(json_data_entry, raw_data_map):
+        metric_name = json_data_entry.get('metric')
+        host_name = json_data_entry.get('tags', {}).get('host') or 'unknownApplication'
+        dps = json_data_entry.get('dps', {})
         metric_value = None
-        header_field = metric_name + "[" + host_name + "]:" + str(get_grouping_id(metric_name, grouping_map))
+        header_field = normalize_key(metric_name) + "[" + host_name + "]:" + str(
+            get_grouping_id(metric_name, grouping_map))
         mtime = 0
         for stime, val in dps.items():
             if int(stime) > mtime:
                 metric_value = val
                 mtime = int(stime)
 
-        value_map[header_field] = str(metric_value)
-        value_map['timestamp'] = str(mtime * 1000)
+        epoch = mtime * 1000
 
+        if epoch in raw_data_map:
+            value_map = raw_data_map[epoch]
+        else:
+            value_map = {}
+
+        value_map[header_field] = str(metric_value)
+        raw_data_map[epoch] = value_map
         return value_map
 
     opentsdb_metric_list = []
     json_data = {
         "token": config['OPENTSDB_TOKEN'],
-        "start": startTime,
-        "end": endTime,
+        "start": start_time,
+        "end": end_time,
         "queries": map(lambda m: {
             "aggregator": "avg",
             "downsample": "1m-avg",
@@ -274,7 +267,7 @@ def get_metric_data(config, metric_list, grouping_map, startTime, endTime):
         logger.debug("Get metric data from opentsdb: " + str(len(rawdata_list)))
 
         # completion metric data
-        opentsdb_metric_list = map(lambda d: full_data(d), rawdata_list)
+        opentsdb_metric_list = map(lambda d: format_data_entry(d, raw_data_map), rawdata_list)
 
     return opentsdb_metric_list
 
@@ -282,8 +275,8 @@ def get_metric_data(config, metric_list, grouping_map, startTime, endTime):
 def send_data(metric_data):
     send_data_time = time.time()
     # prepare data for metric streaming agent
-    to_send_data_dict = {}
-    to_send_data_dict["metric_data"] = json.dumps(metric_data)
+    to_send_data_dict = dict()
+    to_send_data_dict["metricData"] = json.dumps(metric_data)
     to_send_data_dict["licenseKey"] = agent_config_ars['licenseKey']
     to_send_data_dict["projectName"] = agent_config_ars['projectName']
     to_send_data_dict["userName"] = agent_config_ars['userName']
@@ -306,8 +299,19 @@ def send_data(metric_data):
 
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
-    for i in xrange(0, len(l), n):
-        yield l[i:i + n]
+    for index in xrange(0, len(l), n):
+        yield l[index:index + n]
+
+
+def normalize_key(metric_key):
+    """
+    Take a single metric key string and return the same string with spaces, slashes and
+    non-alphanumeric characters subbed out.
+    """
+    metric_key = SPACES.sub("_", metric_key)
+    metric_key = SLASHES.sub("-", metric_key)
+    metric_key = NON_ALNUM.sub("", metric_key)
+    return metric_key
 
 
 def set_logger_config(level):
@@ -333,11 +337,15 @@ def set_logger_config(level):
 if __name__ == "__main__":
     GROUPING_START = 15000
     GROUPING_END = 20000
+    METRIC_CHUNKS = 50
+    SPACES = re.compile(r"\s+")
+    SLASHES = re.compile(r"\/+")
+    NON_ALNUM = re.compile(r"[^a-zA-Z_\-0-9\.]")
 
-    log_level = logging.INFO
+    parameters = get_parameters()
+    log_level = parameters['logLevel']
     logger = set_logger_config(log_level)
     data_dir = 'data'
-    parameters = get_parameters()
     agent_config_ars = get_agent_config_vars()
     reporting_config_vars = get_reporting_config_vars()
     grouping_map = load_grouping()
@@ -346,7 +354,7 @@ if __name__ == "__main__":
     agent_config = get_opentsdb_config()
 
     time_list = []
-    if agent_config['OPENTSDB_MODE'] == 'streaming':
+    if parameters['mode'] == 'streaming':
         # get data by cron
         data_end_ts = int(time.time())
         interval_in_secs = int(reporting_config_vars['reporting_interval'] * 60)
@@ -354,39 +362,70 @@ if __name__ == "__main__":
         time_list = [(data_start_ts, data_end_ts)]
     else:
         # get data from history date
-        start_day = agent_config['OPENTSDB_HIS_START_DAY']
-        end_day = agent_config['OPENTSDB_HIS_END_DAY']
+        start_day = parameters['startDate']
+        end_day = parameters['endDate']
         start_day_obj = datetime.strptime(start_day, "%Y-%m-%d")
         start_ts = int(time.mktime(start_day_obj.timetuple()))
         end_day_obj = datetime.strptime(end_day, "%Y-%m-%d")
         end_ts = int(time.mktime(end_day_obj.timetuple()))
+        if start_ts >= end_ts:
+            logger.error(
+                "Agent not correctly configured(OPENTSDB_HIS_START_DAY and OPENTSDB_HIS_END_DAY). Check config file.")
+            sys.exit(1)
         timeInterval = (end_ts - start_ts) / 60
         time_list = [(start_ts + i * 60, start_ts + (i + 1) * 60) for i in range(timeInterval)]
+    try:
+        raw_data_map = collections.OrderedDict()
+        metric_data = []
+        chunk_number = 0
 
-    for data_start_ts, data_end_ts in time_list:
-        try:
-            logger.debug("Start to send metric data: {}-{}".format(data_start_ts, data_end_ts))
-            # get metric list from opentsdb
-            # metric_list = get_metric_list(agent_config)
-            # all_metrics_list = get_metric_list_from_file(agent_config, agent_config['OPENTSDB_METRIC_FILEPATH'])
-            if len(all_metrics_list) == 0:
-                all_metrics_list = get_metric_list(agent_config)
-                logger.error("No metrics to get data for.")
-                # sys.exit()
+        # get metric list
+        all_metrics_list = agent_config['OPENTSDB_METRICS']
+        if len(all_metrics_list) == 0:
+            all_metrics_list = get_metric_list(agent_config)
 
-            chunked_metric_list = chunks(all_metrics_list, parameters['chunkSize'])
+        for data_start_ts, data_end_ts in time_list:
+            logger.debug("Getting data from OpenTSDB for range: {}-{}".format(data_start_ts, data_end_ts))
+            chunked_metric_list = chunks(all_metrics_list, METRIC_CHUNKS)
             for sub_list in chunked_metric_list:
                 # get metric data from opentsdb every SAMPLING_INTERVAL
                 metric_data_list = get_metric_data(agent_config, sub_list, grouping_map, data_start_ts,
-                                                   data_end_ts)
-                if len(metric_data_list) == 0:
-                    logger.error("No data for metrics received from Open TSDB.")
+                                                   data_end_ts, raw_data_map)
+                if len(raw_data_map) == 0:
+                    logger.error("No data for metrics received from OpenTSDB.")
                     sys.exit()
-                # send metric data to insightfinder
-                send_data(metric_data_list)
-                save_grouping(grouping_map)
+            if len(raw_data_map) >= parameters['chunkLines']:
+                min_timestamp = sys.maxsize
+                max_timestamp = -sys.maxsize
+                for timestamp in raw_data_map.keys():
+                    value_map = raw_data_map[timestamp]
+                    value_map['timestamp'] = str(timestamp)
+                    metric_data.append(value_map)
+                    min_timestamp = min(min_timestamp, timestamp)
+                    max_timestamp = max(max_timestamp, timestamp)
+                chunk_number += 1
+                logger.debug("Sending Chunk Number: " + str(chunk_number))
+                logger.info("Sending from OpenTSDB for range: {}-{}".format(min_timestamp, max_timestamp))
+                send_data(metric_data)
+                metric_data = []
+                raw_data_map = collections.OrderedDict()
 
-            logger.info("Send metric date for {} - {}.".format(data_start_ts, data_end_ts))
-        except Exception as e:
-            logger.error("Error send metric data to insightfinder: {}-{}".format(data_start_ts, data_end_ts))
-            logger.error(e)
+        # send final chunk
+        for timestamp in raw_data_map.keys():
+            min_timestamp = sys.maxsize
+            max_timestamp = -sys.maxsize
+            value_map = raw_data_map[timestamp]
+            value_map['timestamp'] = str(timestamp)
+            metric_data.append(value_map)
+            min_timestamp = min(min_timestamp, timestamp)
+            max_timestamp = max(max_timestamp, timestamp)
+        if len(metric_data) != 0:
+            chunk_number += 1
+            logger.debug("Sending Final Chunk: " + str(chunk_number))
+            logger.info("Sending from OpenTSDB for range: {}-{}".format(min_timestamp, max_timestamp))
+            send_data(metric_data)
+        save_grouping(grouping_map)
+
+    except Exception as e:
+        logger.error("Error sending metric data to InsightFinder.")
+        logger.error(e)
