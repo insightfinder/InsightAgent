@@ -1,0 +1,141 @@
+---
+- name : Check Mandatory Variables For Install
+  debug:
+    msg:
+      - ProjectName:{{ projectName | mandatory }}
+      - UserName:{{ userName | mandatory }}
+      - Sampling Interval:{{ samplingInterval | mandatory }}
+      - Agent Type:{{ agentType | mandatory }}
+      - License Key:{{ licenseKey | mandatory }}
+      - Kafka Bootstrap Servers:{{ kafkaBootstrapServers | mandatory }}
+      - Kafka Metric Topic:{{ kafkaMetricTopic | mandatory }}
+- name: SELinux | Check for SELinux
+  become: yes
+  stat:
+    path: /etc/selinux/config
+  register: p
+- name: SELinux | Disable SELinux
+  become: yes
+  selinux:
+    state: disabled
+  when: p.stat.exists == True
+- name: Delete Old Tar Bundle for Agent
+  become: yes
+  file:
+    state: absent
+    path: "{{ansible_env.HOME}}/insightagent.tar.gz"
+- name: Delete Old Agent Code
+  become: yes
+  file:
+    state: absent
+    path: "{{ansible_env.HOME}}/InsightAgent-master"
+- name: Delete ifagent Cron Configuration
+  become: yes
+  file:
+    state: absent
+    path: /etc/cron.d/ifagent
+- name: Copy Agent Code on Machines
+  become: yes
+  copy:
+    src: ../files/insightagent.tar.gz
+    dest: "{{ansible_env.HOME}}"
+    owner: root
+    group: root
+    mode: 0644
+- name: Untar the Agent Code
+  unarchive:
+    src: "{{ansible_env.HOME}}/insightagent.tar.gz"
+    dest: "{{ansible_env.HOME}}"
+    remote_src: True
+- name: Copy Pip packages on Machines
+  become: yes
+  copy:
+    src: ../files/pip_packages.tar.gz
+    dest: "{{ansible_env.HOME}}"
+    owner: root
+    group: root
+    mode: 0644
+- name: Untar the Pip packages
+  unarchive:
+    src: "{{ansible_env.HOME}}/pip_packages.tar.gz"
+    dest: "{{ansible_env.HOME}}"
+    remote_src: True
+- name: Copy get-pip.py on Machines
+  become: yes
+  copy:
+    src: ../files/get-pip.py
+    dest: "{{ansible_env.HOME}}"
+    owner: root
+    group: root
+    mode: 0644
+- name: Install pip
+  become: yes
+  shell: "http_proxy={{ http_proxy }} python {{ansible_env.HOME}}/get-pip.py --no-index --find-links={{ansible_env.HOME}}/pip_packages/"
+- name: Install pip packages for Agent
+  shell: "pip install --no-index --find-links='{{ansible_env.HOME}}/pip_packages/' requests pytz kafka"
+- name: Deploy Replay Agent
+  shell: "no_proxy={{ no_proxy }} ./deployment/install.sh
+    -i {{ projectName }}
+    -u {{ userName }}
+    -k {{ licenseKey }}
+    -s {{ samplingInterval }}
+    -t {{ agentType }}
+    -w {{ reportingUrl }}"
+  become: true
+  args:
+    chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
+- name: td-agent | Copy setup script
+  become: yes
+  template: src=config.ini dest={{ansible_env.HOME}}/InsightAgent-master/kafka/config.ini
+- name: Monit | Install Monit
+  yum:
+    name: monit
+    state: present
+  when: ansible_pkg_mgr == 'yum'
+- name: Monit | Install Monit
+  apt:
+    name: monit
+    state: present
+  when: ansible_pkg_mgr == 'apt'
+- name: Monit | Start Monit daemon
+  systemd:
+    name: monit.service
+    enabled: yes
+    daemon_reload: yes
+    state: started
+- name: Monit | Add Monit config
+  template:
+    src: monitrc
+    dest: /etc/monitrc
+    owner: root
+    group: root
+    mode: 0600
+- name: Monit | Add Monit config
+  template:
+    src: monitrc
+    dest: /etc/monit.conf
+    owner: root
+    group: root
+    mode: 0600
+- name: Monit | Restart Monit daemon
+  systemd:
+    name: monit.service
+    enabled: yes
+    daemon_reload: yes
+    state: restarted
+- name: Delete Tar Bundle for Agent
+  file:
+    state: absent
+    path: "{{ansible_env.HOME}}/insightagent.tar.gz"
+- name: Delete pip_packages.tar.gz
+  file:
+    state: absent
+    path: "{{ansible_env.HOME}}/pip_packages.tar.gz"
+- name: Delete get-pip.py
+  file:
+    state: absent
+    path: "{{ansible_env.HOME}}/get-pip.py"
+- name: Delete pip_packages directory
+  file:
+    state: absent
+    path: "{{ansible_env.HOME}}/pip_packages"
