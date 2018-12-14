@@ -213,7 +213,7 @@ elif [ $AGENT_TYPE == 'opentsdb' ]; then
     if [ -z "$CHUNK_SIZE" ]; then
 	    CHUNK_SIZE='50'
     fi
-	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_opentsdb.py -d $INSIGHTAGENTDIR -w $SERVER_URL -c $CHUNK_SIZE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
+	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_opentsdb.py -w $SERVER_URL -c $CHUNK_SIZE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
 	if [ "$IS_SECOND_REPORTING" = true ] ; then
 		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
 	else

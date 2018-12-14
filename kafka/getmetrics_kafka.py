@@ -1,12 +1,11 @@
 #!/usr/bin/env python
-import threading
-import logging
-import time
 import csv
-import socket
-from optparse import OptionParser
 import os
-from kafka import KafkaConsumer, KafkaProducer
+import socket
+import time
+from optparse import OptionParser
+
+from kafka import KafkaConsumer
 
 '''
 this script gathers system info from kafka and add to daily csv file
@@ -54,8 +53,8 @@ try:
         homepath, datadir + date + "_kafka.csv"), "a+")
 
     # Kafka consumer to configuration
-    if os.path.exists(os.path.join(homepath, datadir + "config.txt")):
-        config_file = open(os.path.join(homepath, datadir + "config.txt"), "r")
+    if os.path.exists(os.path.join(homepath, datadir + "config.ini")):
+        config_file = open(os.path.join(homepath, datadir + "config.ini"), "r")
         host = config_file.readline()
         host = host.strip('\n\r')  # remove newline character from read line
         if len(host) == 0:
