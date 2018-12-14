@@ -1,17 +1,18 @@
 #!/usr/bin/python
-import math
-from common import reportMetrics, ifLogger, configReader
-from optparse import OptionParser
-from elasticsearch import Elasticsearch
-import os
-import json
-import time
-import socket
-import requests
 import datetime
-import pytz
+import json
 import logging
+import math
+import os
+import socket
 import sys
+import time
+from optparse import OptionParser
+
+import pytz
+import requests
+from elasticsearch import Elasticsearch
+
 
 def getParameters():
     usage = "Usage: %prog [options]"
@@ -163,13 +164,15 @@ def getLogsFromElastic(elasticsearch, elasticsearchConfigVars):
     maxTimeStamp = 0
     if len(res2['hits']['hits']) != 0: # if there are updated values after the last read record
         currentLog = {}
-        latest_time = res2['hits']['hits'][0]["_source"][elasticsearchConfigVars['timeFieldName']] # update the last read record timestamp
-        header_fields = res2['hits']['hits'][0]["_source"]['message']
+        latest_time = res2['hits']['hits'][0]['sort'][0]  # update the last read record timestamp
         currentLog['eventId'] = latest_time
         minTimeStamp = min(minTimeStamp, long(latest_time))
         maxTimeStamp = max(maxTimeStamp, long(latest_time))
         currentLog['data'] = json.dumps(res2['hits']['hits'][0]["_source"])
-        currentLog['tag'] = res2['hits']['hits'][0]["_source"][elasticsearchConfigVars['hostNameField']]
+        try:
+            currentLog['tag'] = res2['hits']['hits'][0]["_source"][elasticsearchConfigVars['hostNameField']]
+        except:
+            currentLog['tag'] = res2['hits']['hits'][0]["_source"]['beat']['hostname']
         jsonData.append(currentLog)
     if len(jsonData) != 0:
         newPrevEndtimeInSec = math.ceil(long(end_time) / 1000.0)
@@ -221,10 +224,44 @@ class LessThanFilter(logging.Filter):
         #non-zero return means we log this message
         return 1 if record.levelno < self.max_level else 0
 
+
+def getAgentConfigVars(homepath=os.getcwd()):
+    configVars = {}
+    with open(os.path.join(homepath, ".agent.bashrc"), 'r') as configFile:
+        fileContent = configFile.readlines()
+        if len(fileContent) < 6:
+            logger.error("Agent not correctly configured. Check .agent.bashrc file.")
+            sys.exit(1)
+        # get license key
+        licenseKeyLine = fileContent[0].split(" ")
+        if len(licenseKeyLine) != 2:
+            logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
+            sys.exit(1)
+        configVars['licenseKey'] = licenseKeyLine[1].split("=")[1].strip()
+        # get project name
+        projectNameLine = fileContent[1].split(" ")
+        if len(projectNameLine) != 2:
+            logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
+            sys.exit(1)
+        configVars['projectName'] = projectNameLine[1].split("=")[1].strip()
+        # get username
+        userNameLine = fileContent[2].split(" ")
+        if len(userNameLine) != 2:
+            logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
+            sys.exit(1)
+        configVars['userName'] = userNameLine[1].split("=")[1].strip()
+        # get sampling interval
+        samplingIntervalLine = fileContent[4].split(" ")
+        if len(samplingIntervalLine) != 2:
+            logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
+            sys.exit(1)
+        configVars['samplingInterval'] = samplingIntervalLine[1].split("=")[1].strip()
+    return configVars
+
 if __name__ == '__main__':
     logger = setloggerConfig()
     parameters = getParameters()
-    agentConfigVars = configReader.getAgentConfigVars(parameters['homepath'])
+    agentConfigVars = getAgentConfigVars(parameters['homepath'])
     elasticsearchConfigVars = getElasticConfigVars()
     reportingConfigVars = getReportingConfigVars()
     elasticsearch = getElasticSearchConnection(elasticsearchConfigVars)
