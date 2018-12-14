@@ -69,37 +69,42 @@ def get_parameters():
 
 
 def get_agent_config_vars():
-    config_vars = {}
-    with open(os.path.abspath(os.path.join(__file__, os.pardir, os.pardir, ".agent.bashrc")), 'r') as configFile:
-        file_content = configFile.readlines()
-        if len(file_content) < 6:
-            logger.error("Agent not correctly configured. Check .agent.bashrc file.")
+    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
+        config_parser = ConfigParser.SafeConfigParser()
+        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
+        try:
+            user_name = config_parser.get('insightfinder', 'user_name')
+            license_key = config_parser.get('insightfinder', 'license_key')
+            project_name = config_parser.get('insightfinder', 'project_name')
+        except ConfigParser.NoOptionError:
+            logger.error(
+                "Agent not correctly configured. Check config file.")
             sys.exit(1)
-        # get license key
-        license_key_line = file_content[0].split(" ")
-        if len(license_key_line) != 2:
-            logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
+
+        if len(user_name) == 0:
+            logger.warning(
+                "Agent not correctly configured(user_name). Check config file.")
             sys.exit(1)
-        config_vars['licenseKey'] = license_key_line[1].split("=")[1].strip()
-        # get project name
-        project_name_line = file_content[1].split(" ")
-        if len(project_name_line) != 2:
-            logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
+        if len(license_key) == 0:
+            logger.warning(
+                "Agent not correctly configured(license_key). Check config file.")
             sys.exit(1)
-        config_vars['projectName'] = project_name_line[1].split("=")[1].strip()
-        # get username
-        user_name_line = file_content[2].split(" ")
-        if len(user_name_line) != 2:
-            logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
+        if len(project_name) == 0:
+            logger.warning(
+                "Agent not correctly configured(project_name). Check config file.")
             sys.exit(1)
-        config_vars['userName'] = user_name_line[1].split("=")[1].strip()
-        # get sampling interval
-        sampling_interval_line = file_content[4].split(" ")
-        if len(sampling_interval_line) != 2:
-            logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
-            sys.exit(1)
-        config_vars['samplingInterval'] = sampling_interval_line[1].split("=")[1].strip()
-    return config_vars
+
+        config_vars = {
+            "userName": user_name,
+            "licenseKey": license_key,
+            "projectName": project_name
+        }
+
+        return config_vars
+    else:
+        logger.error(
+            "Agent not correctly configured. Check config file.")
+        sys.exit(1)
 
 
 def get_reporting_config_vars():
@@ -129,9 +134,9 @@ def get_opentsdb_config():
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
         try:
-            opentsdb_url = config_parser.get('opentsdb', 'OPENTSDB_URL')
-            opentsdb_token = config_parser.get('opentsdb', 'OPENTSDB_TOKEN')
-            opentsdb_metrics = config_parser.get('opentsdb', 'OPENTSDB_METRICS')
+            opentsdb_url = config_parser.get('opentsdb', 'opentsdb_server_url')
+            opentsdb_token = config_parser.get('opentsdb', 'token')
+            opentsdb_metrics = config_parser.get('opentsdb', 'metrics')
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
@@ -277,9 +282,9 @@ def send_data(metric_data):
     # prepare data for metric streaming agent
     to_send_data_dict = dict()
     to_send_data_dict["metricData"] = json.dumps(metric_data)
-    to_send_data_dict["licenseKey"] = agent_config_ars['licenseKey']
-    to_send_data_dict["projectName"] = agent_config_ars['projectName']
-    to_send_data_dict["userName"] = agent_config_ars['userName']
+    to_send_data_dict["licenseKey"] = agent_config_vars['licenseKey']
+    to_send_data_dict["projectName"] = agent_config_vars['projectName']
+    to_send_data_dict["userName"] = agent_config_vars['userName']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
     to_send_data_dict["samplingInterval"] = str(int(reporting_config_vars['reporting_interval'] * 60))
     to_send_data_dict["agentType"] = "custom"
@@ -346,7 +351,7 @@ if __name__ == "__main__":
     log_level = parameters['logLevel']
     logger = set_logger_config(log_level)
     data_dir = 'data'
-    agent_config_ars = get_agent_config_vars()
+    agent_config_vars = get_agent_config_vars()
     reporting_config_vars = get_reporting_config_vars()
     grouping_map = load_grouping()
 
@@ -370,7 +375,7 @@ if __name__ == "__main__":
         end_ts = int(time.mktime(end_day_obj.timetuple()))
         if start_ts >= end_ts:
             logger.error(
-                "Agent not correctly configured(OPENTSDB_HIS_START_DAY and OPENTSDB_HIS_END_DAY). Check config file.")
+                "Agent not correctly configured(historical start date and end date). Check parameters")
             sys.exit(1)
         timeInterval = (end_ts - start_ts) / 60
         time_list = [(start_ts + i * 60, start_ts + (i + 1) * 60) for i in range(timeInterval)]
