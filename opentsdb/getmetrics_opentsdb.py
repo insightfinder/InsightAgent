@@ -129,7 +129,6 @@ def get_reporting_config_vars():
 
 def get_opentsdb_config():
     """Read and parse Open TSDB config from config.ini"""
-    opentsdb_config = {}
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
@@ -167,7 +166,7 @@ def get_opentsdb_config():
     return opentsdb_config
 
 
-def save_grouping(grouping_map):
+def save_grouping(metric_grouping):
     """
     Saves the grouping data to grouping.json
     Parameters:
@@ -175,7 +174,7 @@ def save_grouping(grouping_map):
     :return: None
     """
     with open('grouping.json', 'w+') as f:
-        f.write(json.dumps(grouping_map))
+        f.write(json.dumps(metric_grouping))
 
 
 def load_grouping():
@@ -196,21 +195,21 @@ def load_grouping():
     return grouping_json
 
 
-def get_grouping_id(metric_key, grouping_map):
+def get_grouping_id(metric_key, metric_grouping):
     """
     Get grouping id for a metric key
     Parameters:
     - `metric_key` : metric key str to get group id.
-    - `temp_id` : proposed group id integer
+    - `metric_grouping` : metric_key-grouping id map
     """
     for index in range(3):
         grouping_candidate = random.randint(GROUPING_START, GROUPING_END)
-        if metric_key in grouping_map:
-            grouping_id = int(grouping_map[metric_key])
+        if metric_key in metric_grouping:
+            grouping_id = int(metric_grouping[metric_key])
             return grouping_id
         else:
             grouping_id = grouping_candidate
-            grouping_map[metric_key] = grouping_id
+            metric_grouping[metric_key] = grouping_id
             return grouping_id
     return GROUPING_START
 
@@ -226,16 +225,16 @@ def get_metric_list(config):
     return metric_list
 
 
-def get_metric_data(config, metric_list, grouping_map, start_time, end_time, raw_data_map):
+def get_metric_data(config, metric_list, metric_grouping, start_time, end_time, collected_data_map):
     """Get metric data from Open TSDB API"""
 
-    def format_data_entry(json_data_entry, raw_data_map):
+    def format_data_entry(json_data_entry):
         metric_name = json_data_entry.get('metric')
-        host_name = json_data_entry.get('tags', {}).get('host') or 'unknownApplication'
+        host_name = json_data_entry.get('tags', {}).get('host') or 'unknownHost'
         dps = json_data_entry.get('dps', {})
         metric_value = None
         header_field = normalize_key(metric_name) + "[" + host_name + "]:" + str(
-            get_grouping_id(metric_name, grouping_map))
+            get_grouping_id(metric_name, metric_grouping))
         mtime = 0
         for stime, val in dps.items():
             if int(stime) > mtime:
@@ -244,16 +243,14 @@ def get_metric_data(config, metric_list, grouping_map, start_time, end_time, raw
 
         epoch = mtime * 1000
 
-        if epoch in raw_data_map:
-            value_map = raw_data_map[epoch]
+        if epoch in collected_data_map:
+            timestamp_value_map = collected_data_map[epoch]
         else:
-            value_map = {}
+            timestamp_value_map = {}
 
-        value_map[header_field] = str(metric_value)
-        raw_data_map[epoch] = value_map
-        return value_map
+        timestamp_value_map[header_field] = str(metric_value)
+        collected_data_map[epoch] = timestamp_value_map
 
-    opentsdb_metric_list = []
     json_data = {
         "token": config['OPENTSDB_TOKEN'],
         "start": start_time,
@@ -271,17 +268,15 @@ def get_metric_data(config, metric_list, grouping_map, start_time, end_time, raw
         rawdata_list = response.json()
         logger.debug("Get metric data from opentsdb: " + str(len(rawdata_list)))
 
-        # completion metric data
-        opentsdb_metric_list = map(lambda d: format_data_entry(d, raw_data_map), rawdata_list)
-
-    return opentsdb_metric_list
+        # format metric and save to collected_data_map
+        map(lambda d: format_data_entry(d), rawdata_list)
 
 
-def send_data(metric_data):
+def send_data(chunk_metric_data):
     send_data_time = time.time()
     # prepare data for metric streaming agent
     to_send_data_dict = dict()
-    to_send_data_dict["metricData"] = json.dumps(metric_data)
+    to_send_data_dict["metricData"] = json.dumps(chunk_metric_data)
     to_send_data_dict["licenseKey"] = agent_config_vars['licenseKey']
     to_send_data_dict["projectName"] = agent_config_vars['projectName']
     to_send_data_dict["userName"] = agent_config_vars['userName']
@@ -394,8 +389,7 @@ if __name__ == "__main__":
             chunked_metric_list = chunks(all_metrics_list, METRIC_CHUNKS)
             for sub_list in chunked_metric_list:
                 # get metric data from opentsdb every SAMPLING_INTERVAL
-                metric_data_list = get_metric_data(agent_config, sub_list, grouping_map, data_start_ts,
-                                                   data_end_ts, raw_data_map)
+                get_metric_data(agent_config, sub_list, grouping_map, data_start_ts, data_end_ts, raw_data_map)
                 if len(raw_data_map) == 0:
                     logger.error("No data for metrics received from OpenTSDB.")
                     sys.exit()
@@ -416,9 +410,9 @@ if __name__ == "__main__":
                 raw_data_map = collections.OrderedDict()
 
         # send final chunk
+        min_timestamp = sys.maxsize
+        max_timestamp = -sys.maxsize
         for timestamp in raw_data_map.keys():
-            min_timestamp = sys.maxsize
-            max_timestamp = -sys.maxsize
             value_map = raw_data_map[timestamp]
             value_map['timestamp'] = str(timestamp)
             metric_data.append(value_map)
