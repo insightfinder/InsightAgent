@@ -130,8 +130,8 @@ def getmetric():
             try:
                 r = requests.get(cadvisor_address)
             except:
-                currTime = int(round(time.time() * 1000))
-                if currTime > start_time + 10000:
+                curr_time = int(round(time.time() * 1000))
+                if curr_time > start_time + 10000:
                     logger.error("unable to get requests from ", cadvisor_address)
                     sys.exit()
                 continue
@@ -151,7 +151,7 @@ def getmetric():
             log = str(start_time)
             cpu_all = 0
             resource_usage_file = open(os.path.join(homepath, data_dir + date + ".csv"), 'a+')
-            numlines = len(resource_usage_file.readlines())
+            num_lines = len(resource_usage_file.readlines())
             i = 0
             for key, value in r.json().items():
                 index = len(r.json()[key]["stats"]) - 1
@@ -220,7 +220,7 @@ def getmetric():
                     network_r = "NaN"
                 log = log + "," + str(cur_cpu) + "," + str(io_read) + "," + str(io_write) + "," + str(
                     network_r) + "," + str(network_t) + "," + str(mem)
-                if (numlines < 1):
+                if (num_lines < 1):
                     fields = ["timestamp", "CPU", "DiskRead", "DiskWrite", "NetworkIn", "NetworkOut", "MemUsed"]
                     if i == 0:
                         fieldnames = fields[0]
@@ -230,7 +230,7 @@ def getmetric():
                             continue
                         if (fieldnames != ""):
                             fieldnames = fieldnames + ","
-                        groupid = getindex(fields[k])
+                        group_id = getindex(fields[k])
 
                         docker_id = r.json()[key]["aliases"][0]
                         docker_id_split = []
@@ -244,11 +244,11 @@ def getmetric():
                         if len(docker_id_split) != 0:
                             docker_id = docker_id_split[0]
                         metric = fields[k] + "[" + docker_id + "_" + host + "]"
-                        fieldnames = fieldnames + metric + ":" + str(groupid)
+                        fieldnames = fieldnames + metric + ":" + str(group_id)
                 i = i + 1
-            if (numlines < 1):
+            if (num_lines < 1):
                 resource_usage_file.write("%s\n" % (fieldnames))
-            logger.error("Log: " + str(log))
+            logger.info("Log: " + str(log))
             write_log = log
             resource_usage_file.write("%s\n" % (write_log))
             resource_usage_file.flush()
