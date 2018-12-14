@@ -248,7 +248,9 @@ elif [ "$AGENT_TYPE" = "opentsdb" ]; then
 		touch $PATH_TO_CONFIG_INI
         echo $HEADER_STR >> $PATH_TO_CONFIG_INI
         ## add agent specific parameters here
-
+        echo "opentsdb_server_url=" >> $PATH_TO_CONFIG_INI
+        echo "token=" >> $PATH_TO_CONFIG_INI
+        echo "metrics=" >> $PATH_TO_CONFIG_INI
         add_insightfinder_details $AGENT_TYPE
 	else
             echo "config.ini exists or directory doesnt exist.."
