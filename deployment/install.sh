@@ -151,29 +151,111 @@ then
 	rm $AGENTRC
 fi
 
-if [ $AGENT_TYPE == 'kafka' ]; then
-	if [ ! -f $INSIGHTAGENTDIR/kafka/config.ini ]; then
-		touch $INSIGHTAGENTDIR/kafka/config.ini
-		echo "insightFinder_license_key=$LICENSEKEY" >> $INSIGHTAGENTDIR/kafka/config.ini
-		echo "insightFinder_project_nameE=$PROJECTNAME" >> $INSIGHTAGENTDIR/kafka/config.ini
-		echo "insightFinder_user_name=$USERNAME" >> $INSIGHTAGENTDIR/kafka/config.ini
-		echo "sampling_interval=$SAMPLING_INTERVAL" >> $INSIGHTAGENTDIR/kafka/config.ini
-	fi
-elif [ $AGENT_TYPE == 'kafka-logs' ]; then
-	if [ ! -f $INSIGHTAGENTDIR/kafka_logs/config.ini ]; then
-		touch $INSIGHTAGENTDIR/kafka_logs/config.ini
-		echo "insightFinder_license_key=$LICENSEKEY" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
-		echo "insightFinder_project_nameE=$PROJECTNAME" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
-		echo "insightFinder_user_name=$USERNAME" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
-		echo "sampling_interval=$SAMPLING_INTERVAL" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
-	fi
-else
-	echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> $AGENTRC
+## adding common parameters here
+add_insightfinder_details (){
+    PATH_TO_CONFIG_INI=$1
+    echo -en '\n' >> $PATH_TO_CONFIG_INI
+    echo "[insightfinder]" >> $PATH_TO_CONFIG_INI
+    echo "insightfinder_license_key=$LICENSEKEY" >> $PATH_TO_CONFIG_INI
+    echo "insightfinder_project_nameE=$PROJECTNAME" >> $PATH_TO_CONFIG_INI
+    echo "insightfinder_user_name=$USERNAME" >> $PATH_TO_CONFIG_INI
+    echo "sampling_interval=$SAMPLING_INTERVAL" >> $PATH_TO_CONFIG_INI
+}
+
+export_insightfinder_details() {
+    echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> $AGENTRC
 	echo "export INSIGHTFINDER_PROJECT_NAME=$PROJECTNAME" >> $AGENTRC
 	echo "export INSIGHTFINDER_USER_NAME=$USERNAME" >> $AGENTRC
 	echo "export INSIGHTAGENTDIR=$INSIGHTAGENTDIR" >> $AGENTRC
 	echo "export SAMPLING_INTERVAL=$SAMPLING_INTERVAL" >> $AGENTRC
-	echo "export REPORTING_INTERVAL=$REPORTING_INTERVAL" >> $AGENTRC
+}
+
+# initializing variables
+DIRECTORY="$INSIGHTAGENTDIR""/"$AGENT_TYPE
+PATH_TO_CONFIG_INI="$DIRECTORY""/config.ini"
+HEADER_STR="["$AGENT_TYPE"]"
+
+if [ "$AGENT_TYPE" = "kafka" ]; then
+        if [ -d "$DIRECTORY" -a ! -f $PATH_TO_CONFIG_INI ]; then
+                touch $PATH_TO_CONFIG_INI
+                echo $HEADER_STR >> $PATH_TO_CONFIG_INI
+                ## add agent specific parameters here
+                echo "bootstrap_servers=" >> $PATH_TO_CONFIG_INI
+                echo "topic=" >> $PATH_TO_CONFIG_INI
+                echo "filter_hosts=" >> $PATH_TO_CONFIG_INI
+                echo "all_metrics=" >> $PATH_TO_CONFIG_INI
+                echo "normalization_id=" >> $PATH_TO_CONFIG_INI
+                echo "group_id=" >> $PATH_TO_CONFIG_INI
+
+                add_insightfinder_details $PATH_TO_CONFIG_INI
+        else
+            echo "config.ini exists or directory doesnt exist.."
+        fi
+elif [ "$AGENT_TYPE" = "cadvisor" ]; then
+	if [ -d "$DIRECTORY" -a ! -f $DIRECTORY/config.ini ]; then
+		touch $PATH_TO_CONFIG_INI
+        echo $HEADER_STR >> $PATH_TO_CONFIG_INI
+        ## add agent specific parameters here
+
+        echo "sampling_interval=$SAMPLING_INTERVAL" >> $PATH_TO_CONFIG_INI
+
+		add_insightfinder_details $AGENT_TYPE
+	else
+            echo "config.ini exists or directory doesnt exist.."
+        fi
+elif [ "$AGENT_TYPE" = "collectd" ]; then
+	if [ -d "$DIRECTORY" -a ! -f $DIRECTORY/config.ini ]; then
+		touch $PATH_TO_CONFIG_INI
+        echo $HEADER_STR >> $PATH_TO_CONFIG_INI
+        ## add agent specific parameters here
+
+        add_insightfinder_details $AGENT_TYPE
+	else
+            echo "config.ini exists or directory doesnt exist.."
+        fi
+elif [ "$AGENT_TYPE" = "common" ]; then
+	if [ -d "$DIRECTORY" -a ! -f $DIRECTORY/config.ini ]; then
+		touch $PATH_TO_CONFIG_INI
+        echo $HEADER_STR >> $PATH_TO_CONFIG_INI
+        ## add agent specific parameters here
+
+        add_insightfinder_details $AGENT_TYPE
+	else
+            echo "config.ini exists or directory doesnt exist.."
+        fi
+elif [ "$AGENT_TYPE" = "elasticsearch-log" ]; then
+	if [ -d "$DIRECTORY" -a ! -f $DIRECTORY/config.ini ]; then
+		touch $PATH_TO_CONFIG_INI
+        echo $HEADER_STR >> $PATH_TO_CONFIG_INI
+        ## add agent specific parameters here
+
+        add_insightfinder_details $AGENT_TYPE
+	else
+            echo "config.ini exists or directory doesnt exist.."
+        fi
+        elif [ "$AGENT_TYPE" = "metadata" ]; then
+	if [ -d "$DIRECTORY" -a ! -f $DIRECTORY/config.ini ]; then
+		touch $PATH_TO_CONFIG_INI
+        echo $HEADER_STR >> $PATH_TO_CONFIG_INI
+        ## add agent specific parameters here
+
+        add_insightfinder_details $AGENT_TYPE
+	else
+            echo "config.ini exists or directory doesnt exist.."
+        fi
+elif [ "$AGENT_TYPE" = "opentsdb" ]; then
+	if [ -d "$DIRECTORY" -a ! -f $DIRECTORY/config.ini ]; then
+		touch $PATH_TO_CONFIG_INI
+        echo $HEADER_STR >> $PATH_TO_CONFIG_INI
+        ## add agent specific parameters here
+
+        add_insightfinder_details $AGENT_TYPE
+	else
+            echo "config.ini exists or directory doesnt exist.."
+        fi
+else
+	echo "No agent type given.. exporting insightfinder details"
+	export_insightfinder_details
 fi
 
 if [ $AGENT_TYPE == 'metricFileReplay' ] || [ $AGENT_TYPE == 'logFileReplay' ]; then
