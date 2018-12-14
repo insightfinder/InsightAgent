@@ -3,14 +3,14 @@ import collections
 import json
 import logging
 import os
-import random
 import socket
 import sys
 import time
 from ConfigParser import SafeConfigParser
 from datetime import datetime
-from optparse import OptionParser
 from multiprocessing import Process
+from optparse import OptionParser
+
 import pytz
 import requests
 from kafka import KafkaConsumer
