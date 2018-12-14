@@ -93,11 +93,8 @@ ifReportingUrl=https://app.insightfinder.com
 
 ##Vars for OpenTSDB
 openTsdbUrl=http://localhost:4242
-openTsdbMetricFilePath=./metrics.txt
+openTsdbMetrics=os.cpu,os.cpu.clock,scollector.collect.gc.cpu_fraction
 openTsdbToken=xxxx
-openTsdbMode=[streaming/history]
-openTsdbHisStartDay=2018-06-01
-openTsdbHisEndDay=2018-06-03
 ```
 
 
@@ -113,6 +110,18 @@ sudo -E ./downloadAgentNoSSL.sh
 cd ..
 ansible-playbook insightagent.yaml
 ```
+
+#### Replaying historical data
+
+For replaying historical data to your project go to the InsightAgent-master directory(Its usually installed in /root or the installing user's home directory).
+Then run the following command:
+
+```
+
+python opentsdb/getmetrics_opentsdb.py -w <insightfinder url> -s 2018-12-11 -e 2018-12-12 -m historical -c <timestamps to send data per chunk>
+```
+The parameters **s** and **e** denote the start and end dates respectively for the historical data you want to collect.
+**Note:** Historical data is collected with a sampling rate of 1 min.
 
 ### Uninstallation:
 Note: Uninstallation is required before you can install any other Metric agent(e.g. cgroup) or you want to reinstall the current collectd agent.
