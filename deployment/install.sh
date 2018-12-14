@@ -157,7 +157,7 @@ add_insightfinder_details (){
     echo -en '\n' >> $PATH_TO_CONFIG_INI
     echo "[insightfinder]" >> $PATH_TO_CONFIG_INI
     echo "insightfinder_license_key=$LICENSEKEY" >> $PATH_TO_CONFIG_INI
-    echo "insightfinder_project_nameE=$PROJECTNAME" >> $PATH_TO_CONFIG_INI
+    echo "insightfinder_project_name=$PROJECTNAME" >> $PATH_TO_CONFIG_INI
     echo "insightfinder_user_name=$USERNAME" >> $PATH_TO_CONFIG_INI
     echo "sampling_interval=$SAMPLING_INTERVAL" >> $PATH_TO_CONFIG_INI
 }
