@@ -108,8 +108,10 @@ cadvisorPort=8080
 ##Vars for NFSen/NFDump
 nfsenProfile=/data/nfsen/profiles-data/live
 
-##Vars for Open TSDB
+##Vars for OpenTSDB
 openTsdbUrl=http://localhost:4242
+openTsdbMetrics=
+openTsdbToken=xxxx
 
 ##Vars for td-agent##
 
