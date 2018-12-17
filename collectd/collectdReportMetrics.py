@@ -33,18 +33,10 @@ def get_input_from_user():
 
     params = {}
 
+    params['homepath'] = os.getcwd() if not options.homepath else options.homepath
+    params['server_url'] = 'http://127.0.0.1:8080' if not options.server_url else options.server_url
     # For calling reportCustomMetrics from '../common' directory.
-    if options.homepath is None:
-        params['homepath'] = os.getcwd()
-        sys.path.insert(0, os.path.join(params['homepath'], 'common'))
-    else:
-        params['homepath'] = options.homepath
-        sys.path.insert(0, os.path.join(params['homepath'], 'common'))
-
-    if options.server_url is None:
-        params['server_url'] = 'http://127.0.0.1:8080'
-    else:
-        params['server_url'] = options.server_url
+    sys.path.insert(0, os.path.join(params['homepath'], 'common'))
 
     params['log_level'] = logging.INFO
     if options.log_level == '0':
@@ -79,31 +71,32 @@ def set_logger_config(level):
 
 
 def set_info_from_config_ini_file():
+    config_vars = {}
     if os.path.exists(os.path.join(home_path, "collectd", "config.ini")):
         try:
             parser = ConfigParser()
             parser.read(os.path.join(home_path, "collectd", "config.ini"))
-            license_key_l = parser.get('insightfinder', 'insightfinder_license_key')
-            project_name_l = parser.get('insightfinder', 'insightfinder_project_name')
-            username_l = parser.get('insightfinder', 'insightfinder_user_name')
+            config_vars['license_key'] = parser.get('insightfinder', 'insightfinder_license_key')
+            config_vars['project_name'] = parser.get('insightfinder', 'insightfinder_project_name')
+            config_vars['user_name'] = parser.get('insightfinder', 'insightfinder_user_name')
 
-            if len(license_key_l) == 0 or len(project_name_l) == 0 or len(username_l) == 0:
+            if len(config_vars['license_key']) == 0 or len(config_vars['project_name']) == 0 or len(config_vars['user_name']) == 0:
                 logger.error("Agent not correctly configured. Check config file.")
                 sys.exit(1)
 
             # setting config var for python
-            os.environ["INSIGHTFINDER_LICENSE_KEY"] = license_key_l
-            os.environ["INSIGHTFINDER_PROJECT_NAME"] = project_name_l
-            os.environ["INSIGHTFINDER_USER_NAME"] = username_l
+            os.environ["INSIGHTFINDER_LICENSE_KEY"] = config_vars['license_key']
+            os.environ["INSIGHTFINDER_PROJECT_NAME"] = config_vars['project_name']
+            os.environ["INSIGHTFINDER_USER_NAME"] = config_vars['user_name']
 
-        except ConfigParser.NoOptionError:
+        except IOError:
             logger.error("Agent not correctly configured. Check config file.")
             sys.exit(1)
     else:
         logger.error("Agent not correctly configured. Check config file.")
         sys.exit(1)
 
-    return license_key_l, project_name_l, username_l
+    return config_vars
 
 
 def set_from_reporting_config_json():
@@ -221,14 +214,15 @@ def update_timestamp(prev_endtime_l):
 
 
 # send data to insightfinder
-def send_data(metric_data_l, reporting_interval_l, license_key_l, project_name_l, username_l, hostname_l):
+def send_data(metric_data_l, reporting_interval_l, hostname_l):
     if len(metric_data_l) == 0:
         return
     collectd = 'collectd'
 
     # update projectKey, userName in dict
-    all_data = {"metricData": json.dumps(metric_data_l), "licenseKey": license_key_l, "projectName": project_name_l,
-                "userName": username_l, "instanceName": hostname_l, "insightAgentType": collectd,
+    all_data = {"metricData": json.dumps(metric_data_l), "licenseKey": agent_config_vars['license_key'],
+                "projectName": agent_config_vars['project_name'],
+                "userName": agent_config_vars['user_name'], "instanceName": hostname_l, "insightAgentType": collectd,
                 "samplingInterval": str(int(reporting_interval_l * 60))}
 
     json_data = json.dumps(all_data)
@@ -481,8 +475,7 @@ def get_new_object_from_disk_and_network_details(data, delta_fields, disk_read, 
 
 
 # update endtime in config
-def update_endtime_in_config(metric_data_l, reporting_interval_l, new_prev_endtime_epoch_l, license_key_l,
-                             project_name_l, username_l, hostname_l):
+def update_endtime_in_config(metric_data_l, reporting_interval_l, new_prev_endtime_epoch_l, hostname_l):
     if new_prev_endtime_epoch_l == 0:
         print "No data is reported"
     else:
@@ -490,14 +483,15 @@ def update_endtime_in_config(metric_data_l, reporting_interval_l, new_prev_endti
         new_prev_endtime = time.strftime(
             "%Y%m%d%H%M%S", time.localtime(long(new_prev_endtimeinsec)))
         update_timestamp(new_prev_endtime)
-        send_data(metric_data_l, reporting_interval_l, license_key_l, project_name_l, username_l, hostname_l)
+        send_data(metric_data_l, reporting_interval_l, hostname_l)
     return
 
 
 # Update custom Metrics
-def report_custom_metrics(license_key_l, project_name_l, username_l):
+def report_custom_metrics():
     reported = reportCustomMetrics.getcustommetrics(
-        server_url, project_name_l, username_l, license_key_l, home_path)
+        server_url, agent_config_vars['project_name'], agent_config_vars['user_name'], agent_config_vars['license_key'],
+        home_path)
     if reported:
         logger.info("Custom metrics sent")
     else:
@@ -516,8 +510,8 @@ if __name__ == "__main__":
     log_level = parameters['log_level']
     # setting log level
     logger = set_logger_config(log_level)
-
-    license_key, project_name, username = set_info_from_config_ini_file()
+    agent_config_vars = {}
+    agent_config_vars = set_info_from_config_ini_file()
 
     new_prev_endtime_epoch = 0
 
@@ -531,8 +525,7 @@ if __name__ == "__main__":
 
     update_results(previous_result)
 
-    update_endtime_in_config(metric_data, reporting_interval, new_prev_endtime_epoch, license_key, project_name,
-                             username, hostname)
+    update_endtime_in_config(metric_data, reporting_interval, new_prev_endtime_epoch, hostname)
 
-    report_custom_metrics(license_key, project_name, username)
+    report_custom_metrics()
     exit(0)
