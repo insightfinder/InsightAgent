@@ -277,3 +277,9 @@ fi
 sudo /usr/bin/pkill -f "script_runner.py"
 sudo nohup $PYTHONPATH $INSIGHTAGENTDIR/script_runner/script_runner.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/script_runner.log &
 
+if [ "$AGENT_TYPE" != 'kafka-logs' ] && [ "$AGENT_TYPE" != 'kafka' ]; then
+	sudo chown root:root $TEMPCRON
+    sudo chmod 644 $TEMPCRON
+    sudo cat $TEMPCRON >> /etc/cron.d/ifagent
+    echo "Agent configuration completed. Two cron jobs are created via /etc/cron.d/ifagent"
+fi
