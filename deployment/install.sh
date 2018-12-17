@@ -229,7 +229,7 @@ elif [ $AGENT_TYPE == 'opentsdb' ]; then
     if [ -z "$CHUNK_SIZE" ]; then
 	    CHUNK_SIZE='50'
     fi
-	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_opentsdb.py -d $INSIGHTAGENTDIR -w $SERVER_URL -c $CHUNK_SIZE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
+	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_opentsdb.py -w $SERVER_URL -c $CHUNK_SIZE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
 	if [ "$IS_SECOND_REPORTING" = true ] ; then
 		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
 	else
@@ -277,3 +277,9 @@ fi
 sudo /usr/bin/pkill -f "script_runner.py"
 sudo nohup $PYTHONPATH $INSIGHTAGENTDIR/script_runner/script_runner.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/script_runner.log &
 
+if [ "$AGENT_TYPE" != 'kafka-logs' ] && [ "$AGENT_TYPE" != 'kafka' ]; then
+	sudo chown root:root $TEMPCRON
+    sudo chmod 644 $TEMPCRON
+    sudo cat $TEMPCRON >> /etc/cron.d/ifagent
+    echo "Agent configuration completed. Two cron jobs are created via /etc/cron.d/ifagent"
+fi
