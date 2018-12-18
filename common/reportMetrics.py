@@ -7,13 +7,12 @@ import time
 import logging
 import sys
 import json
-import datetime
 import csv
 import math
 import socket
 import subprocess
-import random
 from ConfigParser import SafeConfigParser
+import validators
 
 '''
 This script reads reporting_config.json and .agent.bashrc
@@ -174,7 +173,7 @@ def get_ec2_instancetype():
     url = "http://169.254.169.254/latest/meta-data/instance-type"
     try:
         response = requests.post(url)
-    except requests.ConnectionError, e:
+    except requests.ConnectionError:
         logger.error("Error finding instance-type")
         return
     if response.status_code != 200:
@@ -185,13 +184,20 @@ def get_ec2_instancetype():
 
 def send_data(metric_data_dict, file_path, chunk_serial_number):
     send_data_time = time.time()
-    # prepare data for metric streaming agent
     to_send_data_dict = {}
+    # prepare data for metric streaming agent
+    to_send_data_json = fill_to_send_data_dict(chunk_serial_number, file_path, metric_data_dict, to_send_data_dict)
+    # send the data
+    send_data_to_backend(metric_data_dict, send_data_time, to_send_data_dict, to_send_data_json)
+    logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
+    return
+
+
+def fill_to_send_data_dict(chunk_serial_number, file_path, metric_data_dict, to_send_data_dict):
     if parameters['mode'] == "metricFileReplay":
         to_send_data_dict["metricData"] = json.dumps(metric_data_dict[0])
     else:
         to_send_data_dict["metricData"] = json.dumps(metric_data_dict)
-
     to_send_data_dict["licenseKey"] = agent_config_vars['license_key']
     to_send_data_dict["projectName"] = agent_config_vars['project_name']
     to_send_data_dict["userName"] = agent_config_vars['user_name']
@@ -214,56 +220,81 @@ def send_data(metric_data_dict, file_path, chunk_serial_number):
         if 'splitID' in parameters.keys() and 'splitBy' in parameters.keys():
             to_send_data_dict["splitID"] = parameters['splitID']
             to_send_data_dict["splitBy"] = parameters['splitBy']
-
     to_send_data_json = json.dumps(to_send_data_dict)
     logger.debug("Chunksize: " + str(len(bytearray(str(metric_data_dict)))) + "\n" + "TotalData: " + str(
         len(bytearray(to_send_data_json))))
+    return to_send_data_json
 
-    # send the data
+
+def send_data_to_backend(metric_data_dict, to_send_data_dict, to_send_data_json):
     post_url = parameters['serverUrl'] + "/customprojectrawdata"
     if parameters['agentType'] == "hypervisor":
+        send_hypervisor_agent_details(metric_data_dict, post_url, to_send_data_dict, to_send_data_json)
+    else:
+        send_other_agent_details(metric_data_dict, post_url, to_send_data_dict, to_send_data_json)
+
+
+def send_other_agent_details(metric_data_dict, post_url, to_send_data_dict, to_send_data_json):
+    # response = requests.post(post_url, data=json.loads(to_send_data_json))
+    if send_http_request(post_url, "post", json.loads(to_send_data_json)):
+        logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
+    else:
+        send_data_in_two_chunks(metric_data_dict, post_url, to_send_data_dict)
+
+
+def send_data_in_two_chunks(metric_data_dict, post_url, to_send_data_dict):
+    data_split1 = metric_data_dict[0:len(metric_data_dict) / 2]
+    to_send_data_dict["metricData"] = json.dumps(data_split1)
+    to_send_data_json = json.dumps(to_send_data_dict)
+    if send_http_request(post_url, "post", json.loads(to_send_data_json),
+                         str(len(bytearray(to_send_data_json))) + " bytes of data are reported.",
+                         "Failed to send data."):
+        parameters['chunkLines'] = parameters['chunkLines'] / 2
+        # since succeeded send the rest of the chunk
+        data_split2 = metric_data_dict[len(metric_data_dict) / 2:]
+        to_send_data_dict["metricData"] = json.dumps(data_split2)
+        to_send_data_json = json.dumps(to_send_data_dict)
+        send_http_request(post_url, "post", json.loads(to_send_data_json))
+    return
+
+
+# retry once for failed data and set chunkLines to half if succeeded
+def send_hypervisor_agent_details(metric_data_dict, post_url, to_send_data_dict, to_send_data_json):
+    response = urllib.urlopen(post_url, data=urllib.urlencode(to_send_data_dict))
+    if response.getcode() == 200:
+        logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
+    else:
+        # retry once for failed data and set chunkLines to half if succeeded
+        logger.error("Failed to send data. Retrying once.")
+        data_split1 = metric_data_dict[0:len(metric_data_dict) / 2]
+        to_send_data_dict["metricData"] = json.dumps(data_split1)
         response = urllib.urlopen(post_url, data=urllib.urlencode(to_send_data_dict))
         if response.getcode() == 200:
             logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
-        else:
-            # retry once for failed data and set chunkLines to half if succeeded
-            logger.error("Failed to send data. Retrying once.")
-            logger.info("Dividing data into 2 halves and trying to send data.");
-
-            data_split1 = metric_data_dict[0:len(metric_data_dict) / 2]
-            to_send_data_dict["metricData"] = json.dumps(data_split1)
+            parameters['chunkLines'] = parameters['chunkLines'] / 2
+            # since succeeded send the rest of the chunk
+            data_split2 = metric_data_dict[len(metric_data_dict) / 2:]
+            to_send_data_dict["metricData"] = json.dumps(data_split2)
             response = urllib.urlopen(post_url, data=urllib.urlencode(to_send_data_dict))
-            if response.getcode() == 200:
-                logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
-                parameters['chunkLines'] = parameters['chunkLines'] / 2
-                # since succeeded send the rest of the chunk
-                data_split2 = metric_data_dict[len(metric_data_dict) / 2:]
-                to_send_data_dict["metricData"] = json.dumps(data_split2)
-                response = urllib.urlopen(post_url, data=urllib.urlencode(to_send_data_dict))
-            else:
-                logger.info("Failed to send data.")
-
-    else:
-        response = requests.post(post_url, data=json.loads(to_send_data_json))
-        if response.status_code == 200:
-            logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
         else:
             logger.info("Failed to send data.")
-            data_split1 = metric_data_dict[0:len(metric_data_dict) / 2]
-            to_send_data_dict["metricData"] = json.dumps(data_split1)
-            to_send_data_json = json.dumps(to_send_data_dict)
-            response = requests.post(post_url, data=json.loads(to_send_data_json))
-            if response.status_code == 200:
-                logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
-                parameters['chunkLines'] = parameters['chunkLines'] / 2
-                # since succeeded send the rest of the chunk
-                data_split2 = metric_data_dict[len(metric_data_dict) / 2:]
-                to_send_data_dict["metricData"] = json.dumps(data_split2)
-                to_send_data_json = json.dumps(to_send_data_dict)
-                response = requests.post(post_url, data=json.loads(to_send_data_json))
-            else:
-                logger.info("Failed to send data.")
-    logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
+
+
+def send_http_request(url, type, data, succ_message="Request successful!", fail_message="Request Failed"):
+    if validators.url(url):
+        if type == "get":
+            response = requests.get(url, data)
+        else:
+            response = requests.post(url, data)
+
+        if response.status_code == 200:
+            logger.info(succ_message)
+            return True
+        logger.info(fail_message)
+        return False
+    else:
+        logger.info("Url not correct : " + url)
+    return True
 
 
 def process_streaming(new_prev_end_time_epoch):
@@ -277,6 +308,19 @@ def process_streaming(new_prev_end_time_epoch):
     if current_date not in dates:
         dates.append(current_date)
 
+    new_prev_end_time_epoch = read_data_from_selected_files(dates, metric_data, new_prev_end_time_epoch)
+    # update endtime in config
+    if new_prev_end_time_epoch == 0:
+        logger.info("No data is reported")
+    else:
+        new_prev_endtime_in_sec = math.ceil(long(new_prev_end_time_epoch) / 1000.0)
+        new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtime_in_sec)))
+        update_timestamp(new_prev_endtime)
+        send_data(metric_data, None, None)
+    return
+
+
+def read_data_from_selected_files(dates, metric_data, new_prev_end_time_epoch):
     # read all selected daily files for data
     for date in dates:
         filename_addition = ""
@@ -291,7 +335,7 @@ def process_streaming(new_prev_end_time_epoch):
                 try:
                     daily_file_reader = csv.reader(dailyFile)
                 except IOError:
-                    print "No data-file for " + str(date) + "!"
+                    logger.info("No data-file for " + str(date) + "!")
                     continue
                 fieldnames = []
                 for csvRow in daily_file_reader:
@@ -323,14 +367,7 @@ def process_streaming(new_prev_end_time_epoch):
                                     colname = colname + ":" + str(get_index_for_column_name(fieldnames[i]))
                                 current_csv_row_data[colname] = csvRow[i]
                         metric_data.append(current_csv_row_data)
-    # update endtime in config
-    if new_prev_end_time_epoch == 0:
-        print "No data is reported"
-    else:
-        new_prev_endtime_in_sec = math.ceil(long(new_prev_end_time_epoch) / 1000.0)
-        new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtime_in_sec)))
-        update_timestamp(new_prev_endtime)
-        send_data(metric_data, None, None)
+    return new_prev_end_time_epoch
 
 
 def process_replay(file_path):
@@ -427,7 +464,6 @@ def set_logger_config(level):
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(process)d - %(threadName)s - %(levelname)s - %(message)s')
     logging_handler_out.setFormatter(formatter)
     logger_obj.addHandler(logging_handler_out)
-
     logging_handler_err = logging.StreamHandler(sys.stderr)
     logging_handler_err.setLevel(logging.WARNING)
     logger_obj.addHandler(logging_handler_err)
@@ -488,3 +524,4 @@ if __name__ == '__main__':
                 process_replay(filePath)
 
     logger.info("--- Total runtime: %s seconds ---" % (time.time() - prog_start_time))
+    exit(0)
