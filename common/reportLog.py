@@ -61,15 +61,6 @@ def get_parameters():
     return params
 
 
-# command = ['bash', '-c', 'source ' + str(parameters['homepath']) + '/.agent.bashrc && env']
-# proc = subprocess.Popen(command, stdout=subprocess.PIPE)
-#
-# for line in proc.stdout:
-#   (key, _, value) = line.partition("=")
-#   os.environ[key] = value.strip()
-# proc.communicate()
-
-
 def get_agent_config_vars():
     config_vars = {}
     try:
@@ -112,11 +103,6 @@ def set_logger_config(level):
     return logger_obj
 
 
-# LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
-# PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
-# USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
-
-
 def get_index(col_name):
     if col_name == "CPU":
         return 1
@@ -129,12 +115,6 @@ def get_index(col_name):
     elif col_name == "MemUsed":
         return 5
     return
-
-#
-# def delete_content(pfile):
-#     with open(os.path.join(parameters['homepath'], parameters['inputfile']), 'w') as fd:
-#         fd.close()
-#     return
 
 
 # update prev_endtime in config file
@@ -268,7 +248,7 @@ def update_agent_data_range(min_ts, max_ts):
     # response = requests.post(url, data=json.loads(json_data))
 
 
-def some_before_main_menthod():
+def set_paramters_from_file():
     # main
     # with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
     #     config = json.load(f)
@@ -309,17 +289,11 @@ def get_total_size_json(json_data):
     return len(bytearray(json.dumps(temp))), temp
 
 
-def some_main_method():
+def send_data_to_backend():
     global metric_data
-    min_timestamp_epoch = 0
-    max_timestamp_epoch = 0
     if os.path.isfile(os.path.join('/tmp', parameters['inputfile'])):
         # numlines = len(open(os.path.join('/tmp', parameters['inputfile'])).readlines())
         file_l = open(os.path.join('/tmp', parameters['inputfile']))
-        metric_data_size_known = False
-        metric_data_size = 0
-        # count = 0
-        first_chunk_size = 0
         if '.json' in parameters['inputfile']:
             json_data = json.load(file_l)
         else:
@@ -328,46 +302,56 @@ def some_main_method():
                 line = line[line.find("{"):]
                 json_data.append(json.loads(line))
         # numlines = len(json_data)
-        size, json_data = get_total_size_json(json_data)
-        parameters['total_size'] += size
-        for row in json_data:
-            metric_data.append(row)
-            parameters['new_prev_endtime_epoch'] = row[row.keys()[0]]
-            if min_timestamp_epoch == 0 or min_timestamp_epoch > long(parameters['new_prev_endtime_epoch']):
-                min_timestamp_epoch = long(parameters['new_prev_endtime_epoch'])
-            if max_timestamp_epoch == 0 or max_timestamp_epoch < long(parameters['new_prev_endtime_epoch']):
-                max_timestamp_epoch = long(parameters['new_prev_endtime_epoch'])
-
-            if not metric_data_size_known:
-                metric_data_size = len(bytearray(json.dumps(metric_data)))
-                metric_data_size_known = True
-            # Not using exact 750KB as some data will be padded later
-            if (len(bytearray(json.dumps(metric_data))) + metric_data_size) < 700000:
-                continue
-            else:
-                first_chunk_size = len(bytearray(json.dumps(metric_data)))
-                send_data(min_timestamp_epoch, max_timestamp_epoch)
-                metric_data = []
-
-        # Send the last chunk
-        remaining_data_size = len(bytearray(json.dumps(metric_data)))
-        if remaining_data_size > 0:
-            if remaining_data_size < first_chunk_size:
-                parameters['total_chunks'] += 1
-            send_data(min_timestamp_epoch, max_timestamp_epoch)
-        # save json file
-        file_l.close()
-        # deleteContent(options.inputFile)
-        if parameters['new_prev_endtime_epoch'] == 0:
-            logger.info("No data is reported!")
-        else:
-            new_prev_endtimeinsec = math.ceil(long(parameters['new_prev_endtime_epoch']) / 1000.0)
-            parameters['new_prev_endtime'] = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtimeinsec)))
-            parameters['prev_endtime'] = parameters['new_prev_endtime']
-            store_log_meta_data()
-            update_agent_data_range(min_timestamp_epoch, max_timestamp_epoch)
+        parse_and_send_data(file_l, json_data)
     else:
         logger.warning("Invalid Input File")
+    return
+
+
+def parse_and_send_data(file_l, json_data):
+    global metric_data
+    min_timestamp_epoch = 0
+    max_timestamp_epoch = 0
+    first_chunk_size = 0
+    metric_data_size = 0
+    metric_data_size_known = False  # type: bool
+    size, json_data = get_total_size_json(json_data)
+    parameters['total_size'] += size
+    for row in json_data:
+        metric_data.append(row)
+        parameters['new_prev_endtime_epoch'] = row[row.keys()[0]]
+        if min_timestamp_epoch == 0 or min_timestamp_epoch > long(parameters['new_prev_endtime_epoch']):
+            min_timestamp_epoch = long(parameters['new_prev_endtime_epoch'])
+        if max_timestamp_epoch == 0 or max_timestamp_epoch < long(parameters['new_prev_endtime_epoch']):
+            max_timestamp_epoch = long(parameters['new_prev_endtime_epoch'])
+
+        if not metric_data_size_known:
+            metric_data_size = len(bytearray(json.dumps(metric_data)))
+            metric_data_size_known = True
+        # Not using exact 750KB as some data will be padded later
+        if (len(bytearray(json.dumps(metric_data))) + metric_data_size) < 700000:
+            continue
+        else:
+            first_chunk_size = len(bytearray(json.dumps(metric_data)))
+            send_data(min_timestamp_epoch, max_timestamp_epoch)
+            metric_data = []
+    # Send the last chunk
+    remaining_data_size = len(bytearray(json.dumps(metric_data)))
+    if remaining_data_size > 0:
+        if remaining_data_size < first_chunk_size:
+            parameters['total_chunks'] += 1
+        send_data(min_timestamp_epoch, max_timestamp_epoch)
+    # save json file
+    file_l.close()
+    # deleteContent(options.inputFile)
+    if parameters['new_prev_endtime_epoch'] == 0:
+        logger.info("No data is reported!")
+    else:
+        new_prev_endtimeinsec = math.ceil(long(parameters['new_prev_endtime_epoch']) / 1000.0)
+        parameters['new_prev_endtime'] = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtimeinsec)))
+        parameters['prev_endtime'] = parameters['new_prev_endtime']
+        store_log_meta_data()
+        update_agent_data_range(min_timestamp_epoch, max_timestamp_epoch)
 
 
 if __name__ == '__main__':
@@ -390,8 +374,8 @@ if __name__ == '__main__':
     alldata = {}
     metric_data = []
 
-    some_before_main_menthod()
+    set_paramters_from_file()
 
-    some_main_method()
+    send_data_to_backend()
 
     exit(0)
