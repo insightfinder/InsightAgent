@@ -11,8 +11,11 @@ grep cpu /proc/stat | awk '{if ($1 ~ /[0-9]$/) {print $1"$user="$2"\n"$1"$nice="
 # Get Disk metrics
 cat /proc/diskstats | awk 'BEGIN{readsector=0;writesector=0} {if ($3 ~ /[0-9]/) {} else {readsector+=$6;writesector+=$10}} END{print "DiskRead="readsector"\nDiskWrite="writesector}' > diskmetrics.txt & PID3=$!
 
+# Get Disk metrics
+df -k / | awk 'BEGIN{disktotal=0;}{if(NR==2) disktotal = $3*100/$2}END{print "DiskUsed="disktotal}' > diskpercent.txt & PID10=$!
+
 # Get Filesystem metrics
-df -k | awk 'BEGIN{diskusedspace=0}{if(NR!=1)print "DiskUsed"$6"="$3; diskusedspace += $3}END{print "DiskUsed="diskusedspace}' > diskusedmetrics.txt & PID4=$!
+df -k | awk '{if(NR!=1)print "DiskUsed"$6"="$3}' > diskusedmetrics.txt & PID4=$!
 
 # Get Summary Network metrics
 cat /proc/net/dev | awk 'BEGIN{NetworkBytesin=0;NetworkBytesout=0} {NetworkBytesin+=$2;NetworkBytesout+=$10} END{print "NetworkIn="NetworkBytesin"\nNetworkOut="NetworkBytesout}' > networkmetrics.txt & PID5=$!
@@ -52,3 +55,4 @@ wait $PID6
 wait $PID7
 wait $PID8
 wait $PID9
+wait $PID10
