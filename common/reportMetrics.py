@@ -375,80 +375,89 @@ def process_replay(file_path):
         logger.info("Replaying file: " + file_path)
         # log file replay processing
         if parameters['mode'] == "logFileReplay":
-            output = subprocess.check_output(
-                'cat ' + file_path + ' | jq -c ".[]" > ' + file_path + ".mod",
-                shell=True)
-            with open(file_path + ".mod") as logfile:
-                line_count = 0
-                chunk_count = 0
-                current_row = []
-                start_time = time.time()
-                for line in logfile:
-                    if line_count == parameters['chunkLines']:
-                        logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                        send_data(current_row, file_path, None)
-                        current_row = []
-                        chunk_count += 1
-                        line_count = 0
-                        start_time = time.time()
-                    current_row.append(json.loads(line.rstrip()))
-                    line_count += 1
-                if len(current_row) != 0:
-                    logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                    send_data(current_row, file_path, None)
-                    chunk_count += 1
-                logger.debug("Total chunks created: " + str(chunk_count))
-            try:
-                subprocess.check_output("rm " + file_path + ".mod", shell=True)
-            except subprocess.CalledProcessError:
-                logger.error("Failed to rm file " + file_path + ".mod")
+            process_log_file_replay(file_path)
         else:  # metric file replay processing
-            with open(file_path) as metricFile:
-                metric_csv_reader = csv.reader(metricFile)
-                to_send_metric_data = []
-                fieldnames = []
-                current_line_count = 1
-                chunk_count = 0
-                min_timestamp_epoch = 0
-                max_timestamp_epoch = -1
-                for row in metric_csv_reader:
-                    if metric_csv_reader.line_num == 1:
-                        # Get all the metric names from header
-                        fieldnames = row
-                        # get index of the timestamp column
-                        for i in range(0, len(fieldnames)):
-                            if fieldnames[i] == "timestamp":
-                                timestampIndex = i
-                    elif metric_csv_reader.line_num > 1:
-                        # Read each line from csv and generate a json
-                        current_row = {}
-                        if current_line_count == parameters['chunkLines']:
-                            send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], file_path, chunk_count + 1)
-                            to_send_metric_data = []
-                            current_line_count = 0
-                            chunk_count += 1
-                        for i in range(0, len(row)):
-                            if fieldnames[i] == "timestamp":
-                                current_row[fieldnames[i]] = row[i]
-                                if min_timestamp_epoch == 0 or min_timestamp_epoch > long(row[i]):
-                                    min_timestamp_epoch = long(row[i])
-                                if max_timestamp_epoch == 0 or max_timestamp_epoch < long(row[i]):
-                                    max_timestamp_epoch = long(row[i])
-                            else:
-                                colname = fieldnames[i]
-                                if colname.find("]") == -1:
-                                    colname = colname + "[-]"
-                                if colname.find(":") == -1:
-                                    groupid = i
-                                    colname = colname + ":" + str(groupid)
-                                current_row[colname] = row[i]
-                        to_send_metric_data.append(current_row)
-                        current_line_count += 1
-                # send final chunk
-                if len(to_send_metric_data) != 0:
-                    send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], file_path, chunk_count + 1)
+            process_metric_file_replay(file_path)
+
+
+def process_metric_file_replay(file_path):
+    with open(file_path) as metricFile:
+        metric_csv_reader = csv.reader(metricFile)
+        to_send_metric_data = []
+        fieldnames = []
+        current_line_count = 1
+        chunk_count = 0
+        min_timestamp_epoch = 0
+        max_timestamp_epoch = -1
+        for row in metric_csv_reader:
+            if metric_csv_reader.line_num == 1:
+                # Get all the metric names from header
+                fieldnames = row
+                # get index of the timestamp column
+                for i in range(0, len(fieldnames)):
+                    if fieldnames[i] == "timestamp":
+                        timestampIndex = i
+            elif metric_csv_reader.line_num > 1:
+                # Read each line from csv and generate a json
+                current_row = {}
+                if current_line_count == parameters['chunkLines']:
+                    send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], file_path,
+                              chunk_count + 1)
+                    to_send_metric_data = []
+                    current_line_count = 0
                     chunk_count += 1
-                logger.debug("Total chunks created: " + str(chunk_count))
+                for i in range(0, len(row)):
+                    if fieldnames[i] == "timestamp":
+                        current_row[fieldnames[i]] = row[i]
+                        if min_timestamp_epoch == 0 or min_timestamp_epoch > long(row[i]):
+                            min_timestamp_epoch = long(row[i])
+                        if max_timestamp_epoch == 0 or max_timestamp_epoch < long(row[i]):
+                            max_timestamp_epoch = long(row[i])
+                    else:
+                        colname = fieldnames[i]
+                        if colname.find("]") == -1:
+                            colname = colname + "[-]"
+                        if colname.find(":") == -1:
+                            groupid = i
+                            colname = colname + ":" + str(groupid)
+                        current_row[colname] = row[i]
+                to_send_metric_data.append(current_row)
+                current_line_count += 1
+        # send final chunk
+        if len(to_send_metric_data) != 0:
+            send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], file_path, chunk_count + 1)
+            chunk_count += 1
+        logger.debug("Total chunks created: " + str(chunk_count))
+
+
+def process_log_file_replay(file_path):
+    output = subprocess.check_output(
+        'cat ' + file_path + ' | jq -c ".[]" > ' + file_path + ".mod",
+        shell=True)
+    with open(file_path + ".mod") as logfile:
+        line_count = 0
+        chunk_count = 0
+        current_row = []
+        start_time = time.time()
+        for line in logfile:
+            if line_count == parameters['chunkLines']:
+                logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                send_data(current_row, file_path, None)
+                current_row = []
+                chunk_count += 1
+                line_count = 0
+                start_time = time.time()
+            current_row.append(json.loads(line.rstrip()))
+            line_count += 1
+        if len(current_row) != 0:
+            logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+            send_data(current_row, file_path, None)
+            chunk_count += 1
+        logger.debug("Total chunks created: " + str(chunk_count))
+    try:
+        subprocess.check_output("rm " + file_path + ".mod", shell=True)
+    except subprocess.CalledProcessError:
+        logger.error("Failed to rm file " + file_path + ".mod")
 
 
 def set_logger_config(level):
