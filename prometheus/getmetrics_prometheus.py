@@ -187,7 +187,10 @@ def getMetricData(config, metricList, grouping_map, startTime, endTime):
                 datas = res.get('data', {}).get('result', [])
                 metricDataList.extend(datas)
 
-    # change data to opentsdb api format:
+    # change data to raw data api format:
+    valueMap = {
+        'timestamp': str(endTime)
+    }
     filterHosts = ['localhost']
     metricOTDataList = []
     for log in metricDataList:
@@ -196,7 +199,6 @@ def getMetricData(config, metricList, grouping_map, startTime, endTime):
         if host in filterHosts:
             continue
 
-        valueMap = {}
         metric_name = log.get('metric').get('__name__')
         host_name = host
         metric_value = None
@@ -208,9 +210,9 @@ def getMetricData(config, metricList, grouping_map, startTime, endTime):
                 mtime = int(stime)
 
         valueMap[header_field] = str(metric_value)
-        valueMap['timestamp'] = str(mtime * 1000)
-        metricOTDataList.append(valueMap)
+    metricOTDataList.append(valueMap)
 
+    logger.info('metricOTDataList:' + str(metricOTDataList))
     return metricOTDataList
 
 
