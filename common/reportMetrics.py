@@ -27,7 +27,7 @@ This also allows you to replay old log and metric files
 '''
 
 
-def getParameters():
+def get_parameters():
     usage = "Usage: %prog [options]"
     parser = OptionParser(usage=usage)
     parser.add_option("-f", "--fileInput",
@@ -112,18 +112,23 @@ def get_agent_config_vars():
             project_name = parser.get('insightfinder', 'project_name')
             user_name = parser.get('insightfinder', 'user_name')
             sampling_interval = parser.get('metrics', 'sampling_interval')
-            if len(insightFinder_license_key) == 0:
+            selected_fields = parser.get('metrics', 'selected_fields').split(",")
+            if len(license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
-            if len(insightFinder_project_name) == 0:
+            if len(project_name) == 0:
                 logger.error("Agent not correctly configured(project name). Check config file.")
                 sys.exit(1)
-            if len(insightFinder_user_name) == 0:
+            if len(user_name) == 0:
                 logger.error("Agent not correctly configured(username). Check config file.")
                 sys.exit(1)
             if len(sampling_interval) == 0:
                 logger.error("Agent not correctly configured(sampling interval). Check config file.")
                 sys.exit(1)
+            if len(selected_fields[0]) != 0:
+                config_vars['selected_fields'] = selected_fields
+            elif len(selected_fields[0]) == 0:
+                config_vars['selected_fields'] = "All"
             config_vars['licenseKey'] = license_key
             config_vars['projectName'] = project_name
             config_vars['userName'] = user_name
@@ -133,7 +138,7 @@ def get_agent_config_vars():
     return config_vars
 
 
-def getReportingConfigVars():
+def get_reporting_config_vars():
     reporting_config_vars = {}
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
         config = json.load(f)
@@ -239,9 +244,9 @@ def send_data(metric_data_dict, filePath, chunkSerialNumber):
     logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
 
     # send the data
-    postUrl = parameters['serverUrl'] + "/customprojectrawdata"
+    post_url = parameters['serverUrl'] + "/customprojectrawdata"
     if parameters['agentType'] == "hypervisor":
-        response = urllib.urlopen(postUrl, data=urllib.urlencode(to_send_data_dict))
+        response = urllib.urlopen(post_url, data=urllib.urlencode(to_send_data_dict))
         if response.getcode() == 200:
             logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
         else:
@@ -249,19 +254,19 @@ def send_data(metric_data_dict, filePath, chunkSerialNumber):
             logger.error("Failed to send data. Retrying once.")
             data_split1 = metric_data_dict[0:len(metric_data_dict) / 2]
             to_send_data_dict["metricData"] = json.dumps(data_split1)
-            response = urllib.urlopen(postUrl, data=urllib.urlencode(to_send_data_dict))
+            response = urllib.urlopen(post_url, data=urllib.urlencode(to_send_data_dict))
             if response.getcode() == 200:
                 logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
                 parameters['chunkLines'] = parameters['chunkLines'] / 2
                 # since succeeded send the rest of the chunk
                 data_split2 = metric_data_dict[len(metric_data_dict) / 2:]
                 to_send_data_dict["metricData"] = json.dumps(data_split2)
-                response = urllib.urlopen(postUrl, data=urllib.urlencode(to_send_data_dict))
+                response = urllib.urlopen(post_url, data=urllib.urlencode(to_send_data_dict))
             else:
                 logger.info("Failed to send data.")
 
     else:
-        response = requests.post(postUrl, data=json.loads(to_send_data_json))
+        response = requests.post(post_url, data=json.loads(to_send_data_json))
         if response.status_code == 200:
             logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
         else:
@@ -269,7 +274,7 @@ def send_data(metric_data_dict, filePath, chunkSerialNumber):
             data_split1 = metric_data_dict[0:len(metric_data_dict) / 2]
             to_send_data_dict["metricData"] = json.dumps(data_split1)
             to_send_data_json = json.dumps(to_send_data_dict)
-            response = requests.post(postUrl, data=json.loads(to_send_data_json))
+            response = requests.post(post_url, data=json.loads(to_send_data_json))
             if response.status_code == 200:
                 logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
                 parameters['chunkLines'] = parameters['chunkLines'] / 2
@@ -277,7 +282,7 @@ def send_data(metric_data_dict, filePath, chunkSerialNumber):
                 data_split2 = metric_data_dict[len(metric_data_dict) / 2:]
                 to_send_data_dict["metricData"] = json.dumps(data_split2)
                 to_send_data_json = json.dumps(to_send_data_dict)
-                response = requests.post(postUrl, data=json.loads(to_send_data_json))
+                response = requests.post(post_url, data=json.loads(to_send_data_json))
             else:
                 logger.info("Failed to send data.")
     logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
@@ -350,15 +355,19 @@ def process_streaming(new_prev_endtime_epoch):
         send_data(metric_data, None, None)
 
 
-def process_replay(filePath):
-    if os.path.isfile(filePath):
-        logger.info("Replaying file: " + filePath)
+def process_replay(file_path):
+    if os.path.isfile(file_path):
+        logger.info("Replaying file: " + file_path)
         # log file replay processing
         if parameters['mode'] == "logFileReplay":
-            output = subprocess.check_output(
-                'cat ' + filePath + ' | jq -c ".[]" > ' + filePath + ".mod",
-                shell=True)
-            with open(filePath + ".mod") as logfile:
+            try:
+                output = subprocess.check_output(
+                    'cat ' + file_path + ' | jq -c ".[]" > ' + file_path + ".mod",
+                    shell=True)
+            except subprocess.CalledProcessError as e:
+                logger.error("not the json file")
+                sys.exit(1)
+            with open(file_path + ".mod") as logfile:
                 line_count = 0
                 chunk_count = 0
                 current_row = []
@@ -366,23 +375,31 @@ def process_replay(filePath):
                 for line in logfile:
                     if line_count == parameters['chunkLines']:
                         logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                        send_data(current_row, filePath, None)
+                        send_data(current_row, file_path, None)
                         current_row = []
                         chunk_count += 1
                         line_count = 0
                         start_time = time.time()
-                    current_row.append(json.loads(line.rstrip()))
+                    json_message = json.loads(line.rstrip())
+                    if agent_config_vars['selected_fields'] == "All":
+                        current_row.append(json_message)
+                    else:
+                        current_log_msg = dict()
+                        for field in agent_config_vars['selected_fields']:
+                            field = str(field).strip()
+                            current_log_msg[field] = json_message.get(field,{})
+                        current_row.append(json.loads(json.dumps(current_log_msg)))
                     line_count += 1
                 if len(current_row) != 0:
                     logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                    send_data(current_row, filePath, None)
+                    send_data(current_row, file_path, None)
                     chunk_count += 1
                 logger.debug("Total chunks created: " + str(chunk_count))
             output = subprocess.check_output(
-                "rm " + filePath + ".mod",
+                "rm " + file_path + ".mod",
                 shell=True)
         else:  # metric file replay processing
-            with open(filePath) as metricFile:
+            with open(file_path) as metricFile:
                 metric_csv_reader = csv.reader(metricFile)
                 to_send_metric_data = []
                 field_names = []
@@ -402,7 +419,7 @@ def process_replay(filePath):
                         # Read each line from csv and generate a json
                         current_row = {}
                         if current_line_count == parameters['chunkLines']:
-                            send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], filePath, chunk_count + 1)
+                            send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], file_path, chunk_count + 1)
                             to_send_metric_data = []
                             current_line_count = 0
                             chunk_count += 1
@@ -425,12 +442,12 @@ def process_replay(filePath):
                         current_line_count += 1
                 # send final chunk
                 if len(to_send_metric_data) != 0:
-                    send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], filePath, chunk_count + 1)
+                    send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], file_path, chunk_count + 1)
                     chunk_count += 1
                 logger.debug("Total chunks created: " + str(chunk_count))
 
 
-def setloggerConfig():
+def set_logger_config():
     # Get the root logger
     logger = logging.getLogger(__name__)
     # Have to set the root logger level, it defaults to logging.WARNING
@@ -457,9 +474,9 @@ class LessThanFilter(logging.Filter):
         return 1 if record.levelno < self.max_level else 0
 
 
-def getFileListForDirectory(rootPath):
+def get_file_list_for_directory(root_path):
     file_list = []
-    for path, subdirs, files in os.walk(rootPath):
+    for path, subdirs, files in os.walk(root_path):
         for name in files:
             if parameters['agentType'] == "metricFileReplay" and "csv" in name:
                 file_list.append(os.path.join(path, name))
@@ -470,11 +487,11 @@ def getFileListForDirectory(rootPath):
 
 if __name__ == '__main__':
     prog_start_time = time.time()
-    logger = setloggerConfig()
+    logger = set_logger_config()
     data_directory = 'data/'
-    parameters = getParameters()
+    parameters = get_parameters()
     agent_config_vars = get_agent_config_vars()
-    reporting_config_vars = getReportingConfigVars()
+    reporting_config_vars = get_reporting_config_vars()
 
     if parameters['agentType'] == "hypervisor":
         import urllib
@@ -494,7 +511,7 @@ if __name__ == '__main__':
             input_file_path = os.path.join(parameters['homepath'], parameters['inputFile'])
             process_replay(input_file_path)
         else:
-            file_list = getFileListForDirectory(parameters['logFolder'])
+            file_list = get_file_list_for_directory(parameters['logFolder'])
             for file_path in file_list:
                 process_replay(file_path)
 
