@@ -194,7 +194,7 @@ def get_index_for_column_name(col_name):
         return 5
 
 
-def getEC2InstanceType():
+def get_ec2_instance_type():
     url = "http://169.254.169.254/latest/meta-data/instance-type"
     try:
         response = requests.post(url)
@@ -207,7 +207,7 @@ def getEC2InstanceType():
     return response.text
 
 
-def send_data(metric_data_dict, filePath, chunkSerialNumber):
+def send_data(metric_data_dict, file_path, chunk_serial_number):
     send_data_time = time.time()
     # prepare data for metric streaming agent
     to_send_data_dict = {}
@@ -222,10 +222,10 @@ def send_data(metric_data_dict, filePath, chunkSerialNumber):
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
     to_send_data_dict["samplingInterval"] = str(int(reporting_config_vars['reporting_interval'] * 60))
     if parameters['agentType'] == "ec2monitoring":
-        to_send_data_dict["instanceType"] = getEC2InstanceType()
+        to_send_data_dict["instanceType"] = get_ec2_instance_type()
     # additional data to send for replay agents
     if "FileReplay" in parameters['mode']:
-        to_send_data_dict["fileID"] = hashlib.md5(filePath).hexdigest()
+        to_send_data_dict["fileID"] = hashlib.md5(file_path).hexdigest()
         if parameters['mode'] == "logFileReplay":
             to_send_data_dict["agentType"] = "LogFileReplay"
             to_send_data_dict["minTimestamp"] = ""
@@ -234,7 +234,7 @@ def send_data(metric_data_dict, filePath, chunkSerialNumber):
             to_send_data_dict["agentType"] = "MetricFileReplay"
             to_send_data_dict["minTimestamp"] = str(metric_data_dict[1])
             to_send_data_dict["maxTimestamp"] = str(metric_data_dict[2])
-            to_send_data_dict["chunkSerialNumber"] = str(chunkSerialNumber)
+            to_send_data_dict["chunkSerialNumber"] = str(chunk_serial_number)
         if ('splitID' in parameters.keys() and 'splitBy' in parameters.keys()):
             to_send_data_dict["splitID"] = parameters['splitID']
             to_send_data_dict["splitBy"] = parameters['splitBy']
