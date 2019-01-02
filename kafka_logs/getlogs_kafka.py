@@ -179,7 +179,7 @@ def get_timestamp_for_zone(date_string, time_zone, datetime_format):
 
 def get_json_info(json_message):
     host_name = ""
-    message = ""
+    message = {}
     timestamp = ""
     host_name_json = json_message
     timestamp_json = json_message
@@ -206,12 +206,8 @@ def get_json_info(json_message):
             if len(message_json) == 0:
                 break
         if len(message_json) != 0:
-            if len(message) == 0:
-                message = message + prefix + ": " + message_json
-            else:
-                message = message + " " + prefix + ": " + message_json
+            message[prefix] = message_json
     timestamp = timestamp.replace(" ", "T")
-    message = message.strip()
     return host_name, message, timestamp
 
 
@@ -277,7 +273,7 @@ def parse_consumer_messages(consumer, filter_hosts):
             current_log_msg = dict()
             current_log_msg['timestamp'] = epoch
             current_log_msg['tag'] = host_name
-            current_log_msg['data'] = message
+            current_log_msg['data'] = json.dumps(message)
             current_row.append(current_log_msg)
             line_count += 1
         except:
