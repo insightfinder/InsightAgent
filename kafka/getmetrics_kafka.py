@@ -3,14 +3,14 @@ import collections
 import json
 import logging
 import os
-import random
 import socket
 import sys
 import time
 from ConfigParser import SafeConfigParser
 from datetime import datetime
-from optparse import OptionParser
 from multiprocessing import Process
+from optparse import OptionParser
+
 import pytz
 import requests
 from kafka import KafkaConsumer
@@ -33,6 +33,8 @@ def get_parameters():
                       action="store", dest="serverUrl", help="Server Url")
     parser.add_option("-l", "--chunkLines",
                       action="store", dest="chunkLines", help="Max number of lines in chunk")
+    parser.add_option("-v", "--logLevel",
+                      action="store", dest="logLevel", help="Change log verbosity(WARNING: 0, INFO: 1, DEBUG: 2)")
     (options, args) = parser.parse_args()
 
     parameters = {}
@@ -53,9 +55,16 @@ def get_parameters():
     else:
         parameters['timeout'] = int(options.timeout)
     if options.chunkLines is None:
-        parameters['chunkLines'] = 100
+        parameters['chunkLines'] = 1
     else:
         parameters['chunkLines'] = int(options.chunkLines)
+    parameters['logLevel'] = logging.INFO
+    if options.logLevel == '0':
+        parameters['logLevel'] = logging.WARNING
+    elif options.logLevel == '1':
+        parameters['logLevel'] = logging.INFO
+    elif options.logLevel >= '2':
+        parameters['logLevel'] = logging.DEBUG
 
     return parameters
 
@@ -104,7 +113,7 @@ def get_agent_config_vars(normalization_ids_map):
             if len(group_id) == 0:
                 logger.error("Agent not correctly configured(group id). Check config file.")
                 sys.exit(1)
-            if len(normalization_ids[0]) != 0:
+            if len(normalization_ids[0]) != 0 and len(normalization_ids) == len(all_metrics):
                 for index in range(len(all_metrics)):
                     metric = all_metrics[index]
                     normalization_id = int(normalization_ids[index])
@@ -112,7 +121,7 @@ def get_agent_config_vars(normalization_ids_map):
                         logger.error("Please config the normalization_id between 0 to 1000.")
                         sys.exit(1)
                     normalization_ids_map[metric] = GROUPING_START + normalization_id
-            if len(normalization_ids[0]) == 0:
+            if len(normalization_ids[0]) == 0 or (len(normalization_ids) != len(all_metrics)):
                 count = 1
                 for index in range(len(all_metrics)):
                     metric = all_metrics[index]
@@ -189,7 +198,8 @@ def sendData(metricData):
     toSendDataDict["agentType"] = "kafka"
 
     toSendDataJSON = json.dumps(toSendDataDict)
-    # logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))))
+    logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))))
+    logger.debug("Data: " + str(toSendDataJSON))
 
     # send the data
     postUrl = parameters['serverUrl'] + "/customprojectrawdata"
@@ -199,7 +209,7 @@ def sendData(metricData):
         # updateLastSentFiles(pcapFileList)
     else:
         logger.info("Failed to send data.")
-    # logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
+    logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
 
 
 def isTimeFormat(timeString, format):
@@ -236,13 +246,10 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
     metricData = []
     chunkNumber = 0
     collectedValues = 0
-    collectedMetricsMap = {}
-    completedRowsTimestampSet = set()
 
     for message in consumer:
         try:
             json_message = json.loads(message.value)
-            #logger.info(json_message)
             timestamp = json_message.get('@timestamp', {})[:-5]
             host_name = json_message.get('beat', {}).get('hostname', {})
             metric_module = json_message.get('metricset', {}).get('module', {})
@@ -253,14 +260,11 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
             if isTimeFormat(timestamp, pattern):
                 epoch = getTimestampForZone(timestamp, "GMT", pattern)
 
-            # get previous collected values for timestamp if available
-            # get previous collected metrics name for timestamp if available
+            logger.debug("Matching host: " + host_name)
             if epoch in rawDataMap:
                 valueMap = rawDataMap[epoch]
-                collectedMetricsSet = collectedMetricsMap[epoch]
             else:
                 valueMap = {}
-                collectedMetricsSet = set()
             if metric_module == "system":
                 if metric_class == "cpu":
                     cpuMetricsList = ["idle", "iowait", "irq", "nice", "softirq", "steal", "system", "user"]
@@ -269,16 +273,13 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
                         metric_name = "cpu-" + metric
                         # skip the metric that are not in the config file
                         if metric_name not in all_metrics_set:
+                            logger.debug("Skipping: " + metric_name)
                             continue
                         header_field = metric_name + "[" + host_name + "]:" + str(
                             get_grouping_id(metric_name, normalization_ids_map))
                         valueMap[header_field] = str(metric_value)
                         rawDataMap[epoch] = valueMap
-                        # add collected metric name
-                        collectedValues += 1
-                        collectedMetricsSet.add(metric_name)
-                        # update the collected metrics for this timestamp
-                        collectedMetricsMap[epoch] = collectedMetricsSet
+                    collectedValues += 1
                 elif metric_class == "memory":
                     memoryMetricsList = ["actual", "swap"]
                     for metric in memoryMetricsList:
@@ -287,19 +288,15 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
                         metric_name = "memory-" + metric
                         # skip the metric that are not in the config file
                         if metric_name not in all_metrics_set:
+                            logger.debug("Skipping: " + metric_name)
                             continue
                         header_field = metric_name + "[" + host_name + "]:" + str(
                             get_grouping_id(metric_name, normalization_ids_map))
                         valueMap[header_field] = str(metric_value)
                         rawDataMap[epoch] = valueMap
-                        # add collected metric name
-                        collectedValues += 1
-                        collectedMetricsSet.add(metric_name)
-                        # update the collected metrics for this timestamp
-                        collectedMetricsMap[epoch] = collectedMetricsSet
+                    collectedValues += 1
                 elif metric_class == "filesystem":
                     if json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}) != "/":
-                        # logger.info("Skipping: " +  json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}))
                         continue
                     # add used-bytes
                     metric_name_bytes = "filesystem/used-bytes"
@@ -310,8 +307,6 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
                         header_field_bytes = metric_name_bytes + "[" + host_name + "]:" + str(
                             get_grouping_id(metric_name_bytes, normalization_ids_map))
                         valueMap[header_field_bytes] = str(metric_value_bytes)
-                        # add collected metric name
-                        collectedMetricsSet.add(metric_name_bytes)
 
                     # add used-pct
                     metric_name_pct = "filesystem/used-pct"
@@ -322,39 +317,23 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
                         header_field_pct = metric_name_pct + "[" + host_name + "]:" + str(
                             get_grouping_id(metric_name_pct, normalization_ids_map))
                         valueMap[header_field_pct] = str(metric_value_pct)
-                        # add collected metric name
-                        collectedMetricsSet.add(metric_name_pct)
                     # add to raw data map
                     rawDataMap[epoch] = valueMap
                     collectedValues += 1
-                    # update the collected metrics for this timestamp
-                    collectedMetricsMap[epoch] = collectedMetricsSet
 
-            # check whether collected all metrics basd on the config file
-            if (isReceivedAllMetrics(collectedMetricsSet, all_metrics_set)):
-                # add the completed timestamp into set
-                completedRowsTimestampSet.add(epoch)
-                # print "All metrics collected for timestamp " + str(epoch) + " Completed rows count: " + str(len(completedRowsTimestampSet))
-            numberOfCompletedRows = len(completedRowsTimestampSet)
-            # check whether the number of completed rows is greater than 100
-            if numberOfCompletedRows >= CHUNK_METRIC_VALUES:
-                # go through all completed timesamp data and add to the buffer
-                start = str(min(completedRowsTimestampSet))
-                end = str(max(completedRowsTimestampSet))
-                for timestamp in completedRowsTimestampSet:
-                    # get and delete the data of the timestamp
-                    valueMap = rawDataMap.pop(timestamp)
-                    # remove recorded metric for the timestamp
-                    collectedMetricsMap.pop(timestamp)
+            logger.debug("Collected timestamps: " + str(collectedValues))
+
+            if collectedValues >= CHUNK_METRIC_VALUES:
+                for timestamp in rawDataMap.keys():
+                    valueMap = rawDataMap[timestamp]
                     valueMap['timestamp'] = str(timestamp)
                     metricData.append(valueMap)
 
                 chunkNumber += 1
-                logger.debug("Sending Chunk Number: " + str(chunkNumber) + " from " + start + " to " + end)
+                logger.debug("Sending Chunk Number: " + str(chunkNumber))
                 sendData(metricData)
-                # clean the buffer and completed row set
                 metricData = []
-                completedRowsTimestampSet = set()
+                rawDataMap = collections.OrderedDict()
                 collectedValues = 0
 
         except ValueError:
@@ -374,21 +353,24 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
         sendData(metricData)
 
 
-def set_logger_config():
+def set_logger_config(level):
+    """Set up logging according to the defined log level"""
     # Get the root logger
-    logger = logging.getLogger(__name__)
+    logger_obj = logging.getLogger(__name__)
     # Have to set the root logger level, it defaults to logging.WARNING
-    logger.setLevel(logging.DEBUG)
+    logger_obj.setLevel(level)
     # route INFO and DEBUG logging to stdout from stderr
     logging_handler_out = logging.StreamHandler(sys.stdout)
     logging_handler_out.setLevel(logging.DEBUG)
-    logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
-    logger.addHandler(logging_handler_out)
+    # create a logging format
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(process)d - %(threadName)s - %(levelname)s - %(message)s')
+    logging_handler_out.setFormatter(formatter)
+    logger_obj.addHandler(logging_handler_out)
 
     logging_handler_err = logging.StreamHandler(sys.stderr)
     logging_handler_err.setLevel(logging.WARNING)
-    logger.addHandler(logging_handler_err)
-    return logger
+    logger_obj.addHandler(logging_handler_err)
+    return logger_obj
 
 
 class LessThanFilter(logging.Filter):
@@ -412,7 +394,7 @@ def kafka_data_consumer(consumer_id):
     else:
         consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest',
                                  consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id=agent_config_vars['groupId'], client_id=agentConfigVars["clientId"])
+                                 group_id=agent_config_vars['groupId'], client_id=agent_config_vars["clientId"])
     consumer.subscribe([topic])
     parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filter_hosts)
     consumer.close()
@@ -420,11 +402,13 @@ def kafka_data_consumer(consumer_id):
 
 
 if __name__ == "__main__":
-    CHUNK_METRIC_VALUES = 10
+    # CHUNK_METRIC_VALUES = 10
     GROUPING_START = 15000
     normalization_ids_map = {}
-    logger = set_logger_config()
     parameters = get_parameters()
+    log_level = parameters['logLevel']
+    CHUNK_METRIC_VALUES = parameters['chunkLines']
+    logger = set_logger_config(log_level)
     agent_config_vars = get_agent_config_vars(normalization_ids_map)
     reporting_config_vars = get_reporting_config_vars()
 
