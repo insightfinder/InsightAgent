@@ -58,6 +58,7 @@ def get_parameters():
 
     return parameters
 
+
 def get_reporting_config_vars():
     reporting_config_vars = {}
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
@@ -84,19 +85,22 @@ def get_agent_config_vars():
         if os.path.exists(os.path.join(parameters['homepath'], "kafka_logs", "config.ini")):
             parser = SafeConfigParser()
             parser.read(os.path.join(parameters['homepath'], "kafka_logs", "config.ini"))
-            insightFinder_license_key = parser.get('kafka', 'insightFinder_license_key')
-            insightFinder_project_name = parser.get('kafka', 'insightFinder_project_name')
-            insightFinder_user_name = parser.get('kafka', 'insightFinder_user_name')
+            license_key = parser.get('insightfinder', 'license_key')
+            project_name = parser.get('insightfinder', 'project_name')
+            user_name = parser.get('insightfinder', 'user_name')
             sampling_interval = parser.get('kafka', 'sampling_interval')
             client_id = parser.get('kafka', 'client_id')
             group_id = parser.get('kafka', 'group_id')
-            if len(insightFinder_license_key) == 0:
+            host_name_field = parser.get('kafka', 'host_name_field')
+            timestamp_field = parser.get('kafka', 'timestamp_field')
+            message_field = parser.get('kafka', 'message_field').split(",")
+            if len(license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
-            if len(insightFinder_project_name) == 0:
+            if len(project_name) == 0:
                 logger.error("Agent not correctly configured(project name). Check config file.")
                 sys.exit(1)
-            if len(insightFinder_user_name) == 0:
+            if len(user_name) == 0:
                 logger.error("Agent not correctly configured(username). Check config file.")
                 sys.exit(1)
             if len(sampling_interval) == 0:
@@ -105,9 +109,21 @@ def get_agent_config_vars():
             if len(group_id) == 0:
                 logger.error("Agent not correctly configured(group id). Check config file.")
                 sys.exit(1)
-            config_vars['licenseKey'] = insightFinder_license_key
-            config_vars['projectName'] = insightFinder_project_name
-            config_vars['userName'] = insightFinder_user_name
+            if len(host_name_field[0]) == 0:
+                logger.error("Agent not correctly configured(host_name_field). Check config file.")
+                sys.exit(1)
+            if len(timestamp_field[0]) == 0:
+                logger.error("Agent not correctly configured(timestamp_field). Check config file.")
+                sys.exit(1)
+            if len(message_field[0]) == 0:
+                logger.error("Agent not correctly configured(message_field). Check config file.")
+                sys.exit(1)
+            config_vars['hostName'] = host_name_field
+            config_vars['timestamp'] = timestamp_field
+            config_vars['messageField'] = message_field
+            config_vars['licenseKey'] = license_key
+            config_vars['projectName'] = project_name
+            config_vars['userName'] = user_name
             config_vars['samplingInterval'] = sampling_interval
             config_vars['groupId'] = group_id
             config_vars['clientId'] = client_id
@@ -122,7 +138,7 @@ def get_kafka_config():
         parser.read(os.path.join(parameters['homepath'], "kafka_logs", "config.ini"))
         bootstrap_servers = parser.get('kafka', 'bootstrap_servers').split(",")
         topic = parser.get('kafka', 'topic')
-        filter_hosts = parser.get('kafka', 'filter_hosts').split(",")
+        filter_hosts = parser.get('kafka', 'filtered_hosts').split(",")
 
         if len(bootstrap_servers) == 0:
             logger.info("Using default server localhost:9092")
@@ -161,20 +177,58 @@ def get_timestamp_for_zone(date_string, time_zone, datetime_format):
     return epoch
 
 
+def get_json_info(json_message):
+    host_name = ""
+    message = ""
+    timestamp = ""
+    host_name_json = json_message
+    timestamp_json = json_message
+    host_name_field = config_vars['hostName'].split("->")
+    timestamp_field = config_vars['timestamp'].split("->")
+    message_fields = config_vars['messageField']
+    for host_name_parameter in host_name_field:
+        host_name_json = host_name_json.get(host_name_parameter.strip(), {})
+        if len(host_name_json) == 0:
+            break
+    host_name = host_name_json.strip()
+    for timestamp_parameter in timestamp_field:
+        timestamp_json = timestamp_json.get(timestamp_parameter.strip(), {})
+        if len(timestamp_json) == 0:
+            break
+    timestamp = timestamp_json
+    for message_field in message_fields:
+        message_field = message_field.split("->")
+        message_json = json_message
+        prefix = ""
+        for message_field_parameter in message_field:
+            message_json = message_json.get(message_field_parameter.strip(), {})
+            prefix = str(message_field_parameter.strip())
+            if len(message_json) == 0:
+                break
+        if len(message_json) != 0:
+            if len(message) == 0:
+                message = message + prefix + ": " + message_json
+            else:
+                message = message + " " + prefix + ": " + message_json
+    timestamp = timestamp.replace(" ", "T")
+    message = message.strip()
+    return host_name, message, timestamp
+
+
 def send_data(metric_data):
     """ Sends parsed metric data to InsightFinder """
     send_data_time = time.time()
     # prepare data for metric streaming agent
     to_send_data_dict = dict()
     to_send_data_dict["metricData"] = json.dumps(metric_data)
-    to_send_data_dict["licenseKey"] = agentConfigVars['licenseKey']
+    to_send_data_dict["licenseKey"] = config_vars['licenseKey']
     if parameters['project'] is None:
-        to_send_data_dict["projectName"] = agentConfigVars['projectName']
+        to_send_data_dict["projectName"] = config_vars['projectName']
     else:
         to_send_data_dict["projectName"] = parameters['project']
-    to_send_data_dict["userName"] = agentConfigVars['userName']
+    to_send_data_dict["userName"] = config_vars['userName']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
-    to_send_data_dict["samplingInterval"] = str(int(reportingConfigVars['reporting_interval'] * 60))
+    to_send_data_dict["samplingInterval"] = str(int(reporting_config_vars['reporting_interval'] * 60))
     to_send_data_dict["agentType"] = "LogStreaming"
 
     to_send_data_json = json.dumps(to_send_data_dict)
@@ -199,15 +253,13 @@ def parse_consumer_messages(consumer, filter_hosts):
     for message in consumer:
         try:
             json_message = json.loads(message.value)
-            # logger.info(json_message)
-            host_name = json_message.get('beat', {}).get('hostname', {})
-            message = json_message.get('message', {})
-            timestamp = json_message.get('@timestamp', {})[:-5]
-
-            if len(filter_hosts) != 0 and host_name.upper() not in (filter_host.upper() for filter_host in
-                                                                    filter_hosts):
+            if 'u_table' not in json_message or json_message.get('u_table', {}).strip() != 'incident':
                 continue
-
+            (host_name, message, timestamp) = get_json_info(json_message)
+            if len(host_name) == 0 or len(message) == 0 or len(timestamp) == 0 or (
+                    len(filter_hosts) != 0 and host_name.upper() not in (filter_host.upper().strip() for filter_host in
+                                                                         filter_hosts)):
+                continue
             if line_count == parameters['chunk_lines']:
                 logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
                 send_data(current_row)
@@ -222,7 +274,6 @@ def parse_consumer_messages(consumer, filter_hosts):
                     epoch = get_timestamp_for_zone(timestamp, "GMT", pattern)
                 except ValueError:
                     continue
-
             current_log_msg = dict()
             current_log_msg['timestamp'] = epoch
             current_log_msg['tag'] = host_name
@@ -270,15 +321,14 @@ def kafka_data_consumer(consumer_id):
     logger.info("Started log consumer number " + consumer_id)
     # Kafka consumer configuration
     (brokers, topic, filter_hosts) = get_kafka_config()
-    if agentConfigVars["clientId"] == "":
-        consumer = KafkaConsumer(bootstrap_servers=brokers,
-                             auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
-                             group_id=agentConfigVars['groupId'])
-    else:
-        logger.info(agentConfigVars["clientId"])
+    if config_vars["clientId"] == "":
         consumer = KafkaConsumer(bootstrap_servers=brokers,
                                  auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id=agentConfigVars['groupId'], client_id = agentConfigVars["clientId"])
+                                 group_id=config_vars['groupId'])
+    else:
+        consumer = KafkaConsumer(bootstrap_servers=brokers,
+                                 auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
+                                 group_id=config_vars['groupId'], client_id=config_vars["clientId"])
     consumer.subscribe([topic])
     parse_consumer_messages(consumer, filter_hosts)
     consumer.close()
@@ -288,8 +338,8 @@ def kafka_data_consumer(consumer_id):
 if __name__ == "__main__":
     logger = set_logger_config()
     parameters = get_parameters()
-    agentConfigVars = get_agent_config_vars()
-    reportingConfigVars = get_reporting_config_vars()
+    config_vars = get_agent_config_vars()
+    reporting_config_vars = get_reporting_config_vars()
 
     try:
         t1 = Process(target=kafka_data_consumer, args=('1',))
