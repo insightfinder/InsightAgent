@@ -99,7 +99,7 @@ def get_agent_config_vars(normalization_ids_map):
             client_id = parser.get('kafka', 'client_id')
             normalization_ids = parser.get('kafka', 'normalization_id').split(",")
             data_send_timeout = parser.get('kafka', 'data_send_timeout')
-            # chunk_lines = parser.get('kafka', 'chunk_lines')
+
             if len(insightFinder_license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
@@ -206,14 +206,12 @@ def sendData(metricData):
 
     toSendDataJSON = json.dumps(toSendDataDict)
     logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))))
-    logger.debug("Data: " + str(toSendDataJSON))
 
     # send the data
     postUrl = parameters['serverUrl'] + "/customprojectrawdata"
     response = requests.post(postUrl, data=json.loads(toSendDataJSON))
     if response.status_code == 200:
         logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
-        # updateLastSentFiles(pcapFileList)
     else:
         logger.info("Failed to send data.")
     logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
@@ -271,8 +269,6 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
                 epoch = getTimestampForZone(timestamp, "GMT", pattern)
 
             logger.debug("Matching host: " + host_name)
-            # get previous collected values for timestamp if available
-            # get previous collected metrics name for timestamp if available
             if epoch in rawDataMap:
                 valueMap = rawDataMap[epoch]
                 collectedMetricsSet = collectedMetricsMap[epoch]
@@ -319,7 +315,6 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
                     collectedValues += 1
                 elif metric_class == "filesystem":
                     if json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}) != "/":
-                        # logger.info("Skipping: " +  json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}))
                         continue
                     # add used-bytes
                     metric_name_bytes = "filesystem/used-bytes"

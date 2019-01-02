@@ -183,7 +183,9 @@ def send_data(metric_data):
 
     # send the data
     post_url = parameters['serverUrl'] + "/customprojectrawdata"
+    logger.info("Before Response: ")
     response = requests.post(post_url, data=json.loads(to_send_data_json))
+    logger.info("Response: " + str(response))
     if response.status_code == 200:
         logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
     else:
@@ -192,6 +194,7 @@ def send_data(metric_data):
 
 
 def parse_consumer_messages(consumer, filter_hosts):
+    logger.debug("Parsing started____________")
     line_count = 0
     chunk_count = 0
     current_row = []
@@ -211,6 +214,7 @@ def parse_consumer_messages(consumer, filter_hosts):
             if line_count == parameters['chunk_lines']:
                 logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
                 send_data(current_row)
+                logger.debug("Moving forward____________")
                 current_row = []
                 chunk_count += 1
                 line_count = 0
@@ -267,7 +271,7 @@ class LessThanFilter(logging.Filter):
 
 
 def kafka_data_consumer(consumer_id):
-    logger.info("Started log consumer number " + consumer_id)
+    logger.info("Started log consumer number " + str(consumer_id))
     # Kafka consumer configuration
     (brokers, topic, filter_hosts) = get_kafka_config()
     if agentConfigVars["clientId"] == "":
@@ -292,9 +296,13 @@ if __name__ == "__main__":
     reportingConfigVars = get_reporting_config_vars()
 
     try:
+        # p = Pool(2)
+        # p.map(kafka_data_consumer, [1,2])
         t1 = Process(target=kafka_data_consumer, args=('1',))
         t2 = Process(target=kafka_data_consumer, args=('2',))
         t1.start()
         t2.start()
+        t1.join()
+        t2.join()
     except KeyboardInterrupt:
         print "Interrupt from keyboard"
