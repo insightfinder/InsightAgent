@@ -9,7 +9,6 @@ import socket
 import sys
 import time
 from optparse import OptionParser
-from urlparse import urlparse
 
 import requests
 
@@ -114,8 +113,6 @@ def get_hadoop_config():
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
         try:
-            # opentsdb_url = config_parser.get('opentsdb', 'opentsdb_server_url')
-            # opentsdb_token = config_parser.get('opentsdb', 'token')
             name_nodes = config_parser.get('hadoop', 'name_nodes')
             data_nodes = config_parser.get('hadoop', 'data_nodes')
             yarn_nodes = config_parser.get('hadoop', 'yarn_nodes')
@@ -124,10 +121,6 @@ def get_hadoop_config():
                 "Agent not correctly configured. Check config file.")
             sys.exit(1)
 
-        # if len(opentsdb_url) == 0:
-        #     logger.warning(
-        #         "Agent not correctly configured(OPENTSDB_URL). Check config file. Using \"127.0.0.1:4242\" as default.")
-        #     opentsdb_url = "http://127.0.0.1:4242"
         if len(name_nodes) != 0:
             name_nodes = name_nodes.split(",")
         else:
@@ -156,53 +149,6 @@ def get_hadoop_config():
 
     return hadoop_config
 
-
-def save_grouping(metric_grouping):
-    """
-    Saves the grouping data to grouping.json
-    Parameters:
-        - `grouping_map` : metric_name-grouping_id dict
-    :return: None
-    """
-    with open('grouping.json', 'w+') as f:
-        f.write(json.dumps(metric_grouping))
-
-
-def load_grouping():
-    """
-    Loads the grouping data from grouping.json
-    :return: grouping JSON string
-    """
-    if os.path.isfile('grouping.json'):
-        logger.debug("Grouping file exists. Loading..")
-        with open('grouping.json', 'r+') as f:
-            try:
-                grouping_json = json.loads(f.read())
-            except ValueError:
-                grouping_json = json.loads("{}")
-                logger.debug("Error parsing grouping.json.")
-    else:
-        grouping_json = json.loads("{}")
-    return grouping_json
-
-
-# def get_grouping_id(metric_key, metric_grouping):
-#     """
-#     Get grouping id for a metric key
-#     Parameters:
-#     - `metric_key` : metric key str to get group id.
-#     - `metric_grouping` : metric_key-grouping id map
-#     """
-#     for index in range(3):
-#         grouping_candidate = random.randint(GROUPING_START, GROUPING_END)
-#         if metric_key in metric_grouping:
-#             grouping_id = int(metric_grouping[metric_key])
-#             return grouping_id
-#         else:
-#             grouping_id = grouping_candidate
-#             metric_grouping[metric_key] = grouping_id
-#             return grouping_id
-#     return GROUPING_START
 
 def get_grouping_id(metric_key, node_type):
     """
@@ -234,8 +180,8 @@ def send_data(chunk_metric_data):
     to_send_data_dict["userName"] = agent_config_vars['userName']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
     to_send_data_dict["samplingInterval"] = str(int(reporting_config_vars['reporting_interval'] * 60))
-    to_send_data_dict["agentType"] = "custom"
-    to_send_data_dict["onlyNewMetricTable"] = "true"
+    to_send_data_dict["insightAgentType"] = "collectd"
+    # to_send_data_dict["onlyNewMetricTable"] = "true"
 
     to_send_data_json = json.dumps(to_send_data_dict)
     logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
@@ -295,31 +241,31 @@ def filter_metrics_json(all_jmx_metrics, nodetype, node_url):
         for current_jmx_bean in all_beans:
             if "tag.Hostname" in current_jmx_bean:
                 host_name = current_jmx_bean["tag.Hostname"]
-                parsed_uri = urlparse(host_name)
             else:
                 continue
-                # parsed_uri = urlparse(node_url)
 
             host_name_parts = host_name.split(".")
-
             host_name = host_name_parts[0]
             if "name" in current_jmx_bean:
                 bean_name = current_jmx_bean["name"]
-                if nodetype == "NameNode":
-                    if "Hadoop:service=NameNode" in bean_name:
-                        filtered_jmx_bean = {}
-                        for metric_key in current_jmx_bean:
-                            if "_percentile" in metric_key or "-inf" in metric_key or "_table" in metric_key:
-                                continue
-                            if metric_key not in filter_metrics_map[nodetype]:
-                                continue
-                            filtered_jmx_bean[metric_key] = current_jmx_bean[metric_key]
-                            filtered_jmx_bean["hostname"] = host_name
-                            filtered_jmx_metrics[bean_name] = filtered_jmx_bean
+                if nodetype == "NameNode" or nodetype == "DataNode":
+                    service = "Hadoop:service=" + nodetype
+                elif nodetype == "YarnNode":
+                    service = "Hadoop:service=ResourceManager"
+                if service in bean_name:
+                    filtered_jmx_bean = {}
+                    for metric_key in current_jmx_bean:
+                        if "_percentile" in metric_key or "-inf" in metric_key or "_table" in metric_key:
+                            continue
+                        if metric_key not in filter_metrics_map[nodetype]:
+                            continue
+                        filtered_jmx_bean[metric_key] = current_jmx_bean[metric_key]
+                        filtered_jmx_bean["hostname"] = host_name
+                        filtered_jmx_metrics[bean_name] = filtered_jmx_bean
     return filtered_jmx_metrics
 
 
-def format_jmx_metrics_json(filtered_metrics_json, node_type, config, metric_grouping, collected_data_map):
+def format_jmx_metrics_json(filtered_metrics_json, node_type, config, collected_data_map):
     epoch_time = int(round(time.time() * 1000))
     for curr_jmx_bean in filtered_metrics_json:
         host_name = filtered_metrics_json[curr_jmx_bean]["hostname"]
@@ -343,7 +289,7 @@ def format_jmx_metrics_json(filtered_metrics_json, node_type, config, metric_gro
         for metric_key in filtered_metrics_json[curr_jmx_bean]:
             if "hostname" in metric_key:
                 continue
-            metric_name = sub_system_name + "." + metric_key
+            metric_name = sub_system_name + "-" + metric_key
             header_field = metric_name + "[" + node_type + "_" + host_name + "]:" + str(
                 get_grouping_id(metric_key, node_type))
             metric_value = filtered_metrics_json[curr_jmx_bean][metric_key]
@@ -352,14 +298,14 @@ def format_jmx_metrics_json(filtered_metrics_json, node_type, config, metric_gro
         collected_data_map[epoch_time] = value_map
 
 
-def get_node_metrics(node_type, node_url, config, metric_grouping, collected_data_map):
+def get_node_metrics(node_type, node_url, config, collected_data_map):
     """Get metric data from Open TSDB API"""
     jmx_url = node_url + "/jmx"
     response = requests.get(jmx_url)
     try:
         response_json = json.loads(response.content)
         filtered_metrics = filter_metrics_json(response_json, node_type, node_url)
-        format_jmx_metrics_json(filtered_metrics, node_type, config, metric_grouping, collected_data_map)
+        format_jmx_metrics_json(filtered_metrics, node_type, config, collected_data_map)
         if len(filtered_metrics) == 0:
             logger.warning("No metrics to send for url: " + node_url)
         logger.debug(response_json)
@@ -396,14 +342,18 @@ if __name__ == "__main__":
                                       "BlocksWritten", "RamDiskBlocksEvicted", "WriteBlockOpNumOps",
                                       "ReplaceBlockOpAvgTime", "ReadBlockOpAvgTime", "CopyBlockOpNumOps"]
 
-    filter_metrics_map["YarnNode"] = [""]
+    filter_metrics_map["YarnNode"] = ["ThreadsTerminated", "Get_mean", "Get_num_ops", "ThreadsWaiting",
+                                      "readRequestCount", "ThreadsBlocked",
+                                      "LogWarn", "ThreadsRunnable", "CheckAndPut_num_ops", "Put_mean", "LogInfo",
+                                      "updatesBlockedTime", "ThreadsNew", "CheckAndPut_mean", "ThreadsTimedWaiting",
+                                      "ProcessCallTime_num_ops", "Put_num_ops", "LogError", "LogFatal",
+                                      "writeRequestCount", "ProcessCallTime_mean"]
 
     parameters = get_parameters()
     log_level = parameters['logLevel']
     logger = set_logger_config(log_level)
     agent_config_vars = get_agent_config_vars()
     reporting_config_vars = get_reporting_config_vars()
-    grouping_map = load_grouping()
 
     # get agent configuration details
     agent_config = get_hadoop_config()
@@ -418,9 +368,8 @@ if __name__ == "__main__":
             node_type = "DataNode"
         elif key == "YARN_NODES":
             node_type = "YarnNode"
-        node_type = "NameNode"
         for node in agent_config[key]:
-            get_node_metrics(node_type, node, agent_config, grouping_map, raw_data_map)
+            get_node_metrics(node_type, node, agent_config, raw_data_map)
 
     for timestamp in raw_data_map.keys():
         value_map = raw_data_map[timestamp]
@@ -429,4 +378,3 @@ if __name__ == "__main__":
     if len(metric_data) != 0:
         logger.info("Start sending data to InsightFinder")
         send_data(metric_data)
-    save_grouping(grouping_map)
