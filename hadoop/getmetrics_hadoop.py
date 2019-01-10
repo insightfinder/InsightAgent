@@ -180,7 +180,7 @@ def send_data(chunk_metric_data):
     to_send_data_dict["userName"] = agent_config_vars['userName']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
     to_send_data_dict["samplingInterval"] = str(int(reporting_config_vars['reporting_interval'] * 60))
-    to_send_data_dict["insightAgentType"] = "collectd"
+    to_send_data_dict["agentType"] = "custom"
     # to_send_data_dict["onlyNewMetricTable"] = "true"
 
     to_send_data_json = json.dumps(to_send_data_dict)
@@ -211,6 +211,7 @@ def normalize_key(metric_key):
     metric_key = SPACES.sub("_", metric_key)
     metric_key = SLASHES.sub("-", metric_key)
     metric_key = NON_ALNUM.sub("", metric_key)
+    metric_key = metric_key.replace(".", "-")
     return metric_key
 
 
@@ -277,7 +278,7 @@ def format_jmx_metrics_json(filtered_metrics_json, node_type, config, collected_
             modeler_name = sub_system_parts[1].split("=")[1].replace("[^A-Za-z0-9 ]", "")
             sub_system_name += modeler_name
         if len(sub_system_parts) >= 3 and len(sub_system_parts[2]) != 0:
-            sub_system_name += "."
+            sub_system_name += "-"
             modeler_sub_name = sub_system_parts[2].split("=")[1].replace("[^A-Za-z0-9 ]", "")
             sub_system_name += modeler_sub_name
 
@@ -289,7 +290,7 @@ def format_jmx_metrics_json(filtered_metrics_json, node_type, config, collected_
         for metric_key in filtered_metrics_json[curr_jmx_bean]:
             if "hostname" in metric_key:
                 continue
-            metric_name = sub_system_name + "-" + metric_key
+            metric_name = normalize_key(sub_system_name + "-" + metric_key)
             header_field = metric_name + "[" + node_type + "_" + host_name + "]:" + str(
                 get_grouping_id(metric_key, node_type))
             metric_value = filtered_metrics_json[curr_jmx_bean][metric_key]
@@ -300,9 +301,13 @@ def format_jmx_metrics_json(filtered_metrics_json, node_type, config, collected_
 
 def get_node_metrics(node_type, node_url, config, collected_data_map):
     """Get metric data from Open TSDB API"""
-    jmx_url = node_url + "/jmx"
-    response = requests.get(jmx_url)
+
+    if "http" not in node_url:
+        jmx_url = "http://" + node_url + "/jmx"
+    else:
+        jmx_url = node_url + "/jmx"
     try:
+        response = requests.get(jmx_url)
         response_json = json.loads(response.content)
         filtered_metrics = filter_metrics_json(response_json, node_type, node_url)
         format_jmx_metrics_json(filtered_metrics, node_type, config, collected_data_map)
@@ -310,7 +315,18 @@ def get_node_metrics(node_type, node_url, config, collected_data_map):
             logger.warning("No metrics to send for url: " + node_url)
         logger.debug(response_json)
     except ValueError:
-        logger.error("Unable to parse result from " + node_url)
+        logger.error("Unable to parse result from: " + node_url)
+    except requests.exceptions.ConnectionError:
+        logger.error("Unable to connect to: " + node_url)
+    except requests.exceptions.MissingSchema as e:
+        logger.error("Missing Schema: " + str(e))
+    except requests.exceptions.Timeout:
+        logger.error("Timed out connecting to: " + node_url)
+    except requests.exceptions.TooManyRedirects:
+        logger.error("Too many redirects to: " + node_url)
+    except requests.exceptions.RequestException as e:
+        logger.error(str(e))
+
 
 
 if __name__ == "__main__":
