@@ -171,6 +171,7 @@ def get_grouping_id(metric_key, metric_node_type):
 
 
 def send_data(chunk_metric_data):
+    """Sends metric data to InsightFinder backend"""
     send_data_time = time.time()
     # prepare data for metric streaming agent
     to_send_data_dict = dict()
@@ -234,6 +235,7 @@ def set_logger_config(level):
 
 
 def filter_metrics_json(all_jmx_metrics, nodetype):
+    """Filters collected jmx metrics to include selected ones for each Node type(e.g. NameNode) """
     filtered_jmx_metrics = {}
     if "beans" in all_jmx_metrics:
         all_beans = all_jmx_metrics["beans"]
@@ -266,6 +268,7 @@ def filter_metrics_json(all_jmx_metrics, nodetype):
 
 
 def format_jmx_metrics_json(filtered_metrics_json, hadoop_node_type, collected_data_map):
+    """Formats the filtered json metrics to the format acceptable by InsightFinder."""
     epoch_time = int(round(time.time() * 1000))
     for curr_jmx_bean in filtered_metrics_json:
         host_name = filtered_metrics_json[curr_jmx_bean]["hostname"]
@@ -311,7 +314,6 @@ def get_node_metrics(_node_type, node_url, collected_data_map):
         format_jmx_metrics_json(filtered_metrics, _node_type, collected_data_map)
         if len(filtered_metrics) == 0:
             logger.warning("No metrics to send for url: " + node_url)
-        logger.debug(response_json)
     except requests.exceptions.ConnectionError:
         logger.error("Unable to connect to: " + node_url)
     except requests.exceptions.MissingSchema as e:
@@ -322,6 +324,8 @@ def get_node_metrics(_node_type, node_url, collected_data_map):
         logger.error("Too many redirects to: " + node_url)
     except ValueError:
         logger.error("Unable to parse result from: " + node_url)
+    except json.JSONDecodeError:
+        logger.error("Unable to decode JSON from: " + node_url)
     except requests.exceptions.RequestException as e:
         logger.error(str(e))
 
