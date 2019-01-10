@@ -150,23 +150,23 @@ def get_hadoop_config():
     return hadoop_config
 
 
-def get_grouping_id(metric_key, node_type):
+def get_grouping_id(metric_key, metric_node_type):
     """
     Get grouping id for a metric key
     Parameters:
     - `metric_key` : metric key str to get group id.
-    - `node_type` : node type the metric key is from
+    - `metric_node_type` : node type the metric key is from
     """
     name_node_start = 23000
     data_node_start = 24000
     yarn_node_start = 25000
     grouping_candidate = 0
-    if node_type == "NameNode":
-        grouping_candidate = filter_metrics_map[node_type].index(metric_key) + name_node_start + 1
-    if node_type == "DataNode":
-        grouping_candidate = filter_metrics_map[node_type].index(metric_key) + data_node_start + 1
-    if node_type == "YarnNode":
-        grouping_candidate = filter_metrics_map[node_type].index(metric_key) + yarn_node_start + 1
+    if metric_node_type == "NameNode":
+        grouping_candidate = filter_metrics_map[metric_node_type].index(metric_key) + name_node_start + 1
+    if metric_node_type == "DataNode":
+        grouping_candidate = filter_metrics_map[metric_node_type].index(metric_key) + data_node_start + 1
+    if metric_node_type == "YarnNode":
+        grouping_candidate = filter_metrics_map[metric_node_type].index(metric_key) + yarn_node_start + 1
     return grouping_candidate
 
 
@@ -181,11 +181,9 @@ def send_data(chunk_metric_data):
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
     to_send_data_dict["samplingInterval"] = str(int(reporting_config_vars['reporting_interval'] * 60))
     to_send_data_dict["agentType"] = "custom"
-    # to_send_data_dict["onlyNewMetricTable"] = "true"
 
     to_send_data_json = json.dumps(to_send_data_dict)
     logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
-    logger.debug("Data: " + str(to_send_data_json))
 
     # send the data
     post_url = parameters['serverUrl'] + "/customprojectrawdata"
@@ -235,7 +233,7 @@ def set_logger_config(level):
     return logger_obj
 
 
-def filter_metrics_json(all_jmx_metrics, nodetype, node_url):
+def filter_metrics_json(all_jmx_metrics, nodetype):
     filtered_jmx_metrics = {}
     if "beans" in all_jmx_metrics:
         all_beans = all_jmx_metrics["beans"]
@@ -249,6 +247,7 @@ def filter_metrics_json(all_jmx_metrics, nodetype, node_url):
             host_name = host_name_parts[0]
             if "name" in current_jmx_bean:
                 bean_name = current_jmx_bean["name"]
+                service = ""
                 if nodetype == "NameNode" or nodetype == "DataNode":
                     service = "Hadoop:service=" + nodetype
                 elif nodetype == "YarnNode":
@@ -266,14 +265,13 @@ def filter_metrics_json(all_jmx_metrics, nodetype, node_url):
     return filtered_jmx_metrics
 
 
-def format_jmx_metrics_json(filtered_metrics_json, node_type, config, collected_data_map):
+def format_jmx_metrics_json(filtered_metrics_json, hadoop_node_type, collected_data_map):
     epoch_time = int(round(time.time() * 1000))
     for curr_jmx_bean in filtered_metrics_json:
         host_name = filtered_metrics_json[curr_jmx_bean]["hostname"]
         # create subsystem name
         sub_system_name = ""
         sub_system_parts = str(curr_jmx_bean).split(",")
-        service = sub_system_parts[0].split("=")[1].replace("[^A-Za-z0-9 ]", "")
         if len(sub_system_parts) >= 2 and len(sub_system_parts[1]) != 0:
             modeler_name = sub_system_parts[1].split("=")[1].replace("[^A-Za-z0-9 ]", "")
             sub_system_name += modeler_name
@@ -283,23 +281,23 @@ def format_jmx_metrics_json(filtered_metrics_json, node_type, config, collected_
             sub_system_name += modeler_sub_name
 
         if epoch_time in collected_data_map:
-            value_map = collected_data_map[epoch_time]
+            epoch_value_map = collected_data_map[epoch_time]
         else:
-            value_map = {}
+            epoch_value_map = dict()
 
         for metric_key in filtered_metrics_json[curr_jmx_bean]:
             if "hostname" in metric_key:
                 continue
             metric_name = normalize_key(sub_system_name + "-" + metric_key)
-            header_field = metric_name + "[" + node_type + "_" + host_name + "]:" + str(
-                get_grouping_id(metric_key, node_type))
+            header_field = metric_name + "[" + hadoop_node_type + "_" + host_name + "]:" + str(
+                get_grouping_id(metric_key, hadoop_node_type))
             metric_value = filtered_metrics_json[curr_jmx_bean][metric_key]
-            value_map[header_field] = str(metric_value)
+            epoch_value_map[header_field] = str(metric_value)
 
-        collected_data_map[epoch_time] = value_map
+        collected_data_map[epoch_time] = epoch_value_map
 
 
-def get_node_metrics(node_type, node_url, config, collected_data_map):
+def get_node_metrics(_node_type, node_url, collected_data_map):
     """Get metric data from Open TSDB API"""
 
     if "http" not in node_url:
@@ -309,13 +307,11 @@ def get_node_metrics(node_type, node_url, config, collected_data_map):
     try:
         response = requests.get(jmx_url)
         response_json = json.loads(response.content)
-        filtered_metrics = filter_metrics_json(response_json, node_type, node_url)
-        format_jmx_metrics_json(filtered_metrics, node_type, config, collected_data_map)
+        filtered_metrics = filter_metrics_json(response_json, _node_type)
+        format_jmx_metrics_json(filtered_metrics, _node_type, collected_data_map)
         if len(filtered_metrics) == 0:
             logger.warning("No metrics to send for url: " + node_url)
         logger.debug(response_json)
-    except ValueError:
-        logger.error("Unable to parse result from: " + node_url)
     except requests.exceptions.ConnectionError:
         logger.error("Unable to connect to: " + node_url)
     except requests.exceptions.MissingSchema as e:
@@ -324,9 +320,10 @@ def get_node_metrics(node_type, node_url, config, collected_data_map):
         logger.error("Timed out connecting to: " + node_url)
     except requests.exceptions.TooManyRedirects:
         logger.error("Too many redirects to: " + node_url)
+    except ValueError:
+        logger.error("Unable to parse result from: " + node_url)
     except requests.exceptions.RequestException as e:
         logger.error(str(e))
-
 
 
 if __name__ == "__main__":
@@ -334,11 +331,11 @@ if __name__ == "__main__":
     GROUPING_END = 25000
     METRIC_CHUNKS = 50
     SPACES = re.compile(r"\s+")
-    SLASHES = re.compile(r"\/+")
-    NON_ALNUM = re.compile(r"[^a-zA-Z_\-0-9\.]")
+    SLASHES = re.compile(r"/+")
+    NON_ALNUM = re.compile(r"[^a-zA-Z_\-0-9.]")
 
     # Map to filter metrics according to node type
-    filter_metrics_map = {}
+    filter_metrics_map = dict()
     filter_metrics_map["NameNode"] = ["BlockReceivedAndDeletedAvgTime", "RollEditLogAvgTime", "GetBlockLocationsNumOps",
                                       "AddBlockOps", "BlockReceivedAndDeletedOps", "BlockReceivedAndDeletedNumOps",
                                       "RollEditLogNumOps", "BlockReportAvgTime", "BlockReportAvgTime",
@@ -378,6 +375,7 @@ if __name__ == "__main__":
     chunk_number = 0
 
     for key in agent_config.keys():
+        node_type = ""
         if key == "NAME_NODES":
             node_type = "NameNode"
         elif key == "DATA_NODES":
@@ -385,7 +383,7 @@ if __name__ == "__main__":
         elif key == "YARN_NODES":
             node_type = "YarnNode"
         for node in agent_config[key]:
-            get_node_metrics(node_type, node, agent_config, raw_data_map)
+            get_node_metrics(node_type, node, raw_data_map)
 
     for timestamp in raw_data_map.keys():
         value_map = raw_data_map[timestamp]
