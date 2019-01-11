@@ -324,8 +324,6 @@ def get_node_metrics(_node_type, node_url, collected_data_map):
         logger.error("Too many redirects to: " + node_url)
     except ValueError:
         logger.error("Unable to parse result from: " + node_url)
-    except json.JSONDecodeError:
-        logger.error("Unable to decode JSON from: " + node_url)
     except requests.exceptions.RequestException as e:
         logger.error(str(e))
 
@@ -387,6 +385,7 @@ if __name__ == "__main__":
         elif key == "YARN_NODES":
             node_type = "YarnNode"
         for node in agent_config[key]:
+            logger.debug("Getting jmx data for node: " + node)
             get_node_metrics(node_type, node, raw_data_map)
 
     for timestamp in raw_data_map.keys():
