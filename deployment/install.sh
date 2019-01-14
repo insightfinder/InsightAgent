@@ -180,6 +180,7 @@ elif [ $AGENT_TYPE == 'hadoop' ]; then
 		echo "project_name=$PROJECTNAME" >> $INSIGHTAGENTDIR/hadoop/config.ini
 		echo "user_name=$USERNAME" >> $INSIGHTAGENTDIR/hadoop/config.ini
 		echo "sampling_interval=$SAMPLING_INTERVAL" >> $INSIGHTAGENTDIR/hadoop/config.ini
+		echo "ssl_verify=True" >> $INSIGHTAGENTDIR/hadoop/config.ini
 	fi
 else
 	echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> $AGENTRC
