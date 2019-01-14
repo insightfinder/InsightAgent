@@ -56,6 +56,7 @@ def get_agent_config_vars():
             user_name = config_parser.get('insightfinder', 'user_name')
             license_key = config_parser.get('insightfinder', 'license_key')
             project_name = config_parser.get('insightfinder', 'project_name')
+            ssl_verification = config_parser.get('insightfinder', 'ssl_verify')
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
@@ -73,11 +74,16 @@ def get_agent_config_vars():
             logger.warning(
                 "Agent not correctly configured(project_name). Check config file.")
             sys.exit(1)
+        if len(ssl_verification) != 0 and (ssl_verification.lower() == 'false' or ssl_verification.lower() == 'f'):
+            ssl_verification = False
+        else:
+            ssl_verification = True
 
         config_vars = {
             "userName": user_name,
             "licenseKey": license_key,
-            "projectName": project_name
+            "projectName": project_name,
+            "sslSecurity": ssl_verification
         }
 
         return config_vars
@@ -308,7 +314,7 @@ def get_node_metrics(_node_type, node_url, collected_data_map):
     else:
         jmx_url = node_url + "/jmx"
     try:
-        response = requests.get(jmx_url)
+        response = requests.get(jmx_url, verify=agent_config_vars['sslSecurity'])
         response_json = json.loads(response.content)
         filtered_metrics = filter_metrics_json(response_json, _node_type)
         format_jmx_metrics_json(filtered_metrics, _node_type, collected_data_map)
