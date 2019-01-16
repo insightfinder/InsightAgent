@@ -1,4 +1,4 @@
-## Use this script to deploy cgroup Agent on multiple Hosts
+## Use this script to deploy collectd Agent on multiple Hosts
 
 ### Prerequisites:
 
