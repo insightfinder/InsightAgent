@@ -177,16 +177,14 @@ def get_grouping_id(metric_key, metric_node_type):
     - `metric_key` : metric key str to get group id.
     - `metric_node_type` : node type the metric key is from
     """
-    name_node_start = 23000
-    data_node_start = 24000
-    yarn_node_start = 25000
-    grouping_candidate = 0
-    if metric_node_type == "NameNode":
-        grouping_candidate = filter_metrics_map[metric_node_type].index(metric_key) + name_node_start + 1
-    if metric_node_type == "DataNode":
-        grouping_candidate = filter_metrics_map[metric_node_type].index(metric_key) + data_node_start + 1
-    if metric_node_type == "YarnNode":
-        grouping_candidate = filter_metrics_map[metric_node_type].index(metric_key) + yarn_node_start + 1
+    node_key_start_map = dict()
+    node_key_start_map["HBaseMaster"] = 20000
+    node_key_start_map["RegionServer"] = 21000
+    node_key_start_map["NameNode"] = 23000
+    node_key_start_map["DataNode"] = 24000
+    node_key_start_map["YarnNode"] = 25000
+    grouping_candidate = filter_metrics_map[metric_node_type].index(metric_key) + node_key_start_map[
+        metric_node_type] + 1
     return grouping_candidate
 
 
