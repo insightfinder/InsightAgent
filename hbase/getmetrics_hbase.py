@@ -287,6 +287,17 @@ def filter_metrics_json(all_jmx_metrics, nodetype):
     return filtered_jmx_metrics
 
 
+def is_number(n):
+    """Checks if a string is a valid number"""
+    try:
+        float(n)  # Type-casting the string to `float`.
+        # If string is not a valid `float`,
+        # it'll raise `ValueError` exception
+    except ValueError:
+        return False
+    return True
+
+
 def format_jmx_metrics_json(filtered_metrics_json, hadoop_node_type, collected_data_map):
     """Formats the filtered json metrics to the format acceptable by InsightFinder."""
     for curr_jmx_bean in filtered_metrics_json:
@@ -314,6 +325,8 @@ def format_jmx_metrics_json(filtered_metrics_json, hadoop_node_type, collected_d
             header_field = metric_name + "[" + hadoop_node_type + "_" + host_name + "]:" + str(
                 get_grouping_id(metric_key, hadoop_node_type))
             metric_value = filtered_metrics_json[curr_jmx_bean][metric_key]
+            if not is_number(metric_value):
+                continue
             epoch_value_map[header_field] = str(metric_value)
 
         collected_data_map[epoch_time] = epoch_value_map
@@ -387,7 +400,7 @@ if __name__ == "__main__":
     filter_metrics_map["HBaseMaster"] = ["ritOldestAge", "ritCountOverThreshold", "ritCount", "Assign_mean",
                                          "queueSize", "numCallsInGeneralQueue", "numCallsInReplicationQueue",
                                          "numCallsInPriorityQueue", "numOpenConnections", "numActiveHandler",
-                                         "TotalCallTime_mean", "tag.isActiveMaster", "numRegionServers",
+                                         "TotalCallTime_mean", "numRegionServers",
                                          "numDeadRegionServers"]
 
     filter_metrics_map["RegionServer"] = ["ThreadsTerminated", "Get_mean", "Get_num_ops", "ThreadsWaiting",
