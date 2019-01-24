@@ -13,8 +13,10 @@ from optparse import OptionParser
 import requests
 
 '''
-This script gathers metric data from hadoop and use http api to send to Insightfinder
+This script gathers elasticsearch data and use http api to send to Insightfinder
 '''
+
+epoch_value_map = {}
 
 
 def get_parameters():
@@ -63,7 +65,8 @@ def get_agent_config_vars():
             logger.error("Agent not correctly configured. Check config file.")
             sys.exit(1)
 
-        if len(config_vars["ssl_verification"]) != 0 and (config_vars["ssl_verification"].lower() == 'false' or config_vars["ssl_verification"].lower() == 'f'):
+        if len(config_vars["ssl_verification"]) != 0 and (
+                config_vars["ssl_verification"].lower() == 'false' or config_vars["ssl_verification"].lower() == 'f'):
             ssl_verification = False
         else:
             ssl_verification = True
@@ -166,126 +169,121 @@ def get_previous_results():
     else:
         return {}
 
-epoch_value_map = {}
-
 
 def handle_cluster_health_json(json_response, hostname, epoch_time, collected_data_map):
     for key in json_response:
         if key in all_metrics:
-            addMetricToBuffers(hostname, json_response, key, key, "cluster_health")
+            add_metric_to_buffers(hostname, json_response, key, key, "cluster_health")
     collected_data_map[epoch_time] = epoch_value_map
 
 
-def handle_accum_metric_keys(host_name, shardsJsonObj, metricName, key, node_type):
-    header_field = metricName + "[" + node_type + "_" + host_name + "]:" + str(
-        get_grouping_id(metricName))
-    metricValue = shardsJsonObj[key]
+def handle_accum_metric_keys(host_name, shards_json_obj, metric_name, key, node_type):
+    header_field = metric_name + "[" + node_type + "_" + host_name + "]:" + str(
+        get_grouping_id(metric_name))
+    metric_value = shards_json_obj[key]
     if header_field in previuos_results_dict:
         old_value = long(previuos_results_dict[header_field])
-        delta = metricValue - old_value
-        previuos_results_dict[header_field] = metricValue
+        delta = metric_value - old_value
+        previuos_results_dict[header_field] = metric_value
         epoch_value_map[header_field] = str(delta)
     else:
-        epoch_value_map[header_field] = metricValue
-        previuos_results_dict[header_field] = metricValue
+        epoch_value_map[header_field] = metric_value
+        previuos_results_dict[header_field] = metric_value
 
 
-def addMetricToBuffers(host_name, shardsJsonObj, metricName, key, node_type):
+def add_metric_to_buffers(host_name, shards_json_obj, metric_name, key, node_type):
     for keyMetric in all_metrics:
-        if metricName.endswith(keyMetric):
-            # need to check for accumulating metrices
+        if metric_name.endswith(keyMetric):
             if keyMetric in nonAccumKeys:
-                header_field = metricName + "[" + node_type + "_" + host_name + "]:" + str(
-                    get_grouping_id(metricName))
-                metricValue = shardsJsonObj[key]
-                epoch_value_map[header_field] = str(metricValue)
+                header_field = metric_name + "[" + node_type + "_" + host_name + "]:" + str(
+                    get_grouping_id(metric_name))
+                metric_value = shards_json_obj[key]
+                epoch_value_map[header_field] = str(metric_value)
             else:
-                handle_accum_metric_keys(host_name, shardsJsonObj, metricName, key, node_type)
+                handle_accum_metric_keys(host_name, shards_json_obj, metric_name, key, node_type)
                 pass
 
-            return
+
+def get_primaries_and_total_and_addit_to_buffers(hostname, all_json_object, insightfinder_metric_name):
+    if all_json_object["primaries"] is not None or all_json_object["total"] is not None:
+        for majorKeys in all_json_object:
+            temp_metric_name_root = insightfinder_metric_name
+            temp_metric_name_root += "_" + majorKeys.replace("_", ".")
+            primaries_json_obj = all_json_object["primaries"]
+            for keyPrimaries in primaries_json_obj:
+                temp_metric_name_primary = temp_metric_name_root
+                temp_metric_name_primary += "_" + keyPrimaries.replace("_", ".")
+                key_primaries_json_object = primaries_json_obj[keyPrimaries]
+                for actualKeys in key_primaries_json_object:
+                    leaf_metric_name = temp_metric_name_primary
+                    leaf_metric_name += "_" + actualKeys.replace("_", ".")
+                    add_metric_to_buffers(hostname, key_primaries_json_object, leaf_metric_name, actualKeys,
+                                          "all_stats")
 
 
-def getPrimariesAndTotalAndAddItToBuffers(hostname, allJsonObject, insightfinderMetricName):
-    if allJsonObject["primaries"] is not None or allJsonObject["total"] is not None:
-        for majorKeys in allJsonObject:
-            tempMetricNameRoot = insightfinderMetricName
-            tempMetricNameRoot += "_" + majorKeys.replace("_", ".")
-            primariesJsonObj = allJsonObject["primaries"]
-            for keyPrimaries in primariesJsonObj:
-                tempMetricNamePrimary = tempMetricNameRoot
-                tempMetricNamePrimary += "_" + keyPrimaries.replace("_", ".")
-                keyPrimariesJsonObject = primariesJsonObj[keyPrimaries]
-                for actualKeys in keyPrimariesJsonObject:
-                    leafMetricName = tempMetricNamePrimary
-                    leafMetricName += "_" + actualKeys.replace("_", ".")
-                    addMetricToBuffers(hostname, keyPrimariesJsonObject, leafMetricName, actualKeys, "all_stats")
-
-
-def handle_all_stats_json(metricResp, hostname, epoch_time, collected_data_map):
-    for respJsonKey in metricResp:
+def handle_all_stats_json(metric_resp, hostname, epoch_time, collected_data_map):
+    for respJsonKey in metric_resp:
         if respJsonKey == "_shards":
-            shardsJsonObj = metricResp[respJsonKey]
-            for key in shardsJsonObj:
+            shards_json_obj = metric_resp[respJsonKey]
+            for key in shards_json_obj:
                 if key == "successful" or key == "total":
-                    insightfinderMetricName = "shards_" + key
-                    addMetricToBuffers(hostname, shardsJsonObj, insightfinderMetricName, key, "all_stats")
+                    insightfinder_metric_name = "shards_" + key
+                    add_metric_to_buffers(hostname, shards_json_obj, insightfinder_metric_name, key, "all_stats")
         elif respJsonKey == "_all":
-            allJsonObject = metricResp["_all"]
-            insightfinderMetricName = "all"
-            getPrimariesAndTotalAndAddItToBuffers(hostname, allJsonObject, insightfinderMetricName)
+            all_json_object = metric_resp["_all"]
+            insightfinder_metric_name = "all"
+            get_primaries_and_total_and_addit_to_buffers(hostname, all_json_object, insightfinder_metric_name)
     collected_data_map[epoch_time] = epoch_value_map
 
 
-def handle_nodes_local_json( matricResponse, epoch_time, collected_data_map ):
-    for keyOuter in matricResponse:
+def handle_nodes_local_json(matric_response, epoch_time, collected_data_map):
+    for keyOuter in matric_response:
         if keyOuter == "nodes":
-            nodes = matricResponse[keyOuter]
-            newMetricName = "nodes"
+            nodes = matric_response[keyOuter]
+            new_metric_name = "nodes"
             for key in nodes:
                 host = nodes[key]["host"]
-                innerNode = nodes[key]
-                for jKey in innerNode:
+                inner_node = nodes[key]
+                for jKey in inner_node:
                     if jKey == "jvm":
-                        jvmJsonObject = innerNode["jvm"]
-                        newMetricName += "_" + jKey.replace("_", ".")
-                        for jvmkey in jvmJsonObject:
+                        jvm_json_object = inner_node["jvm"]
+                        new_metric_name += "_" + jKey.replace("_", ".")
+                        for jvmkey in jvm_json_object:
                             if jvmkey == "start_time_in_millis":
-                                newMetricName += "_" + jvmkey.replace("_", ".")
-                                addMetricToBuffers(host, jvmJsonObject, newMetricName, jvmkey, "nodes_local")
+                                new_metric_name += "_" + jvmkey.replace("_", ".")
+                                add_metric_to_buffers(host, jvm_json_object, new_metric_name, jvmkey, "nodes_local")
                             elif jvmkey == "mem":
-                                newMetricName += "_" + jvmkey.replace("_", ".")
-                                for jvmMemKeys in jvmJsonObject["mem"]:
-                                    newMetricName += "_" + jvmMemKeys.replace("_", ".")
-                                    addMetricToBuffers(host, jvmJsonObject["mem"], newMetricName, jvmMemKeys, "nodes_local")
-                                    newMetricName = newMetricName.replace("_" + jvmMemKeys.replace("_","."), "")
-                            newMetricName = newMetricName.replace("_" + jvmkey.replace("_", "."), "")
-                        newMetricName = newMetricName.replace("_" + jKey.replace("_","."), "")
-                    newMetricName = newMetricName.replace("_" + key.replace("_", "."), "")
+                                new_metric_name += "_" + jvmkey.replace("_", ".")
+                                for jvmMemKeys in jvm_json_object["mem"]:
+                                    new_metric_name += "_" + jvmMemKeys.replace("_", ".")
+                                    add_metric_to_buffers(host, jvm_json_object["mem"], new_metric_name, jvmMemKeys,
+                                                          "nodes_local")
+                                    new_metric_name = new_metric_name.replace("_" + jvmMemKeys.replace("_", "."), "")
+                            new_metric_name = new_metric_name.replace("_" + jvmkey.replace("_", "."), "")
+                        new_metric_name = new_metric_name.replace("_" + jKey.replace("_", "."), "")
+                    new_metric_name = new_metric_name.replace("_" + key.replace("_", "."), "")
     collected_data_map[epoch_time] = epoch_value_map
 
 
-def get_hostname_from_url( elastic_search_node_url ):
+def get_hostname_from_url(elastic_search_node_url):
     elastic_search_node_url = elastic_search_node_url.replace("https://", "").replace("http://", "")
     elastic_search_node_url = elastic_search_node_url.split(":")[0].split("/")[0]
     return elastic_search_node_url
 
 
 def get_node_metrics(elastic_search_nodes, collected_data_map):
-    elastic_search_urls = [ "_cluster/health",  "_all/_stats#", "_nodes/_local"]
+    elastic_search_urls = ["_cluster/health", "_all/_stats#", "_nodes/_local"]
     epoch_time = int(round(time.time() * 1000))
     for elastic_search_node in elastic_search_nodes:
         for elastic_search_url in elastic_search_urls:
             if "http" not in elastic_search_node:
-                elastic_search_node_url = "https://" + elastic_search_node + "/" +elastic_search_url
+                elastic_search_node_url = "https://" + elastic_search_node + "/" + elastic_search_url
             else:
                 elastic_search_node_url = elastic_search_node + "/" + elastic_search_url
-
             try:
                 response = requests.get(elastic_search_node_url, verify=agent_config_vars['ssl_security'])
                 response_json = json.loads(response.content)
-                # print response_json
-                hostname = get_hostname_from_url(elastic_search_node_url)   # calculate hostname
+                hostname = get_hostname_from_url(elastic_search_node_url)  # calculate hostname
                 if elastic_search_url == "_cluster/health":
                     handle_cluster_health_json(response_json, hostname, epoch_time, collected_data_map)
                 elif elastic_search_url == "_all/_stats#":
@@ -306,9 +304,9 @@ def get_node_metrics(elastic_search_nodes, collected_data_map):
                 logger.error(str(e))
 
 
-def set_previous_results(previuos_results_dict):
+def set_previous_results(previuos_results_dict_l):
     with open(os.path.join(parameters['homepath'], datadir + "previous_results.json"), 'w') as f:
-        f.write(json.dumps(previuos_results_dict))
+        f.write(json.dumps(previuos_results_dict_l))
 
 
 if __name__ == "__main__":
@@ -356,14 +354,14 @@ if __name__ == "__main__":
     metric_data = []
     datadir = 'data/'
     previuos_results_dict = get_previous_results()
-    
+
     get_node_metrics(agent_config["elastic_search_nodes"], raw_data_map)
 
     for timestamp in raw_data_map.keys():
         value_map = raw_data_map[timestamp]
         value_map['timestamp'] = str(timestamp)
         metric_data.append(value_map)
-    print "metric data" , metric_data
+    print "metric data", metric_data
 
     set_previous_results(previuos_results_dict)
     if len(metric_data) != 0:
