@@ -170,72 +170,6 @@ def set_logger_config(level):
     return logger_obj
 
 
-def filter_metrics_json(all_jmx_metrics, nodetype):
-    """Filters collected jmx metrics to include selected ones for each Node type(e.g. NameNode) """
-    # filtered_jmx_metrics = {}
-    # if "beans" in all_jmx_metrics:
-    #     all_beans = all_jmx_metrics["beans"]
-    #     for current_jmx_bean in all_beans:
-    #         if "tag.Hostname" in current_jmx_bean:
-    #             host_name = current_jmx_bean["tag.Hostname"]
-    #         else:
-    #             continue
-    #
-    #         host_name_parts = host_name.split(".")
-    #         host_name = host_name_parts[0]
-    #         if "name" in current_jmx_bean:
-    #             bean_name = current_jmx_bean["name"]
-    #             service = ""
-    #             if nodetype == "NameNode" or nodetype == "DataNode":
-    #                 service = "Hadoop:service=" + nodetype
-    #             elif nodetype == "YarnNode":
-    #                 service = "Hadoop:service=ResourceManager"
-    #             if service in bean_name:
-    #                 filtered_jmx_bean = {}
-    #                 for metric_key in current_jmx_bean:
-    #                     if "_percentile" in metric_key or "-inf" in metric_key or "_table" in metric_key:
-    #                         continue
-    #                     if metric_key not in filter_metrics_map[nodetype]:
-    #                         continue
-    #                     filtered_jmx_bean[metric_key] = current_jmx_bean[metric_key]
-    #                     filtered_jmx_bean["hostname"] = host_name
-    #                     filtered_jmx_metrics[bean_name] = filtered_jmx_bean
-    # return filtered_jmx_metrics
-
-
-def format_jmx_metrics_json(filtered_metrics_json, hadoop_node_type, collected_data_map):
-    """Formats the filtered json metrics to the format acceptable by InsightFinder."""
-    # epoch_time = int(round(time.time() * 1000))
-    # for curr_jmx_bean in filtered_metrics_json:
-    #     host_name = filtered_metrics_json[curr_jmx_bean]["hostname"]
-    #     # create subsystem name
-    #     sub_system_name = ""
-    #     sub_system_parts = str(curr_jmx_bean).split(",")
-    #     if len(sub_system_parts) >= 2 and len(sub_system_parts[1]) != 0:
-    #         modeler_name = sub_system_parts[1].split("=")[1].replace("[^A-Za-z0-9 ]", "")
-    #         sub_system_name += modeler_name
-    #     if len(sub_system_parts) >= 3 and len(sub_system_parts[2]) != 0:
-    #         sub_system_name += "-"
-    #         modeler_sub_name = sub_system_parts[2].split("=")[1].replace("[^A-Za-z0-9 ]", "")
-    #         sub_system_name += modeler_sub_name
-    #
-    #     if epoch_time in collected_data_map:
-    #         epoch_value_map = collected_data_map[epoch_time]
-    #     else:
-    #         epoch_value_map = dict()
-    #
-    #     for metric_key in filtered_metrics_json[curr_jmx_bean]:
-    #         if "hostname" in metric_key:
-    #             continue
-    #         metric_name = normalize_key(sub_system_name + "-" + metric_key)
-    #         header_field = metric_name + "[" + hadoop_node_type + "_" + host_name + "]:" + str(
-    #             get_grouping_id(metric_key, hadoop_node_type))
-    #         metric_value = filtered_metrics_json[curr_jmx_bean][metric_key]
-    #         epoch_value_map[header_field] = str(metric_value)
-    #
-    #     collected_data_map[epoch_time] = epoch_value_map
-
-
 def get_grouping_id(metric_key):
     elastic_node_start = 23014
     index = 0
@@ -260,14 +194,33 @@ def handle_cluster_health_json(json_response, hostname, epoch_time, collected_da
     collected_data_map[epoch_time] = epoch_value_map
 
 
+def handle_accum_metric_keys(host_name, shardsJsonObj, metricName, key, node_type):
+    header_field = metricName + "[" + node_type + "_" + host_name + "]:" + str(
+        get_grouping_id(metricName))
+    metricValue = shardsJsonObj[key]
+    if header_field in previuos_results_dict:
+        old_value = long(previuos_results_dict[header_field])
+        delta = metricValue - old_value
+        previuos_results_dict[header_field] = metricValue
+        epoch_value_map[header_field] = str(delta)
+    else:
+        epoch_value_map[header_field] = metricValue
+        previuos_results_dict[header_field] = metricValue
+
+
 def addMetricToBuffers(host_name, shardsJsonObj, metricName, key, node_type):
     for keyMetric in all_metrics:
         if metricName.endswith(keyMetric):
-            header_field = metricName + "[" + node_type + "_" + host_name + "]:" + str(
-                get_grouping_id(metricName))
-            metricValue = shardsJsonObj[key]
+            # need to check for accumulating metrices
+            if keyMetric in nonAccumKeys:
+                header_field = metricName + "[" + node_type + "_" + host_name + "]:" + str(
+                    get_grouping_id(metricName))
+                metricValue = shardsJsonObj[key]
+                epoch_value_map[header_field] = str(metricValue)
+            else:
+                handle_accum_metric_keys(host_name, shardsJsonObj, metricName, key, node_type)
+                pass
 
-            epoch_value_map[header_field] = str(metricValue)
             return
 
 
@@ -330,6 +283,10 @@ def handle_nodes_local_json( matricResponse, epoch_time, collected_data_map ):
     collected_data_map[epoch_time] = epoch_value_map
 
 
+def get_hostname_from_url( elastic_search_node_url ):
+    return "tttt"
+
+
 def get_node_metrics(elastic_search_nodes, collected_data_map):
     elastic_search_urls = [ "_cluster/health",  "_all/_stats#", "_nodes/_local"]
     epoch_time = int(round(time.time() * 1000))
@@ -344,20 +301,13 @@ def get_node_metrics(elastic_search_nodes, collected_data_map):
                 response = requests.get(elastic_search_node_url, verify=agent_config_vars['ssl_security'])
                 response_json = json.loads(response.content)
                 # print response_json
-                hostname = "ttttt"
+                hostname = get_hostname_from_url(elastic_search_node_url)   # calculate hostname
                 if elastic_search_url == "_cluster/health":
-                    # continue
                     handle_cluster_health_json(response_json, hostname, epoch_time, collected_data_map)
                 elif elastic_search_url == "_all/_stats#":
-                    # continue
                     handle_all_stats_json(response_json, hostname, epoch_time, collected_data_map)
                 else:
-                    # continue
                     handle_nodes_local_json(response_json, epoch_time, collected_data_map)
-                # filtered_metrics = filter_metrics_json(response_json, _node_type)
-                # format_jmx_metrics_json(filtered_metrics, _node_type, collected_data_map)
-                # if len(filtered_metrics) == 0:
-                #     logger.warning("No metrics to send for url: " + node_url)
             except requests.exceptions.ConnectionError:
                 logger.error("Unable to connect to: " + elastic_search_node_url)
             except requests.exceptions.MissingSchema as e:
@@ -370,6 +320,11 @@ def get_node_metrics(elastic_search_nodes, collected_data_map):
                 logger.error("Unable to parse result from: " + elastic_search_node_url)
             except requests.exceptions.RequestException as e:
                 logger.error(str(e))
+
+
+def set_previous_results(previuos_results_dict):
+    with open(os.path.join(parameters['homepath'], datadir + "previous_results.json"), 'w') as f:
+        f.write(json.dumps(previuos_results_dict))
 
 
 if __name__ == "__main__":
@@ -416,6 +371,8 @@ if __name__ == "__main__":
     raw_data_map = collections.OrderedDict()
     metric_data = []
     datadir = 'data/'
+    previuos_results_dict = get_previous_results()
+    
     get_node_metrics(agent_config["elastic_search_nodes"], raw_data_map)
 
     for timestamp in raw_data_map.keys():
@@ -423,6 +380,8 @@ if __name__ == "__main__":
         value_map['timestamp'] = str(timestamp)
         metric_data.append(value_map)
     print "metric data" , metric_data
+
+    set_previous_results(previuos_results_dict)
     if len(metric_data) != 0:
         logger.info("Start sending data to InsightFinder")
         send_data(metric_data)
