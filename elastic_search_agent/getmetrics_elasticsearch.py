@@ -119,6 +119,7 @@ def send_data(chunk_metric_data):
 
     # send the data
     post_url = parameters['server_url'] + "/customprojectrawdata"
+    print post_url
     response = requests.post(post_url, data=json.loads(to_send_data_json))
     if response.status_code == 200:
         logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
@@ -146,7 +147,7 @@ def set_logger_config(level):
     logger_obj.addHandler(logging_handler_err)
     return logger_obj
 
-# need to think of diff stratergy
+
 def get_grouping_id(metric_key):
     elastic_node_start = 23014
     index = 0
