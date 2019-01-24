@@ -22,8 +22,6 @@ def get_parameters():
     parser = OptionParser(usage=usage)
     parser.add_option("-w", "--serverUrl",
                       action="store", dest="server_url", help="Server Url")
-    # parser.add_option("-c", "--chunkLines",
-    #                   action="store", dest="chunkLines", help="Timestamps per chunk for historical data.")
     parser.add_option("-d", "--directory",
                       action="store", dest="homepath", help="Directory to run from")
     parser.add_option("-l", "--logLevel",
@@ -31,17 +29,8 @@ def get_parameters():
     (options, args) = parser.parse_args()
 
     params = {}
-    # if options.serverUrl is None:
-    #     params['serverUrl'] = 'https://app.insightfinder.com'
-    # else:
-    #     params['serverUrl'] = options.serverUrl
     params['server_url'] = 'https://app.insightfinder.com' if not options.server_url else options.server_url
     params['homepath'] = os.getcwd() if not options.homepath else options.homepath
-
-    # if options.chunkLines is None:
-    #     params['chunkLines'] = 50
-    # else:
-    #     params['chunkLines'] = int(options.chunkLines)
     params['logLevel'] = logging.INFO
     if options.logLevel == '0':
         params['logLevel'] = logging.WARNING
@@ -138,18 +127,6 @@ def send_data(chunk_metric_data):
     logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
 
 
-def normalize_key(metric_key):
-    """
-    Take a single metric key string and return the same string with spaces, slashes and
-    non-alphanumeric characters subbed out.
-    """
-    metric_key = SPACES.sub("_", metric_key)
-    metric_key = SLASHES.sub("-", metric_key)
-    metric_key = NON_ALNUM.sub("", metric_key)
-    metric_key = metric_key.replace(".", "-")
-    return metric_key
-
-
 def set_logger_config(level):
     """Set up logging according to the defined log level"""
     # Get the root logger
@@ -169,20 +146,24 @@ def set_logger_config(level):
     logger_obj.addHandler(logging_handler_err)
     return logger_obj
 
-
+# need to think of diff stratergy
 def get_grouping_id(metric_key):
     elastic_node_start = 23014
     index = 0
     for key in all_metrics:
-        if key == metric_key:
+        if metric_key.endswith(key):
             return elastic_node_start + index
         index = index + 1
     return elastic_node_start
 
 
 def get_previous_results():
-    with open(os.path.join(parameters['homepath'], datadir + "previous_results.json"), 'r') as f:
-        return json.load(f)
+    file_path = os.path.join(parameters['homepath'], datadir + "previous_results.json")
+    if os.path.isfile(file_path):
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    else:
+        return {}
 
 epoch_value_map = {}
 
@@ -284,7 +265,9 @@ def handle_nodes_local_json( matricResponse, epoch_time, collected_data_map ):
 
 
 def get_hostname_from_url( elastic_search_node_url ):
-    return "tttt"
+    elastic_search_node_url = elastic_search_node_url.replace("https://", "").replace("http://", "")
+    elastic_search_node_url = elastic_search_node_url.split(":")[0].split("/")[0]
+    return elastic_search_node_url
 
 
 def get_node_metrics(elastic_search_nodes, collected_data_map):
