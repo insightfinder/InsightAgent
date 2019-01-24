@@ -488,15 +488,14 @@ def get_grouping_id(metric_key, metric_grouping):
     - `metric_key` : metric key str to get group id.
     - `metric_grouping` : metric_key-grouping id map
     """
+    if metric_key in metric_grouping:
+        grouping_id = int(metric_grouping[metric_key])
+        return grouping_id
     for index in range(3):
         grouping_candidate = random.randint(GROUPING_START, GROUPING_END)
-        if metric_key in metric_grouping:
-            grouping_id = int(metric_grouping[metric_key])
-            return grouping_id
-        else:
-            grouping_id = grouping_candidate
-            metric_grouping[metric_key] = grouping_id
-            return grouping_id
+        if grouping_candidate not in map(int, metric_grouping.values()):
+            metric_grouping[metric_key] = grouping_candidate
+            return grouping_candidate
     return GROUPING_START
 
 
