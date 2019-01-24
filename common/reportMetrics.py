@@ -1,19 +1,18 @@
 #!/usr/bin/python
 
-import hashlib
-from optparse import OptionParser
-import os
-import time
-import logging
-import sys
-import json
-import datetime
 import csv
+import hashlib
+import json
+import logging
 import math
+import os
+import random
 import socket
 import subprocess
-import random
+import sys
+import time
 from ConfigParser import SafeConfigParser
+from optparse import OptionParser
 
 '''
 This script reads reporting_config.json and .agent.bashrc
@@ -399,6 +398,7 @@ def process_replay(file_path):
                 "rm " + file_path + ".mod",
                 shell=True)
         else:  # metric file replay processing
+            grouping_map = load_grouping()
             with open(file_path) as metricFile:
                 metric_csv_reader = csv.reader(metricFile)
                 to_send_metric_data = []
@@ -431,13 +431,17 @@ def process_replay(file_path):
                                 if max_timestamp_epoch == 0 or max_timestamp_epoch < long(row[i]):
                                     max_timestamp_epoch = long(row[i])
                             else:
-                                colname = field_names[i]
-                                if colname.find("]") == -1:
-                                    colname = colname + "[-]"
-                                if colname.find(":") == -1:
-                                    groupid = i
-                                    colname = colname + ":" + str(groupid)
-                                current_row[colname] = row[i]
+                                column_name = field_names[i].strip()
+                                metric = column_name.split("[")[0]
+                                if column_name.find("]") == -1:
+                                    column_name = column_name + "[-]"
+                                if column_name.find(":") == -1:
+                                    group_id = get_grouping_id(metric, grouping_map)
+                                    column_name = column_name + ":" + str(group_id)
+                                elif len(column_name.split(":")[1]) == 0:
+                                    group_id = get_grouping_id(metric, grouping_map)
+                                    column_name = column_name + str(group_id)
+                                current_row[column_name] = row[i]
                         to_send_metric_data.append(current_row)
                         current_line_count += 1
                 # send final chunk
@@ -445,6 +449,55 @@ def process_replay(file_path):
                     send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], file_path, chunk_count + 1)
                     chunk_count += 1
                 logger.debug("Total chunks created: " + str(chunk_count))
+                save_grouping(grouping_map)
+
+
+def save_grouping(metric_grouping):
+    """
+    Saves the grouping data to grouping.json
+    Parameters:
+        - `grouping_map` : metric_name-grouping_id dict
+    :return: None
+    """
+    with open('grouping.json', 'w+') as f:
+        f.write(json.dumps(metric_grouping))
+
+
+def load_grouping():
+    """
+    Loads the grouping data from grouping.json
+    :return: grouping JSON string
+    """
+    if os.path.isfile('grouping.json'):
+        logger.debug("Grouping file exists. Loading..")
+        with open('grouping.json', 'r+') as f:
+            try:
+                grouping_json = json.loads(f.read())
+            except ValueError:
+                grouping_json = json.loads("{}")
+                logger.debug("Error parsing grouping.json.")
+    else:
+        grouping_json = json.loads("{}")
+    return grouping_json
+
+
+def get_grouping_id(metric_key, metric_grouping):
+    """
+    Get grouping id for a metric key
+    Parameters:
+    - `metric_key` : metric key str to get group id.
+    - `metric_grouping` : metric_key-grouping id map
+    """
+    for index in range(3):
+        grouping_candidate = random.randint(GROUPING_START, GROUPING_END)
+        if metric_key in metric_grouping:
+            grouping_id = int(metric_grouping[metric_key])
+            return grouping_id
+        else:
+            grouping_id = grouping_candidate
+            metric_grouping[metric_key] = grouping_id
+            return grouping_id
+    return GROUPING_START
 
 
 def set_logger_config():
@@ -486,6 +539,8 @@ def get_file_list_for_directory(root_path):
 
 
 if __name__ == '__main__':
+    GROUPING_START = 31000
+    GROUPING_END = 33000
     prog_start_time = time.time()
     logger = set_logger_config()
     data_directory = 'data/'
