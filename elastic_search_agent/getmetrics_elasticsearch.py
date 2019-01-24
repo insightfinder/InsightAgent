@@ -118,9 +118,9 @@ def send_data(chunk_metric_data):
     # prepare data for metric streaming agent
     to_send_data_dict = dict()
     to_send_data_dict["metricData"] = json.dumps(chunk_metric_data)
-    to_send_data_dict["licenseKey"] = agent_config_vars['licenseKey']
-    to_send_data_dict["projectName"] = agent_config_vars['projectName']
-    to_send_data_dict["userName"] = agent_config_vars['userName']
+    to_send_data_dict["licenseKey"] = agent_config_vars['license_key']
+    to_send_data_dict["projectName"] = agent_config_vars['project_name']
+    to_send_data_dict["userName"] = agent_config_vars['user_name']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
     # to_send_data_dict["samplingInterval"] = str(int(reporting_config_vars['reporting_interval'] * 60))
     to_send_data_dict["agentType"] = "custom"
@@ -129,7 +129,7 @@ def send_data(chunk_metric_data):
     logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
 
     # send the data
-    post_url = parameters['serverUrl'] + "/customprojectrawdata"
+    post_url = parameters['server_url'] + "/customprojectrawdata"
     response = requests.post(post_url, data=json.loads(to_send_data_json))
     if response.status_code == 200:
         logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
@@ -253,11 +253,11 @@ def get_previous_results():
 epoch_value_map = {}
 
 
-def handle_cluster_health_json(json_response, hostname):
+def handle_cluster_health_json(json_response, hostname, epoch_time, collected_data_map):
     for key in json_response:
         if key in all_metrics:
             addMetricToBuffers(hostname, json_response, key, key, "cluster_health")
-    print epoch_value_map
+    collected_data_map[epoch_time] = epoch_value_map
 
 
 def addMetricToBuffers(host_name, shardsJsonObj, metricName, key, node_type):
@@ -272,10 +272,22 @@ def addMetricToBuffers(host_name, shardsJsonObj, metricName, key, node_type):
 
 
 def getPrimariesAndTotalAndAddItToBuffers(hostname, allJsonObject, insightfinderMetricName):
-    pass
+    if allJsonObject["primaries"] is not None or allJsonObject["total"] is not None:
+        for majorKeys in allJsonObject:
+            tempMetricNameRoot = insightfinderMetricName
+            tempMetricNameRoot += "_" + majorKeys.replace("_", ".")
+            primariesJsonObj = allJsonObject["primaries"]
+            for keyPrimaries in primariesJsonObj:
+                tempMetricNamePrimary = tempMetricNameRoot
+                tempMetricNamePrimary += "_" + keyPrimaries.replace("_", ".")
+                keyPrimariesJsonObject = primariesJsonObj[keyPrimaries]
+                for actualKeys in keyPrimariesJsonObject:
+                    leafMetricName = tempMetricNamePrimary
+                    leafMetricName += "_" + actualKeys.replace("_", ".")
+                    addMetricToBuffers(hostname, keyPrimariesJsonObject, leafMetricName, actualKeys, "all_stats")
 
 
-def handle_all_stats_json(metricResp, hostname):
+def handle_all_stats_json(metricResp, hostname, epoch_time, collected_data_map):
     for respJsonKey in metricResp:
         if respJsonKey == "_shards":
             shardsJsonObj = metricResp[respJsonKey]
@@ -287,9 +299,10 @@ def handle_all_stats_json(metricResp, hostname):
             allJsonObject = metricResp["_all"]
             insightfinderMetricName = "all"
             getPrimariesAndTotalAndAddItToBuffers(hostname, allJsonObject, insightfinderMetricName)
+    collected_data_map[epoch_time] = epoch_value_map
 
 
-def handle_nodes_local_json( matricResponse ):
+def handle_nodes_local_json( matricResponse, epoch_time, collected_data_map ):
     for keyOuter in matricResponse:
         if keyOuter == "nodes":
             nodes = matricResponse[keyOuter]
@@ -305,7 +318,6 @@ def handle_nodes_local_json( matricResponse ):
                             if jvmkey == "start_time_in_millis":
                                 newMetricName += "_" + jvmkey.replace("_", ".")
                                 addMetricToBuffers(host, jvmJsonObject, newMetricName, jvmkey, "nodes_local")
-
                             elif jvmkey == "mem":
                                 newMetricName += "_" + jvmkey.replace("_", ".")
                                 for jvmMemKeys in jvmJsonObject["mem"]:
@@ -315,13 +327,12 @@ def handle_nodes_local_json( matricResponse ):
                             newMetricName = newMetricName.replace("_" + jvmkey.replace("_", "."), "")
                         newMetricName = newMetricName.replace("_" + jKey.replace("_","."), "")
                     newMetricName = newMetricName.replace("_" + key.replace("_", "."), "")
-            print "heyyy" , epoch_value_map
+    collected_data_map[epoch_time] = epoch_value_map
 
 
 def get_node_metrics(elastic_search_nodes, collected_data_map):
-
     elastic_search_urls = [ "_cluster/health",  "_all/_stats#", "_nodes/_local"]
-
+    epoch_time = int(round(time.time() * 1000))
     for elastic_search_node in elastic_search_nodes:
         for elastic_search_url in elastic_search_urls:
             if "http" not in elastic_search_node:
@@ -335,13 +346,14 @@ def get_node_metrics(elastic_search_nodes, collected_data_map):
                 # print response_json
                 hostname = "ttttt"
                 if elastic_search_url == "_cluster/health":
-                    continue
-                    # handle_cluster_health_json(response_json, hostname)
+                    # continue
+                    handle_cluster_health_json(response_json, hostname, epoch_time, collected_data_map)
                 elif elastic_search_url == "_all/_stats#":
-                    continue
-                    # handle_all_stats_json(response_json, hostname)
+                    # continue
+                    handle_all_stats_json(response_json, hostname, epoch_time, collected_data_map)
                 else:
-                    handle_nodes_local_json(response_json)
+                    # continue
+                    handle_nodes_local_json(response_json, epoch_time, collected_data_map)
                 # filtered_metrics = filter_metrics_json(response_json, _node_type)
                 # format_jmx_metrics_json(filtered_metrics, _node_type, collected_data_map)
                 # if len(filtered_metrics) == 0:
@@ -400,7 +412,6 @@ if __name__ == "__main__":
                    "total_query.cache_miss.count",
                    "jvm_start.time.in.millis", "jvm_mem_heap.max.in.bytes"}
 
-
     agent_config = get_elastic_config()
     raw_data_map = collections.OrderedDict()
     metric_data = []
@@ -411,6 +422,7 @@ if __name__ == "__main__":
         value_map = raw_data_map[timestamp]
         value_map['timestamp'] = str(timestamp)
         metric_data.append(value_map)
+    print "metric data" , metric_data
     if len(metric_data) != 0:
         logger.info("Start sending data to InsightFinder")
         send_data(metric_data)
