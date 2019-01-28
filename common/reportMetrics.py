@@ -442,15 +442,25 @@ def process_replay(file_path):
                                     max_timestamp_epoch = long(row[i])
                             else:
                                 column_name = field_names[i].strip()
-                                metric = column_name.split("[")[0]
+                                metric_key = column_name.split("[")[0]
                                 if column_name.find("]") == -1:
                                     column_name = column_name + "[-]"
+
                                 if column_name.find(":") == -1:
-                                    group_id = get_grouping_id(metric, grouping_map)
+                                    print metric_key
+                                    group_id = get_normalization(grouping_map, metric_key)
                                     column_name = column_name + ":" + str(group_id)
                                 elif len(column_name.split(":")[1]) == 0:
-                                    group_id = get_grouping_id(metric, grouping_map)
+                                    group_id = get_normalization(grouping_map, metric_key)
                                     column_name = column_name + str(group_id)
+                                elif len(column_name.split(":")[1]) != 0:
+                                    if len(normalization_ids_map) != 0:
+                                        if metric_key in normalization_ids_map:
+                                            group_id = int(normalization_ids_map[metric_key])
+                                    else:
+                                        group_id = column_name.split(":")[1]
+                                    column_name = column_name.split(":")[0] + ":" + str(group_id)
+
                                 current_row[column_name] = row[i]
                         to_send_metric_data.append(current_row)
                         current_line_count += 1
@@ -460,6 +470,15 @@ def process_replay(file_path):
                     chunk_count += 1
                 logger.debug("Total chunks created: " + str(chunk_count))
                 save_grouping(grouping_map)
+
+
+def get_normalization(grouping_map, metric_key):
+    if len(normalization_ids_map) != 0:
+        if metric_key in normalization_ids_map:
+            group_id = int(normalization_ids_map[metric_key])
+        else:
+            group_id = get_grouping_id(metric_key, grouping_map)
+    return group_id
 
 
 def save_grouping(metric_grouping):
