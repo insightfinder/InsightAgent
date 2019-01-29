@@ -1,0 +1,9 @@
+[elasticsearch]
+elastic_search_nodes =
+
+[insightfinder]
+license_key=
+project_name=
+user_name=
+sampling_interval=
+ssl_verify=True
