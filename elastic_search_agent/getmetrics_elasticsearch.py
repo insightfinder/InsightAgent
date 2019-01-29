@@ -173,7 +173,7 @@ def get_previous_results():
 def handle_cluster_health_json(json_response, hostname, epoch_time, collected_data_map):
     for key in json_response:
         if key in all_metrics:
-            add_metric_to_buffers(hostname, json_response, key, key, "cluster_health")
+            add_metric_to_buffers(hostname, json_response, key, key, "cluster.health")
     collected_data_map[epoch_time] = epoch_value_map
 
 
@@ -218,7 +218,7 @@ def get_primaries_and_total_and_addit_to_buffers(hostname, all_json_object, insi
                     leaf_metric_name = temp_metric_name_primary
                     leaf_metric_name += "_" + actualKeys.replace("_", ".")
                     add_metric_to_buffers(hostname, key_primaries_json_object, leaf_metric_name, actualKeys,
-                                          "all_stats")
+                                          "all.stats")
 
 
 def handle_all_stats_json(metric_resp, hostname, epoch_time, collected_data_map):
@@ -228,7 +228,7 @@ def handle_all_stats_json(metric_resp, hostname, epoch_time, collected_data_map)
             for key in shards_json_obj:
                 if key == "successful" or key == "total":
                     insightfinder_metric_name = "shards_" + key
-                    add_metric_to_buffers(hostname, shards_json_obj, insightfinder_metric_name, key, "all_stats")
+                    add_metric_to_buffers(hostname, shards_json_obj, insightfinder_metric_name, key, "all.stats")
         elif respJsonKey == "_all":
             all_json_object = metric_resp["_all"]
             insightfinder_metric_name = "all"
@@ -251,13 +251,13 @@ def handle_nodes_local_json(matric_response, epoch_time, collected_data_map):
                         for jvmkey in jvm_json_object:
                             if jvmkey == "start_time_in_millis":
                                 new_metric_name += "_" + jvmkey.replace("_", ".")
-                                add_metric_to_buffers(host, jvm_json_object, new_metric_name, jvmkey, "nodes_local")
+                                add_metric_to_buffers(host, jvm_json_object, new_metric_name, jvmkey, "nodes.local")
                             elif jvmkey == "mem":
                                 new_metric_name += "_" + jvmkey.replace("_", ".")
                                 for jvmMemKeys in jvm_json_object["mem"]:
                                     new_metric_name += "_" + jvmMemKeys.replace("_", ".")
                                     add_metric_to_buffers(host, jvm_json_object["mem"], new_metric_name, jvmMemKeys,
-                                                          "nodes_local")
+                                                          "nodes.local")
                                     new_metric_name = new_metric_name.replace("_" + jvmMemKeys.replace("_", "."), "")
                             new_metric_name = new_metric_name.replace("_" + jvmkey.replace("_", "."), "")
                         new_metric_name = new_metric_name.replace("_" + jKey.replace("_", "."), "")
@@ -277,7 +277,7 @@ def get_node_metrics(elastic_search_nodes, collected_data_map):
     for elastic_search_node in elastic_search_nodes:
         for elastic_search_url in elastic_search_urls:
             if "http" not in elastic_search_node:
-                elastic_search_node_url = "https://" + elastic_search_node + "/" + elastic_search_url
+                elastic_search_node_url = "http://" + elastic_search_node + "/" + elastic_search_url
             else:
                 elastic_search_node_url = elastic_search_node + "/" + elastic_search_url
             try:
@@ -361,7 +361,7 @@ if __name__ == "__main__":
         value_map = raw_data_map[timestamp]
         value_map['timestamp'] = str(timestamp)
         metric_data.append(value_map)
-    print "metric data", metric_data
+    logger.info("metric data" + metric_data)
 
     set_previous_results(previuos_results_dict)
     if len(metric_data) != 0:
