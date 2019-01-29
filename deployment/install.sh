@@ -103,7 +103,7 @@ if [ -z "$AGENT_TYPE" ] || [ -z "$REPORTING_INTERVAL" ] || [ -z "$SAMPLING_INTER
 	exit 1
 fi
 
-if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'elasticsearch-log' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ] && [ $AGENT_TYPE != 'metricFileReplay' ] && [ $AGENT_TYPE != 'logFileReplay' ] && [ $AGENT_TYPE != 'daemonset' ] && [ $AGENT_TYPE != 'hypervisor' ] && [ $AGENT_TYPE != 'elasticsearch' ] && [ $AGENT_TYPE != 'collectd' ] && [ $AGENT_TYPE != 'ec2monitoring' ] && [ $AGENT_TYPE != 'jolokia'  ] && [ $AGENT_TYPE != 'datadog' ] && [ $AGENT_TYPE != 'newrelic' ] && [ $AGENT_TYPE != 'kvm' ] && [ $AGENT_TYPE != 'logStreaming' ] && [ $AGENT_TYPE != 'kafka' ] && [ $AGENT_TYPE != 'elasticsearch-storage' ] && [ $AGENT_TYPE != 'nfdump' ] && [ $AGENT_TYPE != 'opentsdb' ] && [ $AGENT_TYPE != 'kafka-logs' ] && [ $AGENT_TYPE != 'hadoop' ]; then
+if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'elasticsearch-log' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ] && [ $AGENT_TYPE != 'metricFileReplay' ] && [ $AGENT_TYPE != 'logFileReplay' ] && [ $AGENT_TYPE != 'daemonset' ] && [ $AGENT_TYPE != 'hypervisor' ] && [ $AGENT_TYPE != 'elasticsearch' ] && [ $AGENT_TYPE != 'collectd' ] && [ $AGENT_TYPE != 'ec2monitoring' ] && [ $AGENT_TYPE != 'jolokia'  ] && [ $AGENT_TYPE != 'datadog' ] && [ $AGENT_TYPE != 'newrelic' ] && [ $AGENT_TYPE != 'kvm' ] && [ $AGENT_TYPE != 'logStreaming' ] && [ $AGENT_TYPE != 'kafka' ] && [ $AGENT_TYPE != 'elasticsearch-storage' ] && [ $AGENT_TYPE != 'nfdump' ] && [ $AGENT_TYPE != 'opentsdb' ] && [ $AGENT_TYPE != 'kafka-logs' ] && [ $AGENT_TYPE != 'hadoop' ]  && [ $AGENT_TYPE != 'hbase' ]; then
 	usage
 	exit 1
 fi
@@ -201,10 +201,27 @@ elif [ $AGENT_TYPE == 'elasticsearch' ]; then
 		echo "sampling_interval=$SAMPLING_INTERVAL" >> $INSIGHTAGENTDIR/elasticsearch/config.ini
 		echo "ssl_verify=True" >> $INSIGHTAGENTDIR/elasticsearch/config.ini
 		if [[ ! -d $INSIGHTAGENTDIR/elasticsearch/data ]]
-        then
-            echo "creating empty data directory to store latest results"
-	        mkdir $INSIGHTAGENTDIR/elasticsearch/data
-        fi
+    then
+        echo "creating empty data directory to store latest results"
+      mkdir $INSIGHTAGENTDIR/elasticsearch/data
+    fi
+  fi
+elif [ $AGENT_TYPE == 'hbase' ]; then
+	if [ ! -f $INSIGHTAGENTDIR/hbase/config.ini ]; then
+		touch $INSIGHTAGENTDIR/hbase/config.ini
+		echo "[hbase]" >> $INSIGHTAGENTDIR/hbase/config.ini
+		echo "name_nodes=" >> $INSIGHTAGENTDIR/hbase/config.ini
+		echo "data_nodes=" >> $INSIGHTAGENTDIR/hbase/config.ini
+		echo "yarn_nodes=" >> $INSIGHTAGENTDIR/hbase/config.ini
+		echo "master_nodes=" >> $INSIGHTAGENTDIR/hbase/config.ini
+		echo "region_servers=" >> $INSIGHTAGENTDIR/hbase/config.ini
+		echo " " >> $INSIGHTAGENTDIR/hbase/config.ini
+		echo "[insightfinder]" >> $INSIGHTAGENTDIR/hbase/config.ini
+		echo "license_key=$LICENSEKEY" >> $INSIGHTAGENTDIR/hbase/config.ini
+		echo "project_name=$PROJECTNAME" >> $INSIGHTAGENTDIR/hbase/config.ini
+		echo "user_name=$USERNAME" >> $INSIGHTAGENTDIR/hbase/config.ini
+		echo "sampling_interval=$SAMPLING_INTERVAL" >> $INSIGHTAGENTDIR/hbase/config.ini
+		echo "ssl_verify=True" >> $INSIGHTAGENTDIR/hbase/config.ini
 	fi
 else
 	echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> $AGENTRC
@@ -298,7 +315,7 @@ elif [ $AGENT_TYPE == 'kafka' ]; then
     service monit restart
 elif [ $AGENT_TYPE == 'logStreaming' ]; then
 	echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportLog.py -d $INSIGHTAGENTDIR -w $SERVER_URL -m logStreaming 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
-elif [ $AGENT_TYPE == 'hadoop' ]; then
+elif [ $AGENT_TYPE == 'hadoop' ] || [ $AGENT_TYPE == 'hbase' ]; then
 	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
 	if [ "$IS_SECOND_REPORTING" = true ] ; then
 		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
