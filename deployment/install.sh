@@ -126,8 +126,9 @@ if [[ -z "$AGENT_TYPE" ]] || [[ -z "$REPORTING_INTERVAL" ]] || [[ -z "$SAMPLING_
 	exit 1
 fi
 
-if [ "$AGENT_TYPE" != "proc" ] && [ "$AGENT_TYPE" != "cadvisor" ] && [ "$AGENT_TYPE" != "elasticsearch-log" ] && [ "$AGENT_TYPE" != "docker_remote_api" ] && [ "$AGENT_TYPE" != "cgroup" ] && [ "$AGENT_TYPE" != "metricFileReplay" ] && [ "$AGENT_TYPE" != "logFileReplay" ] && [ "$AGENT_TYPE" != "daemonset" ] && [ "$AGENT_TYPE" != "hypervisor" ] && [ "$AGENT_TYPE" != "elasticsearch" ] && [ "$AGENT_TYPE" != "collectd" ] && [ "$AGENT_TYPE" != "ec2monitoring" ] && [ "$AGENT_TYPE" != "jolokia" ] && [ "$AGENT_TYPE" != "datadog" ] && [ "$AGENT_TYPE" != "newrelic" ] && [ "$AGENT_TYPE" != "kvm" ] && [ "$AGENT_TYPE" != "logStreaming" ] && [ "$AGENT_TYPE" != "kafka" ] && [ "$AGENT_TYPE" != "elasticsearch-storage" ] && [ "$AGENT_TYPE" != "nfdump" ] && [ "$AGENT_TYPE" != "opentsdb" ] && [ "$AGENT_TYPE" != "kafka-logs" ] && [ "$AGENT_TYPE" != "hadoop" ]; then
-	usage]
+
+if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'elasticsearch-log' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ] && [ $AGENT_TYPE != 'metricFileReplay' ] && [ $AGENT_TYPE != 'logFileReplay' ] && [ $AGENT_TYPE != 'daemonset' ] && [ $AGENT_TYPE != 'hypervisor' ] && [ $AGENT_TYPE != 'elasticsearch' ] && [ $AGENT_TYPE != 'collectd' ] && [ $AGENT_TYPE != 'ec2monitoring' ] && [ $AGENT_TYPE != 'jolokia'  ] && [ $AGENT_TYPE != 'datadog' ] && [ $AGENT_TYPE != 'newrelic' ] && [ $AGENT_TYPE != 'kvm' ] && [ $AGENT_TYPE != 'logStreaming' ] && [ $AGENT_TYPE != 'kafka' ] && [ $AGENT_TYPE != 'elasticsearch-storage' ] && [ $AGENT_TYPE != 'nfdump' ] && [ $AGENT_TYPE != 'opentsdb' ] && [ $AGENT_TYPE != 'kafka-logs' ] && [ $AGENT_TYPE != 'hadoop' ]  && [ $AGENT_TYPE != 'hbase' ]; then
+	usage
 	exit 1
 fi
 
@@ -256,7 +257,7 @@ elif [ "$AGENT_TYPE" == "metricFileReplay" ] || [ "$AGENT_TYPE" ==  "logFileRepl
 	fi
 else
     echo "No agent type given.. exporting insightfinder details"
-     PATH_TO_CONFIG_INI="$INSIGHTAGENTDIR"/common/config.ini
+    PATH_TO_CONFIG_INI="$INSIGHTAGENTDIR"/common/config.ini
     if [ -d $INSIGHTAGENTDIR -a ! -f ${PATH_TO_CONFIG_INI} ]; then
         touch ${PATH_TO_CONFIG_INI}
         add_insightfinder_details ${PATH_TO_CONFIG_INI}
@@ -347,7 +348,9 @@ elif [ "$AGENT_TYPE" == "kafka" ]; then
     service monit restart
 elif [ "$AGENT_TYPE" == "logStreaming" ]; then
 	echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportLog.py -d $INSIGHTAGENTDIR -w $SERVER_URL -m logStreaming 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> ${TEMPCRON}
-elif [ "$AGENT_TYPE" == "hadoop" ]; then
+elif [ $AGENT_TYPE == 'logStreaming' ]; then
+	echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportLog.py -d $INSIGHTAGENTDIR -w $SERVER_URL -m logStreaming 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
+elif [ $AGENT_TYPE == 'hadoop' ] || [ $AGENT_TYPE == 'hbase' ]; then
 	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
 	if [[ "$IS_SECOND_REPORTING" = true ]] ; then
 		createCronSeconds "${COMMAND_REPORTING}" ${TEMPCRON}
