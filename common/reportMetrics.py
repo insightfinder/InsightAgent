@@ -445,9 +445,8 @@ def process_replay(file_path):
                                 metric_key = column_name.split("[")[0]
                                 if column_name.find("]") == -1:
                                     column_name = column_name + "[-]"
-
+                                # Generate normalization id or use from config.ini
                                 if column_name.find(":") == -1:
-                                    print metric_key
                                     group_id = get_normalization(grouping_map, metric_key)
                                     column_name = column_name + ":" + str(group_id)
                                 elif len(column_name.split(":")[1]) == 0:
