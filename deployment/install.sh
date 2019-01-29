@@ -56,6 +56,9 @@ while [ "$1" != "" ]; do
 		-l )	shift
 			CHUNK_LINES=$1
 			;;
+        -e )	shift
+            ELASTICSEARCH_NODES=$1
+        ;;
 		* )	usage
 			exit 1
 	esac
@@ -182,6 +185,27 @@ elif [ $AGENT_TYPE == 'hadoop' ]; then
 		echo "sampling_interval=$SAMPLING_INTERVAL" >> $INSIGHTAGENTDIR/hadoop/config.ini
 		echo "ssl_verify=True" >> $INSIGHTAGENTDIR/hadoop/config.ini
 	fi
+elif [ $AGENT_TYPE == 'elasticsearch' ]; then
+	if [ ! -f $INSIGHTAGENTDIR/hadoop/config.ini ]; then
+		touch $INSIGHTAGENTDIR/hadoop/config.ini
+		echo "[elasticsearch]" >> $INSIGHTAGENTDIR/hadoop/config.ini
+		if [ -z "$ELASTICSEARCH_NODES" ]; then
+	        ELASTICSEARCH_NODES='http://52.90.112.179:9200'
+        fi
+		echo "elastic_search_nodes =$ELASTICSEARCH_NODES" >> $INSIGHTAGENTDIR/elasticsearch/config.ini
+
+		echo "[insightfinder]" >> $INSIGHTAGENTDIR/elasticsearch/config.ini
+		echo "license_key=$LICENSEKEY" >> $INSIGHTAGENTDIR/elasticsearch/config.ini
+		echo "project_name=$PROJECTNAME" >> $INSIGHTAGENTDIR/elasticsearch/config.ini
+		echo "user_name=$USERNAME" >> $INSIGHTAGENTDIR/elasticsearch/config.ini
+		echo "sampling_interval=$SAMPLING_INTERVAL" >> $INSIGHTAGENTDIR/elasticsearch/config.ini
+		echo "ssl_verify=True" >> $INSIGHTAGENTDIR/elasticsearch/config.ini
+		if [[ ! -d $INSIGHTAGENTDIR/elasticsearch/data ]]
+        then
+            echo "creating empty data directory to store latest results"
+	        mkdir $INSIGHTAGENTDIR/elasticsearch/data
+        fi
+	fi
 else
 	echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> $AGENTRC
 	echo "export INSIGHTFINDER_PROJECT_NAME=$PROJECTNAME" >> $AGENTRC
@@ -276,6 +300,13 @@ elif [ $AGENT_TYPE == 'logStreaming' ]; then
 	echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportLog.py -d $INSIGHTAGENTDIR -w $SERVER_URL -m logStreaming 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
 elif [ $AGENT_TYPE == 'hadoop' ]; then
 	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
+	if [ "$IS_SECOND_REPORTING" = true ] ; then
+		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
+	else
+		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
+	fi
+elif [ $AGENT_TYPE == 'elasticsearch' ]; then
+	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_elasticsearch.py -d $INSIGHTAGENTDIR -e $ELASTICSEARCH_NODES -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
 	if [ "$IS_SECOND_REPORTING" = true ] ; then
 		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
 	else
