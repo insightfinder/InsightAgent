@@ -1,0 +1,11 @@
+[hadoop]
+#The example format for nodes is: http://hostname1.com,http://hostname2.com
+name_nodes=
+data_nodes=
+yarn_nodes=
+
+[insightfinder]
+user_name =
+license_key =
+project_name =
+ssl_verify =

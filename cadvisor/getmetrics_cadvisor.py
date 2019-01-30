@@ -4,7 +4,6 @@ import time
 import requests
 import sys
 import os
-import subprocess
 import socket
 from optparse import OptionParser
 import json
@@ -115,7 +114,7 @@ def update_container_count(cadvisor_json, date):
                 os.rename(old_file, new_file)
 
 
-def getmetric():
+def get_metric():
     global counter_time_map
     global counter
     global index
@@ -149,7 +148,6 @@ def getmetric():
             counter_time_map[counter] = time_stamp
             counter = (counter + 1) % 60
             log = str(start_time)
-            cpu_all = 0
             resource_usage_file = open(os.path.join(homepath, data_dir + date + ".csv"), 'a+')
             num_lines = len(resource_usage_file.readlines())
             i = 0
@@ -181,8 +179,6 @@ def getmetric():
                     curr_block_num = len(r.json()[key]["stats"][index]["diskio"]["io_service_bytes"])
                     curr_io_read = 0
                     curr_io_write = 0
-                    prev_io_read = 0
-                    prev_io_write = 0
                     for j in range(curr_block_num):
                         curr_io_read += r.json()[key]["stats"][index]["diskio"]["io_service_bytes"][j]["stats"]["Read"]
                         curr_io_write += r.json()[key]["stats"][index]["diskio"]["io_service_bytes"][j]["stats"][
@@ -260,7 +256,7 @@ def getmetric():
 
 def main():
     try:
-        getmetric()
+        get_metric()
     except (KeyboardInterrupt, SystemExit):
         logger.error("Keyboard Interrupt")
         sys.exit()
