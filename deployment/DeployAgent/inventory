@@ -1,6 +1,6 @@
 [nodes]
-localhost ansible_connection=local
-#HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
+#localhost ansible_connection=local
+HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
 ###We can specify the host name with ssh details like this for each host
 ##If you have the ssh key
 #192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
@@ -46,16 +46,16 @@ no_proxy=
 ifAction=install
 
 ##Login User In Insightfinder Application
-ifUserName=yqian10
+ifUserName=
 
 ##Project Name In Insightfinder Application(for individial agent install)
 # When agent type is log-metric, this signifies metric project name(collectd)
-ifProjectName=cadVisorTest
+ifProjectName=
 # Set this when agent type is log-metric
 logProjectName=
 
 ##User's License Key in Application
-ifLicenseKey=42761d1f3286aae33e1ddff48fc30db48d5a0ae3
+ifLicenseKey=
 
 ifSamplingInterval=1
 
@@ -63,7 +63,7 @@ ifSamplingInterval=1
 #ifAgent=collectd
 #ifAgent=cgroup
 #ifAgent=syscall
-ifAgent=cadvisor
+#ifAgent=cadvisor
 #ifAgent=metricFileReplay
 #ifAgent=logFileReplay
 #ifAgent=hypervisor
