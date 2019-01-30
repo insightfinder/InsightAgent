@@ -227,34 +227,34 @@ class LessThanFilter(logging.Filter):
 
 
 def getAgentConfigVars(homepath=os.getcwd()):
-    configVars = {}
+    config_vars = {}
     try:
         if os.path.exists(os.path.join(homepath, "elasticsearch-log", "config.ini")):
             parser = SafeConfigParser()
             parser.read(os.path.join(homepath, "elasticsearch-log", "config.ini"))
-            licenseKey = parser.get('elasticsearch-log', 'insightFinder_license_key')
-            projectName = parser.get('elasticsearch-log', 'insightFinder_project_name')
-            userName = parser.get('elasticsearch-log', 'insightFinder_user_name')
-            samplingInterval = parser.get('elasticsearch-log', 'sampling_interval')
-            if len(insightFinder_license_key) == 0:
+            insightfinder_license_key = parser.get('elasticsearch-log', 'insightFinder_license_key')
+            insightfinder_project_name = parser.get('elasticsearch-log', 'insightFinder_project_name')
+            insightfinder_user_name = parser.get('elasticsearch-log', 'insightFinder_user_name')
+            sampling_interval = parser.get('elasticsearch-log', 'sampling_interval')
+            if len(insightfinder_license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
-            if len(insightFinder_project_name) == 0:
+            if len(insightfinder_project_name) == 0:
                 logger.error("Agent not correctly configured(project name). Check config file.")
                 sys.exit(1)
-            if len(insightFinder_user_name) == 0:
+            if len(insightfinder_user_name) == 0:
                 logger.error("Agent not correctly configured(username). Check config file.")
                 sys.exit(1)
             if len(sampling_interval) == 0:
                 logger.error("Agent not correctly configured(sampling interval). Check config file.")
                 sys.exit(1)
-            configVars['licenseKey'] = licenseKey
-            configVars['projectName'] = projectName
-            configVars['userName'] = userName
-            configVars['samplingInterval'] = samplingInterval
+            config_vars['licenseKey'] = insightfinder_license_key
+            config_vars['projectName'] = insightfinder_project_name
+            config_vars['userName'] = insightfinder_user_name
+            config_vars['samplingInterval'] = sampling_interval
     except IOError:
         logger.error("config.ini file is missing")
-    return configVars
+    return config_vars
 
 if __name__ == '__main__':
     logger = setloggerConfig()
