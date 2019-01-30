@@ -29,9 +29,9 @@ add_insightfinder_details (){
     PATH_TO_CONFIG_INI=$1
     echo -en '\n' >> ${PATH_TO_CONFIG_INI}
     echo "[insightfinder]" >> ${PATH_TO_CONFIG_INI}
-    echo "insightfinder_license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
-    echo "insightfinder_project_name=$PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
-    echo "insightfinder_user_name=$USERNAME" >> ${PATH_TO_CONFIG_INI}
+    echo "license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
+    echo "project_name=$PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
+    echo "user_name=$USERNAME" >> ${PATH_TO_CONFIG_INI}
     echo "sampling_interval=$SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
     echo "ssl_verify=True" >> ${PATH_TO_CONFIG_INI}
 
@@ -189,7 +189,18 @@ if [ "$AGENT_TYPE" == "kafka" ]; then
     if [ -d "$DIRECTORY" -a ! -f $PATH_TO_CONFIG_INI ]; then
 #    if [[ -d "$DIRECTORY" -a ! -f ${PATH_TO_CONFIG_INI} ]]; then
 		touch PATH_TO_CONFIG_INI
-		add_insightfinder_details ${PATH_TO_CONFIG_INI}
+        echo "insightfinder_license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
+        echo "insightfinder_license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
+        echo "insightfinder_license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
+        echo "insightfinder_license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
+
+
+
+		echo "insightfinder_license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
+        echo "insightfinder_project_name=$PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
+        echo "insightfinder_user_name=$USERNAME" >> ${PATH_TO_CONFIG_INI}
+
+#		add_insightfinder_details ${PATH_TO_CONFIG_INI}
 	fi
 elif [ "$AGENT_TYPE" == "kafka-logs" ]; then
     if [ -d "$DIRECTORY" -a ! -f $PATH_TO_CONFIG_INI ]; then
@@ -358,7 +369,7 @@ elif [ $AGENT_TYPE == 'hadoop' ] || [ $AGENT_TYPE == 'hbase' ]; then
 		createCronMinute ${REPORTING_INTERVAL} "${COMMAND_REPORTING}" ${TEMPCRON}
 	fi
 elif [ "$AGENT_TYPE" == "elasticsearch" ]; then
-	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_elasticsearch.py -d $INSIGHTAGENTDIR -e $ELASTICSEARCH_NODES -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
+	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_elasticsearch.py -d $INSIGHTAGENTDIR -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
 	if [[ "$IS_SECOND_REPORTING" = true ]] ; then
 		createCronSeconds "${COMMAND_REPORTING}" ${TEMPCRON}
 	else
