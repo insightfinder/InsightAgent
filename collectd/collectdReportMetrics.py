@@ -37,7 +37,7 @@ if options.serverUrl != None:
 
 datadir = "data/"
 
-
+config_vars = {}
 try:
     if os.path.exists(os.path.join(homepath, "collectd", "config.ini")):
         parser = SafeConfigParser()
@@ -54,15 +54,15 @@ try:
         if len(insightFinder_user_name) == 0:
             print("Agent not correctly configured(username). Check config file.")
             sys.exit(1)
-        os.environ["INSIGHTFINDER_LICENSE_KEY"] = insightFinder_license_key
-        os.environ["INSIGHTFINDER_PROJECT_NAME"] = insightFinder_project_name
-        os.environ["INSIGHTFINDER_USER_NAME"] = insightFinder_user_name
+        config_vars["INSIGHTFINDER_LICENSE_KEY"] = insightFinder_license_key
+        config_vars["INSIGHTFINDER_PROJECT_NAME"] = insightFinder_project_name
+        config_vars["INSIGHTFINDER_USER_NAME"] = insightFinder_user_name
 except IOError:
         print("config.ini file is missing")
 
-LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
-PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
-USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
+LICENSEKEY = config_vars["INSIGHTFINDER_LICENSE_KEY"]
+PROJECTNAME = config_vars["INSIGHTFINDER_PROJECT_NAME"]
+USERNAME = config_vars["INSIGHTFINDER_USER_NAME"]
 
 with open(os.path.join(homepath, "reporting_config.json"), 'r') as f:
     config = json.load(f)
