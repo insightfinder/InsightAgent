@@ -11,6 +11,7 @@ import subprocess
 import requests
 import datetime
 import itertools
+from ConfigParser import SafeConfigParser
 
 serverUrl = 'https://agent-data.insightfinder.com'
 usage = "Usage: %prog [options]"
@@ -36,16 +37,32 @@ if options.serverUrl != None:
 
 datadir = "data/"
 
-command = ['bash', '-c', 'source ' + str(homepath) + '/.agent.bashrc && env']
-proc = subprocess.Popen(command, stdout=subprocess.PIPE)
-for line in proc.stdout:
-    (key, _, value) = line.partition("=")
-    os.environ[key] = value.strip()
-proc.communicate()
+config_vars = {}
+try:
+    if os.path.exists(os.path.join(homepath, "collectd", "config.ini")):
+        parser = SafeConfigParser()
+        parser.read(os.path.join(homepath, "collectd", "config.ini"))
+        insightFinder_license_key = parser.get('collectd', 'insightFinder_license_key')
+        insightFinder_project_name = parser.get('collectd', 'insightFinder_project_name')
+        insightFinder_user_name = parser.get('collectd', 'insightFinder_user_name')
+        if len(insightFinder_license_key) == 0:
+            print("Agent not correctly configured(license key). Check config file.")
+            sys.exit(1)
+        if len(insightFinder_project_name) == 0:
+            print("Agent not correctly configured(project name). Check config file.")
+            sys.exit(1)
+        if len(insightFinder_user_name) == 0:
+            print("Agent not correctly configured(username). Check config file.")
+            sys.exit(1)
+        config_vars["INSIGHTFINDER_LICENSE_KEY"] = insightFinder_license_key
+        config_vars["INSIGHTFINDER_PROJECT_NAME"] = insightFinder_project_name
+        config_vars["INSIGHTFINDER_USER_NAME"] = insightFinder_user_name
+except IOError:
+        print("config.ini file is missing")
 
-LICENSEKEY = os.environ["INSIGHTFINDER_LICENSE_KEY"]
-PROJECTNAME = os.environ["INSIGHTFINDER_PROJECT_NAME"]
-USERNAME = os.environ["INSIGHTFINDER_USER_NAME"]
+LICENSEKEY = config_vars["INSIGHTFINDER_LICENSE_KEY"]
+PROJECTNAME = config_vars["INSIGHTFINDER_PROJECT_NAME"]
+USERNAME = config_vars["INSIGHTFINDER_USER_NAME"]
 
 with open(os.path.join(homepath, "reporting_config.json"), 'r') as f:
     config = json.load(f)
@@ -394,3 +411,5 @@ if reported:
     print "Custom metrics sent"
 else:
     print "Failed to send custom metrics"
+
+

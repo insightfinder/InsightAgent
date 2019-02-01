@@ -12,6 +12,7 @@ from optparse import OptionParser
 import pytz
 import requests
 from elasticsearch import Elasticsearch
+from ConfigParser import SafeConfigParser
 
 
 def getParameters():
@@ -226,37 +227,34 @@ class LessThanFilter(logging.Filter):
 
 
 def getAgentConfigVars(homepath=os.getcwd()):
-    configVars = {}
-    with open(os.path.join(homepath, ".agent.bashrc"), 'r') as configFile:
-        fileContent = configFile.readlines()
-        if len(fileContent) < 6:
-            logger.error("Agent not correctly configured. Check .agent.bashrc file.")
-            sys.exit(1)
-        # get license key
-        licenseKeyLine = fileContent[0].split(" ")
-        if len(licenseKeyLine) != 2:
-            logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['licenseKey'] = licenseKeyLine[1].split("=")[1].strip()
-        # get project name
-        projectNameLine = fileContent[1].split(" ")
-        if len(projectNameLine) != 2:
-            logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['projectName'] = projectNameLine[1].split("=")[1].strip()
-        # get username
-        userNameLine = fileContent[2].split(" ")
-        if len(userNameLine) != 2:
-            logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['userName'] = userNameLine[1].split("=")[1].strip()
-        # get sampling interval
-        samplingIntervalLine = fileContent[4].split(" ")
-        if len(samplingIntervalLine) != 2:
-            logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['samplingInterval'] = samplingIntervalLine[1].split("=")[1].strip()
-    return configVars
+    config_vars = {}
+    try:
+        if os.path.exists(os.path.join(homepath, "elasticsearch-log", "config.ini")):
+            parser = SafeConfigParser()
+            parser.read(os.path.join(homepath, "elasticsearch-log", "config.ini"))
+            insightfinder_license_key = parser.get('elasticsearch-log', 'insightFinder_license_key')
+            insightfinder_project_name = parser.get('elasticsearch-log', 'insightFinder_project_name')
+            insightfinder_user_name = parser.get('elasticsearch-log', 'insightFinder_user_name')
+            sampling_interval = parser.get('elasticsearch-log', 'sampling_interval')
+            if len(insightfinder_license_key) == 0:
+                logger.error("Agent not correctly configured(license key). Check config file.")
+                sys.exit(1)
+            if len(insightfinder_project_name) == 0:
+                logger.error("Agent not correctly configured(project name). Check config file.")
+                sys.exit(1)
+            if len(insightfinder_user_name) == 0:
+                logger.error("Agent not correctly configured(username). Check config file.")
+                sys.exit(1)
+            if len(sampling_interval) == 0:
+                logger.error("Agent not correctly configured(sampling interval). Check config file.")
+                sys.exit(1)
+            config_vars['licenseKey'] = insightfinder_license_key
+            config_vars['projectName'] = insightfinder_project_name
+            config_vars['userName'] = insightfinder_user_name
+            config_vars['samplingInterval'] = sampling_interval
+    except IOError:
+        logger.error("config.ini file is missing")
+    return config_vars
 
 if __name__ == '__main__':
     logger = setloggerConfig()

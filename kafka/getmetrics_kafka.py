@@ -3,7 +3,6 @@ import collections
 import json
 import logging
 import os
-import random
 import socket
 import sys
 import time
@@ -412,7 +411,7 @@ def kafka_data_consumer(consumer_id):
     else:
         consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest',
                                  consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id=agent_config_vars['groupId'], client_id=agentConfigVars["clientId"])
+                                 group_id=agent_config_vars['groupId'], client_id=agent_config_vars["clientId"])
     consumer.subscribe([topic])
     parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filter_hosts)
     consumer.close()
