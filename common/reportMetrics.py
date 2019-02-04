@@ -101,7 +101,7 @@ def get_parameters():
     return parameters
 
 
-def get_agent_config_vars():
+def get_agent_config_vars(normalization_map):
     config_vars = {}
     try:
         if os.path.exists(os.path.join(parameters['homepath'], "common", "config.ini")):
@@ -112,6 +112,8 @@ def get_agent_config_vars():
             user_name = parser.get('insightfinder', 'user_name')
             sampling_interval = parser.get('metrics', 'sampling_interval')
             selected_fields = parser.get('metrics', 'selected_fields').split(",")
+            all_metrics = parser.get('metrics', 'all_metrics').split(",")
+            normalization_ids = parser.get('metrics', 'normalization_id').split(",")
             if len(license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
@@ -128,6 +130,14 @@ def get_agent_config_vars():
                 config_vars['selected_fields'] = selected_fields
             elif len(selected_fields[0]) == 0:
                 config_vars['selected_fields'] = "All"
+            if len(normalization_ids[0]) != 0 and len(all_metrics) == len(normalization_ids):
+                for index in range(len(all_metrics)):
+                    metric = all_metrics[index]
+                    normalization_id = int(normalization_ids[index])
+                    if normalization_id > 1000:
+                        logger.error("Please config the normalization_id between 0 to 1000.")
+                        sys.exit(1)
+                    normalization_map[metric] = GROUPING_START + normalization_id
             config_vars['licenseKey'] = license_key
             config_vars['projectName'] = project_name
             config_vars['userName'] = user_name
@@ -432,15 +442,24 @@ def process_replay(file_path):
                                     max_timestamp_epoch = long(row[i])
                             else:
                                 column_name = field_names[i].strip()
-                                metric = column_name.split("[")[0]
+                                metric_key = column_name.split("[")[0]
                                 if column_name.find("]") == -1:
                                     column_name = column_name + "[-]"
+                                # Generate normalization id or use from config.ini
                                 if column_name.find(":") == -1:
-                                    group_id = get_grouping_id(metric, grouping_map)
+                                    group_id = get_normalization(grouping_map, metric_key)
                                     column_name = column_name + ":" + str(group_id)
                                 elif len(column_name.split(":")[1]) == 0:
-                                    group_id = get_grouping_id(metric, grouping_map)
+                                    group_id = get_normalization(grouping_map, metric_key)
                                     column_name = column_name + str(group_id)
+                                elif len(column_name.split(":")[1]) != 0:
+                                    if len(normalization_ids_map) != 0:
+                                        if metric_key in normalization_ids_map:
+                                            group_id = int(normalization_ids_map[metric_key])
+                                    else:
+                                        group_id = column_name.split(":")[1]
+                                    column_name = column_name.split(":")[0] + ":" + str(group_id)
+
                                 current_row[column_name] = row[i]
                         to_send_metric_data.append(current_row)
                         current_line_count += 1
@@ -450,6 +469,15 @@ def process_replay(file_path):
                     chunk_count += 1
                 logger.debug("Total chunks created: " + str(chunk_count))
                 save_grouping(grouping_map)
+
+
+def get_normalization(grouping_map, metric_key):
+    if len(normalization_ids_map) != 0:
+        if metric_key in normalization_ids_map:
+            group_id = int(normalization_ids_map[metric_key])
+        else:
+            group_id = get_grouping_id(metric_key, grouping_map)
+    return group_id
 
 
 def save_grouping(metric_grouping):
@@ -542,9 +570,10 @@ if __name__ == '__main__':
     GROUPING_END = 33000
     prog_start_time = time.time()
     logger = set_logger_config()
+    normalization_ids_map = {}
     data_directory = 'data/'
     parameters = get_parameters()
-    agent_config_vars = get_agent_config_vars()
+    agent_config_vars = get_agent_config_vars(normalization_ids_map)
     reporting_config_vars = get_reporting_config_vars()
 
     if parameters['agentType'] == "hypervisor":
