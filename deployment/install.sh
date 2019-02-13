@@ -233,7 +233,6 @@ elif [ $AGENT_TYPE == 'collectd' ]; then
         touch ${PATH_TO_CONFIG_INI}
         add_insightfinder_details ${PATH_TO_CONFIG_INI}
     fi
-fi
 else
 	echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> $AGENTRC
 	echo "export INSIGHTFINDER_PROJECT_NAME=$PROJECTNAME" >> $AGENTRC
