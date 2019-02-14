@@ -88,6 +88,7 @@ def get_agent_config_vars():
             insightFinder_project_name = parser.get('kafka', 'insightFinder_project_name')
             insightFinder_user_name = parser.get('kafka', 'insightFinder_user_name')
             sampling_interval = parser.get('kafka', 'sampling_interval')
+            client_id = parser.get('kafka', 'client_id')
             group_id = parser.get('kafka', 'group_id')
             if len(insightFinder_license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
@@ -109,6 +110,7 @@ def get_agent_config_vars():
             config_vars['userName'] = insightFinder_user_name
             config_vars['samplingInterval'] = sampling_interval
             config_vars['groupId'] = group_id
+            config_vars['clientId'] = client_id
     except IOError:
         logger.error("config.ini file is missing")
     return config_vars
@@ -268,9 +270,15 @@ def kafka_data_consumer(consumer_id):
     logger.info("Started log consumer number " + consumer_id)
     # Kafka consumer configuration
     (brokers, topic, filter_hosts) = get_kafka_config()
-    consumer = KafkaConsumer(bootstrap_servers=brokers,
+    if agentConfigVars["clientId"] == "":
+        consumer = KafkaConsumer(bootstrap_servers=brokers,
                              auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
                              group_id=agentConfigVars['groupId'])
+    else:
+        logger.info(agentConfigVars["clientId"])
+        consumer = KafkaConsumer(bootstrap_servers=brokers,
+                                 auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
+                                 group_id=agentConfigVars['groupId'], client_id = agentConfigVars["clientId"])
     consumer.subscribe([topic])
     parse_consumer_messages(consumer, filter_hosts)
     consumer.close()

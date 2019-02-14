@@ -114,10 +114,12 @@ grouping_end=20000
 
 ##Vars for Prometheus
 prometheusUrl=http://localhost:9090
-prometheusMetricsFile=metrics.txt
+prometheusMetricsFile=/tmp/metrics.txt
 
-##Vars for Open TSDB
+##Vars for OpenTSDB
 openTsdbUrl=http://localhost:4242
+openTsdbMetrics=
+openTsdbToken=xxxx
 
 ##Vars for td-agent##
 
