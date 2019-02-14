@@ -109,8 +109,8 @@ cadvisorPort=8080
 nfsenProfile=/data/nfsen/profiles-data/live
 
 ## metric grouping
-grouping_start=15000
-grouping_end=20000
+groupingStart=15000
+groupingEnd=20000
 
 ##Vars for Prometheus
 prometheusUrl=http://localhost:9090

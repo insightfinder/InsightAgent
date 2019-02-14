@@ -17,7 +17,7 @@ this script gathers system info from prometheus and use http api to send to serv
 '''
 
 
-def getParameters():
+def get_parameters():
     usage = "Usage: %prog [options]"
     parser = OptionParser(usage=usage)
     parser.add_option("-d", "--directory",
@@ -28,117 +28,123 @@ def getParameters():
                       action="store", dest="chunkSize", help="Metrics per chunk")
     (options, args) = parser.parse_args()
 
-    parameters = {}
+    params = {}
     if options.homepath is None:
-        parameters['homepath'] = os.getcwd()
+        params['homepath'] = os.getcwd()
     else:
-        parameters['homepath'] = options.homepath
-    if options.serverUrl == None:
-        parameters['serverUrl'] = 'https://app.insightfinder.com'
+        params['homepath'] = options.homepath
+    if options.serverUrl is None:
+        params['serverUrl'] = 'https://app.insightfinder.com'
     else:
-        parameters['serverUrl'] = options.serverUrl
+        params['serverUrl'] = options.serverUrl
     if options.chunkSize is None:
-        parameters['chunkSize'] = 50
+        params['chunkSize'] = 50
     else:
-        parameters['chunkSize'] = int(options.chunkSize)
-    return parameters
+        params['chunkSize'] = int(options.chunkSize)
+    return params
 
 
-def getAgentConfigVars():
-    configVars = {}
+def get_agent_config_vars():
+    config_vars = {}
     with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as configFile:
-        fileContent = configFile.readlines()
-        if len(fileContent) < 6:
-            logger.error("Agent not correctly configured. Check .agent.bashrc file.")
+        file_content = configFile.readlines()
+        if len(file_content) < 6:
+            logger.error(
+                "Agent not correctly configured. Check .agent.bashrc file.")
             sys.exit(1)
         # get license key
-        licenseKeyLine = fileContent[0].split(" ")
-        if len(licenseKeyLine) != 2:
-            logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
+        license_key_line = file_content[0].split(" ")
+        if len(license_key_line) != 2:
+            logger.error(
+                "Agent not correctly configured(license key). Check .agent.bashrc file.")
             sys.exit(1)
-        configVars['licenseKey'] = licenseKeyLine[1].split("=")[1].strip()
+        config_vars['licenseKey'] = license_key_line[1].split("=")[1].strip()
         # get project name
-        projectNameLine = fileContent[1].split(" ")
-        if len(projectNameLine) != 2:
-            logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
+        project_name_line = file_content[1].split(" ")
+        if len(project_name_line) != 2:
+            logger.error(
+                "Agent not correctly configured(project name). Check .agent.bashrc file.")
             sys.exit(1)
-        configVars['projectName'] = projectNameLine[1].split("=")[1].strip()
+        config_vars['projectName'] = project_name_line[1].split("=")[1].strip()
         # get username
-        userNameLine = fileContent[2].split(" ")
-        if len(userNameLine) != 2:
-            logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
+        user_name_line = file_content[2].split(" ")
+        if len(user_name_line) != 2:
+            logger.error(
+                "Agent not correctly configured(username). Check .agent.bashrc file.")
             sys.exit(1)
-        configVars['userName'] = userNameLine[1].split("=")[1].strip()
+        config_vars['userName'] = user_name_line[1].split("=")[1].strip()
         # get sampling interval
-        samplingIntervalLine = fileContent[4].split(" ")
-        if len(samplingIntervalLine) != 2:
-            logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
+        sampling_interval_line = file_content[4].split(" ")
+        if len(sampling_interval_line) != 2:
+            logger.error(
+                "Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
             sys.exit(1)
-        configVars['samplingInterval'] = samplingIntervalLine[1].split("=")[1].strip()
-    return configVars
+        config_vars['samplingInterval'] = sampling_interval_line[1].split("=")[
+            1].strip()
+    return config_vars
 
 
-def getReportingConfigVars():
-    reportingConfigVars = {}
+def get_reporting_config_vars():
+    config_data = {}
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
         config = json.load(f)
     reporting_interval_string = config['reporting_interval']
-    is_second_reporting = False
     if reporting_interval_string[-1:] == 's':
-        is_second_reporting = True
         reporting_interval = float(config['reporting_interval'][:-1])
-        reportingConfigVars['reporting_interval'] = float(reporting_interval / 60.0)
+        config_data['reporting_interval'] = float(
+            reporting_interval / 60.0)
     else:
-        reportingConfigVars['reporting_interval'] = int(config['reporting_interval'])
-        reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
-        reportingConfigVars['prev_endtime'] = config['prev_endtime']
-        reportingConfigVars['deltaFields'] = config['delta_fields']
+        config_data['reporting_interval'] = int(
+            config['reporting_interval'])
+        config_data['keep_file_days'] = int(config['keep_file_days'])
+        config_data['prev_endtime'] = config['prev_endtime']
+        config_data['deltaFields'] = config['delta_fields']
 
-    reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
-    reportingConfigVars['prev_endtime'] = config['prev_endtime']
-    reportingConfigVars['deltaFields'] = config['delta_fields']
-    return reportingConfigVars
+    config_data['keep_file_days'] = int(config['keep_file_days'])
+    config_data['prev_endtime'] = config['prev_endtime']
+    config_data['deltaFields'] = config['delta_fields']
+    return config_data
 
 
-def getPrometheusConfig(parameters, datadir):
+def get_prometheus_config(params):
     """Read and parse Prometheus config from config.txt"""
-    prometheusConfig = {}
-    if os.path.exists(os.path.join(parameters['homepath'], datadir, "config.txt")):
+    prometheus_config = {}
+    if os.path.exists(os.path.join(params['homepath'], "prometheus/config.txt")):
         cp = ConfigParser.SafeConfigParser()
-        cp.read(os.path.join(parameters['homepath'], datadir, "config.txt"))
-        prometheusConfig = {
+        cp.read(os.path.join(params['homepath'], "prometheus/config.txt"))
+        prometheus_config = {
             "GROUPING_START": cp.getint('prometheus', 'GROUPING_START'),
             "GROUPING_END": cp.getint('prometheus', 'GROUPING_END'),
             "PROMETHEUS_URL": cp.get('prometheus', 'PROMETHEUS_URL'),
             "PROMETHEUS_METRICS_FILE": cp.get('prometheus', 'PROMETHEUS_METRICS_FILE'),
         }
-    return prometheusConfig
+    return prometheus_config
 
 
-def save_grouping(grouping_map):
+def save_grouping(grouping):
     """
     Saves the grouping data to grouping.json
     :return: None
     """
     with open('grouping.json', 'w+') as f:
-        f.write(json.dumps(grouping_map))
+        f.write(json.dumps(grouping))
 
 
 def load_grouping():
-    if (os.path.isfile('grouping.json')):
+    if os.path.isfile('grouping.json'):
         logger.debug("Grouping file exists. Loading..")
         with open('grouping.json', 'r+') as f:
             try:
-                grouping_map = json.loads(f.read())
+                grouping = json.loads(f.read())
             except ValueError:
-                grouping_map = json.loads("{}")
+                grouping = json.loads("{}")
                 logger.debug("Error parsing grouping.json.")
     else:
-        grouping_map = json.loads("{}")
-    return grouping_map
+        grouping = json.loads("{}")
+    return grouping
 
 
-def get_grouping_id(config, metric_key, grouping_map):
+def get_grouping_id(config, metric_key, grouping):
     """
     Get grouping id for a metric key
     Parameters:
@@ -146,37 +152,38 @@ def get_grouping_id(config, metric_key, grouping_map):
     - `temp_id` : proposed group id integer
     """
     for i in range(3):
-        grouping_candidate = random.randint(config["GROUPING_START"], config["GROUPING_END"])
-        if metric_key in grouping_map:
-            grouping_id = int(grouping_map[metric_key])
+        grouping_candidate = random.randint(
+            config["GROUPING_START"], config["GROUPING_END"])
+        if metric_key in grouping:
+            grouping_id = int(grouping[metric_key])
             return grouping_id
         else:
             grouping_id = grouping_candidate
-            grouping_map[metric_key] = grouping_id
+            grouping[metric_key] = grouping_id
             return grouping_id
     return config["GROUPING_START"]
 
 
-def getMetricListFromFile(config):
+def get_metric_list_from_file(config):
     """Get available metric list from File"""
-    metricList = set()
+    metric_list = set()
     with open(config['PROMETHEUS_METRICS_FILE'], 'r') as f:
         for line in f:
             if line:
-                metricList.add(line.replace('\n', ''))
-        logger.debug("Get metric list from file: " + str(metricList))
-    return list(metricList)
+                metric_list.add(line.replace('\n', ''))
+        logger.debug("Get metric list from file: " + str(metric_list))
+    return list(metric_list)
 
 
-def getMetricData(config, metricList, grouping_map, startTime, endTime):
+def get_metric_data(config, metric_list, grouping, start_time, end_time):
     """Get metric data from Prometheus API"""
-    metricDataList = []
+    metric_datas = []
 
-    for m in metricList:
+    for m in metric_list:
         params = {
             "query": m,
-            "start": startTime,
-            "end": endTime,
+            "start": start_time,
+            "end": end_time,
             "step": '60s',
         }
         url = config["PROMETHEUS_URL"] + "/api/v1/query_range"
@@ -185,60 +192,66 @@ def getMetricData(config, metricList, grouping_map, startTime, endTime):
             res = response.json()
             if res and res.get('status') == 'success':
                 datas = res.get('data', {}).get('result', [])
-                metricDataList.extend(datas)
+                metric_datas.extend(datas)
 
     # change data to raw data api format:
-    valueMap = {
-        'timestamp': str(endTime)
+    value_map = {
+        'timestamp': str(end_time)
     }
-    filterHosts = ['localhost']
-    metricOTDataList = []
-    for log in metricDataList:
+    filter_hosts = ['localhost']
+    metric_data_all = []
+    for log in metric_datas:
         host = log.get('metric').get('instance', '').split(':')[0]
 
-        if host in filterHosts:
+        if host in filter_hosts:
             continue
 
         metric_name = log.get('metric').get('__name__')
         host_name = host
         metric_value = None
-        header_field = metric_name + "[" + host_name + "]:" + str(get_grouping_id(config, metric_name, grouping_map))
+        header_field = metric_name + \
+            "[" + host_name + "]:" + \
+            str(get_grouping_id(config, metric_name, grouping))
         mtime = 0
         for stime, val in log.get('values', []):
             if int(stime) > mtime:
                 metric_value = val
                 mtime = int(stime)
 
-        valueMap[header_field] = str(metric_value)
-    metricOTDataList.append(valueMap)
+        value_map[header_field] = str(metric_value)
+        metric_data_all.append(value_map)
 
-    logger.info('metricOTDataList:' + str(metricOTDataList))
-    return metricOTDataList
+    logger.info('metric_data_all:' + str(metric_data_all))
+    return metric_data_all
 
 
-def sendData(metricData):
-    sendDataTime = time.time()
+def send_data(metric_data):
+    send_data_time = time.time()
     # prepare data for metric streaming agent
-    toSendDataDict = {}
-    toSendDataDict["metricData"] = json.dumps(metricData)
-    toSendDataDict["licenseKey"] = agentConfigVars['licenseKey']
-    toSendDataDict["projectName"] = agentConfigVars['projectName']
-    toSendDataDict["userName"] = agentConfigVars['userName']
-    toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
-    toSendDataDict["samplingInterval"] = str(int(reportingConfigVars['reporting_interval'] * 60))
-    toSendDataDict["agentType"] = "custom"
+    to_send_data_dict = {}
+    to_send_data_dict["metric_data"] = json.dumps(metric_data)
+    to_send_data_dict["licenseKey"] = agent_config_vars['licenseKey']
+    to_send_data_dict["projectName"] = agent_config_vars['projectName']
+    to_send_data_dict["userName"] = agent_config_vars['userName']
+    to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
+    to_send_data_dict["samplingInterval"] = str(
+        int(reporting_config_vars['reporting_interval'] * 60))
+    to_send_data_dict["agentType"] = "custom"
 
-    toSendDataJSON = json.dumps(toSendDataDict)
-    logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))) + " Bytes")
+    to_send_data_json = json.dumps(to_send_data_dict)
+    logger.debug("TotalData: " +
+                 str(len(bytearray(to_send_data_json))) + " Bytes")
 
     # send the data
-    postUrl = parameters['serverUrl'] + "/customprojectrawdata"
-    response = requests.post(postUrl, data=json.loads(toSendDataJSON))
+    post_url = parameters['serverUrl'] + "/customprojectrawdata"
+    response = requests.post(post_url, data=json.loads(to_send_data_json))
     if response.status_code == 200:
-        logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
+        logger.info(str(len(bytearray(to_send_data_json))) +
+                    " bytes of data are reported.")
     else:
         logger.info("Failed to send data.")
-    logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
+    logger.debug("--- Send data time: %s seconds ---" %
+                 (time.time() - send_data_time))
 
 
 def chunks(l, n):
@@ -247,22 +260,22 @@ def chunks(l, n):
         yield l[i:i + n]
 
 
-def setloggerConfig(logLevel):
+def set_logger_config(log_level):
     """Set up logging according to the defined log level"""
     # Get the root logger
-    logger = logging.getLogger(__name__)
+    logger_obj = logging.getLogger(__name__)
     # Have to set the root logger level, it defaults to logging.WARNING
-    logger.setLevel(logLevel)
+    logger_obj.setLevel(log_level)
     # route INFO and DEBUG logging to stdout from stderr
     logging_handler_out = logging.StreamHandler(sys.stdout)
     logging_handler_out.setLevel(logging.DEBUG)
     logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
-    logger.addHandler(logging_handler_out)
+    logger_obj.addHandler(logging_handler_out)
 
     logging_handler_err = logging.StreamHandler(sys.stderr)
     logging_handler_err.setLevel(logging.WARNING)
-    logger.addHandler(logging_handler_err)
-    return logger
+    logger_obj.addHandler(logging_handler_err)
+    return logger_obj
 
 
 class LessThanFilter(logging.Filter):
@@ -276,29 +289,28 @@ class LessThanFilter(logging.Filter):
 
 
 if __name__ == "__main__":
-    logLevel = logging.INFO
-    logger = setloggerConfig(logLevel)
-    dataDirectory = 'data'
-    parameters = getParameters()
-    agentConfigVars = getAgentConfigVars()
-    reportingConfigVars = getReportingConfigVars()
+    logger = set_logger_config(logging.INFO)
+    parameters = get_parameters()
+    agent_config_vars = get_agent_config_vars()
+    reporting_config_vars = get_reporting_config_vars()
     grouping_map = load_grouping()
 
     # get agent configuration details
-    agent_config = getPrometheusConfig(parameters, dataDirectory)
+    agent_config = get_prometheus_config(parameters)
     for item in agent_config.values():
         if not item:
-            logger.error("config error, check data/config.txt")
+            logger.error("config error, check prometheus/config.txt")
             sys.exit("config error, check config.txt")
 
     dataEndTimestamp = int(time.time())
-    intervalInSecs = int(reportingConfigVars['reporting_interval'] * 60)
+    intervalInSecs = int(reporting_config_vars['reporting_interval'] * 60)
     dataStartTimestamp = dataEndTimestamp - intervalInSecs
 
     try:
-        logger.debug("Start to send metric data: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
+        logger.debug(
+            "Start to send metric data: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
         # get metric list from prometheus
-        metricListAll = getMetricListFromFile(agent_config)
+        metricListAll = get_metric_list_from_file(agent_config)
         if len(metricListAll) == 0:
             logger.error("No metrics to get data for.")
             sys.exit()
@@ -306,14 +318,16 @@ if __name__ == "__main__":
         chunked_metric_list = chunks(metricListAll, parameters['chunkSize'])
         for sub_list in chunked_metric_list:
             # get metric data from prometheus every SAMPLING_INTERVAL
-            metricDataList = getMetricData(agent_config, sub_list, grouping_map, dataStartTimestamp, dataEndTimestamp)
-            if len(metricDataList) == 0:
+            metric_data_list = get_metric_data(
+                agent_config, sub_list, grouping_map, dataStartTimestamp, dataEndTimestamp)
+            if len(metric_data_list) == 0:
                 logger.error("No data for metrics received from Prometheus.")
                 sys.exit()
             # send metric data to insightfinder
-            sendData(metricDataList)
+            send_data(metric_data_list)
             save_grouping(grouping_map)
 
     except Exception as e:
-        logger.error("Error send metric data to insightfinder: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
+        logger.error(
+            "Error send metric data to insightfinder: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
         logger.error(e)
