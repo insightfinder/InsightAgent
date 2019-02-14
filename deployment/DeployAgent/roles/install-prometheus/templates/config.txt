@@ -1,5 +1,5 @@
 [prometheus]
-GROUPING_START = {{ grouping_start }}
-GROUPING_END = {{ grouping_end }}
+GROUPING_START = {{ groupingStart }}
+GROUPING_END = {{ groupingEnd }}
 PROMETHEUS_URL = {{ prometheusUrl }}
 PROMETHEUS_METRICS_FILE = {{ prometheusMetricsFile }}
