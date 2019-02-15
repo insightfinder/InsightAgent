@@ -1,17 +1,18 @@
-import csv
-import time
-from optparse import OptionParser
-import os
-import json
-import math
-import socket
 import collections
-import sys
-import requests
+import csv
 import datetime
 import itertools
-from ConfigParser import ConfigParser
+import json
 import logging
+import math
+import os
+import socket
+import sys
+import time
+from ConfigParser import ConfigParser
+from optparse import OptionParser
+
+import requests
 
 home_path = ''
 server_url = ''
@@ -76,11 +77,12 @@ def set_info_from_config_ini_file():
         try:
             parser = ConfigParser()
             parser.read(os.path.join(home_path, "collectd", "config.ini"))
-            config_vars['license_key'] = parser.get('insightfinder', 'insightfinder_license_key')
-            config_vars['project_name'] = parser.get('insightfinder', 'insightfinder_project_name')
-            config_vars['user_name'] = parser.get('insightfinder', 'insightfinder_user_name')
+            config_vars['license_key'] = parser.get('insightfinder', 'license_key')
+            config_vars['project_name'] = parser.get('insightfinder', 'project_name')
+            config_vars['user_name'] = parser.get('insightfinder', 'user_name')
 
-            if len(config_vars['license_key']) == 0 or len(config_vars['project_name']) == 0 or len(config_vars['user_name']) == 0:
+            if len(config_vars['license_key']) == 0 or len(config_vars['project_name']) == 0 or len(
+                    config_vars['user_name']) == 0:
                 logger.error("Agent not correctly configured. Check config file.")
                 sys.exit(1)
 
@@ -193,8 +195,7 @@ def set_epoch_time(reporting_interval_l, prev_endtime_l):
     if prev_endtime_l != "0":
         start_time = prev_endtime_l
         # pad a second after prev_end_time
-        start_time_epoch_l = 1000 + \
-                             long(1000 * time.mktime(time.strptime(start_time, "%Y%m%d%H%M%S")))
+        start_time_epoch_l = 1000 + long(1000 * time.mktime(time.strptime(start_time, "%Y%m%d%H%M%S")))
         # end_time_epoch = start_time_epoch_l + 1000 * 60 * reporting_interval_l
         start_time_epoch_l = start_time_epoch_l / 1000
     else:  # prev_endtime == 0
@@ -425,10 +426,8 @@ def get_new_object_from_disk_and_network_details(data, delta_fields, disk_read, 
                                                  previous_result_l, this_data):
     new_result = {}
     for each_metric in metric_list:
-        if each_metric == "DiskWrite" or each_metric == "DiskRead" or each_metric == "NetworkIn" or each_metric == "NetworkOut":
-            # if eachmetric == "DiskWrite" or eachmetric == "DiskRead" or
-            # eachmetric == "DiskUsed" or eachmetric == "NetworkIn" or
-            # eachmetric == "NetworkOut":
+        if each_metric == "DiskWrite" or each_metric == "DiskRead" \
+                or each_metric == "NetworkIn" or each_metric == "NetworkOut":
             for each_data in data:
                 if "DiskWrite" in each_data:
                     disk_write += float(data[each_data])
@@ -438,8 +437,8 @@ def get_new_object_from_disk_and_network_details(data, delta_fields, disk_read, 
                     network_in = float(data[each_data])
                 if "NetworkOut" in each_data:
                     network_out = float(data[each_data])
-        if (not is_str_in_keys(data,
-                               each_metric)) and each_metric != "DiskRead" and each_metric != "DiskWrite" and each_metric != "NetworkIn" and each_metric != "NetworkOut":
+        if (not is_str_in_keys(data, each_metric)) and each_metric != "DiskRead" and each_metric != "DiskWrite" \
+                and each_metric != "NetworkIn" and each_metric != "NetworkOut":
             final_metric_name = str(
                 each_metric) + "[" + str(hostname_short_l) + "]:" + str(getindex(each_metric))
             this_data[final_metric_name] = "NaN"
@@ -487,22 +486,8 @@ def update_endtime_in_config(metric_data_l, reporting_interval_l, new_prev_endti
     return
 
 
-# Update custom Metrics
-def report_custom_metrics():
-    reported = reportCustomMetrics.getcustommetrics(
-        server_url, agent_config_vars['project_name'], agent_config_vars['user_name'], agent_config_vars['license_key'],
-        home_path)
-    if reported:
-        logger.info("Custom metrics sent")
-    else:
-        logger.error("Failed to send custom metrics")
-    return
-
-
 if __name__ == "__main__":
     parameters = get_input_from_user()
-    # importing from reportCustomMetric
-    import reportCustomMetrics
 
     server_url = parameters['server_url']
     home_path = parameters['homepath']
@@ -510,7 +495,6 @@ if __name__ == "__main__":
     log_level = parameters['log_level']
     # setting log level
     logger = set_logger_config(log_level)
-    agent_config_vars = {}
     agent_config_vars = set_info_from_config_ini_file()
 
     new_prev_endtime_epoch = 0
@@ -527,5 +511,4 @@ if __name__ == "__main__":
 
     update_endtime_in_config(metric_data, reporting_interval, new_prev_endtime_epoch, hostname)
 
-    report_custom_metrics()
     exit(0)
