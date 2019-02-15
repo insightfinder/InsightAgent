@@ -19,31 +19,6 @@ function createCronSeconds() {
 	echo "* * * * * root sleep 50; $1" >> $2
 }
 
-## adding common parameters here
-add_insightfinder_details (){
-    PATH_TO_CONFIG_INI=$1
-    echo -en '\n' >> ${PATH_TO_CONFIG_INI}
-    echo "[insightfinder]" >> ${PATH_TO_CONFIG_INI}
-    echo "license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
-    echo "project_name=$PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
-    echo "user_name=$USERNAME" >> ${PATH_TO_CONFIG_INI}
-    echo "sampling_interval=$SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
-    echo "ssl_verify=True" >> ${PATH_TO_CONFIG_INI}
-
-
-    # for backward compatibility
-    export_insightfinder_details
-}
-
-export_insightfinder_details() {
-    echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> ${AGENTRC}
-	echo "export INSIGHTFINDER_PROJECT_NAME=$PROJECTNAME" >> ${AGENTRC}
-	echo "export INSIGHTFINDER_USER_NAME=$USERNAME" >> ${AGENTRC}
-	echo "export INSIGHTAGENTDIR=$INSIGHTAGENTDIR" >> ${AGENTRC}
-	echo "export SAMPLING_INTERVAL=$SAMPLING_INTERVAL" >> ${AGENTRC}
-	echo "export REPORTING_INTERVAL=$REPORTING_INTERVAL" >> ${AGENTRC}
-}
-
 if [ "$#" -lt 10 ]; then
 	usage
 	exit 1
@@ -140,7 +115,7 @@ if [[ -d $PYTHONPATH ]]
 then
 	PYTHONPATH=$INSIGHTAGENTDIR/pyenv/bin/python
 else
-	PYTHONPATH=python
+	PYTHONPATH=/usr/bin/python
 fi
 
 if [ $AGENT_TYPE == 'daemonset' ]; then
@@ -170,11 +145,7 @@ then
         mkdir $INSIGHTAGENTDIR/custom
 fi
 
-# initializing variables
-DIRECTORY="$INSIGHTAGENTDIR""/"${AGENT_TYPE}
-PATH_TO_CONFIG_INI="$DIRECTORY""/config.ini"
 AGENTRC=$INSIGHTAGENTDIR/.agent.bashrc
-
 if [[ -f $AGENTRC ]]
 then
 	rm $AGENTRC
@@ -228,11 +199,6 @@ elif [ $AGENT_TYPE == 'hbase' ]; then
 		echo "sampling_interval=$SAMPLING_INTERVAL" >> $INSIGHTAGENTDIR/hbase/config.ini
 		echo "ssl_verify=True" >> $INSIGHTAGENTDIR/hbase/config.ini
 	fi
-elif [ $AGENT_TYPE == 'collectd' ]; then
-    if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
-        touch ${PATH_TO_CONFIG_INI}
-        add_insightfinder_details ${PATH_TO_CONFIG_INI}
-    fi
 else
 	echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> $AGENTRC
 	echo "export INSIGHTFINDER_PROJECT_NAME=$PROJECTNAME" >> $AGENTRC
@@ -302,25 +268,25 @@ elif [ $AGENT_TYPE == 'opentsdb' ]; then
 		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
 	fi
 elif [ $AGENT_TYPE == 'kafka-logs' ]; then
-	MONITRCLOC=/etc/monit/monitrc
-	MONITCONFIGLOC=/etc/monit/monit.conf
+	MONITRCLOC=/etc/monit.d/kafka_logs
+	if [ ! -f $MONITRCLOC ]; then
+        touch $MONITRCLOC
+	fi
 	echo "check process kafka-logs matching \"kafka_logs/getlogs_kafka.py\"
 			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES &>$INSIGHTAGENTDIR/log/kafka-logs.log &\"
+			stop program = \"/usr/bin/pkill getlogs_kafka.py\"
      		" >> $MONITRCLOC
-    echo "check process kafka-logs matching \"kafka_logs/getlogs_kafka.py\"
-			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES &>$INSIGHTAGENTDIR/log/kafka-logs.log &\"
-     		" >> MONITCONFIGLOC
     /usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES &>$INSIGHTAGENTDIR/log/kafka-logs.log &
     service monit restart
 elif [ $AGENT_TYPE == 'kafka' ]; then
-	MONITRCLOC=/etc/monit/monitrc
-	MONITCONFIGLOC=/etc/monit/monit.conf
+	MONITRCLOC=/etc/monit.d/kafka_metric
+	if [ ! -f $MONITRCLOC ]; then
+        touch $MONITRCLOC
+	fi
 	echo "check process kafka matching \"kafka/getmetrics_kafka.py\"
 			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &\"
+			stop program = \"/usr/bin/pkill getmetrics_kafka.py\"
      		" >> $MONITRCLOC
-    echo "check process kafka matching \"kafka/getmetrics_kafka.py\"
-			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &\"
-     		" >> $MONITCONFIGLOC
     /usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &
     service monit restart
 elif [ $AGENT_TYPE == 'logStreaming' ]; then
