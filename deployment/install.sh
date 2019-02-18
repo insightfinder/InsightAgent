@@ -269,6 +269,9 @@ elif [ $AGENT_TYPE == 'opentsdb' ]; then
 	fi
 elif [ $AGENT_TYPE == 'kafka-logs' ]; then
 	MONITRCLOC=/etc/monit.d/kafka_logs
+	if [ -z "$CHUNK_LINES" ]; then
+	    CHUNK_LINES='100'
+    fi
 	if [ ! -f $MONITRCLOC ]; then
         touch $MONITRCLOC
 	fi
