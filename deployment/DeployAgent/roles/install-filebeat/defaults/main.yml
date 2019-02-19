@@ -1,0 +1,31 @@
+---
+filebeat_version: 6.x
+filebeat_create_config: true
+
+filebeat_prospectors:
+  - input_type: log
+    paths:
+      - "/var/log/*.log"
+  - input_type: log
+    paths:
+      - "/opt/jetty/logs/*stderrout.log"
+    fields:
+      log_type: jetty
+
+filebeat_output_elasticsearch_enabled: false
+filebeat_output_elasticsearch_hosts:
+  - "localhost:9200"
+
+filebeat_output_logstash_enabled: true
+filebeat_output_logstash_hosts:
+  - "localhost:5044"
+
+filebeat_enable_logging: true
+filebeat_log_level: info
+filebeat_log_dir: /var/log/filebeat
+filebeat_log_filename: mybeat.log
+
+filebeat_ssl_dir: /etc/pki/logstash
+filebeat_ssl_certificate_file: ""
+filebeat_ssl_key_file: ""
+filebeat_ssl_insecure: "false"
