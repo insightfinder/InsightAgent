@@ -11,6 +11,14 @@
     - 03-http-output.conf
   notify: restart logstash
 
+- name: Creates pattern directory
+  file:
+    path: /etc/logstash/pattern/
+    state: directory
+    owner: root
+    group: root
+    mode: 0775
+
 - name: Create Logstash grok patterns.
   copy:
     src: "patterns/{{ item }}"

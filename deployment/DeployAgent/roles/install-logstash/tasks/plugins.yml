@@ -8,12 +8,12 @@
 
 - name: Copy rpm file to server
   copy:
-     src: logstash-filter-json_encode-3.0.3-java.gem
-     dest: /tmp/logstash-filter-json_encode-3.0.3-java.gem
+     src: logstash-offline-plugins-6.6.0.zip
+     dest: /tmp/logstash-offline-plugins-6.6.0.zip
 
 - name: Install configured plugins(json_encode).
   command: >
-    ./bin/logstash-plugin install /tmp/logstash-filter-json_encode-3.0.3-java.gem
+    ./bin/logstash-plugin install file:////tmp/logstash-offline-plugins-6.6.0.zip
     chdir={{ logstash_dir }}
 
 - name: Install configured plugins.
