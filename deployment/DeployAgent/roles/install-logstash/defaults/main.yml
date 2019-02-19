@@ -16,6 +16,7 @@ logstash_ssl_certificate_file: ""
 logstash_ssl_key_file: ""
 
 logstash_enabled_on_boot: true
+install_logstash_offline: true
 
 logstash_install_plugins:
   - logstash-input-beats

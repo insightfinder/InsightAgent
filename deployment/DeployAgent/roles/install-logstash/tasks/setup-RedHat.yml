@@ -1,26 +1,32 @@
 ---
 
-#- name: Add Elasticsearch GPG key.
-#  rpm_key:
-#    key: https://artifacts.elastic.co/GPG-KEY-elasticsearch
-#    state: present
+- name: Add Elasticsearch GPG key.
+  rpm_key:
+    key: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+    state: present
+  when: not install_logstash_offline
 
-#- name: Add Logstash repository.
-#  template:
-#    src: logstash.repo.j2
-#    dest: /etc/yum.repos.d/logstash.repo
-#    mode: 0644
+- name: Add Logstash repository.
+  template:
+    src: logstash.repo.j2
+    dest: /etc/yum.repos.d/logstash.repo
+    mode: 0644
+  when: not install_logstash_offline
+
+- name: Install Logstash.
+  package:
+    name: logstash
+    state: present
+  when: not install_logstash_offline
 
 - name: Copy rpm file to server
   copy:
      src: logstash-6.6.0.rpm
      dest: /tmp/logstash-6.6.0.rpm
+  when: install_logstash_offline
+
 - name: Install Logstash
   yum:
     name: /tmp/logstash-6.6.0.rpm
     state: present
-
-#- name: Install Logstash.
-#  package:
-#    name: logstash
-#    state: present
+  when: install_logstash_offline
