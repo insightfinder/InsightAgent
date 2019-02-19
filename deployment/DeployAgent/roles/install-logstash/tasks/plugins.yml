@@ -11,7 +11,7 @@
      src: logstash-filter-json_encode-3.0.3-java.gem
      dest: /tmp/logstash-filter-json_encode-3.0.3-java.gem
 
-- name: Install configured plugins.
+- name: Install configured plugins(json_encode).
   command: >
     ./bin/logstash-plugin install /tmp/logstash-filter-json_encode-3.0.3-java.gem
     chdir={{ logstash_dir }}
