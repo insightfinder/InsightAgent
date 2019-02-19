@@ -1,0 +1,25 @@
+---
+- name: Get list of installed plugins.
+  command: >
+    ./bin/logstash-plugin list
+    chdir={{ logstash_dir }}
+  register: logstash_plugins_list
+  changed_when: false
+
+- name: Copy rpm file to server
+  copy:
+     src: logstash-filter-json_encode-3.0.3-java.gem
+     dest: /tmp/logstash-filter-json_encode-3.0.3-java.gem
+
+- name: Install configured plugins.
+  command: >
+    ./bin/logstash-plugin install /tmp/logstash-filter-json_encode-3.0.3-java.gem
+    chdir={{ logstash_dir }}
+
+- name: Install configured plugins.
+  command: >
+    ./bin/logstash-plugin install {{ item }}
+    chdir={{ logstash_dir }}
+  with_items: "{{ logstash_install_plugins }}"
+  when: "item not in logstash_plugins_list.stdout"
+  notify: restart logstash
