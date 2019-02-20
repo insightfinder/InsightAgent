@@ -30,3 +30,9 @@
     name: /tmp/logstash-6.6.0.rpm
     state: present
   when: install_logstash_offline
+
+- name: System-install fix
+  command: >
+    ./bin/system-install
+    chdir={{ logstash_dir }}
+  when: install_logstash_offline
