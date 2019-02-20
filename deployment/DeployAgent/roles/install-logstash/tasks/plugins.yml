@@ -1,0 +1,25 @@
+---
+- name: Get list of installed plugins.
+  command: >
+    ./bin/logstash-plugin list
+    chdir={{ logstash_dir }}
+  register: logstash_plugins_list
+  changed_when: false
+
+- name: Copy rpm file to server
+  copy:
+     src: logstash-offline-plugins-6.6.0.zip
+     dest: /tmp/logstash-offline-plugins-6.6.0.zip
+
+- name: Install configured plugins(json_encode).
+  command: >
+    ./bin/logstash-plugin install file:////tmp/logstash-offline-plugins-6.6.0.zip
+    chdir={{ logstash_dir }}
+
+- name: Install configured plugins.
+  command: >
+    ./bin/logstash-plugin install {{ item }}
+    chdir={{ logstash_dir }}
+  with_items: "{{ logstash_install_plugins }}"
+  when: "item not in logstash_plugins_list.stdout"
+  notify: restart logstash
