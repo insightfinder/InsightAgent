@@ -1,0 +1,18 @@
+output {
+    stdout { codec => line { format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project: %{project}" }}
+    if [output_type] == "InsightFinder"{
+        http {
+        url => "{{ ifReportingUrl }}/api/v1/customprojectrawdata"
+        http_method => post
+        format => form
+
+        mapping => {
+                        "userName" => "{{ ifUserName }}"
+                        "licenseKey" => "{{ ifLicenseKey }}"
+                        "projectName" => "{{ ifProjectName }}"
+                        "agentType" => "LogStreaming"
+                        "metricData" => "[%{groupdata}]"
+                    }
+        }
+    }
+}
