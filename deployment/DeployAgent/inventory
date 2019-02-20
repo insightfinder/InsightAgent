@@ -72,6 +72,7 @@ ifSamplingInterval=1
 #ifAgent=metric-log
 #ifAgent=kafka-logs
 #ifAgent=kafka
+#ifAgent=logstash
 
 ##When yes, we will run the equivalent of 'apt-get update' before installing any packages.
 ##Valid entries are yes or no. Not used with yum-based installation (e.g., CentOS).
