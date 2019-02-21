@@ -198,7 +198,7 @@ elif [ $AGENT_TYPE == 'kafka-logs' ]; then
 		echo "client_id =" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
 		echo "group_id =" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
 		echo "insightFinder_license_key=$LICENSEKEY" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
-		echo "insightFinder_project_nameE=$PROJECTNAME" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
+		echo "insightFinder_project_name=$PROJECTNAME" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
 		echo "insightFinder_user_name=$USERNAME" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
 		echo "sampling_interval=$SAMPLING_INTERVAL" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
 	fi
