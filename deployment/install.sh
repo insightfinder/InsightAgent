@@ -191,8 +191,14 @@ if [ $AGENT_TYPE == 'kafka' ]; then
 elif [ $AGENT_TYPE == 'kafka-logs' ]; then
 	if [ ! -f $INSIGHTAGENTDIR/kafka_logs/config.ini ]; then
 		touch $INSIGHTAGENTDIR/kafka_logs/config.ini
+		echo "[kafka]" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
+		echo "bootstrap_servers = localhost:9092" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
+		echo "topic =" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
+		echo "filter_hosts =" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
+		echo "client_id =" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
+		echo "group_id =" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
 		echo "insightFinder_license_key=$LICENSEKEY" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
-		echo "insightFinder_project_nameE=$PROJECTNAME" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
+		echo "insightFinder_project_name=$PROJECTNAME" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
 		echo "insightFinder_user_name=$USERNAME" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
 		echo "sampling_interval=$SAMPLING_INTERVAL" >> $INSIGHTAGENTDIR/kafka_logs/config.ini
 	fi
