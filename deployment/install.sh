@@ -140,7 +140,7 @@ if [[ -d $PYTHONPATH ]]
 then
 	PYTHONPATH=$INSIGHTAGENTDIR/pyenv/bin/python
 else
-	PYTHONPATH=python
+	PYTHONPATH=/usr/bin/python
 fi
 
 if [ $AGENT_TYPE == 'daemonset' ]; then
@@ -302,25 +302,28 @@ elif [ $AGENT_TYPE == 'opentsdb' ]; then
 		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
 	fi
 elif [ $AGENT_TYPE == 'kafka-logs' ]; then
-	MONITRCLOC=/etc/monit/monitrc
-	MONITCONFIGLOC=/etc/monit/monit.conf
+	MONITRCLOC=/etc/monit.d/kafka_logs
+	if [ -z "$CHUNK_LINES" ]; then
+	    CHUNK_LINES='100'
+    fi
+	if [ ! -f $MONITRCLOC ]; then
+        touch $MONITRCLOC
+	fi
 	echo "check process kafka-logs matching \"kafka_logs/getlogs_kafka.py\"
 			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES &>$INSIGHTAGENTDIR/log/kafka-logs.log &\"
+			stop program = \"/usr/bin/pkill getlogs_kafka.py\"
      		" >> $MONITRCLOC
-    echo "check process kafka-logs matching \"kafka_logs/getlogs_kafka.py\"
-			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES &>$INSIGHTAGENTDIR/log/kafka-logs.log &\"
-     		" >> MONITCONFIGLOC
     /usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka_logs/getlogs_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL -l $CHUNK_LINES &>$INSIGHTAGENTDIR/log/kafka-logs.log &
     service monit restart
 elif [ $AGENT_TYPE == 'kafka' ]; then
-	MONITRCLOC=/etc/monit/monitrc
-	MONITCONFIGLOC=/etc/monit/monit.conf
+	MONITRCLOC=/etc/monit.d/kafka_metric
+	if [ ! -f $MONITRCLOC ]; then
+        touch $MONITRCLOC
+	fi
 	echo "check process kafka matching \"kafka/getmetrics_kafka.py\"
 			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &\"
+			stop program = \"/usr/bin/pkill getmetrics_kafka.py\"
      		" >> $MONITRCLOC
-    echo "check process kafka matching \"kafka/getmetrics_kafka.py\"
-			start program = \"/usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &\"
-     		" >> $MONITCONFIGLOC
     /usr/bin/nohup $PYTHONPATH $INSIGHTAGENTDIR/kafka/getmetrics_kafka.py -d $INSIGHTAGENTDIR -w $SERVER_URL &>$INSIGHTAGENTDIR/log/kafka-metrics.log &
     service monit restart
 elif [ $AGENT_TYPE == 'logStreaming' ]; then
