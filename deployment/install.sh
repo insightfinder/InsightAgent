@@ -19,30 +19,30 @@ function createCronSeconds() {
 	echo "* * * * * root sleep 50; $1" >> $2
 }
 
-## adding common parameters here	
-add_insightfinder_details (){	
-    PATH_TO_CONFIG_INI=$1	
-    echo -en '\n' >> ${PATH_TO_CONFIG_INI}	
-    echo "[insightfinder]" >> ${PATH_TO_CONFIG_INI}	
-    echo "license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}	
+## adding common parameters here
+add_insightfinder_details (){
+    PATH_TO_CONFIG_INI=$1
+    echo -en '\n' >> ${PATH_TO_CONFIG_INI}
+    echo "[insightfinder]" >> ${PATH_TO_CONFIG_INI}
+    echo "license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
     echo "project_name=$PROJECTNAME" >> ${PATH_TO_CONFIG_INI}	
-    echo "user_name=$USERNAME" >> ${PATH_TO_CONFIG_INI}	
-    echo "sampling_interval=$SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}	
-    echo "ssl_verify=True" >> ${PATH_TO_CONFIG_INI}	
+    echo "user_name=$USERNAME" >> ${PATH_TO_CONFIG_INI}
+    echo "sampling_interval=$SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
+    echo "ssl_verify=True" >> ${PATH_TO_CONFIG_INI}
 
 
-     # for backward compatibility	
-    export_insightfinder_details	
-}	
+    # for backward compatibility
+    export_insightfinder_details
+}
 
- export_insightfinder_details() {	
-    echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> ${AGENTRC}	
-	echo "export INSIGHTFINDER_PROJECT_NAME=$PROJECTNAME" >> ${AGENTRC}	
-	echo "export INSIGHTFINDER_USER_NAME=$USERNAME" >> ${AGENTRC}	
-	echo "export INSIGHTAGENTDIR=$INSIGHTAGENTDIR" >> ${AGENTRC}	
-	echo "export SAMPLING_INTERVAL=$SAMPLING_INTERVAL" >> ${AGENTRC}	
-	echo "export REPORTING_INTERVAL=$REPORTING_INTERVAL" >> ${AGENTRC}	
-}	
+ export_insightfinder_details() {
+    echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> ${AGENTRC}
+	echo "export INSIGHTFINDER_PROJECT_NAME=$PROJECTNAME" >> ${AGENTRC}
+	echo "export INSIGHTFINDER_USER_NAME=$USERNAME" >> ${AGENTRC}
+	echo "export INSIGHTAGENTDIR=$INSIGHTAGENTDIR" >> ${AGENTRC}
+	echo "export SAMPLING_INTERVAL=$SAMPLING_INTERVAL" >> ${AGENTRC}
+	echo "export REPORTING_INTERVAL=$REPORTING_INTERVAL" >> ${AGENTRC}
+}
 
 if [ "$#" -lt 10 ]; then
 	usage
@@ -170,8 +170,8 @@ then
         mkdir $INSIGHTAGENTDIR/custom
 fi
 
-# initializing variables	
-DIRECTORY="$INSIGHTAGENTDIR""/"${AGENT_TYPE}	
+# initializing variables
+DIRECTORY="$INSIGHTAGENTDIR""/"${AGENT_TYPE}
 PATH_TO_CONFIG_INI="$DIRECTORY""/config.ini"
 AGENTRC=$INSIGHTAGENTDIR/.agent.bashrc
 
@@ -228,10 +228,10 @@ elif [ $AGENT_TYPE == 'hbase' ]; then
 		echo "sampling_interval=$SAMPLING_INTERVAL" >> $INSIGHTAGENTDIR/hbase/config.ini
 		echo "ssl_verify=True" >> $INSIGHTAGENTDIR/hbase/config.ini
 	fi
-elif [ $AGENT_TYPE == 'collectd' ]; then	
-    if [ ! -f ${PATH_TO_CONFIG_INI} ]; then	
-        touch ${PATH_TO_CONFIG_INI}	
-        add_insightfinder_details ${PATH_TO_CONFIG_INI}	
+elif [ $AGENT_TYPE == 'collectd' ]; then
+    if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
+        touch ${PATH_TO_CONFIG_INI}
+        add_insightfinder_details ${PATH_TO_CONFIG_INI}
     fi
 else
 	echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> $AGENTRC
