@@ -25,7 +25,7 @@ add_insightfinder_details (){
     echo -en '\n' >> ${PATH_TO_CONFIG_INI}
     echo "[insightfinder]" >> ${PATH_TO_CONFIG_INI}
     echo "license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
-    echo "project_name=$PROJECTNAME" >> ${PATH_TO_CONFIG_INI}	
+    echo "project_name=$PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
     echo "user_name=$USERNAME" >> ${PATH_TO_CONFIG_INI}
     echo "sampling_interval=$SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
     echo "ssl_verify=True" >> ${PATH_TO_CONFIG_INI}
@@ -35,7 +35,7 @@ add_insightfinder_details (){
     export_insightfinder_details
 }
 
- export_insightfinder_details() {
+export_insightfinder_details() {
     echo "export INSIGHTFINDER_LICENSE_KEY=$LICENSEKEY" >> ${AGENTRC}
 	echo "export INSIGHTFINDER_PROJECT_NAME=$PROJECTNAME" >> ${AGENTRC}
 	echo "export INSIGHTFINDER_USER_NAME=$USERNAME" >> ${AGENTRC}
