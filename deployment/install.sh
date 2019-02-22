@@ -181,12 +181,20 @@ then
 fi
 
 if [ $AGENT_TYPE == 'kafka' ]; then
-	if [ ! -f $INSIGHTAGENTDIR/kafka/config.ini ]; then
-		touch $INSIGHTAGENTDIR/kafka/config.ini
-		echo "insightFinder_license_key=$LICENSEKEY" >> $INSIGHTAGENTDIR/kafka/config.ini
-		echo "insightFinder_project_nameE=$PROJECTNAME" >> $INSIGHTAGENTDIR/kafka/config.ini
-		echo "insightFinder_user_name=$USERNAME" >> $INSIGHTAGENTDIR/kafka/config.ini
-		echo "sampling_interval=$SAMPLING_INTERVAL" >> $INSIGHTAGENTDIR/kafka/config.ini
+	if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
+		touch ${PATH_TO_CONFIG_INI}
+		echo "[kafka]" >> ${PATH_TO_CONFIG_INI}
+		echo "bootstrap_servers = localhost:9092" >> ${PATH_TO_CONFIG_INI}
+		echo "topic =" >> ${PATH_TO_CONFIG_INI}
+		echo "filter_hosts =" >> ${PATH_TO_CONFIG_INI}
+		echo "all_metrics =" >> ${PATH_TO_CONFIG_INI}
+		echo "client_id =" >> ${PATH_TO_CONFIG_INI}
+		echo "group_id =" >> ${PATH_TO_CONFIG_INI}
+		echo "insightFinder_license_key = $LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
+		echo "insightFinder_project_name = $PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
+		echo "insightFinder_user_name = $USERNAME" >> ${PATH_TO_CONFIG_INI}
+		echo "sampling_interval = $SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
+		echo "normalization_id =" >> ${PATH_TO_CONFIG_INI}
 	fi
 elif [ $AGENT_TYPE == 'kafka-logs' ]; then
 	if [ ! -f $INSIGHTAGENTDIR/kafka_logs/config.ini ]; then
