@@ -302,24 +302,24 @@ if __name__ == "__main__":
             logger.error("config error, check prometheus/config.txt")
             sys.exit("config error, check config.txt")
 
-    dataEndTimestamp = int(time.time())
-    intervalInSecs = int(reporting_config_vars['reporting_interval'] * 60)
-    dataStartTimestamp = dataEndTimestamp - intervalInSecs
+    data_end_timestamp = int(time.time())
+    interval_in_secs = int(reporting_config_vars['reporting_interval'] * 60)
+    data_start_timestamp = data_end_timestamp - interval_in_secs
 
     try:
         logger.debug(
-            "Start to send metric data: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
+            "Start to send metric data: {}-{}".format(data_start_timestamp, data_end_timestamp))
         # get metric list from prometheus
-        metricListAll = get_metric_list_from_file(agent_config)
-        if len(metricListAll) == 0:
+        metric_list_all = get_metric_list_from_file(agent_config)
+        if len(metric_list_all) == 0:
             logger.error("No metrics to get data for.")
             sys.exit()
 
-        chunked_metric_list = chunks(metricListAll, parameters['chunkSize'])
+        chunked_metric_list = chunks(metric_list_all, parameters['chunkSize'])
         for sub_list in chunked_metric_list:
             # get metric data from prometheus every SAMPLING_INTERVAL
             metric_data_list = get_metric_data(
-                agent_config, sub_list, grouping_map, dataStartTimestamp, dataEndTimestamp)
+                agent_config, sub_list, grouping_map, data_start_timestamp, data_end_timestamp)
             if len(metric_data_list) == 0:
                 logger.error("No data for metrics received from Prometheus.")
                 sys.exit()
@@ -329,5 +329,5 @@ if __name__ == "__main__":
 
     except Exception as e:
         logger.error(
-            "Error send metric data to insightfinder: {}-{}".format(dataStartTimestamp, dataEndTimestamp))
+            "Error send metric data to insightfinder: {}-{}".format(data_start_timestamp, data_end_timestamp))
         logger.error(e)
