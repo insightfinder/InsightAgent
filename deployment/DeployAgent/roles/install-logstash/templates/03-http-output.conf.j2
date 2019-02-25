@@ -9,7 +9,11 @@ output {
         mapping => {
                         "userName" => "{{ ifUserName }}"
                         "licenseKey" => "{{ ifLicenseKey }}"
+                    {% if agentType == "metric-log" %}
+                        "projectName" => "{{ ifLogProjectName }}"
+                    {% else %}
                         "projectName" => "{{ ifProjectName }}"
+                    {% endif %}
                         "agentType" => "LogStreaming"
                         "metricData" => "[%{groupdata}]"
                     }

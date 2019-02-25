@@ -2,6 +2,7 @@
  - hosts: nodes
    vars:
      projectName: "{{ ifProjectName }}"
+     ifLogProjectName: "{{ logProjectName }}"
      userName: "{{ ifUserName }}"
      samplingInterval: "{{ ifSamplingInterval }}"
      agentType: "{{ ifAgent }}"
@@ -39,12 +40,12 @@
      - { role: install-hypervisor, when: agentType=="hypervisor" and action=="install"}
      - { role: install-nfdump, when: agentType=="nfdump" and action=="install"}
      - { role: install-replay, when: (agentType=="metricFileReplay" or agentType=="logFileReplay") and action=="install"}
-     - { role: install-tdagent, when: (agentType=="tdagent" or agentType=="metric-log") and action=="install"}
+     - { role: install-tdagent, when: agentType=="tdagent" and action=="install"}
      - { role: install-opentsdb, when: (agentType=="opentsdb") and action=="install"}
      - { role: install-kafka-logs, when: (agentType=="kafka-logs") and action=="install"}
      - { role: install-kafka-metrics, when: agentType=="kafka" and action=="install"}
-     - { role: install-logstash, when: agentType=="logstash" and action=="install"}
-     - { role: install-filebeat, when: agentType=="logstash" and action=="install"}
+     - { role: install-logstash, when: (agentType=="logstash" or agentType=="metric-log") and action=="install"}
+     - { role: install-filebeat, when: (agentType=="logstash" or agentType=="metric-log") and action=="install"}
      - { role: uninstall, when: action=="uninstall" }
    environment:
      http_proxy: "{{ http_proxy }}"
