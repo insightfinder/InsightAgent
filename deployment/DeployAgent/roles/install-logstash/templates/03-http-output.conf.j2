@@ -1,8 +1,8 @@
 output {
 {% if agentType == "metric-log" %}
-    stdout { codec => line { format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project: '{{ ifProjectName }}'" }}
-{% else %}
     stdout { codec => line { format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project: '{{ ifLogProjectName }}'" }}
+{% else %}
+    stdout { codec => line { format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project: '{{ ifProjectName }}'" }}
 {% endif %}
     if [output_type] == "InsightFinder"{
         http {
