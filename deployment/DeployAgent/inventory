@@ -68,7 +68,7 @@ ifSamplingInterval=1
 #ifAgent=logFileReplay
 #ifAgent=hypervisor
 #ifAgent=nfdump
-# This project type installs both collectd and td-agent.
+# This project type installs both collectd and logstash.
 #ifAgent=metric-log
 #ifAgent=kafka-logs
 #ifAgent=kafka
