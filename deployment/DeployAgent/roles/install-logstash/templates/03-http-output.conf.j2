@@ -1,5 +1,9 @@
 output {
-    stdout { codec => line { format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project: %{project}" }}
+{% if agentType == "metric-log" %}
+    stdout { codec => line { format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project: '{{ ifLogProjectName }}'" }}
+{% else %}
+    stdout { codec => line { format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project: '{{ ifProjectName }}'" }}
+{% endif %}
     if [output_type] == "InsightFinder"{
         http {
         url => "{{ ifReportingUrl }}/api/v1/customprojectrawdata"
@@ -9,7 +13,11 @@ output {
         mapping => {
                         "userName" => "{{ ifUserName }}"
                         "licenseKey" => "{{ ifLicenseKey }}"
+                    {% if agentType == "metric-log" %}
+                        "projectName" => "{{ ifLogProjectName }}"
+                    {% else %}
                         "projectName" => "{{ ifProjectName }}"
+                    {% endif %}
                         "agentType" => "LogStreaming"
                         "metricData" => "[%{groupdata}]"
                     }
