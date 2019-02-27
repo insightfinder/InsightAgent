@@ -40,6 +40,7 @@
   with_items:
     - 10-syslog.conf
     - 16-jetty.conf
+    - 15-cassandra.conf
   notify: restart logstash
 
 - name: Create Logstash configuration file for local syslog.
