@@ -1,0 +1,35 @@
+---
+- name: HTTPS APT transport for Elasticsearch repository.
+  apt:
+    name: apt-transport-https
+    state: present
+
+- name: Add Elasticsearch apt key.
+  apt_key:
+    url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+    state: present
+
+- name: Add Logstash repository.
+  apt_repository:
+    repo: 'deb https://artifacts.elastic.co/packages/{{ logstash_version }}/apt stable main'
+    state: present
+
+- name: Check if Logstash is already installed.
+  stat: path=/etc/init.d/logstash
+  register: logstash_installed
+
+- name: Update apt cache if repository just added.
+  apt: update_cache=yes
+  when: logstash_installed.stat.exists == false
+
+- name: Install Logstash.
+  apt:
+    name: logstash
+    state: present
+
+- name: Add Logstash user to adm group (Debian).
+  user:
+    name: logstash
+    group: logstash
+    groups: adm
+  notify: restart logstash
