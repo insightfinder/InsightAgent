@@ -2,7 +2,8 @@
 import time
 import sys
 from optparse import OptionParser
-import ConfigParser
+from ConfigParser import SafeConfigParser
+import pytz
 import os
 import requests
 import json
@@ -44,45 +45,59 @@ def get_parameters():
     return params
 
 
-def get_agent_config_vars():
+def get_agent_config_vars(normalization_ids_map):
     config_vars = {}
-    with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as configFile:
-        file_content = configFile.readlines()
-        if len(file_content) < 6:
-            logger.error(
-                "Agent not correctly configured. Check .agent.bashrc file.")
-            sys.exit(1)
-        # get license key
-        license_key_line = file_content[0].split(" ")
-        if len(license_key_line) != 2:
-            logger.error(
-                "Agent not correctly configured(license key). Check .agent.bashrc file.")
-            sys.exit(1)
-        config_vars['licenseKey'] = license_key_line[1].split("=")[1].strip()
-        # get project name
-        project_name_line = file_content[1].split(" ")
-        if len(project_name_line) != 2:
-            logger.error(
-                "Agent not correctly configured(project name). Check .agent.bashrc file.")
-            sys.exit(1)
-        config_vars['projectName'] = project_name_line[1].split("=")[1].strip()
-        # get username
-        user_name_line = file_content[2].split(" ")
-        if len(user_name_line) != 2:
-            logger.error(
-                "Agent not correctly configured(username). Check .agent.bashrc file.")
-            sys.exit(1)
-        config_vars['userName'] = user_name_line[1].split("=")[1].strip()
-        # get sampling interval
-        sampling_interval_line = file_content[4].split(" ")
-        if len(sampling_interval_line) != 2:
-            logger.error(
-                "Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
-            sys.exit(1)
-        config_vars['samplingInterval'] = sampling_interval_line[1].split("=")[
-            1].strip()
+    try:
+        if os.path.exists(os.path.join(parameters['homepath'], "prometheus", "config.ini")):
+            parser = SafeConfigParser()
+            parser.read(os.path.join(parameters['homepath'], "prometheus", "config.ini"))
+            insightFinder_license_key = parser.get('prometheus', 'insightFinder_license_key')
+            insightFinder_project_name = parser.get('', 'insightFinder_project_name')
+            insightFinder_user_name = parser.get('prometheus', 'insightFinder_user_name')
+            sampling_interval = parser.get('prometheus', 'sampling_interval')
+            group_id = parser.get('prometheus', 'group_id')
+            all_metrics = parser.get('prometheus', 'all_metrics').split(",")
+            client_id = parser.get('prometheus', 'client_id')
+            normalization_ids = parser.get('prometheus', 'normalization_id').split(",")
+            if len(insightFinder_license_key) == 0:
+                logger.error("Agent not correctly configured(license key). Check config file.")
+                sys.exit(1)
+            if len(insightFinder_project_name) == 0:
+                logger.error("Agent not correctly configured(project name). Check config file.")
+                sys.exit(1)
+            if len(insightFinder_user_name) == 0:
+                logger.error("Agent not correctly configured(username). Check config file.")
+                sys.exit(1)
+            if len(sampling_interval) == 0:
+                logger.error("Agent not correctly configured(sampling interval). Check config file.")
+                sys.exit(1)
+            if len(group_id) == 0:
+                logger.error("Agent not correctly configured(group id). Check config file.")
+                sys.exit(1)
+            if len(normalization_ids[0]) != 0:
+                for index in range(len(all_metrics)):
+                    metric = all_metrics[index]
+                    normalization_id = int(normalization_ids[index])
+                    if normalization_id > 1000:
+                        logger.error("Please config the normalization_id between 0 to 1000.")
+                        sys.exit(1)
+                    normalization_ids_map[metric] = GROUPING_START + normalization_id
+            if len(normalization_ids[0]) == 0:
+                count = 1
+                for index in range(len(all_metrics)):
+                    metric = all_metrics[index]
+                    normalization_ids_map[metric] = GROUPING_START + count
+                    count += 1
+            config_vars['licenseKey'] = insightFinder_license_key
+            config_vars['projectName'] = insightFinder_project_name
+            config_vars['userName'] = insightFinder_user_name
+            config_vars['samplingInterval'] = sampling_interval
+            config_vars['groupId'] = group_id
+            config_vars['clientId'] = client_id
+        
+    except IOError:
+        logger.error("config.ini file is missing")
     return config_vars
-
 
 def get_reporting_config_vars():
     config_data = {}
@@ -106,19 +121,24 @@ def get_reporting_config_vars():
     return config_data
 
 
-def get_prometheus_config(params):
-    """Read and parse Prometheus config from config.txt"""
-    prometheus_config = {}
-    if os.path.exists(os.path.join(params['homepath'], "prometheus/config.txt")):
-        cp = ConfigParser.SafeConfigParser()
-        cp.read(os.path.join(params['homepath'], "prometheus/config.txt"))
-        prometheus_config = {
-            "GROUPING_START": cp.getint('prometheus', 'GROUPING_START'),
-            "GROUPING_END": cp.getint('prometheus', 'GROUPING_END'),
-            "PROMETHEUS_URL": cp.get('prometheus', 'PROMETHEUS_URL'),
-            "PROMETHEUS_METRICS_FILE": cp.get('prometheus', 'PROMETHEUS_METRICS_FILE'),
-        }
-    return prometheus_config
+def get_prometheus_config():
+    
+    if os.path.exists(os.path.join(parameters['homepath'], "prometheus", "config.ini")):
+        parser = SafeConfigParser()
+        parser.read(os.path.join(parameters['homepath'], "prometheus", "config.ini"))
+        prometheus_url = parser.get('prometheus', 'prometheus_url').split(",")
+        prometheus_metrics_file = parser.get('prometheus', 'prometheus_metrics_file').split(",")
+        all_metrics_set = set()
+        if len(prometheus_url) == 0:
+            logger.info("Using default server localhost:9090")
+            prometheus_url = ['localhost:9090']
+        if len(prometheus_metrics_file[0]) != 0:
+            for metric in prometheus_metrics_file:
+                all_metrics_set.add(metric)
+    else:
+        prometheus_url = ['localhost:9090']
+    return (prometheus_url, all_metrics_set)
+
 
 
 def save_grouping(grouping):
@@ -151,7 +171,7 @@ def get_grouping_id(config, metric_key, grouping):
     - `metric_key` : metric key str to get group id.
     - `temp_id` : proposed group id integer
     """
-    for i in range(3):
+    for i in xrange(3):
         grouping_candidate = random.randint(
             config["GROUPING_START"], config["GROUPING_END"])
         if metric_key in grouping:
@@ -234,9 +254,8 @@ def send_data(metric_data):
     to_send_data_dict["projectName"] = agent_config_vars['projectName']
     to_send_data_dict["userName"] = agent_config_vars['userName']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
-    to_send_data_dict["samplingInterval"] = str(
-        int(reporting_config_vars['reporting_interval'] * 60))
-    to_send_data_dict["agentType"] = "custom"
+    to_send_data_dict["samplingInterval"] = str(int(reporting_config_vars['reporting_interval'] * 60))
+    to_send_data_dict["agentType"] = "prometheus"
 
     to_send_data_json = json.dumps(to_send_data_dict)
     logger.debug("TotalData: " +
@@ -256,7 +275,7 @@ def send_data(metric_data):
 
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
-    for i in xrange(0, len(l), n):
+    for i in range(0, len(l), n):
         yield l[i:i + n]
 
 
@@ -289,12 +308,13 @@ class LessThanFilter(logging.Filter):
 
 
 if __name__ == "__main__":
+    GROUPING_START = 15000
     logger = set_logger_config(logging.INFO)
     parameters = get_parameters()
     agent_config_vars = get_agent_config_vars()
     reporting_config_vars = get_reporting_config_vars()
     grouping_map = load_grouping()
-##
+
     # get agent configuration details
     agent_config = get_prometheus_config(parameters)
     for item in agent_config.values():
