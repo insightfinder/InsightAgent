@@ -179,8 +179,22 @@ if [[ -f $AGENTRC ]]
 then
 	rm $AGENTRC
 fi
-
-if [ $AGENT_TYPE == 'kafka' ]; then
+if [ $AGENT_TYPE == 'prometheus' ]; then
+    	if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
+		touch ${PATH_TO_CONFIG_INI}
+		echo "[prometheus]" >> ${PATH_TO_CONFIG_INI}
+		echo "prometheus_url = localhost:9092" >> ${PATH_TO_CONFIG_INI}
+		echo "filter_hosts =" >> ${PATH_TO_CONFIG_INI}
+		echo "prometheus_metrics_file =" >> ${PATH_TO_CONFIG_INI}
+		echo "client_id =" >> ${PATH_TO_CONFIG_INI}
+		echo "group_id =" >> ${PATH_TO_CONFIG_INI}
+		echo "insightFinder_license_key = $LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
+		echo "insightFinder_project_name = $PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
+		echo "insightFinder_user_name = $USERNAME" >> ${PATH_TO_CONFIG_INI}
+		echo "sampling_interval = $SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
+		echo "normalization_id =" >> ${PATH_TO_CONFIG_INI}
+	fi
+elif [ $AGENT_TYPE == 'kafka' ]; then
 	if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
 		touch ${PATH_TO_CONFIG_INI}
 		echo "[kafka]" >> ${PATH_TO_CONFIG_INI}
@@ -315,16 +329,7 @@ elif [ $AGENT_TYPE == 'opentsdb' ]; then
 	else
 		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
 	fi
-elif [ $AGENT_TYPE == 'prometheus' ]; then
-    if [ -z "$CHUNK_SIZE" ]; then
-	    CHUNK_SIZE='50'
-    fi
-	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_prometheus.py -d $INSIGHTAGENTDIR -w $SERVER_URL -c $CHUNK_SIZE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
-	if [ "$IS_SECOND_REPORTING" = true ] ; then
-		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
-	else
-		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
-	fi
+
 elif [ $AGENT_TYPE == 'kafka-logs' ]; then
 	MONITRCLOC=/etc/monit.d/kafka_logs
 	if [ -z "$CHUNK_LINES" ]; then
