@@ -294,7 +294,7 @@ if __name__ == "__main__":
     agent_config_vars = get_agent_config_vars()
     reporting_config_vars = get_reporting_config_vars()
     grouping_map = load_grouping()
-
+##
     # get agent configuration details
     agent_config = get_prometheus_config(parameters)
     for item in agent_config.values():
