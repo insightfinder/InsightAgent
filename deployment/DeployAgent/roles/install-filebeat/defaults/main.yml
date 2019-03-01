@@ -1,0 +1,56 @@
+---
+filebeat_version: 6.x
+filebeat_create_config: true
+
+filebeat_prospectors:
+  - input_type: log
+    paths:
+      - "/var/log/*.log"
+  - input_type: log
+    paths:
+      - "/opt/jetty/logs/*stderrout.log"
+    fields:
+      log_type: jetty
+    multiline.pattern: '^[A-Za-z]{3} [0-9]{2}|[0-9]{1},'
+    multiline.negate: true
+    multiline.match: after
+  - input_type: log
+    paths:
+      - "/var/log/cassandra/system.log*"
+    document_type: cassandra_system_logs
+    fields:
+      log_type: cassandra
+    exclude_files: ['\.zip$']
+    multiline.pattern: '^TRACE|DEBUG|WARN|INFO|ERROR'
+    multiline.negate: true
+    multiline.match: after
+  - input_type: log
+    paths:
+      - "/var/log/cassandra/debug.log*"
+    document_type: cassandra_debug_logs
+    fields:
+      log_type: cassandra
+    exclude_files: ['\.zip$']
+    multiline.pattern: '^TRACE|DEBUG|WARN|INFO|ERROR'
+    multiline.negate: true
+    multiline.match: after
+
+filebeat_output_elasticsearch_enabled: false
+filebeat_output_elasticsearch_hosts:
+  - "localhost:9200"
+
+filebeat_output_logstash_enabled: true
+filebeat_output_logstash_hosts:
+  - "localhost:5044"
+
+filebeat_enable_logging: true
+filebeat_log_level: info
+filebeat_log_dir: /var/log/filebeat
+filebeat_log_filename: mybeat.log
+
+filebeat_ssl_dir: /etc/pki/logstash
+filebeat_ssl_certificate_file: ""
+filebeat_ssl_key_file: ""
+filebeat_ssl_insecure: "false"
+
+filebeat_install_offline: true
