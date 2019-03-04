@@ -183,16 +183,18 @@ if [ $AGENT_TYPE == 'prometheus' ]; then
     	if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
 		touch ${PATH_TO_CONFIG_INI}
 		echo "[prometheus]" >> ${PATH_TO_CONFIG_INI}
-		echo "prometheus_url = localhost:9092" >> ${PATH_TO_CONFIG_INI}
+		echo "prometheus_urls = localhost:9092" >> ${PATH_TO_CONFIG_INI}
 		echo "filter_hosts =" >> ${PATH_TO_CONFIG_INI}
 		echo "prometheus_metrics_file =" >> ${PATH_TO_CONFIG_INI}
-		echo "client_id =" >> ${PATH_TO_CONFIG_INI}
-		echo "group_id =" >> ${PATH_TO_CONFIG_INI}
-		echo "insightFinder_license_key = $LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
-		echo "insightFinder_project_name = $PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
-		echo "insightFinder_user_name = $USERNAME" >> ${PATH_TO_CONFIG_INI}
-		echo "sampling_interval = $SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
-		echo "normalization_id =" >> ${PATH_TO_CONFIG_INI}
+		echo "normalization_id = " >> ${PATH_TO_CONFIG_INI}
+		echo "all_metrics =" >> ${PATH_TO_CONFIG_INI}
+		echo " " >> ${PATH_TO_CONFIG_INI}
+		echo "[insightfinder]" >> ${PATH_TO_CONFIG_INI}
+		echo "license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
+		echo "project_name=$PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
+		echo "user_name=$USERNAME" >> ${PATH_TO_CONFIG_INI}
+		echo "sampling_interval=$SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
+		echo "ssl_verify=True" >> ${PATH_TO_CONFIG_INI}
 	fi
 elif [ $AGENT_TYPE == 'kafka' ]; then
 	if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
@@ -357,7 +359,7 @@ elif [ $AGENT_TYPE == 'kafka' ]; then
     service monit restart
 elif [ $AGENT_TYPE == 'logStreaming' ]; then
 	echo "*/$REPORTING_INTERVAL * * * * root $PYTHONPATH $INSIGHTAGENTDIR/common/reportLog.py -d $INSIGHTAGENTDIR -w $SERVER_URL -m logStreaming 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out" >> $TEMPCRON
-elif [ $AGENT_TYPE == 'hadoop' ] || [ $AGENT_TYPE == 'hbase' ]; then
+elif [ $AGENT_TYPE == 'hadoop' ] || [ $AGENT_TYPE == 'hbase' ] || [ $AGENT_TYPE == 'prometheus' ]; then
 	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -w $SERVER_URL 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
 	if [ "$IS_SECOND_REPORTING" = true ] ; then
 		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
