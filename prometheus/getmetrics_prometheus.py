@@ -98,7 +98,9 @@ def get_prometheus_config(_normalization_ids_map):
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
         try:
-            all_metrics = config_parser.get('prometheus', 'all_metrics').split(",")
+            all_metrics = get_metric_list_from_file()
+            if len(all_metrics) == 0:
+                all_metrics = config_parser.get('prometheus', 'all_metrics').split(",")
             normalization_ids = config_parser.get('prometheus', 'normalization_id').split(",")
             prometheus_url = config_parser.get('prometheus', 'prometheus_urls').split(",")
             filter_hosts = config_parser.get('prometheus', 'filter_hosts').split(",")
@@ -158,29 +160,6 @@ def get_reporting_config_vars():
     return reporting_config
 
 
-def save_grouping(grouping):
-    """
-    Saves the grouping data to grouping.json
-    :return: None
-    """
-    with open('grouping.json', 'w+') as f:
-        f.write(json.dumps(grouping))
-
-
-def load_grouping():
-    if os.path.isfile('grouping.json'):
-        logger.debug("Grouping file exists. Loading..")
-        with open('grouping.json', 'r+') as f:
-            try:
-                grouping = json.loads(f.read())
-            except ValueError:
-                grouping = json.loads("{}")
-                logger.debug("Error parsing grouping.json.")
-    else:
-        grouping = json.loads("{}")
-    return grouping
-
-
 def get_grouping_id(metric_key, normalization_ids_map):
     """
     Get grouping id for a metric key
@@ -192,14 +171,15 @@ def get_grouping_id(metric_key, normalization_ids_map):
     return grouping_id
 
 
-def get_metric_list_from_file(config):
+def get_metric_list_from_file():
     """Get available metric list from File"""
     metric_list = set()
-    with open(config['PROMETHEUS_METRICS_FILE'], 'r') as f:
-        for line in f:
-            if line:
-                metric_list.add(line.replace('\n', ''))
-        logger.debug("Get metric list from file: " + str(metric_list))
+    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "metrics.txt"))):
+        with open(os.path.abspath(os.path.join(__file__, os.pardir, "metrics.txt")), 'r') as f:
+            for line in f:
+                if line:
+                    metric_list.add(line.replace('\n', ''))
+            logger.debug("Get metric list from file: " + str(metric_list))
     return list(metric_list)
 
 

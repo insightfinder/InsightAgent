@@ -90,10 +90,6 @@ ifAgent=prometheus
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
 ifReportingUrl=https://app.insightfinder.com
-
-##Vars for Prometheus
-PrometheusUrl=http://localhost:9090
-PrometheusMetricsFile=/root/if/metrics.txt
 ```
 
 
@@ -109,6 +105,10 @@ sudo -E ./downloadAgentNoSSL.sh
 cd ..
 ansible-playbook insightagent.yaml
 ```
+
+**Note:** Add the names of metrics to be reported in <Home Directory>/InsightAgent-master/metrics.txt with each metric seperated by a new line.
+Also, update the configuration for prometheus in **<Home Directory>/InsightAgent-master/config.ini**. The <Home Directory> is usually **/root** or **/home/username**
+
 
 ### Uninstallation:
 Note: Uninstallation is required before you can install any other Metric agent(e.g. cgroup) or you want to reinstall the current collectd agent.
