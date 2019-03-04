@@ -20,8 +20,6 @@ this script gathers system info from prometheus and use http api to send to serv
 def get_parameters():
     usage = "Usage: %prog [options]"
     parser = OptionParser(usage=usage)
-    parser.add_option("-d", "--directory",
-                      action="store", dest="homepath", help="Directory to run from")
     parser.add_option("-w", "--serverUrl",
                       action="store", dest="serverUrl", help="Server Url")
     parser.add_option("-c", "--chunkSize",
@@ -31,10 +29,6 @@ def get_parameters():
     (options, args) = parser.parse_args()
 
     params = {}
-    if options.homepath is None:
-        params['homepath'] = os.getcwd()
-    else:
-        params['homepath'] = options.homepath
     if options.serverUrl is None:
         params['serverUrl'] = 'https://app.insightfinder.com'
     else:
@@ -145,25 +139,23 @@ def get_prometheus_config(_normalization_ids_map):
 
 
 def get_reporting_config_vars():
-    config_data = {}
-    with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
+    reporting_config = {}
+    with open(os.path.abspath(os.path.join(__file__, os.pardir, os.pardir, "reporting_config.json")), 'r') as f:
         config = json.load(f)
     reporting_interval_string = config['reporting_interval']
     if reporting_interval_string[-1:] == 's':
         reporting_interval = float(config['reporting_interval'][:-1])
-        config_data['reporting_interval'] = float(
-            reporting_interval / 60.0)
+        reporting_config['reporting_interval'] = float(reporting_interval / 60.0)
     else:
-        config_data['reporting_interval'] = int(
-            config['reporting_interval'])
-        config_data['keep_file_days'] = int(config['keep_file_days'])
-        config_data['prev_endtime'] = config['prev_endtime']
-        config_data['deltaFields'] = config['delta_fields']
+        reporting_config['reporting_interval'] = int(config['reporting_interval'])
+        reporting_config['keep_file_days'] = int(config['keep_file_days'])
+        reporting_config['prev_endtime'] = config['prev_endtime']
+        reporting_config['deltaFields'] = config['delta_fields']
 
-    config_data['keep_file_days'] = int(config['keep_file_days'])
-    config_data['prev_endtime'] = config['prev_endtime']
-    config_data['deltaFields'] = config['delta_fields']
-    return config_data
+    reporting_config['keep_file_days'] = int(config['keep_file_days'])
+    reporting_config['prev_endtime'] = config['prev_endtime']
+    reporting_config['deltaFields'] = config['delta_fields']
+    return reporting_config
 
 
 def save_grouping(grouping):
