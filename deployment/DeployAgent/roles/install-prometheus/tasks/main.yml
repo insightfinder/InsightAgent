@@ -82,9 +82,6 @@
   become: true
   args:
     chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
-- name: td-agent | Copy setup script
-  become: yes
-  template: src=config.txt dest={{ansible_env.HOME}}/InsightAgent-master/prometheus/config.txt
 - name: Delete Tar Bundle for Agent
   file:
     state: absent

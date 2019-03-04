@@ -285,10 +285,10 @@ def send_data(metric_data):
                  (time.time() - send_data_time))
 
 
-def chunks(l, n):
-    """Yield successive n-sized chunks from l."""
-    for i in range(0, len(l), n):
-        yield l[i:i + n]
+def chunks(list_to_split, size_of_each_chunk):
+    """Yield successive size_of_each_chunk sized chunks from list_to_split."""
+    for i in range(0, len(list_to_split), size_of_each_chunk):
+        yield list_to_split[i:i + size_of_each_chunk]
 
 
 def set_logger_config(level):
