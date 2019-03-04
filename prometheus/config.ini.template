@@ -1,14 +1,17 @@
 #example for config
 #if done locally bootstrap_servers = localhost:9092
 [prometheus]
-prometheus_url=
+prometheus_urls=
 prometheus_metrics_file=
-
 #the normalization id needs to be given between 0 and 1000
 normalization_id =
-insightFinder_license_key =
-insightFinder_project_name =
-insightFinder_user_name =
+all_metrics =
+filter_hosts =
+
+[insightfinder]
+license_key =
+project_name =
+user_name = user
 sampling_interval =
-group_id =
-client_id = 
+ssl_verify =
+
