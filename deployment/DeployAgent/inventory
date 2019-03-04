@@ -109,14 +109,6 @@ cadvisorPort=8080
 ##Vars for NFSen/NFDump
 nfsenProfile=/data/nfsen/profiles-data/live
 
-## metric grouping
-groupingStart=15000
-groupingEnd=20000
-
-##Vars for Prometheus
-prometheusUrl=http://localhost:9090
-prometheusMetricsFile=/tmp/metrics.txt
-
 ##Vars for OpenTSDB
 openTsdbUrl=http://localhost:4242
 openTsdbMetrics=
