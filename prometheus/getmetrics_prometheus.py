@@ -3,17 +3,14 @@ import time
 import sys
 from optparse import OptionParser
 import ConfigParser
-import pytz
 import os
 import requests
 import json
 import logging
 import socket
-import random
-import re
-from datetime import datetime
 
-PROMETHEUS_URLS = "prometheus_urls"
+METRICS_SET = "all_metrics_set"
+FILTER_HOSTS = "filter_hosts"
 
 '''
 this script gathers system info from prometheus and use http api to send to server
@@ -54,6 +51,7 @@ def get_parameters():
     elif options.logLevel >= '2':
         params['logLevel'] = logging.DEBUG
     return params
+
 
 def get_agent_config_vars():
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
@@ -100,7 +98,7 @@ def get_agent_config_vars():
         sys.exit(1)
 
 
-def get_prometheus_config(normalization_ids_map):
+def get_prometheus_config(_normalization_ids_map):
     """Read and parse Prometheus config from config.ini"""
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
         config_parser = ConfigParser.SafeConfigParser()
@@ -109,6 +107,7 @@ def get_prometheus_config(normalization_ids_map):
             all_metrics = config_parser.get('prometheus', 'all_metrics').split(",")
             normalization_ids = config_parser.get('prometheus', 'normalization_id').split(",")
             prometheus_url = config_parser.get('prometheus', 'prometheus_urls').split(",")
+            filter_hosts = config_parser.get('prometheus', 'filter_hosts').split(",")
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
@@ -121,17 +120,20 @@ def get_prometheus_config(normalization_ids_map):
                 if normalization_id > 1000:
                     logger.error("Please config the normalization_id between 0 to 1000.")
                     sys.exit(1)
-                normalization_ids_map[metric] = GROUPING_START + normalization_id
+                _normalization_ids_map[metric] = GROUPING_START + normalization_id
         if len(normalization_ids[0]) == 0:
             count = 1
             for index in range(len(all_metrics)):
                 metric = all_metrics[index]
-                normalization_ids_map[metric] = GROUPING_START + count
+                _normalization_ids_map[metric] = GROUPING_START + count
                 count += 1
+        if len(filter_hosts[0]) == 0:
+            filter_hosts = []
 
         prometheus_config = {
-            "all_metrics_set": all_metrics,
-            PROMETHEUS_URLS: prometheus_url
+            METRICS_SET: all_metrics,
+            PROMETHEUS_URLS: prometheus_url,
+            FILTER_HOSTS: filter_hosts
         }
     else:
         logger.warning("No config file found. Using defaults.")
@@ -232,29 +234,23 @@ def get_metric_data(server_url, metric_list, end_time):
         value_map = {
             'timestamp': str(end_time) + "000"
         }
-        filter_hosts = ['']
         metric_data_all = []
         for log in metric_datas:
             host = log.get('metric').get('instance', '').split(':')[0]
 
-            if host in filter_hosts:
+            if host in prometheus_config[FILTER_HOSTS]:
                 continue
 
             metric_name = log.get('metric').get('__name__')
             host_name = host
-            metric_value = None
-            header_field = metric_name + \
-                           "[" + host_name + "]:" + \
-                           str(get_grouping_id(metric_name, normalization_ids_map))
-            mtime = 0
-            for stime, val in log.get('values', []):
-                if int(stime) > mtime:
-                    metric_value = val
-                    mtime = int(stime)
-
+            header_field = metric_name + "[" + host_name + "]:" + str(
+                get_grouping_id(metric_name, normalization_ids_map))
+            value_list = log.get('value', [])
+            if len(value_list) != 2:
+                continue
+            metric_value = value_list[1]
             value_map[header_field] = str(metric_value)
-            metric_data_all.append(value_map)
-        logger.info('metric_data_all:' + str(metric_data_all))
+        metric_data_all.append(value_map)
     except requests.exceptions.ConnectionError:
         logger.error("Unable to connect to: " + url)
     except requests.exceptions.MissingSchema as e:
@@ -303,33 +299,6 @@ def chunks(l, n):
         yield l[i:i + n]
 
 
-def set_logger_config(log_level):
-    """Set up logging according to the defined log level"""
-    # Get the root logger
-    logger_obj = logging.getLogger(__name__)
-    # Have to set the root logger level, it defaults to logging.WARNING
-    logger_obj.setLevel(log_level)
-    # route INFO and DEBUG logging to stdout from stderr
-    logging_handler_out = logging.StreamHandler(sys.stdout)
-    logging_handler_out.setLevel(logging.DEBUG)
-    logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
-    logger_obj.addHandler(logging_handler_out)
-
-    logging_handler_err = logging.StreamHandler(sys.stderr)
-    logging_handler_err.setLevel(logging.WARNING)
-    logger_obj.addHandler(logging_handler_err)
-    return logger_obj
-
-
-class LessThanFilter(logging.Filter):
-    def __init__(self, exclusive_maximum, name=""):
-        super(LessThanFilter, self).__init__(name)
-        self.max_level = exclusive_maximum
-
-    def filter(self, record):
-        # non-zero return means we log this message
-        return 1 if record.levelno < self.max_level else 0
-
 def set_logger_config(level):
     """Set up logging according to the defined log level"""
     # Get the root logger
@@ -349,32 +318,32 @@ def set_logger_config(level):
     logger_obj.addHandler(logging_handler_err)
     return logger_obj
 
+
 if __name__ == "__main__":
     GROUPING_START = 15000
+    PROMETHEUS_URLS = "prometheus_urls"
     normalization_ids_map = {}
     parameters = get_parameters()
     log_level = parameters['logLevel']
     logger = set_logger_config(log_level)
     agent_config_vars = get_agent_config_vars()
     reporting_config_vars = get_reporting_config_vars()
-    grouping_map = load_grouping()
 
     # get agent configuration details
-    agent_config = get_prometheus_config(normalization_ids_map)
+    prometheus_config = get_prometheus_config(normalization_ids_map)
     data_end_timestamp = int(time.time())
 
     try:
         logger.debug(
             "Collect metric data for timestamp: {}".format(data_end_timestamp))
         # get metric list from prometheus
-        metric_list_all = list(agent_config["all_metrics_set"])
-        # metric_list_all = get_metric_list_from_file(agent_config)
+        metric_list_all = list(prometheus_config["all_metrics_set"])
         if len(metric_list_all) == 0:
             logger.error("No metrics to get data for.")
             sys.exit()
 
         chunked_metric_list = chunks(metric_list_all, parameters['chunkSize'])
-        for prometheus_server in agent_config["prometheus_urls"]:
+        for prometheus_server in prometheus_config["prometheus_urls"]:
             for sub_list in chunked_metric_list:
                 # get metric data from prometheus every SAMPLING_INTERVAL
                 metric_data_list = get_metric_data(
@@ -384,7 +353,6 @@ if __name__ == "__main__":
                     sys.exit()
                 # send metric data to insightfinder
                 send_data(metric_data_list)
-                save_grouping(grouping_map)
 
     except Exception as e:
         logger.error(
