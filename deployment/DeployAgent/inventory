@@ -73,6 +73,7 @@ ifSamplingInterval=1
 #ifAgent=kafka-logs
 #ifAgent=kafka
 #ifAgent=logstash
+#ifAgent=prometheus
 
 ##When yes, we will run the equivalent of 'apt-get update' before installing any packages.
 ##Valid entries are yes or no. Not used with yum-based installation (e.g., CentOS).
