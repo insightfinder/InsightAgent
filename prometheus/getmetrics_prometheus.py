@@ -177,7 +177,7 @@ def get_metric_list_from_file():
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "metrics.txt"))):
         with open(os.path.abspath(os.path.join(__file__, os.pardir, "metrics.txt")), 'r') as f:
             for line in f:
-                if line:
+                if line not in ['\n', '\r\n']:
                     metric_list.add(line.replace('\n', ''))
             logger.debug("Get metric list from file: " + str(metric_list))
     return list(metric_list)
@@ -203,6 +203,8 @@ def get_metric_data(server_url, metric_list, end_time):
                         datas = res.get('data', {}).get('result', [])
                         metric_datas.extend(datas)
         # change data to raw data api format:
+        if len(metric_datas) == 0:
+            return metric_datas
         value_map = {
             'timestamp': str(end_time) + "000"
         }
@@ -241,13 +243,13 @@ def get_metric_data(server_url, metric_list, end_time):
 def send_data(metric_data):
     send_data_time = time.time()
     # prepare data for metric streaming agent
-    to_send_data_dict = {"metric_data": json.dumps(metric_data),
+    to_send_data_dict = {"metricData": json.dumps(metric_data),
                          "licenseKey": agent_config_vars['licenseKey'],
                          "projectName": agent_config_vars['projectName'],
                          "userName": agent_config_vars['userName'],
                          "instanceName": socket.gethostname().partition(".")[0],
                          "samplingInterval": str(int(reporting_config_vars['reporting_interval'] * 60)),
-                         "agentType": "prometheus"}
+                         "agentType": "custom"}
 
     to_send_data_json = json.dumps(to_send_data_dict)
     logger.debug("TotalData: " +

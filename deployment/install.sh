@@ -185,7 +185,6 @@ if [ $AGENT_TYPE == 'prometheus' ]; then
 		echo "[prometheus]" >> ${PATH_TO_CONFIG_INI}
 		echo "prometheus_urls = localhost:9092" >> ${PATH_TO_CONFIG_INI}
 		echo "filter_hosts =" >> ${PATH_TO_CONFIG_INI}
-		echo "prometheus_metrics_file =" >> ${PATH_TO_CONFIG_INI}
 		echo "normalization_id = " >> ${PATH_TO_CONFIG_INI}
 		echo "all_metrics =" >> ${PATH_TO_CONFIG_INI}
 		echo " " >> ${PATH_TO_CONFIG_INI}
