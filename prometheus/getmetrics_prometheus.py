@@ -8,9 +8,7 @@ import requests
 import json
 import logging
 import socket
-
-METRICS_SET = "all_metrics_set"
-FILTER_HOSTS = "filter_hosts"
+import re
 
 '''
 this script gathers system info from prometheus and use http api to send to server
@@ -100,16 +98,16 @@ def get_prometheus_config(_normalization_ids_map):
         try:
             all_metrics = get_metric_list_from_file()
             if len(all_metrics) == 0:
-                all_metrics = config_parser.get('prometheus', 'all_metrics').split(",")
-            normalization_ids = config_parser.get('prometheus', 'normalization_id').split(",")
+                all_metrics = filter(None,config_parser.get('prometheus', 'all_metrics').split(","))
+            normalization_ids = filter(None, config_parser.get('prometheus', 'normalization_id').split(","))
             prometheus_url = config_parser.get('prometheus', 'prometheus_urls').split(",")
-            filter_hosts = config_parser.get('prometheus', 'filter_hosts').split(",")
+            filter_hosts = filter(None,config_parser.get('prometheus', 'filter_hosts').split(","))
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
             sys.exit(1)
 
-        if len(normalization_ids[0]) != 0:
+        if len(normalization_ids) != 0:
             for index in range(len(all_metrics)):
                 metric = all_metrics[index]
                 normalization_id = int(normalization_ids[index])
@@ -117,24 +115,26 @@ def get_prometheus_config(_normalization_ids_map):
                     logger.error("Please config the normalization_id between 0 to 1000.")
                     sys.exit(1)
                 _normalization_ids_map[metric] = GROUPING_START + normalization_id
-        if len(normalization_ids[0]) == 0:
-            count = 1
+        else:
+            _count = 1
             for index in range(len(all_metrics)):
                 metric = all_metrics[index]
-                _normalization_ids_map[metric] = GROUPING_START + count
-                count += 1
-        if len(filter_hosts[0]) == 0:
+                _normalization_ids_map[metric] = GROUPING_START + _count
+                _count += 1
+        if len(filter_hosts) == 0:
             filter_hosts = []
 
         prometheus_config = {
-            METRICS_SET: all_metrics,
+            METRICS_SET: filter(None, all_metrics),
             PROMETHEUS_URLS: prometheus_url,
             FILTER_HOSTS: filter_hosts
         }
     else:
         logger.warning("No config file found. Using defaults.")
         prometheus_config = {
-            PROMETHEUS_URLS: ["http://localhost:9200"]
+            PROMETHEUS_URLS: ["http://localhost:9200"],
+            METRICS_SET: [],
+            FILTER_HOSTS: []
         }
 
     return prometheus_config
@@ -183,6 +183,46 @@ def get_metric_list_from_file():
     return list(metric_list)
 
 
+def get_all_metric_list_from_api(server_url):
+    """Get metric data from Prometheus API"""
+    metric_list = []
+    try:
+        if "http" not in server_url:
+            url = "http://" + server_url + "/api/v1/label/__name__/values"
+        else:
+            url = server_url + "/api/v1/label/__name__/values"
+        response = requests.get(url, verify=agent_config_vars['sslSecurity'])
+        if response.status_code == 200:
+            res = response.json()
+            if res and res.get('status') == 'success':
+                metric_list = res.get('data', {})
+    except requests.exceptions.ConnectionError:
+        logger.error("Unable to connect to: " + url)
+    except requests.exceptions.MissingSchema as e:
+        logger.error("Missing Schema: " + str(e))
+    except requests.exceptions.Timeout:
+        logger.error("Timed out connecting to: " + url)
+    except requests.exceptions.TooManyRedirects:
+        logger.error("Too many redirects to: " + url)
+    except ValueError:
+        logger.error("Unable to parse result from: " + url)
+    except requests.exceptions.RequestException as e:
+        logger.error(str(e))
+    return metric_list
+
+
+def normalize_key(metric_key):
+    """
+    Take a single metric key string and return the same string with spaces, slashes and
+    non-alphanumeric characters subbed out.
+    """
+    metric_key = SPACES.sub("_", metric_key)
+    metric_key = SLASHES.sub("-", metric_key)
+    metric_key = NON_ALNUM.sub("", metric_key)
+    metric_key = metric_key.replace(".", "-")
+    return metric_key
+
+
 def get_metric_data(server_url, metric_list, end_time):
     """Get metric data from Prometheus API"""
     metric_datas = []
@@ -210,14 +250,14 @@ def get_metric_data(server_url, metric_list, end_time):
         }
         metric_data_all = []
         for log in metric_datas:
-            host = log.get('metric').get('instance', '').split(':')[0]
+            host = log.get('metric').get('instance', '')
 
             if host in prometheus_config[FILTER_HOSTS]:
                 continue
 
             metric_name = log.get('metric').get('__name__')
             host_name = host
-            header_field = metric_name + "[" + host_name + "]:" + str(
+            header_field = normalize_key(metric_name) + "[" + normalize_key(host_name) + "]:" + str(
                 get_grouping_id(metric_name, normalization_ids_map))
             value_list = log.get('value', [])
             if len(value_list) != 2:
@@ -236,7 +276,7 @@ def get_metric_data(server_url, metric_list, end_time):
     except ValueError:
         logger.error("Unable to parse result from: " + url)
     except requests.exceptions.RequestException as e:
-        logger.error(str(e))
+        logger.error(str(e.message))
     return metric_data_all
 
 
@@ -296,6 +336,11 @@ def set_logger_config(level):
 if __name__ == "__main__":
     GROUPING_START = 15000
     PROMETHEUS_URLS = "prometheus_urls"
+    METRICS_SET = "all_metrics_set"
+    FILTER_HOSTS = "filter_hosts"
+    SPACES = re.compile(r"\s+")
+    SLASHES = re.compile(r"/+")
+    NON_ALNUM = re.compile(r"[^a-zA-Z_\-0-9.]")
     normalization_ids_map = {}
     parameters = get_parameters()
     log_level = parameters['logLevel']
@@ -312,12 +357,16 @@ if __name__ == "__main__":
             "Collect metric data for timestamp: {}".format(data_end_timestamp))
         # get metric list from prometheus
         metric_list_all = list(prometheus_config["all_metrics_set"])
-        if len(metric_list_all) == 0:
-            logger.error("No metrics to get data for.")
-            sys.exit()
-
-        chunked_metric_list = chunks(metric_list_all, parameters['chunkSize'])
         for prometheus_server in prometheus_config["prometheus_urls"]:
+            if(len(metric_list_all)) == 0:
+                metric_list_all = get_all_metric_list_from_api(prometheus_server)
+                if len(normalization_ids_map) == 0:
+                    count = 1
+                    for index in range(len(metric_list_all)):
+                        metric = metric_list_all[index]
+                        normalization_ids_map[metric] = GROUPING_START + count
+                        count += 1
+            chunked_metric_list = chunks(metric_list_all, parameters['chunkSize'])
             for sub_list in chunked_metric_list:
                 # get metric data from prometheus every SAMPLING_INTERVAL
                 metric_data_list = get_metric_data(
