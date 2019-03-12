@@ -28,7 +28,7 @@ You can follow our sample [config](logstash-if.conf) to send data to the Insight
 - Try it with different input/filter/codec plugins
 - Start LogStash as a service/daemon in your production environment
 
-## Install using Ansible
+## Install using InsightAgent installer
 
 You can also utilize our Ansible scripts to install logstash and file-beat to monitor the InsightFinder on-prem infrastructure with Jetty and Cassandra configs. Configs you are already using can also be added to the pipeline after the installation.
 
