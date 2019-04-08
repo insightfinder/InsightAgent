@@ -543,19 +543,12 @@ def replay_sar(metric_file_path, grouping_map):
                 metric_key = column_name
                 column_name = column_name + '[' + instance + ']:' + str(i)
                 # Generate normalization id or use from config.ini
-                if column_name.find(":") == -1:
-                    group_id = get_normalization(grouping_map, metric_key)
-                    column_name = column_name + ":" + str(group_id)
-                elif len(column_name.split(":")[1]) == 0:
-                    group_id = get_normalization(grouping_map, metric_key)
-                    column_name = column_name + str(group_id)
-                elif len(column_name.split(":")[1]) != 0:
-                    if len(normalization_ids_map) != 0:
-                        if metric_key in normalization_ids_map:
-                            group_id = int(normalization_ids_map[metric_key])
-                    else:
-                        group_id = column_name.split(":")[1]
-                    column_name = column_name.split(":")[0] + ":" + str(group_id)
+                if len(normalization_ids_map) != 0:
+                    if metric_key in normalization_ids_map:
+                        group_id = int(normalization_ids_map[metric_key])
+                else:
+                    group_id = column_name.split(":")[1]
+                column_name = column_name.split(":")[0] + ":" + str(group_id)
                 current_row[column_name] = row[i]
             to_send_metric_data.append(current_row)
             current_line_count += 1
