@@ -13,7 +13,7 @@ InsightAgent supports replay mode of json log files in which the data from the j
 - Go to the link https://insightfinder.com/
 - Sign in with the user credentials or sign up for a new account.
 - Go to Settings and Register for a project under "Insight Agent" tab.
-- Give a project name, select Project Type as "Metric".
+- Give a project name, select Project Type as "Log" with a type of "File Replay".
 - Note down the project name and license key which will be used for agent installation. The license key is also available in "User Account Information". To go to "User Account Information", click the userid on the top right corner.
 
 ### Prerequisites:
