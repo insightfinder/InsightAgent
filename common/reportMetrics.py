@@ -10,9 +10,16 @@ import random
 import socket
 import subprocess
 import sys
+import re
 import time
+from datetime import datetime
+import pytz
 from ConfigParser import SafeConfigParser
 from optparse import OptionParser
+import gpfsHandler
+import db2Handler
+import sarHandler
+
 
 '''
 This script reads reporting_config.json and .agent.bashrc
@@ -54,7 +61,7 @@ def get_parameters():
                       action="store", dest="chunkLines", help="Max number of lines in chunk")
     (options, args) = parser.parse_args()
 
-    parameters = {}
+    parameters = dict()
     if options.homepath is None:
         parameters['homepath'] = os.getcwd()
     else:
@@ -83,7 +90,7 @@ def get_parameters():
         parameters['timeZone'] = "GMT"
     else:
         parameters['timeZone'] = options.timeZone
-    if options.chunkLines is None and parameters['agentType'] == 'metricFileReplay':
+    if options.chunkLines is None and parameters['mode'] == 'metricFileReplay':
         parameters['chunkLines'] = 100
     elif options.chunkLines is None:
         parameters['chunkLines'] = 40000
@@ -102,7 +109,7 @@ def get_parameters():
 
 
 def get_agent_config_vars(normalization_map):
-    config_vars = {}
+    config_vars = dict()
     try:
         if os.path.exists(os.path.join(parameters['homepath'], "common", "config.ini")):
             parser = SafeConfigParser()
@@ -148,7 +155,7 @@ def get_agent_config_vars(normalization_map):
 
 
 def get_reporting_config_vars():
-    reporting_config_vars = {}
+    reporting_config_vars = dict()
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
         config = json.load(f)
     reporting_interval_string = config['reporting_interval']
@@ -157,9 +164,9 @@ def get_reporting_config_vars():
         reporting_config_vars['reporting_interval'] = float(reporting_interval / 60.0)
     else:
         reporting_config_vars['reporting_interval'] = int(config['reporting_interval'])
-        reporting_config_vars['keep_file_days'] = int(config['keep_file_days'])
-        reporting_config_vars['prev_endtime'] = config['prev_endtime']
-        reporting_config_vars['deltaFields'] = config['delta_fields']
+    reporting_config_vars['keep_file_days'] = int(config['keep_file_days'])
+    reporting_config_vars['prev_endtime'] = config['prev_endtime']
+    reporting_config_vars['deltaFields'] = config['delta_fields']
     return reporting_config_vars
 
 
@@ -204,7 +211,7 @@ def get_index_for_column_name(col_name):
 
 
 def get_ec2_instance_type():
-    url = "http://169.254.169.254/latest/meta-data/instance-type"
+    url = "http://169.254.169.254/latest/meta-data/instance-type" # TODO: fix/remove
     try:
         response = requests.post(url)
     except requests.ConnectionError, e:
@@ -219,7 +226,7 @@ def get_ec2_instance_type():
 def send_data(metric_data_dict, file_path, chunk_serial_number):
     send_data_time = time.time()
     # prepare data for metric streaming agent
-    to_send_data_dict = {}
+    to_send_data_dict = dict()
     if parameters['mode'] == "metricFileReplay":
         to_send_data_dict["metricData"] = json.dumps(metric_data_dict[0])
     else:
@@ -229,7 +236,7 @@ def send_data(metric_data_dict, file_path, chunk_serial_number):
     to_send_data_dict["projectName"] = agent_config_vars['projectName']
     to_send_data_dict["userName"] = agent_config_vars['userName']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
-    to_send_data_dict["samplingInterval"] = str(int(reporting_config_vars['reporting_interval'] * 60))
+    to_send_data_dict['samplingInterval'] = agent_config_vars['samplingInterval']
     if parameters['agentType'] == "ec2monitoring":
         to_send_data_dict["instanceType"] = get_ec2_instance_type()
     # additional data to send for replay agents
@@ -244,7 +251,7 @@ def send_data(metric_data_dict, file_path, chunk_serial_number):
             to_send_data_dict["minTimestamp"] = str(metric_data_dict[1])
             to_send_data_dict["maxTimestamp"] = str(metric_data_dict[2])
             to_send_data_dict["chunkSerialNumber"] = str(chunk_serial_number)
-        if ('splitID' in parameters.keys() and 'splitBy' in parameters.keys()):
+        if 'splitID' in parameters.keys() and 'splitBy' in parameters.keys():
             to_send_data_dict["splitID"] = parameters['splitID']
             to_send_data_dict["splitBy"] = parameters['splitBy']
 
@@ -340,7 +347,7 @@ def process_streaming(new_prev_endtime_epoch):
                         except ValueError:
                             continue
                         # Read each line from csv and generate a json
-                        currentCSVRowData = {}
+                        currentCSVRowData = dict()
                         for i in range(0, len(csvRow)):
                             if field_names[i] == "timestamp":
                                 new_prev_endtime_epoch = csvRow[timestamp_index]
@@ -369,106 +376,273 @@ def process_replay(file_path):
         logger.info("Replaying file: " + file_path)
         # log file replay processing
         if parameters['mode'] == "logFileReplay":
-            try:
-                output = subprocess.check_output(
-                    'cat ' + file_path + ' | jq -c ".[]" > ' + file_path + ".mod",
-                    shell=True)
-            except subprocess.CalledProcessError as e:
-                logger.error("not the json file")
-                sys.exit(1)
-            with open(file_path + ".mod") as logfile:
-                line_count = 0
-                chunk_count = 0
-                current_row = []
-                start_time = time.time()
-                for line in logfile:
-                    if line_count == parameters['chunkLines']:
+
+            '''
+            handle specific filetypes
+            '''
+            if parameters['agentType'] == 'db2':
+                replay_db2(file_path)
+            elif parameters['agentType'] == 'gpfs':
+                replay_gpfs(file_path)
+            else:
+                # default
+                try:
+                    output = subprocess.check_output(
+                        'cat ' + file_path + ' | jq -c ".[]" > ' + file_path + ".mod",
+                        shell=True)
+                except subprocess.CalledProcessError as e:
+                    logger.error("Not a correctly formatted json file. Please contact support.")
+                    sys.exit(1)
+                with open(file_path + ".mod") as logfile:
+                    line_count = 0
+                    chunk_count = 0
+                    current_row = []
+                    start_time = time.time()
+                    for line in logfile:
+                        if line_count == parameters['chunkLines']:
+                            logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                            send_data(current_row, file_path, None)
+                            current_row = []
+                            chunk_count += 1
+                            line_count = 0
+                            start_time = time.time()
+                        json_message = json.loads(line.rstrip())
+                        if agent_config_vars['selected_fields'] == "All":
+                            current_row.append(json_message)
+                        else:
+                            current_log_msg = dict()
+                            for field in agent_config_vars['selected_fields']:
+                                field = str(field).strip()
+                                current_log_msg[field] = json_message.get(field, {})
+                            current_row.append(json.loads(json.dumps(current_log_msg)))
+                        line_count += 1
+                    if len(current_row) != 0:
                         logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
                         send_data(current_row, file_path, None)
-                        current_row = []
                         chunk_count += 1
-                        line_count = 0
-                        start_time = time.time()
-                    json_message = json.loads(line.rstrip())
-                    if agent_config_vars['selected_fields'] == "All":
-                        current_row.append(json_message)
-                    else:
-                        current_log_msg = dict()
-                        for field in agent_config_vars['selected_fields']:
-                            field = str(field).strip()
-                            current_log_msg[field] = json_message.get(field,{})
-                        current_row.append(json.loads(json.dumps(current_log_msg)))
-                    line_count += 1
-                if len(current_row) != 0:
-                    logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                    send_data(current_row, file_path, None)
-                    chunk_count += 1
-                logger.debug("Total chunks created: " + str(chunk_count))
-            output = subprocess.check_output(
-                "rm " + file_path + ".mod",
-                shell=True)
+                    logger.debug("Total chunks created: " + str(chunk_count))
+                output = subprocess.check_output(
+                    "rm " + file_path + ".mod",
+                    shell=True)
         else:  # metric file replay processing
             grouping_map = load_grouping()
-            with open(file_path) as metricFile:
-                metric_csv_reader = csv.reader(metricFile)
-                to_send_metric_data = []
-                field_names = []
-                current_line_count = 1
-                chunk_count = 0
-                min_timestamp_epoch = 0
-                max_timestamp_epoch = -1
-                for row in metric_csv_reader:
-                    if metric_csv_reader.line_num == 1:
-                        # Get all the metric names from header
-                        field_names = row
-                        # get index of the timestamp column
-                        for i in range(0, len(field_names)):
-                            if field_names[i] == "timestamp":
-                                timestampIndex = i
-                    elif metric_csv_reader.line_num > 1:
-                        # Read each line from csv and generate a json
-                        current_row = {}
-                        if current_line_count == parameters['chunkLines']:
-                            send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], file_path, chunk_count + 1)
-                            to_send_metric_data = []
-                            current_line_count = 0
-                            chunk_count += 1
-                        for i in range(0, len(row)):
-                            if field_names[i] == "timestamp":
-                                current_row[field_names[i]] = row[i]
-                                if min_timestamp_epoch == 0 or min_timestamp_epoch > long(row[i]):
-                                    min_timestamp_epoch = long(row[i])
-                                if max_timestamp_epoch == 0 or max_timestamp_epoch < long(row[i]):
-                                    max_timestamp_epoch = long(row[i])
-                            else:
-                                column_name = field_names[i].strip()
-                                metric_key = column_name.split("[")[0]
-                                if column_name.find("]") == -1:
-                                    column_name = column_name + "[-]"
-                                # Generate normalization id or use from config.ini
-                                if column_name.find(":") == -1:
-                                    group_id = get_normalization(grouping_map, metric_key)
-                                    column_name = column_name + ":" + str(group_id)
-                                elif len(column_name.split(":")[1]) == 0:
-                                    group_id = get_normalization(grouping_map, metric_key)
-                                    column_name = column_name + str(group_id)
-                                elif len(column_name.split(":")[1]) != 0:
-                                    if len(normalization_ids_map) != 0:
-                                        if metric_key in normalization_ids_map:
-                                            group_id = int(normalization_ids_map[metric_key])
-                                    else:
-                                        group_id = column_name.split(":")[1]
-                                    column_name = column_name.split(":")[0] + ":" + str(group_id)
+            '''
+            handle different metric agnets
+            '''
+            if parameters['agentType'] == 'sar':
+                replay_sar()
+            else:
+                # default
+                with open(file_path) as metricFile:
+                    metric_csv_reader = csv.reader(metricFile)
+                    to_send_metric_data = []
+                    field_names = []
+                    current_line_count = 1
+                    chunk_count = 0
+                    min_timestamp_epoch = 0
+                    max_timestamp_epoch = -1
+                    for row in metric_csv_reader:
+                        if metric_csv_reader.line_num == 1:
+                            # Get all the metric names from header
+                            field_names = row
+                            # get index of the timestamp column
+                            for i in range(0, len(field_names)):
+                                if field_names[i] == "timestamp":
+                                    timestampIndex = i
+                        elif metric_csv_reader.line_num > 1:
+                            # Read each line from csv and generate a json
+                            current_row = dict()
+                            if current_line_count == parameters['chunkLines']:
+                                send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], file_path, chunk_count + 1)
+                                to_send_metric_data = []
+                                current_line_count = 0
+                                chunk_count += 1
+                            for i in range(0, len(row)):
+                                if field_names[i] == "timestamp":
+                                    current_row[field_names[i]] = row[i]
+                                    if min_timestamp_epoch == 0 or min_timestamp_epoch > long(row[i]):
+                                        min_timestamp_epoch = long(row[i])
+                                    if max_timestamp_epoch == 0 or max_timestamp_epoch < long(row[i]):
+                                        max_timestamp_epoch = long(row[i])
+                                else:
+                                    column_name = field_names[i].strip()
+                                    metric_key = column_name.split("[")[0]
+                                    if column_name.find("]") == -1:
+                                        column_name = column_name + "[-]"
+                                    # Generate normalization id or use from config.ini
+                                    if column_name.find(":") == -1:
+                                        group_id = get_normalization(grouping_map, metric_key)
+                                        column_name = column_name + ":" + str(group_id)
+                                    elif len(column_name.split(":")[1]) == 0:
+                                        group_id = get_normalization(grouping_map, metric_key)
+                                        column_name = column_name + str(group_id)
+                                    elif len(column_name.split(":")[1]) != 0:
+                                        if len(normalization_ids_map) != 0:
+                                            if metric_key in normalization_ids_map:
+                                                group_id = int(normalization_ids_map[metric_key])
+                                        else:
+                                            group_id = column_name.split(":")[1]
+                                        column_name = column_name.split(":")[0] + ":" + str(group_id)
 
-                                current_row[column_name] = row[i]
-                        to_send_metric_data.append(current_row)
-                        current_line_count += 1
-                # send final chunk
-                if len(to_send_metric_data) != 0:
-                    send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], file_path, chunk_count + 1)
-                    chunk_count += 1
-                logger.debug("Total chunks created: " + str(chunk_count))
+                                    current_row[column_name] = row[i]
+                            to_send_metric_data.append(current_row)
+                            current_line_count += 1
+                    # send final chunk
+                    if len(to_send_metric_data) != 0:
+                        send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], file_path, chunk_count + 1)
+                        chunk_count += 1
+                    logger.debug("Total chunks created: " + str(chunk_count))
                 save_grouping(grouping_map)
+
+
+def replay_sar(metric_file_path):
+    return
+
+
+def replay_db2(log_file_path):
+    print('Replaying db2 file')
+    with open(log_file_path) as log_file:
+        line_count = 0
+        chunk_count = 0
+        current_row = []
+        current_obj = dict()
+        start_time = time.time()
+        line = log_file.readline()
+        while line:
+            # empty line denotes new log entry. aggregate current string
+            if not line.strip():
+                # build json entry
+                entry = dict()
+                entry['tag'] = 'db2-replay'
+                entry['eventId'] = str(current_obj.pop('timestamp'))
+                entry['data'] = current_obj
+                print(entry)
+                current_row.append(entry)
+                line_count += 1
+                current_obj = dict()
+            else:
+                # first line starts with timestamp
+                if len(current_obj) == 0:
+                    timestamp_str = line.split()[0]
+                    current_obj['timestamp'] = _get_timestamp_db2(timestamp_str, parameters['timeZone'])
+                    current_obj['id'] = line.split()[1]
+                    current_obj['LEVEL'] = line[line.rfind(' '):]
+                elif line[:3] == 'ARG' or line[:4] == 'DATA' or line[:7] == 'MESSAGE':
+                    key = line[:line.find(':')]
+                    current_obj[key] = line[line.find(':') + 1:]
+                    # until we hit the next field
+                    i = log_file.tell()  # save the current position
+                    next_line = log_file.readline()
+                    while next_line.strip():
+                        current_obj[key] = current_obj[key] + next_line
+                        i = log_file.tell()  # save the current position
+                        next_line = log_file.readline()
+                        if next_line[:3] == 'ARG' or next_line[:4] == 'DATA' or next_line[:7] == 'MESSAGE':
+                            break
+                    log_file.seek(i)
+                else:
+                    extract_fields_db2(current_obj, line)
+
+            # if the last loop results in chunkLines being set...
+            if line_count == parameters['chunkLines']:
+                logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                send_data(current_row, log_file_path, chunk_count)
+                current_row = []
+                chunk_count += 1
+                line_count = 0
+                start_time = time.time()
+
+            line = log_file.readline()
+        # last chunk
+        if len(current_row) != 0:
+            # build json entry
+            entry = dict()
+            entry['tag'] = 'db2-replay'
+            entry['eventId'] = str(current_obj.pop('timestamp'))
+            entry['data'] = current_obj
+            print(entry)
+            current_row.append(entry)
+            logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+            send_data(current_row, log_file_path, chunk_count)
+            chunk_count += 1
+        logger.debug("Total chunks created: " + str(chunk_count))
+    return
+
+
+def extract_fields_db2(obj, line):
+    # need to put spaces before :
+    matches = re.findall('[A-Z]+:', line)
+    for match in matches:
+        split_at = line.find(':', line.find(match))
+        line = line[:split_at] + ' ' + line[split_at:]
+
+    line_arr = line.split()
+    while len(line_arr) > 0:
+        rev_array = line_arr[::-1]
+        last_val_pos = len(line_arr) - rev_array.index(':')
+        last_val = ' '.join(line_arr[last_val_pos:])
+        last_key_pos = last_val_pos - 2
+        last_key = line_arr[last_key_pos]
+        obj[last_key] = last_val
+        if last_key_pos == 0:
+            break
+        line_arr = line_arr[:last_key_pos]
+    return
+
+
+def replay_gpfs(log_file_path):
+    print('Replaying gpfs file')
+    with open(log_file_path) as log_file:
+        line_count = 0
+        chunk_count = 0
+        current_row = []
+        start_time = time.time()
+        for line in log_file:
+            # skip empty lines
+            if not line.strip():
+                continue
+            # if the last loop results in chunkLines being set...
+            if line_count == parameters['chunkLines']:
+                logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                send_data(current_row, log_file_path, chunk_count)
+                current_row = []
+                chunk_count += 1
+                line_count = 0
+                start_time = time.time()
+            # build json entry
+            entry = dict()
+            entry['tag'] = 'gpfs-replay'
+            entry['eventId'] = str(_get_timestamp_gpfs(':'.join(line.split(':')[0:3]), parameters['timeZone']))
+            entry['data'] = line
+            current_row.append(entry)
+            line_count += 1
+        # last chunk
+        if len(current_row) != 0:
+            logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+            send_data(current_row, log_file_path, chunk_count)
+            chunk_count += 1
+        logger.debug("Total chunks created: " + str(chunk_count))
+    return
+
+
+def _get_timestamp_gpfs(timestamp_str, tz):
+    return _get_timestamp_with_timezone(timestamp_str, tz, '%Y-%m-%d_%H:%M:%S.%f', True)
+
+
+def _get_timestamp_db2(timestamp_str, tz):
+    return _get_timestamp_with_timezone(timestamp_str, tz, '%Y-%m-%d-%H.%M.%S.%f', True)
+
+
+def _get_timestamp_with_timezone(date_string, time_zone, format, strip_offset):
+    # take off +HHMM and rely on passing -z flag
+    if strip_offset:
+        date_string = date_string[:-5]
+
+    timestamp_datetime = datetime.strptime(date_string, format)
+    tz = pytz.timezone(time_zone)
+    time_in_tz = tz.localize(timestamp_datetime)
+    epoch = long((time_in_tz - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds())*1000
+    return epoch
 
 
 def get_normalization(grouping_map, metric_key):
@@ -558,9 +732,9 @@ def get_file_list_for_directory(root_path):
     file_list = []
     for path, subdirs, files in os.walk(root_path):
         for name in files:
-            if parameters['agentType'] == "metricFileReplay" and "csv" in name:
+            if parameters['mode'] == "metricFileReplay" and "csv" in name:
                 file_list.append(os.path.join(path, name))
-            if parameters['agentType'] == "LogFileReplay" and "json" in name:
+            if parameters['mode'] == "logFileReplay" and "json" in name:
                 file_list.append(os.path.join(path, name))
     return file_list
 
@@ -570,7 +744,7 @@ if __name__ == '__main__':
     GROUPING_END = 33000
     prog_start_time = time.time()
     logger = set_logger_config()
-    normalization_ids_map = {}
+    normalization_ids_map = dict()
     data_directory = 'data/'
     parameters = get_parameters()
     agent_config_vars = get_agent_config_vars(normalization_ids_map)
