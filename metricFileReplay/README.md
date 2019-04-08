@@ -18,7 +18,7 @@ timestamp,cpu[node1]:1,memory[node1]:2,disk_read[node1]:3,disk_write[node1]:4,ne
 - Go to the link https://insightfinder.com/
 - Sign in with the user credentials or sign up for a new account.
 - Go to Settings and Register for a project under "Insight Agent" tab.
-- Give a project name, select Project Type as "Metric File".
+- Give a project name, select Project Type as "Metric" with a type of "Custom".
 - Note down the project name and license key which will be used for agent installation. The license key is also available in "User Account Information". To go to "User Account Information", click the userid on the top right corner.
 
 ### Prerequisites:
@@ -122,10 +122,14 @@ Make sure each file is .csv formatted, starts with a row of headers and the head
 
 2) Run the following command for each data file.
 ```
-sudo python /root/InsightAgent-master/common/reportMetrics.py -t metricFileReplay -m metricFileReplay -f PATH_TO_CSVFILENAME
+sudo python /root/InsightAgent-master/common/reportMetrics.py -m metricFileReplay -f PATH_TO_CSV_FILE
 ```
 Where PATH_TO_CSVFILENAME is the path and filename of the csv file.
 
+If you are replaying the output of a sar file, you can specify so as an argument to the -t parameter:
+```
+sudo python common/reportMetrics.py -t sar -m metricFileReplay -f PATH_TO_SAR_FILE
+```
 
 ### Uninstallation:
 Note: Uninstallation is required before you can install any other Metric agent(e.g. cgroup) or you want to reinstall the current collectd agent.
