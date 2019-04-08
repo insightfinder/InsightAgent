@@ -424,10 +424,10 @@ def process_replay(file_path):
         else:  # metric file replay processing
             grouping_map = load_grouping()
             '''
-            handle different metric agnets
+            handle different metric agents
             '''
             if parameters['agentType'] == 'sar':
-                replay_sar()
+                replay_sar(file_path, grouping_map)
             else:
                 # default
                 with open(file_path) as metricFile:
@@ -492,7 +492,80 @@ def process_replay(file_path):
                 save_grouping(grouping_map)
 
 
-def replay_sar(metric_file_path):
+def replay_sar(metric_file_path, grouping_map):
+    print('Replaying sar file')
+    with open(metric_file_path) as metric_file:
+        line = metric_file.readline()
+        header = line.split()
+        instance = header[2][1:-1]
+        date = header[3]
+        _ = metric_file.readline()
+        metrics = metric_file.readline()
+        field_names = metrics.split()
+        field_names[0] = 'timestamp'
+        field_names[1] = 'ampm'
+        to_send_metric_data = []
+        current_line_count = 1
+        chunk_count = 0
+        min_timestamp_epoch = 0
+        max_timestamp_epoch = -1
+        line = metric_file.readline()
+        while line:
+            # Read each line from csv and generate a json
+            current_row = dict()
+            if current_line_count == parameters['chunkLines']:
+                send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], metric_file_path, chunk_count + 1)
+                to_send_metric_data = []
+                current_line_count = 0
+                chunk_count += 1
+
+            row = line.split()
+            if row[2:] == field_names[2:] or 'RESTART' in row or not row:
+                line = metric_file.readline()
+                continue
+
+            # make timestamp
+            time = row[0]
+            ampm = row[1]
+            if time == 'Average:':
+                line = metric_file.readline()
+                continue
+            timestamp = _get_timestamp_sar(date, time, ampm, parameters['timeZone'])
+            current_row['timestamp'] = str(timestamp)
+            if min_timestamp_epoch == 0 or min_timestamp_epoch > long(timestamp):
+                min_timestamp_epoch = long(timestamp)
+            if max_timestamp_epoch == 0 or max_timestamp_epoch < long(timestamp):
+                max_timestamp_epoch = long(timestamp)
+
+            # metric values
+            for i in range(2, len(row)):
+                column_name = field_names[i].strip()
+                metric_key = column_name
+                column_name = column_name + '[' + instance + ']:' + str(i)
+                # Generate normalization id or use from config.ini
+                if column_name.find(":") == -1:
+                    group_id = get_normalization(grouping_map, metric_key)
+                    column_name = column_name + ":" + str(group_id)
+                elif len(column_name.split(":")[1]) == 0:
+                    group_id = get_normalization(grouping_map, metric_key)
+                    column_name = column_name + str(group_id)
+                elif len(column_name.split(":")[1]) != 0:
+                    if len(normalization_ids_map) != 0:
+                        if metric_key in normalization_ids_map:
+                            group_id = int(normalization_ids_map[metric_key])
+                    else:
+                        group_id = column_name.split(":")[1]
+                    column_name = column_name.split(":")[0] + ":" + str(group_id)
+                current_row[column_name] = row[i]
+            to_send_metric_data.append(current_row)
+            current_line_count += 1
+            line = metric_file.readline()
+        # send final chunk
+        if len(to_send_metric_data) != 0:
+            send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], metric_file_path, chunk_count + 1)
+            chunk_count += 1
+        logger.debug("Total chunks created: " + str(chunk_count))
+        save_grouping(grouping_map)
     return
 
 
@@ -513,7 +586,6 @@ def replay_db2(log_file_path):
                 entry['tag'] = 'db2-replay'
                 entry['eventId'] = str(current_obj.pop('timestamp'))
                 entry['data'] = current_obj
-                print(entry)
                 current_row.append(entry)
                 line_count += 1
                 current_obj = dict()
@@ -557,7 +629,6 @@ def replay_db2(log_file_path):
             entry['tag'] = 'db2-replay'
             entry['eventId'] = str(current_obj.pop('timestamp'))
             entry['data'] = current_obj
-            print(entry)
             current_row.append(entry)
             logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
             send_data(current_row, log_file_path, chunk_count)
@@ -620,6 +691,10 @@ def replay_gpfs(log_file_path):
             chunk_count += 1
         logger.debug("Total chunks created: " + str(chunk_count))
     return
+
+
+def _get_timestamp_sar(date, time, ampm, tz):
+    return _get_timestamp_with_timezone(date + ' ' + time + ' ' + ampm, tz, '%d/%m/%Y %I:%M:%S %p', False)
 
 
 def _get_timestamp_gpfs(timestamp_str, tz):
