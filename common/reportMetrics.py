@@ -75,7 +75,7 @@ def get_parameters():
         parameters['serverUrl'] = 'https://app.insightfinder.com'
     else:
         parameters['serverUrl'] = options.serverUrl
-    if options.inputFile is None:
+    if options.inputFile is None or not os.path.exists(options.inputFile):
         parameters['inputFile'] = None
     else:
         parameters['inputFile'] = options.inputFile
@@ -493,7 +493,7 @@ def process_replay(file_path):
 
 
 def replay_sar(metric_file_path, grouping_map):
-    print('Replaying sar file')
+    logger.info('Replaying sar file')
     with open(metric_file_path) as metric_file:
         line = metric_file.readline()
         header = line.split()
@@ -563,7 +563,7 @@ def replay_sar(metric_file_path, grouping_map):
 
 
 def replay_db2(log_file_path):
-    print('Replaying db2 file')
+    logger.info('Replaying db2 file')
     with open(log_file_path) as log_file:
         line_count = 0
         chunk_count = 0
@@ -576,7 +576,7 @@ def replay_db2(log_file_path):
             if not line.strip():
                 # build json entry
                 entry = dict()
-                entry['tag'] = 'db2-replay'
+                entry['tag'] = current_obj['HOSTNAME']
                 entry['eventId'] = str(current_obj.pop('timestamp'))
                 entry['data'] = current_obj
                 current_row.append(entry)
@@ -652,7 +652,7 @@ def extract_fields_db2(obj, line):
 
 
 def replay_gpfs(log_file_path):
-    print('Replaying gpfs file')
+    logger.info('Replaying gpfs file')
     with open(log_file_path) as log_file:
         line_count = 0
         chunk_count = 0
@@ -672,7 +672,7 @@ def replay_gpfs(log_file_path):
                 start_time = time.time()
             # build json entry
             entry = dict()
-            entry['tag'] = 'gpfs-replay'
+            entry['tag'] = log_file.name.split('.')[-1]
             entry['eventId'] = str(_get_timestamp_gpfs(':'.join(line.split(':')[0:3]), parameters['timeZone']))
             entry['data'] = line
             current_row.append(entry)
