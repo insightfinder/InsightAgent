@@ -16,9 +16,6 @@ from datetime import datetime
 import pytz
 from ConfigParser import SafeConfigParser
 from optparse import OptionParser
-import gpfsHandler
-import db2Handler
-import sarHandler
 
 
 '''
