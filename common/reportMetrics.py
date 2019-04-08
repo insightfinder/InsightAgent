@@ -576,7 +576,7 @@ def replay_db2(log_file_path):
             if not line.strip():
                 # build json entry
                 entry = dict()
-                entry['tag'] = current_obj['HOSTNAME']
+                entry['tag'] = current_obj['HOSTNAME'] | 'localhost'
                 entry['eventId'] = str(current_obj.pop('timestamp'))
                 entry['data'] = current_obj
                 current_row.append(entry)
