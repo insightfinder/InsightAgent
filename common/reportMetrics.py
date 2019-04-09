@@ -24,7 +24,7 @@ and opens daily metric file and reports header + rows within
 window of reporting interval after prev endtime
 if prev endtime is 0, report most recent reporting interval
 till now from today's metric file (may or may not be present)
-assumping gmt epoch timestamp and local date daily file. 
+assuming gmt epoch timestamp and local date daily file. 
 
 This also allows you to replay old log and metric files 
 '''
@@ -498,7 +498,13 @@ def replay_sar(metric_file_path, grouping_map):
         line = metric_file.readline()
         header = line.split()
         instance = header[2][1:-1]
+        # assume DD/MM/YYYY
         date = header[3]
+        format = '%m/%d/%Y %I:%M:%S %p'
+        # in case it's DAY_OF_WEEK DD MONTH_OF_YEAR YYYY
+        if '/' not in date:
+            date = ' '.join(header[3:6])
+            format = '%A %d %B %Y %I:%M:%S %p'
         _ = metric_file.readline()
         metrics = metric_file.readline()
         field_names = metrics.split()
@@ -507,6 +513,8 @@ def replay_sar(metric_file_path, grouping_map):
         to_send_metric_data = []
         current_line_count = 1
         chunk_count = 0
+        first_timestamp_epoch = 0
+        row_count = 0
         min_timestamp_epoch = 0
         max_timestamp_epoch = -1
         line = metric_file.readline()
@@ -530,7 +538,13 @@ def replay_sar(metric_file_path, grouping_map):
             if time == 'Average:':
                 line = metric_file.readline()
                 continue
-            timestamp = _get_timestamp_sar(date, time, ampm, parameters['timeZone'])
+
+            # calc first timestamp
+            if first_timestamp_epoch == 0:
+                first_timestamp_epoch = _get_timestamp_sar(date, time, ampm, parameters['timeZone'], format)
+
+            # sar has unreliable sampling interval, so base it off of the config
+            timestamp = first_timestamp_epoch + int(agent_config_vars['samplingInterval']) * 60 * 1000 * row_count
             current_row['timestamp'] = str(timestamp)
             if min_timestamp_epoch == 0 or min_timestamp_epoch > long(timestamp):
                 min_timestamp_epoch = long(timestamp)
@@ -552,6 +566,7 @@ def replay_sar(metric_file_path, grouping_map):
                 current_row[column_name] = row[i]
             to_send_metric_data.append(current_row)
             current_line_count += 1
+            row_count += 1
             line = metric_file.readline()
         # send final chunk
         if len(to_send_metric_data) != 0:
@@ -576,7 +591,7 @@ def replay_db2(log_file_path):
             if not line.strip():
                 # build json entry
                 entry = dict()
-                entry['tag'] = current_obj['HOSTNAME'] | 'localhost'
+                entry['tag'] = current_obj['HOSTNAME'] or 'localhost'
                 entry['eventId'] = str(current_obj.pop('timestamp'))
                 entry['data'] = current_obj
                 current_row.append(entry)
@@ -619,7 +634,7 @@ def replay_db2(log_file_path):
         if len(current_row) != 0:
             # build json entry
             entry = dict()
-            entry['tag'] = 'db2-replay'
+            entry['tag'] = current_obj['HOSTNAME'] or 'localhost'
             entry['eventId'] = str(current_obj.pop('timestamp'))
             entry['data'] = current_obj
             current_row.append(entry)
@@ -686,8 +701,8 @@ def replay_gpfs(log_file_path):
     return
 
 
-def _get_timestamp_sar(date, time, ampm, tz):
-    return _get_timestamp_with_timezone(date + ' ' + time + ' ' + ampm, tz, '%d/%m/%Y %I:%M:%S %p', False)
+def _get_timestamp_sar(date, time, ampm, tz, format):
+    return _get_timestamp_with_timezone(date + ' ' + time + ' ' + ampm, tz, format, False)
 
 
 def _get_timestamp_gpfs(timestamp_str, tz):
