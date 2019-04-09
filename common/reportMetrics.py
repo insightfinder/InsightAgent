@@ -501,10 +501,6 @@ def replay_sar(metric_file_path, grouping_map):
         # assume DD/MM/YYYY
         date = header[3]
         format = '%m/%d/%Y %I:%M:%S %p'
-        # in case it's DAY_OF_WEEK DD MONTH_OF_YEAR YYYY
-        if '/' not in date:
-            date = ' '.join(header[3:6])
-            format = '%A %d %B %Y %I:%M:%S %p'
         _ = metric_file.readline()
         metrics = metric_file.readline()
         field_names = metrics.split()
