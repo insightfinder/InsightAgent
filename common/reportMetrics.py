@@ -56,6 +56,8 @@ def get_parameters():
                       action="store", dest="chunkSize", help="Max chunk size in KB")
     parser.add_option("-l", "--chunkLines",
                       action="store", dest="chunkLines", help="Max number of lines in chunk")
+    parser.add_option("-v", "--logLevel",
+                      action="store", dest="logLevel", help="Change log verbosity(WARNING: 0, INFO: 1, DEBUG: 2)")
     (options, args) = parser.parse_args()
 
     parameters = dict()
@@ -102,6 +104,14 @@ def get_parameters():
         parameters['splitBy'] = None
     else:
         parameters['splitBy'] = options.splitBy
+    # log level
+    parameters['logLevel'] = logging.INFO
+    if options.logLevel == '0':
+        parameters['logLevel'] = logging.WARNING
+    elif options.logLevel == '1':
+        parameters['logLevel'] = logging.INFO
+    elif options.logLevel >= '2':
+        parameters['logLevel'] = logging.DEBUG
     return parameters
 
 
@@ -777,21 +787,24 @@ def get_grouping_id(metric_key, metric_grouping):
     return GROUPING_START
 
 
-def set_logger_config():
+def set_logger_config(level):
+    """Set up logging according to the defined log level"""
     # Get the root logger
-    logger = logging.getLogger(__name__)
-    # Have to set the root logger level, it defaults to logging.WARNING
-    logger.setLevel(logging.INFO)
+    logger_obj = logging.getLogger(__name__)
+    # Have to set the root logger level, it defaults to logging.INFO
+    logger_obj.setLevel(level)
     # route INFO and DEBUG logging to stdout from stderr
     logging_handler_out = logging.StreamHandler(sys.stdout)
     logging_handler_out.setLevel(logging.DEBUG)
-    logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
-    logger.addHandler(logging_handler_out)
+    # create a logging format
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(process)d - %(threadName)s - %(levelname)s - %(message)s')
+    logging_handler_out.setFormatter(formatter)
+    logger_obj.addHandler(logging_handler_out)
 
     logging_handler_err = logging.StreamHandler(sys.stderr)
     logging_handler_err.setLevel(logging.WARNING)
-    logger.addHandler(logging_handler_err)
-    return logger
+    logger_obj.addHandler(logging_handler_err)
+    return logger_obj
 
 
 class LessThanFilter(logging.Filter):
@@ -819,10 +832,10 @@ if __name__ == '__main__':
     GROUPING_START = 31000
     GROUPING_END = 33000
     prog_start_time = time.time()
-    logger = set_logger_config()
     normalization_ids_map = dict()
     data_directory = 'data/'
     parameters = get_parameters()
+    logger = set_logger_config(parameters['logLevel'])
     agent_config_vars = get_agent_config_vars(normalization_ids_map)
     reporting_config_vars = get_reporting_config_vars()
 
