@@ -384,9 +384,7 @@ def process_replay(file_path):
         # log file replay processing
         if parameters['mode'] == "logFileReplay":
 
-            '''
-            handle specific filetypes
-            '''
+            # handle specific filetypes
             if parameters['agentType'] == 'db2':
                 replay_db2(file_path)
             elif parameters['agentType'] == 'gpfs':
@@ -433,9 +431,8 @@ def process_replay(file_path):
                     shell=True)
         else:  # metric file replay processing
             grouping_map = load_grouping()
-            '''
-            handle different metric agents
-            '''
+
+            # handle different metric agents
             if parameters['agentType'] == 'sar':
                 replay_sar(file_path, grouping_map)
             else:
@@ -597,7 +594,10 @@ def replay_db2(log_file_path):
             if not line.strip():
                 # build json entry
                 entry = dict()
-                entry['tag'] = current_obj['HOSTNAME'] or 'localhost'
+                if 'HOSTNAME' in current_obj and current_obj['HOSTNAME']:
+                    entry['tag'] = current_obj['HOSTNAME']
+                else:
+                    entry['tag'] = 'localhost'
                 entry['eventId'] = str(current_obj.pop('timestamp'))
                 entry['data'] = current_obj
                 current_row.append(entry)
@@ -640,7 +640,10 @@ def replay_db2(log_file_path):
         if len(current_row) != 0:
             # build json entry
             entry = dict()
-            entry['tag'] = current_obj['HOSTNAME'] or 'localhost'
+            if 'HOSTNAME' in current_obj and current_obj['HOSTNAME']:
+                entry['tag'] = current_obj['HOSTNAME']
+            else:
+                entry['tag'] = 'localhost'
             entry['eventId'] = str(current_obj.pop('timestamp'))
             entry['data'] = current_obj
             current_row.append(entry)
