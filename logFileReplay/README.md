@@ -6,14 +6,14 @@ Platform: Linux
 InsightAgent supports replay mode of json log files in which the data from the json file is read and sent to insightfinder server. A sample log file is as follows:
 
 ```json
-[{"eventId": 1480750759682, "data": " INFO org.apache.hadoop.hdfs.server.namenode.TransferFsImage: Downloaded file fsimage.ckpt_0000000000000000020 size 120 bytes.\n"}, {"eventId": 1480750759725, "Data": " INFO org.apache.hadoop.hdfs.server.namenode.NNStorageRetentionManager: Going to retain 2 images with txid >= 18\n"}, {"eventId": 1480754359850, "Data": " INFO org.apache.hadoop.hdfs.server.namenode.FSNamesystem: Roll Edit Log from 127.0.0.1\n"}]
+[{"eventId": 1480750759682, "data": " INFO org.apache.hadoop.hdfs.server.namenode.TransferFsImage: Downloaded file fsimage.ckpt_0000000000000000020 size 120 bytes.\n", "tag": "hadoop"}, {"eventId": 1480750759725, "data": " INFO org.apache.hadoop.hdfs.server.namenode.NNStorageRetentionManager: Going to retain 2 images with txid >= 18\n", "tag": "hadoop"}, {"eventId": 1480754359850, "data": " INFO org.apache.hadoop.hdfs.server.namenode.FSNamesystem: Roll Edit Log from 127.0.0.1\n", "tag": "hadoop"}]
 ```
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
 - Sign in with the user credentials or sign up for a new account.
 - Go to Settings and Register for a project under "Insight Agent" tab.
-- Give a project name, select Project Type as "Metric File".
+- Give a project name, select Project Type as "Log" with a type of "File Replay".
 - Note down the project name and license key which will be used for agent installation. The license key is also available in "User Account Information". To go to "User Account Information", click the userid on the top right corner.
 
 ### Prerequisites:
@@ -114,10 +114,21 @@ ansible-playbook insightagent.yaml
 ### Sending Data
 Run the following command for each log json file. You should be inside InsightAgent-master directory while running the command.
 ```
-python common/reportMetrics.py -m logFileReplay -t LogFileReplay -f PATH_TO_JSON_FILE -w https://app.insightfinder.com
+python common/reportMetrics.py -m logFileReplay -f PATH_TO_JSON_FILE -w https://app.insightfinder.com
 ```
 Where PATH_TO_JSON_FILE is the path and filename of the json file.
 Note: If running from a different server(on-prem installation), add the server ip and port after the -w option.
+
+If your data is not pre-formatted JSON, we support the following log types:
+* gpfs
+* db2
+
+You can specify that your file is one of the above types by passing it as an argument for the -t flag
+```
+python common/reportMetrics.py -m logFileReplay -t gpfs -f PATH_TO_GPFS_FILE -w https://app.insightfinder.com
+
+python common/reportMetrics.py -m logFileReplay -t db2 -f PATH_TO_DB2_FILE -w https://app.insightfinder.com
+```
 
 ### Uninstallation:
 Note: Uninstallation is required before you can install any other Metric agent(e.g. cgroup) or you want to reinstall the current collectd agent.
@@ -131,7 +142,7 @@ ifAction=uninstall
 
 ```
 ##Agent type
-ifAgent=collectd
+ifAgent=LogFileReplay
 ```
 2) Run the playbook
 ```
