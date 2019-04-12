@@ -608,7 +608,7 @@ def replay_network_log(log_file_path):
                 timestamp_array[1] = '0' + timestamp_array[1]
             year_str = str(datetime.now().year)
             entry = dict()
-            entry['tag'] = 'test'
+            entry['tag'] = 'network-log'
             entry['eventId'] = str(_get_timestamp_network_logs(' '.join(timestamp_array), year_str, parameters['timeZone']))
             entry['data'] = line
             current_row.append(entry)
