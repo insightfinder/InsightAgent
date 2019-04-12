@@ -389,6 +389,8 @@ def process_replay(file_path):
                 replay_db2(file_path)
             elif parameters['agentType'] == 'gpfs':
                 replay_gpfs(file_path)
+            elif parameters['agentType'] == 'network-log':
+                replay_network_log(file_path)
             else:
                 # default
                 try:
@@ -580,6 +582,46 @@ def replay_sar(metric_file_path, grouping_map):
     return
 
 
+def replay_network_log(log_file_path):
+    logger.info('Replaying network log file')
+    with open(log_file_path) as log_file:
+        line_count = 0
+        chunk_count = 0
+        current_row = []
+        start_time = time.time()
+        for line in log_file:
+            # skip empty lines
+            if not line.strip():
+                continue
+            # if the last loop results in chunkLines being set...
+            if line_count == parameters['chunkLines']:
+                logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                send_data(current_row, log_file_path, chunk_count)
+                current_row = []
+                chunk_count += 1
+                line_count = 0
+                start_time = time.time()
+            # build json entry
+            timestamp_array = line.split()[:3]
+            # pad with 0 if needed
+            if len(timestamp_array[1]) == 1:
+                timestamp_array[1] = '0' + timestamp_array[1]
+            year_str = str(datetime.now().year)
+            entry = dict()
+            entry['tag'] = 'test'
+            entry['eventId'] = str(_get_timestamp_network_logs(' '.join(timestamp_array), year_str, parameters['timeZone']))
+            entry['data'] = line
+            current_row.append(entry)
+            line_count += 1
+        # last chunk
+        if len(current_row) != 0:
+            logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+            send_data(current_row, log_file_path, chunk_count)
+            chunk_count += 1
+        logger.debug("Total chunks created: " + str(chunk_count))
+    return
+
+
 def replay_db2(log_file_path):
     logger.info('Replaying db2 file')
     with open(log_file_path) as log_file:
@@ -716,6 +758,10 @@ def _get_timestamp_sar(date, time, ampm, tz, format):
 
 def _get_timestamp_gpfs(timestamp_str, tz):
     return _get_timestamp_with_timezone(timestamp_str, tz, '%Y-%m-%d_%H:%M:%S.%f', True)
+
+
+def _get_timestamp_network_logs(timestamp_str, year, tz):
+    return _get_timestamp_with_timezone(timestamp_str + ' ' + year, tz, '%b %d %H:%M:%S %Y', False)
 
 
 def _get_timestamp_db2(timestamp_str, tz):
