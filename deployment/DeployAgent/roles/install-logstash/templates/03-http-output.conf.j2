@@ -1,26 +1,33 @@
-output {
-{% if agentType == "metric-log" %}
-    stdout { codec => line { format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project: '{{ ifLogProjectName }}'" }}
-{% else %}
-    stdout { codec => line { format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project: '{{ ifProjectName }}'" }}
-{% endif %}
-    if [output_type] == "InsightFinder"{
+output {        
+    # Send to IF
+    if "InsightFinder" in [output_type]  {
         http {
-        url => "{{ ifReportingUrl }}/api/v1/customprojectrawdata"
-        http_method => post
-        format => form
+            url => "{{ ifReportingUrl }}/api/v1/customprojectrawdata"
+            http_method => post
+            format => form
 
-        mapping => {
-                        "userName" => "{{ ifUserName }}"
-                        "licenseKey" => "{{ ifLicenseKey }}"
-                    {% if agentType == "metric-log" %}
-                        "projectName" => "{{ ifLogProjectName }}"
-                    {% else %}
-                        "projectName" => "{{ ifProjectName }}"
-                    {% endif %}
-                        "agentType" => "LogStreaming"
-                        "metricData" => "[%{groupdata}]"
-                    }
+            mapping => {
+                "userName" => "{{ ifUserName }}"
+                "licenseKey" => "{{ ifLicenseKey }}"
+            {% if agentType == "metric-log" %}
+                "projectName" => "{{ ifLogProjectName }}"
+            {% else %}
+                "projectName" => "{{ ifProjectName }}"
+            {% endif %}
+                "agentType" => "LogStreaming"
+                "metricData" => "[%{groupdata}]"
+            }
         }
+    }
+    
+    # handle parse errors    
+    if "true" in [LogStashErrorPool] {
+        
+    } else {
+    {% if agentType == "metric-log" %}
+        stdout { codec => line { format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project: '{{ ifLogProjectName }}'" }}
+    {% else %}
+        stdout { codec => line { format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project: '{{ ifProjectName }}'" }}
+    {% endif %}
     }
 }
