@@ -137,7 +137,7 @@ def get_agent_config_vars(normalization_map):
             if len(user_name) == 0:
                 logger.error("Agent not correctly configured(username). Check config file.")
                 sys.exit(1)
-            if len(sampling_interval) == 0:
+            if len(sampling_interval) == 0 and 'metric' in parameters['mode'] :
                 logger.error("Agent not correctly configured(sampling interval). Check config file.")
                 sys.exit(1)
             if len(selected_fields[0]) != 0:
