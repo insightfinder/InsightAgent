@@ -122,12 +122,15 @@ Note: If running from a different server(on-prem installation), add the server i
 If your data is not pre-formatted JSON, we support the following log types:
 * gpfs
 * db2
+* network-logs
 
 You can specify that your file is one of the above types by passing it as an argument for the -t flag
 ```
 python common/reportMetrics.py -m logFileReplay -t gpfs -f PATH_TO_GPFS_FILE -w https://app.insightfinder.com
 
 python common/reportMetrics.py -m logFileReplay -t db2 -f PATH_TO_DB2_FILE -w https://app.insightfinder.com
+
+python common/reportMetrics.py -m logFileReplay -t network-log -f PATH_TO_NETWORK-LOG_FILE -w https://app.insightfinder.com
 ```
 
 ### Uninstallation:
