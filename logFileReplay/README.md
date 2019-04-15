@@ -34,26 +34,41 @@ sudo -E apt-get install wget
 sudo -E yum update
 sudo -E yum install wget
 ```
-Note: If you are using proxy, the proxy needs to be set for both the current user and root
+Note: If you are using proxy, the proxy needs to be set for both the current user and root.
+
 #### Installation:
 1) Use the following command to download the insightfinder agent code. You can skip this step if you have the offline installer package.
 ```
 wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
 or
 wget --no-check-certificate http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
-
 ```
+
 Untar using this command.
 ```
 tar -xvf insightagent.tar.gz
+cd InsightAgent-master/
 ```
+
+If you do not need to distribute the replay script, you can skip to **Sending Data** below.
+
+2) Download the agent Code which will be distributed to other machines(not required if you have the offline installation package)
 ```
-cd InsightAgent-master/deployment/DeployAgent/
+cd deployment/DeployAgent/files/
+sudo -E ./downloadAgentSSL.sh
+# or
+sudo -E ./downloadAgentNoSSL.sh
+```
+
+3) Install Ansible, if this the first agent you are installing from this machine.
+```
+cd ..
 sudo -E ./installAnsible.sh
 ```
-2) Open and modify the inventory file
 
+4) Open and modify the inventory file
 ```
+# vi inventory
 [nodes]
 HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
 ###We can specify the host name with ssh details like this for each host
@@ -91,33 +106,31 @@ ifLicenseKey=
 ifSamplingInterval=1
 
 ##Agent type
+#
 ifAgent=LogFileReplay
+#
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
 ifReportingUrl=https://app.insightfinder.com
 ```
 
-
-3) Download the agent Code which will be distributed to other machines(not required if you have the offline installation package)
+5) Run the playbook
 ```
-cd files
-sudo -E ./downloadAgentSSL.sh
-or
-sudo -E ./downloadAgentNoSSL.sh
-```
-4) Run the playbook(Go back to the DeployAgent directory)
-```
-cd ..
 ansible-playbook insightagent.yaml
 ```
 
 ### Sending Data
 Run the following command for each log json file. You should be inside InsightAgent-master directory while running the command.
 ```
-python common/reportMetrics.py -m logFileReplay -f PATH_TO_JSON_FILE -w https://app.insightfinder.com
+cd InsightAgent-master/
+python common/reportMetrics.py -w https://app.insightfinder.com -m logFileReplay -f PATH/TO/JSON_FILE
 ```
-Where PATH_TO_JSON_FILE is the path and filename of the json file.
-Note: If running from a different server(on-prem installation), add the server ip and port after the -w option.
+Note: If replaying to an on-prem installation, add the server ip and port after the -w option.
+
+If you want to send a list of logs within a directory, you can use:
+```
+find /PATH/TO/DIRECTORY -maxdepth 1 -type f -exec python common/reportMetrics.py... -f {} \;
+```
 
 If your data is not pre-formatted JSON, we support the following log types:
 * gpfs
@@ -126,11 +139,11 @@ If your data is not pre-formatted JSON, we support the following log types:
 
 You can specify that your file is one of the above types by passing it as an argument for the -t flag
 ```
-python common/reportMetrics.py -m logFileReplay -t gpfs -f PATH_TO_GPFS_FILE -w https://app.insightfinder.com
+python common/reportMetrics.py -w https://app.insightfinder.com -m logFileReplay -t gpfs -f PATH/TO/GPFS_FILE
 
-python common/reportMetrics.py -m logFileReplay -t db2 -f PATH_TO_DB2_FILE -w https://app.insightfinder.com
+python common/reportMetrics.py -w https://app.insightfinder.com -m logFileReplay -t db2 -f PATH/TO/DB2_FILE
 
-python common/reportMetrics.py -m logFileReplay -t network-log -f PATH_TO_NETWORK-LOG_FILE -w https://app.insightfinder.com
+python common/reportMetrics.py -w https://app.insightfinder.com -m logFileReplay -t network-log -f PATH/TO/NETWORK-LOG_FILE
 ```
 
 ### Uninstallation:
@@ -145,8 +158,11 @@ ifAction=uninstall
 
 ```
 ##Agent type
+#
 ifAgent=LogFileReplay
+#
 ```
+
 2) Run the playbook
 ```
 ansible-playbook insightagent.yaml
