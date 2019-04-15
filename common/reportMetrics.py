@@ -503,9 +503,10 @@ def process_replay(file_path):
 
 def replay_sar(metric_file_path, grouping_map):
     logger.info('Replaying sar file')
+    translated_file_path = metric_file_path + '.sar'
     try:
         subprocess.check_output(
-            'sar -f ' + metric_file_path + ' > ' + metric_file_path + '.sar',
+            'sar -f ' + metric_file_path + ' > ' + translated_file_path,
             shell=True)
     except subprocess.CalledProcessError as e:
         logger.error('Not a sar file, sar is not installed, or there is a version mismatch ' +
@@ -587,6 +588,11 @@ def replay_sar(metric_file_path, grouping_map):
             chunk_count += 1
         logger.debug("Total chunks created: " + str(chunk_count))
         save_grouping(grouping_map)
+
+        # clean up
+        _ = subprocess.check_output(
+            'rm -f ' + translated_file_path,
+            shell=True)
     return
 
 
