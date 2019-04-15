@@ -3,7 +3,7 @@ Agent Type: Kafka
 
 Platform: Linux
 
-InsightFinder agent can be used to collect metrics from kafka.
+This agent is used to collect log data from kafka.
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
