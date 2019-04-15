@@ -603,6 +603,7 @@ def replay_network_log(log_file_path):
         chunk_count = 0
         current_row = []
         start_time = time.time()
+        instance = log_file.name.split('/')[-1].split('.')[0]
         for line in log_file:
             # skip empty lines
             if not line.strip():
@@ -622,7 +623,7 @@ def replay_network_log(log_file_path):
                 timestamp_array[1] = '0' + timestamp_array[1]
             year_str = str(datetime.now().year)
             entry = dict()
-            entry['tag'] = log_file.name.split('/')[-1].split('.')[0]
+            entry['tag'] = instance
             entry['eventId'] = str(_get_timestamp_network_logs(' '.join(timestamp_array), year_str, parameters['timeZone']))
             entry['data'] = line
             current_row.append(entry)
@@ -760,6 +761,7 @@ def replay_gpfs(log_file_path):
         chunk_count = 0
         current_row = []
         start_time = time.time()
+        instance = log_file.name.split('/')[-1].split('.')[0]
         for line in log_file:
             # skip empty lines
             if not line.strip():
@@ -774,7 +776,7 @@ def replay_gpfs(log_file_path):
                 start_time = time.time()
             # build json entry
             entry = dict()
-            entry['tag'] = log_file.name.split('.')[0]
+            entry['tag'] = instance
             entry['eventId'] = str(_get_timestamp_gpfs(line.split('+')[0], parameters['timeZone']))
             entry['data'] = line
             current_row.append(entry)
