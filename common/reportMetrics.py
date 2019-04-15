@@ -57,7 +57,7 @@ def get_parameters():
     parser.add_option("-l", "--chunkLines",
                       action="store", dest="chunkLines", help="Max number of lines in chunk")
     parser.add_option("-v", "--logLevel",
-                      action="store", dest="logLevel", help="Change log verbosity(WARNING: 0, INFO: 1, DEBUG: 2)")
+                      action="store", dest="logLevel", help="Change log verbosity (WARNING: 0, INFO: 1, DEBUG: 2)")
     (options, args) = parser.parse_args()
 
     parameters = dict()
@@ -519,7 +519,7 @@ def replay_sar(metric_file_path, grouping_map):
         # assume DD/MM/YYYY
         date = header[3]
         format = '%m/%d/%Y %I:%M:%S %p'
-        _ = metric_file.readline()
+        metric_file.readline()
         metrics = metric_file.readline()
         field_names = metrics.split()
         field_names[0] = 'timestamp'
@@ -590,7 +590,7 @@ def replay_sar(metric_file_path, grouping_map):
         save_grouping(grouping_map)
 
         # clean up
-        _ = subprocess.check_output(
+        subprocess.check_output(
             'rm -f ' + translated_file_path,
             shell=True)
     return
@@ -708,6 +708,7 @@ def replay_db2(log_file_path):
 
             # step to next line
             line = log_file.readline()
+    
         # last chunk
         if len(current_row) > 0 or len(current_obj) > 0:
             # build json entry
