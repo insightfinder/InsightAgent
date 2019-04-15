@@ -20,7 +20,7 @@ https://www.ssh.com/ssh/keygen/
 
 Tested with ansible version 2.2.3.0
 
-Kafka should be installed and accessible on port 9092 (This can be changed via the [configuration file](#config)). The default topic name the agent consumes from is ***"insightfinder_logs"***.
+Kafka should be installed and accessible on port 9092 (This can be changed via the configuration file). The default topic name the agent consumes from is ***"insightfinder_logs"***.
 
 ### Install wget to download the required files:
 #### For Debian and Ubuntu
