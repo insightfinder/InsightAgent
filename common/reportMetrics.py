@@ -647,6 +647,7 @@ def replay_db2(log_file_path):
         line = log_file.readline()
         current_obj = dict()
         key = 'no_field'
+        localhost = socket.gethostname()
         while line:
             # skip empty lines
             if not line.strip():
@@ -666,7 +667,7 @@ def replay_db2(log_file_path):
                     if 'HOSTNAME' in current_obj and current_obj['HOSTNAME']:
                         entry['tag'] = current_obj['HOSTNAME']
                     else:
-                        entry['tag'] = 'localhost'
+                        entry['tag'] = localhost
                     entry['eventId'] = str(current_obj.pop('timestamp'))
                     entry['data'] = current_obj
                     current_row.append(entry)
@@ -725,7 +726,7 @@ def replay_db2(log_file_path):
             if 'HOSTNAME' in current_obj and current_obj['HOSTNAME']:
                 entry['tag'] = current_obj['HOSTNAME']
             else:
-                entry['tag'] = 'localhost'
+                entry['tag'] = localhost
             entry['eventId'] = str(current_obj.pop('timestamp'))
             entry['data'] = current_obj
             current_row.append(entry)
