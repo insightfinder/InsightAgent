@@ -643,9 +643,10 @@ def replay_db2(log_file_path):
         line_count = 0
         chunk_count = 0
         current_row = []
-        current_obj = dict()
         start_time = time.time()
         line = log_file.readline()
+        current_obj = dict()
+        key = 'no_field'
         while line:
             # skip empty lines
             if not line.strip():
@@ -676,6 +677,7 @@ def replay_db2(log_file_path):
                 current_obj['timestamp'] = timestamp
                 current_obj['id'] = line.split()[1]
                 current_obj['LEVEL'] = line[line.rfind(' ') + 1:line.rfind('\n')]
+                key = 'no_field'
 
             except ValueError:
                 # we are still extracting fields
@@ -692,9 +694,15 @@ def replay_db2(log_file_path):
                         if not next_line.strip() and (next_line.startswith('ARG') or next_line.startswith('DATA') or next_line.startswith('MESSAGE')):
                             break
                     log_file.seek(i)
-                    last_key = key
                 elif ':' not in line:
-                    current_obj[last_key] = current_obj[key] + line
+                    # this should just be a continuation of the last key we've hit
+                    # or of 'no_field'
+                    if key in current_obj:
+                        current_obj[key] = current_obj[key] + line
+                    # otherwise, it's a new line that otherwise had no key. no need to log per line
+                    else:
+                        current_obj[key] = line
+                        logger.error(current_obj['id'] + ' has a line with no key')
                 else:
                     extract_fields_db2(current_obj, line)
 
