@@ -23,7 +23,7 @@ https://www.ssh.com/ssh/keygen/
 
 Tested with ansible version 2.2.3.0
 
-### Install wget to download the required files :
+### Install wget to download the required files:
 #### For Debian and Ubuntu
 ```
 sudo -E apt-get update
@@ -154,13 +154,6 @@ Note: Uninstallation is required before you can install any other Metric agent(e
 [all:vars]
 ##install or uninstall
 ifAction=uninstall
-```
-
-```
-##Agent type
-#
-ifAgent=LogFileReplay
-#
 ```
 
 2) Run the playbook
