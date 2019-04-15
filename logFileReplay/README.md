@@ -34,27 +34,41 @@ sudo -E apt-get install wget
 sudo -E yum update
 sudo -E yum install wget
 ```
-Note: If you are using proxy, the proxy needs to be set for both the current user and root
+Note: If you are using proxy, the proxy needs to be set for both the current user and root.
+
 #### Installation:
 1) Use the following command to download the insightfinder agent code. You can skip this step if you have the offline installer package.
 ```
 wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
 or
 wget --no-check-certificate http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
-
 ```
+
 Untar using this command.
 ```
 tar -xvf insightagent.tar.gz
+cd InsightAgent-master/
 ```
+
 If you do not need to distribute the replay script, you can skip to **Sending Data** below.
+
+2) Download the agent Code which will be distributed to other machines(not required if you have the offline installation package)
 ```
-cd InsightAgent-master/deployment/DeployAgent/
+cd deployment/DeployAgent/files/
+sudo -E ./downloadAgentSSL.sh
+# or
+sudo -E ./downloadAgentNoSSL.sh
+```
+
+3) Install Ansible, if this the first agent you are installing from this machine.
+```
+cd ..
 sudo -E ./installAnsible.sh
 ```
-2) Open and modify the inventory file
 
+4) Open and modify the inventory file
 ```
+# vi inventory
 [nodes]
 HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
 ###We can specify the host name with ssh details like this for each host
@@ -92,23 +106,16 @@ ifLicenseKey=
 ifSamplingInterval=1
 
 ##Agent type
+#
 ifAgent=LogFileReplay
+#
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
 ifReportingUrl=https://app.insightfinder.com
 ```
 
-
-3) Download the agent Code which will be distributed to other machines (not required if you have the offline installation package)
+5) Run the playbook
 ```
-cd files
-sudo -E ./downloadAgentSSL.sh
-or
-sudo -E ./downloadAgentNoSSL.sh
-```
-4) Run the playbook(Go back to the DeployAgent directory)
-```
-cd ..
 ansible-playbook insightagent.yaml
 ```
 
@@ -151,8 +158,11 @@ ifAction=uninstall
 
 ```
 ##Agent type
+#
 ifAgent=LogFileReplay
+#
 ```
+
 2) Run the playbook
 ```
 ansible-playbook insightagent.yaml
