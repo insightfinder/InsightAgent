@@ -647,6 +647,7 @@ def replay_db2(log_file_path):
         line = log_file.readline()
         current_obj = dict()
         key = 'no_field'
+        field_name_regex = '[A-Z]+\s*#?[0-9]*:'
         localhost = socket.gethostname()
         while line:
             # skip empty lines
@@ -670,32 +671,20 @@ def replay_db2(log_file_path):
                         entry['tag'] = localhost
                     entry['eventId'] = str(current_obj.pop('timestamp'))
                     entry['data'] = current_obj
+                    logger.debug(entry)
                     current_row.append(entry)
                     line_count += 1
 
                 # reset obj
                 current_obj = dict()
                 current_obj['timestamp'] = timestamp
-                current_obj['id'] = line.split()[1]
+                current_obj['UNIQ'] = line.split()[1]
                 current_obj['LEVEL'] = line[line.rfind(' ') + 1:line.rfind('\n')]
                 key = 'no_field'
 
             except ValueError:
-                # we are still extracting fields
-                if line.startswith('ARG') or line.startswith('DATA') or line.startswith('MESSAGE'):
-                    key = line[:line.find(':')]
-                    current_obj[key] = line[line.find(':') + 1:]
-                    # until we hit the next field
-                    i = log_file.tell()  # save the current position
-                    next_line = log_file.readline()
-                    while next_line.strip():
-                        current_obj[key] = current_obj[key] + next_line
-                        i = log_file.tell()  # save the current position
-                        next_line = log_file.readline()
-                        if not next_line.strip() and (next_line.startswith('ARG') or next_line.startswith('DATA') or next_line.startswith('MESSAGE')):
-                            break
-                    log_file.seek(i)
-                elif ':' not in line:
+                # check if line start with a field name
+                if not re.match('^' + field_name_regex, line):
                     # this should just be a continuation of the last key we've hit
                     # or of 'no_field'
                     if key in current_obj:
@@ -703,9 +692,8 @@ def replay_db2(log_file_path):
                     # otherwise, it's a new line that otherwise had no key. no need to log per line
                     else:
                         current_obj[key] = line
-                        logger.error(current_obj['id'] + ' has a line with no key')
                 else:
-                    extract_fields_db2(current_obj, line)
+                    extract_fields_db2(current_obj, line, field_name_regex)
 
             # if the last loop results in chunkLines being set...
             if line_count == parameters['chunkLines']:
@@ -737,29 +725,14 @@ def replay_db2(log_file_path):
     return
 
 
-def extract_fields_db2(obj, line):
-    # need to put spaces before and after ":"
-    matches_post = re.findall('[A-Z]+:', line)
-    for match in matches_post:
-        split_at = line.find(':', line.find(match))
-        line = line[:split_at] + ' ' + line[split_at:]
+def extract_fields_db2(obj, line, field_name_regex):
+    line = '#'.join(re.split('\s*#', line))
 
-    matches_pre = re.findall(':\S+', line)
-    for match in matches_pre:
-        split_at = line.find(':', line.find(match))
-        line = line[:split_at + 1] + ' ' + line[split_at + 1:]
-
-    line_arr = line.split()
-    while len(line_arr) > 0:
-        rev_array = line_arr[::-1]
-        last_val_pos = len(line_arr) - rev_array.index(':')
-        last_val = ' '.join(line_arr[last_val_pos:])
-        last_key_pos = last_val_pos - 2
-        last_key = line_arr[last_key_pos]
-        obj[last_key] = last_val
-        if last_key_pos == 0:
-            break
-        line_arr = line_arr[:last_key_pos]
+    field_names = re.findall(field_name_regex, line)
+    for field_name in reversed(field_names):
+        split_at = line.find(field_name) + len(field_name)
+        obj[re.split('\s*:', field_name)[0]] = ' '.join(line[split_at:].split())
+        line = line[:split_at - len(field_name)]
     return
 
 
@@ -770,7 +743,7 @@ def replay_gpfs(log_file_path):
         chunk_count = 0
         current_row = []
         start_time = time.time()
-        instance = log_file.name.split('/')[-1].split('.')[0]
+        instance = log_file.name.split('/')[-1].split('.')[-1]
         for line in log_file:
             # skip empty lines
             if not line.strip():
