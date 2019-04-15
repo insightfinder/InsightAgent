@@ -11,7 +11,7 @@ This agent is used to collect log data from kafka.
 - Go to Settings and create a project.
 - Select InsightAgent as the Data Source on the next page.
 - Using the dropdowns on the next page, select "Custom" as the Instance Type, "Log" as the Data Type, and "Live Streaming" as the Agent Type
-- Note you license key which is available in "User Account Information". To get to "User Account Information", click on the username on the top right corner.
+- Note your license key which is available in "User Account Information". To get to "User Account Information", click on the username on the top right corner.
 
 ##### Pre-requisites:
 Python 2.7
