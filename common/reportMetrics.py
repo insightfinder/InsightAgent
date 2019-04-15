@@ -503,7 +503,15 @@ def process_replay(file_path):
 
 def replay_sar(metric_file_path, grouping_map):
     logger.info('Replaying sar file')
-    with open(metric_file_path) as metric_file:
+    try:
+        subprocess.check_output(
+            'sar -f ' + metric_file_path + ' > ' + metric_file_path + '.sar',
+            shell=True)
+    except subprocess.CalledProcessError as e:
+        logger.error('Not a sar file, sar is not installed, or there is a version mismatch ' +
+                     'between the origin machine and the current machine. Please contact support.')
+        sys.exit(1)
+    with open(metric_file_path + '.sar') as metric_file:
         line = metric_file.readline()
         header = line.split()
         instance = header[2][1:-1]
@@ -608,7 +616,7 @@ def replay_network_log(log_file_path):
                 timestamp_array[1] = '0' + timestamp_array[1]
             year_str = str(datetime.now().year)
             entry = dict()
-            entry['tag'] = 'network-log'
+            entry['tag'] = log_file.name.split('/')[-1].split('.')[0]
             entry['eventId'] = str(_get_timestamp_network_logs(' '.join(timestamp_array), year_str, parameters['timeZone']))
             entry['data'] = line
             current_row.append(entry)
@@ -632,27 +640,39 @@ def replay_db2(log_file_path):
         start_time = time.time()
         line = log_file.readline()
         while line:
-            # empty line denotes new log entry. aggregate current string
+            # skip empty lines
             if not line.strip():
+                line = log_file.readline()
+                continue
+
+            try:
+                # new timestamp = new log entry
+                timestamp = _get_timestamp_db2(line.split('+')[0], parameters['timeZone'])
+                #####
+                # we will only hit the next block of code if the line starts with a valid timestamp
+                #####
+
                 # build json entry
-                entry = dict()
-                if 'HOSTNAME' in current_obj and current_obj['HOSTNAME']:
-                    entry['tag'] = current_obj['HOSTNAME']
-                else:
-                    entry['tag'] = 'localhost'
-                entry['eventId'] = str(current_obj.pop('timestamp'))
-                entry['data'] = current_obj
-                current_row.append(entry)
-                line_count += 1
+                if len(current_obj) > 0:
+                    entry = dict()
+                    if 'HOSTNAME' in current_obj and current_obj['HOSTNAME']:
+                        entry['tag'] = current_obj['HOSTNAME']
+                    else:
+                        entry['tag'] = 'localhost'
+                    entry['eventId'] = str(current_obj.pop('timestamp'))
+                    entry['data'] = current_obj
+                    current_row.append(entry)
+                    line_count += 1
+
+                # reset obj
                 current_obj = dict()
-            else:
-                # first line starts with timestamp
-                if len(current_obj) == 0:
-                    timestamp_str = line.split()[0]
-                    current_obj['timestamp'] = _get_timestamp_db2(timestamp_str, parameters['timeZone'])
-                    current_obj['id'] = line.split()[1]
-                    current_obj['LEVEL'] = line[line.rfind(' '):]
-                elif line[:3] == 'ARG' or line[:4] == 'DATA' or line[:7] == 'MESSAGE':
+                current_obj['timestamp'] = timestamp
+                current_obj['id'] = line.split()[1]
+                current_obj['LEVEL'] = line[line.rfind(' ') + 1:line.rfind('\n')]
+
+            except ValueError:
+                # we are still extracting fields
+                if line.startswith('ARG') or line.startswith('DATA') or line.startswith('MESSAGE'):
                     key = line[:line.find(':')]
                     current_obj[key] = line[line.find(':') + 1:]
                     # until we hit the next field
@@ -662,9 +682,12 @@ def replay_db2(log_file_path):
                         current_obj[key] = current_obj[key] + next_line
                         i = log_file.tell()  # save the current position
                         next_line = log_file.readline()
-                        if next_line[:3] == 'ARG' or next_line[:4] == 'DATA' or next_line[:7] == 'MESSAGE':
+                        if not next_line.strip() and (next_line.startswith('ARG') or next_line.startswith('DATA') or next_line.startswith('MESSAGE')):
                             break
                     log_file.seek(i)
+                    last_key = key
+                elif ':' not in line:
+                    current_obj[last_key] = current_obj[key] + line
                 else:
                     extract_fields_db2(current_obj, line)
 
@@ -677,9 +700,10 @@ def replay_db2(log_file_path):
                 line_count = 0
                 start_time = time.time()
 
+            # step to next line
             line = log_file.readline()
         # last chunk
-        if len(current_row) != 0:
+        if len(current_row) > 0 or len(current_obj) > 0:
             # build json entry
             entry = dict()
             if 'HOSTNAME' in current_obj and current_obj['HOSTNAME']:
@@ -697,11 +721,16 @@ def replay_db2(log_file_path):
 
 
 def extract_fields_db2(obj, line):
-    # need to put spaces before :
-    matches = re.findall('[A-Z]+:', line)
-    for match in matches:
+    # need to put spaces before and after ":"
+    matches_post = re.findall('[A-Z]+:', line)
+    for match in matches_post:
         split_at = line.find(':', line.find(match))
         line = line[:split_at] + ' ' + line[split_at:]
+
+    matches_pre = re.findall(':\S+', line)
+    for match in matches_pre:
+        split_at = line.find(':', line.find(match))
+        line = line[:split_at + 1] + ' ' + line[split_at + 1:]
 
     line_arr = line.split()
     while len(line_arr) > 0:
@@ -738,8 +767,8 @@ def replay_gpfs(log_file_path):
                 start_time = time.time()
             # build json entry
             entry = dict()
-            entry['tag'] = log_file.name.split('.')[-1]
-            entry['eventId'] = str(_get_timestamp_gpfs(':'.join(line.split(':')[0:3]), parameters['timeZone']))
+            entry['tag'] = log_file.name.split('.')[0]
+            entry['eventId'] = str(_get_timestamp_gpfs(line.split('+')[0], parameters['timeZone']))
             entry['data'] = line
             current_row.append(entry)
             line_count += 1
@@ -753,26 +782,22 @@ def replay_gpfs(log_file_path):
 
 
 def _get_timestamp_sar(date, time, ampm, tz, format):
-    return _get_timestamp_with_timezone(date + ' ' + time + ' ' + ampm, tz, format, False)
+    return _get_timestamp_with_timezone(date + ' ' + time + ' ' + ampm, tz, format)
 
 
 def _get_timestamp_gpfs(timestamp_str, tz):
-    return _get_timestamp_with_timezone(timestamp_str, tz, '%Y-%m-%d_%H:%M:%S.%f', True)
+    return _get_timestamp_with_timezone(timestamp_str, tz, '%Y-%m-%d_%H:%M:%S.%f')
 
 
 def _get_timestamp_network_logs(timestamp_str, year, tz):
-    return _get_timestamp_with_timezone(timestamp_str + ' ' + year, tz, '%b %d %H:%M:%S %Y', False)
+    return _get_timestamp_with_timezone(timestamp_str + ' ' + year, tz, '%b %d %H:%M:%S %Y')
 
 
 def _get_timestamp_db2(timestamp_str, tz):
-    return _get_timestamp_with_timezone(timestamp_str, tz, '%Y-%m-%d-%H.%M.%S.%f', True)
+    return _get_timestamp_with_timezone(timestamp_str, tz, '%Y-%m-%d-%H.%M.%S.%f')
 
 
-def _get_timestamp_with_timezone(date_string, time_zone, format, strip_offset):
-    # take off +HHMM and rely on passing -z flag
-    if strip_offset:
-        date_string = date_string[:-5]
-
+def _get_timestamp_with_timezone(date_string, time_zone, format):
     timestamp_datetime = datetime.strptime(date_string, format)
     tz = pytz.timezone(time_zone)
     time_in_tz = tz.localize(timestamp_datetime)
