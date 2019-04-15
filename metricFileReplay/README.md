@@ -52,6 +52,7 @@ Untar using this command.
 ```
 tar -xvf insightagent.tar.gz
 ```
+If you do not need to distribute the replay script, you can skip to **Sending Data** below.
 ```
 cd InsightAgent-master/deployment/DeployAgent/
 sudo -E ./installAnsible.sh
@@ -122,13 +123,19 @@ Make sure each file is .csv formatted, starts with a row of headers and the head
 
 2) Run the following command for each data file.
 ```
-sudo python /root/InsightAgent-master/common/reportMetrics.py -m metricFileReplay -f PATH_TO_CSV_FILE
+cd InsightAgent-master/
+sudo python common/reportMetrics.py -w https://app.insightfinder.com -m metricFileReplay -f PATH/TO/CSV_FILE
 ```
-Where PATH_TO_CSVFILENAME is the path and filename of the csv file.
+Note: If replaying to an on-prem installation, add the server ip and port after the -w option.
+
+If you want to send a list of logs within a directory, you can use:
+```
+find /PATH/TO/DIRECTORY -maxdepth 1 -type f -exec python common/reportMetrics.py... -f {} \;
+```
 
 If you are replaying the output of a sar file, you can specify so as an argument to the -t parameter:
 ```
-sudo python common/reportMetrics.py -t sar -m metricFileReplay -f PATH_TO_SAR_FILE
+sudo python common/reportMetrics.py -w https://app.insightfinder.com -m metricFileReplay -t sar -f PATH/TO/SAR_FILE
 ```
 
 ### Uninstallation:
