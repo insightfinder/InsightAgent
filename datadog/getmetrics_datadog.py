@@ -26,12 +26,6 @@ def get_parameters():
                       action="store", dest="serverUrl", help="Server Url")
     parser.add_option("-c", "--chunkLines",
                       action="store", dest="chunkLines", help="Timestamps per chunk for historical data.")
-    parser.add_option("-m", "--mode",
-                      action="store", dest="mode", help="Data sending mode(streaming/historical)")
-    parser.add_option("-s", "--startDate",
-                      action="store", dest="startDate", help="Historical data start date")
-    parser.add_option("-e", "--endDate",
-                      action="store", dest="endDate", help="Historical data end date")
     parser.add_option("-l", "--logLevel",
                       action="store", dest="logLevel", help="Change log verbosity(WARNING: 0, INFO: 1, DEBUG: 2)")
     (options, args) = parser.parse_args()
@@ -45,18 +39,6 @@ def get_parameters():
         params['chunkLines'] = 50
     else:
         params['chunkLines'] = int(options.chunkLines)
-    if options.mode is None or options.mode != "historical":
-        params['mode'] = "streaming"
-    else:
-        params['mode'] = "historical"
-    if options.startDate is None or options.mode == "streaming":
-        params['startDate'] = ""
-    else:
-        params['startDate'] = options.startDate
-    if options.endDate is None or options.mode == "streaming":
-        params['endDate'] = ""
-    else:
-        params['endDate'] = options.endDate
     params['logLevel'] = logging.INFO
     if options.logLevel == '0':
         params['logLevel'] = logging.WARNING
@@ -118,7 +100,8 @@ def get_agent_config_vars(normalization_ids_map):
             "userName": user_name,
             "licenseKey": license_key,
             "projectName": project_name,
-            "allMetrics": all_metrics
+            "allMetrics": all_metrics,
+            "samplingInterval": sampling_interval
         }
 
         return config_vars
@@ -126,26 +109,6 @@ def get_agent_config_vars(normalization_ids_map):
         logger.error(
             "Agent not correctly configured. Check config file.")
         sys.exit(1)
-
-
-def get_reporting_config_vars():
-    reporting_config = {}
-    with open(os.path.abspath(os.path.join(__file__, os.pardir, os.pardir, "reporting_config.json")), 'r') as f:
-        config = json.load(f)
-    reporting_interval_string = config['reporting_interval']
-    if reporting_interval_string[-1:] == 's':
-        reporting_interval = float(config['reporting_interval'][:-1])
-        reporting_config['reporting_interval'] = float(reporting_interval / 60.0)
-    else:
-        reporting_config['reporting_interval'] = int(config['reporting_interval'])
-        reporting_config['keep_file_days'] = int(config['keep_file_days'])
-        reporting_config['prev_endtime'] = config['prev_endtime']
-        reporting_config['deltaFields'] = config['delta_fields']
-
-    reporting_config['keep_file_days'] = int(config['keep_file_days'])
-    reporting_config['prev_endtime'] = config['prev_endtime']
-    reporting_config['deltaFields'] = config['delta_fields']
-    return reporting_config
 
 
 def get_datadog_config():
@@ -240,20 +203,18 @@ def get_metric_list(config):
 
 
 def get_metric_data(config, metric_list, metric_grouping, start_time, end_time, collected_data_map):
-    """Get metric data from Open TSDB API"""
+    """Get metric data from Datadog API"""
 
     def format_data_entry(json_data_entry):
         metric_name = json_data_entry.get('metric')
         host_name = json_data_entry.get('scope') or 'unknown_host'
         datapoints = json_data_entry.get('pointlist', [])
-        metric_value = None
         header_field = normalize_key(metric_name) + "[" + host_name + "]:" + str(
             get_grouping_id(metric_name, metric_grouping))
-        mtime = 0
         for each_point in datapoints:
-            metric_value = each_point[1]
-            if metric_value is None:
+            if len(each_point) < 2 or each_point[1] is None:
                 continue
+            metric_value = each_point[1]
             epoch = int(each_point[0])
             if epoch in collected_data_map:
                 timestamp_value_map = collected_data_map[epoch]
@@ -354,21 +315,17 @@ if __name__ == "__main__":
     logger = set_logger_config(log_level)
     data_dir = 'data'
     agent_config_vars = get_agent_config_vars(normalization_ids_map)
-    reporting_config_vars = get_reporting_config_vars()
     grouping_map = load_grouping()
 
     # get agent configuration details
-    agent_config = get_datadog_config()
-    datadog_api = datadog.initialize(api_key=agent_config['DATADOG_API_KEY'], app_key=agent_config['DATADOG_APP_KEY'])
-
-    title = "Something big happened!"
-    text = 'And let me tell you all about it here!'
-    tags = ['version:1', 'application:web']
+    datadog_config = get_datadog_config()
+    datadog_api = datadog.initialize(api_key=datadog_config['DATADOG_API_KEY'],
+                                     app_key=datadog_config['DATADOG_APP_KEY'])
 
     time_list = []
     # get data by cron
     data_end_ts = int(time.time())
-    interval_in_secs = int(reporting_config_vars['reporting_interval'] * 3600 * 10)
+    interval_in_secs = int(agent_config_vars['reportingInterval'] * 60)
     data_start_ts = data_end_ts - interval_in_secs
     time_list = [(data_start_ts, data_end_ts)]
     try:
@@ -379,14 +336,20 @@ if __name__ == "__main__":
         # get metric list
         all_metrics_list = agent_config_vars['allMetrics']
         if len(all_metrics_list) == 0:
-            all_metrics_list = get_metric_list(agent_config)
+            all_metrics_list = get_metric_list(datadog_config)
+            if len(normalization_ids_map) == 0:
+                count = 1
+                for index in range(len(all_metrics_list)):
+                    metric = all_metrics_list[index]
+                    normalization_ids_map[metric] = GROUPING_START + count
+                    count += 1
 
         for data_start_ts, data_end_ts in time_list:
             logger.debug("Getting data from datadog for range: {}-{}".format(data_start_ts, data_end_ts))
             chunked_metric_list = chunks(all_metrics_list, METRIC_CHUNKS)
             for sub_list in chunked_metric_list:
                 # get metric data from datadog every SAMPLING_INTERVAL
-                get_metric_data(agent_config, sub_list, grouping_map, data_start_ts, data_end_ts, raw_data_map)
+                get_metric_data(datadog_config, sub_list, grouping_map, data_start_ts, data_end_ts, raw_data_map)
                 if len(raw_data_map) == 0:
                     logger.error("No data for metrics received from datadog.")
                     sys.exit()
