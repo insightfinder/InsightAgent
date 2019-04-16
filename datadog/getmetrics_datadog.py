@@ -4,7 +4,6 @@ import collections
 import json
 import logging
 import os
-import random
 import re
 import socket
 import sys
@@ -63,6 +62,8 @@ def get_agent_config_vars(normalization_ids_map):
             if len(config_parser.get('insightfinder', 'all_metrics')) != 0:
                 all_metrics = config_parser.get('insightfinder', 'all_metrics').split(",")
             normalization_ids = config_parser.get('insightfinder', 'normalization_id').split(",")
+            http_proxy = config_parser.get('insightfinder', 'http_proxy')
+            https_proxy = config_parser.get('insightfinder', 'https_proxy')
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
@@ -101,7 +102,9 @@ def get_agent_config_vars(normalization_ids_map):
             "licenseKey": license_key,
             "projectName": project_name,
             "allMetrics": all_metrics,
-            "samplingInterval": sampling_interval
+            "samplingInterval": sampling_interval,
+            "httpProxy": http_proxy,
+            "httpsProxy": https_proxy
         }
 
         return config_vars
@@ -144,55 +147,18 @@ def get_datadog_config():
     return datadog_config
 
 
-def save_grouping(metric_grouping):
-    """
-    Saves the grouping data to grouping.json
-    Parameters:
-        - `grouping_map` : metric_name-grouping_id dict
-    :return: None
-    """
-    with open('grouping.json', 'w+') as f:
-        f.write(json.dumps(metric_grouping))
-
-
-def load_grouping():
-    """
-    Loads the grouping data from grouping.json
-    :return: grouping JSON string
-    """
-    if os.path.isfile('grouping.json'):
-        logger.debug("Grouping file exists. Loading..")
-        with open('grouping.json', 'r+') as f:
-            try:
-                grouping_json = json.loads(f.read())
-            except ValueError:
-                grouping_json = json.loads("{}")
-                logger.debug("Error parsing grouping.json.")
-    else:
-        grouping_json = json.loads("{}")
-    return grouping_json
-
-
-def get_grouping_id(metric_key, metric_grouping):
+def get_grouping_id(metric_key, normalization_ids_map):
     """
     Get grouping id for a metric key
     Parameters:
     - `metric_key` : metric key str to get group id.
-    - `metric_grouping` : metric_key-grouping id map
+    - `temp_id` : proposed group id integer
     """
-    for index in range(3):
-        grouping_candidate = random.randint(GROUPING_START, GROUPING_END)
-        if metric_key in metric_grouping:
-            grouping_id = int(metric_grouping[metric_key])
-            return grouping_id
-        else:
-            grouping_id = grouping_candidate
-            metric_grouping[metric_key] = grouping_id
-            return grouping_id
-    return GROUPING_START
+    grouping_id = int(normalization_ids_map[metric_key])
+    return grouping_id
 
 
-def get_metric_list(config):
+def get_metric_list():
     """Get available metric list from Datadog API"""
     metric_list = []
     from_time = int(time.time()) - 60 * 60 * 24 * 1
@@ -202,15 +168,20 @@ def get_metric_list(config):
     return metric_list
 
 
-def get_metric_data(config, metric_list, metric_grouping, start_time, end_time, collected_data_map):
+def get_metric_data(metric_list, start_time, end_time, collected_data_map):
     """Get metric data from Datadog API"""
 
     def format_data_entry(json_data_entry):
         metric_name = json_data_entry.get('metric')
-        host_name = json_data_entry.get('scope') or 'unknown_host'
+        host_name_arr = str(json_data_entry.get('scope'))
+        host_name_arr = host_name_arr.split(":")
+        if len(host_name_arr) == 2:
+            host_name = host_name_arr[1]
+        else:
+            host_name = "unknown_host"
         datapoints = json_data_entry.get('pointlist', [])
-        header_field = normalize_key(metric_name) + "[" + host_name + "]:" + str(
-            get_grouping_id(metric_name, metric_grouping))
+        header_field = normalize_key(metric_name) + "[" + normalize_key(host_name) + "]:" + str(
+            get_grouping_id(metric_name, normalization_ids_map))
         for each_point in datapoints:
             if len(each_point) < 2 or each_point[1] is None:
                 continue
@@ -230,7 +201,6 @@ def get_metric_data(config, metric_list, metric_grouping, start_time, end_time, 
         query += each_metric + '{*}by{host},'
     query = query[:-1]
     datadog_metrics_result = datadog.api.Metric.query(start=start_time, end=end_time, query=query)
-    print(json.dumps(datadog_metrics_result))
 
     status = datadog_metrics_result.get('status', 'error')
 
@@ -248,7 +218,7 @@ def send_data(chunk_metric_data):
     to_send_data_dict["projectName"] = agent_config_vars['projectName']
     to_send_data_dict["userName"] = agent_config_vars['userName']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
-    to_send_data_dict["samplingInterval"] = str(int(reporting_config_vars['reporting_interval'] * 60))
+    to_send_data_dict["samplingInterval"] = str(int(agent_config_vars['samplingInterval'] * 60))
     to_send_data_dict["agentType"] = "custom"
 
     to_send_data_json = json.dumps(to_send_data_dict)
@@ -315,17 +285,21 @@ if __name__ == "__main__":
     logger = set_logger_config(log_level)
     data_dir = 'data'
     agent_config_vars = get_agent_config_vars(normalization_ids_map)
-    grouping_map = load_grouping()
 
     # get agent configuration details
     datadog_config = get_datadog_config()
+    datadog_proxies = {}
+    if len(agent_config_vars['httpProxy']) != 0:
+        datadog_proxies['http'] = agent_config_vars['httpProxy']
+    if len(agent_config_vars['httpsProxy']) != 0:
+        datadog_proxies['https'] = agent_config_vars['httpsProxy']
     datadog_api = datadog.initialize(api_key=datadog_config['DATADOG_API_KEY'],
-                                     app_key=datadog_config['DATADOG_APP_KEY'])
+                                     app_key=datadog_config['DATADOG_APP_KEY'], proxies=datadog_proxies)
 
     time_list = []
     # get data by cron
     data_end_ts = int(time.time())
-    interval_in_secs = int(agent_config_vars['reportingInterval'] * 60)
+    interval_in_secs = int(agent_config_vars['samplingInterval']) * 60
     data_start_ts = data_end_ts - interval_in_secs
     time_list = [(data_start_ts, data_end_ts)]
     try:
@@ -336,7 +310,7 @@ if __name__ == "__main__":
         # get metric list
         all_metrics_list = agent_config_vars['allMetrics']
         if len(all_metrics_list) == 0:
-            all_metrics_list = get_metric_list(datadog_config)
+            all_metrics_list = get_metric_list()
             if len(normalization_ids_map) == 0:
                 count = 1
                 for index in range(len(all_metrics_list)):
@@ -349,7 +323,7 @@ if __name__ == "__main__":
             chunked_metric_list = chunks(all_metrics_list, METRIC_CHUNKS)
             for sub_list in chunked_metric_list:
                 # get metric data from datadog every SAMPLING_INTERVAL
-                get_metric_data(datadog_config, sub_list, grouping_map, data_start_ts, data_end_ts, raw_data_map)
+                get_metric_data(sub_list, data_start_ts, data_end_ts, raw_data_map)
                 if len(raw_data_map) == 0:
                     logger.error("No data for metrics received from datadog.")
                     sys.exit()
@@ -383,7 +357,6 @@ if __name__ == "__main__":
             logger.debug("Sending Final Chunk: " + str(chunk_number))
             logger.info("Sending from datadog for range: {}-{}".format(min_timestamp, max_timestamp))
             send_data(metric_data)
-        save_grouping(grouping_map)
 
     except Exception as e:
         logger.error("Error sending metric data to InsightFinder.")

@@ -195,6 +195,23 @@ if [ $AGENT_TYPE == 'prometheus' ]; then
 		echo "sampling_interval=$SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
 		echo "ssl_verify=True" >> ${PATH_TO_CONFIG_INI}
 	fi
+elif [ $AGENT_TYPE == 'datadog' ]; then
+    	if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
+		touch ${PATH_TO_CONFIG_INI}
+		echo "[datadog]" >> ${PATH_TO_CONFIG_INI}
+		echo "app_key =" >> ${PATH_TO_CONFIG_INI}
+		echo "api_key =" >> ${PATH_TO_CONFIG_INI}
+		echo " " >> ${PATH_TO_CONFIG_INI}
+		echo "[insightfinder]" >> ${PATH_TO_CONFIG_INI}
+		echo "license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
+		echo "project_name=$PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
+		echo "user_name=$USERNAME" >> ${PATH_TO_CONFIG_INI}
+		echo "sampling_interval=$SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
+		echo "normalization_id = " >> ${PATH_TO_CONFIG_INI}
+		echo "all_metrics =" >> ${PATH_TO_CONFIG_INI}
+		echo "http_proxy =" >> ${PATH_TO_CONFIG_INI}
+		echo "https_proxy =" >> ${PATH_TO_CONFIG_INI}
+	fi
 elif [ $AGENT_TYPE == 'kafka' ]; then
 	if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
 		touch ${PATH_TO_CONFIG_INI}
@@ -330,7 +347,16 @@ elif [ $AGENT_TYPE == 'opentsdb' ]; then
 	else
 		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
 	fi
-
+elif [ $AGENT_TYPE == 'datadog' ]; then
+    if [ -z "$CHUNK_SIZE" ]; then
+	    CHUNK_SIZE='50'
+    fi
+	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -w $SERVER_URL -c $CHUNK_SIZE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
+	if [ "$IS_SECOND_REPORTING" = true ] ; then
+		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
+	else
+		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
+	fi
 elif [ $AGENT_TYPE == 'kafka-logs' ]; then
 	MONITRCLOC=/etc/monit.d/kafka_logs
 	if [ -z "$CHUNK_LINES" ]; then
