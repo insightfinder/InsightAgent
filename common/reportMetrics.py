@@ -57,7 +57,7 @@ def get_parameters():
     parser.add_option("-l", "--chunkLines",
                       action="store", dest="chunkLines", help="Max number of lines in chunk")
     parser.add_option("-v", "--logLevel",
-                      action="store", dest="logLevel", help="Change log verbosity (WARNING: 0, INFO: 1, DEBUG: 2)")
+                      action="store", dest="logLevel", help="Change log verbosity (WARNING/0, INFO/1, DEBUG/2)")
     (options, args) = parser.parse_args()
 
     parameters = dict()
@@ -165,15 +165,15 @@ def get_reporting_config_vars():
     reporting_config_vars = dict()
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
         config = json.load(f)
-    reporting_interval_string = config['reporting_interval']
-    if reporting_interval_string[-1:] == 's':
-        reporting_interval = float(config['reporting_interval'][:-1])
-        reporting_config_vars['reporting_interval'] = float(reporting_interval / 60.0)
-    else:
-        reporting_config_vars['reporting_interval'] = int(config['reporting_interval'])
-    reporting_config_vars['keep_file_days'] = int(config['keep_file_days'])
-    reporting_config_vars['prev_endtime'] = config['prev_endtime']
-    reporting_config_vars['deltaFields'] = config['delta_fields']
+        reporting_interval_string = config['reporting_interval']
+        if reporting_interval_string[-1:] == 's':
+            reporting_interval = float(config['reporting_interval'][:-1])
+            reporting_config_vars['reporting_interval'] = float(reporting_interval / 60.0)
+        else:
+            reporting_config_vars['reporting_interval'] = int(config['reporting_interval'])
+        reporting_config_vars['keep_file_days'] = int(config['keep_file_days'])
+        reporting_config_vars['prev_endtime'] = config['prev_endtime']
+        reporting_config_vars['deltaFields'] = config['delta_fields']
     return reporting_config_vars
 
 
@@ -647,7 +647,7 @@ def replay_db2(log_file_path):
         line = log_file.readline()
         current_obj = dict()
         key = 'no_field'
-        field_name_regex = '[A-Z]+\s*#?[0-9]*:'
+        field_name_regex = '[A-Z]+\s*#?[0-9]*\s*:'
         localhost = socket.gethostname()
         while line:
             # skip empty lines
@@ -675,6 +675,15 @@ def replay_db2(log_file_path):
                     current_row.append(entry)
                     line_count += 1
 
+                    # if adding the most recent entry should trigger sending
+                    if line_count == parameters['chunkLines']:
+                        logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                        send_data(current_row, log_file_path, chunk_count)
+                        current_row = []
+                        chunk_count += 1
+                        line_count = 0
+                        start_time = time.time()
+
                 # reset obj
                 current_obj = dict()
                 current_obj['timestamp'] = timestamp
@@ -683,26 +692,16 @@ def replay_db2(log_file_path):
                 key = 'no_field'
 
             except ValueError:
-                # check if line start with a field name
-                if not re.match('^' + field_name_regex, line):
+                # check if line start with a field name or not
+                if re.match('^' + field_name_regex, line):
+                    key = extract_fields_db2(current_obj, line, field_name_regex)
+                else:
                     # this should just be a continuation of the last key we've hit
-                    # or of 'no_field'
+                    #   or of 'no_field'
                     if key in current_obj:
                         current_obj[key] = current_obj[key] + line
-                    # otherwise, it's a new line that otherwise had no key. no need to log per line
                     else:
                         current_obj[key] = line
-                else:
-                    extract_fields_db2(current_obj, line, field_name_regex)
-
-            # if the last loop results in chunkLines being set...
-            if line_count == parameters['chunkLines']:
-                logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                send_data(current_row, log_file_path, chunk_count)
-                current_row = []
-                chunk_count += 1
-                line_count = 0
-                start_time = time.time()
 
             # step to next line
             line = log_file.readline()
@@ -728,12 +727,16 @@ def replay_db2(log_file_path):
 def extract_fields_db2(obj, line, field_name_regex):
     line = '#'.join(re.split('\s*#', line))
 
+    last_key = ''
     field_names = re.findall(field_name_regex, line)
-    for field_name in reversed(field_names):
-        split_at = line.find(field_name) + len(field_name)
-        obj[re.split('\s*:', field_name)[0]] = ' '.join(line[split_at:].split())
-        line = line[:split_at - len(field_name)]
-    return
+    for field in reversed(field_names):
+        split_at = line.find(field) + len(field)
+        field_name = re.split('\s*:', field)[0]
+        if not last_key:
+            last_key = field_name
+        obj[field_name] = ' '.join(line[split_at:].split())
+        line = line[:split_at - len(field)]
+    return last_key
 
 
 def replay_gpfs(log_file_path):
@@ -902,22 +905,23 @@ if __name__ == '__main__':
     parameters = get_parameters()
     logger = set_logger_config(parameters['logLevel'])
     agent_config_vars = get_agent_config_vars(normalization_ids_map)
-    reporting_config_vars = get_reporting_config_vars()
 
     if parameters['agentType'] == "hypervisor":
         import urllib
     else:
         import requests
 
-    # locate time range and date range
-    prev_endtime_epoch = reporting_config_vars['prev_endtime']
-    new_prev_endtime_epoch = 0
-    start_time_epoch = 0
-    start_time_epoch = update_data_start_time()
-
+    # if no input options, stream
     if parameters['inputFile'] is None and parameters['logFolder'] is None:
+        reporting_config_vars = get_reporting_config_vars()
+        # locate time range and date range
+        prev_endtime_epoch = reporting_config_vars['prev_endtime']
+        new_prev_endtime_epoch = 0
+        start_time_epoch = 0
+        start_time_epoch = update_data_start_time()
+
         process_streaming(new_prev_endtime_epoch)
-    else:
+    else: # replay from a folder (strict .csv or .json) or single file
         if parameters['logFolder'] is None:
             input_file_path = os.path.join(parameters['homepath'], parameters['inputFile'])
             process_replay(input_file_path)
