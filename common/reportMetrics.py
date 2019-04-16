@@ -646,7 +646,8 @@ def replay_db2(log_file_path):
         start_time = time.time()
         line = log_file.readline()
         current_obj = dict()
-        key = 'no_field'
+        blank_key = 'no_field'
+        key = blank_key
         field_name_regex = '[A-Z]+\s*#?[0-9]*\s*:'
         localhost = socket.gethostname()
         while line:
@@ -671,7 +672,6 @@ def replay_db2(log_file_path):
                         entry['tag'] = localhost
                     entry['eventId'] = str(current_obj.pop('timestamp'))
                     entry['data'] = current_obj
-                    logger.debug(entry)
                     current_row.append(entry)
                     line_count += 1
 
@@ -689,7 +689,7 @@ def replay_db2(log_file_path):
                 current_obj['timestamp'] = timestamp
                 current_obj['UNIQ'] = line.split()[1]
                 current_obj['LEVEL'] = line[line.rfind(' ') + 1:line.rfind('\n')]
-                key = 'no_field'
+                key = blank_key
 
             except ValueError:
                 # check if line start with a field name or not
@@ -701,6 +701,10 @@ def replay_db2(log_file_path):
                     if key in current_obj:
                         current_obj[key] = current_obj[key] + line
                     else:
+                        # log error if the field name couldn't be parsed
+                        if key == blank_key:
+                            logger.error('Could not parse field name for log entry ' + current_obj['UNIQ'] +
+                                         '. This log entry will still be processed.')
                         current_obj[key] = line
 
             # step to next line
@@ -732,9 +736,13 @@ def extract_fields_db2(obj, line, field_name_regex):
     for field in reversed(field_names):
         split_at = line.find(field) + len(field)
         field_name = re.split('\s*:', field)[0]
-        if not last_key:
-            last_key = field_name
-        obj[field_name] = ' '.join(line[split_at:].split())
+        # don't overwrite existing fields
+        if field_name in obj:
+            continue
+        else:
+            obj[field_name] = ' '.join(line[split_at:].split())
+            if not last_key:
+                last_key = field_name
         line = line[:split_at - len(field)]
     return last_key
 
