@@ -48,6 +48,11 @@ source pyenv/bin/activate
 ```
 pip install datadog
 ```
+For offline installation of packages do:
+```
+tar xvf InsightAgent-master/deployment/DeployAgent/files/pip_packages.tar.gz
+sudo pip install --no-index --find-links='pip_packages' requests pytz datadog
+```
 
 5) Run the below command to install agent.(The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required)
 ```
