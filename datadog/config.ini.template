@@ -1,0 +1,17 @@
+#example for config
+[insightfinder]
+license_key =
+project_name =
+user_name =
+sampling_interval =
+filter_hosts =
+all_metrics =
+#the normalization id needs to be given between 0 and 1000
+normalization_id =
+
+
+[datadog]
+app_key =
+api_key =
+
+
