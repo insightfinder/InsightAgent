@@ -1,0 +1,16 @@
+[insightfinder]
+license_key =
+project_name =
+user_name =
+sampling_interval =
+all_metrics =
+#the normalization id needs to be given between 0 and 1000
+normalization_id =
+http_proxy =
+https_proxy =
+
+[datadog]
+app_key =
+api_key =
+
+
