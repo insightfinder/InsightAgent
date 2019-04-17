@@ -293,8 +293,12 @@ if __name__ == "__main__":
         datadog_proxies['http'] = agent_config_vars['httpProxy']
     if len(agent_config_vars['httpsProxy']) != 0:
         datadog_proxies['https'] = agent_config_vars['httpsProxy']
-    datadog_api = datadog.initialize(api_key=datadog_config['DATADOG_API_KEY'],
+    if len(datadog_proxies) != 0:
+        datadog_api = datadog.initialize(api_key=datadog_config['DATADOG_API_KEY'],
                                      app_key=datadog_config['DATADOG_APP_KEY'], proxies=datadog_proxies)
+    else:
+        datadog_api = datadog.initialize(api_key=datadog_config['DATADOG_API_KEY'],
+                                         app_key=datadog_config['DATADOG_APP_KEY'])
 
     time_list = []
     # get data by cron
