@@ -226,7 +226,11 @@ def send_data(chunk_metric_data):
 
     # send the data
     post_url = parameters['serverUrl'] + "/customprojectrawdata"
-    response = requests.post(post_url, data=json.loads(to_send_data_json))
+    if len(datadog_proxies) == 0:
+        response = requests.post(post_url, data=json.loads(to_send_data_json))
+    else:
+        response = requests.post(post_url, data=json.loads(to_send_data_json), proxies=datadog_proxies)
+
     if response.status_code == 200:
         logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
     else:
