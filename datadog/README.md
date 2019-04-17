@@ -44,10 +44,6 @@ tar -xvf insightagent.tar.gz
 source pyenv/bin/activate
 ```
 
-3) Install the datadog package in python if you are running it for the first time
-```
-pip install datadog
-```
 For offline installation of packages do:
 ```
 tar xvf InsightAgent-master/deployment/DeployAgent/files/pip_packages.tar.gz
