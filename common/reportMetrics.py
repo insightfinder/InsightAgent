@@ -57,7 +57,7 @@ def get_parameters():
     parser.add_option("-l", "--chunkLines",
                       action="store", dest="chunkLines", help="Max number of lines in chunk")
     parser.add_option("-v", "--logLevel",
-                      action="store", dest="logLevel", help="Change log verbosity(WARNING: 0, INFO: 1, DEBUG: 2)")
+                      action="store", dest="logLevel", help="Change log verbosity (WARNING/0, INFO/1, DEBUG/2)")
     (options, args) = parser.parse_args()
 
     parameters = dict()
@@ -137,7 +137,7 @@ def get_agent_config_vars(normalization_map):
             if len(user_name) == 0:
                 logger.error("Agent not correctly configured(username). Check config file.")
                 sys.exit(1)
-            if len(sampling_interval) == 0:
+            if len(sampling_interval) == 0 and 'metric' in parameters['mode'] :
                 logger.error("Agent not correctly configured(sampling interval). Check config file.")
                 sys.exit(1)
             if len(selected_fields[0]) != 0:
@@ -165,15 +165,15 @@ def get_reporting_config_vars():
     reporting_config_vars = dict()
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
         config = json.load(f)
-    reporting_interval_string = config['reporting_interval']
-    if reporting_interval_string[-1:] == 's':
-        reporting_interval = float(config['reporting_interval'][:-1])
-        reporting_config_vars['reporting_interval'] = float(reporting_interval / 60.0)
-    else:
-        reporting_config_vars['reporting_interval'] = int(config['reporting_interval'])
-    reporting_config_vars['keep_file_days'] = int(config['keep_file_days'])
-    reporting_config_vars['prev_endtime'] = config['prev_endtime']
-    reporting_config_vars['deltaFields'] = config['delta_fields']
+        reporting_interval_string = config['reporting_interval']
+        if reporting_interval_string[-1:] == 's':
+            reporting_interval = float(config['reporting_interval'][:-1])
+            reporting_config_vars['reporting_interval'] = float(reporting_interval / 60.0)
+        else:
+            reporting_config_vars['reporting_interval'] = int(config['reporting_interval'])
+        reporting_config_vars['keep_file_days'] = int(config['keep_file_days'])
+        reporting_config_vars['prev_endtime'] = config['prev_endtime']
+        reporting_config_vars['deltaFields'] = config['delta_fields']
     return reporting_config_vars
 
 
@@ -389,6 +389,8 @@ def process_replay(file_path):
                 replay_db2(file_path)
             elif parameters['agentType'] == 'gpfs':
                 replay_gpfs(file_path)
+            elif parameters['agentType'] == 'network-log':
+                replay_network_log(file_path)
             else:
                 # default
                 try:
@@ -501,14 +503,23 @@ def process_replay(file_path):
 
 def replay_sar(metric_file_path, grouping_map):
     logger.info('Replaying sar file')
-    with open(metric_file_path) as metric_file:
+    translated_file_path = metric_file_path + '.sar'
+    try:
+        subprocess.check_output(
+            'sar -f ' + metric_file_path + ' > ' + translated_file_path,
+            shell=True)
+    except subprocess.CalledProcessError as e:
+        logger.error('Not a sar file, sar is not installed, or there is a version mismatch ' +
+                     'between the origin machine and the current machine. Please contact support.')
+        sys.exit(1)
+    with open(metric_file_path + '.sar') as metric_file:
         line = metric_file.readline()
         header = line.split()
         instance = header[2][1:-1]
         # assume DD/MM/YYYY
         date = header[3]
         format = '%m/%d/%Y %I:%M:%S %p'
-        _ = metric_file.readline()
+        metric_file.readline()
         metrics = metric_file.readline()
         field_names = metrics.split()
         field_names[0] = 'timestamp'
@@ -577,6 +588,52 @@ def replay_sar(metric_file_path, grouping_map):
             chunk_count += 1
         logger.debug("Total chunks created: " + str(chunk_count))
         save_grouping(grouping_map)
+
+        # clean up
+        subprocess.check_output(
+            'rm -f ' + translated_file_path,
+            shell=True)
+    return
+
+
+def replay_network_log(log_file_path):
+    logger.info('Replaying network log file')
+    with open(log_file_path) as log_file:
+        line_count = 0
+        chunk_count = 0
+        current_row = []
+        start_time = time.time()
+        instance = log_file.name.split('/')[-1].split('.')[0]
+        for line in log_file:
+            # skip empty lines
+            if not line.strip():
+                continue
+            # if the last loop results in chunkLines being set...
+            if line_count == parameters['chunkLines']:
+                logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                send_data(current_row, log_file_path, chunk_count)
+                current_row = []
+                chunk_count += 1
+                line_count = 0
+                start_time = time.time()
+            # build json entry
+            timestamp_array = line.split()[:3]
+            # pad with 0 if needed
+            if len(timestamp_array[1]) == 1:
+                timestamp_array[1] = '0' + timestamp_array[1]
+            year_str = str(datetime.now().year)
+            entry = dict()
+            entry['tag'] = instance
+            entry['eventId'] = str(_get_timestamp_network_logs(' '.join(timestamp_array), year_str, parameters['timeZone']))
+            entry['data'] = line
+            current_row.append(entry)
+            line_count += 1
+        # last chunk
+        if len(current_row) != 0:
+            logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+            send_data(current_row, log_file_path, chunk_count)
+            chunk_count += 1
+        logger.debug("Total chunks created: " + str(chunk_count))
     return
 
 
@@ -586,64 +643,81 @@ def replay_db2(log_file_path):
         line_count = 0
         chunk_count = 0
         current_row = []
-        current_obj = dict()
         start_time = time.time()
         line = log_file.readline()
+        current_obj = dict()
+        blank_key = 'no_field'
+        key = blank_key
+        field_name_regex = '[A-Z]+\s*#?[0-9]*\s*:'
+        localhost = socket.gethostname()
         while line:
-            # empty line denotes new log entry. aggregate current string
+            # skip empty lines
             if not line.strip():
+                line = log_file.readline()
+                continue
+
+            try:
+                # new timestamp = new log entry
+                timestamp = _get_timestamp_db2(line.split('+')[0], parameters['timeZone'])
+                #####
+                # we will only hit the next block of code if the line starts with a valid timestamp
+                #####
+
                 # build json entry
-                entry = dict()
-                if 'HOSTNAME' in current_obj and current_obj['HOSTNAME']:
-                    entry['tag'] = current_obj['HOSTNAME']
-                else:
-                    entry['tag'] = 'localhost'
-                entry['eventId'] = str(current_obj.pop('timestamp'))
-                entry['data'] = current_obj
-                current_row.append(entry)
-                line_count += 1
+                if len(current_obj) > 0:
+                    entry = dict()
+                    if 'HOSTNAME' in current_obj and current_obj['HOSTNAME']:
+                        entry['tag'] = current_obj['HOSTNAME']
+                    else:
+                        entry['tag'] = localhost
+                    entry['eventId'] = str(current_obj.pop('timestamp'))
+                    entry['data'] = current_obj
+                    current_row.append(entry)
+                    line_count += 1
+
+                    # if adding the most recent entry should trigger sending
+                    if line_count == parameters['chunkLines']:
+                        logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                        send_data(current_row, log_file_path, chunk_count)
+                        current_row = []
+                        chunk_count += 1
+                        line_count = 0
+                        start_time = time.time()
+
+                # reset obj
                 current_obj = dict()
-            else:
-                # first line starts with timestamp
-                if len(current_obj) == 0:
-                    timestamp_str = line.split()[0]
-                    current_obj['timestamp'] = _get_timestamp_db2(timestamp_str, parameters['timeZone'])
-                    current_obj['id'] = line.split()[1]
-                    current_obj['LEVEL'] = line[line.rfind(' '):]
-                elif line[:3] == 'ARG' or line[:4] == 'DATA' or line[:7] == 'MESSAGE':
-                    key = line[:line.find(':')]
-                    current_obj[key] = line[line.find(':') + 1:]
-                    # until we hit the next field
-                    i = log_file.tell()  # save the current position
-                    next_line = log_file.readline()
-                    while next_line.strip():
-                        current_obj[key] = current_obj[key] + next_line
-                        i = log_file.tell()  # save the current position
-                        next_line = log_file.readline()
-                        if next_line[:3] == 'ARG' or next_line[:4] == 'DATA' or next_line[:7] == 'MESSAGE':
-                            break
-                    log_file.seek(i)
+                current_obj['timestamp'] = timestamp
+                current_obj['UNIQ'] = line.split()[1]
+                current_obj['LEVEL'] = line[line.rfind(' ') + 1:line.rfind('\n')]
+                key = blank_key
+
+            except ValueError:
+                # check if line start with a field name or not
+                if re.match('^' + field_name_regex, line):
+                    key = extract_fields_db2(current_obj, line, field_name_regex)
                 else:
-                    extract_fields_db2(current_obj, line)
+                    # this should just be a continuation of the last key we've hit
+                    #   or of 'no_field'
+                    if key in current_obj:
+                        current_obj[key] = current_obj[key] + line
+                    else:
+                        # log error if the field name couldn't be parsed
+                        if key == blank_key:
+                            logger.error('Could not parse field name for log entry ' + current_obj['UNIQ'] +
+                                         '. This log entry will still be processed.')
+                        current_obj[key] = line
 
-            # if the last loop results in chunkLines being set...
-            if line_count == parameters['chunkLines']:
-                logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                send_data(current_row, log_file_path, chunk_count)
-                current_row = []
-                chunk_count += 1
-                line_count = 0
-                start_time = time.time()
-
+            # step to next line
             line = log_file.readline()
+    
         # last chunk
-        if len(current_row) != 0:
+        if len(current_row) > 0 or len(current_obj) > 0:
             # build json entry
             entry = dict()
             if 'HOSTNAME' in current_obj and current_obj['HOSTNAME']:
                 entry['tag'] = current_obj['HOSTNAME']
             else:
-                entry['tag'] = 'localhost'
+                entry['tag'] = localhost
             entry['eventId'] = str(current_obj.pop('timestamp'))
             entry['data'] = current_obj
             current_row.append(entry)
@@ -654,25 +728,23 @@ def replay_db2(log_file_path):
     return
 
 
-def extract_fields_db2(obj, line):
-    # need to put spaces before :
-    matches = re.findall('[A-Z]+:', line)
-    for match in matches:
-        split_at = line.find(':', line.find(match))
-        line = line[:split_at] + ' ' + line[split_at:]
+def extract_fields_db2(obj, line, field_name_regex):
+    line = '#'.join(re.split('\s*#', line))
 
-    line_arr = line.split()
-    while len(line_arr) > 0:
-        rev_array = line_arr[::-1]
-        last_val_pos = len(line_arr) - rev_array.index(':')
-        last_val = ' '.join(line_arr[last_val_pos:])
-        last_key_pos = last_val_pos - 2
-        last_key = line_arr[last_key_pos]
-        obj[last_key] = last_val
-        if last_key_pos == 0:
-            break
-        line_arr = line_arr[:last_key_pos]
-    return
+    last_key = ''
+    field_names = re.findall(field_name_regex, line)
+    for field in reversed(field_names):
+        split_at = line.find(field) + len(field)
+        field_name = re.split('\s*:', field)[0]
+        # don't overwrite existing fields
+        if field_name in obj:
+            continue
+        else:
+            obj[field_name] = ' '.join(line[split_at:].split())
+            if not last_key:
+                last_key = field_name
+        line = line[:split_at - len(field)]
+    return last_key
 
 
 def replay_gpfs(log_file_path):
@@ -682,6 +754,7 @@ def replay_gpfs(log_file_path):
         chunk_count = 0
         current_row = []
         start_time = time.time()
+        instance = log_file.name.split('/')[-1].split('.')[-1]
         for line in log_file:
             # skip empty lines
             if not line.strip():
@@ -696,8 +769,8 @@ def replay_gpfs(log_file_path):
                 start_time = time.time()
             # build json entry
             entry = dict()
-            entry['tag'] = log_file.name.split('.')[-1]
-            entry['eventId'] = str(_get_timestamp_gpfs(':'.join(line.split(':')[0:3]), parameters['timeZone']))
+            entry['tag'] = instance
+            entry['eventId'] = str(_get_timestamp_gpfs(line.split('+')[0], parameters['timeZone']))
             entry['data'] = line
             current_row.append(entry)
             line_count += 1
@@ -711,22 +784,22 @@ def replay_gpfs(log_file_path):
 
 
 def _get_timestamp_sar(date, time, ampm, tz, format):
-    return _get_timestamp_with_timezone(date + ' ' + time + ' ' + ampm, tz, format, False)
+    return _get_timestamp_with_timezone(date + ' ' + time + ' ' + ampm, tz, format)
 
 
 def _get_timestamp_gpfs(timestamp_str, tz):
-    return _get_timestamp_with_timezone(timestamp_str, tz, '%Y-%m-%d_%H:%M:%S.%f', True)
+    return _get_timestamp_with_timezone(timestamp_str, tz, '%Y-%m-%d_%H:%M:%S.%f')
+
+
+def _get_timestamp_network_logs(timestamp_str, year, tz):
+    return _get_timestamp_with_timezone(timestamp_str + ' ' + year, tz, '%b %d %H:%M:%S %Y')
 
 
 def _get_timestamp_db2(timestamp_str, tz):
-    return _get_timestamp_with_timezone(timestamp_str, tz, '%Y-%m-%d-%H.%M.%S.%f', True)
+    return _get_timestamp_with_timezone(timestamp_str, tz, '%Y-%m-%d-%H.%M.%S.%f')
 
 
-def _get_timestamp_with_timezone(date_string, time_zone, format, strip_offset):
-    # take off +HHMM and rely on passing -z flag
-    if strip_offset:
-        date_string = date_string[:-5]
-
+def _get_timestamp_with_timezone(date_string, time_zone, format):
     timestamp_datetime = datetime.strptime(date_string, format)
     tz = pytz.timezone(time_zone)
     time_in_tz = tz.localize(timestamp_datetime)
@@ -840,22 +913,23 @@ if __name__ == '__main__':
     parameters = get_parameters()
     logger = set_logger_config(parameters['logLevel'])
     agent_config_vars = get_agent_config_vars(normalization_ids_map)
-    reporting_config_vars = get_reporting_config_vars()
 
     if parameters['agentType'] == "hypervisor":
         import urllib
     else:
         import requests
 
-    # locate time range and date range
-    prev_endtime_epoch = reporting_config_vars['prev_endtime']
-    new_prev_endtime_epoch = 0
-    start_time_epoch = 0
-    start_time_epoch = update_data_start_time()
-
+    # if no input options, stream
     if parameters['inputFile'] is None and parameters['logFolder'] is None:
+        reporting_config_vars = get_reporting_config_vars()
+        # locate time range and date range
+        prev_endtime_epoch = reporting_config_vars['prev_endtime']
+        new_prev_endtime_epoch = 0
+        start_time_epoch = 0
+        start_time_epoch = update_data_start_time()
+
         process_streaming(new_prev_endtime_epoch)
-    else:
+    else: # replay from a folder (strict .csv or .json) or single file
         if parameters['logFolder'] is None:
             input_file_path = os.path.join(parameters['homepath'], parameters['inputFile'])
             process_replay(input_file_path)
