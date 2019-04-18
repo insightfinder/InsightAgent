@@ -524,6 +524,7 @@ def replay_sar(metric_file_path, grouping_map):
                      'between the origin machine and the current machine. Please contact support.')
         sys.exit(1)
     with open(metric_file_path + '.sar') as metric_file:
+        # parse opening lines
         line = metric_file.readline()
         header = line.split()
         instance = header[2][1:-1]
@@ -542,6 +543,8 @@ def replay_sar(metric_file_path, grouping_map):
         row_count = 0
         min_timestamp_epoch = 0
         max_timestamp_epoch = -1
+
+        # read each line of metrics
         line = metric_file.readline()
         while line:
             # Read each line from csv and generate a json
