@@ -802,7 +802,7 @@ def replay_gpfs(log_file_path):
             line_count += 1
             entry_count += 1
         # last chunk
-        if line_count >= 0:
+        if line_count > 0:
             logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
             send_data(current_row, log_file_path, chunk_count)
             chunk_count += 1
