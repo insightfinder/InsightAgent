@@ -402,17 +402,19 @@ def process_replay(file_path):
                     sys.exit(1)
                 with open(file_path + ".mod") as logfile:
                     line_count = 0
+                    entry_count = 0
                     chunk_count = 0
                     current_row = []
                     start_time = time.time()
                     for line in logfile:
-                        if line_count == parameters['chunkLines']:
+                        if line_count >= parameters['chunkLines']:
                             logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
                             send_data(current_row, file_path, None)
                             current_row = []
                             chunk_count += 1
                             line_count = 0
                             start_time = time.time()
+
                         json_message = json.loads(line.rstrip())
                         if agent_config_vars['selected_fields'] == "All":
                             current_row.append(json_message)
@@ -423,14 +425,23 @@ def process_replay(file_path):
                                 current_log_msg[field] = json_message.get(field, {})
                             current_row.append(json.loads(json.dumps(current_log_msg)))
                         line_count += 1
+                        entry_count += 1
+
                     if len(current_row) != 0:
                         logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
                         send_data(current_row, file_path, None)
                         chunk_count += 1
+
                     logger.debug("Total chunks created: " + str(chunk_count))
-                output = subprocess.check_output(
-                    "rm " + file_path + ".mod",
-                    shell=True)
+                    logger.debug("Total log entries: " + str(entry_count))
+
+                try:
+                    subprocess.check_output(
+                        "rm -f " + file_path + ".mod",
+                        shell=True)
+                except subprocess.CalledProcessError:
+                    logger.error('Could not clean up file. Please run "rm ' + file_path + '.mod"')
+
         else:  # metric file replay processing
             grouping_map = load_grouping()
 
@@ -508,11 +519,12 @@ def replay_sar(metric_file_path, grouping_map):
         subprocess.check_output(
             'sar -f ' + metric_file_path + ' > ' + translated_file_path,
             shell=True)
-    except subprocess.CalledProcessError as e:
-        logger.error('Not a sar file, sar is not installed, or there is a version mismatch ' +
+    except subprocess.CalledProcessError:
+        logger.error('Not a sar file, sar is not installed, or there is a sar version mismatch ' +
                      'between the origin machine and the current machine. Please contact support.')
         sys.exit(1)
     with open(metric_file_path + '.sar') as metric_file:
+        # parse opening lines
         line = metric_file.readline()
         header = line.split()
         instance = header[2][1:-1]
@@ -531,11 +543,13 @@ def replay_sar(metric_file_path, grouping_map):
         row_count = 0
         min_timestamp_epoch = 0
         max_timestamp_epoch = -1
+
+        # read each line of metrics
         line = metric_file.readline()
         while line:
             # Read each line from csv and generate a json
             current_row = dict()
-            if current_line_count == parameters['chunkLines']:
+            if current_line_count >= parameters['chunkLines']:
                 send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], metric_file_path, chunk_count + 1)
                 to_send_metric_data = []
                 current_line_count = 0
@@ -590,9 +604,12 @@ def replay_sar(metric_file_path, grouping_map):
         save_grouping(grouping_map)
 
         # clean up
-        subprocess.check_output(
-            'rm -f ' + translated_file_path,
-            shell=True)
+        try:
+            subprocess.check_output(
+                'rm -f ' + translated_file_path,
+                shell=True)
+        except subprocess.CalledProcessError:
+            logger.error('Could not clean up file. Please run "rm ' + translated_file_path + '"')
     return
 
 
@@ -600,6 +617,7 @@ def replay_network_log(log_file_path):
     logger.info('Replaying network log file')
     with open(log_file_path) as log_file:
         line_count = 0
+        entry_count = 0
         chunk_count = 0
         current_row = []
         start_time = time.time()
@@ -608,6 +626,7 @@ def replay_network_log(log_file_path):
             # skip empty lines
             if not line.strip():
                 continue
+
             # if the last loop results in chunkLines being set...
             if line_count == parameters['chunkLines']:
                 logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
@@ -616,6 +635,7 @@ def replay_network_log(log_file_path):
                 chunk_count += 1
                 line_count = 0
                 start_time = time.time()
+
             # build json entry
             timestamp_array = line.split()[:3]
             # pad with 0 if needed
@@ -628,12 +648,16 @@ def replay_network_log(log_file_path):
             entry['data'] = line
             current_row.append(entry)
             line_count += 1
+            entry_count += 1
+
         # last chunk
-        if len(current_row) != 0:
+        if line_count > 0:
             logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
             send_data(current_row, log_file_path, chunk_count)
             chunk_count += 1
+
         logger.debug("Total chunks created: " + str(chunk_count))
+        logger.debug("Total log entries: " + str(entry_count))
     return
 
 
@@ -641,19 +665,18 @@ def replay_db2(log_file_path):
     logger.info('Replaying db2 file')
     with open(log_file_path) as log_file:
         line_count = 0
+        entry_count = 0
         chunk_count = 0
         current_row = []
         start_time = time.time()
-        line = log_file.readline()
         current_obj = dict()
         blank_key = 'no_field'
         key = blank_key
         field_name_regex = '[A-Z]+\s*#?[0-9]*\s*:'
         localhost = socket.gethostname()
-        while line:
+        for line in log_file:
             # skip empty lines
             if not line.strip():
-                line = log_file.readline()
                 continue
 
             try:
@@ -674,9 +697,10 @@ def replay_db2(log_file_path):
                     entry['data'] = current_obj
                     current_row.append(entry)
                     line_count += 1
+                    entry_count += 1
 
                     # if adding the most recent entry should trigger sending
-                    if line_count == parameters['chunkLines']:
+                    if line_count >= parameters['chunkLines']:
                         logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
                         send_data(current_row, log_file_path, chunk_count)
                         current_row = []
@@ -697,7 +721,7 @@ def replay_db2(log_file_path):
                     key = extract_fields_db2(current_obj, line, field_name_regex)
                 else:
                     # this should just be a continuation of the last key we've hit
-                    #   or of 'no_field'
+                    #   or of blank_key
                     if key in current_obj:
                         current_obj[key] = current_obj[key] + line
                     else:
@@ -707,11 +731,8 @@ def replay_db2(log_file_path):
                                          '. This log entry will still be processed.')
                         current_obj[key] = line
 
-            # step to next line
-            line = log_file.readline()
-    
-        # last chunk
-        if len(current_row) > 0 or len(current_obj) > 0:
+        # wrap up last log entry
+        if len(current_obj) > 0:
             # build json entry
             entry = dict()
             if 'HOSTNAME' in current_obj and current_obj['HOSTNAME']:
@@ -721,10 +742,17 @@ def replay_db2(log_file_path):
             entry['eventId'] = str(current_obj.pop('timestamp'))
             entry['data'] = current_obj
             current_row.append(entry)
+            line_count += 1
+            entry_count += 1
+
+        # last chunk
+        if line_count > 0:
             logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
             send_data(current_row, log_file_path, chunk_count)
             chunk_count += 1
+
         logger.debug("Total chunks created: " + str(chunk_count))
+        logger.debug("Total log entries: " + str(entry_count))
     return
 
 
@@ -751,6 +779,7 @@ def replay_gpfs(log_file_path):
     logger.info('Replaying gpfs file')
     with open(log_file_path) as log_file:
         line_count = 0
+        entry_count = 0
         chunk_count = 0
         current_row = []
         start_time = time.time()
@@ -774,12 +803,14 @@ def replay_gpfs(log_file_path):
             entry['data'] = line
             current_row.append(entry)
             line_count += 1
+            entry_count += 1
         # last chunk
-        if len(current_row) != 0:
+        if line_count > 0:
             logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
             send_data(current_row, log_file_path, chunk_count)
             chunk_count += 1
         logger.debug("Total chunks created: " + str(chunk_count))
+        logger.debug("Total log entries: " + str(entry_count))
     return
 
 
