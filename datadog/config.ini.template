@@ -6,11 +6,11 @@ sampling_interval =
 all_metrics =
 #the normalization id needs to be given between 0 and 1000
 normalization_id =
-http_proxy =
-https_proxy =
+if_http_proxy =
+if_https_proxy =
 
 [datadog]
 app_key =
 api_key =
-
-
+datadog_http_proxy =
+datadog_https_proxy =

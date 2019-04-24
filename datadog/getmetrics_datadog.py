@@ -62,8 +62,8 @@ def get_agent_config_vars(normalization_ids_map):
             if len(config_parser.get('insightfinder', 'all_metrics')) != 0:
                 all_metrics = config_parser.get('insightfinder', 'all_metrics').split(",")
             normalization_ids = config_parser.get('insightfinder', 'normalization_id').split(",")
-            http_proxy = config_parser.get('insightfinder', 'http_proxy')
-            https_proxy = config_parser.get('insightfinder', 'https_proxy')
+            if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
+            if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
@@ -103,8 +103,8 @@ def get_agent_config_vars(normalization_ids_map):
             "projectName": project_name,
             "allMetrics": all_metrics,
             "samplingInterval": sampling_interval,
-            "httpProxy": http_proxy,
-            "httpsProxy": https_proxy
+            "httpProxy": if_http_proxy,
+            "httpsProxy": if_https_proxy
         }
 
         return config_vars
@@ -122,6 +122,8 @@ def get_datadog_config():
         try:
             datadog_app_key = config_parser.get('datadog', 'app_key')
             datadog_api_key = config_parser.get('datadog', 'api_key')
+            datadog_http_proxy = config_parser.get('datadog', 'datadog_http_proxy')
+            datadog_https_proxy = config_parser.get('datadog', 'datadog_https_proxy')
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
@@ -138,7 +140,9 @@ def get_datadog_config():
 
         datadog_config = {
             "DATADOG_APP_KEY": datadog_app_key,
-            "DATADOG_API_KEY": datadog_api_key
+            "DATADOG_API_KEY": datadog_api_key,
+            "httpProxy": datadog_http_proxy,
+            "httpsProxy": datadog_https_proxy
         }
     else:
         logger.warning("No config file found. Exiting...")
@@ -226,10 +230,10 @@ def send_data(chunk_metric_data):
 
     # send the data
     post_url = parameters['serverUrl'] + "/customprojectrawdata"
-    if len(datadog_proxies) == 0:
+    if len(if_proxies) == 0:
         response = requests.post(post_url, data=json.loads(to_send_data_json))
     else:
-        response = requests.post(post_url, data=json.loads(to_send_data_json), proxies=datadog_proxies)
+        response = requests.post(post_url, data=json.loads(to_send_data_json), proxies=if_proxies)
 
     if response.status_code == 200:
         logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
@@ -289,14 +293,19 @@ if __name__ == "__main__":
     logger = set_logger_config(log_level)
     data_dir = 'data'
     agent_config_vars = get_agent_config_vars(normalization_ids_map)
+    if_proxies = dict()
+    if len(agent_config_vars['httpProxy']) != 0:
+        if_proxies['http'] = agent_config_vars['httpProxy']
+    if len(agent_config_vars['httpsProxy']) != 0:
+        if_proxies['https'] = agent_config_vars['httpsProxy']
 
     # get agent configuration details
     datadog_config = get_datadog_config()
-    datadog_proxies = {}
-    if len(agent_config_vars['httpProxy']) != 0:
-        datadog_proxies['http'] = agent_config_vars['httpProxy']
-    if len(agent_config_vars['httpsProxy']) != 0:
-        datadog_proxies['https'] = agent_config_vars['httpsProxy']
+    datadog_proxies = dict()
+    if len(datadog_config['httpProxy']) != 0:
+        datadog_proxies['http'] = datadog_config['httpProxy']
+    if len(datadog_config['httpsProxy']) != 0:
+        datadog_proxies['https'] = datadog_config['httpsProxy']
     if len(datadog_proxies) != 0:
         datadog_api = datadog.initialize(api_key=datadog_config['DATADOG_API_KEY'],
                                      app_key=datadog_config['DATADOG_APP_KEY'], proxies=datadog_proxies)
