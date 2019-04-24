@@ -308,7 +308,8 @@ if __name__ == "__main__":
         datadog_proxies['https'] = datadog_config['httpsProxy']
     if len(datadog_proxies) != 0:
         datadog_api = datadog.initialize(api_key=datadog_config['DATADOG_API_KEY'],
-                                     app_key=datadog_config['DATADOG_APP_KEY'], proxies=datadog_proxies)
+                                         app_key=datadog_config['DATADOG_APP_KEY'],
+                                         proxies=datadog_proxies)
     else:
         datadog_api = datadog.initialize(api_key=datadog_config['DATADOG_API_KEY'],
                                          app_key=datadog_config['DATADOG_APP_KEY'])
