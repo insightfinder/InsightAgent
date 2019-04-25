@@ -74,8 +74,6 @@ ifSamplingInterval=1
 #ifAgent=kafka
 #ifAgent=logstash
 #ifAgent=prometheus
-#ifAgent=awsCloudtrail
-#ifAgent=googlePubSub
 
 ##When yes, we will run the equivalent of 'apt-get update' before installing any packages.
 ##Valid entries are yes or no. Not used with yum-based installation (e.g., CentOS).
@@ -83,20 +81,6 @@ apt_update=no
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
 ifReportingUrl=https://app.insightfinder.com
-
-##Vars for AWS Cloudtrail
-# S3 bucket the trail is logging to
-aws_bucket = 
-# AWS credentials; either both the access key and secret key or the credentials file must be given
-aws_access_key_id = 
-aws_secret_access_key =
-aws_credentials_file = 
-
-##Vars for Google Pub/Sub
-pubsub_project_id = 
-pubsub_topic_name = 
-# the subscription need not be created
-pubsub_subscription = 
 
 ##Vars for Kafka
 
