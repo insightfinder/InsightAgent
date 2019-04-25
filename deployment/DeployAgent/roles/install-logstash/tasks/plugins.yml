@@ -6,15 +6,36 @@
   register: logstash_plugins_list
   changed_when: false
 
-- name: Copy rpm file to server
+- name: Copy json_encode plugin file to server
   copy:
-     src: logstash-offline-plugins-6.6.0.zip
-     dest: /tmp/logstash-offline-plugins-6.6.0.zip
-
-- name: Install configured plugins(json_encode).
+     src: logstash-offline-plugin-json-encode-6.6.0.zip
+     dest: /tmp/logstash-offline-plugin-json-encode-6.6.0.zip
+- name: Install plugin (json_encode).
   command: >
-    ./bin/logstash-plugin install file:////tmp/logstash-offline-plugins-6.6.0.zip
+    ./bin/logstash-plugin install file:////tmp/logstash-offline-plugin-json-encode-6.6.0.zip
     chdir={{ logstash_dir }}
+    
+- name: Copy Cloudtrail codec plugin file to server
+  copy:
+     src: logstash-offline-plugin-cloudtrail-codec-6.6.0.zip
+     dest: /tmp/logstash-offline-plugin-cloudtrail-codec-6.6.0.zip
+  when: agentType=="awsCloudtrail"
+- name: Install codec plugin (cloudtrail).
+  command: >
+    ./bin/logstash-plugin install file:////tmp/logstash-offline-plugin-cloudtrail-codec-6.6.0.zip
+    chdir={{ logstash_dir }}
+  when: agentType=="awsCloudtrail"
+    
+- name: Copy Pub/Sub input plugin file to server
+  copy:
+     src: logstash-offline-plugin-pubsub-input-6.6.0.zip
+     dest: /tmp/logstash-offline-plugin-pubsub-input-6.6.0.zip
+  when: agentType=="googlePubSub"
+- name: Install input plugin (google_pubsub).
+  command: >
+    ./bin/logstash-plugin install file:////tmp/logstash-offline-plugin-pubsub-input-6.6.0.zip
+    chdir={{ logstash_dir }}
+  when: agentType=="googlePubSub"
 
 - name: Install configured plugins.
   command: >
