@@ -2,7 +2,7 @@
 Agent Type: AWS Cloudtrail
 Platform: Linux
 
-This AWS Cloudtrail agent is a Logstash pipeline that reads from an S3 bucket.
+This AWS Cloudtrail agent is a Logstash pipeline that reads from an S3 bucket. The installer includes the required Logstash installation and configuration files.
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
