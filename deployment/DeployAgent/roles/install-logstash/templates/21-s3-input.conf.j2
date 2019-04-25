@@ -19,6 +19,14 @@ input {
         # Assume one pipeline per bucket
         type => "cloudtrail"
         id => "{{ aws_bucket }}"
+        
+        add_field => {
+        {% if agentType == "metric-log" %}
+            "project" => "{{ ifLogProjectName }}"
+        {% else %}
+            "project" => "{{ ifProjectName }}"
+        {% endif %}
+        }
     }
 } 
  
