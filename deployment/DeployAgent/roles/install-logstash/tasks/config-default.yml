@@ -1,0 +1,61 @@
+---
+- name: Create Logstash configuration files.
+  template:
+    src: "{{ item }}.j2"
+    dest: "/etc/logstash/conf.d/{{ item }}"
+    owner: root
+    group: root
+    mode: 0644
+  with_items:
+    - 01-beats-input.conf
+  notify: restart logstash
+
+- name: Creates pattern directory
+  file:
+    path: /etc/logstash/pattern/
+    state: directory
+    owner: root
+    group: root
+    mode: 0775
+
+- name: Create Logstash grok patterns.
+  copy:
+    src: "patterns/{{ item }}"
+    dest: "/etc/logstash/pattern/{{ item }}"
+    owner: root
+    group: root
+    mode: 0644
+  with_items:
+    - jetty_custom_time
+  notify: restart logstash
+
+- name: Create Logstash filters.
+  copy:
+    src: "filters/{{ item }}"
+    dest: "/etc/logstash/conf.d/{{ item }}"
+    owner: root
+    group: root
+    mode: 0644
+  with_items:
+    - 10-syslog.conf
+    - 16-jetty.conf
+    - 15-cassandra.conf
+  notify: restart logstash
+
+- name: Create Logstash configuration file for local syslog.
+  template:
+    src: 02-local-syslog-input.conf.j2
+    dest: /etc/logstash/conf.d/02-local-syslog-input.conf
+    owner: root
+    group: root
+    mode: 0644
+  when: logstash_monitor_local_syslog
+  notify: restart logstash
+
+- name: Ensure configuration for local syslog is absent if disabled.
+  file:
+    path: /etc/logstash/conf.d/02-local-syslog-input.conf
+    state: absent
+  when: not logstash_monitor_local_syslog
+  notify: restart logstash
+ 
