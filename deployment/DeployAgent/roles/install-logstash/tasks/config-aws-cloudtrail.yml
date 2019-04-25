@@ -1,0 +1,28 @@
+---
+- name : Check Mandatory Variables For Install
+  assert:
+    that:
+      - "aws_bucket is defined"
+      - "(aws_access_key_id is defined and aws_access_key_id is defined) or aws_credentials_file is defined"
+
+- name: Create Logstash configuration files.
+  template:
+    src: "{{ item }}.j2"
+    dest: "/etc/logstash/conf.d/{{ item }}"
+    owner: root
+    group: root
+    mode: 0644
+  with_items:
+    - 21-s3-input.conf
+  notify: restart logstash
+
+- name: Create Logstash filters.
+  copy:
+    src: "filters/{{ item }}"
+    dest: "/etc/logstash/conf.d/{{ item }}"
+    owner: root
+    group: root
+    mode: 0644
+  with_items:
+    - 90-cloudtrail.conf
+  notify: restart logstash
