@@ -2,7 +2,7 @@
 Agent Type: Google Pub/Sub
 Platform: Linux
 
-This Google Pub/Sub agent is a Logstash pipeline; the installer includes all required files for offline installation.
+This Google Pub/Sub agent is a Logstash pipeline that reads from a subscription to a given topic. The installer includes the required Logstash installation and configuration files.
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
