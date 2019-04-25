@@ -45,9 +45,7 @@ tar -xvf insightagent.tar.gz
 cd InsightAgent-master/
 ```
 
-If you do not need to distribute the replay script, you can skip to **Sending Data** below.
-
-2) Download the agent Code which will be distributed to other machines(not required if you have the offline installation package)
+2) Download the agent Code which will be distributed to other machines (not required if you have the offline installation package)
 ```
 cd deployment/DeployAgent/files/
 sudo -E ./downloadAgentSSL.sh
@@ -55,7 +53,7 @@ sudo -E ./downloadAgentSSL.sh
 sudo -E ./downloadAgentNoSSL.sh
 ```
 
-3) Install Ansible, if this the first agent you are installing from this machine.
+3) Install Ansible if this the first agent you are installing from this machine.
 ```
 cd ..
 sudo -E ./installAnsible.sh
@@ -121,8 +119,6 @@ ansible-playbook insightagent.yaml
 ```
 
 The pipline is now set up; it may take some time for data to be reflected with the UI.
-
-### Monitoring and troubleshooting:
 
 
 ### Uninstallation:
