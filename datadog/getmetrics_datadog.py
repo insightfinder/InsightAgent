@@ -59,11 +59,16 @@ def get_agent_config_vars(normalization_ids_map):
             project_name = config_parser.get('insightfinder', 'project_name')
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             all_metrics = []
+            filter_hosts = []
             if len(config_parser.get('insightfinder', 'all_metrics')) != 0:
                 all_metrics = config_parser.get('insightfinder', 'all_metrics').split(",")
+            if len(config_parser.get('insightfinder', 'filter_hosts')) != 0:
+                filter_hosts = config_parser.get('insightfinder', 'filter_hosts').split(",")
             normalization_ids = config_parser.get('insightfinder', 'normalization_id').split(",")
             http_proxy = config_parser.get('insightfinder', 'http_proxy')
             https_proxy = config_parser.get('insightfinder', 'https_proxy')
+            host_chunk_size = int(config_parser.get('insightfinder', 'host_chunk_size'))
+            metric_chunk_size = int(config_parser.get('insightfinder', 'metric_chunk_size'))
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
@@ -102,9 +107,12 @@ def get_agent_config_vars(normalization_ids_map):
             "licenseKey": license_key,
             "projectName": project_name,
             "allMetrics": all_metrics,
+            "filterHosts": filter_hosts,
             "samplingInterval": sampling_interval,
             "httpProxy": http_proxy,
-            "httpsProxy": https_proxy
+            "httpsProxy": https_proxy,
+            "hostChunkSize": host_chunk_size,
+            "metricChunkSize": metric_chunk_size
         }
 
         return config_vars
@@ -168,7 +176,28 @@ def get_metric_list():
     return metric_list
 
 
-def get_metric_data(metric_list, start_time, end_time, collected_data_map):
+def get_host_list():
+    """Get available metric list from Datadog API"""
+    hosts_list = []
+    host_totals = datadog.api.Hosts.totals()
+    total_hosts = 0
+    if 'total_active' in host_totals.keys():
+        total_hosts = int(host_totals['total_active'])
+    if total_hosts > 100:
+        for index in range(0, total_hosts + 1, 100):
+            result = datadog.api.Hosts.search(start=index)
+            if 'host_list' in result.keys() and len(result['host_list']) != 0:
+                for host_meta in result['host_list']:
+                    hosts_list.append(host_meta["name"])
+    else:
+        result = datadog.api.Hosts.search()
+        if 'host_list' in result.keys() and len(result['host_list']) != 0:
+            for host_meta in result['host_list']:
+                hosts_list.append(host_meta["name"])
+    return hosts_list
+
+
+def get_metric_data(metric_list, host_list, start_time, end_time, collected_data_map):
     """Get metric data from Datadog API"""
 
     def format_data_entry(json_data_entry):
@@ -197,9 +226,11 @@ def get_metric_data(metric_list, start_time, end_time, collected_data_map):
 
     # for metric in all_metrics_list:
     query = ""
-    for each_metric in metric_list:
-        query += each_metric + '{*}by{host},'
-    query = query[:-1]
+    for host_name in host_list:
+        for each_metric in metric_list:
+            query += each_metric + '{*}by{' + host_name + '},'
+        query = query[:-1]
+
     datadog_metrics_result = datadog.api.Metric.query(start=start_time, end=end_time, query=query)
 
     status = datadog_metrics_result.get('status', 'error')
@@ -315,7 +346,12 @@ if __name__ == "__main__":
         metric_data = []
         chunk_number = 0
 
-        # get metric list
+        # get hosts list
+        all_host_list = agent_config_vars['filterHosts']
+        if len(all_host_list) == 0:
+            all_host_list = get_host_list()
+
+        # generate normalization ids if metrics are from API(config list empty)
         all_metrics_list = agent_config_vars['allMetrics']
         if len(all_metrics_list) == 0:
             all_metrics_list = get_metric_list()
@@ -328,28 +364,30 @@ if __name__ == "__main__":
 
         for data_start_ts, data_end_ts in time_list:
             logger.debug("Getting data from datadog for range: {}-{}".format(data_start_ts, data_end_ts))
-            chunked_metric_list = chunks(all_metrics_list, METRIC_CHUNKS)
-            for sub_list in chunked_metric_list:
-                # get metric data from datadog every SAMPLING_INTERVAL
-                get_metric_data(sub_list, data_start_ts, data_end_ts, raw_data_map)
-                if len(raw_data_map) == 0:
-                    logger.error("No data for metrics received from datadog.")
-                    sys.exit()
-            if len(raw_data_map) >= parameters['chunkLines']:
-                min_timestamp = sys.maxsize
-                max_timestamp = -sys.maxsize
-                for timestamp in raw_data_map.keys():
-                    value_map = raw_data_map[timestamp]
-                    value_map['timestamp'] = str(timestamp)
-                    metric_data.append(value_map)
-                    min_timestamp = min(min_timestamp, timestamp)
-                    max_timestamp = max(max_timestamp, timestamp)
-                chunk_number += 1
-                logger.debug("Sending Chunk Number: " + str(chunk_number))
-                logger.info("Sending from datadog for range: {}-{}".format(min_timestamp, max_timestamp))
-                send_data(metric_data)
-                metric_data = []
-                raw_data_map = collections.OrderedDict()
+            chunked_metric_list = chunks(all_metrics_list, agent_config_vars['metricChunkSize'])
+            chunked_host_list = chunks(all_host_list, agent_config_vars['hostChunkSize'])
+            for sub_metric_list in chunked_metric_list:
+                for sub_host_list in chunked_host_list:
+                    # get metric data from datadog every SAMPLING_INTERVAL
+                    get_metric_data(sub_metric_list, sub_host_list, data_start_ts, data_end_ts, raw_data_map)
+                    if len(raw_data_map) == 0:
+                        logger.error("No data for metrics received from datadog.")
+                        sys.exit()
+                if len(raw_data_map) >= parameters['chunkLines']:
+                    min_timestamp = sys.maxsize
+                    max_timestamp = -sys.maxsize
+                    for timestamp in raw_data_map.keys():
+                        value_map = raw_data_map[timestamp]
+                        value_map['timestamp'] = str(timestamp)
+                        metric_data.append(value_map)
+                        min_timestamp = min(min_timestamp, timestamp)
+                        max_timestamp = max(max_timestamp, timestamp)
+                    chunk_number += 1
+                    logger.debug("Sending Chunk Number: " + str(chunk_number))
+                    logger.info("Sending from datadog for range: {}-{}".format(min_timestamp, max_timestamp))
+                    send_data(metric_data)
+                    metric_data = []
+                    raw_data_map = collections.OrderedDict()
 
         # send final chunk
         min_timestamp = sys.maxsize
