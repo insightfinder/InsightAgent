@@ -9,11 +9,7 @@ output {
             mapping => {
                 "userName" => "{{ ifUserName }}"
                 "licenseKey" => "{{ ifLicenseKey }}"
-            {% if agentType == "metric-log" %}
-                "projectName" => "{{ ifLogProjectName }}"
-            {% else %}
-                "projectName" => "{{ ifProjectName }}"
-            {% endif %}
+                "projectName" => "%{project}"
                 "agentType" => "LogStreaming"
                 "metricData" => "[%{groupdata}]"
             }
@@ -24,10 +20,10 @@ output {
     if "true" in [LogStashErrorPool] {
         
     } else {
-    {% if agentType == "metric-log" %}
-        stdout { codec => line { format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project: '{{ ifLogProjectName }}'" }}
-    {% else %}
-        stdout { codec => line { format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project: '{{ ifProjectName }}'" }}
-    {% endif %}
+        stdout { 
+            codec => line { 
+                format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project %{project}"
+            }
+        }
     }
 }

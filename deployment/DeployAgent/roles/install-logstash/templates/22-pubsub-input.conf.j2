@@ -14,5 +14,13 @@ input {
         # assume one pipeline per topic
         type => "pubsub"
         id => "{{ pubsub_topic_name }}"
+        
+        add_field => {
+        {% if agentType == "metric-log" %}
+            "project" => "{{ ifLogProjectName }}"
+        {% else %}
+            "project" => "{{ ifProjectName }}"
+        {% endif %}
+        }
     }
 }
