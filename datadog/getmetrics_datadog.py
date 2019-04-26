@@ -49,7 +49,7 @@ def get_parameters():
     return params
 
 
-def get_agent_config_vars(normalization_ids_map):
+def get_agent_config_vars():
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
@@ -60,13 +60,24 @@ def get_agent_config_vars(normalization_ids_map):
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             all_metrics = []
             filter_hosts = []
+
             if len(config_parser.get('insightfinder', 'all_metrics')) != 0:
                 all_metrics = config_parser.get('insightfinder', 'all_metrics').split(",")
+            else:
+                temp_metrics = get_metric_list_from_file()
+                if temp_metrics is not None and len(temp_metrics) != 0:
+                    all_metrics = temp_metrics
+                else:
+                    all_metrics = ['system.cpu.user', 'system.cpu.idle', 'system.cpu.system', 'system.disk.used',
+                                   'system.disk.free', 'system.mem.pct_usable', 'system.mem.total',
+                                   'system.mem.used', 'system.net.bytes_rcvd', 'system.net.bytes_sent',
+                                   'system.swap.used', 'system.net.packets_in.error', 'system.net.packets_out.error']
             if len(config_parser.get('insightfinder', 'filter_hosts')) != 0:
                 filter_hosts = config_parser.get('insightfinder', 'filter_hosts').split(",")
-            normalization_ids = config_parser.get('insightfinder', 'normalization_id').split(",")
-            http_proxy = config_parser.get('insightfinder', 'http_proxy')
-            https_proxy = config_parser.get('insightfinder', 'https_proxy')
+            else:
+                filter_hosts = get_host_list_from_file()
+            if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
+            if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
             host_chunk_size = int(config_parser.get('insightfinder', 'host_chunk_size'))
             metric_chunk_size = int(config_parser.get('insightfinder', 'metric_chunk_size'))
         except ConfigParser.NoOptionError:
@@ -87,21 +98,6 @@ def get_agent_config_vars(normalization_ids_map):
                 "Agent not correctly configured(project_name). Check config file.")
             sys.exit(1)
 
-        if len(normalization_ids[0]) != 0:
-            for index in range(len(all_metrics)):
-                metric = all_metrics[index]
-                normalization_id = int(normalization_ids[index])
-                if normalization_id > 1000:
-                    logger.error("Please config the normalization_id between 0 to 1000.")
-                    sys.exit(1)
-                normalization_ids_map[metric] = GROUPING_START + normalization_id
-        if len(normalization_ids[0]) == 0:
-            count = 1
-            for index in range(len(all_metrics)):
-                metric = all_metrics[index]
-                normalization_ids_map[metric] = GROUPING_START + count
-                count += 1
-
         config_vars = {
             "userName": user_name,
             "licenseKey": license_key,
@@ -109,10 +105,10 @@ def get_agent_config_vars(normalization_ids_map):
             "allMetrics": all_metrics,
             "filterHosts": filter_hosts,
             "samplingInterval": sampling_interval,
-            "httpProxy": http_proxy,
-            "httpsProxy": https_proxy,
             "hostChunkSize": host_chunk_size,
-            "metricChunkSize": metric_chunk_size
+            "metricChunkSize": metric_chunk_size,
+            "httpProxy": if_http_proxy,
+            "httpsProxy": if_https_proxy
         }
 
         return config_vars
@@ -130,6 +126,8 @@ def get_datadog_config():
         try:
             datadog_app_key = config_parser.get('datadog', 'app_key')
             datadog_api_key = config_parser.get('datadog', 'api_key')
+            datadog_http_proxy = config_parser.get('datadog', 'datadog_http_proxy')
+            datadog_https_proxy = config_parser.get('datadog', 'datadog_https_proxy')
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
@@ -146,7 +144,9 @@ def get_datadog_config():
 
         datadog_config = {
             "DATADOG_APP_KEY": datadog_app_key,
-            "DATADOG_API_KEY": datadog_api_key
+            "DATADOG_API_KEY": datadog_api_key,
+            "httpProxy": datadog_http_proxy,
+            "httpsProxy": datadog_https_proxy
         }
     else:
         logger.warning("No config file found. Exiting...")
@@ -155,15 +155,28 @@ def get_datadog_config():
     return datadog_config
 
 
-def get_grouping_id(metric_key, normalization_ids_map):
-    """
-    Get grouping id for a metric key
-    Parameters:
-    - `metric_key` : metric key str to get group id.
-    - `temp_id` : proposed group id integer
-    """
-    grouping_id = int(normalization_ids_map[metric_key])
-    return grouping_id
+def get_metric_list_from_file():
+    """Get available metric list from File"""
+    metric_list = set()
+    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "metrics.txt"))):
+        with open(os.path.abspath(os.path.join(__file__, os.pardir, "metrics.txt")), 'r') as f:
+            for line in f:
+                if line not in ['\n', '\r\n']:
+                    metric_list.add(line.replace('\n', ''))
+            logger.debug("Get metric list from file: " + str(metric_list))
+    return list(metric_list)
+
+
+def get_host_list_from_file():
+    """Get available host list from File"""
+    metric_list = set()
+    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "hosts.txt"))):
+        with open(os.path.abspath(os.path.join(__file__, os.pardir, "hosts.txt")), 'r') as f:
+            for line in f:
+                if line not in ['\n', '\r\n']:
+                    metric_list.add(line.replace('\n', ''))
+            logger.debug("Get host list from file: " + str(metric_list))
+    return list(metric_list)
 
 
 def get_metric_list():
@@ -177,7 +190,7 @@ def get_metric_list():
 
 
 def get_host_list():
-    """Get available metric list from Datadog API"""
+    """Get available host list from Datadog API"""
     hosts_list = []
     host_totals = datadog.api.Hosts.totals()
     total_hosts = 0
@@ -209,8 +222,7 @@ def get_metric_data(metric_list, host_list, start_time, end_time, collected_data
         else:
             host_name = "unknown_host"
         datapoints = json_data_entry.get('pointlist', [])
-        header_field = normalize_key(metric_name) + "[" + normalize_key(host_name) + "]:" + str(
-            get_grouping_id(metric_name, normalization_ids_map))
+        header_field = normalize_key(metric_name) + "[" + normalize_key(host_name) + "]"
         for each_point in datapoints:
             if len(each_point) < 2 or each_point[1] is None:
                 continue
@@ -224,12 +236,14 @@ def get_metric_data(metric_list, host_list, start_time, end_time, collected_data
             timestamp_value_map[header_field] = str(metric_value)
             collected_data_map[epoch] = timestamp_value_map
 
+    # Set one metric multiple host
     # for metric in all_metrics_list:
     query = ""
     for host_name in host_list:
         for each_metric in metric_list:
             query += each_metric + '{*}by{' + host_name + '},'
-        query = query[:-1]
+
+    query = query[:-1]
 
     datadog_metrics_result = datadog.api.Metric.query(start=start_time, end=end_time, query=query)
 
@@ -257,10 +271,10 @@ def send_data(chunk_metric_data):
 
     # send the data
     post_url = parameters['serverUrl'] + "/customprojectrawdata"
-    if len(datadog_proxies) == 0:
+    if len(if_proxies) == 0:
         response = requests.post(post_url, data=json.loads(to_send_data_json))
     else:
-        response = requests.post(post_url, data=json.loads(to_send_data_json), proxies=datadog_proxies)
+        response = requests.post(post_url, data=json.loads(to_send_data_json), proxies=if_proxies)
 
     if response.status_code == 200:
         logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
@@ -309,28 +323,32 @@ def set_logger_config(level):
 if __name__ == "__main__":
     GROUPING_START = 15000
     GROUPING_END = 20000
-    METRIC_CHUNKS = 50
     SPACES = re.compile(r"\s+")
     SLASHES = re.compile(r"\/+")
     NON_ALNUM = re.compile(r"[^a-zA-Z_\-0-9\.]")
 
-    normalization_ids_map = dict()
     parameters = get_parameters()
     log_level = parameters['logLevel']
     logger = set_logger_config(log_level)
     data_dir = 'data'
-    agent_config_vars = get_agent_config_vars(normalization_ids_map)
+    agent_config_vars = get_agent_config_vars()
+    if_proxies = dict()
+    if len(agent_config_vars['httpProxy']) != 0:
+        if_proxies['http'] = agent_config_vars['httpProxy']
+    if len(agent_config_vars['httpsProxy']) != 0:
+        if_proxies['https'] = agent_config_vars['httpsProxy']
 
     # get agent configuration details
     datadog_config = get_datadog_config()
-    datadog_proxies = {}
-    if len(agent_config_vars['httpProxy']) != 0:
-        datadog_proxies['http'] = agent_config_vars['httpProxy']
-    if len(agent_config_vars['httpsProxy']) != 0:
-        datadog_proxies['https'] = agent_config_vars['httpsProxy']
+    datadog_proxies = dict()
+    if len(datadog_config['httpProxy']) != 0:
+        datadog_proxies['http'] = datadog_config['httpProxy']
+    if len(datadog_config['httpsProxy']) != 0:
+        datadog_proxies['https'] = datadog_config['httpsProxy']
     if len(datadog_proxies) != 0:
         datadog_api = datadog.initialize(api_key=datadog_config['DATADOG_API_KEY'],
-                                     app_key=datadog_config['DATADOG_APP_KEY'], proxies=datadog_proxies)
+                                         app_key=datadog_config['DATADOG_APP_KEY'],
+                                         proxies=datadog_proxies)
     else:
         datadog_api = datadog.initialize(api_key=datadog_config['DATADOG_API_KEY'],
                                          app_key=datadog_config['DATADOG_APP_KEY'])
@@ -355,12 +373,6 @@ if __name__ == "__main__":
         all_metrics_list = agent_config_vars['allMetrics']
         if len(all_metrics_list) == 0:
             all_metrics_list = get_metric_list()
-            if len(normalization_ids_map) == 0:
-                count = 1
-                for index in range(len(all_metrics_list)):
-                    metric = all_metrics_list[index]
-                    normalization_ids_map[metric] = GROUPING_START + count
-                    count += 1
 
         for data_start_ts, data_end_ts in time_list:
             logger.debug("Getting data from datadog for range: {}-{}".format(data_start_ts, data_end_ts))

@@ -1,16 +1,19 @@
 [insightfinder]
-license_key =
-project_name =
-user_name =
+license_key = 
+project_name = 
+user_name = 
 sampling_interval =
+# You can also provide as list of metrics in the metrics.txt file
 all_metrics =
-#the normalization id needs to be given between 0 and 1000
-normalization_id =
-http_proxy =
-https_proxy =
+# You can also provide as list of hosts in the hosts.txt file
+filter_hosts =
+if_http_proxy = 
+if_https_proxy = 
+host_chunk_size = 2
+metric_chunk_size = 50
 
 [datadog]
-app_key =
-api_key =
-
-
+app_key = 
+api_key = 
+datadog_http_proxy = 
+datadog_https_proxy = 
