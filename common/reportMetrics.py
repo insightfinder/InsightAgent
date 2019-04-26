@@ -156,7 +156,6 @@ def get_agent_config_vars(normalization_map):
             config_vars['projectName'] = project_name
             config_vars['userName'] = user_name
             config_vars['samplingInterval'] = sampling_interval
-            logger.debug('license_key :' + license_key)
     except IOError:
         logger.error("config.ini file is missing")
     return config_vars
