@@ -201,16 +201,20 @@ elif [ $AGENT_TYPE == 'datadog' ]; then
 		echo "[datadog]" >> ${PATH_TO_CONFIG_INI}
 		echo "app_key =" >> ${PATH_TO_CONFIG_INI}
 		echo "api_key =" >> ${PATH_TO_CONFIG_INI}
+		echo "datadog_http_proxy =" >> ${PATH_TO_CONFIG_INI}
+		echo "datadog_https_proxy =" >> ${PATH_TO_CONFIG_INI}
 		echo " " >> ${PATH_TO_CONFIG_INI}
 		echo "[insightfinder]" >> ${PATH_TO_CONFIG_INI}
 		echo "license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
 		echo "project_name=$PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
 		echo "user_name=$USERNAME" >> ${PATH_TO_CONFIG_INI}
 		echo "sampling_interval=$SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
-		echo "normalization_id = " >> ${PATH_TO_CONFIG_INI}
 		echo "all_metrics =" >> ${PATH_TO_CONFIG_INI}
-		echo "http_proxy =" >> ${PATH_TO_CONFIG_INI}
-		echo "https_proxy =" >> ${PATH_TO_CONFIG_INI}
+		echo "filter_hosts =" >> ${PATH_TO_CONFIG_INI}
+		echo "if_http_proxy =" >> ${PATH_TO_CONFIG_INI}
+		echo "if_https_proxy =" >> ${PATH_TO_CONFIG_INI}
+		echo "host_chunk_size = 1" >> ${PATH_TO_CONFIG_INI}
+		echo "metric_chunk_size = 50" >> ${PATH_TO_CONFIG_INI}
 	fi
 elif [ $AGENT_TYPE == 'kafka' ]; then
 	if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
