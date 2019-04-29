@@ -47,6 +47,7 @@ filter {
         aggregate {
             task_id => "%{task_id}"
             code => "
+		    map['project'] ||= event.get('project')
                     map['output_type'] ||= event.get('output_type')
                     map['size'] ||= 0
                     map['count'] ||= 0

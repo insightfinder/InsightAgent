@@ -17,3 +17,7 @@
     - 22-pubsub-input.conf
     - 91-pubsub.conf
   notify: restart logstash
+
+- include: config-google-pubsub-key.yml
+  when: gcp_json_key_file is defined
+
