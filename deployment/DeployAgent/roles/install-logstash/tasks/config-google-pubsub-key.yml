@@ -1,0 +1,10 @@
+---
+- name: Copy JSON key file to server
+  copy:
+     src: {{ gcp_json_key_file }}
+     dest: /tmp/{{ gcp_json_key_file }}
+
+- name: Set up JSON key file
+  command: >
+    mkdir /etc/logstash/keys
+    mv /tmp/{{ gcp_json_key_file | quote }} /etc/logstash/keys/

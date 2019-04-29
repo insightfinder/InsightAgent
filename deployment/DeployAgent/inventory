@@ -96,7 +96,9 @@ aws_credentials_file =
 pubsub_project_id = 
 pubsub_topic_name = 
 # the subscription need not be created
-pubsub_subscription = 
+pubsub_subscription =
+# provide the key file (as json) if installing this agent on a non-GCE machine 
+gcp_json_key_file = 
 
 ##Vars for Kafka
 
