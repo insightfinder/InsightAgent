@@ -218,7 +218,7 @@ def get_metric_data(metric_list, host_list, start_time, end_time, collected_data
         host_name_arr = str(json_data_entry.get('scope'))
         host_name_arr = host_name_arr.split(":")
         if len(host_name_arr) == 2:
-            host_name = host_name_arr[1]
+            host_name = host_name_arr[0]
         else:
             host_name = "unknown_host"
         datapoints = json_data_entry.get('pointlist', [])
