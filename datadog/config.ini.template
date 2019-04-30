@@ -2,12 +2,15 @@
 license_key = 
 project_name = 
 user_name = 
-sampling_interval = 
-all_metrics = 
-#the normalization id needs to be given between 0 and 1000
-normalization_id = 
+sampling_interval =
+# You can also provide as list of metrics in the metrics.txt file
+all_metrics =
+# You can also provide as list of hosts in the hosts.txt file
+filter_hosts =
 if_http_proxy = 
 if_https_proxy = 
+host_chunk_size = 2
+metric_chunk_size = 50
 
 [datadog]
 app_key = 
