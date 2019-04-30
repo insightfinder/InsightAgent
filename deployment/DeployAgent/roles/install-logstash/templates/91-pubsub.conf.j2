@@ -1,0 +1,65 @@
+filter {
+    if [type] == "pubsub" {
+        # validate timestamp and convert to ISO8601
+        # change first parameter to your timestamp variable.
+        # change 2..n params to match your incoming timestamp(s)
+        # can be commented out if you're purely relying on @timestamp
+        date {
+            match => [ "timestamp", "ISO8601" ]
+        }
+        
+        # convert the timestamp into unix epoch (ms)
+        ruby {  
+            code => "event.set('ts_epoch', event.get('@timestamp').to_i * 1000)"
+        }
+        
+        # handle errors
+        if "_grokparsefailure" in [tags] or "_dateparsefailure" in [tags] {
+            mutate {
+                add_field => {
+                    "LogStashErrorPool" => "true"
+                    "[message][LogStashErrorPool]" => "true"
+                }
+            }
+        }
+        
+        # add msg field and labeled subfields
+        mutate {
+            add_field => {
+                "instance" => "{{ pubsub_topic_name }}"
+                "task_id" => "%{host}"
+                "[msg][tag]" => "%{instance}"
+                "[msg][eventId]" => "%{ts_epoch}"
+                "[msg][data]" => "%{message}"
+                "output_type" => "InsightFinder"
+            }
+        }
+        
+        # turn the msg built in mutate into json
+        # must install the json_encode plugin
+        # bin/logstash-plugin install logstash-filter-json_encode
+        json_encode {
+            source => "msg"
+            target => "data"
+        }
+        
+        ### grouping events ###
+        aggregate {
+            task_id => "%{task_id}"
+            code => "
+                    map['output_type'] ||= event.get('output_type')
+                    map['size'] ||= 0
+                    map['count'] ||= 0
+                    map['groupdata'] ||= []
+                    map['groupdata'] << event.get('data')
+                    map['size'] += (event.get('data').size + 20)
+                    map['count'] += 1
+                    map_meta.timeout = 0 if map['count'] > 999999 or (map['size'] + 400) > 999999
+                    event.cancel()
+                    "
+            push_previous_map_as_event => false
+            push_map_as_event_on_timeout => true
+            timeout => 10
+        }
+    }
+}
