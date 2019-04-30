@@ -2,7 +2,12 @@
 Agent Type: Google Pub/Sub
 Platform: Linux
 
-This Google Pub/Sub agent is a Logstash pipeline that reads from a subscription to a given topic. The installer includes the required Logstash installation and configuration files.
+This Google Pub/Sub agent is a Logstash pipeline that reads from a subscription to a given topic. The installer includes the required Logstash installation and configuration files. The configuration files are set up as j2 templates for Ansible to fill in during installation of the agent.
+```
+deploymeny/DeployAgent/roles/install-logstash/templates/22-pubsub-input.conf.j2
+deployment/DeployAgent/roles/install-logstash/templates/91-pubsub.conf.j2
+deploymeny/DeployAgent/roles/install-logstash/templates/03-http-output.conf.j2
+```
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
