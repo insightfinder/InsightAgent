@@ -1,0 +1,32 @@
+input {
+    s3 {
+        # Bucket to read from
+        bucket => "{{ aws_bucket }}"
+
+        # AWS credentials
+    {% if aws_credentials_file %}
+        aws_credentials_file => "{{ aws_credentials_file }}"
+    {% else %}
+        access_key_id => "{{ aws_access_key_id }}"
+        secret_access_key => "{{ aws_secret_access_key }}"
+    {% endif %}
+
+        # add'l settings from AWS SDK
+        additional_settings => { }
+        
+        codec => "cloudtrail"
+        
+        # Assume one pipeline per bucket
+        type => "cloudtrail"
+        id => "{{ aws_bucket }}"
+        
+        add_field => {
+        {% if agentType == "metric-log" %}
+            "project" => "{{ ifLogProjectName }}"
+        {% else %}
+            "project" => "{{ ifProjectName }}"
+        {% endif %}
+        }
+    }
+} 
+ 
