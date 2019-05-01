@@ -1,9 +1,9 @@
-# InsightAgent: Kafka Logs
-Agent Type: Kafka Logs
+# InsightAgent: Kafka Incident
+Agent Type: Kafka Incident
 
 Platform: Linux
 
-This agent is used to collect log data from kafka.
+This agent is used to collect incident data from kafka.
 
 ##### Instructions to register a project in Insightfinder.com
 - Go to the link https://insightfinder.com/
@@ -106,7 +106,7 @@ ifSamplingInterval=1
 
 ##Agent type
 #
-ifAgent=kafka-logs
+ifAgent=kafka-incident
 #
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
@@ -118,9 +118,7 @@ ifReportingUrl=https://app.insightfinder.com
 # e.g. host:9092,host2:9092
 kafkaBootstrapServers = localhost:9092
 
-kafkaLogTopic = insightfinder_logs
-
-kafkaMetricTopic = insightfinder_metrics
+kafkaIncidentTopic = insightfinder_logs
 
 filterHosts =
 ```
