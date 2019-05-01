@@ -72,6 +72,7 @@ ifSamplingInterval=1
 #ifAgent=metric-log
 #ifAgent=kafka-logs
 #ifAgent=kafka
+#ifAgent=kafka-incident
 #ifAgent=logstash
 #ifAgent=prometheus
 #ifAgent=awsCloudtrail
@@ -107,6 +108,8 @@ kafkaBootstrapServers = localhost:9092
 kafkaLogTopic = insightfinder_logs
 
 kafkaMetricTopic = insightfinder_metrics
+
+kafkaIncidentTopic = insightfinder_incident
 
 filterHosts =
 
