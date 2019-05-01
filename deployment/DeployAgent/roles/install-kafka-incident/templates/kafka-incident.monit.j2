@@ -1,0 +1,2 @@
+check process kafka_incident matching "kafka_incident/getincident_kafka.py"
+    start program = "/usr/bin/nohup /usr/bin/python {{ansible_env.HOME}}/InsightAgent-master/kafka_incident/getincident_kafka.py -d {{ansible_env.HOME}}/InsightAgent-master/ -w {{ reportingUrl }} -l 500 2>{{ansible_env.HOME}}/InsightAgent-master/log/reporting-kafa-incident.err 1>{{ansible_env.HOME}}/InsightAgent-master/log/reporting-kafka-incident.out &" with timeout 20 seconds
