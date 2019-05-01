@@ -10,7 +10,7 @@ This agent is used to collect incident data from kafka.
 - Sign in with the user credentials or sign up for a new account.
 - Go to Settings and create a project.
 - Select InsightAgent as the Data Source on the next page.
-- Using the dropdowns on the next page, select "Custom" as the Instance Type, "Log" as the Data Type, and "Live Streaming" as the Agent Type
+- Using the dropdowns on the next page, select "Custom" as the Instance Type, "Incident" as the Data Type, and "Live Streaming" as the Agent Type
 - Note your license key which is available in "User Account Information". To get to "User Account Information", click on the username on the top right corner.
 
 ##### Pre-requisites:
