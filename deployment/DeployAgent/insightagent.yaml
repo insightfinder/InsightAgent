@@ -44,6 +44,7 @@
      - { role: install-opentsdb, when: (agentType=="opentsdb") and action=="install"}
      - { role: install-prometheus, when: (agentType=="prometheus") and action=="install"}
      - { role: install-kafka-logs, when: (agentType=="kafka-logs") and action=="install"}
+     - { role: install-kafka-incident, when: (agentType=="kafka-incident") and action=="install"}
      - { role: install-kafka-metrics, when: agentType=="kafka" and action=="install"}
      - { role: install-filebeat, when: (agentType=="logstash" or agentType=="metric-log") and action=="install"}
      - { role: install-logstash, when: (agentType=="logstash" or agentType=="metric-log" or agentType=="awsCloudtrail" or agentType=="googlePubSub") and action=="install"}
