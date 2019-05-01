@@ -215,7 +215,9 @@ def get_metric_data(metric_list, host_list, start_time, end_time, collected_data
 
     def format_data_entry(json_data_entry):
         metric_name = json_data_entry.get('metric')
+        logger.debug("json_data_entry is: " + str(json_data_entry))
         host_name_arr = str(json_data_entry.get('scope'))
+        logger.debug("host_name_arr is: " + host_name_arr)
         host_name_arr = host_name_arr.split(":")
         if len(host_name_arr) == 2:
             host_name = host_name_arr[0]
