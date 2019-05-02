@@ -189,11 +189,14 @@ def get_json_info(json_message):
     message = {}
     timestamp = ""
     host_name_json = json_message
+    app_name_json = json_message
+    group_name_json = json_message
     timestamp_json = json_message
     host_name_field = config_vars['hostName'].split("->")
     timestamp_field = config_vars['timestamp'].split("->")
     message_fields = config_vars['messageField']
     app_name_field = config_vars['appName'].split("->")
+    group_name_field = config_var['groupName'].split("->")
     
     for host_name_parameter in host_name_field:
         host_name_json = host_name_json.get(host_name_parameter.strip(), {})
@@ -208,7 +211,16 @@ def get_json_info(json_message):
                 break
         app_name = app_name_json.strip()
     else:
-        app_name = get_fallback_project_name()
+        app_name = ''
+
+    if len(group_name_field) > 0:
+        for group_name_parameter in group_name_field:
+            group_name_json = group_name_json.get(group_name_parameter.strip(), {})
+            if len(group_name_json) == 0:
+                break
+        group_name = group_name_json.strip()
+    else:
+        group_name = ''
 
     for timestamp_parameter in timestamp_field:
         timestamp_json = timestamp_json.get(timestamp_parameter.strip(), {})
@@ -228,7 +240,7 @@ def get_json_info(json_message):
         if len(message_json) != 0:
             message[prefix] = message_json
     timestamp = timestamp.replace(" ", "T")
-    return host_name, message, timestamp, app_name
+    return host_name, message, timestamp, app_name, group_name
 
 
 def safe_project_name(name):
@@ -236,23 +248,29 @@ def safe_project_name(name):
     return safe_name
 
 
-def get_fallback_project_name():
-    fallback_project = ''
-    if parameters['project'] is None:
-        fallback_project = config_vars['projectName']
-    else:
-        fallback_project = parameters['project']
+def safe_group_name(name):
+    safe_name = re.sub(r'[\_]+', '-', name)
+    return safe_name
+
+
+def get_fallback_project_name(host_name):
+    fallback_project = host_name
+    if fallback_project == '':
+        if parameters['project'] is None:
+            fallback_project = config_vars['projectName']
+        else:
+            fallback_project = parameters['project']
     return fallback_project
 
 
-def send_data(metric_data, app_name):
+def send_data(metric_data, app_name, group_name):
     """ Sends parsed metric data to InsightFinder """
     send_data_time = time.time()
     # prepare data for metric streaming agent
     to_send_data_dict = dict()
     to_send_data_dict["incidentData"] = json.dumps(metric_data)
     to_send_data_dict["licenseKey"] = config_vars['licenseKey']
-    to_send_data_dict["projectName"] = get_fallback_project_name()
+    to_send_data_dict["projectName"] = get_fallback_project_name('')
     to_send_data_dict["userName"] = config_vars['userName']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
     to_send_data_dict["samplingInterval"] = config_vars['samplingInterval']
@@ -269,13 +287,16 @@ def send_data(metric_data, app_name):
     # check for existing project
     if 'token' in config_vars.keys() and config_vars['token'] is not None:
         fallback_project_name = to_send_data_dict["projectName"]
-        app_name = safe_project_name(app_name)
-        to_send_data_dict["projectName"] = app_name
+        to_send_data_dict["projectName"] = safe_project_name(app_name)
         try:
             output_check_project = subprocess.check_output('curl "' + url + '/api/v1/getprojectstatus?userName=' + config_vars['userName'] + '&token=' + config_vars['token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + to_send_data_dict["projectName"] + '%22%2C%22customerName%22%3A%22' + config_vars['userName'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"', shell=True)
             # create project if no existing project
-            if app_name not in output_check_project:
+            if to_send_data_dict["projectName"] not in output_check_project:
                 output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + config_vars['userName'] + '&token=' + config_vars['token'] + '&projectName=' + to_send_data_dict["projectName"] + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=Incident&samplingInterval=1&samplingIntervalInSeconds=60&zone=&email=&access-key=&secrete-key=&insightAgentType=Custom" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + url + ':8080/api/v1/add-custom-project?tzOffset=-18000000', shell=True)
+                
+                # try to add new project to system
+                if len(group_name) != 0:
+                    output_update_project = subprocess.check_output('no_proxy= curl -d "userName=' + config_vars['userName'] + '&token=' + config_vars['token'] + '&operation=updateprojsettings&projectName=' + to_send_data_dict["projectName"] + '&systemName=' + safe_group_name(group_name) + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + url + ':8080/api/v1/projects/update?tzOffset=-18000000', shell=True)
         except subprocess.CalledProcessError as e:
             logger.error("Unable to create project for " + to_send_data_dict["projectName"] + '. Data will be sent to ' + to_send_data_dict["fallback_projectName"])
             to_send_data_dict["projectName"] = fallback_project_name
@@ -300,12 +321,16 @@ def parse_consumer_messages(consumer, filter_hosts, filter_apps):
             json_message = json.loads(message.value)
             if 'u_table' not in json_message or json_message.get('u_table', {}).strip() != 'problem':
                 continue
-            (host_name, message, timestamp, app_name) = get_json_info(json_message)
-            if len(host_name) == 0 or len(message) == 0 or len(timestamp) == 0 or len(app_name) == 0 or
+            (host_name, message, timestamp, app_name, group_name) = get_json_info(json_message)
+            if len(host_name) == 0 or len(message) == 0 or len(timestamp) == 0 or
                  (len(filter_hosts) != 0 and host_name.upper() not in (filter_host.upper().strip() for filter_host in filter_hosts)) or
-                 (len(filter_apps) != 0 and app_name.upper() not in (filter_app.upper().strip() for filter_app in filter_apps)):
+                 (app_name != '' and len(filter_apps) != 0 and app_name.upper() not in (filter_app.upper().strip() for filter_app in filter_apps)):
                 continue
             
+            # if no app_name found, use host_name
+            if len(app_name) == 0:
+                app_name = host_name
+
             # set line count
             if app_name in line_count:
                 line_count[app_name] += 1
@@ -315,7 +340,7 @@ def parse_consumer_messages(consumer, filter_hosts, filter_apps):
                 
             if line_count[app_name] >= parameters['chunk_lines']:
                 logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                send_data(current_row[app_name], app_name)
+                send_data(current_row[app_name], app_name, group_name)
                 current_row[app_name] = []
                 chunk_count += 1
                 line_count[app_name] = 0
