@@ -289,7 +289,13 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
                             continue
                         header_field = metric_name + "[" + host_name + "]:" + str(
                             get_grouping_id(metric_name, normalization_ids_map))
-                        valueMap[header_field] = str(metric_value)
+                        if header_field in valueMap.keys():
+                            if metric_value is not None and len(str(metric_value)) > 0:
+                                valueMap[header_field] = str(metric_value)
+                            else:
+                                continue
+                        else:
+                            valueMap[header_field] = str(metric_value)
                         rawDataMap[epoch] = valueMap
                         # add collected metric name
                         collectedValues += 1
