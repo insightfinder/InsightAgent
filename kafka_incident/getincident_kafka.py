@@ -13,6 +13,7 @@ import subprocess
 import pytz
 import requests
 from kafka import KafkaConsumer
+import re
 
 '''
 this script gathers logs from kafka and send to InsightFinder
@@ -211,6 +212,11 @@ def get_json_info(json_message):
     return host_name, message, timestamp
 
 
+def safe_project_name(name)
+    safe_name = re.sub(r'[^0-9a-zA-Z\_\-]+', '-',name)
+    return safe_name
+
+
 def send_data(metric_data, host_name):
     """ Sends parsed metric data to InsightFinder """
     send_data_time = time.time()
@@ -238,7 +244,7 @@ def send_data(metric_data, host_name):
     # check for existing project
     unless config_vars['token'] is None:
         fallback_project_name = to_send_data_dict["projectName"]
-        to_send_data_dict["projectName"] = host_name
+        to_send_data_dict["projectName"] = safe_project_name(host_name)
         try:
             output_check_project = subprocess.check_output('curl "' + url + '/api/v1/getprojectstatus?userName=' + config_vars['userName'] + '&token=' + config_vars['token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + to_send_data_dict["projectName"] + '%22%2C%22customerName%22%3A%22' + config_vars['userName'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"', shell=True)
             # create project if no existing project
