@@ -9,6 +9,7 @@ import socket
 import sys
 import time
 from optparse import OptionParser
+from itertools import islice
 
 import datadog
 import requests
@@ -276,22 +277,46 @@ def send_data(chunk_metric_data):
 
     # send the data
     post_url = parameters['serverUrl'] + "/customprojectrawdata"
-    if len(if_proxies) == 0:
-        response = requests.post(post_url, data=json.loads(to_send_data_json))
-    else:
-        response = requests.post(post_url, data=json.loads(to_send_data_json), proxies=if_proxies)
+    for _ in xrange(ATTEMPTS):
+        try:
+            if len(if_proxies) == 0:
+                response = requests.post(post_url, data=json.loads(to_send_data_json))
+            else:
+                response = requests.post(post_url, data=json.loads(to_send_data_json), proxies=if_proxies)
+            if response.status_code == 200:
+                logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
+                logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
+            else:
+                logger.info("Failed to send data.")
+            return
+        except requests.exceptions.Timeout:
+            logger.exception(
+                "Timed out while flushing to InsightFinder. Reattempting...")
+            continue
+        except requests.exceptions.TooManyRedirects:
+            logger.exception(
+                "Too many redirects while flushing to InsightFinder.")
+            break
+        except requests.exceptions.RequestException as e:
+            logger.exception(
+                "Exception while flushing to InsightFinder.")
+            break
 
-    if response.status_code == 200:
-        logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
-    else:
-        logger.info("Failed to send data.")
-    logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
+    logger.error(
+        "Failed to flush to InsightFinder! Gave up after %d attempts.", ATTEMPTS)
 
 
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
     for index in xrange(0, len(l), n):
         yield l[index:index + n]
+
+
+def chunk_map(data, SIZE=50):
+    """Yield successive n-sized chunks from l."""
+    it = iter(data)
+    for i in xrange(0, len(data), SIZE):
+        yield {k: data[k] for k in islice(it, SIZE)}
 
 
 def normalize_key(metric_key):
@@ -331,6 +356,7 @@ if __name__ == "__main__":
     SPACES = re.compile(r"\s+")
     SLASHES = re.compile(r"\/+")
     NON_ALNUM = re.compile(r"[^a-zA-Z_\-0-9\.]")
+    ATTEMPTS = 3
 
     parameters = get_parameters()
     log_level = parameters['logLevel']
@@ -381,45 +407,58 @@ if __name__ == "__main__":
 
         for data_start_ts, data_end_ts in time_list:
             logger.debug("Getting data from datadog for range: {}-{}".format(data_start_ts, data_end_ts))
+            retry_metric_list = []
+            retry_host_list = []
             chunked_metric_list = chunks(all_metrics_list, agent_config_vars['metricChunkSize'])
             chunked_host_list = chunks(all_host_list, agent_config_vars['hostChunkSize'])
+
             for sub_metric_list in chunked_metric_list:
                 for sub_host_list in chunked_host_list:
                     # get metric data from datadog every SAMPLING_INTERVAL
-                    get_metric_data(sub_metric_list, sub_host_list, data_start_ts, data_end_ts, raw_data_map)
-                    if len(raw_data_map) == 0:
-                        logger.error("No data for metrics received from datadog.")
-                        sys.exit()
-                if len(raw_data_map) >= parameters['chunkLines']:
-                    min_timestamp = sys.maxsize
-                    max_timestamp = -sys.maxsize
-                    for timestamp in raw_data_map.keys():
-                        value_map = raw_data_map[timestamp]
-                        value_map['timestamp'] = str(timestamp)
-                        metric_data.append(value_map)
-                        min_timestamp = min(min_timestamp, timestamp)
-                        max_timestamp = max(max_timestamp, timestamp)
-                    chunk_number += 1
-                    logger.debug("Sending Chunk Number: " + str(chunk_number))
-                    logger.info("Sending from datadog for range: {}-{}".format(min_timestamp, max_timestamp))
-                    send_data(metric_data)
-                    metric_data = []
-                    raw_data_map = collections.OrderedDict()
+                    for _ in xrange(ATTEMPTS):
+                        try:
+                            get_metric_data(sub_metric_list, sub_host_list, data_start_ts, data_end_ts, raw_data_map)
+                            break
+                        except Exception as e:
+                            retry_host_list.append(sub_host_list)
+                            retry_metric_list.append(sub_metric_list)
+                            logger.exception(
+                                "Error while fetching metrics from DataDog. Reattempting...\n Hosts: " + str(
+                                    sub_host_list))
+                            logger.exception(e)
 
-        # send final chunk
-        min_timestamp = sys.maxsize
-        max_timestamp = -sys.maxsize
-        for timestamp in raw_data_map.keys():
-            value_map = raw_data_map[timestamp]
-            value_map['timestamp'] = str(timestamp)
-            metric_data.append(value_map)
-            min_timestamp = min(min_timestamp, timestamp)
-            max_timestamp = max(max_timestamp, timestamp)
-        if len(metric_data) != 0:
-            chunk_number += 1
-            logger.debug("Sending Final Chunk: " + str(chunk_number))
-            logger.info("Sending from datadog for range: {}-{}".format(min_timestamp, max_timestamp))
-            send_data(metric_data)
+            # retry for failed hosts
+            for sub_metric_list in retry_metric_list:
+                for sub_host_list in retry_host_list:
+                    # get metric data from datadog every SAMPLING_INTERVAL with 3 retry attempts
+                    for _ in xrange(ATTEMPTS):
+                        try:
+                            get_metric_data(sub_metric_list, sub_host_list, data_start_ts, data_end_ts, raw_data_map)
+                            break
+                        except Exception as e:
+                            logger.exception(
+                                "Error while fetching metrics from DataDog. Reattempting...\n Hosts: " + str(
+                                    sub_host_list))
+                            logger.exception(e)
+
+        if len(raw_data_map) == 0:
+            logger.error("No data for metrics received from datadog.")
+            sys.exit()
+        for raw_data_map_chunk in chunk_map(raw_data_map, parameters['chunkLines']):
+            min_timestamp = sys.maxsize
+            max_timestamp = -sys.maxsize
+            for timestamp in raw_data_map_chunk.keys():
+                value_map = raw_data_map_chunk[timestamp]
+                value_map['timestamp'] = str(timestamp)
+                metric_data.append(value_map)
+                min_timestamp = min(min_timestamp, timestamp)
+                max_timestamp = max(max_timestamp, timestamp)
+            if len(metric_data) != 0:
+                chunk_number += 1
+                logger.debug("Sending Chunk Number: " + str(chunk_number))
+                logger.info("Sending from datadog for range: {}-{}".format(min_timestamp, max_timestamp))
+                send_data(metric_data)
+                metric_data = []
 
     except Exception as e:
         logger.error("Error sending metric data to InsightFinder.")
