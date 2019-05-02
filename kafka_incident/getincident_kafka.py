@@ -85,7 +85,7 @@ def get_agent_config_vars():
             license_key = parser.get('insightfinder', 'license_key')
             project_name = parser.get('insightfinder', 'project_name')
             user_name = parser.get('insightfinder', 'user_name')
-            # token = parser.get('insightfinder', 'token')
+            token = parser.get('insightfinder', 'token')
             url = parser.get('insightfinder', 'url')
             sampling_interval = parser.get('kafka', 'sampling_interval')
             client_id = parser.get('kafka', 'client_id')
@@ -291,7 +291,7 @@ def send_data(metric_data, app_name, group_name):
         fallback_project_name = to_send_data_dict["projectName"]
         to_send_data_dict["projectName"] = safe_project_name(app_name)
         try:
-            output_check_project = subprocess.check_output('curl "' + url + '/api/v1/getprojectstatus?userName=' + config_vars['userName'] + '&token=' + config_vars['token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + to_send_data_dict["projectName"] + '%22%2C%22customerName%22%3A%22' + config_vars['userName'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"', shell=True)
+            output_check_project = subprocess.check_output('curl "' + url + ':8080/api/v1/getprojectstatus?userName=' + config_vars['userName'] + '&token=' + config_vars['token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + to_send_data_dict["projectName"] + '%22%2C%22customerName%22%3A%22' + config_vars['userName'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"', shell=True)
             # create project if no existing project
             if to_send_data_dict["projectName"] not in output_check_project:
                 output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + config_vars['userName'] + '&token=' + config_vars['token'] + '&projectName=' + to_send_data_dict["projectName"] + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=Incident&samplingInterval=1&samplingIntervalInSeconds=60&zone=&email=&access-key=&secrete-key=&insightAgentType=Custom" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + url + ':8080/api/v1/add-custom-project?tzOffset=-18000000', shell=True)
@@ -304,7 +304,7 @@ def send_data(metric_data, app_name, group_name):
             to_send_data_dict["projectName"] = fallback_project_name
     
     # send the data
-    post_url = url + "/incidentdatareceive"
+    post_url = url + ":8080/incidentdatareceive"
     response = requests.post(post_url, data=json.loads(to_send_data_json))
     if response.status_code == 200:
         logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
