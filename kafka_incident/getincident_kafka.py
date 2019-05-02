@@ -109,17 +109,14 @@ def get_agent_config_vars():
             if len(group_id) == 0:
                 logger.error("Agent not correctly configured(group id). Check config file.")
                 sys.exit(1)
-            if len(host_name_field[0]) == 0:
+            if len(host_name_field) == 0:
                 logger.error("Agent not correctly configured(host_name_field). Check config file.")
                 sys.exit(1)
-            if len(timestamp_field[0]) == 0:
+            if len(timestamp_field) == 0:
                 logger.error("Agent not correctly configured(timestamp_field). Check config file.")
                 sys.exit(1)
             if len(message_field[0]) == 0:
                 logger.error("Agent not correctly configured(message_field). Check config file.")
-                sys.exit(1)
-            if len(app_name_field) == 0:
-                logger.error("Agent not correctly configured(app_name_field). Check config file.")
                 sys.exit(1)
             config_vars['hostName'] = host_name_field
             config_vars['timestamp'] = timestamp_field
@@ -145,6 +142,7 @@ def get_kafka_config():
         bootstrap_servers = parser.get('kafka', 'bootstrap_servers').split(",")
         topic = parser.get('kafka', 'topic')
         filter_hosts = parser.get('kafka', 'filtered_hosts').split(",")
+        filter_apps = parser.get('kafka', 'filtered_apps').split(",")
 
         if len(bootstrap_servers) == 0:
             logger.info("Using default server localhost:9092")
@@ -154,11 +152,14 @@ def get_kafka_config():
             topic = 'insightfinder_incident'
         if len(filter_hosts[0]) == 0:
             filter_hosts = []
+        if len(filter_apps[0]) == 0:
+            filter_apps = []
     else:
         bootstrap_servers = ['localhost:9092']
         topic = 'insightfinder_incident'
         filter_hosts = []
-    return bootstrap_servers, topic, filter_hosts
+        filter_apps = []
+    return bootstrap_servers, topic, filter_hosts, filter_apps
 
 
 def is_time_format(time_string, datetime_format):
@@ -193,21 +194,28 @@ def get_json_info(json_message):
     timestamp_field = config_vars['timestamp'].split("->")
     message_fields = config_vars['messageField']
     app_name_field = config_vars['appName'].split("->")
+    
     for host_name_parameter in host_name_field:
         host_name_json = host_name_json.get(host_name_parameter.strip(), {})
         if len(host_name_json) == 0:
             break
     host_name = host_name_json.strip()
-    for app_name_parameter in app_name_field:
-        app_name_json = app_name_json.get(app_name_parameter.strip(), {})
-        if len(app_name_json) == 0:
-            break
-    app_name = app_name_json.strip()
+
+    if len(app_name_field) > 0:
+        for app_name_parameter in app_name_field:
+            app_name_json = app_name_json.get(app_name_parameter.strip(), {})
+            if len(app_name_json) == 0:
+                break
+        app_name = app_name_json.strip()
+    else:
+        app_name = get_fallback_project_name()
+
     for timestamp_parameter in timestamp_field:
         timestamp_json = timestamp_json.get(timestamp_parameter.strip(), {})
         if len(timestamp_json) == 0:
             break
     timestamp = timestamp_json
+    
     for message_field in message_fields:
         message_field = message_field.split("->")
         message_json = json_message
@@ -228,6 +236,15 @@ def safe_project_name(name):
     return safe_name
 
 
+def get_fallback_project_name():
+    fallback_project = ''
+    if parameters['project'] is None:
+        fallback_project = config_vars['projectName']
+    else:
+        fallback_project = parameters['project']
+    return fallback_project
+
+
 def send_data(metric_data, app_name):
     """ Sends parsed metric data to InsightFinder """
     send_data_time = time.time()
@@ -235,10 +252,7 @@ def send_data(metric_data, app_name):
     to_send_data_dict = dict()
     to_send_data_dict["incidentData"] = json.dumps(metric_data)
     to_send_data_dict["licenseKey"] = config_vars['licenseKey']
-    if parameters['project'] is None:
-        to_send_data_dict["projectName"] = config_vars['projectName']
-    else:
-        to_send_data_dict["projectName"] = parameters['project']
+    to_send_data_dict["projectName"] = get_fallback_project_name()
     to_send_data_dict["userName"] = config_vars['userName']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
     to_send_data_dict["samplingInterval"] = config_vars['samplingInterval']
@@ -276,7 +290,7 @@ def send_data(metric_data, app_name):
     logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
 
 
-def parse_consumer_messages(consumer, filter_hosts):
+def parse_consumer_messages(consumer, filter_hosts, filter_apps):
     line_count = dict()
     chunk_count = 0
     current_row = dict()
@@ -287,9 +301,9 @@ def parse_consumer_messages(consumer, filter_hosts):
             if 'u_table' not in json_message or json_message.get('u_table', {}).strip() != 'problem':
                 continue
             (host_name, message, timestamp, app_name) = get_json_info(json_message)
-            if len(host_name) == 0 or len(message) == 0 or len(timestamp) == 0 or len(app_name) == 0 or (
-                    len(filter_hosts) != 0 and host_name.upper() not in (filter_host.upper().strip() for filter_host in
-                                                                         filter_hosts)):
+            if len(host_name) == 0 or len(message) == 0 or len(timestamp) == 0 or len(app_name) == 0 or
+                 (len(filter_hosts) != 0 and host_name.upper() not in (filter_host.upper().strip() for filter_host in filter_hosts)) or
+                 (len(filter_apps) != 0 and app_name.upper() not in (filter_app.upper().strip() for filter_app in filter_apps)):
                 continue
             
             # set line count
@@ -359,7 +373,7 @@ class LessThanFilter(logging.Filter):
 def kafka_data_consumer(consumer_id):
     logger.info("Started log consumer number " + consumer_id)
     # Kafka consumer configuration
-    (brokers, topic, filter_hosts) = get_kafka_config()
+    (brokers, topic, filter_hosts, filter_apps) = get_kafka_config()
     if config_vars['clientId'] == "":
         consumer = KafkaConsumer(bootstrap_servers=brokers,
                                  auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
@@ -369,7 +383,7 @@ def kafka_data_consumer(consumer_id):
                                  auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
                                  group_id=config_vars['groupId'], client_id=config_vars['clientId'])
     consumer.subscribe([topic])
-    parse_consumer_messages(consumer, filter_hosts)
+    parse_consumer_messages(consumer, filter_hosts, filter_apps)
     consumer.close()
     logger.info("Closed log consumer number " + consumer_id)
 
