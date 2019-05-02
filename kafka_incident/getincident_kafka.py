@@ -277,7 +277,7 @@ def send_data(metric_data, app_name, group_name):
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
     to_send_data_dict["samplingInterval"] = config_vars['samplingInterval']
     to_send_data_dict["agentType"] = "LogStreaming"
-    if config_vars['url'] is not None:
+    if len(config_vars['url']) > 0:
         url = config_vars['url']
     else:
         url = parameters['serverUrl']
