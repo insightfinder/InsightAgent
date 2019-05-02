@@ -265,7 +265,7 @@ def parse_consumer_messages(consumer, filter_hosts):
     start_time = time.time()
     for message in consumer:
         try:
-            json_message = json.loads(message.value)
+            json_message = json.loads(message.value
             if 'u_table' not in json_message or json_message.get('u_table', {}).strip() != 'problem':
                 continue
             (host_name, message, timestamp) = get_json_info(json_message)
