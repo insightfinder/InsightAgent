@@ -223,8 +223,8 @@ def get_json_info(json_message):
     return host_name, message, timestamp, app_name
 
 
-def safe_project_name(name)
-    safe_name = re.sub(r'[^0-9a-zA-Z\_\-]+', '-',name)
+def safe_project_name(name):
+    safe_name = re.sub(r'[^0-9a-zA-Z\_\-]+', '-', name)
     return safe_name
 
 
@@ -283,7 +283,7 @@ def parse_consumer_messages(consumer, filter_hosts):
     start_time = time.time()
     for message in consumer:
         try:
-            json_message = json.loads(message.value
+            json_message = json.loads(message.value)
             if 'u_table' not in json_message or json_message.get('u_table', {}).strip() != 'problem':
                 continue
             (host_name, message, timestamp, app_name) = get_json_info(json_message)
@@ -304,7 +304,7 @@ def parse_consumer_messages(consumer, filter_hosts):
                 send_data(current_row[app_name], app_name)
                 current_row[app_name] = []
                 chunk_count += 1
-                line_count = 0
+                line_count[app_name] = 0
                 start_time = time.time()
 
             pattern = "%Y-%m-%dT%H:%M:%S"
