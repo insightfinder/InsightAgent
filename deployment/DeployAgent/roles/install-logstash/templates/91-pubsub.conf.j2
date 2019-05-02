@@ -55,7 +55,7 @@ filter {
                     map['groupdata'] << event.get('data')
                     map['size'] += (event.get('data').size + 20)
                     map['count'] += 1
-                    map_meta.timeout = 0 if map['count'] > 999999 or (map['size'] + 400) > 999999
+                    map_meta.timeout = 0 if map['count'] > 4999 or (map['size'] + 400) > 999999
                     event.cancel()
                     "
             push_previous_map_as_event => false
