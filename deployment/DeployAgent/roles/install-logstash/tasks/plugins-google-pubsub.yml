@@ -4,7 +4,7 @@
      src: logstash-offline-plugin-pubsub-input-6.6.0.zip
      dest: /tmp/logstash-offline-plugin-pubsub-input-6.6.0.zip
   when: agentType=="googlePubSub"
-- name: Install input plugin (google_pubsub).
+- name: Install google_pubsub input plugin
   command: >	  command: >
     ./bin/logstash-plugin install file:////tmp/logstash-offline-plugin-pubsub-input-6.6.0.zip
     chdir={{ logstash_dir }}
