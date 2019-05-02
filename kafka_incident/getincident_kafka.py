@@ -85,7 +85,7 @@ def get_agent_config_vars():
             license_key = parser.get('insightfinder', 'license_key')
             project_name = parser.get('insightfinder', 'project_name')
             user_name = parser.get('insightfinder', 'user_name')
-            token = parser.get('insightfinder', 'token')
+            # token = parser.get('insightfinder', 'token')
             url = parser.get('insightfinder', 'url')
             sampling_interval = parser.get('kafka', 'sampling_interval')
             client_id = parser.get('kafka', 'client_id')
@@ -198,7 +198,7 @@ def get_json_info(json_message):
     timestamp_field = config_vars['timestamp'].split("->")
     message_fields = config_vars['messageField']
     app_name_field = config_vars['appName'].split("->")
-    group_name_field = config_var['groupName'].split("->")
+    group_name_field = config_vars['groupName'].split("->")
     
     for host_name_parameter in host_name_field:
         host_name_json = host_name_json.get(host_name_parameter.strip(), {})
@@ -324,9 +324,8 @@ def parse_consumer_messages(consumer, filter_hosts, filter_apps):
             if 'u_table' not in json_message or json_message.get('u_table', {}).strip() != 'problem':
                 continue
             (host_name, message, timestamp, app_name, group_name) = get_json_info(json_message)
-            if len(host_name) == 0 or len(message) == 0 or len(timestamp) == 0 or
-                 (len(filter_hosts) != 0 and host_name.upper() not in (filter_host.upper().strip() for filter_host in filter_hosts)) or
-                 (app_name != '' and len(filter_apps) != 0 and app_name.upper() not in (filter_app.upper().strip() for filter_app in filter_apps)):
+            
+            if len(host_name) == 0 or len(message) == 0 or len(timestamp) == 0 or (len(filter_hosts) != 0 and host_name.upper() not in (filter_host.upper().strip() for filter_host in filter_hosts)) or (len(app_name) > 0 and len(filter_apps) != 0 and app_name.upper() not in (filter_app.upper().strip() for filter_app in filter_apps)):
                 continue
             
             # if no app_name found, use host_name
