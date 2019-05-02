@@ -93,6 +93,7 @@ def get_agent_config_vars():
             host_name_field = parser.get('kafka', 'host_name_field')
             timestamp_field = parser.get('kafka', 'timestamp_field')
             message_field = parser.get('kafka', 'message_field').split(",")
+            app_name_field = parser.get('kafka', 'app_name_field')
             if len(license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
@@ -117,9 +118,13 @@ def get_agent_config_vars():
             if len(message_field[0]) == 0:
                 logger.error("Agent not correctly configured(message_field). Check config file.")
                 sys.exit(1)
+            if len(app_name_field) == 0:
+                logger.error("Agent not correctly configured(app_name_field). Check config file.")
+                sys.exit(1)
             config_vars['hostName'] = host_name_field
             config_vars['timestamp'] = timestamp_field
             config_vars['messageField'] = message_field
+            config_vars['appName'] = app_name_field
             config_vars['licenseKey'] = license_key
             config_vars['projectName'] = project_name
             config_vars['userName'] = user_name
@@ -187,11 +192,17 @@ def get_json_info(json_message):
     host_name_field = config_vars['hostName'].split("->")
     timestamp_field = config_vars['timestamp'].split("->")
     message_fields = config_vars['messageField']
+    app_name_field = config_vars['appName'].split("->")
     for host_name_parameter in host_name_field:
         host_name_json = host_name_json.get(host_name_parameter.strip(), {})
         if len(host_name_json) == 0:
             break
     host_name = host_name_json.strip()
+    for app_name_parameter in app_name_field:
+        app_name_json = app_name_json.get(app_name_parameter.strip(), {})
+        if len(app_name_json) == 0:
+            break
+    app_name = app_name_json.strip()
     for timestamp_parameter in timestamp_field:
         timestamp_json = timestamp_json.get(timestamp_parameter.strip(), {})
         if len(timestamp_json) == 0:
@@ -209,7 +220,7 @@ def get_json_info(json_message):
         if len(message_json) != 0:
             message[prefix] = message_json
     timestamp = timestamp.replace(" ", "T")
-    return host_name, message, timestamp
+    return host_name, message, timestamp, app_name
 
 
 def safe_project_name(name)
@@ -217,7 +228,7 @@ def safe_project_name(name)
     return safe_name
 
 
-def send_data(metric_data, host_name):
+def send_data(metric_data, app_name):
     """ Sends parsed metric data to InsightFinder """
     send_data_time = time.time()
     # prepare data for metric streaming agent
@@ -242,13 +253,14 @@ def send_data(metric_data, host_name):
     # logger.debug("Data: " + str(to_send_data_json))
 
     # check for existing project
-    unless config_vars['token'] is None:
+    if 'token' in config_vars.keys() and config_vars['token'] is not None:
         fallback_project_name = to_send_data_dict["projectName"]
-        to_send_data_dict["projectName"] = safe_project_name(host_name)
+        app_name = safe_project_name(app_name)
+        to_send_data_dict["projectName"] = app_name
         try:
             output_check_project = subprocess.check_output('curl "' + url + '/api/v1/getprojectstatus?userName=' + config_vars['userName'] + '&token=' + config_vars['token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + to_send_data_dict["projectName"] + '%22%2C%22customerName%22%3A%22' + config_vars['userName'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"', shell=True)
             # create project if no existing project
-            unless host_name in output_check_project:
+            if app_name not in output_check_project:
                 output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + config_vars['userName'] + '&token=' + config_vars['token'] + '&projectName=' + to_send_data_dict["projectName"] + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=Incident&samplingInterval=1&samplingIntervalInSeconds=60&zone=&email=&access-key=&secrete-key=&insightAgentType=Custom" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + url + ':8080/api/v1/add-custom-project?tzOffset=-18000000', shell=True)
         except subprocess.CalledProcessError as e:
             logger.error("Unable to create project for " + to_send_data_dict["projectName"] + '. Data will be sent to ' + to_send_data_dict["fallback_projectName"])
@@ -274,23 +286,23 @@ def parse_consumer_messages(consumer, filter_hosts):
             json_message = json.loads(message.value
             if 'u_table' not in json_message or json_message.get('u_table', {}).strip() != 'problem':
                 continue
-            (host_name, message, timestamp) = get_json_info(json_message)
-            if len(host_name) == 0 or len(message) == 0 or len(timestamp) == 0 or (
+            (host_name, message, timestamp, app_name) = get_json_info(json_message)
+            if len(host_name) == 0 or len(message) == 0 or len(timestamp) == 0 or len(app_name) == 0 or (
                     len(filter_hosts) != 0 and host_name.upper() not in (filter_host.upper().strip() for filter_host in
                                                                          filter_hosts)):
                 continue
             
             # set line count
-            if host_name in line_count:
-                line_count[host_name] += 1
+            if app_name in line_count:
+                line_count[app_name] += 1
             else:
-                line_count[host_name] = 1
-                current_row[host_name] = []
+                line_count[app_name] = 1
+                current_row[app_name] = []
                 
-            if line_count[host_name] >= parameters['chunk_lines']:
+            if line_count[app_name] >= parameters['chunk_lines']:
                 logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                send_data(current_row[host_name], host_name)
-                current_row[host_name] = []
+                send_data(current_row[app_name], app_name)
+                current_row[app_name] = []
                 chunk_count += 1
                 line_count = 0
                 start_time = time.time()
@@ -305,7 +317,7 @@ def parse_consumer_messages(consumer, filter_hosts):
             current_log_msg['timestamp'] = epoch
             current_log_msg['instanceName'] = host_name
             current_log_msg['data'] = json.dumps(message)
-            current_row[host_name].append(current_log_msg)
+            current_row[app_name].append(current_log_msg)
             line_count += 1
         except:
             continue
