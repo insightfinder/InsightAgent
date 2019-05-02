@@ -274,7 +274,7 @@ def send_data(metric_data_dict, file_path, chunk_serial_number):
             logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
         else:
             # retry once for failed data and set chunkLines to half if succeeded
-            logger.error("Failed to send data. Retrying once.")
+            logger.error("Failed to send data.\nResponse Code: " + str(response.status_code) + "\nTEXT: " + str(response.text) + "\nRetrying once.")
             data_split1 = metric_data_dict[0:len(metric_data_dict) / 2]
             to_send_data_dict["metricData"] = json.dumps(data_split1)
             response = urllib.urlopen(post_url, data=urllib.urlencode(to_send_data_dict))
@@ -286,14 +286,14 @@ def send_data(metric_data_dict, file_path, chunk_serial_number):
                 to_send_data_dict["metricData"] = json.dumps(data_split2)
                 response = urllib.urlopen(post_url, data=urllib.urlencode(to_send_data_dict))
             else:
-                logger.info("Failed to send data.")
+                logger.error("Failed to send data.\nResponse Code: " + str(response.status_code) + "\nTEXT: " + str(response.text))
 
     else:
         response = requests.post(post_url, data=json.loads(to_send_data_json))
         if response.status_code == 200:
             logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
         else:
-            logger.info("Failed to send data. Response Code: " + str(response.status_code))
+            logger.error("Failed to send data.\nResponse Code: " + str(response.status_code) + "\nTEXT: " + str(response.text))
             data_split1 = metric_data_dict[0:len(metric_data_dict) / 2]
             to_send_data_dict["metricData"] = json.dumps(data_split1)
             to_send_data_json = json.dumps(to_send_data_dict)
@@ -307,7 +307,7 @@ def send_data(metric_data_dict, file_path, chunk_serial_number):
                 to_send_data_json = json.dumps(to_send_data_dict)
                 response = requests.post(post_url, data=json.loads(to_send_data_json))
             else:
-                logger.info("Failed to send data. Response Code: " + str(response.status_code))
+                logger.error("Failed to send data.\nResponse Code: " + str(response.status_code) + "\nTEXT: " + str(response.text))
     logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
 
 
