@@ -94,6 +94,7 @@ def get_agent_config_vars():
             timestamp_field = parser.get('kafka', 'timestamp_field')
             message_field = parser.get('kafka', 'message_field').split(",")
             app_name_field = parser.get('kafka', 'app_name_field')
+            group_name_field = parser.get('kafka', 'group_name_field')
             if len(license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
@@ -122,6 +123,7 @@ def get_agent_config_vars():
             config_vars['timestamp'] = timestamp_field
             config_vars['messageField'] = message_field
             config_vars['appName'] = app_name_field
+            config_vars['groupName'] = group_name_field
             config_vars['licenseKey'] = license_key
             config_vars['projectName'] = project_name
             config_vars['userName'] = user_name
