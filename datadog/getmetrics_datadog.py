@@ -415,13 +415,18 @@ if __name__ == "__main__":
             for sub_metric_list in chunked_metric_list:
                 for sub_host_list in chunked_host_list:
                     # get metric data from datadog every SAMPLING_INTERVAL
+                    count = 0
                     for _ in xrange(ATTEMPTS):
                         try:
                             get_metric_data(sub_metric_list, sub_host_list, data_start_ts, data_end_ts, raw_data_map)
                             break
                         except Exception as e:
-                            retry_host_list.append(sub_host_list)
-                            retry_metric_list.append(sub_metric_list)
+                            if count == ATTEMPTS - 1:
+                                retry_host_list.append(sub_host_list)
+                                retry_metric_list.append(sub_metric_list)
+                                break
+                            count = count + 1
+                            continue
                             logger.exception(
                                 "Error while fetching metrics from DataDog. Reattempting...\n Hosts: " + str(
                                     sub_host_list))
