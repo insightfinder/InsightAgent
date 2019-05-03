@@ -59,22 +59,7 @@ def get_parameters():
     return parameters
 
 
-
-
-
-
-def get_grouping_id(metric_key, normalization_ids_map):
-    """
-    Get grouping id for a metric key
-    Parameters:
-    - `metric_key` : metric key str to get group id.
-    - `temp_id` : proposed group id integer
-    """
-    grouping_id = int(normalization_ids_map[metric_key])
-    return grouping_id
-
-
-def get_agent_config_vars(normalization_ids_map):
+def get_agent_config_vars():
     config_vars = {}
     try:
         if os.path.exists(os.path.join(parameters['homepath'], "kafka", "config.ini")):
@@ -87,7 +72,6 @@ def get_agent_config_vars(normalization_ids_map):
             group_id = parser.get('kafka', 'group_id')
             all_metrics = parser.get('kafka', 'all_metrics').split(",")
             client_id = parser.get('kafka', 'client_id')
-            normalization_ids = parser.get('kafka', 'normalization_id').split(",")
             if len(insightFinder_license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
@@ -103,20 +87,6 @@ def get_agent_config_vars(normalization_ids_map):
             if len(group_id) == 0:
                 logger.error("Agent not correctly configured(group id). Check config file.")
                 sys.exit(1)
-            if len(normalization_ids[0]) != 0:
-                for index in range(len(all_metrics)):
-                    metric = all_metrics[index]
-                    normalization_id = int(normalization_ids[index])
-                    if normalization_id > 1000:
-                        logger.error("Please config the normalization_id between 0 to 1000.")
-                        sys.exit(1)
-                    normalization_ids_map[metric] = GROUPING_START + normalization_id
-            if len(normalization_ids[0]) == 0:
-                count = 1
-                for index in range(len(all_metrics)):
-                    metric = all_metrics[index]
-                    normalization_ids_map[metric] = GROUPING_START + count
-                    count += 1
             config_vars['licenseKey'] = insightFinder_license_key
             config_vars['projectName'] = insightFinder_project_name
             config_vars['userName'] = insightFinder_user_name
@@ -138,10 +108,6 @@ def get_reporting_config_vars():
         reportingConfigVars['reporting_interval'] = float(reporting_interval / 60.0)
     else:
         reportingConfigVars['reporting_interval'] = int(config['reporting_interval'])
-        reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
-        reportingConfigVars['prev_endtime'] = config['prev_endtime']
-        reportingConfigVars['deltaFields'] = config['delta_fields']
-
     reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
     reportingConfigVars['prev_endtime'] = config['prev_endtime']
     reportingConfigVars['deltaFields'] = config['delta_fields']
@@ -184,7 +150,7 @@ def sendData(metricData):
     toSendDataDict["projectName"] = agent_config_vars['projectName']
     toSendDataDict["userName"] = agent_config_vars['userName']
     toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
-    toSendDataDict["samplingInterval"] = str(int(reporting_config_vars['reporting_interval'] * 60))
+    toSendDataDict["samplingInterval"] = str(int(agent_config_vars['samplingInterval'] * 60))
     toSendDataDict["agentType"] = "kafka"
 
     toSendDataJSON = json.dumps(toSendDataDict)
@@ -230,7 +196,7 @@ def isReceivedAllMetrics(collectedMetrics, all_metrics):
             return False
     return True
 
-def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filter_hosts):
+def parseConsumerMessages(consumer, all_metrics_set, filter_hosts):
     rawDataMap = collections.OrderedDict()
     metricData = []
     chunkNumber = 0
@@ -269,8 +235,7 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
                         # skip the metric that are not in the config file
                         if metric_name not in all_metrics_set:
                             continue
-                        header_field = metric_name + "[" + host_name + "]:" + str(
-                            get_grouping_id(metric_name, normalization_ids_map))
+                        header_field = metric_name + "[" + host_name + "]"
                         valueMap[header_field] = str(metric_value)
                         rawDataMap[epoch] = valueMap
                         # add collected metric name
@@ -287,8 +252,7 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
                         # skip the metric that are not in the config file
                         if metric_name not in all_metrics_set:
                             continue
-                        header_field = metric_name + "[" + host_name + "]:" + str(
-                            get_grouping_id(metric_name, normalization_ids_map))
+                        header_field = metric_name + "[" + host_name + "]"
                         valueMap[header_field] = str(metric_value)
                         rawDataMap[epoch] = valueMap
                         # add collected metric name
@@ -306,8 +270,7 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
                     if metric_name_bytes in all_metrics_set:
                         metric_value_bytes = json_message.get('system', {}).get(
                             'filesystem', {}).get('used', {}).get('bytes', '')
-                        header_field_bytes = metric_name_bytes + "[" + host_name + "]:" + str(
-                            get_grouping_id(metric_name_bytes, normalization_ids_map))
+                        header_field_bytes = metric_name_bytes + "[" + host_name + "]"
                         valueMap[header_field_bytes] = str(metric_value_bytes)
                         # add collected metric name
                         collectedMetricsSet.add(metric_name_bytes)
@@ -318,8 +281,7 @@ def parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filt
                     if metric_name_pct in all_metrics_set:
                         metric_value_pct = json_message.get('system', {}).get(
                             'filesystem', {}).get('used', {}).get('pct', '')
-                        header_field_pct = metric_name_pct + "[" + host_name + "]:" + str(
-                            get_grouping_id(metric_name_pct, normalization_ids_map))
+                        header_field_pct = metric_name_pct + "[" + host_name + "]"
                         valueMap[header_field_pct] = str(metric_value_pct)
                         # add collected metric name
                         collectedMetricsSet.add(metric_name_pct)
@@ -413,7 +375,7 @@ def kafka_data_consumer(consumer_id):
                                  consumer_timeout_ms=1000 * parameters['timeout'],
                                  group_id=agent_config_vars['groupId'], client_id=agent_config_vars["clientId"])
     consumer.subscribe([topic])
-    parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filter_hosts)
+    parseConsumerMessages(consumer, all_metrics_set, filter_hosts)
     consumer.close()
     logger.info("Closed log consumer number " + consumer_id)
 
@@ -421,11 +383,10 @@ def kafka_data_consumer(consumer_id):
 if __name__ == "__main__":
     CHUNK_METRIC_VALUES = 10
     GROUPING_START = 15000
-    normalization_ids_map = {}
     logger = set_logger_config()
     parameters = get_parameters()
-    agent_config_vars = get_agent_config_vars(normalization_ids_map)
-    reporting_config_vars = get_reporting_config_vars()
+    agent_config_vars = get_agent_config_vars()
+    # reporting_config_vars = get_reporting_config_vars()
 
     # path to write the daily csv file
     data_directory = 'data/'
