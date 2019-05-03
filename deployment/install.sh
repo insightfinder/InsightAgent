@@ -230,7 +230,6 @@ elif [ $AGENT_TYPE == 'kafka' ]; then
 		echo "insightFinder_project_name = $PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
 		echo "insightFinder_user_name = $USERNAME" >> ${PATH_TO_CONFIG_INI}
 		echo "sampling_interval = $SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
-		echo "normalization_id =" >> ${PATH_TO_CONFIG_INI}
 	fi
 elif [ $AGENT_TYPE == 'kafka-logs' ]; then
 	if [ ! -f $INSIGHTAGENTDIR/kafka_logs/config.ini ]; then
