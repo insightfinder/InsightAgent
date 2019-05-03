@@ -84,7 +84,6 @@ def get_agent_config_vars(normalization_ids_map):
             insightFinder_project_name = parser.get('kafka', 'insightFinder_project_name')
             insightFinder_user_name = parser.get('kafka', 'insightFinder_user_name')
             sampling_interval = parser.get('kafka', 'sampling_interval')
-            group_id = parser.get('kafka', 'group_id')
             all_metrics = parser.get('kafka', 'all_metrics').split(",")
             client_id = parser.get('kafka', 'client_id')
             normalization_ids = parser.get('kafka', 'normalization_id').split(",")
@@ -99,9 +98,6 @@ def get_agent_config_vars(normalization_ids_map):
                 sys.exit(1)
             if len(sampling_interval) == 0:
                 logger.error("Agent not correctly configured(sampling interval). Check config file.")
-                sys.exit(1)
-            if len(group_id) == 0:
-                logger.error("Agent not correctly configured(group id). Check config file.")
                 sys.exit(1)
             if len(normalization_ids[0]) != 0:
                 for index in range(len(all_metrics)):
@@ -121,7 +117,6 @@ def get_agent_config_vars(normalization_ids_map):
             config_vars['projectName'] = insightFinder_project_name
             config_vars['userName'] = insightFinder_user_name
             config_vars['samplingInterval'] = sampling_interval
-            config_vars['groupId'] = group_id
             config_vars['clientId'] = client_id
     except IOError:
         logger.error("config.ini file is missing")
@@ -138,10 +133,6 @@ def get_reporting_config_vars():
         reportingConfigVars['reporting_interval'] = float(reporting_interval / 60.0)
     else:
         reportingConfigVars['reporting_interval'] = int(config['reporting_interval'])
-        reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
-        reportingConfigVars['prev_endtime'] = config['prev_endtime']
-        reportingConfigVars['deltaFields'] = config['delta_fields']
-
     reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
     reportingConfigVars['prev_endtime'] = config['prev_endtime']
     reportingConfigVars['deltaFields'] = config['delta_fields']
@@ -406,12 +397,11 @@ def kafka_data_consumer(consumer_id):
     (brokers, topic, filter_hosts, all_metrics_set) = getKafkaConfig()
     if agent_config_vars["clientId"] == "":
         consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest',
-                                 consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id=agent_config_vars['groupId'])
+                                 consumer_timeout_ms=1000 * parameters['timeout'])
     else:
         consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest',
                                  consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id=agent_config_vars['groupId'], client_id=agent_config_vars["clientId"])
+                                 client_id=agent_config_vars["clientId"])
     consumer.subscribe([topic])
     parseConsumerMessages(consumer, all_metrics_set, normalization_ids_map, filter_hosts)
     consumer.close()

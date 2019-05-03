@@ -225,7 +225,6 @@ elif [ $AGENT_TYPE == 'kafka' ]; then
 		echo "filter_hosts =" >> ${PATH_TO_CONFIG_INI}
 		echo "all_metrics =" >> ${PATH_TO_CONFIG_INI}
 		echo "client_id =" >> ${PATH_TO_CONFIG_INI}
-		echo "group_id =" >> ${PATH_TO_CONFIG_INI}
 		echo "insightFinder_license_key = $LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
 		echo "insightFinder_project_name = $PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
 		echo "insightFinder_user_name = $USERNAME" >> ${PATH_TO_CONFIG_INI}
