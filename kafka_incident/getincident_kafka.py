@@ -278,7 +278,7 @@ def parse_consumer_messages(consumer, filter_hosts, filter_apps):
     line_count = dict()
     chunk_count = 0
     current_row = dict()
-    start_time = time.time()
+    start_time = dict()
     for message in consumer:
         try:
             json_message = json.loads(message.value)
@@ -302,15 +302,16 @@ def parse_consumer_messages(consumer, filter_hosts, filter_apps):
                 line_count[app_name] += 1
             else:
                 line_count[app_name] = 1
+                start_time[app_name] = time.time()
                 current_row[app_name] = []
                 
             if line_count[app_name] >= parameters['chunk_lines']:
-                logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time[app_name]))
                 send_data(current_row[app_name], app_name)
                 current_row[app_name] = []
                 chunk_count += 1
                 line_count[app_name] = 0
-                start_time = time.time()
+                start_time[app_name] = time.time()
 
             pattern = "%Y-%m-%dT%H:%M:%S"
             if is_time_format(timestamp, pattern):
@@ -328,7 +329,7 @@ def parse_consumer_messages(consumer, filter_hosts, filter_apps):
             continue
 
     if len(current_row) != 0:
-        logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+        logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time[app_name]))
         for app in current_row:
             # send last chunk of each project
             if len(current_row[app]) > 0:
