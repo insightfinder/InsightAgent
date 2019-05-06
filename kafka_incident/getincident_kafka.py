@@ -392,7 +392,7 @@ if __name__ == "__main__":
     # print input info
     for vars in [parameters, config_vars]:
         for var in vars:
-            logger.info(var + ': ' + vars[var])
+            logger.info(str(var) + ': ' + str(vars[var]))
 
     # start consumers
     try:
