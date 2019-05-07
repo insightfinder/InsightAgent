@@ -32,6 +32,8 @@ def get_parameters():
                       action="store", dest="chunkLines", help="Max number of lines in chunk")
     parser.add_option("-p", "--project",
                       action="store", dest="project", help="Insightfinder Project to send data to")
+    parser.add_option("-s", "--logLevel",
+                      action="store", dest="logLevel", help="Change log verbosity(WARNING: 0, INFO: 1, DEBUG: 2)")
     (options, args) = parser.parse_args()
 
     parameters = {}
@@ -55,6 +57,13 @@ def get_parameters():
         parameters['project'] = None
     else:
         parameters['project'] = options.project
+    parameters['logLevel'] = logging.INFO
+    if options.logLevel == '0':
+        parameters['logLevel'] = logging.WARNING
+    elif options.logLevel == '1':
+        parameters['logLevel'] = logging.INFO
+    elif options.logLevel >= '2':
+        parameters['logLevel'] = logging.DEBUG
 
     return parameters
 
@@ -248,11 +257,13 @@ def parse_consumer_messages(consumer, filter_hosts):
             json_message = json.loads(message.value)
             if 'u_table' not in json_message or json_message.get('u_table', {}).strip() != 'incident':
                 continue
+            logger.debug("filtered u_table: " + json_message.get('u_table', {}).strip())
             (host_name, message, timestamp) = get_json_info(json_message)
             if len(host_name) == 0 or len(message) == 0 or len(timestamp) == 0 or (
                     len(filter_hosts) != 0 and host_name.upper() not in (filter_host.upper().strip() for filter_host in
                                                                          filter_hosts)):
                 continue
+            logger.debug("filtered host_name: " + host_name)
             if line_count == parameters['chunk_lines']:
                 logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
                 send_data(current_row)
@@ -283,21 +294,24 @@ def parse_consumer_messages(consumer, filter_hosts):
     logger.debug("Total chunks created: " + str(chunk_count))
 
 
-def set_logger_config():
+def set_logger_config(level):
+    """Set up logging according to the defined log level"""
     # Get the root logger
-    logger = logging.getLogger(__name__)
+    logger_obj = logging.getLogger(__name__)
     # Have to set the root logger level, it defaults to logging.WARNING
-    logger.setLevel(logging.DEBUG)
+    logger_obj.setLevel(level)
     # route INFO and DEBUG logging to stdout from stderr
     logging_handler_out = logging.StreamHandler(sys.stdout)
     logging_handler_out.setLevel(logging.DEBUG)
-    logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
-    logger.addHandler(logging_handler_out)
+    # create a logging format
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(process)d - %(threadName)s - %(levelname)s - %(message)s')
+    logging_handler_out.setFormatter(formatter)
+    logger_obj.addHandler(logging_handler_out)
 
     logging_handler_err = logging.StreamHandler(sys.stderr)
     logging_handler_err.setLevel(logging.WARNING)
-    logger.addHandler(logging_handler_err)
-    return logger
+    logger_obj.addHandler(logging_handler_err)
+    return logger_obj
 
 
 class LessThanFilter(logging.Filter):
@@ -329,8 +343,9 @@ def kafka_data_consumer(consumer_id):
 
 
 if __name__ == "__main__":
-    logger = set_logger_config()
     parameters = get_parameters()
+    log_level = parameters['logLevel']
+    logger = set_logger_config(log_level)
     config_vars = get_agent_config_vars()
     #reporting_config_vars = get_reporting_config_vars()
 
