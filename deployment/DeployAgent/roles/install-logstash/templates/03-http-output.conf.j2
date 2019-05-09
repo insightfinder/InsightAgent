@@ -22,7 +22,7 @@ output {
     } else {
         stdout { 
             codec => line { 
-                format => "[%{@timestamp}] Posting %{count} event[s] with size: %{size} to project %{project}"
+                format => "[%{@timestamp}] InsightFinder|Info: Posting %{count} event[s] with size: %{size} to project %{project}"
             }
         }
     }
