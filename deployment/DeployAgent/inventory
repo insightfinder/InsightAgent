@@ -1,6 +1,6 @@
 [nodes]
-#localhost ansible_connection=local
-HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
+localhost ansible_connection=local
+#HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
 ###We can specify the host name with ssh details like this for each host
 ##If you have the ssh key
 #192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
@@ -15,7 +15,7 @@ HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
 #192.168.33.15
 
 [coordinator]
-HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
+#HOST ansible_user=USER ansible_ssh_private_key_file=KEY_FILE
 ###We can specify the host name with ssh details like this for each host
 ##If you have the ssh key
 #192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
@@ -57,6 +57,7 @@ logProjectName=
 ##User's License Key in Application
 ifLicenseKey=
 
+##Sampling interval could be an integer indicating the number of minutes or "10s" indicating 10 seconds.
 ifSamplingInterval=1
 
 ##Valid Agents are cgroup, collectd, cadvisor
@@ -82,7 +83,7 @@ ifSamplingInterval=1
 apt_update=no
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
-ifReportingUrl=https://app.insightfinder.com
+ifReportingUrl=http://stg.insightfinder.com
 
 ##Vars for AWS Cloudtrail
 # S3 bucket the trail is logging to
@@ -96,9 +97,9 @@ aws_credentials_file =
 pubsub_project_id = 
 pubsub_topic_name = 
 # the subscription need not be created
-pubsub_subscription =
+pubsub_subscription = 
 # provide the key file (as json) if installing this agent on a non-GCE machine 
-gcp_json_key_file = 
+#gcp_json_key_file = 
 
 ##Vars for Kafka
 
