@@ -8,12 +8,12 @@
 
 - name: Copy json_encode plugin file to server
   copy:
-     src: logstash-offline-plugins-6.6.0.zip
-     dest: /tmp/logstash-offline-plugins-6.6.0.zip
+     src: logstash-offline-plugin-json-encode-6.6.0.zip
+     dest: /tmp/logstash-offline-plugin-json-encode-6.6.0.zip
 
 - name: Install json_encode plugin
   command: >
-    ./bin/logstash-plugin install file:////tmp/logstash-offline-plugins-6.6.0.zip
+    ./bin/logstash-plugin install file:////tmp/logstash-offline-plugin-json-encode-6.6.0.zip
     chdir={{ logstash_dir }}
 
 - include: plugins-aws-cloudtrail.yml
