@@ -83,7 +83,7 @@ ifSamplingInterval=1
 apt_update=no
 
 ##The server reporting Url(Do not change unless you have on-prem deployment)
-ifReportingUrl=http://stg.insightfinder.com
+ifReportingUrl=https://app.insightfinder.com
 
 ##Vars for AWS Cloudtrail
 # S3 bucket the trail is logging to
