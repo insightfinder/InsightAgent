@@ -159,7 +159,7 @@ def sendData(metricData):
     toSendDataDict["projectName"] = agent_config_vars['projectName']
     toSendDataDict["userName"] = agent_config_vars['userName']
     toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
-    toSendDataDict["samplingInterval"] = str(int(agent_config_vars['samplingInterval'] * 60))
+    toSendDataDict["samplingInterval"] = str(int(agent_config_vars['samplingInterval']) * 60)
     toSendDataDict["agentType"] = "kafka"
 
     toSendDataJSON = json.dumps(toSendDataDict)
