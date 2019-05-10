@@ -222,9 +222,10 @@ def get_metric_data(metric_list, host_list, start_time, end_time, collected_data
         host_name_arr = host_name_arr.split(":")
         logger.debug("host_name_arr length is: " + str(len(host_name_arr)))
         if len(host_name_arr) > 0:
-            logger.debug("host_name_arr[0] is: " + str(host_name_arr[0]))
+            logger.debug("host_name_arr[1] is: " + str(host_name_arr[1]))
         if len(host_name_arr) == 2:
-            host_name = host_name_arr[0]
+            #host_name = host_name_arr[0]
+            host_name = host_name_arr[1]
         else:
             host_name = "unknown_host"
         datapoints = json_data_entry.get('pointlist', [])
@@ -247,8 +248,8 @@ def get_metric_data(metric_list, host_list, start_time, end_time, collected_data
     query = ""
     for host_name in host_list:
         for each_metric in metric_list:
-            query += each_metric + '{*}by{' + host_name + '},'
-
+            #query += each_metric + '{*}by{' + host_name + '},'
+            query += each_metric + '{host:' + host_name + '},'
     query = query[:-1]
 
     datadog_metrics_result = datadog.api.Metric.query(start=start_time, end=end_time, query=query)
@@ -269,7 +270,7 @@ def send_data(chunk_metric_data):
     to_send_data_dict["projectName"] = agent_config_vars['projectName']
     to_send_data_dict["userName"] = agent_config_vars['userName']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
-    to_send_data_dict["samplingInterval"] = str(int(agent_config_vars['samplingInterval'] * 60))
+    to_send_data_dict["samplingInterval"] = str(int(agent_config_vars['samplingInterval']) * 60)
     to_send_data_dict["agentType"] = "custom"
 
     to_send_data_json = json.dumps(to_send_data_dict)
@@ -415,7 +416,6 @@ if __name__ == "__main__":
             for sub_metric_list in chunked_metric_list:
                 for sub_host_list in chunked_host_list:
                     # get metric data from datadog every SAMPLING_INTERVAL
-                    count = 0
                     try:
                         get_metric_data(sub_metric_list, sub_host_list, data_start_ts, data_end_ts, raw_data_map)
                     except Exception as e:
