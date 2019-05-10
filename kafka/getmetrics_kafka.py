@@ -385,6 +385,8 @@ class LessThanFilter(logging.Filter):
         return 1 if record.levelno < self.max_level else 0
 
 def add_valuemap(header_field, metric_value, valueMap):
+    # use the next non-null value to overwrite the prev value
+    # for the same metric in the same timestamp
     if header_field in valueMap.keys():
         if metric_value is not None and len(str(metric_value)) > 0:
             valueMap[header_field] = str(metric_value)
