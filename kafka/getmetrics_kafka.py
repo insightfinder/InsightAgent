@@ -32,6 +32,8 @@ def get_parameters():
                       action="store", dest="serverUrl", help="Server Url")
     parser.add_option("-l", "--chunkLines",
                       action="store", dest="chunkLines", help="Max number of lines in chunk")
+    parser.add_option("-s", "--logLevel",
+                      action="store", dest="logLevel", help="Change log verbosity(WARNING: 0, INFO: 1, DEBUG: 2)")
     (options, args) = parser.parse_args()
 
     parameters = {}
@@ -55,6 +57,13 @@ def get_parameters():
         parameters['chunkLines'] = 100
     else:
         parameters['chunkLines'] = int(options.chunkLines)
+    parameters['logLevel'] = logging.INFO
+    if options.logLevel == '0':
+        parameters['logLevel'] = logging.WARNING
+    elif options.logLevel == '1':
+        parameters['logLevel'] = logging.INFO
+    elif options.logLevel >= '2':
+        parameters['logLevel'] = logging.DEBUG
 
     return parameters
 
@@ -236,7 +245,7 @@ def parseConsumerMessages(consumer, all_metrics_set, filter_hosts):
                         if metric_name not in all_metrics_set:
                             continue
                         header_field = metric_name + "[" + host_name + "]"
-                        valueMap[header_field] = str(metric_value)
+                        add_valuemap(header_field, metric_value, valueMap)
                         rawDataMap[epoch] = valueMap
                         # add collected metric name
                         collectedValues += 1
@@ -253,7 +262,7 @@ def parseConsumerMessages(consumer, all_metrics_set, filter_hosts):
                         if metric_name not in all_metrics_set:
                             continue
                         header_field = metric_name + "[" + host_name + "]"
-                        valueMap[header_field] = str(metric_value)
+                        add_valuemap(header_field, metric_value, valueMap)
                         rawDataMap[epoch] = valueMap
                         # add collected metric name
                         collectedValues += 1
@@ -271,7 +280,7 @@ def parseConsumerMessages(consumer, all_metrics_set, filter_hosts):
                         metric_value_bytes = json_message.get('system', {}).get(
                             'filesystem', {}).get('used', {}).get('bytes', '')
                         header_field_bytes = metric_name_bytes + "[" + host_name + "]"
-                        valueMap[header_field_bytes] = str(metric_value_bytes)
+                        add_valuemap(header_field_bytes, metric_value_bytes, valueMap)
                         # add collected metric name
                         collectedMetricsSet.add(metric_name_bytes)
 
@@ -282,7 +291,7 @@ def parseConsumerMessages(consumer, all_metrics_set, filter_hosts):
                         metric_value_pct = json_message.get('system', {}).get(
                             'filesystem', {}).get('used', {}).get('pct', '')
                         header_field_pct = metric_name_pct + "[" + host_name + "]"
-                        valueMap[header_field_pct] = str(metric_value_pct)
+                        add_valuemap(header_field_pct, metric_value_pct, valueMap)
                         # add collected metric name
                         collectedMetricsSet.add(metric_name_pct)
                     # add to raw data map
@@ -302,17 +311,25 @@ def parseConsumerMessages(consumer, all_metrics_set, filter_hosts):
                 # go through all completed timesamp data and add to the buffer
                 start = str(min(completedRowsTimestampSet))
                 end = str(max(completedRowsTimestampSet))
+                completed_count = 0
                 for timestamp in completedRowsTimestampSet:
                     # get and delete the data of the timestamp
+                    if timestamp in finished_timestamp:
+                        logger.debug("timestamp: " + str(timestamp) + " has already there")
+                        continue
                     valueMap = rawDataMap.pop(timestamp)
                     # remove recorded metric for the timestamp
                     collectedMetricsMap.pop(timestamp)
                     valueMap['timestamp'] = str(timestamp)
+                    finished_timestamp.add(timestamp)
                     metricData.append(valueMap)
-
+                    completed_count += 1
                 chunkNumber += 1
-                logger.debug("Sending Chunk Number: " + str(chunkNumber) + " from " + start + " to " + end)
-                sendData(metricData)
+                if completed_count > 0:
+                    logger.debug("Sending Chunk Number: " + str(chunkNumber) + " from " + start + " to " + end)
+                    sendData(metricData)
+                else:
+                    logger.debug("Not send Data because all data have been sent before")
                 # clean the buffer and completed row set
                 metricData = []
                 completedRowsTimestampSet = set()
@@ -321,12 +338,15 @@ def parseConsumerMessages(consumer, all_metrics_set, filter_hosts):
         except ValueError:
             logger.error("Error parsing metric json")
             continue
-
     # send final chunk
     for timestamp in rawDataMap.keys():
+        if timestamp in finished_timestamp:
+            logger.debug("timestamp: " + str(timestamp) + " has already there")
+            continue
         valueMap = rawDataMap[timestamp]
         valueMap['timestamp'] = str(timestamp)
         metricData.append(valueMap)
+        finished_timestamp.add(timestamp)
     if len(metricData) == 0:
         logger.info("No data remaining to send")
     else:
@@ -335,21 +355,24 @@ def parseConsumerMessages(consumer, all_metrics_set, filter_hosts):
         sendData(metricData)
 
 
-def set_logger_config():
+def set_logger_config(level):
+    """Set up logging according to the defined log level"""
     # Get the root logger
-    logger = logging.getLogger(__name__)
+    logger_obj = logging.getLogger(__name__)
     # Have to set the root logger level, it defaults to logging.WARNING
-    logger.setLevel(logging.DEBUG)
+    logger_obj.setLevel(level)
     # route INFO and DEBUG logging to stdout from stderr
     logging_handler_out = logging.StreamHandler(sys.stdout)
     logging_handler_out.setLevel(logging.DEBUG)
-    logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
-    logger.addHandler(logging_handler_out)
+    # create a logging format
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(process)d - %(threadName)s - %(levelname)s - %(message)s')
+    logging_handler_out.setFormatter(formatter)
+    logger_obj.addHandler(logging_handler_out)
 
     logging_handler_err = logging.StreamHandler(sys.stderr)
     logging_handler_err.setLevel(logging.WARNING)
-    logger.addHandler(logging_handler_err)
-    return logger
+    logger_obj.addHandler(logging_handler_err)
+    return logger_obj
 
 
 class LessThanFilter(logging.Filter):
@@ -361,7 +384,14 @@ class LessThanFilter(logging.Filter):
         # non-zero return means we log this message
         return 1 if record.levelno < self.max_level else 0
 
-
+def add_valuemap(header_field, metric_value, valueMap):
+    # use the next non-null value to overwrite the prev value
+    # for the same metric in the same timestamp
+    if header_field in valueMap.keys():
+        if metric_value is not None and len(str(metric_value)) > 0:
+            valueMap[header_field] = str(metric_value)
+    else:
+        valueMap[header_field] = str(metric_value)
 
 def kafka_data_consumer(consumer_id):
     logger.info("Started metric consumer number " + consumer_id)
@@ -383,9 +413,11 @@ def kafka_data_consumer(consumer_id):
 if __name__ == "__main__":
     CHUNK_METRIC_VALUES = 10
     GROUPING_START = 15000
-    logger = set_logger_config()
     parameters = get_parameters()
+    log_level = parameters['logLevel']
+    logger = set_logger_config(log_level)
     agent_config_vars = get_agent_config_vars()
+    finished_timestamp = set()
     # reporting_config_vars = get_reporting_config_vars()
 
     # path to write the daily csv file
