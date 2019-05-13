@@ -2,7 +2,7 @@ input {
     google_pubsub {
 	{% if gcp_json_key_file is defined %}
 	# path to json key file
-	json_key_file => "{{ gcp_json_key_file }}"
+	json_key_file => "/etc/logstash/keys/gcp_json_key_file"
 	{% endif %}
 	# Your GCP project id (name)
         project_id => "{{ pubsub_project_id }}"

@@ -6,6 +6,9 @@
       - "pubsub_topic_name is defined"
       - "pubsub_subscription is defined"
 
+- include: config-gcp-key.yml
+  when: gcp_json_key_file is defined and gcp_json_key_file != ""
+
 - name: Create Logstash configuration files.
   template:
     src: "{{ item }}.j2"
@@ -17,7 +20,4 @@
     - 22-pubsub-input.conf
     - 91-pubsub.conf
   notify: restart logstash
-
-- include: config-google-pubsub-key.yml
-  when: gcp_json_key_file is defined and gcp_json_key_file != ""
 
