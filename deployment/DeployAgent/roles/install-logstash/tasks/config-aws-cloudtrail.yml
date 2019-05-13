@@ -5,6 +5,9 @@
       - "aws_bucket is defined"
       - "(aws_access_key_id is defined and aws_access_key_id is defined) or aws_credentials_file is defined"
 
+- include: config-aws-key.yml
+  when: aws_credentials_file is defined and aws_credentials_file != ""
+
 - name: Create Logstash configuration files.
   template:
     src: "{{ item }}.j2"

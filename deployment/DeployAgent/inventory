@@ -91,7 +91,7 @@ aws_bucket =
 # AWS credentials; either both the access key and secret key or the credentials file must be given
 aws_access_key_id = 
 aws_secret_access_key =
-aws_credentials_file = 
+#aws_credentials_file = 
 
 ##Vars for Google Pub/Sub
 pubsub_project_id = 
