@@ -29,3 +29,12 @@
   with_items: "{{ logstash_install_plugins }}"
   when: "item not in logstash_plugins_list.stdout"
   notify: restart logstash
+
+- name: Change directory ownership
+  command: >
+    chown --recursive logstash /var/lib/logstash
+
+- name: Change directory permissions
+  command: >
+    chmod --recursive 755 /var/lib/logstash
+
