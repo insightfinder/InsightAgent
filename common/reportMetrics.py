@@ -443,30 +443,34 @@ def process_replay(file_path):
                     logger.error('Could not clean up file. Please run "rm ' + file_path + '.mod"')
 
         else:  # metric file replay processing
-            grouping_map = load_grouping()
-
             # handle different metric agents
             if parameters['agentType'] == 'sar':
-                replay_sar(file_path, grouping_map)
+                for command in ['sar', 'sar -n DEV', 'sar -p -d']:
+                    replay_sar(file_path, command)
             else:
                 # default
                 with open(file_path) as metricFile:
-                    metric_csv_reader = csv.reader(metricFile)
-                    to_send_metric_data = []
                     field_names = []
+                    to_send_metric_data = []
                     current_line_count = 1
                     chunk_count = 0
                     min_timestamp_epoch = 0
                     max_timestamp_epoch = -1
+                    if parameters['agentType'] == 'rds':
+                        is_rds = True
+                        directory_path, file_name = os.path.split(file_path)
+                        file_name_array = file_name.split('_')
+                        instance_name = file_name_array[-1].split('.')[0]
+                        data_info = file_name_array[0].split('.')
+                        metric = data_info[-1]
+                        key = metric + '[' + instance_name + ']'
+                        field_names = ['timestamp', key]
+                    metric_csv_reader = csv.reader(metricFile)
                     for row in metric_csv_reader:
-                        if metric_csv_reader.line_num == 1:
+                        if metric_csv_reader.line_num == 1 and not is_rds:
                             # Get all the metric names from header
                             field_names = row
-                            # get index of the timestamp column
-                            for i in range(0, len(field_names)):
-                                if field_names[i] == "timestamp":
-                                    timestampIndex = i
-                        elif metric_csv_reader.line_num > 1:
+                        elif metric_csv_reader.line_num > 1 or is_rds:
                             # Read each line from csv and generate a json
                             current_row = dict()
                             if current_line_count == parameters['chunkLines']:
@@ -476,31 +480,18 @@ def process_replay(file_path):
                                 chunk_count += 1
                             for i in range(0, len(row)):
                                 if field_names[i] == "timestamp":
-                                    current_row[field_names[i]] = row[i]
-                                    if min_timestamp_epoch == 0 or min_timestamp_epoch > long(row[i]):
-                                        min_timestamp_epoch = long(row[i])
-                                    if max_timestamp_epoch == 0 or max_timestamp_epoch < long(row[i]):
-                                        max_timestamp_epoch = long(row[i])
+                                    timestamp = row[i]
+                                    if '.' in timestamp:
+                                        timestamp = timestamp.split('.')[0]
+                                    current_row[field_names[i]] = timestamp
+                                    if min_timestamp_epoch == 0 or min_timestamp_epoch > long(timestamp):
+                                        min_timestamp_epoch = long(timestamp)
+                                    if max_timestamp_epoch == 0 or max_timestamp_epoch < long(timestamp):
+                                        max_timestamp_epoch = long(timestamp)
                                 else:
                                     column_name = field_names[i].strip()
-                                    metric_key = column_name.split("[")[0]
                                     if column_name.find("]") == -1:
                                         column_name = column_name + "[-]"
-                                    # Generate normalization id or use from config.ini
-                                    if column_name.find(":") == -1:
-                                        group_id = get_normalization(grouping_map, metric_key)
-                                        column_name = column_name + ":" + str(group_id)
-                                    elif len(column_name.split(":")[1]) == 0:
-                                        group_id = get_normalization(grouping_map, metric_key)
-                                        column_name = column_name + str(group_id)
-                                    elif len(column_name.split(":")[1]) != 0:
-                                        if len(normalization_ids_map) != 0:
-                                            if metric_key in normalization_ids_map:
-                                                group_id = int(normalization_ids_map[metric_key])
-                                        else:
-                                            group_id = column_name.split(":")[1]
-                                        column_name = column_name.split(":")[0] + ":" + str(group_id)
-
                                     current_row[column_name] = row[i]
                             to_send_metric_data.append(current_row)
                             current_line_count += 1
@@ -509,15 +500,15 @@ def process_replay(file_path):
                         send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], file_path, chunk_count + 1)
                         chunk_count += 1
                     logger.debug("Total chunks created: " + str(chunk_count))
-                save_grouping(grouping_map)
 
 
-def replay_sar(metric_file_path, grouping_map):
+
+def replay_sar(metric_file_path, command):
     logger.info('Replaying sar file')
     translated_file_path = metric_file_path + '.sar'
     try:
         subprocess.check_output(
-            'sar -f ' + metric_file_path + ' > ' + translated_file_path,
+            command + ' -f ' + metric_file_path + ' > ' + translated_file_path,
             shell=True)
     except subprocess.CalledProcessError:
         logger.error('Not a sar file, sar is not installed, or there is a sar version mismatch ' +
@@ -536,10 +527,13 @@ def replay_sar(metric_file_path, grouping_map):
         field_names = metrics.split()
         field_names[0] = 'timestamp'
         field_names[1] = 'ampm'
+        # determine where fields start
+        start_index = 2
+        if field_names[2] == field_names[2].upper():
+            start_index = 3
         to_send_metric_data = []
         current_line_count = 1
         chunk_count = 0
-        first_timestamp_epoch = 0
         row_count = 0
         min_timestamp_epoch = 0
         max_timestamp_epoch = -1
@@ -556,23 +550,20 @@ def replay_sar(metric_file_path, grouping_map):
                 chunk_count += 1
 
             row = line.split()
-            if row[2:] == field_names[2:] or 'RESTART' in row or not row:
+            if not row or row[start_index:] == field_names[start_index:] or 'RESTART' in row or line.startswith('Average'):
                 line = metric_file.readline()
                 continue
 
             # make timestamp
             time = row[0]
             ampm = row[1]
-            if time == 'Average:':
-                line = metric_file.readline()
-                continue
 
-            # calc first timestamp
-            if first_timestamp_epoch == 0:
-                first_timestamp_epoch = _get_timestamp_sar(date, time, ampm, parameters['timeZone'], format)
+            # secondary instance tag
+            tag = instance
+            if start_index == 3:
+                tag += '-' + row[2]
 
-            # sar has unreliable sampling interval, so base it off of the config
-            timestamp = first_timestamp_epoch + int(agent_config_vars['samplingInterval']) * 60 * 1000 * row_count
+            timestamp = _get_timestamp_sar(date, time, ampm, parameters['timeZone'], format)
             current_row['timestamp'] = str(timestamp)
             if min_timestamp_epoch == 0 or min_timestamp_epoch > long(timestamp):
                 min_timestamp_epoch = long(timestamp)
@@ -580,17 +571,8 @@ def replay_sar(metric_file_path, grouping_map):
                 max_timestamp_epoch = long(timestamp)
 
             # metric values
-            for i in range(2, len(row)):
-                column_name = field_names[i].strip()
-                metric_key = column_name
-                column_name = column_name + '[' + instance + ']:' + str(i)
-                # Generate normalization id or use from config.ini
-                if len(normalization_ids_map) != 0:
-                    if metric_key in normalization_ids_map:
-                        group_id = int(normalization_ids_map[metric_key])
-                else:
-                    group_id = column_name.split(":")[1]
-                column_name = column_name.split(":")[0] + ":" + str(group_id)
+            for i in range(start_index, len(row)):
+                column_name = field_names[i].strip() + '[' + tag + ']'
                 current_row[column_name] = row[i]
             to_send_metric_data.append(current_row)
             current_line_count += 1
@@ -601,7 +583,6 @@ def replay_sar(metric_file_path, grouping_map):
             send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], metric_file_path, chunk_count + 1)
             chunk_count += 1
         logger.debug("Total chunks created: " + str(chunk_count))
-        save_grouping(grouping_map)
 
         # clean up
         try:
