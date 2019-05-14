@@ -4,7 +4,9 @@ Agent Type: MetricFileReplay
 
 Platform: Linux
 
-InsightAgent support replay mode of metric csv files in which the data from the csv file is read and sent to insightfinder server. The user can send multiple files to the same project. InsightFinder backend can automatically fuse multiple files into one csv data based on timestamps. A sample file looks like the following. The column name in the csv file follows the format of metricName[instanceName]. Metric name should not include special characters such as "[]", " ", ":".
+InsightAgent support replay mode of metric sar, rds, or csv files in which the data from the csv file is read and sent to insightfinder server. The user can send multiple files to the same project.
+
+A sample csv file looks like the following. There must be a timestamp field (specified in Unix epoch (ms)); the other columns are metric values for that timestamp. The column name in the csv file follows the format of "timestamp" or  metricName[instanceName]. The metric name should not include special characters such as "[]", " ", ":".
 ```csv
 timestamp,cpu[node1],memory[node1],disk_read[node1],disk_write[node1],network_receive[node1],network_send[node1], cpu[node2],memory[node2],disk_read[node2],disk_write[node2],network_receive[node2],network_send[node2], cpu[node3],memory[node3],disk_read[node3],disk_write[node3],network_receive[node3],network_send[node3], cpu[node4],memory[node4],disk_read[node4],disk_write[node4],network_receive[node4],network_send[node4], cpu[node5],memory[node5],disk_read[node5],disk_write[node5],network_receive[node5],network_send[node5]
 1442555275000,8.7380231,1050.804224,2.732032,0.0,46.175,43.11,3.4068913,1138.601984,0.262144,0.0,5.853,4.709,3.5621096,1628.110848,1.800192,0.0,7.458,6.303,2.8296526,1264.095232,0.004096,0.0,5.119,4.932,3.8720168,1713.414144,0.004096,0.0,7.772,7.607
@@ -137,10 +139,13 @@ If you want to send a list of logs within a directory, you can use:
 find /PATH/TO/DIRECTORY -maxdepth 1 -type f -exec python common/reportMetrics.py... -f {} \;
 ```
 
-If you are replaying the output of a sar file, you can specify so as an argument to the -t parameter:
+This agent also supports replaying sar and RDS files via the `-t` option:
 ```
 sudo python common/reportMetrics.py -w https://app.insightfinder.com -m metricFileReplay -t sar -f PATH/TO/SAR_FILE
+# or
+sudo python common/reportMetrics.py -w https://app.insightfinder.com -m metricFileReplay -t rds -f PATH/TO/RDS_FILE
 ```
+These can also be ran over a directory, as above.
 
 ### Uninstallation:
 Note: Uninstallation is required before you can install any other Metric agent(e.g. cgroup) or you want to reinstall the current collectd agent.
