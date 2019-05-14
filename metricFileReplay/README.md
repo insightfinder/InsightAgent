@@ -137,10 +137,13 @@ If you want to send a list of logs within a directory, you can use:
 find /PATH/TO/DIRECTORY -maxdepth 1 -type f -exec python common/reportMetrics.py... -f {} \;
 ```
 
-If you are replaying the output of a sar file, you can specify so as an argument to the -t parameter:
+This agent also supports replaying sar and RDS files via the `-t` option:
 ```
 sudo python common/reportMetrics.py -w https://app.insightfinder.com -m metricFileReplay -t sar -f PATH/TO/SAR_FILE
+
+sudo python common/reportMetrics.py -w https://app.insightfinder.com -m metricFileReplay -t rds -f PATH/TO/RDS_FILE
 ```
+
 
 ### Uninstallation:
 Note: Uninstallation is required before you can install any other Metric agent(e.g. cgroup) or you want to reinstall the current collectd agent.
