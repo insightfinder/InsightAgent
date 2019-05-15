@@ -120,7 +120,7 @@ def post_request(url, data, proxies, success_message, failure_message):
 
     logger.error(
         "Failed! Gave up after %d attempts.", ATTEMPTS)
-    return response
+    return -1
 
 
 def get_parameters():
@@ -301,10 +301,9 @@ def make_instance_name(endpoint):
 
 def prepare_log_entry(timestamp, instance, span):
     log_entry = dict()
-    log_entry['timestamp'] = timestamp
-    log_entry['instance'] = instance
+    log_entry['eventId'] = timestamp
+    log_entry['tag'] = instance
     log_entry['data'] = span
-    logger.debug(log_entry)
     track['current_row'].append(log_entry)
     track['line_count'] += 1
     return
