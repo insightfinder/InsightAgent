@@ -50,7 +50,7 @@ def process_zipkin_span(timestamp_fixed, span):
     if filter_zipkin_span(endpoint['serviceName'], span_name):
         return
 
-    timestamp = int(span['timestamp']) / 1000
+    timestamp = int(span.pop('timestamp')) / 1000
     instance = make_instance_name(endpoint)
 
     if track['mode'] == "LOG":
@@ -361,8 +361,7 @@ def transpose_metrics():
         for key in track['current_dict'][timestamp]:
             value = track['current_dict'][timestamp][key]
             if '|' in value:
-                value_arr = value.split('|')
-                value = median(map(lambda v: int(v), value_arr))
+                value = median(map(lambda v: int(v), value.split('|')))
             new_row[key] = str(value)
         track['current_row'].append(new_row)
 
