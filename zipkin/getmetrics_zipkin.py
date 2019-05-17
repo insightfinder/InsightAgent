@@ -91,6 +91,9 @@ def zipkin_get_traces():
     return json.loads(resp.text)
 
 
+#################
+# Configuration #
+#################
 def get_agent_config_vars():
     """Read and parse config.ini"""
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
@@ -135,6 +138,9 @@ def get_agent_config_vars():
         exit()
 
 
+########################
+# Start of boilerplate #
+########################
 def get_if_config_vars():
     """ get config.ini vars """
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
@@ -284,7 +290,6 @@ def set_logger_config(level):
 
 def print_summary_info():
     # info to be sent to IF
-
     post_data_block = '\nData sent to IF:'
     post_data = initialize_api_post_data()
     for i in post_data.keys():
