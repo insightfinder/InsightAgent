@@ -12,3 +12,4 @@ insightFinder_user_name =
 sampling_interval =
 group_id =
 client_id = 
+data_send_timeout =
