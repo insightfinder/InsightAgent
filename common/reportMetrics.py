@@ -274,7 +274,7 @@ def send_data(metric_data_dict, file_path, chunk_serial_number):
             logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
         else:
             # retry once for failed data and set chunkLines to half if succeeded
-            logger.error("Failed to send data. Retrying once.")
+            logger.error("Failed to send data.\nResponse Code: " + str(response.status_code) + "\nTEXT: " + str(response.text) + "\nRetrying once.")
             data_split1 = metric_data_dict[0:len(metric_data_dict) / 2]
             to_send_data_dict["metricData"] = json.dumps(data_split1)
             response = urllib.urlopen(post_url, data=urllib.urlencode(to_send_data_dict))
@@ -286,14 +286,14 @@ def send_data(metric_data_dict, file_path, chunk_serial_number):
                 to_send_data_dict["metricData"] = json.dumps(data_split2)
                 response = urllib.urlopen(post_url, data=urllib.urlencode(to_send_data_dict))
             else:
-                logger.info("Failed to send data.")
+                logger.error("Failed to send data.\nResponse Code: " + str(response.status_code) + "\nTEXT: " + str(response.text))
 
     else:
         response = requests.post(post_url, data=json.loads(to_send_data_json))
         if response.status_code == 200:
             logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
         else:
-            logger.info("Failed to send data.")
+            logger.error("Failed to send data.\nResponse Code: " + str(response.status_code) + "\nTEXT: " + str(response.text))
             data_split1 = metric_data_dict[0:len(metric_data_dict) / 2]
             to_send_data_dict["metricData"] = json.dumps(data_split1)
             to_send_data_json = json.dumps(to_send_data_dict)
@@ -307,7 +307,7 @@ def send_data(metric_data_dict, file_path, chunk_serial_number):
                 to_send_data_json = json.dumps(to_send_data_dict)
                 response = requests.post(post_url, data=json.loads(to_send_data_json))
             else:
-                logger.info("Failed to send data.")
+                logger.error("Failed to send data.\nResponse Code: " + str(response.status_code) + "\nTEXT: " + str(response.text))
     logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
 
 
@@ -385,7 +385,7 @@ def process_replay(file_path):
         if parameters['mode'] == "logFileReplay":
 
             # handle specific filetypes
-            if parameters['agentType'] == 'db2':
+            if parameters['agentType'] == 'db2' or parameters['agentType'] == 'db2-json':
                 replay_db2(file_path)
             elif parameters['agentType'] == 'gpfs':
                 replay_gpfs(file_path)
@@ -675,7 +675,11 @@ def replay_db2(log_file_path):
                     else:
                         entry['tag'] = localhost
                     entry['eventId'] = str(current_obj.pop('timestamp'))
-                    entry['data'] = current_obj
+                    if parameters['agentType'] == 'db2-json':
+                        current_obj.pop('as_string')
+                        entry['data'] = current_obj
+                    else:
+                        entry['data'] = current_obj['as_string']
                     current_row.append(entry)
                     line_count += 1
                     entry_count += 1
@@ -694,9 +698,12 @@ def replay_db2(log_file_path):
                 current_obj['timestamp'] = timestamp
                 current_obj['UNIQ'] = line.split()[1]
                 current_obj['LEVEL'] = line[line.rfind(' ') + 1:line.rfind('\n')]
+                current_obj['as_string'] = line
                 key = blank_key
 
             except ValueError:
+                # build overall log entry string
+                current_obj['as_string'] += line
                 # check if line start with a field name or not
                 if re.match('^' + field_name_regex, line):
                     key = extract_fields_db2(current_obj, line, field_name_regex)
@@ -721,7 +728,11 @@ def replay_db2(log_file_path):
             else:
                 entry['tag'] = localhost
             entry['eventId'] = str(current_obj.pop('timestamp'))
-            entry['data'] = current_obj
+            if parameters['agentType'] == 'db2-json':
+                current_obj.pop('as_string')
+                entry['data'] = current_obj
+            else:
+                entry['data'] = current_obj['as_string']
             current_row.append(entry)
             line_count += 1
             entry_count += 1

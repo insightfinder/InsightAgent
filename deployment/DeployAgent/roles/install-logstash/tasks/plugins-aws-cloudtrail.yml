@@ -1,0 +1,9 @@
+---
+- name: Copy Cloudtrail codec plugin file to server
+  copy:
+     src: logstash-offline-plugin-cloudtrail-codec-6.6.0.zip
+     dest: /tmp/logstash-offline-plugin-cloudtrail-codec-6.6.0.zip
+- name: Install Cloudtrail codec plugin
+  command: >
+    ./bin/logstash-plugin install file:////tmp/logstash-offline-plugin-cloudtrail-codec-6.6.0.zip
+    chdir={{ logstash_dir }}
