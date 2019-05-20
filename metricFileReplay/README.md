@@ -147,6 +147,15 @@ sudo python common/reportMetrics.py -w https://app.insightfinder.com -m metricFi
 ```
 These can also be ran over a directory, as above.
 
+Replaying only sar metrics for the following is also available:
+* `sar-cpu`: CPU metrics (`sar -f`)
+* `sar-mem`: Memory metrics (`sar -r -f`)
+* `sar-network`: Network metrics (`sar -n DEV -f`)
+* `sar-storage`: Disk device metrics (`sar -p -d -f`)
+
+`sar-network` and `sar-storage` both support the `exclude_tags` setting in `config.ini`. Setting this to a comma-delimited list of specific device ids, or ids that start with a given string, to exclude. For example, `exclude_tags = eth0,sda*` will not include data for devices `eth0` nor data for devices that start with `sda`.
+
+
 ### Uninstallation:
 Note: Uninstallation is required before you can install any other Metric agent(e.g. cgroup) or you want to reinstall the current collectd agent.
 
