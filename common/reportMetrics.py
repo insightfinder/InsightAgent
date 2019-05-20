@@ -446,14 +446,15 @@ def process_replay(file_path):
 
         else:  # metric file replay processing
             # handle different metric agents
-            if parameters['agentType'] == 'sar':
-                replay_sar(file_path, 'sar')
-            elif parameters['agentType'] == 'sar-network':
-                replay_sar(file_path, 'sar -n DEV')
-            elif parameters['agentType'] == 'sar-storage':
-                replay_sar(file_path, 'sar -p -d')
-            elif parameters['agentType'] == 'sar-mem':
-                replay_sar(file_path, 'sar -r')
+            if 'sar' in parameters['agentType']:
+                if parameters['agentType'] == 'sar-cpu' or parameters['agentType'] == 'sar':
+                    replay_sar(file_path, 'sar')
+                if parameters['agentType'] == 'sar-network' or parameters['agentType'] == 'sar':
+                    replay_sar(file_path, 'sar -n DEV')
+                if parameters['agentType'] == 'sar-storage' or parameters['agentType'] == 'sar':
+                    replay_sar(file_path, 'sar -p -d')
+                if parameters['agentType'] == 'sar-mem' or parameters['agentType'] == 'sar':
+                    replay_sar(file_path, 'sar -r')
             else:
                 # default
                 with open(file_path) as metricFile:
