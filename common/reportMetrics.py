@@ -143,10 +143,9 @@ def get_agent_config_vars(normalization_map):
                 sys.exit(1)
             if len(selected_fields[0]) != 0:
                 config_vars['selected_fields'] = selected_fields
-            if len(exclude_tags[0]) != 0:
-                config_vars['exclude_tags'] = exclude_tags
             elif len(selected_fields[0]) == 0:
                 config_vars['selected_fields'] = "All"
+            config_vars['exclude_tags'] = exclude_tags
             if len(normalization_ids[0]) != 0 and len(all_metrics) == len(normalization_ids):
                 for index in range(len(all_metrics)):
                     metric = all_metrics[index]
