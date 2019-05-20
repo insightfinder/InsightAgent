@@ -97,13 +97,16 @@ def get_agent_config_vars():
                 logger.error("Agent not correctly configured(group id). Check config file.")
                 sys.exit(1)
             if len(data_send_timeout) == 0:
-                data_send_timeout = 60
+                if int(sampling_interval) == 0:
+                    data_send_timeout = 60
+                else:
+                    data_send_timeout = int(sampling_interval)
             else:
                 data_send_timeout = int(data_send_timeout)
             config_vars['licenseKey'] = insightFinder_license_key
             config_vars['projectName'] = insightFinder_project_name
             config_vars['userName'] = insightFinder_user_name
-            config_vars['samplingInterval'] = sampling_interval
+            config_vars['samplingInterval'] = int(sampling_interval)
             config_vars['groupId'] = group_id
             config_vars['clientId'] = client_id
             config_vars['dataSendTimeout'] = data_send_timeout
