@@ -12,6 +12,7 @@
     dest: /etc/yum.repos.d/logstash.repo
     mode: 0644
   when: not install_logstash_offline
+  ignore_errors: True
 
 - name: Install Logstash.
   package:
@@ -30,6 +31,7 @@
     name: /tmp/logstash-6.6.0.rpm
     state: present
   when: install_logstash_offline
+  ignore_errors: True
 
 - name: System-install fix
   command: >
