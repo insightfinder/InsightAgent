@@ -30,11 +30,10 @@
   when: "item not in logstash_plugins_list.stdout"
   notify: restart logstash
 
-- name: Change directory ownership
-  command: >
-    chown --recursive logstash /var/lib/logstash
-
-- name: Change directory permissions
-  command: >
-    chmod --recursive 755 /var/lib/logstash
+- name: Change directory ownership & permissions
+  file:
+    path: /var/lib/logstash
+    recurse: yes
+    owner: logstash
+    mode: 0755
 
