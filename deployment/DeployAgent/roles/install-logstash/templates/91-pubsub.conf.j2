@@ -27,7 +27,7 @@ filter {
         mutate {
             add_field => {
                 "instance" => "{{ pubsub_topic_name }}"
-                "task_id" => "%{host}"
+                "task_id" => "%{host}{{ pubsub_topic_name }}"
                 "[msg][tag]" => "%{instance}"
                 "[msg][eventId]" => "%{ts_epoch}"
                 "[msg][data]" => "%{message}"
@@ -45,7 +45,7 @@ filter {
         
         ### grouping events ###
         aggregate {
-            task_id => "%{task_id}"
+            task_id => "%{task_id}-pubsub"
             code => "
 		    map['project'] ||= event.get('project')
                     map['output_type'] ||= event.get('output_type')
