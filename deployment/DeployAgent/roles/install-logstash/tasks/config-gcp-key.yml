@@ -7,6 +7,6 @@
 - name: Google Pubsub | Set up JSON key file
   command: >
     mkdir -p /etc/logstash/keys
-    rm -rf /etc/logstash/keys/gcp_json_key_file.json
+    rm -f /etc/logstash/keys/gcp_json_key_file.json
     mv /tmp/gcp_json_key_file.json /etc/logstash/keys/
 
