@@ -5,7 +5,7 @@
     dest: "/tmp/gcp_json_key_file.json"
 
 - name: Google Pubsub | Set up JSON key file
-  command: >
+  command: |
     mkdir -p /etc/logstash/keys
     rm -f /etc/logstash/keys/gcp_json_key_file.json
     mv /tmp/gcp_json_key_file.json /etc/logstash/keys/
