@@ -11,4 +11,6 @@ insightFinder_project_name =
 insightFinder_user_name =
 sampling_interval =
 group_id =
-client_id = 
+client_id =
+#by default is equivalent to sampling interval
+data_send_timeout =
