@@ -27,7 +27,7 @@ filter {
         mutate {
             add_field => {
                 "instance" => "{{ pubsub_topic_name }}"
-                "task_id" => "%{host}{{ pubsub_topic_name }}"
+                "task_id" => "%{host}-{{ pubsub_topic_name }}"
                 "[msg][tag]" => "%{instance}"
                 "[msg][eventId]" => "%{ts_epoch}"
                 "[msg][data]" => "%{message}"
