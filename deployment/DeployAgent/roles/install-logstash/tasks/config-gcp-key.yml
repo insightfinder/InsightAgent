@@ -2,10 +2,11 @@
 - name: Google Pubsub | Copy JSON key file to server
   copy:
     src: "{{ gcp_json_key_file }}"
-    dest: "/tmp/gcp_json_key_file"
+    dest: "/tmp/gcp_json_key_file.json"
 
 - name: Google Pubsub | Set up JSON key file
   command: >
-    mkdir /etc/logstash/keys
-    mv /tmp/gcp_json_key_file /etc/logstash/keys/gcp_json_key_file
+    mkdir -p /etc/logstash/keys
+    rm -rf /etc/logstash/keys/gcp_json_key_file.json
+    mv /tmp/gcp_json_key_file.json /etc/logstash/keys/
 
