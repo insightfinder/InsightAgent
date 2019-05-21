@@ -120,7 +120,7 @@ ansible-playbook insightagent.yaml
 ```
 
 ### Sending Data
-If you skipped to this step, set up `common/config.ini` in the InsightAgent folder.
+If you skipped to this step, set up `common/config.ini` in the InsightAgent folder. Note that the `[metrics]` section can be left blank when replaying logs.
 
 Run the following command for each log json file. You should be inside InsightAgent-master directory while running the command.
 ```
