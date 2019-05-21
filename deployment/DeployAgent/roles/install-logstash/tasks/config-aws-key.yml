@@ -5,7 +5,7 @@
     dest: "/tmp/aws_credentials_file.yaml"
 
 - name: AWS Cloudtrail | Set up key file
-  command: >
+  command: |
     mkdir -p /etc/logstash/keys
     rm -f /etc/logstash/keys/aws_credentials_file.yaml
     mv /tmp/aws_credentials_file.yaml /etc/logstash/keys/
