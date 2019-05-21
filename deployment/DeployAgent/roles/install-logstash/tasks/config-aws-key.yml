@@ -2,10 +2,11 @@
 - name: AWS Cloudtrail | Copy key file to server
   copy:
     src: "{{ aws_credentials_file }}"
-    dest: "/tmp/aws_credentials_file"
+    dest: "/tmp/aws_credentials_file.yaml"
 
 - name: AWS Cloudtrail | Set up key file
   command: >
-    mkdir /etc/logstash/keys
-    mv /tmp/aws_credentials_file /etc/logstash/keys/aws_credentials_file
+    mkdir -p /etc/logstash/keys
+    rm -f /etc/logstash/keys/aws_credentials_file.yaml
+    mv /tmp/aws_credentials_file.yaml /etc/logstash/keys/
 
