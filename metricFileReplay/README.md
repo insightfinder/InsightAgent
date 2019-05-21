@@ -126,6 +126,8 @@ ansible-playbook insightagent.yaml
 ```
 
 ### Sending Data
+0) If you skipped to this step, set up `common/config.ini` in the InsightAgent folder.
+
 1) Make sure each file is .csv formatted, starts with a row of headers and the headers should have "timestamp" field in it.
 
 2) Run the following command for each data file.
