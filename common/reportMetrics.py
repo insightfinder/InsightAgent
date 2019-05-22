@@ -546,7 +546,6 @@ def replay_sar(metric_file_path, command):
         min_timestamp_epoch = 0
         max_timestamp_epoch = -1
         exclude_tags = agent_config_vars['exclude_tags']
-        logger.debug(exclude_tags)
 
         # read each line of metrics
         line = metric_file.readline()
@@ -583,7 +582,6 @@ def replay_sar(metric_file_path, command):
             if exclude_flag:
                 line = metric_file.readline()
                 continue
-            logger.debug(instance)
 
             timestamp = _get_timestamp_sar(date, time, ampm, parameters['timeZone'], format)
             current_row['timestamp'] = str(timestamp)
