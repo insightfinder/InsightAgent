@@ -22,19 +22,13 @@
 - name: Monit | Install Monit
   yum:
     name: monit
-     state: present
+    state: present
   when: ansible_pkg_mgr == 'yum'
 - name: Monit | Install Monit
   apt:
     name: monit
     state: present
   when: ansible_pkg_mgr == 'apt'
-  #- name: Monit | Restart Monit daemon
-  #systemd:
-  #  name: monit.service
-  #  enabled: yes
-  #  daemon_reload: yes
-  #  state: restarted
 - name: Delete Old Tar Bundle for Agent
   become: yes
   file:
@@ -89,17 +83,6 @@
   shell: "http_proxy={{ http_proxy }} python {{ansible_env.HOME}}/get-pip.py --no-index --find-links={{ansible_env.HOME}}/pip_packages/"
 - name: Install pip packages for Agent
   shell: "pip install --no-index --find-links='{{ansible_env.HOME}}/pip_packages/' requests pytz kafka"
-  #- name: Deploy Replay Agent
-  #shell: "no_proxy={{ no_proxy }} ./deployment/install.sh
-  #  -i {{ projectName }}
-  #  -u {{ userName }}
-  #  -k {{ licenseKey }}
-  #  -s {{ samplingInterval }}
-  #  -t {{ agentType }}
-  #  -w {{ reportingUrl }}"
-  #become: true
-  #args:
-  #  chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
 - name: Agent | Add config.ini
   template:
     src: config.ini.j2
