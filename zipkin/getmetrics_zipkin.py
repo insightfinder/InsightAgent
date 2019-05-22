@@ -82,7 +82,7 @@ def zipkin_get_traces():
     """ get traces from zipkin for the last reporting period """
     data = {
         'lookback': int(if_config_vars['samplingInterval']) * 60 * 1000,
-        'limit': if_config_vars['chunkLines']
+        'limit': int(if_config_vars['chunkLines'])
     }
     url = urlparse.urljoin(agent_config_vars['url'], '/api/v2/traces')
     resp = send_request(url, "GET", data, agent_config_vars['proxies'],
@@ -150,8 +150,8 @@ def get_if_config_vars():
             user_name = config_parser.get('insightfinder', 'user_name')
             license_key = config_parser.get('insightfinder', 'license_key')
             project_name = config_parser.get('insightfinder', 'project_name')
-            sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
-            chunk_lines = config_parser.get('insightfinder', 'chunk_lines')
+            sampling_interval = int(config_parser.get('insightfinder', 'sampling_interval'))
+            chunk_lines = int(config_parser.get('insightfinder', 'chunk_lines'))
             if_url = config_parser.get('insightfinder', 'url')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
@@ -177,10 +177,6 @@ def get_if_config_vars():
             logger.warning(
                 "Agent not correctly configured (sampling_interval). Check config file.")
             sys.exit(1)
-        if len(sampling_interval) == 0:
-            logger.warning(
-                "Agent not correctly configured (sampling_interval). Check config file.")
-            sys.exit(1)
 
         # defaults
         if len(chunk_lines) == 0:
@@ -199,8 +195,8 @@ def get_if_config_vars():
             "userName": user_name,
             "licenseKey": license_key,
             "projectName": project_name,
-            "samplingInterval": sampling_interval,
-            "chunkLines": chunk_lines,
+            "samplingInterval": int(sampling_interval),
+            "chunkLines": int(chunk_lines),
             "ifURL": if_url,
             "ifProxies": if_proxies
         }
@@ -247,13 +243,18 @@ def chunk_map(data, SIZE=50):
         yield {k: data[k] for k in islice(it, SIZE)}
 
 
-def make_safe_instance_string(string):
-    return UNDERSCORE.sub(".", string)
+def make_safe_instance_string(instance, device=''):
+    # strip underscores
+    instance = UNDERSCORE.sub(".", instance)
+    # if there's a device, concatenate it to the instance with an underscore
+    if len(device) != 0:
+        instance += '_' + make_safe_instance_string(device)
+    return instance
 
 
-def make_safe_metric_key(string):
+def make_safe_metric_key(metric_key):
     """ make safe string already handles this"""
-    return make_safe_string(string)
+    return make_safe_string(metric_key)
 
 
 def make_safe_string(string):
@@ -326,22 +327,48 @@ def reset_track():
     track['current_dict'] = dict()
 
 
-###################################
-# Functions to handle Metric data #
-###################################
-def metric_handoff(timestamp, field_name, instance, data):
-    append_metric_data_to_entry(timestamp, field_name, instance, data)
+#########################################
+# Functions to handle Log/Incident data #
+#########################################
+def log_handoff(timestamp, instance, data):
+    entry = prepare_log_entry(timestamp, instance, data)
+    track['current_row'].append(entry)
     track['line_count'] += 1
     track['entry_count'] += 1
-    if len(track['current_dict']) >= if_config_vars['chunkLines']:
+    if track['line_count'] >= if_config_vars['chunkLines'] * 100:
         send_data_wrapper()
 
 
-def append_metric_data_to_entry(timestamp, field_name, instance, data):
+def prepare_log_entry(timestamp, instance, data):
+    """ creates the log entry """
+    #logger.debug(instance + '|' + str(timestamp) + '|' +
+                 #datetime.fromtimestamp(timestamp/1000).strftime('%Y-%m-%d %H:%M:%S'))
+    entry = dict()
+    entry['data'] = data
+    if 'INCIDENT' in track['mode'].upper():
+        entry['timestamp'] = timestamp
+        entry['instanceName'] = instance
+    else:
+        entry['eventId'] = timestamp
+        entry['tag'] = instance
+    return entry
+
+
+###################################
+# Functions to handle Metric data #
+###################################
+def metric_handoff(timestamp, field_name, instance, device, data):
+    append_metric_data_to_entry(timestamp, field_name, instance, device, data)
+    track['line_count'] += 1
+    track['entry_count'] += 1
+    if len(track['current_dict']) >= if_config_vars['chunkLines']:
+        transpose_metrics()
+        send_data_wrapper()
+
+
+def append_metric_data_to_entry(timestamp, field_name, instance, device, data):
     """ creates the metric entry """
-    logger.debug(instance + '|' + str(timestamp) + '|' +
-                 datetime.fromtimestamp(timestamp/1000).strftime('%Y-%m-%d %H:%M:%S'))
-    key = make_safe_metric_key(field_name) + '[' + make_safe_instance_string(instance) + ']'
+    key = make_safe_metric_key(field_name) + '[' + make_safe_instance_string(instance, device) + ']'
     ts_str = str(timestamp)
     if ts_str not in track['current_dict'].keys():
         track['current_dict'][ts_str] = dict()
@@ -371,43 +398,12 @@ def transpose_metrics():
         track['current_row'].append(new_row)
 
 
-#########################################
-# Functions to handle Log/Incident data #
-#########################################
-def log_handoff(timestamp, instance, data):
-    entry = prepare_log_entry(timestamp, instance, data)
-    track['current_row'].append(entry)
-    track['line_count'] += 1
-    track['entry_count'] += 1
-    if track['line_count'] >= if_config_vars['chunkLines'] * 100:
-        send_data_wrapper()
-
-
-def prepare_log_entry(timestamp, instance, data):
-    """ creates the log entry """
-    logger.debug(instance + '|' + str(timestamp) + '|' +
-                 datetime.fromtimestamp(timestamp/1000).strftime('%Y-%m-%d %H:%M:%S'))
-    entry = dict()
-    entry['data'] = data
-    if 'INCIDENT' in track['mode'].upper():
-        entry['timestamp'] = timestamp
-        entry['instanceName'] = instance
-    else:
-        entry['eventId'] = timestamp
-        entry['tag'] = instance
-    return entry
-
-
 ################################
 # Functions to send data to IF #
 ################################
 def send_data_wrapper():
     """ wrapper to send data """
     logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - track['start_time']))
-    # transpose metrics up
-    if 'METRIC' in track['mode'].upper():
-        transpose_metrics()
-
     send_data_to_if(track['current_row'], track['mode'])
     track['chunk_count'] += 1
     reset_track()
@@ -438,17 +434,14 @@ def send_data_to_if(chunk_metric_data, mode):
 
 def send_request(url, mode="GET", data={}, proxies={}, failure_message='Failure!', success_message='Success!'):
     """ posts a request to the given url """
-    # determine if getting or get (default)
+    # determine if post or get (default)
     req = requests.get
     if mode.upper() == "POST":
         req = requests.post
 
     for _ in xrange(ATTEMPTS):
         try:
-            if len(proxies) == 0:
-                response = req(url, data=data)
-            else:
-                response = req(url, data=data, proxies=proxies)
+            response = req(url, data=data, proxies=proxies)
             if response.status_code == httplib.OK:
                 logger.info(success_message)
                 return response

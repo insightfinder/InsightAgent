@@ -1,5 +1,5 @@
 [zipkin]
-url = 
+url = http://localhost:9411
 # define services to include (default all)
 services_filter = 
 # define span names to include (default all)
@@ -9,11 +9,11 @@ zipkin_https_proxy =
 
 [insightfinder]
 user_name = 
-license_key = 
+license_key =
 project_name = 
-sampling_interval = 10
+sampling_interval = 
 # log projects treat this as chunk_lines * 100
 chunk_lines = 50
-url = http://stg.insightfinder.com
+url = https://app.insightfinder.com
 if_http_proxy = 
 if_https_proxy = 
