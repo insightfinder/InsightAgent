@@ -526,6 +526,9 @@ def replay_sar(metric_file_path, command):
         # parse opening lines
         line = metric_file.readline()
         header = line.split()
+        if len(header) < 4:
+            logger.error('Error in sar file header')
+            sys.exit(1)
         host = header[2][1:-1]
         # assume DD/MM/YYYY
         date = header[3]
