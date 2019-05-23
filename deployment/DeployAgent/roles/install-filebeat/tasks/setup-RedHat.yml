@@ -21,4 +21,4 @@
     name: /tmp/filebeat-6.6.0-x86_64.rpm
     state: present
   when: filebeat_install_offline
-
+  ignore_errors: True
