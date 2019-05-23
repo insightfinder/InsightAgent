@@ -16,7 +16,7 @@
      src: filebeat-6.6.0-x86_64.rpm
      dest: /tmp/filebeat-6.6.0-x86_64.rpm
   when: filebeat_install_offline
-- name: Install Logstash
+- name: Install Filebeat
   yum:
     name: /tmp/filebeat-6.6.0-x86_64.rpm
     state: present
