@@ -92,7 +92,7 @@ def get_parameters():
     if options.chunkLines is None and parameters['mode'] == 'metricFileReplay':
         parameters['chunkLines'] = 100
     elif options.chunkLines is None:
-        parameters['chunkLines'] = 40000
+        parameters['chunkLines'] = 2000
     else:
         parameters['chunkLines'] = int(options.chunkLines)
     # Optional split id and split by for metric file replay
