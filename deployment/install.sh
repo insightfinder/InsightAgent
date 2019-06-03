@@ -386,9 +386,6 @@ elif [ $AGENT_TYPE == 'datadog' ]; then
 		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
 	fi
 elif [ $AGENT_TYPE == 'newrelic' ]; then
-    if [ -z "$REPORTING_INTERVAL" ]; then
-	    $REPORTING_INTERVAL='10'
-    fi
 	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
 	if [ "$IS_SECOND_REPORTING" = true ] ; then
 		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
