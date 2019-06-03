@@ -81,13 +81,17 @@ while [ "$1" != "" ]; do
 		-l )	shift
 			CHUNK_LINES=$1
 			;;
+		-r )	shift
+			REPORTING_INTERVAL=$1
+			;;
 		* )	usage
 			exit 1
 	esac
 	shift
 done
-
-REPORTING_INTERVAL=$SAMPLING_INTERVAL
+if [ -z "$REPORTING_INTERVAL" ]; then
+	REPORTING_INTERVAL=$SAMPLING_INTERVAL
+fi
 
 #Check if sampling interval is in seconds
 lastCharSampling=${SAMPLING_INTERVAL: -1}
@@ -120,7 +124,7 @@ if [ -z "$SERVER_URL" ]; then
 	SERVER_URL='https://app.insightfinder.com'
 fi
 
-if [ -z "$AGENT_TYPE" ] || [ -z "$REPORTING_INTERVAL" ] || [ -z "$SAMPLING_INTERVAL" ] || [ -z "$LICENSEKEY" ] || [ -z "$USERNAME" ] || [ -z "$PROJECTNAME" ]; then
+if [ -z "$AGENT_TYPE" ] || [ -z "$SAMPLING_INTERVAL" ] || [ -z "$LICENSEKEY" ] || [ -z "$USERNAME" ] || [ -z "$PROJECTNAME" ]; then
 	usage
 	exit 1
 fi
@@ -215,6 +219,27 @@ elif [ $AGENT_TYPE == 'datadog' ]; then
 		echo "if_https_proxy =" >> ${PATH_TO_CONFIG_INI}
 		echo "host_chunk_size = 1" >> ${PATH_TO_CONFIG_INI}
 		echo "metric_chunk_size = 50" >> ${PATH_TO_CONFIG_INI}
+	fi
+elif [ $AGENT_TYPE == 'newrelic' ]; then
+    	if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
+		touch ${PATH_TO_CONFIG_INI}
+		echo "[newrelic]" >> ${PATH_TO_CONFIG_INI}
+		echo "app_name_filter =" >> ${PATH_TO_CONFIG_INI}
+		echo "host_filter =" >> ${PATH_TO_CONFIG_INI}
+		echo "metrics =" >> ${PATH_TO_CONFIG_INI}
+		echo "run_interval =$REPORTING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
+		echo "agent_http_proxy =" >> ${PATH_TO_CONFIG_INI}
+		echo "agent_https_proxy =" >> ${PATH_TO_CONFIG_INI}
+		echo " " >> ${PATH_TO_CONFIG_INI}
+		echo "[insightfinder]" >> ${PATH_TO_CONFIG_INI}
+		echo "user_name=$USERNAME" >> ${PATH_TO_CONFIG_INI}
+		echo "license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
+		echo "project_name=$PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
+		echo "sampling_interval=$SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
+		echo "chunk_size_kb = 1024" >> ${PATH_TO_CONFIG_INI}
+		echo "url = $SERVER_URL" >> ${PATH_TO_CONFIG_INI}
+		echo "if_http_proxy =" >> ${PATH_TO_CONFIG_INI}
+		echo "if_https_proxy =" >> ${PATH_TO_CONFIG_INI}
 	fi
 elif [ $AGENT_TYPE == 'kafka' ]; then
 	if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
@@ -355,6 +380,16 @@ elif [ $AGENT_TYPE == 'datadog' ]; then
 	    CHUNK_SIZE='50'
     fi
 	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -w $SERVER_URL -c $CHUNK_SIZE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
+	if [ "$IS_SECOND_REPORTING" = true ] ; then
+		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
+	else
+		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
+	fi
+elif [ $AGENT_TYPE == 'newrelic' ]; then
+    if [ -z "$REPORTING_INTERVAL" ]; then
+	    $REPORTING_INTERVAL='10'
+    fi
+	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
 	if [ "$IS_SECOND_REPORTING" = true ] ; then
 		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
 	else
