@@ -126,6 +126,7 @@ def get_agent_config_vars(normalization_map):
             user_name = parser.get('insightfinder', 'user_name')
             sampling_interval = parser.get('metrics', 'sampling_interval')
             selected_fields = parser.get('metrics', 'selected_fields').split(",")
+            exclude_tags = parser.get('metrics', 'exclude_tags').split(",")
             all_metrics = parser.get('metrics', 'all_metrics').split(",")
             normalization_ids = parser.get('metrics', 'normalization_id').split(",")
             if len(license_key) == 0:
@@ -144,6 +145,7 @@ def get_agent_config_vars(normalization_map):
                 config_vars['selected_fields'] = selected_fields
             elif len(selected_fields[0]) == 0:
                 config_vars['selected_fields'] = "All"
+            config_vars['exclude_tags'] = exclude_tags
             if len(normalization_ids[0]) != 0 and len(all_metrics) == len(normalization_ids):
                 for index in range(len(all_metrics)):
                     metric = all_metrics[index]
@@ -444,9 +446,15 @@ def process_replay(file_path):
 
         else:  # metric file replay processing
             # handle different metric agents
-            if parameters['agentType'] == 'sar':
-                for command in ['sar', 'sar -n DEV', 'sar -p -d']:
-                    replay_sar(file_path, command)
+            if 'sar' in parameters['agentType']:
+                if parameters['agentType'] == 'sar-cpu' or parameters['agentType'] == 'sar':
+                    replay_sar(file_path, 'sar')
+                if parameters['agentType'] == 'sar-network' or parameters['agentType'] == 'sar':
+                    replay_sar(file_path, 'sar -n DEV')
+                if parameters['agentType'] == 'sar-storage' or parameters['agentType'] == 'sar':
+                    replay_sar(file_path, 'sar -p -d')
+                if parameters['agentType'] == 'sar-mem' or parameters['agentType'] == 'sar':
+                    replay_sar(file_path, 'sar -r')
             else:
                 # default
                 with open(file_path) as metricFile:
@@ -518,7 +526,10 @@ def replay_sar(metric_file_path, command):
         # parse opening lines
         line = metric_file.readline()
         header = line.split()
-        instance = header[2][1:-1]
+        if len(header) < 4:
+            logger.error('Error in sar file header')
+            sys.exit(1)
+        host = header[2][1:-1]
         # assume DD/MM/YYYY
         date = header[3]
         format = '%m/%d/%Y %I:%M:%S %p'
@@ -537,6 +548,7 @@ def replay_sar(metric_file_path, command):
         row_count = 0
         min_timestamp_epoch = 0
         max_timestamp_epoch = -1
+        exclude_tags = agent_config_vars['exclude_tags']
 
         # read each line of metrics
         line = metric_file.readline()
@@ -559,9 +571,20 @@ def replay_sar(metric_file_path, command):
             ampm = row[1]
 
             # secondary instance tag
-            tag = instance
+            exclude_flag = False
+            instance = host
             if start_index == 3:
-                tag += '-' + row[2]
+                # check for excluded tags
+                device = row[2]
+                if len(exclude_tags) != 0:
+                    for tag in exclude_tags:
+                        if device == tag or (tag.endswith('*') and device.startswith(tag.split('*')[0])):
+                            exclude_flag = True
+                            break
+                instance += '_' + device
+            if exclude_flag:
+                line = metric_file.readline()
+                continue
 
             timestamp = _get_timestamp_sar(date, time, ampm, parameters['timeZone'], format)
             current_row['timestamp'] = str(timestamp)
@@ -572,7 +595,7 @@ def replay_sar(metric_file_path, command):
 
             # metric values
             for i in range(start_index, len(row)):
-                column_name = field_names[i].strip() + '[' + tag + ']'
+                column_name = field_names[i].strip() + '[' + instance + ']'
                 current_row[column_name] = row[i]
             to_send_metric_data.append(current_row)
             current_line_count += 1
