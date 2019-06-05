@@ -5,20 +5,21 @@
     state: present
   when: not filebeat_install_offline
 
-- name: Add Filebeat repository.
+- name: Add Filebeat repository
   template:
     src: beats.repo.j2
     dest: /etc/yum.repos.d/beats.repo
     mode: 0644
   when: not filebeat_install_offline
+
 - name: Copy rpm file to server
   copy:
      src: filebeat-6.6.0-x86_64.rpm
      dest: /tmp/filebeat-6.6.0-x86_64.rpm
   when: filebeat_install_offline
-- name: Install Logstash
+ 
+- name: Install Filebeat
   yum:
     name: /tmp/filebeat-6.6.0-x86_64.rpm
     state: present
   when: filebeat_install_offline
-
