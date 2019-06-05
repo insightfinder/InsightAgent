@@ -21,7 +21,6 @@ from xlrd import open_workbook
 from time import gmtime, strftime
 
 directory = "Config"
-tag_key = 'tag'
 file_name_key = 'file_name'
 project_name_key = 'project_name'
 user_name_key = 'user_name'
@@ -119,7 +118,6 @@ def get_agent_config_vars():
         if os.path.exists(os.path.join(parameters['homepath'], "config.ini")):
             parser = SafeConfigParser()
             parser.read(os.path.join(parameters['homepath'], "config.ini"))
-            tag = parser.get(directory, 'tag')
             file_name = parser.get(directory, 'file_name')
             license_key = parser.get(directory, 'insightFinder_license_key')
             project_name = parser.get(directory, 'insightFinder_project_name')
@@ -129,9 +127,6 @@ def get_agent_config_vars():
             timestamp_pattern = parser.get(directory, 'timestamp_pattern')
             instance_name = parser.get(directory, 'instance_name_key')
             keys_to_filter = json.loads(parser.get(directory, 'keys_to_filter'))
-            if len(tag) == 0:
-                logger.error("Agent not correctly configured(tag name). Check config file.")
-                sys.exit(1)
             if len(file_name) == 0:
                 logger.error("Agent not correctly configured(file name). Check config file.")
                 sys.exit(1)
@@ -156,7 +151,6 @@ def get_agent_config_vars():
             if len(instance_name) == 0:
                 logger.error("Agent not correctly configured(instance name). Check config file.")
                 sys.exit(1)
-            config_vars[tag_key] = tag
             config_vars[file_name_key] = file_name
             config_vars['license_key'] = license_key
             config_vars[project_name_key] = project_name
