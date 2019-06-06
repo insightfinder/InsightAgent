@@ -227,15 +227,15 @@ elif [ $AGENT_TYPE == 'newrelic' ]; then
 		echo "app_name_filter =" >> ${PATH_TO_CONFIG_INI}
 		echo "host_filter =" >> ${PATH_TO_CONFIG_INI}
 		echo "metrics =" >> ${PATH_TO_CONFIG_INI}
-		echo "run_interval =$REPORTING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
+		echo "run_interval = $REPORTING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
 		echo "agent_http_proxy =" >> ${PATH_TO_CONFIG_INI}
 		echo "agent_https_proxy =" >> ${PATH_TO_CONFIG_INI}
 		echo " " >> ${PATH_TO_CONFIG_INI}
 		echo "[insightfinder]" >> ${PATH_TO_CONFIG_INI}
-		echo "user_name=$USERNAME" >> ${PATH_TO_CONFIG_INI}
-		echo "license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
-		echo "project_name=$PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
-		echo "sampling_interval=$SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
+		echo "user_name = $USERNAME" >> ${PATH_TO_CONFIG_INI}
+		echo "license_key = $LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
+		echo "project_name = $PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
+		echo "sampling_interval = $SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
 		echo "chunk_size_kb = 1024" >> ${PATH_TO_CONFIG_INI}
 		echo "url = $SERVER_URL" >> ${PATH_TO_CONFIG_INI}
 		echo "if_http_proxy =" >> ${PATH_TO_CONFIG_INI}
@@ -449,5 +449,5 @@ if [ "$AGENT_TYPE" != 'kafka-logs' ] && [ "$AGENT_TYPE" != 'kafka' ]; then
 	sudo chown root:root $TEMPCRON
     sudo chmod 644 $TEMPCRON
     sudo cat $TEMPCRON >> /etc/cron.d/ifagent
-    echo "Agent configuration completed. Two cron jobs are created via /etc/cron.d/ifagent"
+    echo "Agent configuration completed. Cron jobs created via /etc/cron.d/ifagent"
 fi

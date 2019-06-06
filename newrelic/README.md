@@ -46,7 +46,7 @@ source pyenv/bin/activate
 
 3) Run the below command to install agent.(The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required)
 ```
-./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -r REPORTING_INTERVAL -t newrelic -w SERVER_URL -s SAMPLING_INTERVAL
+sudo ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -r REPORTING_INTERVAL -t newrelic -w SERVER_URL -s SAMPLING_INTERVAL
 
 Required: PROJECT_NAME, USER_NAME, LICENSE_KEY, SAMPLING_INTERVAL  
 REPORTING_INTERVAL is the time interval for backend collectior
