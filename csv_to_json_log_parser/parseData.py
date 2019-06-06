@@ -176,6 +176,7 @@ def read_message():
     keys_to_filter_list = config_vars[keys_to_filter_key]
     for sheet in wb.sheets():
         for row in range(sheet.nrows):
+            timestamp = 0
             raw_data = {}
             current_log_msg = dict()
             for col in range (sheet.ncols):
@@ -183,12 +184,18 @@ def read_message():
                 if (count == 0):
                     json_keys.append(value)
                 else:
+                    if (json_keys[col] == config_vars[timestamp_key]):
+                        timestamp = value
+                        continue
                     if (json_keys[col] not in keys_to_filter_list):
                         raw_data[json_keys[col]] = value
-            tag = ""
+            if (timestamp == 0 and count != 0):
+                logger.info("Corrputed timestamp filed.")
+                continue
+            tag = "unknownApplication"
             if (count != 0):
                 tag = raw_data[config_vars[instance_name_key]]
-                current_log_msg['timestamp'] = get_timestamp_for_zone(raw_data[config_vars[timestamp_key]], "GMT", config_vars[timestamp_pattern_key])
+                current_log_msg['timestamp'] = get_timestamp_for_zone(timestamp, "GMT", config_vars[timestamp_pattern_key])
                 current_log_msg['tag'] = tag
                 current_log_msg['data'] = raw_data
                 if tag not in collected_logs_map:
