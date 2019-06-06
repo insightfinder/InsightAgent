@@ -1,0 +1,12 @@
+[Config]
+file_name = 
+insightFinder_license_key = 
+insightFinder_project_name = 
+insightFinder_user_name = 
+sampling_interval = 
+timestamp_key = 
+#Example %%Y/%%m/%%d %%H:%%M:%%S
+timestamp_pattern = 
+instance_name_key = 
+#Example ["Alert Count", "Appview", "Date", "Week Of Year"]
+keys_to_filter=[]
