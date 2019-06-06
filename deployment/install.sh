@@ -449,5 +449,5 @@ if [ "$AGENT_TYPE" != 'kafka-logs' ] && [ "$AGENT_TYPE" != 'kafka' ]; then
 	sudo chown root:root $TEMPCRON
     sudo chmod 644 $TEMPCRON
     sudo cat $TEMPCRON >> /etc/cron.d/ifagent
-    echo "Agent configuration completed. Cron jobs created via /etc/cron.d/ifagent"
+    echo "Agent configuration completed. Cron jobs created in /etc/cron.d/ifagent"
 fi
