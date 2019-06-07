@@ -190,7 +190,7 @@ def read_message():
                     if (json_keys[col] not in keys_to_filter_list):
                         raw_data[json_keys[col]] = value
             if (timestamp == 0 and count != 0):
-                logger.info("Corrputed timestamp filed.")
+                logger.info("Corrupted timestamp field.")
                 continue
             tag = "unknownApplication"
             if (count != 0):
