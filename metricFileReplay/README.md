@@ -126,6 +126,8 @@ ansible-playbook insightagent.yaml
 ```
 
 ### Sending Data
+If you are replaying cs data, use `getmetrics_cs.py` in this folder. Copy `config.ini.template` to `config.ini` and fill it in as appropriate, then run it as `python getmetrics_cs.py`.
+
 0) If you skipped to this step, set up `common/config.ini` in the InsightAgent folder.
 
 1) Make sure each file is .csv formatted, starts with a row of headers and the headers should have "timestamp" field in it.
