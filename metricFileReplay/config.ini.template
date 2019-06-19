@@ -1,0 +1,24 @@
+[agent]
+file_path = 
+directory = 
+active_filters = meta,app,region,env,os,host,type,unit,part
+meta = 
+app =
+region =
+env = 
+os = 
+host = 
+type = 
+unit = 
+part = 
+
+[insightfinder]
+user_name = 
+license_key = 
+project_name = 
+sampling_interval = 
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+url = https://app.insightfinder.com
+if_http_proxy = 
+if_https_proxy = 
