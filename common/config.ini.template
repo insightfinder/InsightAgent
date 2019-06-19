@@ -1,0 +1,18 @@
+[agent]
+# define things to include (default all)
+thing1_filter = 
+# define things to exclude (default none)
+thing2_exclude = 
+agent_http_proxy = 
+agent_https_proxy = 
+
+[insightfinder]
+user_name = 
+license_key = 
+project_name = 
+sampling_interval = 
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+url = https://app.insightfinder.com
+if_http_proxy = 
+if_https_proxy = 
