@@ -207,6 +207,11 @@ def should_filter_per_config(setting, value):
     return len(agent_config_vars[setting]) != 0 and value not in agent_config_vars[setting]
 
 
+def should_exclude_per_config(setting, value):
+    """ determine if an agent config exclude setting would exclude a given value """
+    return len(agent_config_vars[setting]) != 0 and value in agent_config_vars[setting]
+
+
 def get_json_size_bytes(json_data):
     """ get size of json object in bytes """
     return len(bytearray(json.dumps(json_data)))

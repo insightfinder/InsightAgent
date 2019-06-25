@@ -1,8 +1,16 @@
 [agent]
 # define things to include (default all)
-thing1_filter = 
+# For example, 'host_filter = a123,z987' would only include entries from those hosts.
+# Usage: 
+# if should_filter_per_config("field_filter", value_to_check):
+#   return
+field_filter = 
 # define things to exclude (default none)
-thing2_exclude = 
+# For example, 'host_exlude = b456,localhost' would not report entries from those hosts.
+# Usage: 
+# if should_exclude_per_config("field_exclude", value_to_check):
+#   return
+field_exclude = 
 agent_http_proxy = 
 agent_https_proxy = 
 
@@ -10,6 +18,7 @@ agent_https_proxy =
 user_name = 
 license_key = 
 project_name = 
+# required for metric projects
 sampling_interval = 
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
