@@ -116,11 +116,9 @@ def get_agent_config_vars():
             config_vars['groupId'] = group_id
             config_vars['clientId'] = client_id
             config_vars['dataSendTimeout'] = data_send_timeout    
-            config_vars['ssl_info'] = {
-                'ssl_ca': ssl_ca,
-                'ssl_key': ssl_key,
-                'ssl_certificate': ssl_certificate
-            }
+            config_vars['ssl_ca'] =  ssl_ca,
+            config_vars['ssl_key'] = ssl_key,
+            config_vars['ssl_certificate'] =  ssl_certificate
  
     except IOError:
         logger.error("config.ini file is missing")
@@ -458,6 +456,7 @@ def kafka_data_consumer(consumer_id):
         kafka_kwargs['ssl_key'] = agent_config_vars['ssl_key'] if agent_config_vars['ssl_key'] != ""
         kafka_kwargs['ssl_certificate'] = agent_config_vars['ssl_certificate'] if agent_config_vars['ssl_certificate'] != ""
 
+    logger.debug(kafka_kwargs)
     consumer = KafkaConsumer(**kafka_kwargs)
     consumer.subscribe([topic])
     parseConsumerMessages(consumer, all_metrics_set, filter_hosts)
