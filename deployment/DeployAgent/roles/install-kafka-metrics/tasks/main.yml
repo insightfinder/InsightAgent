@@ -106,8 +106,8 @@
     force: no
 - name: Monit | Add Kafka metric config file
   template:
-    src: kafka-metric.monit.j2
-    dest: /etc/monit.d/kafka-metric
+    src: kafka-metrics.monit.j2
+    dest: /etc/monit.d/kafka-metrics
     owner: root
     group: root
     mode: 0644

@@ -106,8 +106,8 @@
     force: no
 - name: Monit | Add Kafka log config file
   template:
-    src: kafka-log.monit.j2
-    dest: /etc/monit.d/kafka-log
+    src: kafka-logs.monit.j2
+    dest: /etc/monit.d/kafka-logs
     owner: root
     group: root
     mode: 0644
