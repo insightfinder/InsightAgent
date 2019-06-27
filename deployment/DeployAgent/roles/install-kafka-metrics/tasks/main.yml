@@ -89,17 +89,45 @@
   shell: "http_proxy={{ http_proxy }} python {{ansible_env.HOME}}/get-pip.py --no-index --find-links={{ansible_env.HOME}}/pip_packages/"
 - name: Install pip packages for Agent
   shell: "pip install --no-index --find-links='{{ansible_env.HOME}}/pip_packages/' requests pytz kafka"
-- name: Deploy Replay Agent
-  shell: "no_proxy={{ no_proxy }} ./deployment/install.sh
-    -i {{ projectName }}
-    -u {{ userName }}
-    -k {{ licenseKey }}
-    -s {{ samplingInterval }}
-    -t {{ agentType }}
-    -w {{ reportingUrl }}"
-  become: true
-  args:
-    chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
+- name: Agent | Add config.ini
+  template:
+    src: config.ini.j2
+    dest: "{{ansible_env.HOME}}/InsightAgent-master/kafka/config.ini"
+    owner: root
+    group: root
+    mode: 0644
+- name: Monit | Add default config file
+  copy:
+    src: files/monit.conf
+    dest: /etc/monit.conf
+    owner: root
+    group: root
+    mode: 0644
+    force: no
+- name: Monit | Add Kafka metric config file
+  template:
+    src: kafka-metric.monit.j2
+    dest: /etc/monit.d/kafka-metric
+    owner: root
+    group: root
+    mode: 0644
+- name: Monit | Restart Monit daemon
+  systemd:
+    name: monit.service
+    enabled: yes 
+    daemon_reload: yes 
+    state: restarted
+#- name: Deploy Replay Agent
+#  shell: "no_proxy={{ no_proxy }} ./deployment/install.sh
+#    -i {{ projectName }}
+#    -u {{ userName }}
+#    -k {{ licenseKey }}
+#    -s {{ samplingInterval }}
+#    -t {{ agentType }}
+#    -w {{ reportingUrl }}"
+#  become: true
+#  args:
+#    chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
 - name: Monit | Restart Monit daemon
   systemd:
     name: monit.service
