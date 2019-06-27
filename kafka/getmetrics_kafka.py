@@ -81,6 +81,11 @@ def get_agent_config_vars():
             group_id = parser.get('kafka', 'group_id')
             client_id = parser.get('kafka', 'client_id')
             data_send_timeout = parser.get('kafka', 'data_send_timeout')
+            ssl_ca = parser.get('kafka','ssl_ca')
+            ssl_key = parser.get('kafka','ssl_key')
+            ssl_certificate = parser.get('kafka','ssl_certificate')
+
+
             if len(insightFinder_license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
@@ -103,13 +108,20 @@ def get_agent_config_vars():
                     data_send_timeout = int(sampling_interval)
             else:
                 data_send_timeout = int(data_send_timeout)
+
             config_vars['licenseKey'] = insightFinder_license_key
             config_vars['projectName'] = insightFinder_project_name
             config_vars['userName'] = insightFinder_user_name
             config_vars['samplingInterval'] = int(sampling_interval)
             config_vars['groupId'] = group_id
             config_vars['clientId'] = client_id
-            config_vars['dataSendTimeout'] = data_send_timeout
+            config_vars['dataSendTimeout'] = data_send_timeout    
+            config_vars['ssl_info'] = {
+                'ssl_ca': ssl_ca,
+                'ssl_key': ssl_key,
+                'ssl_certificate': ssl_certificate
+            }
+ 
     except IOError:
         logger.error("config.ini file is missing")
     return config_vars
@@ -427,14 +439,26 @@ def add_valuemap(header_field, metric_value, valueMap):
 def kafka_data_consumer(consumer_id):
     logger.info("Started metric consumer number " + consumer_id)
     (brokers, topic, filter_hosts, all_metrics_set) = getKafkaConfig()
-    if agent_config_vars["clientId"] == "":
-        consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest',
-                                 consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id=agent_config_vars['groupId'])
-    else:
-        consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest',
-                                 consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id=agent_config_vars['groupId'], client_id=agent_config_vars["clientId"])
+    # initialize shared kwargs 
+    kafka_kwargs = {
+            'bootstrap_servers': brokers,
+            'auto_offset_reset': 'latest',
+            'consumer_timeout_ms': 1000 * parameters['timeout'],
+            'group_id': agent_config_vars['groupId']
+            }
+
+    # add client ID if given
+    if agent_config_vars["clientId"] != "":
+        kafka_kwargs['client_id'] = agent_config_vars["clientId"]
+
+    # add SSL info
+    if agent_config_vars['ssl_ca'] != "" or agent_config_vars['ssl_key'] != "" or agent_config_vars['ssl_certificate'] != "":
+        kafka_kwargs['security_protocol'] = 'SSL'
+        kafka_kwargs['ssl_ca'] = agent_config_vars['ssl_ca'] if agent_config_vars['ssl_ca'] != ""
+        kafka_kwargs['ssl_key'] = agent_config_vars['ssl_key'] if agent_config_vars['ssl_key'] != ""
+        kafka_kwargs['ssl_certificate'] = agent_config_vars['ssl_certificate'] if agent_config_vars['ssl_certificate'] != ""
+
+    consumer = KafkaConsumer(**kafka_kwargs)
     consumer.subscribe([topic])
     parseConsumerMessages(consumer, all_metrics_set, filter_hosts)
     consumer.close()
