@@ -116,8 +116,8 @@ def get_agent_config_vars():
             config_vars['groupId'] = group_id
             config_vars['clientId'] = client_id
             config_vars['dataSendTimeout'] = data_send_timeout    
-            config_vars['ssl_ca'] =  ssl_ca,
-            config_vars['ssl_key'] = ssl_key,
+            config_vars['ssl_ca'] =  ssl_ca
+            config_vars['ssl_key'] = ssl_key
             config_vars['ssl_certificate'] =  ssl_certificate
  
     except IOError:
