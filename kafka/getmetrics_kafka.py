@@ -81,10 +81,15 @@ def get_agent_config_vars():
             group_id = parser.get('kafka', 'group_id')
             client_id = parser.get('kafka', 'client_id')
             data_send_timeout = parser.get('kafka', 'data_send_timeout')
+            security_protocol = parser.get('kafka', 'security_protocol')
+            ssl_context = parser.get('kafka','ssl_context')
+            ssl_check_hostname = parser.get('kafka','ssl_check_hostname')
             ssl_ca = parser.get('kafka','ssl_ca')
-            ssl_key = parser.get('kafka','ssl_key')
             ssl_certificate = parser.get('kafka','ssl_certificate')
-
+            ssl_key = parser.get('kafka','ssl_key')
+            ssl_password = parser.get('kafka','ssl_password')
+            ssl_crl = parser.get('kafka','ssl_crl')
+            ssl_ciphers = parser.get('kafka','ssl_ciphers')>
 
             if len(insightFinder_license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
@@ -109,6 +114,10 @@ def get_agent_config_vars():
             else:
                 data_send_timeout = int(data_send_timeout)
 
+            if len(security_protocol) == 0:
+                logger.info('security_protocol not defined, assuming PLAINTEXT')
+                security_protocol = 'PLAINTEXT'
+
             config_vars['licenseKey'] = insightFinder_license_key
             config_vars['projectName'] = insightFinder_project_name
             config_vars['userName'] = insightFinder_user_name
@@ -116,9 +125,15 @@ def get_agent_config_vars():
             config_vars['groupId'] = group_id
             config_vars['clientId'] = client_id
             config_vars['dataSendTimeout'] = data_send_timeout    
+            config_vars['security_protocol'] = security_protocol
+            config_vars['ssl_context'] =  ssl_context
+            config_vars['ssl_check_hostname'] =  ssl_check_hostname
             config_vars['ssl_ca'] =  ssl_ca
-            config_vars['ssl_key'] = ssl_key
             config_vars['ssl_certificate'] =  ssl_certificate
+            config_vars['ssl_key'] = ssl_key
+            config_vars['ssl_password'] =  ssl_password
+            config_vars['ssl_crl'] =  ssl_crl
+            config_vars['ssl_ciphers'] =  ssl_ciphers
  
     except IOError:
         logger.error("config.ini file is missing")
@@ -450,11 +465,16 @@ def kafka_data_consumer(consumer_id):
         kafka_kwargs['client_id'] = agent_config_vars["clientId"]
 
     # add SSL info
-    if agent_config_vars['ssl_ca'] != "" or agent_config_vars['ssl_key'] != "" or agent_config_vars['ssl_certificate'] != "":
+    if agent_config_vars['security_protocol'] == 'SSL': 
         kafka_kwargs['security_protocol'] = 'SSL'
+        kafka_kwargs['ssl_context'] = agent_config_vars['ssl_context'] if agent_config_vars['ssl_context'] != ""
+        kafka_kwargs['ssl_check_hostname'] = agent_config_vars['ssl_check_hostname'] if agent_config_vars['ssl_check_hostname'] != ""
         kafka_kwargs['ssl_ca'] = agent_config_vars['ssl_ca'] if agent_config_vars['ssl_ca'] != ""
-        kafka_kwargs['ssl_key'] = agent_config_vars['ssl_key'] if agent_config_vars['ssl_key'] != ""
         kafka_kwargs['ssl_certificate'] = agent_config_vars['ssl_certificate'] if agent_config_vars['ssl_certificate'] != ""
+        kafka_kwargs['ssl_key'] = agent_config_vars['ssl_key'] if agent_config_vars['ssl_key'] != ""
+        kafka_kwargs['ssl_password'] = agent_config_vars['ssl_password'] if agent_config_vars['ssl_password'] != ""
+        kafka_kwargs['ssl_crl'] = agent_config_vars['ssl_crl'] if agent_config_vars['ssl_crl'] != ""
+        kafka_kwargs['ssl_ciphers'] = agent_config_vars['ssl_ciphers'] if agent_config_vars['ssl_ciphers'] != ""
 
     logger.debug(kafka_kwargs)
     consumer = KafkaConsumer(**kafka_kwargs)
