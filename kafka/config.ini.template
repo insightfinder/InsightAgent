@@ -5,6 +5,10 @@ bootstrap_servers =
 topic =
 filter_hosts =
 all_metrics =
+use_ssl = false
+ssl_key = 
+ssl_ca =
+ssl_certificate =
 
 insightFinder_license_key =
 insightFinder_project_name =
