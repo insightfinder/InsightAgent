@@ -212,14 +212,14 @@ def send_data(metric_data):
     # prepare data for metric streaming agent
     to_send_data_dict = dict()
     to_send_data_dict["metricData"] = json.dumps(metric_data)
-    to_send_data_dict["licenseKey"] = agentConfigVars['licenseKey']
+    to_send_data_dict["licenseKey"] = agent_config_vars['licenseKey']
     if parameters['project'] is None:
-        to_send_data_dict["projectName"] = agentConfigVars['projectName']
+        to_send_data_dict["projectName"] = agent_config_vars['projectName']
     else:
         to_send_data_dict["projectName"] = parameters['project']
-    to_send_data_dict["userName"] = agentConfigVars['userName']
+    to_send_data_dict["userName"] = agent_config_vars['userName']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
-    to_send_data_dict["samplingInterval"] = str(int(reportingConfigVars['reporting_interval'] * 60))
+    to_send_data_dict["samplingInterval"] = str(int(agent_config_vars['samplingInterval'] * 60))
     to_send_data_dict["agentType"] = "LogStreaming"
 
     to_send_data_json = json.dumps(to_send_data_dict)
@@ -379,8 +379,8 @@ def kafka_data_consumer(consumer_id):
 if __name__ == "__main__":
     logger = set_logger_config()
     parameters = get_parameters()
-    agentConfigVars = get_agent_config_vars()
-    reportingConfigVars = get_reporting_config_vars()
+    agent_config_vars = get_agent_config_vars()
+    # reportingConfigVars = get_reporting_config_vars()
 
     try:
         t1 = Process(target=kafka_data_consumer, args=('1',))
