@@ -138,7 +138,7 @@ def get_agent_config_vars():
             # SSL
             config_vars['security_protocol'] = security_protocol
             config_vars['ssl_context'] = ssl_context
-            config_vars['ssl_check_hostname'] = False if ssl_check_hostname == 'False' else True
+            config_vars['ssl_check_hostname'] = ssl_check_hostname
             config_vars['ssl_ca'] = ssl_ca
             config_vars['ssl_certificate'] = ssl_certificate
             config_vars['ssl_key'] = ssl_key
@@ -268,7 +268,6 @@ def parseConsumerMessages(consumer, all_metrics_set, filter_hosts):
     for message in consumer:
         try:
             json_message = json.loads(message.value)
-            logger.info('msg rcvd')
             logger.debug(json_message)
             timestamp = json_message.get('@timestamp', {})[:-5]
             host_name = json_message.get('beat', {}).get('hostname', {})
