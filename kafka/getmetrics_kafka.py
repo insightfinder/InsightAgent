@@ -137,14 +137,14 @@ def get_agent_config_vars():
 
             # SSL
             config_vars['security_protocol'] = security_protocol
-            config_vars['ssl_context'] =  ssl_context
-            config_vars['ssl_check_hostname'] =  ssl_check_hostname
-            config_vars['ssl_ca'] =  ssl_ca
-            config_vars['ssl_certificate'] =  ssl_certificate
+            config_vars['ssl_context'] = ssl_context
+            config_vars['ssl_check_hostname'] = False if ssl_check_hostname == 'False' else True
+            config_vars['ssl_ca'] = ssl_ca
+            config_vars['ssl_certificate'] = ssl_certificate
             config_vars['ssl_key'] = ssl_key
-            config_vars['ssl_password'] =  ssl_password
-            config_vars['ssl_crl'] =  ssl_crl
-            config_vars['ssl_ciphers'] =  ssl_ciphers
+            config_vars['ssl_password'] = ssl_password
+            config_vars['ssl_crl'] = ssl_crl
+            config_vars['ssl_ciphers'] = ssl_ciphers
  
             #SASL
             config_vars['sasl_mechanism'] = sasl_mechanism
@@ -268,7 +268,8 @@ def parseConsumerMessages(consumer, all_metrics_set, filter_hosts):
     for message in consumer:
         try:
             json_message = json.loads(message.value)
-            #logger.info(json_message)
+            logger.info('msg rcvd')
+            logger.debug(json_message)
             timestamp = json_message.get('@timestamp', {})[:-5]
             host_name = json_message.get('beat', {}).get('hostname', {})
             metric_module = json_message.get('metricset', {}).get('module', {})
@@ -468,14 +469,14 @@ def add_valuemap(header_field, metric_value, valueMap):
         valueMap[header_field] = str(metric_value)
 
 def kafka_data_consumer(consumer_id):
-    logger.info("Started metric consumer number " + consumer_id)
     (brokers, topic, filter_hosts, all_metrics_set) = getKafkaConfig()
     # initialize shared kwargs 
     kafka_kwargs = {
             'bootstrap_servers': brokers,
             'auto_offset_reset': 'latest',
             'consumer_timeout_ms': 1000 * parameters['timeout'],
-            'group_id': agent_config_vars['groupId']
+            'group_id': agent_config_vars['groupId'],
+            'api_version': (0, 9)
             }
 
     # add client ID if given
@@ -485,26 +486,45 @@ def kafka_data_consumer(consumer_id):
     # add SSL info
     if agent_config_vars['security_protocol'] == 'SSL': 
         kafka_kwargs['security_protocol'] = 'SSL'
-        kafka_kwargs['ssl_context'] = agent_config_vars['ssl_context'] if agent_config_vars['ssl_context'] != "" else None
-        kafka_kwargs['ssl_check_hostname'] = agent_config_vars['ssl_check_hostname'] if agent_config_vars['ssl_check_hostname'] != "" else None
-        kafka_kwargs['ssl_ca'] = agent_config_vars['ssl_ca'] if agent_config_vars['ssl_ca'] != "" else None
-        kafka_kwargs['ssl_certificate'] = agent_config_vars['ssl_certificate'] if agent_config_vars['ssl_certificate'] != "" else None
-        kafka_kwargs['ssl_key'] = agent_config_vars['ssl_key'] if agent_config_vars['ssl_key'] != "" else None
-        kafka_kwargs['ssl_password'] = agent_config_vars['ssl_password'] if agent_config_vars['ssl_password'] != "" else None
-        kafka_kwargs['ssl_crl'] = agent_config_vars['ssl_crl'] if agent_config_vars['ssl_crl'] != "" else None
-        kafka_kwargs['ssl_ciphers'] = agent_config_vars['ssl_ciphers'] if agent_config_vars['ssl_ciphers'] != "" else None
-
+        if agent_config_vars['ssl_context'] != "":
+            kafka_kwargs['ssl_context'] = agent_config_vars['ssl_context']
+        if agent_config_vars['ssl_check_hostname'] == "False":
+            kafka_kwargs['ssl_check_hostname'] = False
+        if agent_config_vars['ssl_ca'] != "":
+            kafka_kwargs['ssl_cafile'] = agent_config_vars['ssl_ca']
+        if agent_config_vars['ssl_certificate'] != "":
+            kafka_kwargs['ssl_certfile'] = agent_config_vars['ssl_certificate']
+        if agent_config_vars['ssl_key'] != "":
+            kafka_kwargs['ssl_keyfile'] = agent_config_vars['ssl_key']
+        if agent_config_vars['ssl_password'] != "":
+            kafka_kwargs['ssl_password'] = agent_config_vars['ssl_password'].strip()
+        if agent_config_vars['ssl_crl'] != "":
+            kafka_kwargs['ssl_crlfile'] = agent_config_vars['ssl_crl']
+        if agent_config_vars['ssl_ciphers'] != "":
+            kafka_kwargs['ssl_ciphers'] = agent_config_vars['ssl_ciphers']
+        
     # add SASL info
     if len(agent_config_vars['sasl_mechanism']) != 0:
-        kafka_kwargs['sasl_mechanism'] = agent_config_vars['sasl_mechanism'] if agent_config_vars['sasl_mechanism'] != "" else None
-        kafka_kwargs['sasl_plain_username'] = agent_config_vars['sasl_plain_username'] if agent_config_vars['sasl_plain_username'] != "" else None
-        kafka_kwargs['sasl_plain_password'] = agent_config_vars['sasl_plain_password'] if agent_config_vars['sasl_plain_password'] != "" else None
-        kafka_kwargs['sasl_kerberos_service_name'] = agent_config_vars['sasl_kerberos_service_name'] if agent_config_vars['sasl_kerberos_service_name'] != "" else None
-        kafka_kwargs['sasl_kerberos_domain_name'] = agent_config_vars['sasl_kerberos_domain_name'] if agent_config_vars['sasl_kerberos_domain_name'] != "" else None
-        kafka_kwargs['sasl_oauth_token_provider '] = agent_config_vars['sasl_oauth_token_provider '] if agent_config_vars['sasl_oauth_token_provider '] != "" else None
+        kafka_kwargs['sasl_mechanism'] = agent_config_vars['sasl_mechanism']
+
+        if agent_config_vars['sasl_plain_username'] != "":
+            kafka_kwargs['sasl_plain_username'] = agent_config_vars['sasl_plain_username'] 
+            
+        if agent_config_vars['sasl_plain_password'] != "":
+            kafka_kwargs['sasl_plain_password'] = agent_config_vars['sasl_plain_password'] 
+
+        if agent_config_vars['sasl_kerberos_service_name'] != "": 
+            kafka_kwargs['sasl_kerberos_service_name'] = agent_config_vars['sasl_kerberos_service_name'] 
+
+        if agent_config_vars['sasl_kerberos_domain_name'] != "": 
+            kafka_kwargs['sasl_kerberos_domain_name'] = agent_config_vars['sasl_kerberos_domain_name'] 
+
+        if agent_config_vars['sasl_oauth_token_provider '] != "":
+            kafka_kwargs['sasl_oauth_token_provider '] = agent_config_vars['sasl_oauth_token_provider '] 
 
     logger.debug(kafka_kwargs)
     consumer = KafkaConsumer(**kafka_kwargs)
+    logger.info("Started metric consumer number " + consumer_id)
     consumer.subscribe([topic])
     parseConsumerMessages(consumer, all_metrics_set, filter_hosts)
     consumer.close()
