@@ -4,6 +4,7 @@ topic =
 filter_hosts =
 client_id =
 group_id =
+sampling_interval = 1
 insightFinder_license_key =
 insightFinder_project_name =
 insightFinder_user_name =
