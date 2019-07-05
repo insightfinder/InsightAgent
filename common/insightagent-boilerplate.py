@@ -40,9 +40,6 @@ def start_data_processing():
     """
     track['mode'] = 'METRIC|METRICREPLAY|LOG|LOGREPLAY|INCIDENT|INCIDENTREPLAY'
     
-    # you can optionally also set a timestamp format in track
-    track['timestamp_format'] = 'See datetime.strptime documentation'
-    
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
