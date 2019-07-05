@@ -1,4 +1,5 @@
 [agent]
+timestamp_format = 
 # define things to include (default all)
 # For example, 'host_filter = a123,z987' would only include entries from those hosts.
 # Usage: 
@@ -18,6 +19,7 @@ agent_https_proxy =
 user_name = 
 license_key = 
 project_name = 
+project_type =
 # required for metric projects
 sampling_interval = 
 # what size to limit chunks sent to IF to, as kb
