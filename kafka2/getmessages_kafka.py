@@ -13,6 +13,7 @@ from optparse import OptionParser
 from itertools import islice
 from datetime import datetime
 import dateutil
+from multiprocessing import Process
 from dateutil.tz import tzlocal
 import urlparse
 import httplib
@@ -23,157 +24,51 @@ from kafka import KafkaConsumer
 This script gathers data to send to Insightfinder
 '''
 
+def start_data_processing(thread_number):
+    # open consumer
+    consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
+    logger.info('Started metric consumer number ' + str(thread_number))
+    consumer.subscribe(agent_config_vars['topics'])
+    logger.info('Successfully subscribed to topics' + str(agent_config_vars['topics']))
+    parse_messages_kafka(consumer)
+    consumer.close()
+    logger.info('Closed consumer number ' + str(thread_number))
+
+
+def parse_messages_kafka(consumer):
+    logger.info('Reading messages')
+    for message in consumer:
+        try:
+            logger.info('Message received')
+            logger.debug(message)
+            if agent_config_vars['data_format'] == 'JSON':
+                parse_json_message(json.loads(message.value))
+            elif agent_config_vars['data_format'] == 'CSV':
+                parse_csv_message(message.value.split(','))
+            else:
+                parse_raw_message(message)
+        except Exception as e:
+            logger.warn('Error when parsing message')
+            logger.warn(e)
+            continue
+
+
 def raw_parse_log(message):
     # call as log_handoff(*raw_parse(message))
-    timestamp = get_timestamp_from_date_string(message) 
-    data = message[0]
-    instance = message[0]
-    device = message[0]
+    timestamp = get_timestamp_from_date_string(time.time()) 
+    data = 'data'
+    instance = 'instance'
+    device = 'device'
     return timestamp, data, instance, device
 
 
 def raw_parse_metric(message):
     # call as metric_handoff(*raw_parse(message))
-    timestamp = get_timestamp_from_date_string(message) 
-    data = message[0]
-    instance = message[0]
-    device = message[0]
+    timestamp = get_timestamp_from_date_string(time.time()) 
+    data = 'data'
+    instance = 'instance'
+    device = 'device'
     return timestamp, metric, data, instance, device
-
-
-def start_data_processing(thread_number):
-    # open consumer
-    consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
-    logger.info('Started metric consumer number ' + thread_number)
-    consumer.subscribe(agent_config_vars['topics'])
-    logger.info('Successfully subscribed to topics')
-    try:
-        parse_messages(consumer)
-    except e:
-        logger.warn('Error when parsing messages')
-    finally:
-        consumer.close()
-        logger.info('Closed consumer number ' + thread_number)
-
-
-def parse_messages(consumer):
-    last_sent_time = time.time()
-    for message in consumer:
-        if agent_config_vars['data_format'] == 'JSON':
-            parse_json_message(json.loads(message.value))
-        elif agent_config_vars['data_format'] == 'CSV':
-            parse_csv_message(message.split(','))
-        else:
-            parse_raw_message(message)
-
-        # periodically flush
-        if (time.time() - last_sent_time) >= if_config_vars['sampling_interval']:
-            send_data_wrapper()
-            last_sent_time = time.time()
-
-
-def parse_raw_message(message):
-    if 'METRIC' in if_config_vars['project_type']:
-        metric_handoff(*raw_parse_metric(message))
-    else:
-        log_handoff(*raw_parse_log(message))
-
-
-def parse_json_message(message):
-    # filter
-    if len(agent_config_vars['filters']) != 0:
-        # for each provided filter
-        for _filter in agent_config_vars['filters']:
-            filter_field = _filter.split(':')[0]
-            filter_vals = _filter.split(':')[1].split(','))
-            filter_check = message
-            # walk down the fields
-            for field in filter_field.split('.'):
-                filter_check = filter_check.get(field, {})
-            # check if a valid value
-            if filter_check not in filter_vals:
-                return
-
-    # get timestamp
-    timestamp = message
-    for field in agent_config_vars['timestamp_field'].split('.'):
-        timestamp = timestamp.get(field, {})
-
-    # get instance
-    instance = message
-    if len(agent_config_vars['instance_field'] != 0:
-        for field in agent_config_vars['instance_field'].split('.'):
-            instance = instance.get(field, {})
-    else:
-        instance = HOSTNAME
-
-    # get device
-    device = message
-    if len(agent_config_vars['device_field'] != 0:
-        for field in agent_config_vars['device_field'].split('.'):
-            device = device.get(field, {})
-    else:
-        device = ''
-
-    # get data
-    log_data = dict()
-    if len(agent_config_vars['data_fields']) != 0: 
-        for data_field in agent_config_vars['data_fields']:
-            data = message
-            for field in data_field.split('.'):
-                data = data.get(field, {})
-
-            if 'METRIC' in if_config_vars['project_type']:
-                metric_handoff(timestamp, data_field.replace('.', '/'), instance, device)
-            else:
-                log_data.append(data)
-
-    # hand off to log
-    if 'METRIC' not in if_config_vars['project_type']:
-        log_handoff(timestamp, send_data, instance, device)
-
-
-def parse_csv_message(message):
-    # instance
-    instance = HOSTNAME
-    if len(agent_config_vars['instance_field']) != 0:
-        instance = message[agent_config_vars['instance_field']]
-        message.pop(agent_config_vars['instance_field'])
-
-    # device
-    device = ''
-    if len(agent_config_vars['device_field']) != 0:
-        device = message[agent_config_vars['device_field']]
-        message.pop(agent_config_vars['device_field'])
-
-    # data & timestamp
-    columns = [agent_config_vars['timestamp_field']] + agent_config_vars['data_fields']
-    row = list(message[i] for i in columns)
-    fields = list(agent_config_vars['csv_field_names'][j] for j in agent_config_vars['data_fields'])
-    parse_csv_row(row, fields, instance, device)
-    
-
-def get_field_index(field_names, field, label, is_required=False):
-    err_code = ''
-    try:
-        temp = int(field)
-        if temp > len(field_names):
-            field = err_code
-        else:
-            field = temp
-    except ValueError:
-        try:
-            field = field_names.index(field)
-        except ValueError:
-            field = err_code
-    finally:
-        if is_required and field == err_code:
-            logger.warn(
-                'Agent not configured correctly (' + label + ')')
-            sys.ext(1)
-            return
-        else:
-            return field
 
 
 def get_agent_config_vars():
@@ -216,14 +111,15 @@ def get_agent_config_vars():
             kafka_kwargs = { k:v for (k, v) in kafka_config.items() if v }
 
             # check SASL
-            if kafka_kwargs['sasl_mechanism'] not in { 'PLAIN', 'GSSAPI', 'OAUTHBEARER' }:
-                kafka_kwargs.pop('sasl_mechanism')
-            else if kafka_kwargs['sasl_mechanism'] == 'PLAIN':
-                # set required vars for plain sasl if not present
-                if 'sasl_plain_username' not in kafka_kwargs:
-                    kafka_kwargs['sasl_plain_username'] = ''
-                if 'sasl_plain_password' not in kafka_kwargs:
-                    kafka_kwargs['sasl_plain_password'] = ''
+            if 'sasl_mechanism' in kafka_kwargs:
+                if kafka_kwargs['sasl_mechanism'] not in { 'PLAIN', 'GSSAPI', 'OAUTHBEARER' }:
+                    kafka_kwargs.pop('sasl_mechanism')
+                elif kafka_kwargs['sasl_mechanism'] == 'PLAIN':
+                    # set required vars for plain sasl if not present
+                    if 'sasl_plain_username' not in kafka_kwargs:
+                        kafka_kwargs['sasl_plain_username'] = ''
+                    if 'sasl_plain_password' not in kafka_kwargs:
+                        kafka_kwargs['sasl_plain_password'] = ''
 
             # handle boolean setting
             if config_parser.get('kafka', 'ssl_check_hostname').upper() == 'FALSE':
@@ -238,15 +134,16 @@ def get_agent_config_vars():
                 sys.exit()
                 
             if len(config_parser.get('kafka', 'topics')) != 0:
-                kafka_kwargs['topics'] = config_parser.get('kafka', 'topics').split(',')
+                topics = config_parser.get('kafka', 'topics').split(',')
             else:
                 logger.warning(
                     'Agent not correctly configured (topics). Check config file.')
                 sys.exit()
 
             # filter
-            if len(config_parser.get('kafka', 'filters')) != 0:
-                filters = config_parser.get('kafka', 'filters').split('|')
+            filters = config_parser.get('kafka', 'filters')
+            if len(filters) != 0:
+                filters = filters.split('|')
 
             # message parsing
             timestamp_format = config_parser.get('kafka', 'timestamp_format')
@@ -254,30 +151,26 @@ def get_agent_config_vars():
             instance_field = config_parser.get('kafka', 'instance_field')
             device_field = config_parser.get('kafka', 'device_field')
             data_fields = config_parser.get('kafka', 'data_fields')
-            data_format = config_parse.get('kafka', 'data_format').upper()
+            data_format = config_parser.get('kafka', 'data_format').upper()
             if data_format not in { 'CSV', 'JSON' }:
                 data_format = 'RAW'
-            
-            if len(timestamp_field) == 0:
-                logger.warning(
-                    'Agent not correctly configured (timestamp_field). Check config file.')
-                sys.exit()
-
-            if len(data_fields) == 0:
-                logger.warning(
-                    'Agent not correctly configured (data_fields). Check config file.')
-                sys.exit()
             else:
+                if len(timestamp_field) == 0:
+                    logger.warning(
+                        'Agent not correctly configured (timestamp_field). Check config file.')
+                    sys.exit()
+
+            if len(data_fields) != 0:
                 data_fields = data_fields.split(',')
 
             # CSV-specific
+            csv_field_names = config_parser.get('kafka', 'csv_field_names')
             if data_format == 'CSV':
-                csv_field_names = config_parse.get('kafka', 'csv_field_names')
                 if len(csv_field_names) == 0:
                     logger.warning(
                         'Agent not correctly configured (csv_field_names)')
                     sys.exit()
-                csv_field_names_array = csv_field_names.split(',')
+                csv_field_names = csv_field_names.split(',')
 
                 # timestamp
                 timestamp_field = get_field_index(csv_field_names, timestamp_field, 'timestamp_field', True)
@@ -299,16 +192,28 @@ def get_agent_config_vars():
                         device_field = ''
 
                 # data
-                data_fields_temp = []
-                for data_field in data_fields:
-                    data_field_temp = get_field_index(csv_field_names, data_field, 'data_field')
-                    if isinstance(data_field_temp, int):
-                        data_fields_temp.append(data_field_temp)
-                data_fields = data_fields_temp
+                if len(data_fields) != 0:
+                    data_fields_temp = []
+                    for data_field in data_fields:
+                        data_field_temp = get_field_index(csv_field_names, data_field, 'data_field')
+                        if isinstance(data_field_temp, int):
+                            data_fields_temp.append(data_field_temp)
+                    data_fields = data_fields_temp
                 if len(data_fields) == 0:
-                    logger.warn(
-                        'Agent not correctly configured (data_fields)')
-                    sys.exit()
+                    data_fields = list(csv_field_names[i] for i in range(len(array)))
+                    data_fields.pop(timestamp_field)
+
+                # filters
+                if len(filters) != 0:
+                    temp_filters = []
+                    for _filter in filters:
+                        filter_field = _filter.split(':')[0]          
+                        filter_vals = _filter.split(':')[1]
+                        filter_field = get_field_index(csv_field_names, filter_field, 'filter_field')
+                        temp_filter = str(filter_field) + ':' + filter_vals
+                        temp_filters.append(temp_filter)
+                    filters = temp_filters
+
 
         except ConfigParser.NoOptionError:
             logger.error(
@@ -329,6 +234,7 @@ def get_agent_config_vars():
         # add parsed variables to a global
         config_vars = {
             'kafka_kwargs': kafka_kwargs,
+            'topics': topics,
             'filters': filters,
             'data_format': data_format,
             'csv_field_names': csv_field_names,
@@ -400,9 +306,13 @@ def get_if_config_vars():
            sys.exit(1)  
 
         if len(sampling_interval) == 0:
-            logger.warning(
-                'Agent not correctly configured (sampling_interval). Check config file.')
-            sys.exit(1)
+            if 'METRIC' in project_type:
+                logger.warning(
+                    'Agent not correctly configured (sampling_interval). Check config file.')
+                sys.exit(1)
+            else:
+                # set default for non-metric
+                sampling_interval = 1
 
         if sampling_interval.endswith('s'):
             sampling_interval = int(sampling_interval[:-1])
@@ -444,7 +354,7 @@ def get_cli_config_vars():
     """ get CLI options. use of these options should be rare """
     usage = 'Usage: %prog [options]'
     parser = OptionParser(usage=usage)
-    parser.add_option('--threads', default='1',
+    parser.add_option('--threads', default=1,
                       action='store', dest='threads', help='Number of threads to run')
     parser.add_option('--tz', default='UTC',
                       action='store', dest='time_zone', help='Timezone of the data. See pytz.all_timezones')
@@ -457,8 +367,13 @@ def get_cli_config_vars():
                                                                 ' Automatically turns on verbose logging')
     (options, args) = parser.parse_args()
 
+    try:
+        threads = int(options.threads)
+    except ValueError:
+        threads = 1
+
     config_vars = {
-        'threads': options.threads,
+        'threads': threads,
         'testing': False,
         'log_level': logging.INFO,
         'time_zone': pytz.utc
@@ -476,6 +391,31 @@ def get_cli_config_vars():
         config_vars['time_zone'] = pytz.timezone(options.time_zone)
 
     return config_vars
+
+
+def get_field_index(field_names, field, label, is_required=False):
+    err_code = ''
+    try:
+        temp = int(field)
+        if temp > len(field_names):
+            field = err_code
+        else:
+            field = temp
+    # not an integer
+    except ValueError:
+        try:
+            field = field_names.index(field)
+        # not in the field names
+        except ValueError:
+            field = err_code
+    finally:
+        if is_required and field == err_code:
+            logger.warn(
+                'Agent not configured correctly (' + label + ')')
+            sys.ext(1)
+            return
+        else:
+            return field
 
 
 def should_filter_per_config(setting, value):
@@ -514,6 +454,109 @@ def get_file_list_for_directory(root_path):
     return file_list
 
 
+def parse_raw_message(message):
+    if 'METRIC' in if_config_vars['project_type']:
+        metric_handoff(*raw_parse_metric(message))
+    else:
+        log_handoff(*raw_parse_log(message))
+
+
+def get_json_field(message, config_setting, default=''):
+    if len(agent_config_vars[config_setting]) == 0:
+        return default
+    temp = message
+    for _field in agent_config_vars[config_setting].split(JSON_LEVEL_DELIM):
+        temp = temp.get(_field, {})
+    if len(temp) == 0:
+        temp = default
+    return temp
+
+
+def parse_json_message(message):
+    # filter
+    if len(agent_config_vars['filters']) != 0:
+        # for each provided filter
+        for _filter in agent_config_vars['filters']:
+            filter_field = _filter.split(':')[0]
+            filter_vals = _filter.split(':')[1].split(',')
+            filter_check = message
+            # walk down the fields
+            for field in filter_field.split(JSON_LEVEL_DELIM):
+                filter_check = filter_check.get(field, {})
+            # check if a valid value
+            if filter_check not in filter_vals:
+                logger.debug('filtered message: ' + filter_check + ' not in ' + str(filter_vals))
+                return
+
+    # get timestamp
+    timestamp = get_json_field(message, 'timestamp_field')
+    timestamp = get_timestamp_from_date_string(timestamp)
+
+    # get instance & device
+    instance = get_json_field(message, 'instance_field', HOSTNAME)
+    device = get_json_field(message, 'device_field')
+
+    # get data
+    log_data = dict()
+    if len(agent_config_vars['data_fields']) != 0: 
+        for data_field in agent_config_vars['data_fields']:
+            data = message
+            for field in data_field.split('.'):
+                data_value = data.get(field, {})
+
+            if 'METRIC' in if_config_vars['project_type']:
+                metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
+            else:
+                log_data[data_field.replace('.', '/')] = data_value
+    else:    
+        if 'METRIC' in if_config_vars['project_type']:
+            # assume metric data is in top level
+            for data_field in message:
+                data_value = message.get(data_field)
+                if data_value is not None:
+                    metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
+        else:
+            log_data = message
+
+    # hand off to log
+    if 'METRIC' not in if_config_vars['project_type']:
+        log_handoff(timestamp, log_data, instance, device)
+
+
+def parse_csv_message(message):
+    logger.debug(message)
+
+    # filter
+    if len(agent_config_vars['filters']) != 0:
+        # for each provided filter                            
+        for _filter in agent_config_vars['filters']:          
+            filter_field = _filter.split(':')[0]              
+            filter_vals = _filter.split(':')[1].split(',')    
+            filter_check = message[int(filter_field)]
+            # check if a valid value                          
+            if filter_check not in filter_vals:               
+                logger.debug('filtered message: ' + filter_check + ' not in ' + str(filter_vals))
+                return                                        
+
+    # instance
+    instance = HOSTNAME
+    if isinstance(agent_config_vars['instance_field'], int):
+        instance_field = agent_config_vars['instance_field']
+        instance = message[int(instance_field)]
+
+    # device
+    device = ''
+    if isinstance(agent_config_vars['device_field'], int):
+        device_field = agent_config_vars['device_field']
+        device = message[int(device_field)]
+
+    # data & timestamp
+    columns = [agent_config_vars['timestamp_field']] + agent_config_vars['data_fields']
+    row = list(message[i] for i in columns)
+    fields = list(agent_config_vars['csv_field_names'][j] for j in agent_config_vars['data_fields'])
+    parse_csv_row(row, fields, instance, device)
+    
+
 def parse_csv_data(csv_data, instance, device=''):
     """
     parses CSV data, assuming the format is given as:
@@ -531,7 +574,7 @@ def parse_csv_data(csv_data, instance, device=''):
         parse_csv_row(row.split(','), field_names, instance, device)
 
 
-def parse_csv_row(row, field_names, instance, device='')
+def parse_csv_row(row, field_names, instance, device=''):
     timestamp = get_timestamp_from_date_string(row.pop(0))
     if 'METRIC' in if_config_vars['project_type']:
         for i in range(len(row)):
@@ -687,7 +730,7 @@ def log_handoff(timestamp, data, instance, device=''):
     track['current_row'].append(entry)
     track['line_count'] += 1
     track['entry_count'] += 1
-    if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+    if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
         send_data_wrapper()
     elif track['entry_count'] % 100 == 0:
         logger.debug('Current data object size: ' + str(get_json_size_bytes(track['current_row'])) + ' bytes')
@@ -712,7 +755,7 @@ def prepare_log_entry(timestamp, data, instance, device=''):
 def metric_handoff(timestamp, field_name, data, instance, device=''):
     append_metric_data_to_entry(timestamp, field_name, data, instance, device)
     track['entry_count'] += 1
-    if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size']:
+    if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
         send_data_wrapper()
     elif track['entry_count'] % 500 == 0:
         logger.debug('Current data object size: ' + str(get_json_size_bytes(track['current_dict'])) + ' bytes')
@@ -869,6 +912,7 @@ if __name__ == "__main__":
     NON_ALNUM = re.compile(r"[^a-zA-Z0-9]")
     ATTEMPTS = 3
     HOSTNAME = socket.gethostname().partition('.')[0]
+    JSON_LEVEL_DELIM = '.'
     track = dict()
 
     # get config
@@ -879,7 +923,7 @@ if __name__ == "__main__":
     print_summary_info()
 
     # start data processing
-    for i in range(1, cli_config_vars['threads']):
+    for i in range(0, cli_config_vars['threads']):
         Process(target=initialize_data_gathering,
                 args=(i,)
                 ).start()
