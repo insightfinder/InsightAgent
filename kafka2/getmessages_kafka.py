@@ -65,6 +65,7 @@ def raw_parse_log(message):
 def raw_parse_metric(message):
     # call as metric_handoff(*raw_parse(message))
     timestamp = get_timestamp_from_date_string(time.time()) 
+    metric = 'metric'
     data = 'data'
     instance = 'instance'
     device = 'device'
@@ -108,11 +109,13 @@ def get_agent_config_vars():
                 'sasl_oauth_token_provider': config_parser.get('kafka', 'sasl_oauth_token_provider')
             }
 
+            # only keep settings with values
             kafka_kwargs = { k:v for (k, v) in kafka_config.items() if v }
 
             # check SASL
             if 'sasl_mechanism' in kafka_kwargs:
                 if kafka_kwargs['sasl_mechanism'] not in { 'PLAIN', 'GSSAPI', 'OAUTHBEARER' }:
+                    logger.warn('sasl_mechanism not one of PLAIN, GSSAPI, or OAUTHBEARER')
                     kafka_kwargs.pop('sasl_mechanism')
                 elif kafka_kwargs['sasl_mechanism'] == 'PLAIN':
                     # set required vars for plain sasl if not present
@@ -140,31 +143,28 @@ def get_agent_config_vars():
                     'Agent not correctly configured (topics). Check config file.')
                 sys.exit()
 
-            # filter
-            filters = config_parser.get('kafka', 'filters')
-            if len(filters) != 0:
-                filters = filters.split('|')
+            # filters
+            filters_include = config_parser.get('kafka', 'filters_include')
+            if len(filters_include) != 0:
+                filters_include = filters_include.split('|')
+            filters_exclude = config_parser.get('kafka', 'filters_exclude')
+            if len(filters_exclude) != 0:
+                filters_exclude = filters_exclude.split('|')
 
             # message parsing
-            timestamp_format = config_parser.get('kafka', 'timestamp_format')
-            timestamp_field = config_parser.get('kafka', 'timestamp_field')
+            timestamp_format = config_parser.get('kafka', 'timestamp_format', raw=True) or 'epoch'
+            timestamp_field = config_parser.get('kafka', 'timestamp_field') or 'timestamp'
             instance_field = config_parser.get('kafka', 'instance_field')
             device_field = config_parser.get('kafka', 'device_field')
+            csv_field_names = config_parser.get('kafka', 'csv_field_names')
             data_fields = config_parser.get('kafka', 'data_fields')
+            if len(data_fields) != 0:
+                data_fields = data_fields.split(',')
             data_format = config_parser.get('kafka', 'data_format').upper()
             if data_format not in { 'CSV', 'JSON' }:
                 data_format = 'RAW'
-            else:
-                if len(timestamp_field) == 0:
-                    logger.warning(
-                        'Agent not correctly configured (timestamp_field). Check config file.')
-                    sys.exit()
-
-            if len(data_fields) != 0:
-                data_fields = data_fields.split(',')
 
             # CSV-specific
-            csv_field_names = config_parser.get('kafka', 'csv_field_names')
             if data_format == 'CSV':
                 if len(csv_field_names) == 0:
                     logger.warning(
@@ -204,15 +204,27 @@ def get_agent_config_vars():
                     data_fields.pop(timestamp_field)
 
                 # filters
-                if len(filters) != 0:
-                    temp_filters = []
-                    for _filter in filters:
+                if len(filters_include) != 0:
+                    temp_filters_include = []
+                    for _filter in filters_include:
                         filter_field = _filter.split(':')[0]          
                         filter_vals = _filter.split(':')[1]
-                        filter_field = get_field_index(csv_field_names, filter_field, 'filter_field')
-                        temp_filter = str(filter_field) + ':' + filter_vals
-                        temp_filters.append(temp_filter)
-                    filters = temp_filters
+                        filter_field_temp = get_field_index(csv_field_names, filter_field, 'filter_field')
+                        if isinstance(filter_field_temp, int):
+                            temp_filter = str(filter_field_temp) + ':' + filter_vals
+                            temp_filters_include.append(temp_filter)
+                    filters_include = temp_filters_include
+
+                if len(filters_exclude) != 0:
+                    temp_filters_exclude = []
+                    for _filter in filters_exclude:
+                        filter_field = _filter.split(':')[0]          
+                        filter_vals = _filter.split(':')[1]
+                        filter_field_temp = get_field_index(csv_field_names, filter_field, 'filter_field')
+                        if isinstance(filter_field_temp, int):
+                            temp_filter = str(filter_field_temp) + ':' + filter_vals
+                            temp_filters_exclude.append(temp_filter)
+                    filters_exclude = temp_filters_exclude
 
 
         except ConfigParser.NoOptionError:
@@ -220,7 +232,6 @@ def get_agent_config_vars():
                 'Agent not correctly configured. Check config file.')
             sys.exit(1)
 
-        # defaults
         if len(timestamp_format) == 0:
             timestamp_format = 'epoch'
 
@@ -235,7 +246,8 @@ def get_agent_config_vars():
         config_vars = {
             'kafka_kwargs': kafka_kwargs,
             'topics': topics,
-            'filters': filters,
+            'filters_include': filters_include,
+            'filters_exclude': filters_exclude,
             'data_format': data_format,
             'csv_field_names': csv_field_names,
             'timestamp_format': timestamp_format,
@@ -398,6 +410,7 @@ def get_field_index(field_names, field, label, is_required=False):
     try:
         temp = int(field)
         if temp > len(field_names):
+            err_msg = 'field ' + str(field) + ' is not a valid array index given field names ' + str(field_names)
             field = err_code
         else:
             field = temp
@@ -407,12 +420,14 @@ def get_field_index(field_names, field, label, is_required=False):
             field = field_names.index(field)
         # not in the field names
         except ValueError:
+            err_msg = 'field ' + str(field) + ' is not a valid field in field names ' + str(field_names)
             field = err_code
     finally:
-        if is_required and field == err_code:
+        if field == err_code:
             logger.warn(
-                'Agent not configured correctly (' + label + ')')
-            sys.ext(1)
+                'Agent not configured correctly (' + label + ')\n' + err_msg)
+            if is_required:
+                sys.exit(1)
             return
         else:
             return field
@@ -474,9 +489,9 @@ def get_json_field(message, config_setting, default=''):
 
 def parse_json_message(message):
     # filter
-    if len(agent_config_vars['filters']) != 0:
+    if len(agent_config_vars['filters_include']) != 0:
         # for each provided filter
-        for _filter in agent_config_vars['filters']:
+        for _filter in agent_config_vars['filters_include']:
             filter_field = _filter.split(':')[0]
             filter_vals = _filter.split(':')[1].split(',')
             filter_check = message
@@ -485,7 +500,21 @@ def parse_json_message(message):
                 filter_check = filter_check.get(field, {})
             # check if a valid value
             if filter_check not in filter_vals:
-                logger.debug('filtered message: ' + filter_check + ' not in ' + str(filter_vals))
+                logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
+                return
+            
+    if len(agent_config_vars['filters_exclude']) != 0:
+        # for each provided filter
+        for _filter in agent_config_vars['filters_exclude']:
+            filter_field = _filter.split(':')[0]
+            filter_vals = _filter.split(':')[1].split(',')
+            filter_check = message
+            # walk down the fields
+            for field in filter_field.split(JSON_LEVEL_DELIM):
+                filter_check = filter_check.get(field, {})
+            # check if a valid value
+            if filter_check in filter_vals:
+                logger.debug('filtered message (exclusion): ' + filter_check + ' in ' + str(filter_vals))
                 return
 
     # get timestamp
@@ -527,15 +556,26 @@ def parse_csv_message(message):
     logger.debug(message)
 
     # filter
-    if len(agent_config_vars['filters']) != 0:
+    if len(agent_config_vars['filters_include']) != 0:
         # for each provided filter                            
-        for _filter in agent_config_vars['filters']:          
+        for _filter in agent_config_vars['filters_include']:          
             filter_field = _filter.split(':')[0]              
             filter_vals = _filter.split(':')[1].split(',')    
             filter_check = message[int(filter_field)]
             # check if a valid value                          
             if filter_check not in filter_vals:               
-                logger.debug('filtered message: ' + filter_check + ' not in ' + str(filter_vals))
+                logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
+                return                                        
+
+    if len(agent_config_vars['filters_exclude']) != 0:
+        # for each provided filter                            
+        for _filter in agent_config_vars['filters_exclude']:          
+            filter_field = _filter.split(':')[0]              
+            filter_vals = _filter.split(':')[1].split(',')    
+            filter_check = message[int(filter_field)]
+            # check if a valid value                          
+            if filter_check in filter_vals:
+                logger.debug('filtered message (exclusion): ' + filter_check + ' in ' + str(filter_vals))
                 return                                        
 
     # instance
