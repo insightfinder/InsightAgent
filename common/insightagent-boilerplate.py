@@ -143,7 +143,8 @@ def get_agent_config_vars():
                         data_fields_temp.append(data_field_temp)
                 data_fields = data_fields_temp
             if len(data_fields) == 0:
-                data_fields = list(csv_field_names[i] for i in range(len(array)))
+                # use all non-timestamp fields
+                data_fields = range(len(csv_field_names))
                 data_fields.pop(timestamp_field)
 
             # filters

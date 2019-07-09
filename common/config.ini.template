@@ -35,6 +35,7 @@ agent_https_proxy =
 user_name = 
 license_key = 
 project_name = 
+# metric, metricreplay, log, logreplay, incident, incidentreplay
 project_type =
 sampling_interval = 1
 # what size to limit chunks sent to IF to, as kb
