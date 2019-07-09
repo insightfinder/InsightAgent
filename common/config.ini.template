@@ -1,29 +1,44 @@
 [agent]
+## filters
+# define a list of filters to use as field:allowed values|field:allowed values
+# for example:
+#   message.env:stg,prd|message.status:complete
+filters_include = 
+# as above, but instead include values that are not allowed
+# for example:
+#   message.env:dev,cde|message.status:draft
+filters_exclude = 
+
+## message parsing
+# raw, csv, or json
+# if raw, see the code to define a custom message parser
+# we can work with you on an open source solution, or provide guidance for a private solution
+data_format = 
+# if csv, must give the field names. specify timestamp_field, instance_field, etc as the column number (starting at index zero).
+# define the field names as timestamp,field1,field2...
+csv_field_names =
+# give format as per python strptime
 timestamp_format = 
-# define things to include (default all)
-# For example, 'host_filter = a123,z987' would only include entries from those hosts.
-# Usage: 
-# if should_filter_per_config("field_filter", value_to_check):
-#   return
-field_filter = 
-# define things to exclude (default none)
-# For example, 'host_exlude = b456,localhost' would not report entries from those hosts.
-# Usage: 
-# if should_exclude_per_config("field_exclude", value_to_check):
-#   return
-field_exclude = 
-agent_http_proxy = 
-agent_https_proxy = 
+# fields in json can be defined as level0.level.timestamp
+timestamp_field = 
+# if no instance given, the local hostname will be used
+instance_field = 
+device_field = 
+# multiple fields are separated by commas.
+data_fields =
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
 
 [insightfinder]
 user_name = 
 license_key = 
 project_name = 
 project_type =
-# required for metric projects
-sampling_interval = 
+sampling_interval = 1
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
-url = https://app.insightfinder.com
+if_url = https://app.insightfinder.com
 if_http_proxy = 
 if_https_proxy = 
