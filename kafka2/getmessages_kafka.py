@@ -232,9 +232,6 @@ def get_agent_config_vars():
                 'Agent not correctly configured. Check config file.')
             sys.exit(1)
 
-        if len(timestamp_format) == 0:
-            timestamp_format = 'epoch'
-
         # any post-processing
         agent_proxies = dict()
         if len(agent_http_proxy) > 0:
