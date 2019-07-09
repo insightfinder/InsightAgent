@@ -90,6 +90,26 @@ def get_agent_config_vars():
             sampling_interval = parser.get('kafka', 'sampling_interval')
             client_id = parser.get('kafka', 'client_id')
             group_id = parser.get('kafka', 'group_id')
+
+            # SSL
+            security_protocol = parser.get('kafka', 'security_protocol')
+            ssl_context = parser.get('kafka','ssl_context')
+            ssl_check_hostname = parser.get('kafka','ssl_check_hostname')
+            ssl_ca = parser.get('kafka','ssl_ca')
+            ssl_certificate = parser.get('kafka','ssl_certificate')
+            ssl_key = parser.get('kafka','ssl_key')
+            ssl_password = parser.get('kafka','ssl_password')
+            ssl_crl = parser.get('kafka','ssl_crl')
+            ssl_ciphers = parser.get('kafka','ssl_ciphers')
+
+            # SASL
+            sasl_mechanism = parser.get('kafka', 'sasl_mechanism')
+            sasl_plain_username = parser.get('kafka', 'sasl_plain_username')
+            sasl_plain_password = parser.get('kafka', 'sasl_plain_password')
+            sasl_kerberos_service_name = parser.get('kafka', 'sasl_kerberos_service_name')
+            sasl_kerberos_domain_name = parser.get('kafka', 'sasl_kerberos_domain_name')
+            sasl_oauth_token_provider = parser.get('kafka', 'sasl_oauth_token_provider')
+
             if len(insightFinder_license_key) == 0:
                 logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
@@ -105,12 +125,37 @@ def get_agent_config_vars():
             if len(group_id) == 0:
                 logger.error("Agent not correctly configured(group id). Check config file.")
                 sys.exit(1)
+
+            if len(security_protocol) == 0:
+                logger.info('security_protocol not defined, assuming PLAINTEXT')
+                security_protocol = 'PLAINTEXT'
+
             config_vars['licenseKey'] = insightFinder_license_key
             config_vars['projectName'] = insightFinder_project_name
             config_vars['userName'] = insightFinder_user_name
             config_vars['samplingInterval'] = sampling_interval
             config_vars['groupId'] = group_id
             config_vars['clientId'] = client_id
+
+            # SSL
+            config_vars['security_protocol'] = security_protocol
+            config_vars['ssl_context'] = ssl_context
+            config_vars['ssl_check_hostname'] = ssl_check_hostname
+            config_vars['ssl_ca'] = ssl_ca
+            config_vars['ssl_certificate'] = ssl_certificate
+            config_vars['ssl_key'] = ssl_key
+            config_vars['ssl_password'] = ssl_password
+            config_vars['ssl_crl'] = ssl_crl
+            config_vars['ssl_ciphers'] = ssl_ciphers
+ 
+            #SASL
+            config_vars['sasl_mechanism'] = sasl_mechanism
+            config_vars['sasl_plain_username'] = sasl_plain_username
+            config_vars['sasl_plain_password'] = sasl_plain_password
+            config_vars['sasl_kerberos_service_name'] = sasl_kerberos_service_name
+            config_vars['sasl_kerberos_domain_name'] = sasl_kerberos_domain_name
+            config_vars['sasl_oauth_token_provider'] = sasl_oauth_token_provider            
+
     except IOError:
         logger.error("config.ini file is missing")
     return config_vars
@@ -167,14 +212,14 @@ def send_data(metric_data):
     # prepare data for metric streaming agent
     to_send_data_dict = dict()
     to_send_data_dict["metricData"] = json.dumps(metric_data)
-    to_send_data_dict["licenseKey"] = agentConfigVars['licenseKey']
+    to_send_data_dict["licenseKey"] = agent_config_vars['licenseKey']
     if parameters['project'] is None:
-        to_send_data_dict["projectName"] = agentConfigVars['projectName']
+        to_send_data_dict["projectName"] = agent_config_vars['projectName']
     else:
         to_send_data_dict["projectName"] = parameters['project']
-    to_send_data_dict["userName"] = agentConfigVars['userName']
+    to_send_data_dict["userName"] = agent_config_vars['userName']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
-    to_send_data_dict["samplingInterval"] = str(int(reportingConfigVars['reporting_interval'] * 60))
+    to_send_data_dict["samplingInterval"] = str(int(agent_config_vars['samplingInterval'] * 60))
     to_send_data_dict["agentType"] = "LogStreaming"
 
     to_send_data_json = json.dumps(to_send_data_dict)
@@ -270,15 +315,61 @@ def kafka_data_consumer(consumer_id):
     logger.info("Started log consumer number " + consumer_id)
     # Kafka consumer configuration
     (brokers, topic, filter_hosts) = get_kafka_config()
-    if agentConfigVars["clientId"] == "":
-        consumer = KafkaConsumer(bootstrap_servers=brokers,
-                             auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
-                             group_id=agentConfigVars['groupId'])
-    else:
-        logger.info(agentConfigVars["clientId"])
-        consumer = KafkaConsumer(bootstrap_servers=brokers,
-                                 auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id=agentConfigVars['groupId'], client_id = agentConfigVars["clientId"])
+
+    # initialize shared kwargs 
+    kafka_kwargs = {
+            'bootstrap_servers': brokers,
+            'auto_offset_reset': 'latest',
+            'consumer_timeout_ms': 1000 * parameters['timeout'],
+            'group_id': agent_config_vars['groupId'],
+            'api_version': (0, 9)
+            }
+
+    # add client ID if given
+    if agent_config_vars["clientId"] != "":
+        kafka_kwargs['client_id'] = agent_config_vars["clientId"]
+    # add SSL info
+    if agent_config_vars['security_protocol'] == 'SSL': 
+        kafka_kwargs['security_protocol'] = 'SSL'
+        if agent_config_vars['ssl_context'] != "":
+            kafka_kwargs['ssl_context'] = agent_config_vars['ssl_context']
+        if agent_config_vars['ssl_check_hostname'] == "False":
+            kafka_kwargs['ssl_check_hostname'] = False
+        if agent_config_vars['ssl_ca'] != "":
+            kafka_kwargs['ssl_cafile'] = agent_config_vars['ssl_ca']
+        if agent_config_vars['ssl_certificate'] != "":
+            kafka_kwargs['ssl_certfile'] = agent_config_vars['ssl_certificate']
+        if agent_config_vars['ssl_key'] != "":
+            kafka_kwargs['ssl_keyfile'] = agent_config_vars['ssl_key']
+        if agent_config_vars['ssl_password'] != "":
+            kafka_kwargs['ssl_password'] = agent_config_vars['ssl_password'].strip()
+        if agent_config_vars['ssl_crl'] != "":
+            kafka_kwargs['ssl_crlfile'] = agent_config_vars['ssl_crl']
+        if agent_config_vars['ssl_ciphers'] != "":
+            kafka_kwargs['ssl_ciphers'] = agent_config_vars['ssl_ciphers']
+        
+    # add SASL info
+    if len(agent_config_vars['sasl_mechanism']) != 0:
+        kafka_kwargs['sasl_mechanism'] = agent_config_vars['sasl_mechanism']
+
+        if agent_config_vars['sasl_plain_username'] != "":
+            kafka_kwargs['sasl_plain_username'] = agent_config_vars['sasl_plain_username'] 
+            
+        if agent_config_vars['sasl_plain_password'] != "":
+            kafka_kwargs['sasl_plain_password'] = agent_config_vars['sasl_plain_password'] 
+
+        if agent_config_vars['sasl_kerberos_service_name'] != "": 
+            kafka_kwargs['sasl_kerberos_service_name'] = agent_config_vars['sasl_kerberos_service_name'] 
+
+        if agent_config_vars['sasl_kerberos_domain_name'] != "": 
+            kafka_kwargs['sasl_kerberos_domain_name'] = agent_config_vars['sasl_kerberos_domain_name'] 
+
+        if agent_config_vars['sasl_oauth_token_provider '] != "":
+            kafka_kwargs['sasl_oauth_token_provider '] = agent_config_vars['sasl_oauth_token_provider '] 
+            
+    logger.debug(kafka_kwargs)
+    consumer = KafkaConsumer(**kafka_kwargs)
+
     consumer.subscribe([topic])
     parse_consumer_messages(consumer, filter_hosts)
     consumer.close()
@@ -288,8 +379,8 @@ def kafka_data_consumer(consumer_id):
 if __name__ == "__main__":
     logger = set_logger_config()
     parameters = get_parameters()
-    agentConfigVars = get_agent_config_vars()
-    reportingConfigVars = get_reporting_config_vars()
+    agent_config_vars = get_agent_config_vars()
+    # reportingConfigVars = get_reporting_config_vars()
 
     try:
         t1 = Process(target=kafka_data_consumer, args=('1',))

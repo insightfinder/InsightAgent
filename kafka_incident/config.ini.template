@@ -1,15 +1,9 @@
-#example for config
-#if done locally bootstrap_servers = localhost:9092
 [kafka]
-bootstrap_servers =
-topic =
+bootstrap_servers = localhost:9092
+topic = 
 filter_hosts =
-all_metrics =
-group_id =
 client_id =
-#by default is equivalent to sampling interval
-data_send_timeout =
-
+group_id =
 insightFinder_license_key =
 insightFinder_project_name =
 insightFinder_user_name =
@@ -33,3 +27,4 @@ sasl_plain_password =
 sasl_kerberos_service_name = 
 sasl_kerberos_domain_name = 
 sasl_oauth_token_provider =
+
