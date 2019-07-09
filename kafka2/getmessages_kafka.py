@@ -28,8 +28,10 @@ def start_data_processing(thread_number):
     # open consumer
     consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
     logger.info('Started metric consumer number ' + str(thread_number))
+    # subscribe to given topics
     consumer.subscribe(agent_config_vars['topics'])
     logger.info('Successfully subscribed to topics' + str(agent_config_vars['topics']))
+    # start consuming messages
     parse_messages_kafka(consumer)
     consumer.close()
     logger.info('Closed consumer number ' + str(thread_number))
@@ -40,7 +42,7 @@ def parse_messages_kafka(consumer):
     for message in consumer:
         try:
             logger.info('Message received')
-            logger.debug(message)
+            logger.debug(message.value)
             if agent_config_vars['data_format'] == 'JSON':
                 parse_json_message(json.loads(message.value))
             elif agent_config_vars['data_format'] == 'CSV':
@@ -84,9 +86,11 @@ def get_agent_config_vars():
             
             # kafka settings
             kafka_config = {
+                # hardcoded
                 'api_version': (0, 9),
                 'auto_offset_reset': 'latest',
 
+                # consumer settings
                 'group_id': config_parser.get('kafka', 'group_id'),
                 'client_id': config_parser.get('kafka', 'client_id'),
 
@@ -129,13 +133,15 @@ def get_agent_config_vars():
                 kafka_kwargs['ssl_check_hostname'] = False
             
             # handle required arrays
+            # bootstrap serverss
             if len(config_parser.get('kafka', 'bootstrap_servers')) != 0:
                 kafka_kwargs['bootstrap_servers'] = config_parser.get('kafka', 'bootstrap_servers').strip().split(',')
             else:
                 logger.warning(
                     'Agent not correctly configured (bootstrap_servers). Check config file.')
                 sys.exit()
-                
+            
+            # topics
             if len(config_parser.get('kafka', 'topics')) != 0:
                 topics = config_parser.get('kafka', 'topics').split(',')
             else:
@@ -200,7 +206,8 @@ def get_agent_config_vars():
                             data_fields_temp.append(data_field_temp)
                     data_fields = data_fields_temp
                 if len(data_fields) == 0:
-                    data_fields = list(csv_field_names[i] for i in range(len(array)))
+                    # use all non-timestamp fields
+                    data_fields = range(len(csv_field_names))
                     data_fields.pop(timestamp_field)
 
                 # filters
