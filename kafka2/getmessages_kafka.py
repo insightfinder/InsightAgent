@@ -328,7 +328,7 @@ def get_if_config_vars():
                 sys.exit(1)
             else:
                 # set default for non-metric
-                sampling_interval = 1
+                sampling_interval = 10
 
         if sampling_interval.endswith('s'):
             sampling_interval = int(sampling_interval[:-1])
