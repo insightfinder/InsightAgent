@@ -10,6 +10,7 @@ import sys
 import time
 import pytz
 from optparse import OptionParser
+from multiprocessing import Process
 from itertools import islice
 from datetime import datetime
 import dateutil
@@ -22,14 +23,6 @@ import requests
 This script gathers data to send to Insightfinder
 '''
 
-def raw_parse(message):                     
-    # call as add_entry(*raw_parse(message))
-    timestamp = message[0]                  
-    data = message[0]                       
-    instance = message[0]                   
-    device = message[0]                     
-    return timestamp, data, instance, device
-
 
 def start_data_processing(thread_number):
     """ TODO: replace with your code.
@@ -40,9 +33,31 @@ def start_data_processing(thread_number):
     1. Parse config options
     2. Gather data
     3. Parse each entry
-    4. Call add_entry(timestamp, data, instance, device)
+    4. Call the appropriate handoff function
+        log_handoff()
+        incident_handoff()
+        metric_handoff()
     See zipkin for an example that uses os.fork to send both metric and log data.
     """
+
+
+def raw_parse_log(message):
+    # call as log_handoff(*raw_parse(message))
+    timestamp = get_timestamp_from_date_string(time.time()) 
+    data = 'data'
+    instance = 'instance'
+    device = 'device'
+    return timestamp, data, instance, device
+
+
+def raw_parse_metric(message):
+    # call as metric_handoff(*raw_parse(message))
+    timestamp = get_timestamp_from_date_string(time.time()) 
+    metric = 'metric'
+    data = 'data'
+    instance = 'instance'
+    device = 'device'
+    return timestamp, metric, data, instance, device
     
 
 def get_agent_config_vars():
@@ -54,37 +69,118 @@ def get_agent_config_vars():
             ## TODO: fill out the fields to grab. examples given below
             ## replace 'agent' with the appropriate section header.
             # fields to grab
-            timestamp_format = config_parser.get('agent', 'timestamp_format')
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
+            
+            # filters
+            filters_include = config_parser.get('agent', 'filters_include')
+            filters_exclude = config_parser.get('agent', 'filters_exclude')
+
+            # message parsing
+            timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
+            timestamp_field = config_parser.get('agent', 'timestamp_field') or 'timestamp'
+            instance_field = config_parser.get('agent', 'instance_field')
+            device_field = config_parser.get('agent', 'device_field')
+            csv_field_names = config_parser.get('agent', 'csv_field_names')
+            data_fields = config_parser.get('agent', 'data_fields')
+            data_format = config_parser.get('agent', 'data_format').upper()
+                    
         except ConfigParser.NoOptionError:
             logger.error(
                 'Agent not correctly configured. Check config file.')
             sys.exit(1)
-
-        ## TODO: add any required fields. Example given below
-        # defined required fields
-        if len(timestamp_format) == 0:
-            logger.warning(
-                'Agent not correctly configured (timestamp_format). Check config file.')
-            exit()
-            
-        ## TODO: add defaults for fields
-        # defaults
-        if len(timestamp_format) == 0:
-            timestamp_format = 'epoch'
-
+         
         # any post-processing
         agent_proxies = dict()
         if len(agent_http_proxy) > 0:
             agent_proxies['http'] = agent_http_proxy
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
+            
+        if len(filters_include) != 0:
+            filters_include = filters_include.split('|')
+        if len(filters_exclude) != 0:
+            filters_exclude = filters_exclude.split('|')
+        if len(data_fields) != 0:
+            data_fields = data_fields.split(',')
+        
+        if data_format not in { 'CSV', 'JSON' }:
+            data_format = 'RAW'
+
+        # CSV-specific
+        if data_format == 'CSV':
+            if len(csv_field_names) == 0:
+                logger.warning(
+                    'Agent not correctly configured (csv_field_names)')
+                sys.exit()
+            csv_field_names = csv_field_names.split(',')
+
+            # timestamp
+            timestamp_field = get_field_index(csv_field_names, timestamp_field, 'timestamp_field', True)
+
+            # instance
+            if len(instance_field) != 0:
+                instance_field_temp = get_field_index(csv_field_names, instance_field, 'instance_field')
+                if isinstance(instance_field_temp, int):
+                    instance_field = instance_field_temp
+                else:
+                    instance_field = ''
+
+            # device
+            if len(device_field) != 0:
+                device_field_temp = get_field_index(csv_field_names, device_field, 'device_field')
+                if isinstance(device_field_temp, int):
+                    device_field = device_field_temp
+                else:
+                    device_field = ''
+
+            # data
+            if len(data_fields) != 0:
+                data_fields_temp = []
+                for data_field in data_fields:
+                    data_field_temp = get_field_index(csv_field_names, data_field, 'data_field')
+                    if isinstance(data_field_temp, int):
+                        data_fields_temp.append(data_field_temp)
+                data_fields = data_fields_temp
+            if len(data_fields) == 0:
+                data_fields = list(csv_field_names[i] for i in range(len(array)))
+                data_fields.pop(timestamp_field)
+
+            # filters
+            if len(filters_include) != 0:
+                temp_filters_include = []
+                for _filter in filters_include:
+                    filter_field = _filter.split(':')[0]          
+                    filter_vals = _filter.split(':')[1]
+                    filter_field_temp = get_field_index(csv_field_names, filter_field, 'filter_field')
+                    if isinstance(filter_field_temp, int):
+                        temp_filter = str(filter_field_temp) + ':' + filter_vals
+                        temp_filters_include.append(temp_filter)
+                filters_include = temp_filters_include
+
+            if len(filters_exclude) != 0:
+                temp_filters_exclude = []
+                for _filter in filters_exclude:
+                    filter_field = _filter.split(':')[0]          
+                    filter_vals = _filter.split(':')[1]
+                    filter_field_temp = get_field_index(csv_field_names, filter_field, 'filter_field')
+                    if isinstance(filter_field_temp, int):
+                        temp_filter = str(filter_field_temp) + ':' + filter_vals
+                        temp_filters_exclude.append(temp_filter)
+                filters_exclude = temp_filters_exclude
 
         # add parsed variables to a global
         config_vars = {
+            'proxies': agent_proxies,
+            'filters_include': filters_include,
+            'filters_exclude': filters_exclude,
+            'data_format': data_format,
+            'csv_field_names': csv_field_names,
             'timestamp_format': timestamp_format,
-            'proxies': agent_proxies
+            'timestamp_field': timestamp_field,
+            'instance_field': instance_field,
+            'device_field': device_field,
+            'data_fields': data_fields
         }
 
         return config_vars
@@ -146,17 +242,19 @@ def get_if_config_vars():
                 'Agent not correctly configured (project_type). Check config file.')
            sys.exit(1)  
 
-        # require sampling interval for metric projects
-        if 'METRIC' in project_type:
-            if len(sampling_interval) == 0:
+        if len(sampling_interval) == 0:
+            if 'METRIC' in project_type:
                 logger.warning(
                     'Agent not correctly configured (sampling_interval). Check config file.')
-            sys.exit(1)
-
-            if sampling_interval.endswith('s'):
-                sampling_interval = int(sampling_interval[:-1])
+                sys.exit(1)
             else:
-                sampling_interval = int(sampling_interval) * 60
+                # set default for non-metric
+                sampling_interval = 1
+
+        if sampling_interval.endswith('s'):
+            sampling_interval = int(sampling_interval[:-1])
+        else:
+            sampling_interval = int(sampling_interval) * 60
 
         # defaults
         if len(chunk_size_kb) == 0:
@@ -193,8 +291,8 @@ def get_cli_config_vars():
     """ get CLI options. use of these options should be rare """
     usage = 'Usage: %prog [options]'
     parser = OptionParser(usage=usage)
-    parser.add_option('--threads', default='1',
-            action='store', dest='threads', help='Number of threads to run')
+    parser.add_option('--threads', default=1,
+                      action='store', dest='threads', help='Number of threads to run')
     parser.add_option('--tz', default='UTC',
                       action='store', dest='time_zone', help='Timezone of the data. See pytz.all_timezones')
     parser.add_option('-q', '--quiet',
@@ -206,8 +304,13 @@ def get_cli_config_vars():
                                                                 ' Automatically turns on verbose logging')
     (options, args) = parser.parse_args()
 
+    try:
+        threads = int(options.threads)
+    except ValueError:
+        threads = 1
+
     config_vars = {
-        'threads': options.threads,
+        'threads': threads,
         'testing': False,
         'log_level': logging.INFO,
         'time_zone': pytz.utc
@@ -225,6 +328,34 @@ def get_cli_config_vars():
         config_vars['time_zone'] = pytz.timezone(options.time_zone)
 
     return config_vars
+
+
+def get_field_index(field_names, field, label, is_required=False):
+    err_code = ''
+    try:
+        temp = int(field)
+        if temp > len(field_names):
+            err_msg = 'field ' + str(field) + ' is not a valid array index given field names ' + str(field_names)
+            field = err_code
+        else:
+            field = temp
+    # not an integer
+    except ValueError:
+        try:
+            field = field_names.index(field)
+        # not in the field names
+        except ValueError:
+            err_msg = 'field ' + str(field) + ' is not a valid field in field names ' + str(field_names)
+            field = err_code
+    finally:
+        if field == err_code:
+            logger.warn(
+                'Agent not configured correctly (' + label + ')\n' + err_msg)
+            if is_required:
+                sys.exit(1)
+            return
+        else:
+            return field
 
 
 def should_filter_per_config(setting, value):
@@ -262,6 +393,163 @@ def get_file_list_for_directory(root_path):
             file_list.append(os.path.join(path, name))
     return file_list
 
+
+def parse_raw_message(message):
+    if 'METRIC' in if_config_vars['project_type']:
+        metric_handoff(*raw_parse_metric(message))
+    else:
+        log_handoff(*raw_parse_log(message))
+
+
+def get_json_field(message, config_setting, default=''):
+    if len(agent_config_vars[config_setting]) == 0:
+        return default
+    temp = message
+    for _field in agent_config_vars[config_setting].split(JSON_LEVEL_DELIM):
+        temp = temp.get(_field, {})
+    if len(temp) == 0:
+        temp = default
+    return temp
+
+
+def parse_json_message(message):
+    # filter
+    if len(agent_config_vars['filters_include']) != 0:
+        # for each provided filter
+        for _filter in agent_config_vars['filters_include']:
+            filter_field = _filter.split(':')[0]
+            filter_vals = _filter.split(':')[1].split(',')
+            filter_check = message
+            # walk down the fields
+            for field in filter_field.split(JSON_LEVEL_DELIM):
+                filter_check = filter_check.get(field, {})
+            # check if a valid value
+            if filter_check not in filter_vals:
+                logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
+                return
+            
+    if len(agent_config_vars['filters_exclude']) != 0:
+        # for each provided filter
+        for _filter in agent_config_vars['filters_exclude']:
+            filter_field = _filter.split(':')[0]
+            filter_vals = _filter.split(':')[1].split(',')
+            filter_check = message
+            # walk down the fields
+            for field in filter_field.split(JSON_LEVEL_DELIM):
+                filter_check = filter_check.get(field, {})
+            # check if a valid value
+            if filter_check in filter_vals:
+                logger.debug('filtered message (exclusion): ' + filter_check + ' in ' + str(filter_vals))
+                return
+
+    # get timestamp
+    timestamp = get_json_field(message, 'timestamp_field')
+    timestamp = get_timestamp_from_date_string(timestamp)
+
+    # get instance & device
+    instance = get_json_field(message, 'instance_field', HOSTNAME)
+    device = get_json_field(message, 'device_field')
+
+    # get data
+    log_data = dict()
+    if len(agent_config_vars['data_fields']) != 0: 
+        for data_field in agent_config_vars['data_fields']:
+            data = message
+            for field in data_field.split('.'):
+                data_value = data.get(field, {})
+
+            if 'METRIC' in if_config_vars['project_type']:
+                metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
+            else:
+                log_data[data_field.replace('.', '/')] = data_value
+    else:    
+        if 'METRIC' in if_config_vars['project_type']:
+            # assume metric data is in top level
+            for data_field in message:
+                data_value = message.get(data_field)
+                if data_value is not None:
+                    metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
+        else:
+            log_data = message
+
+    # hand off to log
+    if 'METRIC' not in if_config_vars['project_type']:
+        log_handoff(timestamp, log_data, instance, device)
+
+
+def parse_csv_message(message):
+    logger.debug(message)
+
+    # filter
+    if len(agent_config_vars['filters_include']) != 0:
+        # for each provided filter                            
+        for _filter in agent_config_vars['filters_include']:          
+            filter_field = _filter.split(':')[0]              
+            filter_vals = _filter.split(':')[1].split(',')    
+            filter_check = message[int(filter_field)]
+            # check if a valid value                          
+            if filter_check not in filter_vals:               
+                logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
+                return                                        
+
+    if len(agent_config_vars['filters_exclude']) != 0:
+        # for each provided filter                            
+        for _filter in agent_config_vars['filters_exclude']:          
+            filter_field = _filter.split(':')[0]              
+            filter_vals = _filter.split(':')[1].split(',')    
+            filter_check = message[int(filter_field)]
+            # check if a valid value                          
+            if filter_check in filter_vals:
+                logger.debug('filtered message (exclusion): ' + filter_check + ' in ' + str(filter_vals))
+                return                                        
+
+    # instance
+    instance = HOSTNAME
+    if isinstance(agent_config_vars['instance_field'], int):
+        instance_field = agent_config_vars['instance_field']
+        instance = message[int(instance_field)]
+
+    # device
+    device = ''
+    if isinstance(agent_config_vars['device_field'], int):
+        device_field = agent_config_vars['device_field']
+        device = message[int(device_field)]
+
+    # data & timestamp
+    columns = [agent_config_vars['timestamp_field']] + agent_config_vars['data_fields']
+    row = list(message[i] for i in columns)
+    fields = list(agent_config_vars['csv_field_names'][j] for j in agent_config_vars['data_fields'])
+    parse_csv_row(row, fields, instance, device)
+    
+
+def parse_csv_data(csv_data, instance, device=''):
+    """
+    parses CSV data, assuming the format is given as:
+        header row:  timestamp,field_1,field_2,...,field_n
+        n data rows: TIMESTAMP,value_1,value_2,...,value_n
+    """
+
+    # get field names from header row
+    field_names = csv_data.pop(0).split(',')[1:]
+
+    # go through each row
+    for row in csv_data:
+        if len(row) == 0:
+            continue
+        parse_csv_row(row.split(','), field_names, instance, device)
+
+
+def parse_csv_row(row, field_names, instance, device=''):
+    timestamp = get_timestamp_from_date_string(row.pop(0))
+    if 'METRIC' in if_config_vars['project_type']:
+        for i in range(len(row)):
+            metric_handoff(timestamp, field_names[i], row[i], instance, device)
+    else:
+        json_message = dict()
+        for i in range(len(row)):
+            json_message[field_names[i]] = row[i]
+        log_handoff(timestamp, json_message, instance, device)
+            
 
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
@@ -380,7 +668,7 @@ def initialize_data_gathering(thread_number):
 
     # last chunk
     if len(track['current_row']) > 0 or len(track['current_dict']) > 0:
-        logger.debug('Sending last chunk for thread ' + thread_number)
+        logger.debug('Sending last chunk')
         send_data_wrapper()
 
     logger.debug('Total chunks created: ' + str(track['chunk_count']))
@@ -395,28 +683,25 @@ def reset_track():
     track['current_dict'] = dict()
 
 
-def add_entry(timestamp, data, instance, device=''):
-    if 'METRIC' in if_config_vars['project_type']:
-        netric_handoff(timestamp, data, instance, device)
-    else:
-        log_handoff(timestamp, data, instance, device)
-
-
 #########################################
 # Functions to handle Log/Incident data #
 #########################################
+def incident_handoff(timestamp, data, instance, device=''):
+    log_handoff(timestamp, data, instance, device)
+
+
 def log_handoff(timestamp, data, instance, device=''):
     entry = prepare_log_entry(timestamp, data, instance, device)
     track['current_row'].append(entry)
     track['line_count'] += 1
     track['entry_count'] += 1
-    if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+    if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
         send_data_wrapper()
     elif track['entry_count'] % 100 == 0:
         logger.debug('Current data object size: ' + str(get_json_size_bytes(track['current_row'])) + ' bytes')
 
 
-def prepare_log_entry(timestamp, data, instance, device='')
+def prepare_log_entry(timestamp, data, instance, device=''):
     """ creates the log entry """
     entry = dict()
     entry['data'] = data
@@ -435,7 +720,7 @@ def prepare_log_entry(timestamp, data, instance, device='')
 def metric_handoff(timestamp, field_name, data, instance, device=''):
     append_metric_data_to_entry(timestamp, field_name, data, instance, device)
     track['entry_count'] += 1
-    if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size']:
+    if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
         send_data_wrapper()
     elif track['entry_count'] % 500 == 0:
         logger.debug('Current data object size: ' + str(get_json_size_bytes(track['current_dict'])) + ' bytes')
@@ -471,26 +756,6 @@ def transpose_metrics():
                 value = median(map(lambda v: int(v), value.split('|')))
             new_row[key] = str(value)
         track['current_row'].append(new_row)
-
-
-def parse_csv_metric_data(csv_data, instance, device=''):
-    """
-    parses CSV data, assuming the format is given as:
-        header row:  timestamp,field_1,field_2,...,field_n
-        n data rows: TIMESTAMP,value_1,value_2,...,value_n
-    """
-
-    # get field names from header row
-    field_names = csv_data.pop(0).split(',')[1:]
-
-    # go through each row
-    for row in csv_data:
-        if len(row) == 0:
-            continue
-        row = row.split(',')
-        timestamp = get_timestamp_from_date_string(row.pop(0))
-        for i in range(len(row)):
-            metric_handoff(timestamp, field_names[i], row[i], instance, device)
 
 
 ################################
@@ -594,7 +859,7 @@ def initialize_api_post_data():
     to_send_data_dict['userName'] = if_config_vars['user_name']
     to_send_data_dict['licenseKey'] = if_config_vars['license_key']
     to_send_data_dict['projectName'] = if_config_vars['project_name']
-    to_send_data_dict['instanceName'] = socket.gethostname().partition('.')[0]
+    to_send_data_dict['instanceName'] = HOSTNAME
     to_send_data_dict['agentType'] = get_agent_type_from_mode()
     if 'METRIC' in if_config_vars['project_type'] and 'sampling_interval' in if_config_vars:
         to_send_data_dict['samplingInterval'] = str(if_config_vars['sampling_interval'])
@@ -611,6 +876,8 @@ if __name__ == "__main__":
     PERIOD = re.compile(r"\.")
     NON_ALNUM = re.compile(r"[^a-zA-Z0-9]")
     ATTEMPTS = 3
+    HOSTNAME = socket.gethostname().partition('.')[0]
+    JSON_LEVEL_DELIM = '.'
     track = dict()
 
     # get config
@@ -621,7 +888,7 @@ if __name__ == "__main__":
     print_summary_info()
 
     # start data processing
-     for i in range(1, cli_config_vars['threads']): 
-         Process(target=initialize_data_gathering,
-                 args=(i,)
-                 ).start()
+    for i in range(0, cli_config_vars['threads']):
+        Process(target=initialize_data_gathering,
+                args=(i,)
+                ).start()
