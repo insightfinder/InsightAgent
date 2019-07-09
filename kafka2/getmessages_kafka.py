@@ -437,7 +437,7 @@ def get_field_index(field_names, field, label, is_required=False):
             return field
 
 
-def should_filter_per_config(setting, value):
+def should_include_per_config(setting, value):
     """ determine if an agent config filter setting would exclude a given value """
     return len(agent_config_vars[setting]) != 0 and value not in agent_config_vars[setting]
 
@@ -503,9 +503,10 @@ def parse_json_message(message):
             for field in filter_field.split(JSON_LEVEL_DELIM):
                 filter_check = filter_check.get(field, {})
             # check if a valid value
-            if filter_check not in filter_vals:
-                logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
-                return
+            for filter_val in filter_vals:
+                if filter_val.upper() not in filter_check.upper():
+                    logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
+                    return
             
     if len(agent_config_vars['filters_exclude']) != 0:
         # for each provided filter
@@ -517,9 +518,10 @@ def parse_json_message(message):
             for field in filter_field.split(JSON_LEVEL_DELIM):
                 filter_check = filter_check.get(field, {})
             # check if a valid value
-            if filter_check in filter_vals:
-                logger.debug('filtered message (exclusion): ' + filter_check + ' in ' + str(filter_vals))
-                return
+            for filter_val in filter_vals:
+                if filter_val.upper() in filter_check.upper():
+                    logger.debug('filtered message (exclusion): ' + filter_check + ' in ' + str(filter_vals))
+                    return
 
     # get timestamp
     timestamp = get_json_field(message, 'timestamp_field')
@@ -567,9 +569,10 @@ def parse_csv_message(message):
             filter_vals = _filter.split(':')[1].split(',')    
             filter_check = message[int(filter_field)]
             # check if a valid value                          
-            if filter_check not in filter_vals:               
-                logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
-                return                                        
+            for filter_val in filter_vals:
+                if filter_val.upper() not in filter_check.upper():
+                    logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
+                    return                                        
 
     if len(agent_config_vars['filters_exclude']) != 0:
         # for each provided filter                            
@@ -578,9 +581,10 @@ def parse_csv_message(message):
             filter_vals = _filter.split(':')[1].split(',')    
             filter_check = message[int(filter_field)]
             # check if a valid value                          
-            if filter_check in filter_vals:
-                logger.debug('filtered message (exclusion): ' + filter_check + ' in ' + str(filter_vals))
-                return                                        
+            for filter_val in filter_vals:
+                if filter_val.upper() in filter_check.upper():
+                    logger.debug('filtered message (exclusion): ' + filter_check + ' in ' + str(filter_vals))
+                    return                                        
 
     # instance
     instance = HOSTNAME
