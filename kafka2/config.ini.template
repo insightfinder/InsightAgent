@@ -1,4 +1,11 @@
-[agent]
+[kafka]
+# required
+bootstrap_servers = localhost:9092
+# required
+topics = test
+group_id = 
+client_id =
+
 ## filters
 # define a list of filters to use as field:allowed values|field:allowed values
 # for example:
@@ -42,7 +49,7 @@ ssl_context =
 # true or false
 ssl_check_hostname = 
 ssl_cafile =
-ssl_certificatefile =
+ssl_certfile =
 ssl_keyfile = 
 ssl_password = 
 ssl_crlfile = 
@@ -69,3 +76,4 @@ chunk_size_kb = 2048
 if_url = https://app.insightfinder.com
 if_http_proxy =
 if_https_proxy =
+

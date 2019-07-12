@@ -10,35 +10,49 @@ import sys
 import time
 import pytz
 from optparse import OptionParser
-from multiprocessing import Process
 from itertools import islice
 from datetime import datetime
 import dateutil
+from multiprocessing import Process
 from dateutil.tz import tzlocal
 import urlparse
 import httplib
 import requests
 
+from kafka import KafkaConsumer
 '''
 This script gathers data to send to Insightfinder
 '''
 
-
 def start_data_processing(thread_number):
-    """ TODO: replace with your code.
-    Most work regarding sending to IF is abstracted away for you.
-    This function will get the data to send and prepare it for the API.
-    The general outline should be:
-    0. Define the project type in config.ini
-    1. Parse config options
-    2. Gather data
-    3. Parse each entry
-    4. Call the appropriate handoff function
-        log_handoff()
-        incident_handoff()
-        metric_handoff()
-    See zipkin for an example that uses os.fork to send both metric and log data.
-    """
+    # open consumer
+    consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
+    logger.info('Started consumer number ' + str(thread_number))
+    # subscribe to given topics
+    consumer.subscribe(agent_config_vars['topics'])
+    logger.info('Successfully subscribed to topics' + str(agent_config_vars['topics']))
+    # start consuming messages
+    parse_messages_kafka(consumer)
+    consumer.close()
+    logger.info('Closed consumer number ' + str(thread_number))
+
+
+def parse_messages_kafka(consumer):
+    logger.info('Reading messages')
+    for message in consumer:
+        try:
+            logger.info('Message received')
+            logger.debug(message.value)
+            if 'JSON' in agent_config_vars['data_format']:
+                parse_json_message(json.loads(message.value))
+            elif 'CSV' in agent_config_vars['data_format']:
+                parse_csv_message(message.value.split(','))
+            else:
+                parse_raw_message(message)
+        except Exception as e:
+            logger.warn('Error when parsing message')
+            logger.warn(e)
+            continue
 
 
 def raw_parse_log(message):
@@ -58,7 +72,7 @@ def raw_parse_metric(message):
     instance = 'instance'
     device = 'device'
     return timestamp, metric, data, instance, device
-    
+
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
@@ -66,123 +80,189 @@ def get_agent_config_vars():
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
         try:
-            ## TODO: fill out the fields to grab. examples given below
-            ## replace 'agent' with the appropriate section header.
-            # fields to grab
-            agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
-            agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
+            # proxy settings
+            agent_http_proxy = config_parser.get('kafka', 'agent_http_proxy')
+            agent_https_proxy = config_parser.get('kafka', 'agent_https_proxy')
             
+            # kafka settings
+            kafka_config = {
+                # hardcoded
+                'api_version': (0, 9),
+                'auto_offset_reset': 'latest',
+                'consumer_timeout_ms': if_config_vars['sampling_interval'] * 1000,
+
+                # consumer settings
+                'group_id': config_parser.get('kafka', 'group_id'),
+                'client_id': config_parser.get('kafka', 'client_id'),
+
+                # SSL
+                'security_protocol': 'SSL' if config_parser.get('kafka', 'security_protocol') == 'SSL' else 'PLAINTEXT',
+                'ssl_context': config_parser.get('kafka', 'ssl_context'),
+                'ssl_cafile': config_parser.get('kafka', 'ssl_cafile'),
+                'ssl_certfile': config_parser.get('kafka', 'ssl_certfile'),
+                'ssl_keyfile': config_parser.get('kafka', 'ssl_keyfile'),
+                'ssl_password': config_parser.get('kafka', 'ssl_password'),
+                'ssl_crlfile': config_parser.get('kafka', 'ssl_crlfile'),
+                'ssl_ciphers': config_parser.get('kafka', 'ssl_ciphers'),
+
+                # SASL
+                'sasl_mechanism': config_parser.get('kafka', 'sasl_mechanism'),
+                'sasl_plain_username': config_parser.get('kafka', 'sasl_plain_username'),
+                'sasl_plain_password': config_parser.get('kafka', 'sasl_plain_password'),
+                'sasl_kerberos_service_name': config_parser.get('kafka', 'sasl_kerberos_service_name'),
+                'sasl_kerberos_domain_name': config_parser.get('kafka', 'sasl_kerberos_domain_name'),
+                'sasl_oauth_token_provider': config_parser.get('kafka', 'sasl_oauth_token_provider')
+            }
+
+            # only keep settings with values
+            kafka_kwargs = { k:v for (k, v) in kafka_config.items() if v }
+
+            # check SASL
+            if 'sasl_mechanism' in kafka_kwargs:
+                if kafka_kwargs['sasl_mechanism'] not in { 'PLAIN', 'GSSAPI', 'OAUTHBEARER' }:
+                    logger.warn('sasl_mechanism not one of PLAIN, GSSAPI, or OAUTHBEARER')
+                    kafka_kwargs.pop('sasl_mechanism')
+                elif kafka_kwargs['sasl_mechanism'] == 'PLAIN':
+                    # set required vars for plain sasl if not present
+                    if 'sasl_plain_username' not in kafka_kwargs:
+                        kafka_kwargs['sasl_plain_username'] = ''
+                    if 'sasl_plain_password' not in kafka_kwargs:
+                        kafka_kwargs['sasl_plain_password'] = ''
+
+            # handle boolean setting
+            if config_parser.get('kafka', 'ssl_check_hostname').upper() == 'FALSE':
+                kafka_kwargs['ssl_check_hostname'] = False
+            
+            # handle required arrays
+            # bootstrap serverss
+            if len(config_parser.get('kafka', 'bootstrap_servers')) != 0:
+                kafka_kwargs['bootstrap_servers'] = config_parser.get('kafka', 'bootstrap_servers').strip().split(',')
+            else:
+                logger.warning(
+                    'Agent not correctly configured (bootstrap_servers). Check config file.')
+                sys.exit()
+            
+            # topics
+            if len(config_parser.get('kafka', 'topics')) != 0:
+                topics = config_parser.get('kafka', 'topics').split(',')
+            else:
+                logger.warning(
+                    'Agent not correctly configured (topics). Check config file.')
+                sys.exit()
+
             # filters
-            filters_include = config_parser.get('agent', 'filters_include')
-            filters_exclude = config_parser.get('agent', 'filters_exclude')
+            filters_include = config_parser.get('kafka', 'filters_include')
+            if len(filters_include) != 0:
+                filters_include = filters_include.split('|')
+            filters_exclude = config_parser.get('kafka', 'filters_exclude')
+            if len(filters_exclude) != 0:
+                filters_exclude = filters_exclude.split('|')
 
             # message parsing
-            timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
-            timestamp_field = config_parser.get('agent', 'timestamp_field') or 'timestamp'
-            instance_field = config_parser.get('agent', 'instance_field')
-            device_field = config_parser.get('agent', 'device_field')
+            timestamp_format = config_parser.get('kafka', 'timestamp_format', raw=True) or 'epoch'
+            timestamp_field = config_parser.get('kafka', 'timestamp_field') or 'timestamp'
+            instance_field = config_parser.get('kafka', 'instance_field')
+            device_field = config_parser.get('kafka', 'device_field')
+            csv_field_names = config_parser.get('kafka', 'csv_field_names')
             json_top_level = config_parser.get('kafka', 'json_top_level')
-            csv_field_names = config_parser.get('agent', 'csv_field_names')
-            data_fields = config_parser.get('agent', 'data_fields')
-            data_format = config_parser.get('agent', 'data_format').upper()
-                    
+            data_fields = config_parser.get('kafka', 'data_fields')
+            if len(data_fields) != 0:
+                data_fields = data_fields.split(',')
+            data_format = config_parser.get('kafka', 'data_format').upper()
+            if data_format not in { 'CSV', 'JSON' }:
+                data_format = 'RAW'
+
+            # CSV-specific
+            if data_format == 'CSV':
+                if len(csv_field_names) == 0:
+                    logger.warning(
+                        'Agent not correctly configured (csv_field_names)')
+                    sys.exit()
+                csv_field_names = csv_field_names.split(',')
+
+                # timestamp
+                timestamp_field = get_field_index(csv_field_names, timestamp_field, 'timestamp_field', True)
+
+                # instance
+                if len(instance_field) != 0:
+                    instance_field_temp = get_field_index(csv_field_names, instance_field, 'instance_field')
+                    if isinstance(instance_field_temp, int):
+                        instance_field = instance_field_temp
+                    else:
+                        instance_field = ''
+
+                # device
+                if len(device_field) != 0:
+                    device_field_temp = get_field_index(csv_field_names, device_field, 'device_field')
+                    if isinstance(device_field_temp, int):
+                        device_field = device_field_temp
+                    else:
+                        device_field = ''
+
+                # data
+                if len(data_fields) != 0:
+                    data_fields_temp = []
+                    for data_field in data_fields:
+                        data_field_temp = get_field_index(csv_field_names, data_field, 'data_field')
+                        if isinstance(data_field_temp, int):
+                            data_fields_temp.append(data_field_temp)
+                    data_fields = data_fields_temp
+                if len(data_fields) == 0:
+                    # use all non-timestamp fields
+                    data_fields = range(len(csv_field_names))
+                    data_fields.pop(timestamp_field)
+
+                # filters
+                if len(filters_include) != 0:
+                    temp_filters_include = []
+                    for _filter in filters_include:
+                        filter_field = _filter.split(':')[0]          
+                        filter_vals = _filter.split(':')[1]
+                        filter_field_temp = get_field_index(csv_field_names, filter_field, 'filter_field')
+                        if isinstance(filter_field_temp, int):
+                            temp_filter = str(filter_field_temp) + ':' + filter_vals
+                            temp_filters_include.append(temp_filter)
+                    filters_include = temp_filters_include
+
+                if len(filters_exclude) != 0:
+                    temp_filters_exclude = []
+                    for _filter in filters_exclude:
+                        filter_field = _filter.split(':')[0]          
+                        filter_vals = _filter.split(':')[1]
+                        filter_field_temp = get_field_index(csv_field_names, filter_field, 'filter_field')
+                        if isinstance(filter_field_temp, int):
+                            temp_filter = str(filter_field_temp) + ':' + filter_vals
+                            temp_filters_exclude.append(temp_filter)
+                    filters_exclude = temp_filters_exclude
+
+
         except ConfigParser.NoOptionError:
             logger.error(
                 'Agent not correctly configured. Check config file.')
             sys.exit(1)
-         
+
         # any post-processing
         agent_proxies = dict()
         if len(agent_http_proxy) > 0:
             agent_proxies['http'] = agent_http_proxy
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
-            
-        if len(filters_include) != 0:
-            filters_include = filters_include.split('|')
-        if len(filters_exclude) != 0:
-            filters_exclude = filters_exclude.split('|')
-        if len(data_fields) != 0:
-            data_fields = data_fields.split(',')
-        
-        if data_format not in { 'CSV', 'JSON' }:
-            data_format = 'RAW'
-
-        # CSV-specific
-        if data_format == 'CSV':
-            if len(csv_field_names) == 0:
-                logger.warning(
-                    'Agent not correctly configured (csv_field_names)')
-                sys.exit()
-            csv_field_names = csv_field_names.split(',')
-
-            # timestamp
-            timestamp_field = get_field_index(csv_field_names, timestamp_field, 'timestamp_field', True)
-
-            # instance
-            if len(instance_field) != 0:
-                instance_field_temp = get_field_index(csv_field_names, instance_field, 'instance_field')
-                if isinstance(instance_field_temp, int):
-                    instance_field = instance_field_temp
-                else:
-                    instance_field = ''
-
-            # device
-            if len(device_field) != 0:
-                device_field_temp = get_field_index(csv_field_names, device_field, 'device_field')
-                if isinstance(device_field_temp, int):
-                    device_field = device_field_temp
-                else:
-                    device_field = ''
-
-            # data
-            if len(data_fields) != 0:
-                data_fields_temp = []
-                for data_field in data_fields:
-                    data_field_temp = get_field_index(csv_field_names, data_field, 'data_field')
-                    if isinstance(data_field_temp, int):
-                        data_fields_temp.append(data_field_temp)
-                data_fields = data_fields_temp
-            if len(data_fields) == 0:
-                # use all non-timestamp fields
-                data_fields = range(len(csv_field_names))
-                data_fields.pop(timestamp_field)
-
-            # filters
-            if len(filters_include) != 0:
-                temp_filters_include = []
-                for _filter in filters_include:
-                    filter_field = _filter.split(':')[0]          
-                    filter_vals = _filter.split(':')[1]
-                    filter_field_temp = get_field_index(csv_field_names, filter_field, 'filter_field')
-                    if isinstance(filter_field_temp, int):
-                        temp_filter = str(filter_field_temp) + ':' + filter_vals
-                        temp_filters_include.append(temp_filter)
-                filters_include = temp_filters_include
-
-            if len(filters_exclude) != 0:
-                temp_filters_exclude = []
-                for _filter in filters_exclude:
-                    filter_field = _filter.split(':')[0]          
-                    filter_vals = _filter.split(':')[1]
-                    filter_field_temp = get_field_index(csv_field_names, filter_field, 'filter_field')
-                    if isinstance(filter_field_temp, int):
-                        temp_filter = str(filter_field_temp) + ':' + filter_vals
-                        temp_filters_exclude.append(temp_filter)
-                filters_exclude = temp_filters_exclude
 
         # add parsed variables to a global
         config_vars = {
-            'proxies': agent_proxies,
+            'kafka_kwargs': kafka_kwargs,
+            'topics': topics,
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
             'data_format': data_format,
             'csv_field_names': csv_field_names,
+            'json_top_level': json_top_level,
             'timestamp_format': timestamp_format,
             'timestamp_field': timestamp_field,
             'instance_field': instance_field,
             'device_field': device_field,
-            'data_fields': data_fields
+            'data_fields': data_fields,
+            'proxies': agent_proxies
         }
 
         return config_vars
