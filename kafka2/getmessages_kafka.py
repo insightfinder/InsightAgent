@@ -493,17 +493,21 @@ def parse_raw_message(message):
         log_handoff(*raw_parse_log(message))
 
 
-def get_json_field(message, config_setting, default=''):
+def get_single_json_field(message, config_setting, default=''):
+    """
+    returns a string of the value specified in the config_setting.
+    if the value is a object, the entire object (and all subelements)
+    will be returned as a string.
+    """
     if len(agent_config_vars[config_setting]) == 0:
         return default
-    field_val = json_format_field_value(_get_json_field_helper(message, agent_config_vars[config_setting].split(JSON_LEVEL_DELIM)))
+    field_val = json_format_field_value(_get_json_field_helper(message, agent_config_vars[config_setting].split(JSON_LEVEL_DELIM)), False)
     if len(field_val) == 0:
         field_val = default
-    logger.debug(str(field_val))
-    return field_val
+    return str(field_val)
 
 
-def _get_json_field_helper(nested_value, next_fields, allow_list=False):
+def _get_json_field_helper(nested_value, next_fields):
     if len(next_fields) == 0:
         logger.debug('len(next_fields) == 0')
         return ''
@@ -533,16 +537,9 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False):
         for item in next_value:
             next_value_all += str(item)
         return next_value_all
-    elif isinstance(next_value, list):
-        logger.debug('isinstance(next_value, list)')
-        if allow_list: 
-            return json_gather_list_values(next_value, next_fields)
-        else:
-            raise Exception('encountered list in json when not allowed')
-            return ''
-    elif isinstance(next_value, dict):
-        logger.debug('isinstance(next_value, dict)')
-        return _get_json_field_helper(next_value, next_fields, allow_list)
+    elif isinstance(next_value, (list, dict)):
+        logger.debug('isinstance(next_value, (list, dict))')
+        return json_gather_list_values(next_value, next_fields)
     else:
         logger.info('given field could not be found')
         return ''
@@ -553,20 +550,23 @@ def json_gather_list_values(l, fields):
     for sub_value in l:
         logger.debug('checking sub val ' + str(sub_value))
         fields_copy = list(fields[i] for i in range(len(fields)))
-        json_value = json_format_field_value(_get_json_field_helper(sub_value, fields_copy, True))
+        json_value = json_format_field_value(_get_json_field_helper(sub_value, fields_copy))
         if len(json_value) != 0:
             sub_field_value.append(json_value)
     return sub_field_value
 
 
-def json_format_field_value(value):
-    if isinstance(value, (dict, list)):
-        logger.debug('returning dictionary/list')
-        if len(value) == 1 and isinstance(value, list):
-            return value.pop(0)
+def json_format_field_value(value, allow_list=True):
+    if isinstance(value, list):
+        logger.debug('returning list')
+        if len(value) == 1:
+            return json_format_field_value(value.pop(0), allow_list)
+        if allow_list:
+            return value
+    elif isinstance(value, dict):
+        logger.debug('returning dictionary')
         return value
-    else:
-        logger.debug('returning stringified value')
+    logger.debug('returning stringified value')
     return str(value)
 
 
@@ -577,7 +577,7 @@ def parse_json_message(messages):
             for message in messages:
                 parse_json_message_single(message)
         else:
-            top_level = _get_json_field_helper(messages, agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM), True)
+            top_level = _get_json_field_helper(messages, agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM))
             if isinstance(top_level, list):
                 logger.debug('parsing message as embedded list of messages')
                 for message in top_level:
@@ -598,7 +598,7 @@ def parse_json_message_single(message):
         for _filter in agent_config_vars['filters_include']:
             filter_field = _filter.split(':')[0]
             filter_vals = _filter.split(':')[1].split(',')
-            filter_check = str(_get_json_field_helper(message, filter_field.split(JSON_LEVEL_DELIM), True))
+            filter_check = str(_get_json_field_helper(message, filter_field.split(JSON_LEVEL_DELIM)))
             logger.debug('filter_check: ' + str(filter_check))
             # check if a valid value
             for filter_val in filter_vals:
@@ -619,7 +619,7 @@ def parse_json_message_single(message):
         for _filter in agent_config_vars['filters_exclude']:
             filter_field = _filter.split(':')[0]
             filter_vals = _filter.split(':')[1].split(',')
-            filter_check = str(_get_json_field_helper(message, filter_field.split(JSON_LEVEL_DELIM), True))
+            filter_check = str(_get_json_field_helper(message, filter_field.split(JSON_LEVEL_DELIM)))
             # check if a valid value
             for filter_val in filter_vals:
                 if filter_val.upper() in filter_check.upper():
@@ -628,19 +628,19 @@ def parse_json_message_single(message):
         logger.debug('passed filter (exclusion)')
 
     # get timestamp
-    timestamp = get_json_field(message, 'timestamp_field')
+    timestamp = get_single_json_field(message, 'timestamp_field')
     timestamp = get_timestamp_from_date_string(timestamp)
 
     # get instance & device
-    instance = get_json_field(message, 'instance_field', HOSTNAME)
-    device = get_json_field(message, 'device_field')
+    instance = get_single_json_field(message, 'instance_field', HOSTNAME)
+    device = get_single_json_field(message, 'device_field')
 
     # get data
     log_data = dict()
     if len(agent_config_vars['data_fields']) != 0: 
         for data_field in agent_config_vars['data_fields']:
             logger.debug(data_field)
-            data_value = json_format_field_value(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM), True))
+            data_value = json_format_field_value(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM)))
             if len(data_value) != 0:
                 if 'METRIC' in if_config_vars['project_type']:
                     metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
@@ -651,7 +651,7 @@ def parse_json_message_single(message):
             # assume metric data is in top level
             for data_field in message:
                 logger.debug(data_field)
-                data_value = str(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM), True))
+                data_value = json_format_field_value(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM)))
                 if data_value is not None:
                     metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
         else:
