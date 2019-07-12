@@ -1,5 +1,7 @@
 [kafka]
+# required
 bootstrap_servers = localhost:9092
+# required
 topics = test
 group_id = 
 client_id =
@@ -22,6 +24,10 @@ data_format =
 # if csv, must give the field names. specify timestamp_field, instance_field, etc as the column number (starting at index zero).
 # define the field names as timestamp,field1,field2...
 csv_field_names =
+# for multi-entry messages, define the top-level
+# if messages are [{message1}, {message2}], set top_level = []
+# it's expected that the top level will be a list
+json_top_level = 
 # give format as per python strptime
 timestamp_format = 
 # fields in json can be defined as level0.level.timestamp
@@ -62,9 +68,9 @@ sasl_oauth_token_provider =
 user_name = 
 license_key = 
 project_name = 
-# metric, metricreplay, log, logreplay, incident, incidentreplay
+# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
 project_type = 
-sampling_interval = 1
+sampling_interval = 10
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
 if_url = https://app.insightfinder.com
