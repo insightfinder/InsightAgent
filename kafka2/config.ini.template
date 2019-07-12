@@ -49,7 +49,7 @@ ssl_context =
 # true or false
 ssl_check_hostname = 
 ssl_cafile =
-ssl_certificatefile =
+ssl_certfile =
 ssl_keyfile = 
 ssl_password = 
 ssl_crlfile = 
