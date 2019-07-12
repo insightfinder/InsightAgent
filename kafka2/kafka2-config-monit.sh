@@ -15,7 +15,7 @@ echo \
     stop program = \"pkill -f ${AGENT_FULL_PATH}\"
 
 check file kafka_agent_config path \"${AGENT_FULL_PATH_CONFIG}\"
-    if changed mtime then restart
+    if changed timestamp then restart
     start program = \"/usr/bin/nohup /usr/bin/python ${AGENT_FULL_PATH}\"
     stop program = \"pkill -f ${AGENT_FULL_PATH}\"" > ${MONIT_FILE}
 
