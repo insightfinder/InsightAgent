@@ -27,7 +27,7 @@ This script gathers data to send to Insightfinder
 def start_data_processing(thread_number):
     # open consumer
     consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
-    logger.info('Started metric consumer number ' + str(thread_number))
+    logger.info('Started consumer number ' + str(thread_number))
     # subscribe to given topics
     consumer.subscribe(agent_config_vars['topics'])
     logger.info('Successfully subscribed to topics' + str(agent_config_vars['topics']))
@@ -43,9 +43,9 @@ def parse_messages_kafka(consumer):
         try:
             logger.info('Message received')
             logger.debug(message.value)
-            if agent_config_vars['data_format'] == 'JSON':
+            if 'JSON' in agent_config_vars['data_format']:
                 parse_json_message(json.loads(message.value))
-            elif agent_config_vars['data_format'] == 'CSV':
+            elif 'CSV' in agent_config_vars['data_format']:
                 parse_csv_message(message.value.split(','))
             else:
                 parse_raw_message(message)
@@ -89,6 +89,7 @@ def get_agent_config_vars():
                 # hardcoded
                 'api_version': (0, 9),
                 'auto_offset_reset': 'latest',
+                'consumer_timeout_ms': if_config_vars['sampling_interval'] * 1000,
 
                 # consumer settings
                 'group_id': config_parser.get('kafka', 'group_id'),
@@ -98,7 +99,7 @@ def get_agent_config_vars():
                 'security_protocol': 'SSL' if config_parser.get('kafka', 'security_protocol') == 'SSL' else 'PLAINTEXT',
                 'ssl_context': config_parser.get('kafka', 'ssl_context'),
                 'ssl_cafile': config_parser.get('kafka', 'ssl_cafile'),
-                'ssl_certificatefile': config_parser.get('kafka', 'ssl_certificatefile'),
+                'ssl_certfile': config_parser.get('kafka', 'ssl_certfile'),
                 'ssl_keyfile': config_parser.get('kafka', 'ssl_keyfile'),
                 'ssl_password': config_parser.get('kafka', 'ssl_password'),
                 'ssl_crlfile': config_parser.get('kafka', 'ssl_crlfile'),
@@ -163,6 +164,7 @@ def get_agent_config_vars():
             instance_field = config_parser.get('kafka', 'instance_field')
             device_field = config_parser.get('kafka', 'device_field')
             csv_field_names = config_parser.get('kafka', 'csv_field_names')
+            json_top_level = config_parser.get('kafka', 'json_top_level')
             data_fields = config_parser.get('kafka', 'data_fields')
             if len(data_fields) != 0:
                 data_fields = data_fields.split(',')
@@ -254,6 +256,7 @@ def get_agent_config_vars():
             'filters_exclude': filters_exclude,
             'data_format': data_format,
             'csv_field_names': csv_field_names,
+            'json_top_level': json_top_level,
             'timestamp_format': timestamp_format,
             'timestamp_field': timestamp_field,
             'instance_field': instance_field,
@@ -315,7 +318,11 @@ def get_if_config_vars():
                 'LOG',
                 'LOGREPLAY',
                 'INCIDENT',
-                'INCIDENTREPLAY'
+                'INCIDENTREPLAY',
+                'ALERT',
+                'ALERTREPLAY',
+                'DEPLOYMENT',
+                'DEPLOYMENTREPLAY'
                 }:
            logger.warning(
                 'Agent not correctly configured (project_type). Check config file.')
@@ -370,8 +377,11 @@ def get_cli_config_vars():
     """ get CLI options. use of these options should be rare """
     usage = 'Usage: %prog [options]'
     parser = OptionParser(usage=usage)
+    """
+    ## not ready.
     parser.add_option('--threads', default=1,
                       action='store', dest='threads', help='Number of threads to run')
+    """
     parser.add_option('--tz', default='UTC',
                       action='store', dest='time_zone', help='Timezone of the data. See pytz.all_timezones')
     parser.add_option('-q', '--quiet',
@@ -383,13 +393,16 @@ def get_cli_config_vars():
                                                                 ' Automatically turns on verbose logging')
     (options, args) = parser.parse_args()
 
+    """
+    # not ready
     try:
         threads = int(options.threads)
     except ValueError:
         threads = 1
+    """
 
     config_vars = {
-        'threads': threads,
+        'threads': 1,
         'testing': False,
         'log_level': logging.INFO,
         'time_zone': pytz.utc
@@ -483,45 +496,136 @@ def parse_raw_message(message):
 def get_json_field(message, config_setting, default=''):
     if len(agent_config_vars[config_setting]) == 0:
         return default
-    temp = message
-    for _field in agent_config_vars[config_setting].split(JSON_LEVEL_DELIM):
-        temp = temp.get(_field, {})
-    if len(temp) == 0:
-        temp = default
-    return temp
+    field_val = json_format_field_value(_get_json_field_helper(message, agent_config_vars[config_setting].split(JSON_LEVEL_DELIM)))
+    if len(field_val) == 0:
+        field_val = default
+    logger.debug(str(field_val))
+    return field_val
 
 
-def parse_json_message(message):
+def _get_json_field_helper(nested_value, next_fields, allow_list=False):
+    if len(next_fields) == 0:
+        logger.debug('len(next_fields) == 0')
+        return ''
+    elif isinstance(nested_value, list):
+        logger.debug('isinstance(nested_value, list)')
+        return json_gather_list_values(nested_value, next_fields)
+    elif not isinstance(nested_value, dict):
+        logger.debug('not isinstance(nested_value, dict)')
+        return ''
+    next_field = next_fields.pop(0)
+    next_value = nested_value.get(next_field)
+    if next_value is None:
+        logger.debug('next_value is None')
+        return ''
+    elif len(bytes(next_value)) == 0:
+        logger.debug('len(bytes(next_value)) == 0')
+        return ''
+    elif next_fields is None:
+        logger.debug('next_fields is None')
+        return next_value
+    elif len(next_fields) == 0:
+        logger.debug('len(next_fields) == 0')
+        return next_value
+    elif isinstance(next_value, set):
+        logger.debug('isinstance(next_value, set)')
+        next_value_all = ''
+        for item in next_value:
+            next_value_all += str(item)
+        return next_value_all
+    elif isinstance(next_value, list):
+        logger.debug('isinstance(next_value, list)')
+        if allow_list: 
+            return json_gather_list_values(next_value, next_fields)
+        else:
+            raise Exception('encountered list in json when not allowed')
+            return ''
+    elif isinstance(next_value, dict):
+        logger.debug('isinstance(next_value, dict)')
+        return _get_json_field_helper(next_value, next_fields, allow_list)
+    else:
+        logger.info('given field could not be found')
+        return ''
+
+
+def json_gather_list_values(l, fields):
+    sub_field_value = []
+    for sub_value in l:
+        logger.debug('checking sub val ' + str(sub_value))
+        fields_copy = list(fields[i] for i in range(len(fields)))
+        json_value = json_format_field_value(_get_json_field_helper(sub_value, fields_copy, True))
+        if len(json_value) != 0:
+            sub_field_value.append(json_value)
+    return sub_field_value
+
+
+def json_format_field_value(value):
+    if isinstance(value, (dict, list)):
+        logger.debug('returning dictionary/list')
+        if len(value) == 1 and isinstance(value, list):
+            return value.pop(0)
+        return value
+    else:
+        logger.debug('returning stringified value')
+    return str(value)
+
+
+def parse_json_message(messages):
+    if len(agent_config_vars['json_top_level']) != 0:
+        if agent_config_vars['json_top_level'] == '[]' and isinstance(messages, list):
+            logger.debug('parsing message as list of messages')
+            for message in messages:
+                parse_json_message_single(message)
+        else:
+            top_level = _get_json_field_helper(messages, agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM), True)
+            if isinstance(top_level, list):
+                logger.debug('parsing message as embedded list of messages')
+                for message in top_level:
+                    parse_json_message_single(message)
+            else:
+                logger.debug('parsing message as embedded message')
+                parse_json_message_single(top_level)
+    else:
+        logger.debug('parsing message as single message')
+        parse_json_message_single(messages)
+
+
+def parse_json_message_single(message):
     # filter
     if len(agent_config_vars['filters_include']) != 0:
         # for each provided filter
+        is_valid = False
         for _filter in agent_config_vars['filters_include']:
             filter_field = _filter.split(':')[0]
             filter_vals = _filter.split(':')[1].split(',')
-            filter_check = message
-            # walk down the fields
-            for field in filter_field.split(JSON_LEVEL_DELIM):
-                filter_check = filter_check.get(field, {})
+            filter_check = str(_get_json_field_helper(message, filter_field.split(JSON_LEVEL_DELIM), True))
+            logger.debug('filter_check: ' + str(filter_check))
             # check if a valid value
             for filter_val in filter_vals:
-                if filter_val.upper() not in filter_check.upper():
-                    logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
-                    return
+                logger.debug('checking ' + str(filter_val))
+                if filter_val.upper() in filter_check.upper():
+                    is_valid = True
+                    break
+            if is_valid:
+                break
+        if not is_valid:
+            logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
+            return
+        else:
+            logger.debug('passed filter (inclusion)')
             
     if len(agent_config_vars['filters_exclude']) != 0:
         # for each provided filter
         for _filter in agent_config_vars['filters_exclude']:
             filter_field = _filter.split(':')[0]
             filter_vals = _filter.split(':')[1].split(',')
-            filter_check = message
-            # walk down the fields
-            for field in filter_field.split(JSON_LEVEL_DELIM):
-                filter_check = filter_check.get(field, {})
+            filter_check = str(_get_json_field_helper(message, filter_field.split(JSON_LEVEL_DELIM), True))
             # check if a valid value
             for filter_val in filter_vals:
                 if filter_val.upper() in filter_check.upper():
-                    logger.debug('filtered message (exclusion): ' + filter_check + ' in ' + str(filter_vals))
+                    logger.debug('filtered message (exclusion): ' + str(filter_val) + ' in ' + str(filter_check))
                     return
+        logger.debug('passed filter (exclusion)')
 
     # get timestamp
     timestamp = get_json_field(message, 'timestamp_field')
@@ -535,19 +639,19 @@ def parse_json_message(message):
     log_data = dict()
     if len(agent_config_vars['data_fields']) != 0: 
         for data_field in agent_config_vars['data_fields']:
-            data = message
-            for field in data_field.split('.'):
-                data_value = data.get(field, {})
-
-            if 'METRIC' in if_config_vars['project_type']:
-                metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
-            else:
-                log_data[data_field.replace('.', '/')] = data_value
+            logger.debug(data_field)
+            data_value = json_format_field_value(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM), True))
+            if len(data_value) != 0:
+                if 'METRIC' in if_config_vars['project_type']:
+                    metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
+                else:
+                    log_data[data_field.replace('.', '/')] = data_value
     else:    
         if 'METRIC' in if_config_vars['project_type']:
             # assume metric data is in top level
             for data_field in message:
-                data_value = message.get(data_field)
+                logger.debug(data_field)
+                data_value = str(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM), True))
                 if data_value is not None:
                     metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
         else:
@@ -563,7 +667,8 @@ def parse_csv_message(message):
 
     # filter
     if len(agent_config_vars['filters_include']) != 0:
-        # for each provided filter                            
+        # for each provided filter, check if there are any allowed valued
+        is_valid = False
         for _filter in agent_config_vars['filters_include']:          
             filter_field = _filter.split(':')[0]              
             filter_vals = _filter.split(':')[1].split(',')    
@@ -571,11 +676,18 @@ def parse_csv_message(message):
             # check if a valid value                          
             for filter_val in filter_vals:
                 if filter_val.upper() not in filter_check.upper():
-                    logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
-                    return                                        
+                    is_valid = True
+                    break
+            if is_valid:
+                break
+        if not is_valid:
+            logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
+            return                                        
+        else:
+            logger.debug('passed filter (inclusion)')
 
     if len(agent_config_vars['filters_exclude']) != 0:
-        # for each provided filter                            
+        # for each provided filter, check if there are any disallowed values
         for _filter in agent_config_vars['filters_exclude']:          
             filter_field = _filter.split(':')[0]              
             filter_vals = _filter.split(':')[1].split(',')    
@@ -585,6 +697,7 @@ def parse_csv_message(message):
                 if filter_val.upper() in filter_check.upper():
                     logger.debug('filtered message (exclusion): ' + filter_check + ' in ' + str(filter_vals))
                     return                                        
+        logger.debug('passed filter (exclusion)')
 
     # instance
     instance = HOSTNAME
@@ -753,6 +866,7 @@ def initialize_data_gathering(thread_number):
     if len(track['current_row']) > 0 or len(track['current_dict']) > 0:
         logger.debug('Sending last chunk')
         send_data_wrapper()
+
 
     logger.debug('Total chunks created: ' + str(track['chunk_count']))
     logger.debug('Total ' + if_config_vars['project_type'].lower() + ' entries: ' + str(track['entry_count']))
@@ -958,9 +1072,9 @@ if __name__ == "__main__":
     RIGHT_BRACE = re.compile(r"\]")
     PERIOD = re.compile(r"\.")
     NON_ALNUM = re.compile(r"[^a-zA-Z0-9]")
-    ATTEMPTS = 3
     HOSTNAME = socket.gethostname().partition('.')[0]
     JSON_LEVEL_DELIM = '.'
+    ATTEMPTS = 3
     track = dict()
 
     # get config
