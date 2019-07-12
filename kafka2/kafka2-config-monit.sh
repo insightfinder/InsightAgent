@@ -3,6 +3,7 @@
 AGENT="kafka2"
 AGENT_SCRIPT="getmessages_kafka.py"
 AGENT_FULL_PATH="$(pwd)/${AGENT_SCRIPT}"
+AGENT_FULL_PATH_CONFIG="$(pwd)/config.ini"
 
 # monit control
 MONIT_FILE="/etc/monit.d/${AGENT}.monit"
@@ -13,10 +14,10 @@ echo \
     start program = \"/usr/bin/nohup /usr/bin/python ${AGENT_FULL_PATH}\"
     stop program = \"pkill -f ${AGENT_FULL_PATH}\"
 
-check file kafka_agent_config matching \"${AGENT_FULL_PATH_CONFIG}\"
+check file kafka_agent_config path \"${AGENT_FULL_PATH_CONFIG}\"
     if changed mtime then restart
     start program = \"/usr/bin/nohup /usr/bin/python ${AGENT_FULL_PATH}\"
-    stop program = \"pkill -f ${AGENT_FULL_PATH}\"" >> ${MONIT_FILE}
+    stop program = \"pkill -f ${AGENT_FULL_PATH}\"" > ${MONIT_FILE}
 
 # reload monit
 monit reload
