@@ -893,7 +893,7 @@ def send_data_to_if(chunk_metric_data):
 
     # prepare data for metric streaming agent
     data_to_post = initialize_api_post_data()
-    data_to_post['metricData'] = json.dumps(chunk_metric_data)
+    data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
 
     logger.debug('First:\n' + str(chunk_metric_data[0]))
     logger.debug('Last:\n' + str(chunk_metric_data[-1]))
