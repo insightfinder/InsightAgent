@@ -34,9 +34,11 @@ def start_data_processing(thread_number):
     2. Gather data
     3. Parse each entry
     4. Call the appropriate handoff function
-        log_handoff()
-        incident_handoff()
         metric_handoff()
+        log_handoff()
+        alert_handoff()
+        incident_handoff()
+        deployment_handoff()
     See zipkin for an example that uses os.fork to send both metric and log data.
     """
 
@@ -816,7 +818,7 @@ def alert_handoff(timestamp, data, instance, device=''):
 
 
 def log_handoff(timestamp, data, instance, device=''):
-    entry = prepare_log_entry(timestamp, data, instance, device)
+    entry = prepare_log_entry(str(int(timestamp)), data, instance, device)
     track['current_row'].append(entry)
     track['line_count'] += 1
     track['entry_count'] += 1
@@ -901,6 +903,9 @@ def send_data_to_if(chunk_metric_data):
 
     # prepare data for metric streaming agent
     data_to_post = initialize_api_post_data()
+    if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
+        for chunk in chunk_metric_data:
+            chunk['data'] = json.dumps(chunk['data'])
     data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
 
     logger.debug('First:\n' + str(chunk_metric_data[0]))
