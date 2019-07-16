@@ -887,6 +887,14 @@ def incident_handoff(timestamp, data, instance, device=''):
     log_handoff(timestamp, data, instance, device)
 
 
+def deployment_handoff(timestamp, data, instance, device=''):
+    log_handoff(timestamp, data, instance, device)
+
+
+def alert_handoff(timestamp, data, instance, device=''):
+    log_handoff(timestamp, data, instance, device)
+
+
 def log_handoff(timestamp, data, instance, device=''):
     entry = prepare_log_entry(timestamp, data, instance, device)
     track['current_row'].append(entry)
@@ -902,10 +910,10 @@ def prepare_log_entry(timestamp, data, instance, device=''):
     """ creates the log entry """
     entry = dict()
     entry['data'] = data
-    if 'INCIDENT' in if_config_vars['project_type']:
+    if 'INCIDENT' in if_config_vars['project_type'] or 'DEPLOYMENT' in if_config_vars['project_type']:
         entry['timestamp'] = timestamp
         entry['instanceName'] = make_safe_instance_string(instance, device)
-    else:
+    else: # LOG or ALERT
         entry['eventId'] = timestamp
         entry['tag'] = make_safe_instance_string(instance, device)
     return entry
@@ -1035,10 +1043,11 @@ def get_agent_type_from_project_type():
             return 'MetricFileReplay'
         else:
             return 'CUSTOM'
-    elif 'REPLAY' in if_config_vars['project_type']:
+    elif 'REPLAY' in if_config_vars['project_type']: # LOG, ALERT
         return 'LogFileReplay'
     else:
         return 'LogStreaming'
+    # INCIDENT and DEPLOYMENT don't use this
 
 
 def get_data_field_from_project_type():
@@ -1046,7 +1055,9 @@ def get_data_field_from_project_type():
     # incident uses a different API endpoint
     if 'INCIDENT' in if_config_vars['project_type']:
         return 'incidentData'
-    else:
+    elif 'DEPLOYMENT' in if_config_vars['project_type']:
+        return 'deploymentData'
+    else: # MERTIC, LOG, ALERT
         return 'metricData'
 
 
@@ -1055,7 +1066,9 @@ def get_api_from_project_type():
     # incident uses a different API endpoint
     if 'INCIDENT' in if_config_vars['project_type']:
         return 'incidentdatareceive'
-    else:
+    elif 'DEPLOYMENT' in if_config_vars['project_type']:
+        return 'deploymentEventReceive'
+    else: # MERTIC, LOG, ALERT
         return 'customprojectrawdata'
 
 
