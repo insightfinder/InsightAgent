@@ -44,7 +44,7 @@ def parse_messages_kafka(consumer):
             logger.info('Message received')
             logger.debug(message.value)
             if 'JSON' in agent_config_vars['data_format']:
-                parse_json_message(json.loads(message.value))
+                parse_json_message(json.loads(str(message.value)))
             elif 'CSV' in agent_config_vars['data_format']:
                 parse_csv_message(message.value.split(','))
             else:
@@ -896,7 +896,7 @@ def alert_handoff(timestamp, data, instance, device=''):
 
 
 def log_handoff(timestamp, data, instance, device=''):
-    entry = prepare_log_entry(timestamp, data, instance, device)
+    entry = prepare_log_entry(str(int(timestamp)), data, instance, device)
     track['current_row'].append(entry)
     track['line_count'] += 1
     track['entry_count'] += 1
@@ -966,6 +966,13 @@ def transpose_metrics():
 ################################
 # Functions to send data to IF #
 ################################
+def format_data_by_project_type(chunk_metric_data):
+    dumped_data = json.dumps(chunk_metric_data)
+    if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
+        return [dumped_data]
+    return dumped_data
+
+
 def send_data_wrapper():
     """ wrapper to send data """
     if 'METRIC' in if_config_vars['project_type']:
@@ -981,19 +988,25 @@ def send_data_to_if(chunk_metric_data):
 
     # prepare data for metric streaming agent
     data_to_post = initialize_api_post_data()
+    if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
+        for chunk in chunk_metric_data:
+            chunk['data'] = json.dumps(chunk['data'])
     data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
+    post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
 
-    logger.debug('First:\n' + str(chunk_metric_data[0]))
-    logger.debug('Last:\n' + str(chunk_metric_data[-1]))
+    #logger.debug('First:\n' + json.dumps(chunk_metric_data[0]))
+    #logger.debug('Last:\n' + json.dumps(chunk_metric_data[-1]))
+    logger.debug(json.dumps(data_to_post))
     logger.debug('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
     logger.debug('Total Lines: ' + str(track['line_count']))
+    logger.debug('URL: ' + post_url)
+    logger.debug('Data Field: ' + get_data_field_from_project_type())
 
     # do not send if only testing
     if cli_config_vars['testing']:
         return
 
     # send the data
-    post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
     send_request(post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
                  data=data_to_post, proxies=if_config_vars['if_proxies'])
@@ -1010,6 +1023,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     for _ in xrange(ATTEMPTS):
         try:
             response = req(url, **request_passthrough)
+            logger.debug(str(response.request.body))
             if response.status_code == httplib.OK:
                 logger.info(success_message)
                 return response
@@ -1052,7 +1066,6 @@ def get_agent_type_from_project_type():
 
 def get_data_field_from_project_type():
     """ use project type to determine which field to place data in """
-    # incident uses a different API endpoint
     if 'INCIDENT' in if_config_vars['project_type']:
         return 'incidentData'
     elif 'DEPLOYMENT' in if_config_vars['project_type']:
@@ -1063,13 +1076,12 @@ def get_data_field_from_project_type():
 
 def get_api_from_project_type():
     """ use project type to determine which API to post to """
-    # incident uses a different API endpoint
     if 'INCIDENT' in if_config_vars['project_type']:
-        return 'incidentdatareceive'
+        return '/api/v1/incidentdatareceive'
     elif 'DEPLOYMENT' in if_config_vars['project_type']:
-        return 'deploymentEventReceive'
+        return '/api/v1/deploymentEventReceive'
     else: # MERTIC, LOG, ALERT
-        return 'customprojectrawdata'
+        return '/api/v1/customprojectrawdata'
 
 
 def initialize_api_post_data():
