@@ -966,13 +966,6 @@ def transpose_metrics():
 ################################
 # Functions to send data to IF #
 ################################
-def format_data_by_project_type(chunk_metric_data):
-    dumped_data = json.dumps(chunk_metric_data)
-    if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
-        return [dumped_data]
-    return dumped_data
-
-
 def send_data_wrapper():
     """ wrapper to send data """
     if 'METRIC' in if_config_vars['project_type']:
