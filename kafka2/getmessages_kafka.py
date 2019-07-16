@@ -89,7 +89,7 @@ def get_agent_config_vars():
                 # hardcoded
                 'api_version': (0, 9),
                 'auto_offset_reset': 'latest',
-                'consumer_timeout_ms': if_config_vars['sampling_interval'] * 1000,
+                'consumer_timeout_ms': if_config_vars['sampling_interval'] * 1000 if 'METRIC' in if_config_vars['project_type'] or 'LOG' in if_config_vars['project_type'] else None,
 
                 # consumer settings
                 'group_id': config_parser.get('kafka', 'group_id'),
@@ -985,7 +985,7 @@ def send_data_to_if(chunk_metric_data):
         return
 
     # send the data
-    post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_mode())
+    post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
     send_request(post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
                  data=data_to_post, proxies=if_config_vars['if_proxies'])
@@ -1028,8 +1028,8 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     return -1
 
 
-def get_agent_type_from_mode():
-    """ use mode to determine agent type """
+def get_agent_type_from_project_type():
+    """ use project type to determine agent type """
     if 'METRIC' in if_config_vars['project_type']:
         if 'REPLAY' in if_config_vars['project_type']:
             return 'MetricFileReplay'
@@ -1041,8 +1041,17 @@ def get_agent_type_from_mode():
         return 'LogStreaming'
 
 
-def get_api_from_mode():
-    """ use mode to determine which API to post to """
+def get_data_field_from_project_type():
+    """ use project type to determine which field to place data in """
+    # incident uses a different API endpoint
+    if 'INCIDENT' in if_config_vars['project_type']:
+        return 'incidentData'
+    else:
+        return 'metricData'
+
+
+def get_api_from_project_type():
+    """ use project type to determine which API to post to """
     # incident uses a different API endpoint
     if 'INCIDENT' in if_config_vars['project_type']:
         return 'incidentdatareceive'
@@ -1057,7 +1066,7 @@ def initialize_api_post_data():
     to_send_data_dict['licenseKey'] = if_config_vars['license_key']
     to_send_data_dict['projectName'] = if_config_vars['project_name']
     to_send_data_dict['instanceName'] = HOSTNAME
-    to_send_data_dict['agentType'] = get_agent_type_from_mode()
+    to_send_data_dict['agentType'] = get_agent_type_from_project_type()
     if 'METRIC' in if_config_vars['project_type'] and 'sampling_interval' in if_config_vars:
         to_send_data_dict['samplingInterval'] = str(if_config_vars['sampling_interval'])
     return to_send_data_dict
