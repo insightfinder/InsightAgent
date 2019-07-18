@@ -34,9 +34,11 @@ def start_data_processing(thread_number):
     2. Gather data
     3. Parse each entry
     4. Call the appropriate handoff function
-        log_handoff()
-        incident_handoff()
         metric_handoff()
+        log_handoff()
+        alert_handoff()
+        incident_handoff()
+        deployment_handoff()
     See zipkin for an example that uses os.fork to send both metric and log data.
     """
 
@@ -807,8 +809,16 @@ def incident_handoff(timestamp, data, instance, device=''):
     log_handoff(timestamp, data, instance, device)
 
 
+def deployment_handoff(timestamp, data, instance, device=''):
+    log_handoff(timestamp, data, instance, device)
+
+
+def alert_handoff(timestamp, data, instance, device=''):
+    log_handoff(timestamp, data, instance, device)
+
+
 def log_handoff(timestamp, data, instance, device=''):
-    entry = prepare_log_entry(timestamp, data, instance, device)
+    entry = prepare_log_entry(str(int(timestamp)), data, instance, device)
     track['current_row'].append(entry)
     track['line_count'] += 1
     track['entry_count'] += 1
@@ -822,10 +832,10 @@ def prepare_log_entry(timestamp, data, instance, device=''):
     """ creates the log entry """
     entry = dict()
     entry['data'] = data
-    if 'INCIDENT' in if_config_vars['project_type']:
+    if 'INCIDENT' in if_config_vars['project_type'] or 'DEPLOYMENT' in if_config_vars['project_type']:
         entry['timestamp'] = timestamp
         entry['instanceName'] = make_safe_instance_string(instance, device)
-    else:
+    else: # LOG or ALERT
         entry['eventId'] = timestamp
         entry['tag'] = make_safe_instance_string(instance, device)
     return entry
@@ -893,7 +903,10 @@ def send_data_to_if(chunk_metric_data):
 
     # prepare data for metric streaming agent
     data_to_post = initialize_api_post_data()
-    data_to_post['metricData'] = json.dumps(chunk_metric_data)
+    if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
+        for chunk in chunk_metric_data:
+            chunk['data'] = json.dumps(chunk['data'])
+    data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
 
     logger.debug('First:\n' + str(chunk_metric_data[0]))
     logger.debug('Last:\n' + str(chunk_metric_data[-1]))
@@ -905,7 +918,7 @@ def send_data_to_if(chunk_metric_data):
         return
 
     # send the data
-    post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_mode())
+    post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
     send_request(post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
                  data=data_to_post, proxies=if_config_vars['if_proxies'])
@@ -948,25 +961,39 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     return -1
 
 
-def get_agent_type_from_mode():
-    """ use mode to determine agent type """
+def get_agent_type_from_project_type():
+    """ use project type to determine agent type """
     if 'METRIC' in if_config_vars['project_type']:
         if 'REPLAY' in if_config_vars['project_type']:
             return 'MetricFileReplay'
         else:
             return 'CUSTOM'
-    elif 'REPLAY' in if_config_vars['project_type']:
+    elif 'REPLAY' in if_config_vars['project_type']: # LOG, ALERT
         return 'LogFileReplay'
     else:
         return 'LogStreaming'
+    # INCIDENT and DEPLOYMENT don't use this
 
 
-def get_api_from_mode():
-    """ use mode to determine which API to post to """
+def get_data_field_from_project_type():
+    """ use project type to determine which field to place data in """
+    # incident uses a different API endpoint
+    if 'INCIDENT' in if_config_vars['project_type']:
+        return 'incidentData'
+    elif 'DEPLOYMENT' in if_config_vars['project_type']:
+        return 'deploymentData'
+    else: # MERTIC, LOG, ALERT
+        return 'metricData'
+
+
+def get_api_from_project_type():
+    """ use project type to determine which API to post to """
     # incident uses a different API endpoint
     if 'INCIDENT' in if_config_vars['project_type']:
         return 'incidentdatareceive'
-    else:
+    elif 'DEPLOYMENT' in if_config_vars['project_type']:
+        return 'deploymentEventReceive'
+    else: # MERTIC, LOG, ALERT
         return 'customprojectrawdata'
 
 
@@ -977,7 +1004,7 @@ def initialize_api_post_data():
     to_send_data_dict['licenseKey'] = if_config_vars['license_key']
     to_send_data_dict['projectName'] = if_config_vars['project_name']
     to_send_data_dict['instanceName'] = HOSTNAME
-    to_send_data_dict['agentType'] = get_agent_type_from_mode()
+    to_send_data_dict['agentType'] = get_agent_type_from_project_type()
     if 'METRIC' in if_config_vars['project_type'] and 'sampling_interval' in if_config_vars:
         to_send_data_dict['samplingInterval'] = str(if_config_vars['sampling_interval'])
     return to_send_data_dict
