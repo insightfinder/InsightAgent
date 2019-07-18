@@ -44,7 +44,7 @@ def parse_messages_kafka(consumer):
             logger.info('Message received')
             logger.debug(message.value)
             if 'JSON' in agent_config_vars['data_format']:
-                parse_json_message(json.loads(message.value))
+                parse_json_message(json.loads(str(message.value)))
             elif 'CSV' in agent_config_vars['data_format']:
                 parse_csv_message(message.value.split(','))
             else:
@@ -89,7 +89,7 @@ def get_agent_config_vars():
                 # hardcoded
                 'api_version': (0, 9),
                 'auto_offset_reset': 'latest',
-                'consumer_timeout_ms': if_config_vars['sampling_interval'] * 1000,
+                'consumer_timeout_ms': if_config_vars['sampling_interval'] * 1000 if 'METRIC' in if_config_vars['project_type'] or 'LOG' in if_config_vars['project_type'] else None,
 
                 # consumer settings
                 'group_id': config_parser.get('kafka', 'group_id'),
@@ -887,8 +887,16 @@ def incident_handoff(timestamp, data, instance, device=''):
     log_handoff(timestamp, data, instance, device)
 
 
+def deployment_handoff(timestamp, data, instance, device=''):
+    log_handoff(timestamp, data, instance, device)
+
+
+def alert_handoff(timestamp, data, instance, device=''):
+    log_handoff(timestamp, data, instance, device)
+
+
 def log_handoff(timestamp, data, instance, device=''):
-    entry = prepare_log_entry(timestamp, data, instance, device)
+    entry = prepare_log_entry(str(int(timestamp)), data, instance, device)
     track['current_row'].append(entry)
     track['line_count'] += 1
     track['entry_count'] += 1
@@ -902,10 +910,10 @@ def prepare_log_entry(timestamp, data, instance, device=''):
     """ creates the log entry """
     entry = dict()
     entry['data'] = data
-    if 'INCIDENT' in if_config_vars['project_type']:
+    if 'INCIDENT' in if_config_vars['project_type'] or 'DEPLOYMENT' in if_config_vars['project_type']:
         entry['timestamp'] = timestamp
         entry['instanceName'] = make_safe_instance_string(instance, device)
-    else:
+    else: # LOG or ALERT
         entry['eventId'] = timestamp
         entry['tag'] = make_safe_instance_string(instance, device)
     return entry
@@ -973,19 +981,25 @@ def send_data_to_if(chunk_metric_data):
 
     # prepare data for metric streaming agent
     data_to_post = initialize_api_post_data()
-    data_to_post['metricData'] = json.dumps(chunk_metric_data)
+    if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
+        for chunk in chunk_metric_data:
+            chunk['data'] = json.dumps(chunk['data'])
+    data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
+    post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
 
-    logger.debug('First:\n' + str(chunk_metric_data[0]))
-    logger.debug('Last:\n' + str(chunk_metric_data[-1]))
+    #logger.debug('First:\n' + json.dumps(chunk_metric_data[0]))
+    #logger.debug('Last:\n' + json.dumps(chunk_metric_data[-1]))
+    logger.debug(json.dumps(data_to_post))
     logger.debug('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
     logger.debug('Total Lines: ' + str(track['line_count']))
+    logger.debug('URL: ' + post_url)
+    logger.debug('Data Field: ' + get_data_field_from_project_type())
 
     # do not send if only testing
     if cli_config_vars['testing']:
         return
 
     # send the data
-    post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_mode())
     send_request(post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
                  data=data_to_post, proxies=if_config_vars['if_proxies'])
@@ -1002,6 +1016,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     for _ in xrange(ATTEMPTS):
         try:
             response = req(url, **request_passthrough)
+            logger.debug(str(response.request.body))
             if response.status_code == httplib.OK:
                 logger.info(success_message)
                 return response
@@ -1028,26 +1043,38 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     return -1
 
 
-def get_agent_type_from_mode():
-    """ use mode to determine agent type """
+def get_agent_type_from_project_type():
+    """ use project type to determine agent type """
     if 'METRIC' in if_config_vars['project_type']:
         if 'REPLAY' in if_config_vars['project_type']:
             return 'MetricFileReplay'
         else:
             return 'CUSTOM'
-    elif 'REPLAY' in if_config_vars['project_type']:
+    elif 'REPLAY' in if_config_vars['project_type']: # LOG, ALERT
         return 'LogFileReplay'
     else:
         return 'LogStreaming'
+    # INCIDENT and DEPLOYMENT don't use this
 
 
-def get_api_from_mode():
-    """ use mode to determine which API to post to """
-    # incident uses a different API endpoint
+def get_data_field_from_project_type():
+    """ use project type to determine which field to place data in """
     if 'INCIDENT' in if_config_vars['project_type']:
-        return 'incidentdatareceive'
-    else:
-        return 'customprojectrawdata'
+        return 'incidentData'
+    elif 'DEPLOYMENT' in if_config_vars['project_type']:
+        return 'deploymentData'
+    else: # MERTIC, LOG, ALERT
+        return 'metricData'
+
+
+def get_api_from_project_type():
+    """ use project type to determine which API to post to """
+    if 'INCIDENT' in if_config_vars['project_type']:
+        return '/api/v1/incidentdatareceive'
+    elif 'DEPLOYMENT' in if_config_vars['project_type']:
+        return '/api/v1/deploymentEventReceive'
+    else: # MERTIC, LOG, ALERT
+        return '/api/v1/customprojectrawdata'
 
 
 def initialize_api_post_data():
@@ -1057,7 +1084,7 @@ def initialize_api_post_data():
     to_send_data_dict['licenseKey'] = if_config_vars['license_key']
     to_send_data_dict['projectName'] = if_config_vars['project_name']
     to_send_data_dict['instanceName'] = HOSTNAME
-    to_send_data_dict['agentType'] = get_agent_type_from_mode()
+    to_send_data_dict['agentType'] = get_agent_type_from_project_type()
     if 'METRIC' in if_config_vars['project_type'] and 'sampling_interval' in if_config_vars:
         to_send_data_dict['samplingInterval'] = str(if_config_vars['sampling_interval'])
     return to_send_data_dict
