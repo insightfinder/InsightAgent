@@ -33,6 +33,7 @@
        - action !="install"
        - action !="uninstall"
    roles:
+     - { role: install-script_runner, when: agentType=="script_runner" and action=="install"}
      - { role: install-cgroup, when: agentType=="cgroup" and action=="install"}
      - { role: install-collectd, when: (agentType=="collectd" or agentType=="metric-log") and action=="install"}
      - { role: install-syscall, when: agentType=="syscall" and action=="install"}

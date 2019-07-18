@@ -60,7 +60,8 @@ ifLicenseKey=
 ##Sampling interval could be an integer indicating the number of minutes or "10s" indicating 10 seconds.
 ifSamplingInterval=1
 
-##Valid Agents are cgroup, collectd, cadvisor
+##Valid Agents are listed below
+#ifAgent=script_runner
 #ifAgent=collectd
 #ifAgent=cgroup
 #ifAgent=syscall
