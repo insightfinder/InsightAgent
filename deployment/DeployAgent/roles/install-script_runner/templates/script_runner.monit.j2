@@ -1,4 +1,4 @@
-check program script_runner matching "script_runner"
+check process script_runner matching "script_runner"
     if does not exist then start
-    start program = "/usr/bin/python {{ansible_env.HOME}}/script_runner/script_runner.py -d {{ansible_env.HOME}} -w {{ reportingUrl }} &>{{ansible_env.HOME}}/log/script_runner.log" 
+    start program = "/usr/bin/python {{ansible_env.HOME}}/InsightAgent-master/script_runner/script_runner.py -d {{ansible_env.HOME}}/InsightAgent-master -w {{ reportingUrl }} &>{{ansible_env.HOME}}/InsightAgent-master/log/script_runner.log" 
     stop program = "/usr/bin/pkill -f script_runner.py"
