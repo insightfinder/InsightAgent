@@ -63,7 +63,34 @@ def filter_applications(base_url, headers, data, metrics_list, app_list):
         # check app filter
         if should_filter_per_config('app_name_filter', app_name):
             continue
-        get_hosts_for_app(base_url, headers, data, metrics_list, app_id)
+        
+        if use_host_api():
+            get_hosts_for_app(base_url, headers, data, metrics_list, app_id)
+        else:
+            get_metrics_for_app(base_url, headers, data, metrics_list, app_id, app_name) 
+
+
+def get_metrics_for_app(base_url, headers, data, metrics_list, app_id, app_name):
+    api = '/v2/applications/' + app_id + '/metrics/data.json'
+    url = urlparse.urljoin(base_url, api)
+    for metric in metrics_list:
+        data_copy = data
+        data_copy['names[]'] = metric
+        data_copy['values[]'] = metrics_list[metric]
+        response = send_request(url, headers=headers, proxies=agent_config_vars['proxies'], data=data_copy)
+        try:
+            metric_data = json.loads(response.text)
+            parse_metric_data(metric_data['metric_data']['metrics'], app_name)
+        # response = -1
+        except TypeError:
+            logger.warn('Failure when contacting NewRelic API while fetching metrics ' +
+                        'for app ' + app_id + ' (' + app_name + ')')
+        # malformed response_json
+        # handles errors from parse_metric_data as well
+        except KeyError:
+            logger.warn('NewRelic API returned malformed data when fetching metrics ' +
+                        'for app ' + app_id + ' (' + app_name + ')' +
+                        'Please contact support if this problem persists.')
 
 
 def get_hosts_for_app(base_url, headers, data, metrics_list, app_id):
@@ -88,7 +115,6 @@ def filter_hosts(base_url, headers, data, metrics_list, app_id, hosts_list):
         hostname = host['host']
         if should_filter_per_config('host_filter', hostname):
             continue
-
         instance = hostname + ' (' + host['application_name'] + ')'
         get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, str(host['id']), instance)
 
@@ -130,10 +156,6 @@ def parse_metric_data(metrics, instance):
                 metric_handoff(timestamp, metric_key, data, instance)
 
 
-def api_logger_type_error(error_type, app_id='', host_id=''):
-    return
-
-
 def get_metrics_list():
     """ Parse metrics given in config.ini, if any """
     metrics_list = dict()
@@ -148,6 +170,10 @@ def get_metrics_list():
     if len(metrics_list) == 0:
         metrics_list = default_metrics_list()
     return metrics_list
+
+
+def use_host_api():
+    return agent_config_vars['app_or_host'] == 'HOST'
 
 
 def default_metrics_list():
@@ -192,6 +218,7 @@ def get_agent_config_vars():
         try:
             # fields to grab
             api_key = config_parser.get('newrelic', 'api_key')
+            app_or_host = config_parser.get('newrelic', 'app_or_host').upper()
             app_name_filter = config_parser.get('newrelic', 'app_name_filter')
             host_filter = config_parser.get('newrelic', 'host_filter')
             metrics = config_parser.get('newrelic', 'metrics')
@@ -213,6 +240,12 @@ def get_agent_config_vars():
                 'Agent not correctly configured (run_interval). Check config file.')
             exit()
 
+        # default
+        if len(app_or_host) == 0 or app_or_host not in { 'APP', 'HOST' }:
+            logger.warning(
+                'Agent not correctly configured (app_or_host). Check config file.')
+            exit()
+
         # set filters
         if len(app_name_filter) != 0:
             app_name_filter = app_name_filter.strip().split(',')
@@ -231,6 +264,7 @@ def get_agent_config_vars():
         # add parsed variables to a global
         config_vars = {
             'api_key': api_key,
+            'app_or_host': app_or_host,
             'app_name_filter': app_name_filter,
             'host_filter': host_filter,
             'metrics': metrics,
