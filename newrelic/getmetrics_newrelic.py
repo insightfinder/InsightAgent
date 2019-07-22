@@ -67,30 +67,7 @@ def filter_applications(base_url, headers, data, metrics_list, app_list):
         if use_host_api():
             get_hosts_for_app(base_url, headers, data, metrics_list, app_id)
         else:
-            get_metrics_for_app(base_url, headers, data, metrics_list, app_id, app_name) 
-
-
-def get_metrics_for_app(base_url, headers, data, metrics_list, app_id, app_name):
-    api = '/v2/applications/' + app_id + '/metrics/data.json'
-    url = urlparse.urljoin(base_url, api)
-    for metric in metrics_list:
-        data_copy = data
-        data_copy['names[]'] = metric
-        data_copy['values[]'] = metrics_list[metric]
-        response = send_request(url, headers=headers, proxies=agent_config_vars['proxies'], data=data_copy)
-        try:
-            metric_data = json.loads(response.text)
-            parse_metric_data(metric_data['metric_data']['metrics'], app_name)
-        # response = -1
-        except TypeError:
-            logger.warn('Failure when contacting NewRelic API while fetching metrics ' +
-                        'for app ' + app_id + ' (' + app_name + ')')
-        # malformed response_json
-        # handles errors from parse_metric_data as well
-        except KeyError:
-            logger.warn('NewRelic API returned malformed data when fetching metrics ' +
-                        'for app ' + app_id + ' (' + app_name + ')' +
-                        'Please contact support if this problem persists.')
+            get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, '', app_name) 
 
 
 def get_hosts_for_app(base_url, headers, data, metrics_list, app_id):
@@ -119,8 +96,8 @@ def filter_hosts(base_url, headers, data, metrics_list, app_id, hosts_list):
         get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, str(host['id']), instance)
 
 
-def get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, host_id, instance):
-    api = '/v2/applications/' + app_id + '/hosts/' + host_id + '/metrics/data.json'
+def get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, host_id='', instance):
+    api = get_metrics_api(app_id, host_id)
     url = urlparse.urljoin(base_url, api)
     for metric in metrics_list:
         data_copy = data
@@ -170,6 +147,13 @@ def get_metrics_list():
     if len(metrics_list) == 0:
         metrics_list = default_metrics_list()
     return metrics_list
+
+
+def get_metrics_api(app_id, host_id=''):
+    if use_host_api() and len(host_id) != 0:
+        return '/v2/applications/' + app_id + '/hosts/' + host_id + '/metrics/data.json'
+    else:
+        return '/v2/applications/' + app_id + '/metrics/data.json'
 
 
 def use_host_api():
