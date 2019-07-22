@@ -410,11 +410,9 @@ if __name__ == "__main__":
             logger.debug("Getting data from datadog for range: {}-{}".format(data_start_ts, data_end_ts))
             retry_metric_list = []
             retry_host_list = []
-            chunked_metric_list = chunks(all_metrics_list, agent_config_vars['metricChunkSize'])
-            chunked_host_list = chunks(all_host_list, agent_config_vars['hostChunkSize'])
 
-            for sub_metric_list in chunked_metric_list:
-                for sub_host_list in chunked_host_list:
+            for sub_metric_list in chunks(all_metrics_list, agent_config_vars['metricChunkSize']):
+                for sub_host_list in chunks(all_host_list, agent_config_vars['hostChunkSize']):
                     # get metric data from datadog every SAMPLING_INTERVAL
                     try:
                         get_metric_data(sub_metric_list, sub_host_list, data_start_ts, data_end_ts, raw_data_map)
