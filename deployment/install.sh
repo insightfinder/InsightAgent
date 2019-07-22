@@ -224,29 +224,31 @@ elif [ $AGENT_TYPE == 'newrelic' ]; then
     	if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
 		touch ${PATH_TO_CONFIG_INI}
 		echo "[newrelic]" >> ${PATH_TO_CONFIG_INI}
-		echo "api_key =" >> ${PATH_TO_CONFIG_INI}
+		echo "api_key = " >> ${PATH_TO_CONFIG_INI}
+		echo "# application-level metrics (app) or host-level (host)" >> ${PATH_TO_CONFIG_INI}
+		echo "app_or_host = " >> ${PATH_TO_CONFIG_INI}
 		echo "# applications to include (default all)" >> ${PATH_TO_CONFIG_INI}
-		echo "app_name_filter =" >> ${PATH_TO_CONFIG_INI}
+		echo "app_name_filter = " >> ${PATH_TO_CONFIG_INI}
 		echo "# hosts to include (default all)" >> ${PATH_TO_CONFIG_INI}
-		echo "host_filter =" >> ${PATH_TO_CONFIG_INI}
+		echo "host_filter = " >> ${PATH_TO_CONFIG_INI}
 		echo "# metric to include (defaults below)" >> ${PATH_TO_CONFIG_INI}
 		echo "# this should be formatted as metric_name:value|value,metric_name:value|value
 metrics = CPU/User Time:percent,Memory/Heap/Used:used_mb_by_host,Memory/Physical:used_mb_by_host,Instance/connectsReqPerMin:requests_per_minute,Controller/reports/show:average_response_time|calls_per_minute|call_count|min_response_time|max_response_time|average_exclusive_time|average_value|total_call_time_per_minute|requests_per_minute|standard_deviation|throughput|average_call_time|min_call_time|max_call_time|total_call_time" >> ${PATH_TO_CONFIG_INI}
-		echo "metrics =" >> ${PATH_TO_CONFIG_INI}
+		echo "metrics = " >> ${PATH_TO_CONFIG_INI}
 		echo "# how frequently (in min) to run this agent (must change value here and in /etc/cron.d/ifagent)" >> ${PATH_TO_CONFIG_INI}
 		echo "run_interval = $REPORTING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
-		echo "agent_http_proxy =" >> ${PATH_TO_CONFIG_INI}
-		echo "agent_https_proxy =" >> ${PATH_TO_CONFIG_INI}
+		echo "agent_http_proxy = " >> ${PATH_TO_CONFIG_INI}
+		echo "agent_https_proxy = " >> ${PATH_TO_CONFIG_INI}
 		echo " " >> ${PATH_TO_CONFIG_INI}
 		echo "[insightfinder]" >> ${PATH_TO_CONFIG_INI}
 		echo "user_name = $USERNAME" >> ${PATH_TO_CONFIG_INI}
 		echo "license_key = $LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
 		echo "project_name = $PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
 		echo "sampling_interval = $SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
-		echo "chunk_size_kb = 1024" >> ${PATH_TO_CONFIG_INI}
+		echo "chunk_size_kb = 2048" >> ${PATH_TO_CONFIG_INI}
 		echo "url = $SERVER_URL" >> ${PATH_TO_CONFIG_INI}
-		echo "if_http_proxy =" >> ${PATH_TO_CONFIG_INI}
-		echo "if_https_proxy =" >> ${PATH_TO_CONFIG_INI}
+		echo "if_http_proxy = " >> ${PATH_TO_CONFIG_INI}
+		echo "if_https_proxy = " >> ${PATH_TO_CONFIG_INI}
 	fi
 elif [ $AGENT_TYPE == 'kafka' ]; then
 	if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
