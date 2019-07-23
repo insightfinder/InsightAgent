@@ -581,7 +581,7 @@ def replay_sar(metric_file_path, command):
                         if device == tag or (tag.endswith('*') and device.startswith(tag.split('*')[0])):
                             exclude_flag = True
                             break
-                instance += '_' + device
+                instance = device + '_' + instance
             if exclude_flag:
                 line = metric_file.readline()
                 continue
