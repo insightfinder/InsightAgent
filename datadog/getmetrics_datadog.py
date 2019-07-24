@@ -229,7 +229,7 @@ def get_metric_data(metric_list, host_list, start_time, end_time, collected_data
         else:
             host_name = "unknown_host"
         datapoints = json_data_entry.get('pointlist', [])
-        header_field = normalize_key(metric_name) + "[" + normalize_key(host_name) + "]"
+        header_field = make_safe_metric_key(metric_name) + "[" + make_safe_metric_key(host_name) + "]"
         for each_point in datapoints:
             if len(each_point) < 2 or each_point[1] is None:
                 continue
@@ -320,13 +320,20 @@ def chunk_map(data, SIZE=50):
         yield {k: data[k] for k in islice(it, SIZE)}
 
 
+def make_safe_metric_key(metric):
+    metric = LEFT_BRACE.sub('(', metric)
+    metric = RIGHT_BRACE.sub(')', metric)
+    metric = PERIOD.sub('/', metric)
+    return metric
+
+
 def normalize_key(metric_key):
     """
     Take a single metric key string and return the same string with spaces, slashes and
     non-alphanumeric characters subbed out.
     """
     metric_key = SPACES.sub("_", metric_key)
-    metric_key = SLASHES.sub("-", metric_key)
+    metric_key = SLASHES.sub(".", metric_key)
     metric_key = NON_ALNUM.sub("", metric_key)
     return metric_key
 
@@ -357,6 +364,9 @@ if __name__ == "__main__":
     SPACES = re.compile(r"\s+")
     SLASHES = re.compile(r"\/+")
     NON_ALNUM = re.compile(r"[^a-zA-Z_\-0-9\.]")
+    LEFT_BRACE = re.compile(r"\[")
+    RIGHT_BRACE = re.compile(r"\]")
+    PERIOD = re.compile(r"\.")
     ATTEMPTS = 3
 
     parameters = get_parameters()
@@ -410,11 +420,9 @@ if __name__ == "__main__":
             logger.debug("Getting data from datadog for range: {}-{}".format(data_start_ts, data_end_ts))
             retry_metric_list = []
             retry_host_list = []
-            chunked_metric_list = chunks(all_metrics_list, agent_config_vars['metricChunkSize'])
-            chunked_host_list = chunks(all_host_list, agent_config_vars['hostChunkSize'])
 
-            for sub_metric_list in chunked_metric_list:
-                for sub_host_list in chunked_host_list:
+            for sub_metric_list in chunks(all_metrics_list, agent_config_vars['metricChunkSize']):
+                for sub_host_list in chunks(all_host_list, agent_config_vars['hostChunkSize']):
                     # get metric data from datadog every SAMPLING_INTERVAL
                     try:
                         get_metric_data(sub_metric_list, sub_host_list, data_start_ts, data_end_ts, raw_data_map)
