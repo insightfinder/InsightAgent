@@ -59,5 +59,64 @@ def get_parameters():
 
     return params
 
+#
+# Read and parse InsightFinder config from config.ini
+#
+
+
+def get_agent_config_vars():
+    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
+        config_parser = ConfigParser.SafeConfigParser()
+        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
+        try:
+            user_name = config_parser.get('insightfinder', 'user_name')
+            license_key = config_parser.get('insightfinder', 'license_key')
+            project_name = config_parser.get('insightfinder', 'project_name')
+            sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
+            if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
+            if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
+            #host_chunk_size = int(config_parser.get('insightfinder', 'host_chunk_size'))
+            #metric_chunk_size = int(config_parser.get('insightfinder', 'metric_chunk_size'))
+        except ConfigParser.NoOptionError:
+            logger.error(
+                "Agent not correctly configured. Check config file.")
+            sys.exit(1)
+
+        if len(user_name) == 0:
+            logger.warning(
+                "Agent not correctly configured(user_name). Check config file.")
+            sys.exit(1)
+        if len(license_key) == 0:
+            logger.warning(
+                "Agent not correctly configured(license_key). Check config file.")
+            sys.exit(1)
+        if len(project_name) == 0:
+            logger.warning(
+                "Agent not correctly configured(project_name). Check config file.")
+            sys.exit(1)
+
+        config_vars = {
+            "userName": user_name,
+            "licenseKey": license_key,
+            "projectName": project_name,
+            "samplingInterval": sampling_interval,
+            "hostChunkSize": host_chunk_size,
+            "metricChunkSize": metric_chunk_size,
+            "httpProxy": if_http_proxy,
+            "httpsProxy": if_https_proxy
+        }
+
+        return config_vars
+    else:
+        print("Agent not correctly configured")
+        logger.error(
+            "Agent not correctly configured. Check config file.")
+        sys.exit(1)
+
+#
+# Read and parse Sysdig config from config.ini
+#
+
+
 
 
