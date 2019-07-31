@@ -118,5 +118,35 @@ def get_agent_config_vars():
 #
 
 
+def get_sysdig_config():
 
+    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
+        config_parser = ConfigParser.SafeConfigParser()
+        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
+        try:
+            sysdig_api_key = config_parser.get('sysdig', 'api_key')
+            hostname = config_parser.get('sysdig', 'hostname')
+        except ConfigParser.NoOptionError:
+            logger.error(
+                "Agent not correctly configured. Check config file.")
+            sys.exit(1)
+
+        if len(sysdig_api_key) == 0:
+            logger.warning(
+                "Agent not correctly configured(API KEY). Check config file.")
+            exit()
+        if len(hostname) == 0:
+            logger.warning(
+                "Agent not correctly configured(hostname). Check config file.")
+            exit()
+
+        sysdig_config = {
+            "SYSDIG_API_KEY": sysdig_api_key,
+            "HOSTNAME": hostname
+        }
+    else:
+        logger.warning("No config file found. Exiting...")
+        exit()
+
+    return sysdig_config
 
