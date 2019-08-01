@@ -125,24 +125,37 @@ def get_sysdig_config():
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
         try:
             sysdig_api_key = config_parser.get('sysdig', 'api_key')
-            hostname = config_parser.get('sysdig', 'hostname')
+            all_metrics = []
+            filter_hosts = []
+
+            if len(config_parser.get('sysdig', 'all_metrics')) != 0:
+                all_metrics = config_parser.get('sysdig', 'all_metrics').split(",")
+            else:
+                all_metrics = [{"id": "container.id"}, {"id": "cpu.used.percent"}, {"id": "memory.used.percent"}]
+
+            if len(config_parser.get('sysdig', 'filter_hosts')) != 0:
+                filter_hosts = config_parser.get('insightfinder', 'filter_hosts').split(",")
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
             sys.exit(1)
-
         if len(sysdig_api_key) == 0:
             logger.warning(
                 "Agent not correctly configured(API KEY). Check config file.")
             exit()
-        if len(hostname) == 0:
+        if len(all_metrics) == 0:
+            logger.warning(
+                "Agent not correctly configured(metrics). Check config file.")
+            exit()
+        if len(filter_hosts) == 0:
             logger.warning(
                 "Agent not correctly configured(hostname). Check config file.")
             exit()
 
         sysdig_config = {
             "SYSDIG_API_KEY": sysdig_api_key,
-            "HOSTNAME": hostname
+            "all_metrics": all_metrics,
+            "filter_hosts": filter_hosts
         }
     else:
         logger.warning("No config file found. Exiting...")
