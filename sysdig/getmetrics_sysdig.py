@@ -168,4 +168,92 @@ def format_data(res):
     print(formated_data)
     return formated_data
 
+def send_data(chunk_metric_data):
+    send_data_time = time.time()
+    # prepare data for metric streaming agent
+    to_send_data_dict = dict()
+    to_send_data_dict["metricData"] = json.dumps(chunk_metric_data)
+    to_send_data_dict["licenseKey"] = agent_config_vars['licenseKey']
+    to_send_data_dict["projectName"] = agent_config_vars['projectName']
+    to_send_data_dict["userName"] = agent_config_vars['userName']
+    to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
+    to_send_data_dict["samplingInterval"] = agent_config_vars['samplingInterval']
+    to_send_data_dict["agentType"] = "MetricFileReplay"
+
+    to_send_data_json = json.dumps(to_send_data_dict)
+    print(json.dumps(to_send_data_dict))
+    logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
+
+    # send the data
+    post_url = parameters['serverUrl'] + "/customprojectrawdata"
+    for _ in xrange(ATTEMPTS):
+        try:
+            if len(if_proxies) == 0:
+                response = requests.post(post_url, data=json.loads(to_send_data_json))
+            else:
+                response = requests.post(post_url, data=json.loads(to_send_data_json), proxies=if_proxies)
+            if response.status_code == 200:
+                logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
+                logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
+            else:
+                logger.info("Failed to send data.")
+            return
+        except requests.exceptions.Timeout:
+            logger.exception(
+                "Timed out while flushing to InsightFinder. Reattempting...")
+            continue
+        except requests.exceptions.TooManyRedirects:
+            logger.exception(
+                "Too many redirects while flushing to InsightFinder.")
+            break
+        except requests.exceptions.RequestException as e:
+            logger.exception(
+                "Exception while flushing to InsightFinder.")
+            break
+
+    logger.error(
+        "Failed to flush to InsightFinder! Gave up after %d attempts.", ATTEMPTS)
+
+
+def set_logger_config(level):
+    """Set up logging according to the defined log level"""
+    # Get the root logger
+    logger_obj = logging.getLogger(__name__)
+    # Have to set the root logger level, it defaults to logging.WARNING
+    logger_obj.setLevel(level)
+    # route INFO and DEBUG logging to stdout from stderr
+    logging_handler_out = logging.StreamHandler(sys.stdout)
+    logging_handler_out.setLevel(logging.DEBUG)
+    # create a logging format
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(process)d - %(threadName)s - %(levelname)s - %(message)s')
+    logging_handler_out.setFormatter(formatter)
+    logger_obj.addHandler(logging_handler_out)
+
+    logging_handler_err = logging.StreamHandler(sys.stderr)
+    logging_handler_err.setLevel(logging.WARNING)
+    logger_obj.addHandler(logging_handler_err)
+    return logger_obj
+
+if __name__ == "__main__":
+
+
+    agent_config_vars = get_agent_config_vars()
+    #send_data(split_elemets)
+    parameters = get_parameters()
+    log_level = parameters['logLevel']
+    ATTEMPTS = 3
+    #agent_config_vars = get_agent_config_vars()
+    if_proxies = dict()
+    if len(agent_config_vars['httpProxy']) != 0:
+        if_proxies['http'] = agent_config_vars['httpProxy']
+    if len(agent_config_vars['httpsProxy']) != 0:
+        if_proxies['https'] = agent_config_vars['httpsProxy']
+    logger = set_logger_config(log_level)
+
+
+    sysdig_config = get_sysdig_config()
+    sdc_token = sysdig_config['SYSDIG_API_KEY']
+    hostname = sysdig_config['HOSTNAME']
+
+
 
