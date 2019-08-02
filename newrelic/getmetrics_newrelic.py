@@ -72,12 +72,14 @@ def filter_applications(base_url, headers, data, metrics_list, app_list):
             logger.debug('skipping')
             continue
 
-        if use_host_api():
-            get_hosts_for_app(base_url, headers, data, metrics_list, app_id)
-        else:
+        if agent_config_vars['auto_create_project']:
             check_project(make_safe_project_string(app_name))
             logger.debug(if_config_vars['projectName'])
-            get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, make_safe_instance_string(app_name + '-' + app_id)) 
+
+        if use_host_api():
+            get_hosts_for_app(base_url, headers, data, metrics_list, app_id)
+        if use_app_api():
+            get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, make_safe_instance_string(app_name)) 
 
 
 def get_hosts_for_app(base_url, headers, data, metrics_list, app_id):
@@ -88,13 +90,17 @@ def get_hosts_for_app(base_url, headers, data, metrics_list, app_id):
         response_json = json.loads(response.text)
         filter_hosts(base_url, headers, data, metrics_list, app_id, response_json['application_hosts'])
     # response = -1
-    except TypeError:
+    except TypeError as te:
         logger.warn('Failure when contacting NewRelic API when fetching hosts for app ' + app_id + '].')
+        logger.warn(str(te))
+        logger.warn(response.text)
     # malformed response_json
     # handles errors from filter_hosts
-    except KeyError:
+    except KeyError as ke:
         logger.warn('NewRelic API returned malformed data when fetching hosts for app ' + app_id + '].'
                     'Please contact support if this problem persists.')
+        logger.warn(str(ke))
+        logger.warn(response.text)
 
 
 def filter_hosts(base_url, headers, data, metrics_list, app_id, hosts_list):
@@ -102,11 +108,16 @@ def filter_hosts(base_url, headers, data, metrics_list, app_id, hosts_list):
         hostname = host['host']
         if should_filter_per_config('host_filter', hostname):
             continue
-        instance = hostname + ' (' + host['application_name'] + ')'
-        get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, instance, str(host['id']))
+        # clear out hostname if not containerizing
+        if not agent_config_vars['containerize']:
+            instance = hostname
+            hostname = ''
+        else:
+            instance = host['application_name']
+        get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, instance, str(host['id']), hostname)
 
 
-def get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, instance='', host_id=''):
+def get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, instance='', host_id='', hostname=''):
     api = get_metrics_api(app_id, host_id)
     url = urlparse.urljoin(base_url, api)
     for metric in metrics_list:
@@ -116,20 +127,24 @@ def get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, inst
         response = send_request(url, headers=headers, proxies=agent_config_vars['proxies'], data=data_copy)
         try:
             metric_data = json.loads(response.text)
-            parse_metric_data(metric_data['metric_data']['metrics'], instance)
+            parse_metric_data(metric_data['metric_data']['metrics'], instance, hostname)
         # response = -1
-        except TypeError:
+        except TypeError as te:
             logger.warn('Failure when contacting NewRelic API while fetching metrics ' +
                         'for app ' + app_id + ' & host ' + host_id + '.')
+            logger.warn(str(te))
+            logger.warn(response.text)
         # malformed response_json
         # handles errors from parse_metric_data as well
-        except KeyError:
+        except KeyError as ke:
             logger.warn('NewRelic API returned malformed data when fetching metrics ' +
                         'for app ' + app_id + ' & host ' + host_id + '.' +
                         'Please contact support if this problem persists.')
+            logger.warn(str(ke))
+            logger.warn(response.text)
 
 
-def parse_metric_data(metrics, instance):
+def parse_metric_data(metrics, instance, hostname=''):
     for metric in metrics:
         metric_key_base = metric['name']
         for timeslice in metric['timeslices']:
@@ -140,7 +155,7 @@ def parse_metric_data(metrics, instance):
             for value in timeslice['values']:
                 metric_key = metric_key_base + '/' + value
                 data = timeslice['values'][value]
-                metric_handoff(timestamp, metric_key, data, instance)
+                metric_handoff(timestamp, metric_key, data, instance, hostname)
 
 
 def check_project(project_name):
@@ -151,7 +166,7 @@ def check_project(project_name):
             # create project if no existing project
             if project_name not in output_check_project:
                 logger.debug('creating project')
-                output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=Metric&samplingInterval=' + str(if_config_vars['samplingInterval'] / 60) +  '&samplingIntervalInSeconds=' + str(if_config_vars['samplingInterval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=Custom" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + if_config_vars['ifURL'] + '/api/v1/add-custom-project?tzOffset=-18000000', shell=True)
+                output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=Metric&samplingInterval=' + str(if_config_vars['samplingInterval'] / 60) +  '&samplingIntervalInSeconds=' + str(if_config_vars['samplingInterval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_agent_type_from_mode_wrap() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + if_config_vars['ifURL'] + '/api/v1/add-custom-project?tzOffset=-18000000', shell=True)
             # set project name to proposed name
             if_config_vars['projectName'] = project_name
         except subprocess.CalledProcessError as e:
@@ -181,8 +196,12 @@ def get_metrics_api(app_id, host_id=''):
         return '/v2/applications/' + app_id + '/metrics/data.json'
 
 
+def use_app_api():
+    return agent_config_vars['app_or_host'] == 'APP' or agent_config_vars['app_or_host'] == 'BOTH'
+
+
 def use_host_api():
-    return agent_config_vars['app_or_host'] == 'HOST'
+    return agent_config_vars['app_or_host'] == 'HOST' or agent_config_vars['app_or_host'] == 'BOTH'
 
 
 def default_metrics_list():
@@ -228,6 +247,8 @@ def get_agent_config_vars():
             # fields to grab
             api_key = config_parser.get('newrelic', 'api_key')
             app_or_host = config_parser.get('newrelic', 'app_or_host').upper()
+            auto_create_project = config_parser.get('newrelic', 'auto_create_project').upper()
+            containerize = config_parser.get('newrelic', 'containerize').upper()
             app_name_filter = config_parser.get('newrelic', 'app_name_filter')
             app_id_filter = config_parser.get('newrelic', 'app_id_filter')
             host_filter = config_parser.get('newrelic', 'host_filter')
@@ -251,7 +272,7 @@ def get_agent_config_vars():
             exit()
 
         # default
-        if len(app_or_host) == 0 or app_or_host not in { 'APP', 'HOST' }:
+        if len(app_or_host) == 0 or app_or_host not in { 'APP', 'HOST' , 'BOTH'}:
             logger.warning(
                 'Agent not correctly configured (app_or_host). Check config file.')
             exit()
@@ -277,6 +298,8 @@ def get_agent_config_vars():
         config_vars = {
             'api_key': api_key,
             'app_or_host': app_or_host,
+            'auto_create_project': True if auto_create_project == 'YES' else False,
+            'containerize': True if containerize == 'YES' else False,
             'app_name_filter': app_name_filter,
             'app_id_filter': app_id_filter,
             'host_filter': host_filter,
@@ -429,7 +452,7 @@ def make_safe_instance_string(instance, device=''):
     instance = UNDERSCORE.sub('.', instance)
     # if there's a device, concatenate it to the instance with an underscore
     if len(device) != 0:
-        instance += '_' + make_safe_instance_string(device)
+        instance = make_safe_instance_string(device) + '_' + instance
     return instance
 
 
@@ -563,7 +586,6 @@ def append_metric_data_to_entry(timestamp, field_name, data, instance, device=''
     else:
         current_obj[key] = str(data)
     track['current_dict'][ts_str] = current_obj
-    logger.debug(current_obj)
 
 
 def transpose_metrics():
@@ -647,6 +669,12 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     logger.error(
         'Failed! Gave up after %d attempts.', ATTEMPTS)
     return -1
+
+
+def get_agent_type_from_mode_wrap():
+    if agent_config_vars['containerize']:
+        return 'ContainerStreaming'
+    return get_agent_type_from_mode()
 
 
 def get_agent_type_from_mode():

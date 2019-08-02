@@ -226,7 +226,9 @@ elif [ $AGENT_TYPE == 'newrelic' ]; then
 		echo "[newrelic]" >> ${PATH_TO_CONFIG_INI}
 		echo "api_key = " >> ${PATH_TO_CONFIG_INI}
 		echo "# application-level metrics (app) or host-level (host)" >> ${PATH_TO_CONFIG_INI}
-		echo "app_or_host = " >> ${PATH_TO_CONFIG_INI}
+        echo "app_or_host = " >> ${PATH_TO_CONFIG_INI}
+		echo "auto_create_project = " >> ${PATH_TO_CONFIG_INI}
+		echo "containerize = " >> ${PATH_TO_CONFIG_INI}
 		echo "# applications to include (default all)" >> ${PATH_TO_CONFIG_INI}
 		echo "app_name_filter = " >> ${PATH_TO_CONFIG_INI}
 		echo "app_id_filter = " >> ${PATH_TO_CONFIG_INI}
