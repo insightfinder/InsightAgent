@@ -229,6 +229,7 @@ elif [ $AGENT_TYPE == 'newrelic' ]; then
 		echo "app_or_host = " >> ${PATH_TO_CONFIG_INI}
 		echo "# applications to include (default all)" >> ${PATH_TO_CONFIG_INI}
 		echo "app_name_filter = " >> ${PATH_TO_CONFIG_INI}
+		echo "app_id_filter = " >> ${PATH_TO_CONFIG_INI}
 		echo "# hosts to include (default all)" >> ${PATH_TO_CONFIG_INI}
 		echo "host_filter = " >> ${PATH_TO_CONFIG_INI}
 		echo "# metric to include (defaults below)" >> ${PATH_TO_CONFIG_INI}
@@ -244,6 +245,7 @@ metrics = CPU/User Time:percent,Memory/Heap/Used:used_mb_by_host,Memory/Physical
 		echo "user_name = $USERNAME" >> ${PATH_TO_CONFIG_INI}
 		echo "license_key = $LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
 		echo "project_name = $PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
+		echo "token" = $PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
 		echo "sampling_interval = $SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
 		echo "chunk_size_kb = 2048" >> ${PATH_TO_CONFIG_INI}
 		echo "url = $SERVER_URL" >> ${PATH_TO_CONFIG_INI}
