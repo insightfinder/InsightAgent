@@ -1,9 +1,11 @@
 [newrelic]
 api_key = 
 # application-level metrics (app) or host-level (host)
+# if app-level metrics are selected, the app name will be used as the project name
 app_or_host = host
 # applications to include (default all)
 app_name_filter = 
+app_id_filter = 
 # hosts to include (default all)
 host_filter = 
 # metrics to include (default all)
@@ -16,8 +18,9 @@ agent_https_proxy =
 
 [insightfinder]
 user_name = 
-license_key = 
+license_key =
 project_name = 
+token = 
 sampling_interval = 
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
