@@ -256,4 +256,54 @@ if __name__ == "__main__":
     hostname = sysdig_config['HOSTNAME']
 
 
+    #
+    # Instantiate the SDC client
+    #
+    sdclient = SdcClient(sdc_token)
+
+    #
+    # Prepare the metrics list.
+    #
+    all_metrics=sysdig_config['ALL_METRICS']
+    metrics = [
+        # The first metric we request is the container name. This is a segmentation
+        # metric, and you can tell by the fact that we don't specify any aggregation
+        # criteria. This entry tells Sysdig Monitor that we want to see the CPU
+        # utilization for each container separately.
+        {"id": "container.id"},
+        {"id": "host.hostName"},
+        # The second metric we request is the CPU. We aggregate it as an average.
+        {"id": "cpu.used.percent"},
+        {"id": "memory.used.percent"}
+    ]
+    metrics=[]
+    for metric_name in all_metrics:
+        metrics.append({"id":metric_name})
+
+
+    #
+    # Prepare the filter
+    #
+    filter = hostname
+
+    #
+    # Paging (from and to included; by default you get from=0 to=9)
+    # Here we'll get the top 5.
+    #
+    # paging = {"from": 0, "to": 4}
+
+    #
+    # Fire the query.
+    #
+    ok, res = sdclient.get_data(metrics=metrics,  # List of metrics to query
+                                start_ts=-600,  # Start of query span is 600 seconds ago
+                                end_ts=0,  # End the query span now
+                                sampling_s=60,  # 1 data point per minute
+                                filter=filter,
+                                # The filter specifying the target host                 # Paging to limit to just the 5 most busy
+                                datasource_type='container')  # The source for our metrics is the container
+    formated_data=format_data(res)
+    send_data(formated_data)
+
+
 
