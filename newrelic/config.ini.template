@@ -3,6 +3,11 @@ api_key =
 # application-level metrics (app) or host-level (host)
 # if app-level metrics are selected, the app name will be used as the project name
 app_or_host = host
+# set to 'yes' to send data to a project based on the app name
+auto_create_project = no
+# set to 'yes' to containerize the hostname info (ie treat each host 
+# as a device within the app). only applies when app_or_host = host
+containerize = no
 # applications to include (default all)
 app_name_filter = 
 app_id_filter = 
