@@ -9,6 +9,7 @@
 # busiest containers inside the given host, with 1 minute data granularity
 #
 
+import ast
 import ConfigParser
 import collections
 import logging
@@ -75,8 +76,8 @@ def get_agent_config_vars():
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
-            #host_chunk_size = int(config_parser.get('insightfinder', 'host_chunk_size'))
-            #metric_chunk_size = int(config_parser.get('insightfinder', 'metric_chunk_size'))
+            host_chunk_size = int(config_parser.get('insightfinder', 'host_chunk_size'))
+            metric_chunk_size = int(config_parser.get('insightfinder', 'metric_chunk_size'))
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
@@ -119,47 +120,52 @@ def get_agent_config_vars():
 
 
 def get_sysdig_config():
-
+    """Read and parse Sysdig config from config.ini"""
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
         try:
             sysdig_api_key = config_parser.get('sysdig', 'api_key')
-            all_metrics = []
-            filter_hosts = []
-
-            if len(config_parser.get('sysdig', 'all_metrics')) != 0:
-                all_metrics = config_parser.get('sysdig', 'all_metrics').split(",")
-            else:
-                all_metrics = [{"id": "container.id"}, {"id": "cpu.used.percent"}, {"id": "memory.used.percent"}]
-
-            if len(config_parser.get('sysdig', 'filter_hosts')) != 0:
-                filter_hosts = config_parser.get('insightfinder', 'filter_hosts').split(",")
+            hostname = config_parser.get('sysdig', 'hostname')
+            all_metrics = config_parser.get('sysdig', 'all_metrics').split(',')
+            print(type(all_metrics))
+            print(all_metrics)
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
             sys.exit(1)
+
         if len(sysdig_api_key) == 0:
             logger.warning(
                 "Agent not correctly configured(API KEY). Check config file.")
             exit()
-        if len(all_metrics) == 0:
+        if len(hostname) == 0:
             logger.warning(
-                "Agent not correctly configured(metrics). Check config file.")
-            exit()
-        if len(filter_hosts) == 0:
-            logger.warning(
-                "Agent not correctly configured(hostname). Check config file.")
+                "Agent not correctly configured. Check config file.")
             exit()
 
         sysdig_config = {
             "SYSDIG_API_KEY": sysdig_api_key,
-            "all_metrics": all_metrics,
-            "filter_hosts": filter_hosts
+            "HOSTNAME": hostname,
+            "ALL_METRICS": all_metrics
         }
     else:
         logger.warning("No config file found. Exiting...")
         exit()
 
     return sysdig_config
+
+
+def format_data(res):
+    formated_data = []
+    print(type(res))
+
+    for data_dict in res['data']:
+
+        instance = data_dict['d'][0] + '_' + data_dict['d'][1]
+        formated_data.append({'cpu.used.percent' + '[' + instance + ']':str(data_dict['d'][2]), 'memory.used.percent' + '[' + instance + ']':str(data_dict['d'][3]), 'timestamp':str(data_dict['t']*1000)})
+
+    print(formated_data)
+    return formated_data
+
 
