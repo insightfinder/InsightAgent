@@ -128,6 +128,8 @@ def get_sysdig_config():
             sysdig_api_key = config_parser.get('sysdig', 'api_key')
             hostname = config_parser.get('sysdig', 'hostname')
             all_metrics = config_parser.get('sysdig', 'all_metrics').split(',')
+            sysdig_http_proxy = config_parser.get('sysdig', 'sysdig_http_proxy')
+            sysdig_https_proxy = config_parser.get('sysdig', 'sysdig_https_proxy')
             print(type(all_metrics))
             print(all_metrics)
         except ConfigParser.NoOptionError:
@@ -145,9 +147,11 @@ def get_sysdig_config():
             exit()
 
         sysdig_config = {
-            "SYSDIG_API_KEY": sysdig_api_key,
-            "HOSTNAME": hostname,
-            "ALL_METRICS": all_metrics
+            "sysdig_api_key": sysdig_api_key,
+            "hostname": hostname,
+            "all_metrics": all_metrics,
+            "httpProxy": sysdig_http_proxy,
+            "httpsProxy": sysdig_https_proxy
         }
     else:
         logger.warning("No config file found. Exiting...")
@@ -163,7 +167,9 @@ def format_data(res):
     for data_dict in res['data']:
 
         instance = data_dict['d'][0] + '_' + data_dict['d'][1]
-        formated_data.append({'cpu.used.percent' + '[' + instance + ']':str(data_dict['d'][2]), 'memory.used.percent' + '[' + instance + ']':str(data_dict['d'][3]), 'timestamp':str(data_dict['t']*1000)})
+        formated_data.append({'cpu.used.percent' + '[' + instance + ']':str(data_dict['d'][2]),
+                              'memory.used.percent' + '[' + instance + ']':str(data_dict['d'][3]),
+                              'timestamp':str(data_dict['t']*1000)})
 
     print(formated_data)
     return formated_data
@@ -252,31 +258,25 @@ if __name__ == "__main__":
 
 
     sysdig_config = get_sysdig_config()
-    sdc_token = sysdig_config['SYSDIG_API_KEY']
-    hostname = sysdig_config['HOSTNAME']
+    sdc_token = sysdig_config['sysdig_api_key']
+    hostname = sysdig_config['hostname']
 
 
     #
     # Instantiate the SDC client
     #
-    sdclient = SdcClient(sdc_token)
+    if len(sysdig_config['httpProxy']) != 0:
+        sdclient = SdcClient(sdc_token, sdc_url='http://app.sysdigcloud.com', ssl_verify=False)
+    if len(sysdig_config['httpsProxy']) != 0:
+        sdclient = SdcClient(sdc_token, sdc_url='https://app.sysdigcloud.com', ssl_verify=True)
+    else:
+        sdclient = SdcClient(sdc_token)
 
     #
     # Prepare the metrics list.
     #
-    all_metrics=sysdig_config['ALL_METRICS']
-    metrics = [
-        # The first metric we request is the container name. This is a segmentation
-        # metric, and you can tell by the fact that we don't specify any aggregation
-        # criteria. This entry tells Sysdig Monitor that we want to see the CPU
-        # utilization for each container separately.
-        {"id": "container.id"},
-        {"id": "host.hostName"},
-        # The second metric we request is the CPU. We aggregate it as an average.
-        {"id": "cpu.used.percent"},
-        {"id": "memory.used.percent"}
-    ]
-    metrics=[]
+    all_metrics=sysdig_config['all_metrics']
+    metrics = []
     for metric_name in all_metrics:
         metrics.append({"id":metric_name})
 
@@ -302,7 +302,7 @@ if __name__ == "__main__":
                                 filter=filter,
                                 # The filter specifying the target host                 # Paging to limit to just the 5 most busy
                                 datasource_type='container')  # The source for our metrics is the container
-    formated_data=format_data(res)
+    formated_data = format_data(res)
     send_data(formated_data)
 
 
