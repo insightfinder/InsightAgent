@@ -76,8 +76,9 @@ def get_agent_config_vars():
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
-            host_chunk_size = int(config_parser.get('insightfinder', 'host_chunk_size'))
-            metric_chunk_size = int(config_parser.get('insightfinder', 'metric_chunk_size'))
+
+            # host_chunk_size = int(config_parser.get('insightfinder', 'host_chunk_size'))
+            # metric_chunk_size = int(config_parser.get('insightfinder', 'metric_chunk_size'))
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
@@ -101,8 +102,8 @@ def get_agent_config_vars():
             "licenseKey": license_key,
             "projectName": project_name,
             "samplingInterval": sampling_interval,
-            "hostChunkSize": host_chunk_size,
-            "metricChunkSize": metric_chunk_size,
+            # "hostChunkSize": host_chunk_size,
+            # "metricChunkSize": metric_chunk_size,
             "httpProxy": if_http_proxy,
             "httpsProxy": if_https_proxy
         }
@@ -130,8 +131,8 @@ def get_sysdig_config():
             all_metrics = config_parser.get('sysdig', 'all_metrics').split(',')
             sysdig_http_proxy = config_parser.get('sysdig', 'sysdig_http_proxy')
             sysdig_https_proxy = config_parser.get('sysdig', 'sysdig_https_proxy')
-            print(type(all_metrics))
-            print(all_metrics)
+            sysdig_metric_chunk_size= config_parser.get('sysdig', 'metric_chunk_size')
+            sysdig_host_chunk_size=config_parser.get('sysdig', 'host_chunk_size')
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
@@ -151,7 +152,9 @@ def get_sysdig_config():
             "hostname": hostname,
             "all_metrics": all_metrics,
             "httpProxy": sysdig_http_proxy,
-            "httpsProxy": sysdig_https_proxy
+            "httpsProxy": sysdig_https_proxy,
+            "host_chunk_size":sysdig_host_chunk_size,
+            "metric_chunk_size":sysdig_metric_chunk_size
         }
     else:
         logger.warning("No config file found. Exiting...")
@@ -160,18 +163,41 @@ def get_sysdig_config():
     return sysdig_config
 
 
-def format_data(res):
+def format_data(res,sub_metric_list):
     formated_data = []
-    print(type(res))
+
+
+    #print(res['data'])
 
     for data_dict in res['data']:
 
-        instance = data_dict['d'][0] + '_' + data_dict['d'][1]
-        formated_data.append({'cpu.used.percent' + '[' + instance + ']':str(data_dict['d'][2]),
-                              'memory.used.percent' + '[' + instance + ']':str(data_dict['d'][3]),
-                              'timestamp':str(data_dict['t']*1000)})
 
-    print(formated_data)
+        instance = data_dict['d'][0] + '_' + data_dict['d'][1]
+        # formated_data.append({'cpu.used.percent' + '[' + instance + ']':str(data_dict['d'][2]),
+        #                       'memory.used.percent' + '[' + instance + ']':str(data_dict['d'][3]),
+        #                       'timestamp':str(data_dict['t']*1000)})
+
+
+        metric_data_dict={}
+
+        if sub_metric_list== ['container.id','host.hostName']:
+            iterator =0
+        else:
+            iterator =2
+
+
+        for metric in sub_metric_list:
+            # if(metric not in ['container.id','host.hostName']):
+                metric_data_dict[metric + '[' + instance + ']'] = str(data_dict['d'][iterator])
+                iterator += 1
+
+
+        metric_data_dict['timestamp']=str(data_dict['t']*1000)
+        formated_data.append(metric_data_dict)
+
+
+
+
     return formated_data
 
 def send_data(chunk_metric_data):
@@ -200,6 +226,8 @@ def send_data(chunk_metric_data):
                 response = requests.post(post_url, data=json.loads(to_send_data_json), proxies=if_proxies)
             if response.status_code == 200:
                 logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
+                #logger.info(str(len(bytearray(to_send_data_json))) + " ------------------------------------------------------------------")
+
                 logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
             else:
                 logger.info("Failed to send data.")
@@ -240,22 +268,55 @@ def set_logger_config(level):
     logger_obj.addHandler(logging_handler_err)
     return logger_obj
 
+
+def chunks(l, n):
+    """Yield successive n-sized chunks from l."""
+    for index in xrange(0, len(l), n):
+        #print(l[index:index + n])
+        yield l[index:index + n]
+
+
+def format_metric_names(metric_list):
+    formated_metric_list = []
+    if metric_list == ['container.id','host.hostName']:
+
+        for metric_name in metric_list:
+            formated_metric_list.append({"id":metric_name})
+        return formated_metric_list
+
+    else:
+        formated_metric_list.append({"id":'container.id'})
+        formated_metric_list.append({"id":'host.hostName'})
+        for metric_name in metric_list:
+
+            formated_metric_list.append({"id": metric_name})
+        return formated_metric_list
+
+
+def format_host_name_list(sub_host_list):
+
+    hostname=",".join(sub_host_list)
+    hostnames=hostname.replace(',', '\' or host.hostName = \'')
+    hostnames='host.hostName= \''+ hostnames
+    hostnames=hostnames+'\''
+    print(hostnames)
+    return hostnames
+
+
 if __name__ == "__main__":
 
 
     agent_config_vars = get_agent_config_vars()
-    #send_data(split_elemets)
+    sampling_interval_secs= int(agent_config_vars['samplingInterval'])*60
     parameters = get_parameters()
     log_level = parameters['logLevel']
     ATTEMPTS = 3
-    #agent_config_vars = get_agent_config_vars()
     if_proxies = dict()
     if len(agent_config_vars['httpProxy']) != 0:
         if_proxies['http'] = agent_config_vars['httpProxy']
     if len(agent_config_vars['httpsProxy']) != 0:
         if_proxies['https'] = agent_config_vars['httpsProxy']
     logger = set_logger_config(log_level)
-
 
     sysdig_config = get_sysdig_config()
     sdc_token = sysdig_config['sysdig_api_key']
@@ -275,35 +336,44 @@ if __name__ == "__main__":
     #
     # Prepare the metrics list.
     #
-    all_metrics=sysdig_config['all_metrics']
-    metrics = []
-    for metric_name in all_metrics:
-        metrics.append({"id":metric_name})
+    try:
 
+        metric_chunk_size= int(sysdig_config['metric_chunk_size'])
+        host_chunk_size=int(sysdig_config['host_chunk_size'])
+        all_host_list=hostname.split(',')  #'
+        hostnames=hostname.replace(',', '\'or host.hostName = \'')
+        hostnames='host.hostName=\''+ hostnames
+        hostnames=hostnames+'\''
+
+
+
+
+        all_metrics=sysdig_config['all_metrics']
+        for sub_metric_list in chunks(all_metrics, metric_chunk_size):
+            formated_metric_list=format_metric_names(sub_metric_list)
+            print(sub_metric_list)
+            for sub_host_list in chunks(all_host_list, host_chunk_size):
+                formated_hostnames=format_host_name_list(sub_host_list)
+                filter = formated_hostnames
 
     #
     # Prepare the filter
     #
-    filter = hostname
 
-    #
-    # Paging (from and to included; by default you get from=0 to=9)
-    # Here we'll get the top 5.
-    #
-    # paging = {"from": 0, "to": 4}
+
 
     #
     # Fire the query.
     #
-    ok, res = sdclient.get_data(metrics=metrics,  # List of metrics to query
+                ok, res = sdclient.get_data(metrics=formated_metric_list,  # List of metrics to query
                                 start_ts=-600,  # Start of query span is 600 seconds ago
                                 end_ts=0,  # End the query span now
-                                sampling_s=60,  # 1 data point per minute
-                                filter=filter,
-                                # The filter specifying the target host                 # Paging to limit to just the 5 most busy
+                                sampling_s=sampling_interval_secs,  # 1 data point per minute
+                                filter=filter,                      # The filter specifying the target host
                                 datasource_type='container')  # The source for our metrics is the container
-    formated_data = format_data(res)
-    send_data(formated_data)
+                formated_data = format_data(res,sub_metric_list)
+                send_data(formated_data)
 
-
-
+    except Exception as e:
+        logger.error("Error sending metric data to InsightFinder.")
+        logger.error(e)
