@@ -237,7 +237,8 @@ elif [ $AGENT_TYPE == 'newrelic' ]; then
 		echo "# metric to include (defaults below)" >> ${PATH_TO_CONFIG_INI}
 		echo "# this should be formatted as metric_name:value|value,metric_name:value|value
 metrics = CPU/User Time:percent,Memory/Heap/Used:used_mb_by_host,Memory/Physical:used_mb_by_host,Instance/connectsReqPerMin:requests_per_minute,Controller/reports/show:average_response_time|calls_per_minute|call_count|min_response_time|max_response_time|average_exclusive_time|average_value|total_call_time_per_minute|requests_per_minute|standard_deviation|throughput|average_call_time|min_call_time|max_call_time|total_call_time" >> ${PATH_TO_CONFIG_INI}
-		echo "metrics = " >> ${PATH_TO_CONFIG_INI}
+		echo "app_metrics = " >> ${PATH_TO_CONFIG_INI}
+		echo "host_metrics = " >> ${PATH_TO_CONFIG_INI}
 		echo "# how frequently (in min) to run this agent (must change value here and in /etc/cron.d/ifagent)" >> ${PATH_TO_CONFIG_INI}
 		echo "run_interval = $REPORTING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
 		echo "agent_http_proxy = " >> ${PATH_TO_CONFIG_INI}
