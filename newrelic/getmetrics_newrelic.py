@@ -36,19 +36,16 @@ def start_data_processing():
         'period': str(if_config_vars['samplingInterval'])
     }
 
-    # get metrics to gather
-    metrics_list = get_metrics_list()
-
-    get_applications(base_url, headers, data, metrics_list)
+    get_applications(base_url, headers, data)
 
 
-def get_applications(base_url, headers, data, metrics_list):
+def get_applications(base_url, headers, data):
     url = urlparse.urljoin(base_url, '/v2/applications.json')
     response = send_request(url, headers=headers, proxies=agent_config_vars['proxies'])
     try:
         logger.debug(response.text)
         response_json = json.loads(response.text)
-        filter_applications(base_url, headers, data, metrics_list, response_json['applications'])
+        filter_applications(base_url, headers, data, response_json['applications'])
     # response = -1
     except TypeError:
         logger.warn('Failure when contacting NewRelic API when fetching applications')
@@ -57,12 +54,11 @@ def get_applications(base_url, headers, data, metrics_list):
                     'Please contact support if this problem persists.')
 
 
-def filter_applications(base_url, headers, data, metrics_list, app_list):
+def filter_applications(base_url, headers, data, app_list):
     for app in app_list:
         app_name = app['name']
         app_id = str(app['id'])
         logger.debug(app_name + ': ' + app_id)
-        logger.debug(app)
         # check app filter
         if should_filter_per_config('app_name_filter', app_name):
             logger.debug('skipping')
@@ -73,13 +69,15 @@ def filter_applications(base_url, headers, data, metrics_list, app_list):
             continue
 
         if agent_config_vars['auto_create_project']:
+            # make sure we send the last chunk for the previous project
+            send_data_wrapper()
             check_project(make_safe_project_string(app_name))
             logger.debug(if_config_vars['projectName'])
 
         if use_host_api():
-            get_hosts_for_app(base_url, headers, data, metrics_list, app_id)
+            get_hosts_for_app(base_url, headers, data, get_metrics_list('host_metrics'), app_id)
         if use_app_api():
-            get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, make_safe_instance_string(app_name)) 
+            get_metrics_for_app_host(base_url, headers, data, get_metrics_list('app_metrics'), app_id, make_safe_instance_string(app_name)) 
 
 
 def get_hosts_for_app(base_url, headers, data, metrics_list, app_id):
@@ -173,10 +171,10 @@ def check_project(project_name):
             logger.error('Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars['projectName'])
 
 
-def get_metrics_list():
+def get_metrics_list(setting):
     """ Parse metrics given in config.ini, if any """
     metrics_list = dict()
-    if len(agent_config_vars['metrics']) != 0:
+    if len(agent_config_vars[setting]) != 0:
         # build an object; see default_metrics_list() for the structure
         for metric_object in agent_config_vars['metrics']:
             metric_object = metric_object.split(':')
@@ -185,7 +183,7 @@ def get_metrics_list():
             metrics_list[metric_name] = values
     # if malformed or none specified, use default
     if len(metrics_list) == 0:
-        metrics_list = default_metrics_list()
+        metrics_list = default_metrics_list(setting)
     return metrics_list
 
 
@@ -204,8 +202,10 @@ def use_host_api():
     return agent_config_vars['app_or_host'] == 'HOST' or agent_config_vars['app_or_host'] == 'BOTH'
 
 
-def default_metrics_list():
-    return {
+def default_metrics_list(setting):
+    metrics = dict()
+    metrics['app_metrics'] = { }
+    metrics['host_metrics'] = {
         'CPU/User Time': [
             'percent'
         ],
@@ -236,6 +236,9 @@ def default_metrics_list():
             'total_call_time'
         ]
     }
+    if setting not in metrics.keys():
+        setting = host_metrics
+    return metrics[setting]
 
 
 def get_agent_config_vars():
@@ -252,7 +255,8 @@ def get_agent_config_vars():
             app_name_filter = config_parser.get('newrelic', 'app_name_filter')
             app_id_filter = config_parser.get('newrelic', 'app_id_filter')
             host_filter = config_parser.get('newrelic', 'host_filter')
-            metrics = config_parser.get('newrelic', 'metrics')
+            app_metrics = config_parser.get('newrelic', 'app_metrics')
+            host_metrics = config_parser.get('newrelic', 'host_metrics')
             run_interval = config_parser.get('newrelic', 'run_interval')
             agent_http_proxy = config_parser.get('newrelic', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('newrelic', 'agent_https_proxy')
@@ -284,8 +288,10 @@ def get_agent_config_vars():
             app_id_filter = app_id_filter.strip().split(',')
         if len(host_filter) != 0:
             host_filter = host_filter.strip().split(',')
-        if len(metrics) != 0:
-            metrics = metrics.strip().split(',')
+        if len(app_metrics) != 0:
+            app_metrics = app_metrics.strip().split(',')
+        if len(host_metrics) != 0:
+            host_metrics = host_metrics.strip().split(',')
 
         # set up proxies for agent
         agent_proxies = dict()
@@ -303,7 +309,8 @@ def get_agent_config_vars():
             'app_name_filter': app_name_filter,
             'app_id_filter': app_id_filter,
             'host_filter': host_filter,
-            'metrics': metrics,
+            'app_metrics': app_metrics,
+            'host_metrics': host_metrics,
             'run_interval': int(run_interval) * 60,  # as seconds
             'proxies': agent_proxies
         }
