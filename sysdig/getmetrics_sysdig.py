@@ -177,7 +177,6 @@ def format_data(res,sub_metric_list):
         #                       'memory.used.percent' + '[' + instance + ']':str(data_dict['d'][3]),
         #                       'timestamp':str(data_dict['t']*1000)})
 
-
         metric_data_dict={}
 
         if sub_metric_list== ['container.id','host.hostName']:
@@ -185,20 +184,16 @@ def format_data(res,sub_metric_list):
         else:
             iterator =2
 
-
         for metric in sub_metric_list:
             # if(metric not in ['container.id','host.hostName']):
                 metric_data_dict[metric + '[' + instance + ']'] = str(data_dict['d'][iterator])
                 iterator += 1
 
-
         metric_data_dict['timestamp']=str(data_dict['t']*1000)
         formated_data.append(metric_data_dict)
 
-
-
-
     return formated_data
+
 
 def send_data(chunk_metric_data):
     send_data_time = time.time()
@@ -304,7 +299,6 @@ def format_host_name_list(sub_host_list):
 
 
 if __name__ == "__main__":
-
 
     agent_config_vars = get_agent_config_vars()
     sampling_interval_secs= int(agent_config_vars['samplingInterval'])*60
