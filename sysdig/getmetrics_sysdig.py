@@ -9,20 +9,16 @@
 # busiest containers inside the given host, with 1 minute data granularity
 #
 
-import ast
+
 import ConfigParser
-import collections
 import logging
-import re
 import socket
 import time
 from optparse import OptionParser
-from itertools import islice
 import requests
 import os
 import sys
 import json
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])), '..'))
 from sdcclient import SdcClient
 
 #
