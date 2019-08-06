@@ -1,1 +1,1 @@
-{"reporting_interval": "1", "prev_endtime": "20180423010646", "keep_file_days": "5", "delta_fields": ["CPU", "DiskRead", "DiskWrite", "NetworkIn", "NetworkOut", "InOctets", "OutOctets", "InErrors", "OutErrors", "InDiscards", "OutDiscards"]}
+{"keep_file_days": "5", "prev_endtime": "0", "reporting_interval": "1", "delta_fields": ["CPU", "DiskRead", "DiskWrite", "NetworkIn", "NetworkOut", "InOctets", "OutOctets", "InErrors", "OutErrors", "InDiscards", "OutDiscards"]}
