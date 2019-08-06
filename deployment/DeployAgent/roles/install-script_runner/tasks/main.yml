@@ -1,0 +1,79 @@
+---
+- name : Check Mandatory Variables For Install
+  debug:
+    msg:
+      - Agent Type:{{ agentType | mandatory }}
+- name: SELinux | Check for SELinux
+  become: yes
+  stat:
+    path: /etc/selinux/config
+  register: p
+- name: SELinux | Disable SELinux
+  become: yes
+  selinux:
+    state: disabled
+  when: p.stat.exists == True
+- name: Monit | Install Monit
+  yum:
+    name: monit
+    state: present
+  when: ansible_pkg_mgr == 'yum'
+- name: Monit | Install Monit
+  apt:
+    name: monit
+    state: present
+  when: ansible_pkg_mgr == 'apt'
+- name: Monit | Restart Monit daemon
+  systemd:
+    name: monit.service
+    enabled: yes
+    daemon_reload: yes
+    state: restarted
+- name: Delete Old Tar Bundle for Agent
+  become: yes
+  file:
+    state: absent
+    path: "{{ansible_env.HOME}}/insightagent.tar.gz"
+- name: Delete Old Agent Code
+  become: yes
+  file:
+    state: absent
+    path: "{{ansible_env.HOME}}/InsightAgent-master"
+- name: Copy Agent Code on Machines
+  become: yes
+  copy:
+    src: ../files/insightagent.tar.gz
+    dest: "{{ansible_env.HOME}}"
+    owner: root
+    group: root
+    mode: 0644
+- name: Untar the Agent Code
+  unarchive:
+    src: "{{ansible_env.HOME}}/insightagent.tar.gz"
+    dest: "{{ansible_env.HOME}}"
+    keep_newer: yes
+- name: Monit | Add default config file
+  copy:
+    src: files/monit.conf
+    dest: /etc/monit.conf
+    owner: root
+    group: root
+    mode: 0644
+    force: no
+- name: Monit | Add script_runner config file
+  template:
+    src: script_runner.monit.j2
+    dest: /etc/monit.d/script_runner
+    owner: root
+    group: root
+    mode: 0644
+- name: Monit | Restart Monit daemon
+  systemd:
+    name: monit.service
+    enabled: yes 
+    daemon_reload: yes 
+    state: restarted
+- name: Delete Tar Bundle for Agent
+  file:
+    state: absent
+    path: "{{ansible_env.HOME}}/insightagent.tar.gz"
