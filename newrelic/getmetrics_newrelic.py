@@ -160,13 +160,19 @@ def check_project(project_name):
     if 'token' in if_config_vars and len(if_config_vars['token']) != 0:
         try:
             # check for existing project
-            output_check_project = subprocess.check_output('curl "' + if_config_vars['ifURL'] + '/api/v1/getprojectstatus?userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + project_name + '%22%2C%22customerName%22%3A%22' + if_config_vars['userName'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"', shell=True)
+            check_url = urlparse.urljoin(if_config_vars['ifURL'], '/api/v1/getprojectstatus'
+            output_check_project = subprocess.check_output('curl "' + check_url + '?userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + project_name + '%22%2C%22customerName%22%3A%22' + if_config_vars['userName'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"', shell=True)
             # create project if no existing project
             if project_name not in output_check_project:
                 logger.debug('creating project')
-                output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=Metric&samplingInterval=' + str(if_config_vars['samplingInterval'] / 60) +  '&samplingIntervalInSeconds=' + str(if_config_vars['samplingInterval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_agent_type_from_mode_wrap() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + if_config_vars['ifURL'] + '/api/v1/add-custom-project?tzOffset=-18000000', shell=True)
+                create_url = urlparse.urljoin(if_config_vars['ifURL'], '/api/v1/add-custom-project')
+                output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=Metric&samplingInterval=' + str(if_config_vars['samplingInterval'] / 60) +  '&samplingIntervalInSeconds=' + str(if_config_vars['samplingInterval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_agent_type_from_mode_wrap() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + create_url + '?tzOffset=-18000000', shell=True)
             # set project name to proposed name
             if_config_vars['projectName'] = project_name
+            # try to add new project to system
+            if 'systemName' in if_config_vars and len(if_config_vars['systemName']) != 0:
+                system_url = urlparse.urljoin(if_config_vars['ifURL'], '/api/v1/projects/update')
+                output_update_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&operation=updateprojsettings&projectName=' + project_name + '&systemName=' + if_config_vars['systemName'] + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + system_url + '?tzOffset=-18000000', shell=True)
         except subprocess.CalledProcessError as e:
             logger.error('Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars['projectName'])
 
@@ -333,6 +339,7 @@ def get_if_config_vars():
             user_name = config_parser.get('insightfinder', 'user_name')
             license_key = config_parser.get('insightfinder', 'license_key')
             project_name = config_parser.get('insightfinder', 'project_name')
+            system_name = config_parser.get('insightfinder', 'system_name')
             token = config_parser.get('insightfinder', 'token')
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             chunk_size_kb = config_parser.get('insightfinder', 'chunk_size_kb')
@@ -384,6 +391,7 @@ def get_if_config_vars():
             'userName': user_name,
             'licenseKey': license_key,
             'projectName': project_name,
+            'systemName': system_name,
             'token': token,
             'samplingInterval': int(sampling_interval),     # as seconds
             'chunkSize': int(chunk_size_kb) * 1024,         # as bytes
