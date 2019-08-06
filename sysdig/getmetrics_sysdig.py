@@ -5,8 +5,7 @@
 # filtering and segmentation.
 #
 # Requires a API Token. Obtained from user settings on Sysdig Monitor
-# The request returns the last 10 minutes of CPU utilization for the 5
-# busiest containers inside the given host, with 1 minute data granularity
+#
 #
 
 
@@ -162,16 +161,9 @@ def get_sysdig_config():
 def format_data(res,sub_metric_list):
     formated_data = []
 
-
-    #print(res['data'])
-
     for data_dict in res['data']:
 
-
         instance = data_dict['d'][0] + '_' + data_dict['d'][1]
-        # formated_data.append({'cpu.used.percent' + '[' + instance + ']':str(data_dict['d'][2]),
-        #                       'memory.used.percent' + '[' + instance + ']':str(data_dict['d'][3]),
-        #                       'timestamp':str(data_dict['t']*1000)})
 
         metric_data_dict={}
 
@@ -201,7 +193,7 @@ def send_data(chunk_metric_data):
     to_send_data_dict["userName"] = agent_config_vars['userName']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
     to_send_data_dict["samplingInterval"] = agent_config_vars['samplingInterval']
-    to_send_data_dict["agentType"] = "MetricFileReplay"
+    to_send_data_dict["agentType"] = "custom"
 
     to_send_data_json = json.dumps(to_send_data_dict)
     print(json.dumps(to_send_data_dict))
@@ -263,7 +255,6 @@ def set_logger_config(level):
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
     for index in xrange(0, len(l), n):
-        #print(l[index:index + n])
         yield l[index:index + n]
 
 
@@ -322,10 +313,6 @@ if __name__ == "__main__":
         sdclient = SdcClient(sdc_token, sdc_url='https://app.sysdigcloud.com', ssl_verify=True)
     else:
         sdclient = SdcClient(sdc_token)
-
-    #
-    # Prepare the metrics list.
-    #
     try:
 
         metric_chunk_size= int(sysdig_config['metric_chunk_size'])
@@ -335,9 +322,6 @@ if __name__ == "__main__":
         hostnames='host.hostName=\''+ hostnames
         hostnames=hostnames+'\''
 
-
-
-
         all_metrics=sysdig_config['all_metrics']
         for sub_metric_list in chunks(all_metrics, metric_chunk_size):
             formated_metric_list=format_metric_names(sub_metric_list)
@@ -345,11 +329,6 @@ if __name__ == "__main__":
             for sub_host_list in chunks(all_host_list, host_chunk_size):
                 formated_hostnames=format_host_name_list(sub_host_list)
                 filter = formated_hostnames
-
-    #
-    # Prepare the filter
-    #
-
 
 
     #
