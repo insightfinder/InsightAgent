@@ -92,7 +92,7 @@ def get_parameters():
     if options.chunkLines is None and parameters['mode'] == 'metricFileReplay':
         parameters['chunkLines'] = 100
     elif options.chunkLines is None:
-        parameters['chunkLines'] = 40000
+        parameters['chunkLines'] = 2000
     else:
         parameters['chunkLines'] = int(options.chunkLines)
     # Optional split id and split by for metric file replay
@@ -265,6 +265,7 @@ def send_data(metric_data_dict, file_path, chunk_serial_number):
             to_send_data_dict["splitBy"] = parameters['splitBy']
 
     to_send_data_json = json.dumps(to_send_data_dict)
+    logger.debug(to_send_data_json)
     logger.debug("Chunksize: " + str(len(bytearray(str(metric_data_dict)))))
     logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
 
@@ -448,7 +449,7 @@ def process_replay(file_path):
             # handle different metric agents
             if 'sar' in parameters['agentType']:
                 if parameters['agentType'] == 'sar-cpu' or parameters['agentType'] == 'sar':
-                    replay_sar(file_path, 'sar')
+                    replay_sar(file_path, 'sar -P ALL')
                 if parameters['agentType'] == 'sar-network' or parameters['agentType'] == 'sar':
                     replay_sar(file_path, 'sar -n DEV')
                 if parameters['agentType'] == 'sar-storage' or parameters['agentType'] == 'sar':
@@ -521,6 +522,12 @@ def replay_sar(metric_file_path, command):
     except subprocess.CalledProcessError:
         logger.error('Not a sar file, sar is not installed, or there is a sar version mismatch ' +
                      'between the origin machine and the current machine. Please contact support.')
+        try:
+            subprocess.check_output(
+                'rm -f ' + translated_file_path,
+                shell=True)
+        except subprocess.CalledProcessError:
+            logger.error('Could not clean up file. Please run "rm ' + translated_file_path + '"')
         sys.exit(1)
     with open(metric_file_path + '.sar') as metric_file:
         # parse opening lines
@@ -532,10 +539,13 @@ def replay_sar(metric_file_path, command):
         host = header[2][1:-1]
         # assume DD/MM/YYYY
         date = header[3]
-        format = '%m/%d/%Y %I:%M:%S %p'
+        ts_format = '%m/%d/%Y %I:%M:%S %p'
         metric_file.readline()
         metrics = metric_file.readline()
-        field_names = metrics.split()
+        field_names = metrics.replace('/', 'PER').split()
+        while 'RESTART' in field_names or len(field_names) == 0:
+            metrics = metric_file.readline()
+            field_names = metrics.replace('/', 'PER').split()
         field_names[0] = 'timestamp'
         field_names[1] = 'ampm'
         # determine where fields start
@@ -561,7 +571,7 @@ def replay_sar(metric_file_path, command):
                 current_line_count = 0
                 chunk_count += 1
 
-            row = line.split()
+            row = line.replace('/', 'PER').split()
             if not row or row[start_index:] == field_names[start_index:] or 'RESTART' in row or line.startswith('Average'):
                 line = metric_file.readline()
                 continue
@@ -581,12 +591,12 @@ def replay_sar(metric_file_path, command):
                         if device == tag or (tag.endswith('*') and device.startswith(tag.split('*')[0])):
                             exclude_flag = True
                             break
-                instance += '_' + device
+                instance = device + '_' + instance
             if exclude_flag:
                 line = metric_file.readline()
                 continue
 
-            timestamp = _get_timestamp_sar(date, time, ampm, parameters['timeZone'], format)
+            timestamp = _get_timestamp_sar(date, time, ampm, parameters['timeZone'], ts_format)
             current_row['timestamp'] = str(timestamp)
             if min_timestamp_epoch == 0 or min_timestamp_epoch > long(timestamp):
                 min_timestamp_epoch = long(timestamp)
@@ -596,8 +606,9 @@ def replay_sar(metric_file_path, command):
             # metric values
             for i in range(start_index, len(row)):
                 column_name = field_names[i].strip() + '[' + instance + ']'
-                current_row[column_name] = row[i]
+                current_row[column_name] = str(row[i].strip())
             to_send_metric_data.append(current_row)
+            logger.debug(str(current_row))
             current_line_count += 1
             row_count += 1
             line = metric_file.readline()
