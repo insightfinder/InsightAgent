@@ -542,10 +542,10 @@ def replay_sar(metric_file_path, command):
         ts_format = '%m/%d/%Y %I:%M:%S %p'
         metric_file.readline()
         metrics = metric_file.readline()
-        field_names = metrics.replace('/', 'PER').split()
+        field_names = metrics.replace('/s', 's').split()
         while 'RESTART' in field_names or len(field_names) == 0:
             metrics = metric_file.readline()
-            field_names = metrics.replace('/', 'PER').split()
+            field_names = metrics.replace('/s', 's').split()
         field_names[0] = 'timestamp'
         field_names[1] = 'ampm'
         # determine where fields start
@@ -571,7 +571,7 @@ def replay_sar(metric_file_path, command):
                 current_line_count = 0
                 chunk_count += 1
 
-            row = line.replace('/', 'PER').split()
+            row = line.replace('/s', 's').split()
             if not row or row[start_index:] == field_names[start_index:] or 'RESTART' in row or line.startswith('Average'):
                 line = metric_file.readline()
                 continue
