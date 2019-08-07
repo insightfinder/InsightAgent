@@ -189,7 +189,7 @@ def send_data(chunk_metric_data):
     to_send_data_dict["userName"] = agent_config_vars['userName']
     to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
     to_send_data_dict["samplingInterval"] = agent_config_vars['samplingInterval']
-    to_send_data_dict["agentType"] = "custom"
+    to_send_data_dict["agentType"] = "containerStreaming"
 
     to_send_data_json = json.dumps(to_send_data_dict)
     print(json.dumps(to_send_data_dict))
