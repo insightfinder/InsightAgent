@@ -18,6 +18,7 @@ import requests
 import os
 import sys
 import json
+import urlparse
 from sdcclient import SdcClient
 
 #
@@ -71,9 +72,6 @@ def get_agent_config_vars():
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
-
-            # host_chunk_size = int(config_parser.get('insightfinder', 'host_chunk_size'))
-            # metric_chunk_size = int(config_parser.get('insightfinder', 'metric_chunk_size'))
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
@@ -97,8 +95,6 @@ def get_agent_config_vars():
             "licenseKey": license_key,
             "projectName": project_name,
             "samplingInterval": sampling_interval,
-            # "hostChunkSize": host_chunk_size,
-            # "metricChunkSize": metric_chunk_size,
             "httpProxy": if_http_proxy,
             "httpsProxy": if_https_proxy
         }
@@ -199,17 +195,15 @@ def send_data(chunk_metric_data):
     print(json.dumps(to_send_data_dict))
     logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
 
-    # send the data
-    post_url = parameters['serverUrl'] + "/customprojectrawdata"
-    for _ in xrange(ATTEMPTS):
+    post_url=urlparse.urljoin(parameters['serverUrl'],"/customprojectrawdata")
+    for attempt_num in xrange(ATTEMPTS):
         try:
             if len(if_proxies) == 0:
-                response = requests.post(post_url, data=json.loads(to_send_data_json))
+                response = requests.post(post_url, data=to_send_data_dict)
             else:
-                response = requests.post(post_url, data=json.loads(to_send_data_json), proxies=if_proxies)
+                response = requests.post(post_url, data=to_send_data_dict, proxies=if_proxies)
             if response.status_code == 200:
                 logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
-                #logger.info(str(len(bytearray(to_send_data_json))) + " ------------------------------------------------------------------")
 
                 logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
             else:
@@ -229,7 +223,7 @@ def send_data(chunk_metric_data):
             break
 
     logger.error(
-        "Failed to flush to InsightFinder! Gave up after %d attempts.", ATTEMPTS)
+        "Failed to flush to InsightFinder! Gave up after %d attempts.", attempt_num)
 
 
 def set_logger_config(level):
@@ -287,10 +281,13 @@ def format_host_name_list(sub_host_list):
 
 if __name__ == "__main__":
 
+    parameters = get_parameters()
+    log_level = parameters['logLevel']
+    logger = set_logger_config(log_level)
     agent_config_vars = get_agent_config_vars()
     sampling_interval_secs= int(agent_config_vars['samplingInterval'])*60
     parameters = get_parameters()
-    log_level = parameters['logLevel']
+
     ATTEMPTS = 3
     if_proxies = dict()
     if len(agent_config_vars['httpProxy']) != 0:
@@ -309,7 +306,7 @@ if __name__ == "__main__":
     #
     if len(sysdig_config['httpProxy']) != 0:
         sdclient = SdcClient(sdc_token, sdc_url='http://app.sysdigcloud.com', ssl_verify=False)
-    if len(sysdig_config['httpsProxy']) != 0:
+    elif len(sysdig_config['httpsProxy']) != 0:
         sdclient = SdcClient(sdc_token, sdc_url='https://app.sysdigcloud.com', ssl_verify=True)
     else:
         sdclient = SdcClient(sdc_token)
