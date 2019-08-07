@@ -60,4 +60,5 @@ After using the agent, use command "deactivate" to get out of python virtual env
 ```
 sysdig/config.ini
 ```
-Update the api_key. The key can be obtained by going to Settings in user account.
+Update the api_key, hostname and metrics. The key can be obtained by going to Settings in user account.
+
