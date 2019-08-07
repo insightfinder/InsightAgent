@@ -1,4 +1,4 @@
-# InsightAgent: datadog
+# InsightAgent: sysdig
 Agent Type: sysdig
 
 Platform: Linux
