@@ -89,6 +89,10 @@ def get_agent_config_vars():
             logger.warning(
                 "Agent not correctly configured(project_name). Check config file.")
             sys.exit(1)
+        if len(sampling_interval) == 0:
+            logger.warning(
+                "Agent not correctly configured(sampling_interval). Check config file.")
+            sys.exit(1)
 
         config_vars = {
             "userName": user_name,
