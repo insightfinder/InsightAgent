@@ -174,7 +174,7 @@ def format_data(res,sub_metric_list):
 
         for metric in sub_metric_list:
             # if(metric not in ['container.id','host.hostName']):
-                metric = metric.replace('.','/')
+
                 metric_data_dict[metric + '[' + instance + ']'] = str(data_dict['d'][iterator])
                 iterator += 1
 
