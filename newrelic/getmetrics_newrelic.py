@@ -14,6 +14,7 @@ from datetime import datetime
 import urlparse
 import httplib
 import requests
+import subprocess
 
 '''
 This script gathers data to send to Insightfinder
@@ -35,18 +36,16 @@ def start_data_processing():
         'period': str(if_config_vars['samplingInterval'])
     }
 
-    # get metrics to gather
-    metrics_list = get_metrics_list()
-
-    get_applications(base_url, headers, data, metrics_list)
+    get_applications(base_url, headers, data)
 
 
-def get_applications(base_url, headers, data, metrics_list):
+def get_applications(base_url, headers, data):
     url = urlparse.urljoin(base_url, '/v2/applications.json')
     response = send_request(url, headers=headers, proxies=agent_config_vars['proxies'])
     try:
+        logger.debug(response.text)
         response_json = json.loads(response.text)
-        filter_applications(base_url, headers, data, metrics_list, response_json['applications'])
+        filter_applications(base_url, headers, data, response_json['applications'])
     # response = -1
     except TypeError:
         logger.warn('Failure when contacting NewRelic API when fetching applications')
@@ -55,15 +54,30 @@ def get_applications(base_url, headers, data, metrics_list):
                     'Please contact support if this problem persists.')
 
 
-def filter_applications(base_url, headers, data, metrics_list, app_list):
+def filter_applications(base_url, headers, data, app_list):
     for app in app_list:
         app_name = app['name']
         app_id = str(app['id'])
         logger.debug(app_name + ': ' + app_id)
         # check app filter
         if should_filter_per_config('app_name_filter', app_name):
+            logger.debug('skipping')
             continue
-        get_hosts_for_app(base_url, headers, data, metrics_list, app_id)
+
+        if should_filter_per_config('app_id_filter', app_id):
+            logger.debug('skipping')
+            continue
+
+        if agent_config_vars['auto_create_project']:
+            # make sure we send the last chunk for the previous project
+            send_data_wrapper()
+            check_project(make_safe_project_string(app_name))
+            logger.debug(if_config_vars['projectName'])
+
+        if use_host_api():
+            get_hosts_for_app(base_url, headers, data, get_metrics_list('host_metrics'), app_id)
+        if use_app_api():
+            get_metrics_for_app_host(base_url, headers, data, get_metrics_list('app_metrics'), app_id, make_safe_instance_string(app_name)) 
 
 
 def get_hosts_for_app(base_url, headers, data, metrics_list, app_id):
@@ -74,13 +88,17 @@ def get_hosts_for_app(base_url, headers, data, metrics_list, app_id):
         response_json = json.loads(response.text)
         filter_hosts(base_url, headers, data, metrics_list, app_id, response_json['application_hosts'])
     # response = -1
-    except TypeError:
+    except TypeError as te:
         logger.warn('Failure when contacting NewRelic API when fetching hosts for app ' + app_id + '].')
+        logger.warn(str(te))
+        logger.warn(response.text)
     # malformed response_json
     # handles errors from filter_hosts
-    except KeyError:
+    except KeyError as ke:
         logger.warn('NewRelic API returned malformed data when fetching hosts for app ' + app_id + '].'
                     'Please contact support if this problem persists.')
+        logger.warn(str(ke))
+        logger.warn(response.text)
 
 
 def filter_hosts(base_url, headers, data, metrics_list, app_id, hosts_list):
@@ -88,13 +106,17 @@ def filter_hosts(base_url, headers, data, metrics_list, app_id, hosts_list):
         hostname = host['host']
         if should_filter_per_config('host_filter', hostname):
             continue
+        # clear out hostname if not containerizing
+        if not agent_config_vars['containerize']:
+            instance = hostname
+            hostname = ''
+        else:
+            instance = host['application_name']
+        get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, instance, str(host['id']), hostname)
 
-        instance = hostname + ' (' + host['application_name'] + ')'
-        get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, str(host['id']), instance)
 
-
-def get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, host_id, instance):
-    api = '/v2/applications/' + app_id + '/hosts/' + host_id + '/metrics/data.json'
+def get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, instance='', host_id='', hostname=''):
+    api = get_metrics_api(app_id, host_id)
     url = urlparse.urljoin(base_url, api)
     for metric in metrics_list:
         data_copy = data
@@ -103,20 +125,24 @@ def get_metrics_for_app_host(base_url, headers, data, metrics_list, app_id, host
         response = send_request(url, headers=headers, proxies=agent_config_vars['proxies'], data=data_copy)
         try:
             metric_data = json.loads(response.text)
-            parse_metric_data(metric_data['metric_data']['metrics'], instance)
+            parse_metric_data(metric_data['metric_data']['metrics'], instance, hostname)
         # response = -1
-        except TypeError:
+        except TypeError as te:
             logger.warn('Failure when contacting NewRelic API while fetching metrics ' +
                         'for app ' + app_id + ' & host ' + host_id + '.')
+            logger.warn(str(te))
+            logger.warn(response.text)
         # malformed response_json
         # handles errors from parse_metric_data as well
-        except KeyError:
+        except KeyError as ke:
             logger.warn('NewRelic API returned malformed data when fetching metrics ' +
                         'for app ' + app_id + ' & host ' + host_id + '.' +
                         'Please contact support if this problem persists.')
+            logger.warn(str(ke))
+            logger.warn(response.text)
 
 
-def parse_metric_data(metrics, instance):
+def parse_metric_data(metrics, instance, hostname=''):
     for metric in metrics:
         metric_key_base = metric['name']
         for timeslice in metric['timeslices']:
@@ -127,17 +153,34 @@ def parse_metric_data(metrics, instance):
             for value in timeslice['values']:
                 metric_key = metric_key_base + '/' + value
                 data = timeslice['values'][value]
-                metric_handoff(timestamp, metric_key, data, instance)
+                metric_handoff(timestamp, metric_key, data, instance, hostname)
 
 
-def api_logger_type_error(error_type, app_id='', host_id=''):
-    return
+def check_project(project_name):
+    if 'token' in if_config_vars and len(if_config_vars['token']) != 0:
+        try:
+            # check for existing project
+            check_url = urlparse.urljoin(if_config_vars['ifURL'], '/api/v1/getprojectstatus'
+            output_check_project = subprocess.check_output('curl "' + check_url + '?userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + project_name + '%22%2C%22customerName%22%3A%22' + if_config_vars['userName'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"', shell=True)
+            # create project if no existing project
+            if project_name not in output_check_project:
+                logger.debug('creating project')
+                create_url = urlparse.urljoin(if_config_vars['ifURL'], '/api/v1/add-custom-project')
+                output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=Metric&samplingInterval=' + str(if_config_vars['samplingInterval'] / 60) +  '&samplingIntervalInSeconds=' + str(if_config_vars['samplingInterval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_agent_type_from_mode_wrap() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + create_url + '?tzOffset=-18000000', shell=True)
+            # set project name to proposed name
+            if_config_vars['projectName'] = project_name
+            # try to add new project to system
+            if 'systemName' in if_config_vars and len(if_config_vars['systemName']) != 0:
+                system_url = urlparse.urljoin(if_config_vars['ifURL'], '/api/v1/projects/update')
+                output_update_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&operation=updateprojsettings&projectName=' + project_name + '&systemName=' + if_config_vars['systemName'] + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + system_url + '?tzOffset=-18000000', shell=True)
+        except subprocess.CalledProcessError as e:
+            logger.error('Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars['projectName'])
 
 
-def get_metrics_list():
+def get_metrics_list(setting):
     """ Parse metrics given in config.ini, if any """
     metrics_list = dict()
-    if len(agent_config_vars['metrics']) != 0:
+    if len(agent_config_vars[setting]) != 0:
         # build an object; see default_metrics_list() for the structure
         for metric_object in agent_config_vars['metrics']:
             metric_object = metric_object.split(':')
@@ -146,12 +189,29 @@ def get_metrics_list():
             metrics_list[metric_name] = values
     # if malformed or none specified, use default
     if len(metrics_list) == 0:
-        metrics_list = default_metrics_list()
+        metrics_list = default_metrics_list(setting)
     return metrics_list
 
 
-def default_metrics_list():
-    return {
+def get_metrics_api(app_id, host_id=''):
+    if use_host_api() and len(host_id) != 0:
+        return '/v2/applications/' + app_id + '/hosts/' + host_id + '/metrics/data.json'
+    else:
+        return '/v2/applications/' + app_id + '/metrics/data.json'
+
+
+def use_app_api():
+    return agent_config_vars['app_or_host'] == 'APP' or agent_config_vars['app_or_host'] == 'BOTH'
+
+
+def use_host_api():
+    return agent_config_vars['app_or_host'] == 'HOST' or agent_config_vars['app_or_host'] == 'BOTH'
+
+
+def default_metrics_list(setting):
+    metrics = dict()
+    metrics['app_metrics'] = { }
+    metrics['host_metrics'] = {
         'CPU/User Time': [
             'percent'
         ],
@@ -182,6 +242,9 @@ def default_metrics_list():
             'total_call_time'
         ]
     }
+    if setting not in metrics.keys():
+        setting = host_metrics
+    return metrics[setting]
 
 
 def get_agent_config_vars():
@@ -192,9 +255,14 @@ def get_agent_config_vars():
         try:
             # fields to grab
             api_key = config_parser.get('newrelic', 'api_key')
+            app_or_host = config_parser.get('newrelic', 'app_or_host').upper()
+            auto_create_project = config_parser.get('newrelic', 'auto_create_project').upper()
+            containerize = config_parser.get('newrelic', 'containerize').upper()
             app_name_filter = config_parser.get('newrelic', 'app_name_filter')
+            app_id_filter = config_parser.get('newrelic', 'app_id_filter')
             host_filter = config_parser.get('newrelic', 'host_filter')
-            metrics = config_parser.get('newrelic', 'metrics')
+            app_metrics = config_parser.get('newrelic', 'app_metrics')
+            host_metrics = config_parser.get('newrelic', 'host_metrics')
             run_interval = config_parser.get('newrelic', 'run_interval')
             agent_http_proxy = config_parser.get('newrelic', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('newrelic', 'agent_https_proxy')
@@ -213,13 +281,23 @@ def get_agent_config_vars():
                 'Agent not correctly configured (run_interval). Check config file.')
             exit()
 
+        # default
+        if len(app_or_host) == 0 or app_or_host not in { 'APP', 'HOST' , 'BOTH'}:
+            logger.warning(
+                'Agent not correctly configured (app_or_host). Check config file.')
+            exit()
+
         # set filters
         if len(app_name_filter) != 0:
             app_name_filter = app_name_filter.strip().split(',')
+        if len(app_id_filter) != 0:
+            app_id_filter = app_id_filter.strip().split(',')
         if len(host_filter) != 0:
             host_filter = host_filter.strip().split(',')
-        if len(metrics) != 0:
-            metrics = metrics.strip().split(',')
+        if len(app_metrics) != 0:
+            app_metrics = app_metrics.strip().split(',')
+        if len(host_metrics) != 0:
+            host_metrics = host_metrics.strip().split(',')
 
         # set up proxies for agent
         agent_proxies = dict()
@@ -231,9 +309,14 @@ def get_agent_config_vars():
         # add parsed variables to a global
         config_vars = {
             'api_key': api_key,
+            'app_or_host': app_or_host,
+            'auto_create_project': True if auto_create_project == 'YES' else False,
+            'containerize': True if containerize == 'YES' else False,
             'app_name_filter': app_name_filter,
+            'app_id_filter': app_id_filter,
             'host_filter': host_filter,
-            'metrics': metrics,
+            'app_metrics': app_metrics,
+            'host_metrics': host_metrics,
             'run_interval': int(run_interval) * 60,  # as seconds
             'proxies': agent_proxies
         }
@@ -256,6 +339,8 @@ def get_if_config_vars():
             user_name = config_parser.get('insightfinder', 'user_name')
             license_key = config_parser.get('insightfinder', 'license_key')
             project_name = config_parser.get('insightfinder', 'project_name')
+            system_name = config_parser.get('insightfinder', 'system_name')
+            token = config_parser.get('insightfinder', 'token')
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             chunk_size_kb = config_parser.get('insightfinder', 'chunk_size_kb')
             if_url = config_parser.get('insightfinder', 'url')
@@ -279,8 +364,6 @@ def get_if_config_vars():
             logger.warning(
                 'Agent not correctly configured (project_name). Check config file.')
             sys.exit(1)
-        # TODO: comment out if not a metric project
-        #"""
         if len(sampling_interval) == 0:
             logger.warning(
                 'Agent not correctly configured (sampling_interval). Check config file.')
@@ -290,11 +373,10 @@ def get_if_config_vars():
             sampling_interval = sampling_interval[:-1]
         else:
             sampling_interval = int(sampling_interval) * 60
-        #"""
 
         # defaults
         if len(chunk_size_kb) == 0:
-            chunk_size_kb = 500
+            chunk_size_kb = 2048
         if len(if_url) == 0:
             if_url = 'https://app.insightfinder.com'
 
@@ -309,6 +391,8 @@ def get_if_config_vars():
             'userName': user_name,
             'licenseKey': license_key,
             'projectName': project_name,
+            'systemName': system_name,
+            'token': token,
             'samplingInterval': int(sampling_interval),     # as seconds
             'chunkSize': int(chunk_size_kb) * 1024,         # as bytes
             'ifURL': if_url,
@@ -371,12 +455,19 @@ def get_timestamp_from_date_string(date_string, format):
     return epoch
 
 
+def make_safe_project_string(project_name):
+    project_name = PERIOD.sub('_', project_name)
+    project_name = SLASHES.sub('-', project_name)
+    project_name = SPACES.sub('-', project_name)
+    return project_name
+
+
 def make_safe_instance_string(instance, device=''):
     # strip underscores
     instance = UNDERSCORE.sub('.', instance)
     # if there's a device, concatenate it to the instance with an underscore
     if len(device) != 0:
-        instance += '_' + make_safe_instance_string(device)
+        instance = make_safe_instance_string(device) + '_' + instance
     return instance
 
 
@@ -593,6 +684,12 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     logger.error(
         'Failed! Gave up after %d attempts.', ATTEMPTS)
     return -1
+
+
+def get_agent_type_from_mode_wrap():
+    if agent_config_vars['containerize']:
+        return 'ContainerStreaming'
+    return get_agent_type_from_mode()
 
 
 def get_agent_type_from_mode():
