@@ -3,7 +3,7 @@
 function usage()
 {
 	echo "Usage: ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL -t AGENT_TYPE
-AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or metricFileReplay or logFileReplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia or nfdump or kvm or kafka or elasticsearch-storage or elasticsearch-log or opentsdb or prometheus or kafka-log or hadoop. Reporting/Sampling interval supports integer value denoting minutes and 10s i.e 10 seconds as a valid value"
+AGENT_TYPE = proc or cadvisor or docker_remote_api or cgroup or metricFileReplay or logFileReplay or daemonset or hypervisor or elasticsearch or collectd or ec2monitoring or jolokia or nfdump or kvm or kafka or elasticsearch-storage or elasticsearch-log or opentsdb or prometheus or kafka-log or hadoop or sysdig. Reporting/Sampling interval supports integer value denoting minutes and 10s i.e 10 seconds as a valid value"
 }
 
 function createCronMinute() {
@@ -129,7 +129,7 @@ if [ -z "$AGENT_TYPE" ] || [ -z "$SAMPLING_INTERVAL" ] || [ -z "$LICENSEKEY" ] |
 	exit 1
 fi
 
-if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'elasticsearch-log' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ] && [ $AGENT_TYPE != 'metricFileReplay' ] && [ $AGENT_TYPE != 'logFileReplay' ] && [ $AGENT_TYPE != 'daemonset' ] && [ $AGENT_TYPE != 'hypervisor' ] && [ $AGENT_TYPE != 'elasticsearch' ] && [ $AGENT_TYPE != 'collectd' ] && [ $AGENT_TYPE != 'ec2monitoring' ] && [ $AGENT_TYPE != 'jolokia'  ] && [ $AGENT_TYPE != 'datadog' ] && [ $AGENT_TYPE != 'newrelic' ] && [ $AGENT_TYPE != 'kvm' ] && [ $AGENT_TYPE != 'logStreaming' ] && [ $AGENT_TYPE != 'kafka' ] && [ $AGENT_TYPE != 'elasticsearch-storage' ] && [ $AGENT_TYPE != 'nfdump' ] && [ $AGENT_TYPE != 'opentsdb' ] && [ $AGENT_TYPE != 'kafka-logs' ] && [ $AGENT_TYPE != 'prometheus' ] && [ $AGENT_TYPE != 'hadoop' ]  && [ $AGENT_TYPE != 'hbase' ]; then
+if [ $AGENT_TYPE != 'proc' ] && [ $AGENT_TYPE != 'cadvisor' ] && [ $AGENT_TYPE != 'elasticsearch-log' ] && [ $AGENT_TYPE != 'docker_remote_api' ] && [ $AGENT_TYPE != 'cgroup' ] && [ $AGENT_TYPE != 'metricFileReplay' ] && [ $AGENT_TYPE != 'logFileReplay' ] && [ $AGENT_TYPE != 'daemonset' ] && [ $AGENT_TYPE != 'hypervisor' ] && [ $AGENT_TYPE != 'elasticsearch' ] && [ $AGENT_TYPE != 'collectd' ] && [ $AGENT_TYPE != 'ec2monitoring' ] && [ $AGENT_TYPE != 'jolokia'  ] && [ $AGENT_TYPE != 'datadog' ] && [ $AGENT_TYPE != 'newrelic' ] && [ $AGENT_TYPE != 'kvm' ] && [ $AGENT_TYPE != 'logStreaming' ] && [ $AGENT_TYPE != 'kafka' ] && [ $AGENT_TYPE != 'elasticsearch-storage' ] && [ $AGENT_TYPE != 'nfdump' ] && [ $AGENT_TYPE != 'opentsdb' ] && [ $AGENT_TYPE != 'kafka-logs' ] && [ $AGENT_TYPE != 'prometheus' ] && [ $AGENT_TYPE != 'hadoop' ]  && [ $AGENT_TYPE != 'hbase' ] && [ $AGENT_TYPE != 'sysdig' ]; then
 	usage
 	exit 1
 fi
@@ -219,6 +219,25 @@ elif [ $AGENT_TYPE == 'datadog' ]; then
 		echo "if_https_proxy =" >> ${PATH_TO_CONFIG_INI}
 		echo "host_chunk_size = 1" >> ${PATH_TO_CONFIG_INI}
 		echo "metric_chunk_size = 50" >> ${PATH_TO_CONFIG_INI}
+	fi
+elif [ $AGENT_TYPE == 'sysdig' ]; then
+        if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
+        echo "[sysdig]" >> ${PATH_TO_CONFIG_INI}
+        echo "api_key =" >> ${PATH_TO_CONFIG_INI}
+        echo "hostname =" >> ${PATH_TO_CONFIG_INI}
+        echo "all_metrics =" >> ${PATH_TO_CONFIG_INI}
+        echo "sysdig_http_proxy =" >> ${PATH_TO_CONFIG_INI}
+        echo "sysdig_https_proxy =" >> ${PATH_TO_CONFIG_INI}
+        echo "host_chunk_size = 3" >> ${PATH_TO_CONFIG_INI}
+        echo "metric_chunk_size = 6" >> ${PATH_TO_CONFIG_INI}
+        echo " " >> ${PATH_TO_CONFIG_INI}
+        echo "[insightfinder]" >> ${PATH_TO_CONFIG_INI}
+        echo "license_key=$LICENSEKEY" >> ${PATH_TO_CONFIG_INI}
+        echo "project_name=$PROJECTNAME" >> ${PATH_TO_CONFIG_INI}
+        echo "user_name=$USERNAME" >> ${PATH_TO_CONFIG_INI}
+        echo "sampling_interval=$SAMPLING_INTERVAL" >> ${PATH_TO_CONFIG_INI}
+        echo "if_http_proxy =" >> ${PATH_TO_CONFIG_INI}
+		echo "if_https_proxy =" >> ${PATH_TO_CONFIG_INI}
 	fi
 elif [ $AGENT_TYPE == 'newrelic' ]; then
     	if [ ! -f ${PATH_TO_CONFIG_INI} ]; then
@@ -391,6 +410,16 @@ elif [ $AGENT_TYPE == 'opentsdb' ]; then
 		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
 	fi
 elif [ $AGENT_TYPE == 'datadog' ]; then
+    if [ -z "$CHUNK_SIZE" ]; then
+	    CHUNK_SIZE='50'
+    fi
+	COMMAND_REPORTING="$PYTHONPATH $INSIGHTAGENTDIR/$AGENT_TYPE/getmetrics_$AGENT_TYPE.py -w $SERVER_URL -c $CHUNK_SIZE 2>$INSIGHTAGENTDIR/log/reporting.err 1>$INSIGHTAGENTDIR/log/reporting.out"
+	if [ "$IS_SECOND_REPORTING" = true ] ; then
+		createCronSeconds "${COMMAND_REPORTING}" $TEMPCRON
+	else
+		createCronMinute $REPORTING_INTERVAL "${COMMAND_REPORTING}" $TEMPCRON
+	fi
+elif [ $AGENT_TYPE == 'sysdig' ]; then
     if [ -z "$CHUNK_SIZE" ]; then
 	    CHUNK_SIZE='50'
     fi

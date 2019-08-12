@@ -14,3 +14,4 @@ netifaces
 pyyaml
 pytz
 datadog
+sdcclient
