@@ -8,10 +8,10 @@ if [[ -z "${PIP_PACKAGES}" ]]; then
 fi
 
 # run as root
-#if [[ $EUID -ne 0 ]]; then
-#   echo "This script should be ran as root. Exiting..."
-#   exit 1
-#fi
+if [[ $EUID -ne 0 ]]; then
+   echo "This script should be ran as root. Exiting..."
+   exit 1
+fi
 
 # if pip packages are needed
 if [[ -n "${PIP_PACKAGES}" ]]; then
