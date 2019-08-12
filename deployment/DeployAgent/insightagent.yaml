@@ -2,6 +2,7 @@
  - hosts: nodes
    vars:
      projectName: "{{ ifProjectName }}"
+     ifLogProjectName: "{{ logProjectName }}"
      userName: "{{ ifUserName }}"
      samplingInterval: "{{ ifSamplingInterval }}"
      agentType: "{{ ifAgent }}"
@@ -32,6 +33,7 @@
        - action !="install"
        - action !="uninstall"
    roles:
+     - { role: install-script_runner, when: agentType=="script_runner" and action=="install"}
      - { role: install-cgroup, when: agentType=="cgroup" and action=="install"}
      - { role: install-collectd, when: (agentType=="collectd" or agentType=="metric-log") and action=="install"}
      - { role: install-syscall, when: agentType=="syscall" and action=="install"}
@@ -39,10 +41,14 @@
      - { role: install-hypervisor, when: agentType=="hypervisor" and action=="install"}
      - { role: install-nfdump, when: agentType=="nfdump" and action=="install"}
      - { role: install-replay, when: (agentType=="metricFileReplay" or agentType=="logFileReplay") and action=="install"}
-     - { role: install-tdagent, when: (agentType=="tdagent" or agentType=="metric-log") and action=="install"}
+     - { role: install-tdagent, when: agentType=="tdagent" and action=="install"}
      - { role: install-opentsdb, when: (agentType=="opentsdb") and action=="install"}
+     - { role: install-prometheus, when: (agentType=="prometheus") and action=="install"}
      - { role: install-kafka-logs, when: (agentType=="kafka-logs") and action=="install"}
+     - { role: install-kafka-incident, when: (agentType=="kafka-incident") and action=="install"}
      - { role: install-kafka-metrics, when: agentType=="kafka" and action=="install"}
+     - { role: install-filebeat, when: (agentType=="logstash" or agentType=="metric-log") and action=="install"}
+     - { role: install-logstash, when: (agentType=="logstash" or agentType=="metric-log" or agentType=="awsCloudtrail" or agentType=="googlePubSub") and action=="install"}
      - { role: uninstall, when: action=="uninstall" }
    environment:
      http_proxy: "{{ http_proxy }}"

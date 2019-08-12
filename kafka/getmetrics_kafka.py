@@ -3,14 +3,13 @@ import collections
 import json
 import logging
 import os
-import random
 import socket
 import sys
 import time
 from ConfigParser import SafeConfigParser
 from datetime import datetime
 from optparse import OptionParser
-
+from multiprocessing import Process
 import pytz
 import requests
 from kafka import KafkaConsumer
@@ -33,6 +32,8 @@ def get_parameters():
                       action="store", dest="serverUrl", help="Server Url")
     parser.add_option("-l", "--chunkLines",
                       action="store", dest="chunkLines", help="Max number of lines in chunk")
+    parser.add_option("-s", "--logLevel",
+                      action="store", dest="logLevel", help="Change log verbosity(WARNING: 0, INFO: 1, DEBUG: 2)")
     (options, args) = parser.parse_args()
 
     parameters = {}
@@ -53,90 +54,108 @@ def get_parameters():
     else:
         parameters['timeout'] = int(options.timeout)
     if options.chunkLines is None:
-        parameters['chunkLines'] = 100
+        parameters['chunkLines'] = 10
     else:
         parameters['chunkLines'] = int(options.chunkLines)
+    parameters['logLevel'] = logging.INFO
+    if options.logLevel == '0':
+        parameters['logLevel'] = logging.WARNING
+    elif options.logLevel == '1':
+        parameters['logLevel'] = logging.INFO
+    elif options.logLevel >= '2':
+        parameters['logLevel'] = logging.DEBUG
 
     return parameters
 
 
-def save_grouping(grouping_map):
-    """
-    Saves the grouping data to grouping.json
-    :return: None
-    """
-    with open('grouping.json', 'w+') as f:
-        f.write(json.dumps(grouping_map))
-
-
-def load_grouping():
-    if (os.path.isfile('grouping.json')):
-        logger.debug("Grouping file exists. Loading..")
-        with open('grouping.json', 'r+') as f:
-            try:
-                grouping_map = json.loads(f.read())
-            except ValueError:
-                grouping_map = json.loads("{}")
-                logger.debug("Error parsing grouping.json.")
-    else:
-        grouping_map = json.loads("{}")
-    return grouping_map
-
-
-def get_grouping_id(metric_key, grouping_map):
-    """
-    Get grouping id for a metric key
-    Parameters:
-    - `metric_key` : metric key str to get group id.
-    - `temp_id` : proposed group id integer
-    """
-    for i in range(3):
-        grouping_candidate = random.randint(GROUPING_START, GROUPING_END)
-        if metric_key in grouping_map:
-            grouping_id = int(grouping_map[metric_key])
-            return grouping_id
-        else:
-            grouping_id = grouping_candidate
-            grouping_map[metric_key] = grouping_id
-            return grouping_id
-    return GROUPING_START
-
-
 def get_agent_config_vars():
-    configVars = {}
+    config_vars = {}
     try:
-        with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as configFile:
-            fileContent = configFile.readlines()
-            if len(fileContent) < 6:
-                logger.error("Agent not correctly configured. Check .agent.bashrc file.")
+        if os.path.exists(os.path.join(parameters['homepath'], "kafka", "config.ini")):
+            parser = SafeConfigParser()
+            parser.read(os.path.join(parameters['homepath'], "kafka", "config.ini"))
+            insightFinder_license_key = parser.get('kafka', 'insightFinder_license_key')
+            insightFinder_project_name = parser.get('kafka', 'insightFinder_project_name')
+            insightFinder_user_name = parser.get('kafka', 'insightFinder_user_name')
+            sampling_interval = parser.get('kafka', 'sampling_interval')
+            group_id = parser.get('kafka', 'group_id')
+            client_id = parser.get('kafka', 'client_id')
+            data_send_timeout = parser.get('kafka', 'data_send_timeout')
+            # SSL
+            security_protocol = parser.get('kafka', 'security_protocol')
+            ssl_context = parser.get('kafka','ssl_context')
+            ssl_check_hostname = parser.get('kafka','ssl_check_hostname')
+            ssl_ca = parser.get('kafka','ssl_ca')
+            ssl_certificate = parser.get('kafka','ssl_certificate')
+            ssl_key = parser.get('kafka','ssl_key')
+            ssl_password = parser.get('kafka','ssl_password')
+            ssl_crl = parser.get('kafka','ssl_crl')
+            ssl_ciphers = parser.get('kafka','ssl_ciphers')
+
+            # SASL
+            sasl_mechanism = parser.get('kafka', 'sasl_mechanism')
+            sasl_plain_username = parser.get('kafka', 'sasl_plain_username')
+            sasl_plain_password = parser.get('kafka', 'sasl_plain_password')
+            sasl_kerberos_service_name = parser.get('kafka', 'sasl_kerberos_service_name')
+            sasl_kerberos_domain_name = parser.get('kafka', 'sasl_kerberos_domain_name')
+            sasl_oauth_token_provider = parser.get('kafka', 'sasl_oauth_token_provider')
+
+            if len(insightFinder_license_key) == 0:
+                logger.error("Agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
-            # get license key
-            licenseKeyLine = fileContent[0].split(" ")
-            if len(licenseKeyLine) != 2:
-                logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
+            if len(insightFinder_project_name) == 0:
+                logger.error("Agent not correctly configured(project name). Check config file.")
                 sys.exit(1)
-            configVars['licenseKey'] = licenseKeyLine[1].split("=")[1].strip()
-            # get project name
-            projectNameLine = fileContent[1].split(" ")
-            if len(projectNameLine) != 2:
-                logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
+            if len(insightFinder_user_name) == 0:
+                logger.error("Agent not correctly configured(username). Check config file.")
                 sys.exit(1)
-            configVars['projectName'] = projectNameLine[1].split("=")[1].strip()
-            # get username
-            userNameLine = fileContent[2].split(" ")
-            if len(userNameLine) != 2:
-                logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
+            if len(sampling_interval) == 0:
+                logger.error("Agent not correctly configured(sampling interval). Check config file.")
                 sys.exit(1)
-            configVars['userName'] = userNameLine[1].split("=")[1].strip()
-            # get sampling interval
-            samplingIntervalLine = fileContent[4].split(" ")
-            if len(samplingIntervalLine) != 2:
-                logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
+            if len(group_id) == 0:
+                logger.error("Agent not correctly configured(group id). Check config file.")
                 sys.exit(1)
-            configVars['samplingInterval'] = samplingIntervalLine[1].split("=")[1].strip()
+            if len(data_send_timeout) == 0:
+                if int(sampling_interval) == 0:
+                    data_send_timeout = 60
+                else:
+                    data_send_timeout = int(sampling_interval)
+            else:
+                data_send_timeout = int(data_send_timeout)
+
+            if len(security_protocol) == 0:
+                logger.info('security_protocol not defined, assuming PLAINTEXT')
+                security_protocol = 'PLAINTEXT'
+
+            config_vars['licenseKey'] = insightFinder_license_key
+            config_vars['projectName'] = insightFinder_project_name
+            config_vars['userName'] = insightFinder_user_name
+            config_vars['samplingInterval'] = int(sampling_interval)
+            config_vars['groupId'] = group_id
+            config_vars['clientId'] = client_id
+            config_vars['dataSendTimeout'] = data_send_timeout    
+
+            # SSL
+            config_vars['security_protocol'] = security_protocol
+            config_vars['ssl_context'] = ssl_context
+            config_vars['ssl_check_hostname'] = ssl_check_hostname
+            config_vars['ssl_ca'] = ssl_ca
+            config_vars['ssl_certificate'] = ssl_certificate
+            config_vars['ssl_key'] = ssl_key
+            config_vars['ssl_password'] = ssl_password
+            config_vars['ssl_crl'] = ssl_crl
+            config_vars['ssl_ciphers'] = ssl_ciphers
+ 
+            #SASL
+            config_vars['sasl_mechanism'] = sasl_mechanism
+            config_vars['sasl_plain_username'] = sasl_plain_username
+            config_vars['sasl_plain_password'] = sasl_plain_password
+            config_vars['sasl_kerberos_service_name'] = sasl_kerberos_service_name
+            config_vars['sasl_kerberos_domain_name'] = sasl_kerberos_domain_name
+            config_vars['sasl_oauth_token_provider'] = sasl_oauth_token_provider
     except IOError:
-        logger.error("Agent not correctly configured. Missing .agent.bashrc file.")
-    return configVars
+        logger.error("config.ini file is missing")
+    return config_vars
 
 
 def get_reporting_config_vars():
@@ -149,10 +168,6 @@ def get_reporting_config_vars():
         reportingConfigVars['reporting_interval'] = float(reporting_interval / 60.0)
     else:
         reportingConfigVars['reporting_interval'] = int(config['reporting_interval'])
-        reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
-        reportingConfigVars['prev_endtime'] = config['prev_endtime']
-        reportingConfigVars['deltaFields'] = config['delta_fields']
-
     reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
     reportingConfigVars['prev_endtime'] = config['prev_endtime']
     reportingConfigVars['deltaFields'] = config['delta_fields']
@@ -195,11 +210,11 @@ def sendData(metricData):
     toSendDataDict["projectName"] = agent_config_vars['projectName']
     toSendDataDict["userName"] = agent_config_vars['userName']
     toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
-    toSendDataDict["samplingInterval"] = str(int(reporting_config_vars['reporting_interval'] * 60))
+    toSendDataDict["samplingInterval"] = str(int(agent_config_vars['samplingInterval']) * 60)
     toSendDataDict["agentType"] = "kafka"
 
     toSendDataJSON = json.dumps(toSendDataDict)
-    logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))))
+    # logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))))
 
     # send the data
     postUrl = parameters['serverUrl'] + "/customprojectrawdata"
@@ -209,7 +224,7 @@ def sendData(metricData):
         # updateLastSentFiles(pcapFileList)
     else:
         logger.info("Failed to send data.")
-    logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
+    # logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
 
 
 def isTimeFormat(timeString, format):
@@ -241,18 +256,19 @@ def isReceivedAllMetrics(collectedMetrics, all_metrics):
             return False
     return True
 
-def parseConsumerMessages(consumer, grouping_map, all_metrics_set):
-    rawDataMap = collections.OrderedDict()
-    metricData = []
-    chunkNumber = 0
-    collectedValues = 0
-    collectedMetricsMap = {}
-    completedRowsTimestampSet = set()
-
+def parseConsumerMessages(consumer, all_metrics_set, filter_hosts):
+    raw_data_map = collections.OrderedDict()
+    metric_data = []
+    chunk_number = 0
+    collected_values = 0
+    collected_metrics_map = {}
+    completed_rows_timestamp_set = set()
+    buffer_time = time.time()
 
     for message in consumer:
         try:
             json_message = json.loads(message.value)
+            logger.debug(json_message)
             timestamp = json_message.get('@timestamp', {})[:-5]
             host_name = json_message.get('beat', {}).get('hostname', {})
             metric_module = json_message.get('metricset', {}).get('module', {})
@@ -265,12 +281,12 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics_set):
 
             # get previous collected values for timestamp if available
             # get previous collected metrics name for timestamp if available
-            if epoch in rawDataMap:
-                valueMap = rawDataMap[epoch]
-                collectedMetricsSet = collectedMetricsMap[epoch]
+            if epoch in raw_data_map:
+                value_map = raw_data_map[epoch]
+                collected_metrics_set = collected_metrics_map[epoch]
             else:
-                valueMap = {}
-                collectedMetricsSet = set()
+                value_map = {}
+                collected_metrics_set = set()
             if metric_module == "system":
                 if metric_class == "cpu":
                     cpuMetricsList = ["idle", "iowait", "irq", "nice", "softirq", "steal", "system", "user"]
@@ -278,129 +294,159 @@ def parseConsumerMessages(consumer, grouping_map, all_metrics_set):
                         metric_value = json_message.get('system', {}).get('cpu', {}).get(metric, {}).get('pct', '')
                         metric_name = "cpu-" + metric
                         # skip the metric that are not in the config file
-                        if metric_name not in all_metrics_set:
+                        if len(all_metrics_set) > 0 and metric_name not in all_metrics_set:
                             continue
-                        header_field = metric_name + "[" + host_name + "]:" + str(
-                            get_grouping_id(metric_name, grouping_map))
-                        valueMap[header_field] = str(metric_value)
-                        rawDataMap[epoch] = valueMap
+                        header_field = metric_name + "[" + host_name + "]"
+                        add_valuemap(header_field, metric_value, value_map)
+                        raw_data_map[epoch] = value_map
                         # add collected metric name
-                        collectedValues += 1
-                        collectedMetricsSet.add(metric_name)
+                        collected_values += 1
+                        collected_metrics_set.add(metric_name)
                         # update the collected metrics for this timestamp
-                        collectedMetricsMap[epoch] = collectedMetricsSet
+                        collected_metrics_map[epoch] = collected_metrics_set
                 elif metric_class == "memory":
-                    memoryMetricsList = ["actual", "swap"]
-                    for metric in memoryMetricsList:
+                    memory_metrics_list = ["actual", "swap"]
+                    for metric in memory_metrics_list:
                         metric_value = json_message.get('system', {}).get('memory', {}).get(metric, {}).get('used',{}).get(
                             'bytes', '')
                         metric_name = "memory-" + metric
                         # skip the metric that are not in the config file
-                        if metric_name not in all_metrics_set:
+                        if len(all_metrics_set) > 0 and metric_name not in all_metrics_set:
                             continue
-                        header_field = metric_name + "[" + host_name + "]:" + str(
-                            get_grouping_id(metric_name, grouping_map))
-                        valueMap[header_field] = str(metric_value)
-                        rawDataMap[epoch] = valueMap
+                        header_field = metric_name + "[" + host_name + "]"
+                        add_valuemap(header_field, metric_value, value_map)
+                        raw_data_map[epoch] = value_map
                         # add collected metric name
-                        collectedValues += 1
-                        collectedMetricsSet.add(metric_name)
+                        collected_values += 1
+                        collected_metrics_set.add(metric_name)
                         # update the collected metrics for this timestamp
-                        collectedMetricsMap[epoch] = collectedMetricsSet
+                        collected_metrics_map[epoch] = collected_metrics_set
                 elif metric_class == "filesystem":
-                    if  json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}) != "/":
-                        #logger.info("Skipping: " +  json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}))
+                    if json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}) != "/":
+                        # logger.info("Skipping: " +  json_message.get('system', {}).get('filesystem', {}).get('mount_point', {}))
                         continue
                     # add used-bytes
                     metric_name_bytes = "filesystem/used-bytes"
                     # skip the metric that are not in the config file
-                    if metric_name_bytes in all_metrics_set:
+                    if metric_name_bytes in all_metrics_set or len(all_metrics_set) == 0:
                         metric_value_bytes = json_message.get('system', {}).get(
                             'filesystem', {}).get('used', {}).get('bytes', '')
-                        header_field_bytes = metric_name_bytes + "[" + host_name + "]:" + str(
-                            get_grouping_id(metric_name_bytes, grouping_map))
-                        valueMap[header_field_bytes] = str(metric_value_bytes)
+                        header_field_bytes = metric_name_bytes + "[" + host_name + "]"
+                        add_valuemap(header_field_bytes, metric_value_bytes, value_map)
                         # add collected metric name
-                        collectedMetricsSet.add(metric_name_bytes)
+                        collected_metrics_set.add(metric_name_bytes)
 
                     # add used-pct
                     metric_name_pct = "filesystem/used-pct"
                     # skip the metric that are not in the config file
-                    if metric_name_pct in all_metrics_set:
+                    if metric_name_pct in all_metrics_set or len(all_metrics_set) == 0:
                         metric_value_pct = json_message.get('system', {}).get(
                             'filesystem', {}).get('used', {}).get('pct', '')
-                        header_field_pct = metric_name_pct + "[" + host_name + "]:" + str(
-                            get_grouping_id(metric_name_pct, grouping_map))
-                        valueMap[header_field_pct] = str(metric_value_pct)
+                        header_field_pct = metric_name_pct + "[" + host_name + "]"
+                        add_valuemap(header_field_pct, metric_value_pct, value_map)
                         # add collected metric name
-                        collectedMetricsSet.add(metric_name_pct)
-                    
+                        collected_metrics_set.add(metric_name_pct)
                     # add to raw data map
-                    rawDataMap[epoch] = valueMap
-                    collectedValues += 1
+                    raw_data_map[epoch] = value_map
+                    collected_values += 1
                     # update the collected metrics for this timestamp
-                    collectedMetricsMap[epoch] = collectedMetricsSet
+                    collected_metrics_map[epoch] = collected_metrics_set
 
             # check whether collected all metrics basd on the config file
-            if (isReceivedAllMetrics(collectedMetricsSet, all_metrics_set)):
+            time_diff = time.time() - buffer_time
+            if (isReceivedAllMetrics(collected_metrics_set, all_metrics_set) or time_diff > agent_config_vars[
+                'dataSendTimeout']):
                 # add the completed timestamp into set
-                completedRowsTimestampSet.add(epoch)
+                completed_rows_timestamp_set.add(epoch)
                 # print "All metrics collected for timestamp " + str(epoch) + " Completed rows count: " + str(len(completedRowsTimestampSet))
-            
-            numberOfCompletedRows = len(completedRowsTimestampSet)
+            number_of_completed_rows = len(completed_rows_timestamp_set)
             # check whether the number of completed rows is greater than 100
-            if numberOfCompletedRows >= CHUNK_METRIC_VALUES:
+            if number_of_completed_rows >= CHUNK_METRIC_VALUES or time_diff > agent_config_vars['dataSendTimeout']:
                 # go through all completed timesamp data and add to the buffer
-                start = str(min(completedRowsTimestampSet))
-                end = str(max(completedRowsTimestampSet))
-                for timestamp in completedRowsTimestampSet:
-                    # get and delete the data of the timestamp
-                    valueMap = rawDataMap.pop(timestamp)
-                    # remove recorded metric for the timestamp
-                    collectedMetricsMap.pop(timestamp)
-                    valueMap['timestamp'] = str(timestamp)
-                    metricData.append(valueMap)
-
-                chunkNumber += 1
-                logger.debug("Sending Chunk Number: " + str(chunkNumber) + " from " + start + " to " + end)
-                sendData(metricData)
+                completed_count = 0
+                if number_of_completed_rows >= CHUNK_METRIC_VALUES:
+                    #if the completed Rows are exceed the chunk lines limit
+                    start = str(min(completed_rows_timestamp_set))
+                    end = str(max(completed_rows_timestamp_set))
+                    for timestamp in completed_rows_timestamp_set:
+                        # get and delete the data of the timestamp
+                        if timestamp in finished_timestamp:
+                            logger.debug("timestamp: " + str(timestamp) + " has already there")
+                            continue
+                        value_map = raw_data_map.pop(timestamp)
+                        # remove recorded metric for the timestamp
+                        collected_metrics_map.pop(timestamp)
+                        value_map['timestamp'] = str(timestamp)
+                        finished_timestamp.add(timestamp)
+                        metric_data.append(value_map)
+                        completed_count += 1
+                else:
+                    #flush the chunk here
+                    for timestamp in raw_data_map.keys():
+                        if timestamp in finished_timestamp:
+                            logger.debug("timestamp: " + str(timestamp) + " has already there")
+                            continue
+                        completed_count += 1
+                        value_map = raw_data_map.pop(timestamp)
+                        value_map['timestamp'] = str(timestamp)
+                        collected_metrics_map.pop(timestamp)
+                        metric_data.append(value_map)
+                        finished_timestamp.add(timestamp)
+                        completed_count += 1
+                chunk_number += 1
+                if completed_count > 0:
+                    logger.debug("Sending Chunk Number: " + str(chunk_number))
+                    sendData(metric_data)
+                else:
+                    logger.debug("Not send Data because all data have been sent before")
                 # clean the buffer and completed row set
-                metricData = []
-                completedRowsTimestampSet = set()
-                collectedValues = 0
-
+                buffer_time = time.time()
+                metric_data = []
+                completed_rows_timestamp_set = set()
+                collected_values = 0
         except ValueError:
             logger.error("Error parsing metric json")
             continue
-
     # send final chunk
-    for timestamp in rawDataMap.keys():
-        valueMap = rawDataMap[timestamp]
-        valueMap['timestamp'] = str(timestamp)
-        metricData.append(valueMap)
-    if len(metricData) == 0:
+    completed_count = 0
+    for timestamp in raw_data_map.keys():
+        if timestamp in finished_timestamp:
+            logger.debug("timestamp: " + str(timestamp) + " has already there")
+            continue
+        completed_count += 1
+        value_map = raw_data_map[timestamp]
+        value_map['timestamp'] = str(timestamp)
+        metric_data.append(value_map)
+        finished_timestamp.add(timestamp)
+    if len(metric_data) == 0:
         logger.info("No data remaining to send")
     else:
-        chunkNumber += 1
-        logger.debug("Sending Final Chunk: " + str(chunkNumber) + " from " + start + " to " + end)
-        sendData(metricData)
+        chunk_number += 1
+        if completed_count > 0:
+            logger.debug("Sending Final Chunk: " + str(chunk_number))
+            sendData(metric_data)
+        else:
+            logger.debug("Not send Data because all data have been sent before")
 
 
-def set_logger_config():
+def set_logger_config(level):
+    """Set up logging according to the defined log level"""
     # Get the root logger
-    logger = logging.getLogger(__name__)
+    logger_obj = logging.getLogger(__name__)
     # Have to set the root logger level, it defaults to logging.WARNING
-    logger.setLevel(logging.DEBUG)
+    logger_obj.setLevel(level)
     # route INFO and DEBUG logging to stdout from stderr
     logging_handler_out = logging.StreamHandler(sys.stdout)
     logging_handler_out.setLevel(logging.DEBUG)
-    logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
-    logger.addHandler(logging_handler_out)
+    # create a logging format
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(process)d - %(threadName)s - %(levelname)s - %(message)s')
+    logging_handler_out.setFormatter(formatter)
+    logger_obj.addHandler(logging_handler_out)
 
     logging_handler_err = logging.StreamHandler(sys.stderr)
     logging_handler_err.setLevel(logging.WARNING)
-    logger.addHandler(logging_handler_err)
-    return logger
+    logger_obj.addHandler(logging_handler_err)
+    return logger_obj
 
 
 class LessThanFilter(logging.Filter):
@@ -412,30 +458,96 @@ class LessThanFilter(logging.Filter):
         # non-zero return means we log this message
         return 1 if record.levelno < self.max_level else 0
 
+def add_valuemap(header_field, metric_value, valueMap):
+    # use the next non-null value to overwrite the prev value
+    # for the same metric in the same timestamp
+    if header_field in valueMap.keys():
+        if metric_value is not None and len(str(metric_value)) > 0:
+            valueMap[header_field] = str(metric_value)
+    else:
+        valueMap[header_field] = str(metric_value)
+
+def kafka_data_consumer(consumer_id):
+    (brokers, topic, filter_hosts, all_metrics_set) = getKafkaConfig()
+    # initialize shared kwargs 
+    kafka_kwargs = {
+            'bootstrap_servers': brokers,
+            'auto_offset_reset': 'latest',
+            'consumer_timeout_ms': 1000 * parameters['timeout'],
+            'group_id': agent_config_vars['groupId'],
+            'api_version': (0, 9)
+            }
+
+    # add client ID if given
+    if agent_config_vars["clientId"] != "":
+        kafka_kwargs['client_id'] = agent_config_vars["clientId"]
+
+    # add SSL info
+    if agent_config_vars['security_protocol'] == 'SSL': 
+        kafka_kwargs['security_protocol'] = 'SSL'
+        if agent_config_vars['ssl_context'] != "":
+            kafka_kwargs['ssl_context'] = agent_config_vars['ssl_context']
+        if agent_config_vars['ssl_check_hostname'] == "False":
+            kafka_kwargs['ssl_check_hostname'] = False
+        if agent_config_vars['ssl_ca'] != "":
+            kafka_kwargs['ssl_cafile'] = agent_config_vars['ssl_ca']
+        if agent_config_vars['ssl_certificate'] != "":
+            kafka_kwargs['ssl_certfile'] = agent_config_vars['ssl_certificate']
+        if agent_config_vars['ssl_key'] != "":
+            kafka_kwargs['ssl_keyfile'] = agent_config_vars['ssl_key']
+        if agent_config_vars['ssl_password'] != "":
+            kafka_kwargs['ssl_password'] = agent_config_vars['ssl_password'].strip()
+        if agent_config_vars['ssl_crl'] != "":
+            kafka_kwargs['ssl_crlfile'] = agent_config_vars['ssl_crl']
+        if agent_config_vars['ssl_ciphers'] != "":
+            kafka_kwargs['ssl_ciphers'] = agent_config_vars['ssl_ciphers']
+        
+    # add SASL info
+    if len(agent_config_vars['sasl_mechanism']) != 0:
+        kafka_kwargs['sasl_mechanism'] = agent_config_vars['sasl_mechanism']
+
+        if agent_config_vars['sasl_plain_username'] != "":
+            kafka_kwargs['sasl_plain_username'] = agent_config_vars['sasl_plain_username'] 
+            
+        if agent_config_vars['sasl_plain_password'] != "":
+            kafka_kwargs['sasl_plain_password'] = agent_config_vars['sasl_plain_password'] 
+
+        if agent_config_vars['sasl_kerberos_service_name'] != "": 
+            kafka_kwargs['sasl_kerberos_service_name'] = agent_config_vars['sasl_kerberos_service_name'] 
+
+        if agent_config_vars['sasl_kerberos_domain_name'] != "": 
+            kafka_kwargs['sasl_kerberos_domain_name'] = agent_config_vars['sasl_kerberos_domain_name'] 
+
+        if agent_config_vars['sasl_oauth_token_provider '] != "":
+            kafka_kwargs['sasl_oauth_token_provider '] = agent_config_vars['sasl_oauth_token_provider '] 
+
+    logger.debug(kafka_kwargs)
+    consumer = KafkaConsumer(**kafka_kwargs)
+    logger.info("Started metric consumer number " + consumer_id)
+    consumer.subscribe([topic])
+    parseConsumerMessages(consumer, all_metrics_set, filter_hosts)
+    consumer.close()
+    logger.info("Closed log consumer number " + consumer_id)
+
 
 if __name__ == "__main__":
-    CHUNK_METRIC_VALUES = 10
     GROUPING_START = 15000
-    GROUPING_END = 20000
-    logger = set_logger_config()
     parameters = get_parameters()
+    log_level = parameters['logLevel']
+    CHUNK_METRIC_VALUES = parameters['chunkLines']
+    logger = set_logger_config(log_level)
     agent_config_vars = get_agent_config_vars()
-    reporting_config_vars = get_reporting_config_vars()
-    grouping_map = load_grouping()
+    finished_timestamp = set()
+    # reporting_config_vars = get_reporting_config_vars()
 
     # path to write the daily csv file
     data_directory = 'data/'
     prev_csv_header_list = "timestamp,"
     hostname = socket.gethostname().partition(".")[0]
     try:
-        # Kafka consumer configuration
-        (brokers, topic, filter_hosts, all_metrics_set) = getKafkaConfig()
-        consumer = KafkaConsumer(bootstrap_servers=brokers, auto_offset_reset='latest', consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id="if_consumers_new")
-        consumer.subscribe([topic])
-        parseConsumerMessages(consumer, grouping_map, all_metrics_set)
-
-        consumer.close()
-        save_grouping(grouping_map)
+        t1 = Process(target=kafka_data_consumer, args=('1',))
+        t2 = Process(target=kafka_data_consumer, args=('2',))
+        t1.start()
+        t2.start()
     except KeyboardInterrupt:
         print "Interrupt from keyboard"

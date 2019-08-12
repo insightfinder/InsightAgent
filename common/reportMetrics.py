@@ -1,18 +1,22 @@
 #!/usr/bin/python
 
-import hashlib
-from optparse import OptionParser
-import os
-import time
-import logging
-import sys
-import json
-import datetime
 import csv
+import hashlib
+import json
+import logging
 import math
+import os
+import random
 import socket
 import subprocess
-import random
+import sys
+import re
+import time
+from datetime import datetime
+import pytz
+from ConfigParser import SafeConfigParser
+from optparse import OptionParser
+
 
 '''
 This script reads reporting_config.json and .agent.bashrc
@@ -20,12 +24,13 @@ and opens daily metric file and reports header + rows within
 window of reporting interval after prev endtime
 if prev endtime is 0, report most recent reporting interval
 till now from today's metric file (may or may not be present)
-assumping gmt epoch timestamp and local date daily file. 
+assuming gmt epoch timestamp and local date daily file. 
 
 This also allows you to replay old log and metric files 
 '''
 
-def getParameters():
+
+def get_parameters():
     usage = "Usage: %prog [options]"
     parser = OptionParser(usage=usage)
     parser.add_option("-f", "--fileInput",
@@ -51,9 +56,11 @@ def getParameters():
                       action="store", dest="chunkSize", help="Max chunk size in KB")
     parser.add_option("-l", "--chunkLines",
                       action="store", dest="chunkLines", help="Max number of lines in chunk")
+    parser.add_option("-v", "--logLevel",
+                      action="store", dest="logLevel", help="Change log verbosity (WARNING/0, INFO/1, DEBUG/2)")
     (options, args) = parser.parse_args()
 
-    parameters = {}
+    parameters = dict()
     if options.homepath is None:
         parameters['homepath'] = os.getcwd()
     else:
@@ -70,7 +77,7 @@ def getParameters():
         parameters['serverUrl'] = 'https://app.insightfinder.com'
     else:
         parameters['serverUrl'] = options.serverUrl
-    if options.inputFile is None:
+    if options.inputFile is None or not os.path.exists(options.inputFile):
         parameters['inputFile'] = None
     else:
         parameters['inputFile'] = options.inputFile
@@ -82,10 +89,10 @@ def getParameters():
         parameters['timeZone'] = "GMT"
     else:
         parameters['timeZone'] = options.timeZone
-    if options.chunkLines is None and parameters['agentType'] == 'metricFileReplay':
+    if options.chunkLines is None and parameters['mode'] == 'metricFileReplay':
         parameters['chunkLines'] = 100
     elif options.chunkLines is None:
-        parameters['chunkLines'] = 40000
+        parameters['chunkLines'] = 2000
     else:
         parameters['chunkLines'] = int(options.chunkLines)
     # Optional split id and split by for metric file replay
@@ -97,74 +104,98 @@ def getParameters():
         parameters['splitBy'] = None
     else:
         parameters['splitBy'] = options.splitBy
+    # log level
+    parameters['logLevel'] = logging.INFO
+    if options.logLevel == '0':
+        parameters['logLevel'] = logging.WARNING
+    elif options.logLevel == '1':
+        parameters['logLevel'] = logging.INFO
+    elif options.logLevel >= '2':
+        parameters['logLevel'] = logging.DEBUG
     return parameters
 
-def getAgentConfigVars():
-    configVars = {}
-    with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as configFile:
-        fileContent = configFile.readlines()
-        if len(fileContent) < 6:
-            logger.error("Agent not correctly configured. Check .agent.bashrc file.")
-            sys.exit(1)
-        # get license key
-        licenseKeyLine = fileContent[0].split(" ")
-        if len(licenseKeyLine) != 2:
-            logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['licenseKey'] = licenseKeyLine[1].split("=")[1].strip()
-        # get project name
-        projectNameLine = fileContent[1].split(" ")
-        if len(projectNameLine) != 2:
-            logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['projectName'] = projectNameLine[1].split("=")[1].strip()
-        # get username
-        userNameLine = fileContent[2].split(" ")
-        if len(userNameLine) != 2:
-            logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['userName'] = userNameLine[1].split("=")[1].strip()
-        # get sampling interval
-        samplingIntervalLine = fileContent[4].split(" ")
-        if len(samplingIntervalLine) != 2:
-            logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
-            sys.exit(1)
-        configVars['samplingInterval'] = samplingIntervalLine[1].split("=")[1].strip()
-    return configVars
 
-def getReportingConfigVars():
-    reportingConfigVars = {}
+def get_agent_config_vars(normalization_map):
+    config_vars = dict()
+    try:
+        if os.path.exists(os.path.join(parameters['homepath'], "common", "config.ini")):
+            parser = SafeConfigParser()
+            parser.read(os.path.join(parameters['homepath'], "common", "config.ini"))
+            license_key = parser.get('insightfinder', 'license_key')
+            project_name = parser.get('insightfinder', 'project_name')
+            user_name = parser.get('insightfinder', 'user_name')
+            sampling_interval = parser.get('metrics', 'sampling_interval')
+            selected_fields = parser.get('metrics', 'selected_fields').split(",")
+            exclude_tags = parser.get('metrics', 'exclude_tags').split(",")
+            all_metrics = parser.get('metrics', 'all_metrics').split(",")
+            normalization_ids = parser.get('metrics', 'normalization_id').split(",")
+            if len(license_key) == 0:
+                logger.error("Agent not correctly configured(license key). Check config file.")
+                sys.exit(1)
+            if len(project_name) == 0:
+                logger.error("Agent not correctly configured(project name). Check config file.")
+                sys.exit(1)
+            if len(user_name) == 0:
+                logger.error("Agent not correctly configured(username). Check config file.")
+                sys.exit(1)
+            if len(sampling_interval) == 0 and 'metric' in parameters['mode'] :
+                logger.error("Agent not correctly configured(sampling interval). Check config file.")
+                sys.exit(1)
+            if len(selected_fields[0]) != 0:
+                config_vars['selected_fields'] = selected_fields
+            elif len(selected_fields[0]) == 0:
+                config_vars['selected_fields'] = "All"
+            config_vars['exclude_tags'] = exclude_tags
+            if len(normalization_ids[0]) != 0 and len(all_metrics) == len(normalization_ids):
+                for index in range(len(all_metrics)):
+                    metric = all_metrics[index]
+                    normalization_id = int(normalization_ids[index])
+                    if normalization_id > 1000:
+                        logger.error("Please config the normalization_id between 0 to 1000.")
+                        sys.exit(1)
+                    normalization_map[metric] = GROUPING_START + normalization_id
+            config_vars['licenseKey'] = license_key
+            config_vars['projectName'] = project_name
+            config_vars['userName'] = user_name
+            config_vars['samplingInterval'] = sampling_interval
+    except IOError:
+        logger.error("config.ini file is missing")
+    return config_vars
+
+
+def get_reporting_config_vars():
+    reporting_config_vars = dict()
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
         config = json.load(f)
-    reporting_interval_string = config['reporting_interval']
-    is_second_reporting = False
-    if reporting_interval_string[-1:] == 's':
-        is_second_reporting = True
-        reporting_interval = float(config['reporting_interval'][:-1])
-        reportingConfigVars['reporting_interval'] = float(reporting_interval / 60.0)
-    else:
-        reportingConfigVars['reporting_interval'] = int(config['reporting_interval'])
-        reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
-        reportingConfigVars['prev_endtime'] = config['prev_endtime']
-        reportingConfigVars['deltaFields'] = config['delta_fields']
-    return reportingConfigVars
+        reporting_interval_string = config['reporting_interval']
+        if reporting_interval_string[-1:] == 's':
+            reporting_interval = float(config['reporting_interval'][:-1])
+            reporting_config_vars['reporting_interval'] = float(reporting_interval / 60.0)
+        else:
+            reporting_config_vars['reporting_interval'] = int(config['reporting_interval'])
+        reporting_config_vars['keep_file_days'] = int(config['keep_file_days'])
+        reporting_config_vars['prev_endtime'] = config['prev_endtime']
+        reporting_config_vars['deltaFields'] = config['delta_fields']
+    return reporting_config_vars
 
-def updateDataStartTime():
-    if "FileReplay" in parameters['mode'] and reportingConfigVars['prev_endtime'] != "0" and len(
-            reportingConfigVars['prev_endtime']) >= 8:
-        startTime = reportingConfigVars['prev_endtime']
+
+def update_data_start_time():
+    if "FileReplay" in parameters['mode'] and reporting_config_vars['prev_endtime'] != "0" and len(
+            reporting_config_vars['prev_endtime']) >= 8:
+        start_time = reporting_config_vars['prev_endtime']
         # pad a second after prev_endtime
-        startTimeEpoch = 1000 + long(1000 * time.mktime(time.strptime(startTime, "%Y%m%d%H%M%S")));
-        end_time_epoch = startTimeEpoch + 1000 * 60 * reportingConfigVars['reporting_interval']
-    elif reportingConfigVars['prev_endtime'] != "0":
-        startTime = reportingConfigVars['prev_endtime']
+        start_time_epoch = 1000 + long(1000 * time.mktime(time.strptime(start_time, "%Y%m%d%H%M%S")));
+        end_time_epoch = start_time_epoch + 1000 * 60 * reporting_config_vars['reporting_interval']
+    elif reporting_config_vars['prev_endtime'] != "0":
+        start_time = reporting_config_vars['prev_endtime']
         # pad a second after prev_endtime
-        startTimeEpoch = 1000 + long(1000 * time.mktime(time.strptime(startTime, "%Y%m%d%H%M%S")));
-        end_time_epoch = startTimeEpoch + 1000 * 60 * reportingConfigVars['reporting_interval']
+        start_time_epoch = 1000 + long(1000 * time.mktime(time.strptime(start_time, "%Y%m%d%H%M%S")));
+        end_time_epoch = start_time_epoch + 1000 * 60 * reporting_config_vars['reporting_interval']
     else:  # prev_endtime == 0
         end_time_epoch = int(time.time()) * 1000
-        startTimeEpoch = end_time_epoch - 1000 * 60 * reportingConfigVars['reporting_interval']
-    return startTimeEpoch
+        start_time_epoch = end_time_epoch - 1000 * 60 * reporting_config_vars['reporting_interval']
+    return start_time_epoch
+
 
 # update prev_endtime in config file
 def update_timestamp(prev_endtime):
@@ -174,7 +205,8 @@ def update_timestamp(prev_endtime):
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), "w") as f:
         json.dump(config, f)
 
-def getIndexForColumnName(col_name):
+
+def get_index_for_column_name(col_name):
     if col_name == "CPU":
         return 1
     elif col_name == "DiskRead" or col_name == "DiskWrite":
@@ -186,8 +218,9 @@ def getIndexForColumnName(col_name):
     elif col_name == "MemUsed":
         return 5
 
-def getEC2InstanceType():
-    url = "http://169.254.169.254/latest/meta-data/instance-type"
+
+def get_ec2_instance_type():
+    url = "http://169.254.169.254/latest/meta-data/instance-type" # TODO: fix/remove
     try:
         response = requests.post(url)
     except requests.ConnectionError, e:
@@ -199,246 +232,713 @@ def getEC2InstanceType():
     return response.text
 
 
-def sendData(metricDataDict, filePath, chunkSerialNumber):
-    sendDataTime = time.time()
+def send_data(metric_data_dict, file_path, chunk_serial_number):
+    send_data_time = time.time()
     # prepare data for metric streaming agent
-    toSendDataDict = {}
+    to_send_data_dict = dict()
     if parameters['mode'] == "metricFileReplay":
-        toSendDataDict["metricData"] = json.dumps(metricDataDict[0])
+        to_send_data_dict["metricData"] = json.dumps(metric_data_dict[0])
     else:
-        toSendDataDict["metricData"] = json.dumps(metricDataDict)
+        to_send_data_dict["metricData"] = json.dumps(metric_data_dict)
 
-    toSendDataDict["licenseKey"] = agentConfigVars['licenseKey']
-    toSendDataDict["projectName"] = agentConfigVars['projectName']
-    toSendDataDict["userName"] = agentConfigVars['userName']
-    toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
-    toSendDataDict["samplingInterval"] = str(int(reportingConfigVars['reporting_interval'] * 60))
+    to_send_data_dict["licenseKey"] = agent_config_vars['licenseKey']
+    to_send_data_dict["projectName"] = agent_config_vars['projectName']
+    to_send_data_dict["userName"] = agent_config_vars['userName']
+    to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
+    to_send_data_dict['samplingInterval'] = agent_config_vars['samplingInterval']
     if parameters['agentType'] == "ec2monitoring":
-        toSendDataDict["instanceType"] = getEC2InstanceType()
-    #additional data to send for replay agents
+        to_send_data_dict["instanceType"] = get_ec2_instance_type()
+    # additional data to send for replay agents
     if "FileReplay" in parameters['mode']:
-        toSendDataDict["fileID"] = hashlib.md5(filePath).hexdigest()
+        to_send_data_dict["fileID"] = hashlib.md5(file_path).hexdigest()
         if parameters['mode'] == "logFileReplay":
-            toSendDataDict["agentType"] = "LogFileReplay"
-            toSendDataDict["minTimestamp"] = ""
-            toSendDataDict["maxTimestamp"] = ""
+            to_send_data_dict["agentType"] = "LogFileReplay"
+            to_send_data_dict["minTimestamp"] = ""
+            to_send_data_dict["maxTimestamp"] = ""
         if parameters['mode'] == "metricFileReplay":
-            toSendDataDict["agentType"] = "MetricFileReplay"
-            toSendDataDict["minTimestamp"] = str(metricDataDict[1])
-            toSendDataDict["maxTimestamp"] = str(metricDataDict[2])
-            toSendDataDict["chunkSerialNumber"] = str(chunkSerialNumber)
-        if ('splitID' in parameters.keys() and 'splitBy' in parameters.keys()):
-            toSendDataDict["splitID"] = parameters['splitID']
-            toSendDataDict["splitBy"] = parameters['splitBy']
+            to_send_data_dict["agentType"] = "MetricFileReplay"
+            to_send_data_dict["minTimestamp"] = str(metric_data_dict[1])
+            to_send_data_dict["maxTimestamp"] = str(metric_data_dict[2])
+            to_send_data_dict["chunkSerialNumber"] = str(chunk_serial_number)
+        if 'splitID' in parameters.keys() and 'splitBy' in parameters.keys():
+            to_send_data_dict["splitID"] = parameters['splitID']
+            to_send_data_dict["splitBy"] = parameters['splitBy']
 
-    toSendDataJSON = json.dumps(toSendDataDict)
-    logger.debug("Chunksize: " + str(len(bytearray(str(metricDataDict)))))
-    logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))))
+    to_send_data_json = json.dumps(to_send_data_dict)
+    logger.debug(to_send_data_json)
+    logger.debug("Chunksize: " + str(len(bytearray(str(metric_data_dict)))))
+    logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
 
-    #send the data
-    postUrl = parameters['serverUrl'] + "/customprojectrawdata"
+    # send the data
+    post_url = parameters['serverUrl'] + "/customprojectrawdata"
     if parameters['agentType'] == "hypervisor":
-        response = urllib.urlopen(postUrl, data=urllib.urlencode(toSendDataDict))
+        response = urllib.urlopen(post_url, data=urllib.urlencode(to_send_data_dict))
         if response.getcode() == 200:
-            logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
+            logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
         else:
             # retry once for failed data and set chunkLines to half if succeeded
-            logger.error("Failed to send data. Retrying once.")
-            dataSplit1 = metricDataDict[0:len(metricDataDict) / 2]
-            toSendDataDict["metricData"] = json.dumps(dataSplit1)
-            response = urllib.urlopen(postUrl, data=urllib.urlencode(toSendDataDict))
+            logger.error("Failed to send data.\nResponse Code: " + str(response.status_code) + "\nTEXT: " + str(response.text) + "\nRetrying once.")
+            data_split1 = metric_data_dict[0:len(metric_data_dict) / 2]
+            to_send_data_dict["metricData"] = json.dumps(data_split1)
+            response = urllib.urlopen(post_url, data=urllib.urlencode(to_send_data_dict))
             if response.getcode() == 200:
-                logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
+                logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
                 parameters['chunkLines'] = parameters['chunkLines'] / 2
                 # since succeeded send the rest of the chunk
-                dataSplit2 = metricDataDict[len(metricDataDict) / 2:]
-                toSendDataDict["metricData"] = json.dumps(dataSplit2)
-                response = urllib.urlopen(postUrl, data=urllib.urlencode(toSendDataDict))
+                data_split2 = metric_data_dict[len(metric_data_dict) / 2:]
+                to_send_data_dict["metricData"] = json.dumps(data_split2)
+                response = urllib.urlopen(post_url, data=urllib.urlencode(to_send_data_dict))
             else:
-                logger.info("Failed to send data.")
+                logger.error("Failed to send data.\nResponse Code: " + str(response.status_code) + "\nTEXT: " + str(response.text))
 
     else:
-        response = requests.post(postUrl, data=json.loads(toSendDataJSON))
+        response = requests.post(post_url, data=json.loads(to_send_data_json))
         if response.status_code == 200:
-            logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
+            logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
         else:
-            logger.info("Failed to send data.")
-            dataSplit1 = metricDataDict[0:len(metricDataDict) / 2]
-            toSendDataDict["metricData"] = json.dumps(dataSplit1)
-            toSendDataJSON = json.dumps(toSendDataDict)
-            response = requests.post(postUrl, data=json.loads(toSendDataJSON))
+            logger.error("Failed to send data.\nResponse Code: " + str(response.status_code) + "\nTEXT: " + str(response.text))
+            data_split1 = metric_data_dict[0:len(metric_data_dict) / 2]
+            to_send_data_dict["metricData"] = json.dumps(data_split1)
+            to_send_data_json = json.dumps(to_send_data_dict)
+            response = requests.post(post_url, data=json.loads(to_send_data_json))
             if response.status_code == 200:
-                logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
+                logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
                 parameters['chunkLines'] = parameters['chunkLines'] / 2
                 # since succeeded send the rest of the chunk
-                dataSplit2 = metricDataDict[len(metricDataDict) / 2:]
-                toSendDataDict["metricData"] = json.dumps(dataSplit2)
-                toSendDataJSON = json.dumps(toSendDataDict)
-                response = requests.post(postUrl, data=json.loads(toSendDataJSON))
+                data_split2 = metric_data_dict[len(metric_data_dict) / 2:]
+                to_send_data_dict["metricData"] = json.dumps(data_split2)
+                to_send_data_json = json.dumps(to_send_data_dict)
+                response = requests.post(post_url, data=json.loads(to_send_data_json))
             else:
-                logger.info("Failed to send data.")
-    logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
+                logger.error("Failed to send data.\nResponse Code: " + str(response.status_code) + "\nTEXT: " + str(response.text))
+    logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
 
-def processStreaming(newPrevEndtimeEpoch):
-    metricData = []
+
+def process_streaming(new_prev_endtime_epoch):
+    metric_data = []
     dates = []
     # get dates to read files for
-    for i in range(0, 3 + int(float(reportingConfigVars['reporting_interval']) / 24 / 60)):
-        dates.append(time.strftime("%Y%m%d", time.localtime(startTimeEpoch / 1000 + 60 * 60 * 24 * i)))
+    for i in range(0, 3 + int(float(reporting_config_vars['reporting_interval']) / 24 / 60)):
+        dates.append(time.strftime("%Y%m%d", time.localtime(start_time_epoch / 1000 + 60 * 60 * 24 * i)))
     # append current date to dates
-    currentDate = time.strftime("%Y%m%d", time.gmtime())
-    if currentDate not in dates:
-        dates.append(currentDate)
+    current_date = time.strftime("%Y%m%d", time.gmtime())
+    if current_date not in dates:
+        dates.append(current_date)
 
     # read all selected daily files for data
     for date in dates:
-        filenameAddition = ""
+        filename_addition = ""
         if parameters['agentType'] == "kafka":
-            filenameAddition = "_kafka"
+            filename_addition = "_kafka"
         elif parameters['agentType'] == "elasticsearch-storage":
-            filenameAddition = "_es"
+            filename_addition = "_es"
 
-        dataFilePath = os.path.join(parameters['homepath'], dataDirectory + date + filenameAddition + ".csv")
-        if os.path.isfile(dataFilePath):
-            with open(dataFilePath) as dailyFile:
+        data_file_path = os.path.join(parameters['homepath'], data_directory + date + filename_addition + ".csv")
+        if os.path.isfile(data_file_path):
+            with open(data_file_path) as dailyFile:
                 try:
-                    dailyFileReader = csv.reader(dailyFile)
+                    daily_file_reader = csv.reader(dailyFile)
                 except IOError:
                     print "No data-file for " + str(date) + "!"
                     continue
-                fieldnames = []
-                for csvRow in dailyFileReader:
-                    if dailyFileReader.line_num == 1:
+                field_names = []
+                for csvRow in daily_file_reader:
+                    if daily_file_reader.line_num == 1:
                         # Get all the metric names
-                        fieldnames = csvRow
-                        for i in range(0, len(fieldnames)):
-                            if fieldnames[i] == "timestamp":
+                        field_names = csvRow
+                        for i in range(0, len(field_names)):
+                            if field_names[i] == "timestamp":
                                 timestamp_index = i
-                    elif dailyFileReader.line_num > 1:
+                    elif daily_file_reader.line_num > 1:
                         # skip lines which are already sent
                         try:
-                            if long(csvRow[timestamp_index]) < long(startTimeEpoch):
+                            if long(csvRow[timestamp_index]) < long(start_time_epoch):
                                 continue
                         except ValueError:
                             continue
                         # Read each line from csv and generate a json
-                        currentCSVRowData = {}
+                        currentCSVRowData = dict()
                         for i in range(0, len(csvRow)):
-                            if fieldnames[i] == "timestamp":
-                                newPrevEndtimeEpoch = csvRow[timestamp_index]
-                                currentCSVRowData[fieldnames[i]] = csvRow[i]
+                            if field_names[i] == "timestamp":
+                                new_prev_endtime_epoch = csvRow[timestamp_index]
+                                currentCSVRowData[field_names[i]] = csvRow[i]
                             else:
                                 # fix incorrectly named columns
-                                colname = fieldnames[i]
+                                colname = field_names[i]
                                 if colname.find("]") == -1:
                                     colname = colname + "[" + parameters['hostname'] + "]"
                                 if colname.find(":") == -1:
-                                    colname = colname + ":" + str(getIndexForColumnName(fieldnames[i]))
+                                    colname = colname + ":" + str(get_index_for_column_name(field_names[i]))
                                 currentCSVRowData[colname] = csvRow[i]
-                        metricData.append(currentCSVRowData)
+                        metric_data.append(currentCSVRowData)
     # update endtime in config
-    if newPrevEndtimeEpoch == 0:
+    if new_prev_endtime_epoch == 0:
         print "No data is reported"
     else:
-        newPrevEndtimeInSec = math.ceil(long(newPrevEndtimeEpoch) / 1000.0)
-        new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(newPrevEndtimeInSec)))
+        new_prev_endtime_in_sec = math.ceil(long(new_prev_endtime_epoch) / 1000.0)
+        new_prev_endtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(new_prev_endtime_in_sec)))
         update_timestamp(new_prev_endtime)
-        sendData(metricData, None, None)
+        send_data(metric_data, None, None)
 
-def processReplay(filePath):
-    if os.path.isfile(filePath):
-        logger.info("Replaying file: " + filePath)
+
+def process_replay(file_path):
+    if os.path.isfile(file_path):
+        logger.info("Replaying file: " + file_path)
         # log file replay processing
         if parameters['mode'] == "logFileReplay":
-            output = subprocess.check_output(
-                'cat ' + filePath + ' | jq -c ".[]" > ' + filePath + ".mod",
-                shell=True)
-            with open(filePath + ".mod") as logfile:
-                lineCount = 0
-                chunkCount = 0
-                currentRow = []
-                start_time = time.time()
-                for line in logfile:
-                    if lineCount == parameters['chunkLines']:
-                        logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                        sendData(currentRow, filePath, None)
-                        currentRow = []
-                        chunkCount += 1
-                        lineCount = 0
-                        start_time = time.time()
-                    currentRow.append(json.loads(line.rstrip()))
-                    lineCount += 1
-                if len(currentRow) != 0:
-                    logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                    sendData(currentRow, filePath, None)
-                    chunkCount += 1
-                logger.debug("Total chunks created: " + str(chunkCount))
-            output = subprocess.check_output(
-                "rm " + filePath + ".mod",
-                shell=True)
-        else:  # metric file replay processing
-            with open(filePath) as metricFile:
-                metricCSVReader = csv.reader(metricFile)
-                toSendMetricData = []
-                fieldnames = []
-                currentLineCount = 1
-                chunkCount = 0
-                minTimestampEpoch = 0
-                maxTimestampEpoch = -1
-                for row in metricCSVReader:
-                    if metricCSVReader.line_num == 1:
-                        # Get all the metric names from header
-                        fieldnames = row
-                        # get index of the timestamp column
-                        for i in range(0, len(fieldnames)):
-                            if fieldnames[i] == "timestamp":
-                                timestampIndex = i
-                    elif metricCSVReader.line_num > 1:
-                        # Read each line from csv and generate a json
-                        currentRow = {}
-                        if currentLineCount == parameters['chunkLines']:
-                            sendData([toSendMetricData, minTimestampEpoch, maxTimestampEpoch], filePath, chunkCount + 1)
-                            toSendMetricData = []
-                            currentLineCount = 0
-                            chunkCount += 1
-                        for i in range(0, len(row)):
-                            if fieldnames[i] == "timestamp":
-                                currentRow[fieldnames[i]] = row[i]
-                                if minTimestampEpoch == 0 or minTimestampEpoch > long(row[i]):
-                                    minTimestampEpoch = long(row[i])
-                                if maxTimestampEpoch == 0 or maxTimestampEpoch < long(row[i]):
-                                    maxTimestampEpoch = long(row[i])
-                            else:
-                                colname = fieldnames[i]
-                                if colname.find("]") == -1:
-                                    colname = colname + "[-]"
-                                if colname.find(":") == -1:
-                                    groupid = i
-                                    colname = colname + ":" + str(groupid)
-                                currentRow[colname] = row[i]
-                        toSendMetricData.append(currentRow)
-                        currentLineCount += 1
-                # send final chunk
-                if len(toSendMetricData) != 0:
-                    sendData([toSendMetricData, minTimestampEpoch, maxTimestampEpoch], filePath, chunkCount + 1)
-                    chunkCount += 1
-                logger.debug("Total chunks created: " + str(chunkCount))
 
-def setloggerConfig():
+            # handle specific filetypes
+            if parameters['agentType'] == 'db2' or parameters['agentType'] == 'db2-json':
+                replay_db2(file_path)
+            elif parameters['agentType'] == 'gpfs':
+                replay_gpfs(file_path)
+            elif parameters['agentType'] == 'network-log':
+                replay_network_log(file_path)
+            else:
+                # default
+                try:
+                    output = subprocess.check_output(
+                        'cat ' + file_path + ' | jq -c ".[]" > ' + file_path + ".mod",
+                        shell=True)
+                except subprocess.CalledProcessError as e:
+                    logger.error("Not a correctly formatted json file. Please contact support.")
+                    sys.exit(1)
+                with open(file_path + ".mod") as logfile:
+                    line_count = 0
+                    entry_count = 0
+                    chunk_count = 0
+                    current_row = []
+                    start_time = time.time()
+                    for line in logfile:
+                        if line_count >= parameters['chunkLines']:
+                            logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                            send_data(current_row, file_path, None)
+                            current_row = []
+                            chunk_count += 1
+                            line_count = 0
+                            start_time = time.time()
+
+                        json_message = json.loads(line.rstrip())
+                        if agent_config_vars['selected_fields'] == "All":
+                            current_row.append(json_message)
+                        else:
+                            current_log_msg = dict()
+                            for field in agent_config_vars['selected_fields']:
+                                field = str(field).strip()
+                                current_log_msg[field] = json_message.get(field, {})
+                            current_row.append(json.loads(json.dumps(current_log_msg)))
+                        line_count += 1
+                        entry_count += 1
+
+                    if len(current_row) != 0:
+                        logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                        send_data(current_row, file_path, None)
+                        chunk_count += 1
+
+                    logger.debug("Total chunks created: " + str(chunk_count))
+                    logger.debug("Total log entries: " + str(entry_count))
+
+                try:
+                    subprocess.check_output(
+                        "rm -f " + file_path + ".mod",
+                        shell=True)
+                except subprocess.CalledProcessError:
+                    logger.error('Could not clean up file. Please run "rm ' + file_path + '.mod"')
+
+        else:  # metric file replay processing
+            # handle different metric agents
+            if 'sar' in parameters['agentType']:
+                if parameters['agentType'] == 'sar-cpu' or parameters['agentType'] == 'sar':
+                    replay_sar(file_path, 'sar -P ALL')
+                if parameters['agentType'] == 'sar-network' or parameters['agentType'] == 'sar':
+                    replay_sar(file_path, 'sar -n DEV')
+                if parameters['agentType'] == 'sar-storage' or parameters['agentType'] == 'sar':
+                    replay_sar(file_path, 'sar -p -d')
+                if parameters['agentType'] == 'sar-mem' or parameters['agentType'] == 'sar':
+                    replay_sar(file_path, 'sar -r')
+            else:
+                # default
+                with open(file_path) as metricFile:
+                    field_names = []
+                    to_send_metric_data = []
+                    current_line_count = 1
+                    chunk_count = 0
+                    min_timestamp_epoch = 0
+                    max_timestamp_epoch = -1
+                    if parameters['agentType'] == 'rds':
+                        is_rds = True
+                        directory_path, file_name = os.path.split(file_path)
+                        file_name_array = file_name.split('_')
+                        instance_name = file_name_array[-1].split('.')[0]
+                        data_info = file_name_array[0].split('.')
+                        metric = data_info[-1]
+                        key = metric + '[' + instance_name + ']'
+                        field_names = ['timestamp', key]
+                    metric_csv_reader = csv.reader(metricFile)
+                    for row in metric_csv_reader:
+                        if metric_csv_reader.line_num == 1 and not is_rds:
+                            # Get all the metric names from header
+                            field_names = row
+                        elif metric_csv_reader.line_num > 1 or is_rds:
+                            # Read each line from csv and generate a json
+                            current_row = dict()
+                            if current_line_count == parameters['chunkLines']:
+                                send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], file_path, chunk_count + 1)
+                                to_send_metric_data = []
+                                current_line_count = 0
+                                chunk_count += 1
+                            for i in range(0, len(row)):
+                                if field_names[i] == "timestamp":
+                                    timestamp = row[i]
+                                    if '.' in timestamp:
+                                        timestamp = timestamp.split('.')[0]
+                                    current_row[field_names[i]] = timestamp
+                                    if min_timestamp_epoch == 0 or min_timestamp_epoch > long(timestamp):
+                                        min_timestamp_epoch = long(timestamp)
+                                    if max_timestamp_epoch == 0 or max_timestamp_epoch < long(timestamp):
+                                        max_timestamp_epoch = long(timestamp)
+                                else:
+                                    column_name = field_names[i].strip()
+                                    if column_name.find("]") == -1:
+                                        column_name = column_name + "[-]"
+                                    current_row[column_name] = row[i]
+                            to_send_metric_data.append(current_row)
+                            current_line_count += 1
+                    # send final chunk
+                    if len(to_send_metric_data) != 0:
+                        send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], file_path, chunk_count + 1)
+                        chunk_count += 1
+                    logger.debug("Total chunks created: " + str(chunk_count))
+
+
+
+def replay_sar(metric_file_path, command):
+    logger.info('Replaying sar file')
+    translated_file_path = metric_file_path + '.sar'
+    try:
+        subprocess.check_output(
+            command + ' -f ' + metric_file_path + ' > ' + translated_file_path,
+            shell=True)
+    except subprocess.CalledProcessError:
+        logger.error('Not a sar file, sar is not installed, or there is a sar version mismatch ' +
+                     'between the origin machine and the current machine. Please contact support.')
+        try:
+            subprocess.check_output(
+                'rm -f ' + translated_file_path,
+                shell=True)
+        except subprocess.CalledProcessError:
+            logger.error('Could not clean up file. Please run "rm ' + translated_file_path + '"')
+        sys.exit(1)
+    with open(metric_file_path + '.sar') as metric_file:
+        # parse opening lines
+        line = metric_file.readline()
+        header = line.split()
+        if len(header) < 4:
+            logger.error('Error in sar file header')
+            sys.exit(1)
+        host = header[2][1:-1]
+        # assume DD/MM/YYYY
+        date = header[3]
+        ts_format = '%m/%d/%Y %I:%M:%S %p'
+        metric_file.readline()
+        metrics = metric_file.readline()
+        field_names = metrics.replace('/s', 's').split()
+        while 'RESTART' in field_names or len(field_names) == 0:
+            metrics = metric_file.readline()
+            field_names = metrics.replace('/s', 's').split()
+        field_names[0] = 'timestamp'
+        field_names[1] = 'ampm'
+        # determine where fields start
+        start_index = 2
+        if field_names[2] == field_names[2].upper():
+            start_index = 3
+        to_send_metric_data = []
+        current_line_count = 1
+        chunk_count = 0
+        row_count = 0
+        min_timestamp_epoch = 0
+        max_timestamp_epoch = -1
+        exclude_tags = agent_config_vars['exclude_tags']
+
+        # read each line of metrics
+        line = metric_file.readline()
+        while line:
+            # Read each line from csv and generate a json
+            current_row = dict()
+            if current_line_count >= parameters['chunkLines']:
+                send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], metric_file_path, chunk_count + 1)
+                to_send_metric_data = []
+                current_line_count = 0
+                chunk_count += 1
+
+            row = line.replace('/s', 's').split()
+            if not row or row[start_index:] == field_names[start_index:] or 'RESTART' in row or line.startswith('Average'):
+                line = metric_file.readline()
+                continue
+
+            # make timestamp
+            time = row[0]
+            ampm = row[1]
+
+            # secondary instance tag
+            exclude_flag = False
+            instance = host
+            if start_index == 3:
+                # check for excluded tags
+                device = row[2]
+                if len(exclude_tags) != 0:
+                    for tag in exclude_tags:
+                        if device == tag or (tag.endswith('*') and device.startswith(tag.split('*')[0])):
+                            exclude_flag = True
+                            break
+                instance = device + '_' + instance
+            if exclude_flag:
+                line = metric_file.readline()
+                continue
+
+            timestamp = _get_timestamp_sar(date, time, ampm, parameters['timeZone'], ts_format)
+            current_row['timestamp'] = str(timestamp)
+            if min_timestamp_epoch == 0 or min_timestamp_epoch > long(timestamp):
+                min_timestamp_epoch = long(timestamp)
+            if max_timestamp_epoch == 0 or max_timestamp_epoch < long(timestamp):
+                max_timestamp_epoch = long(timestamp)
+
+            # metric values
+            for i in range(start_index, len(row)):
+                column_name = field_names[i].strip() + '[' + instance + ']'
+                current_row[column_name] = str(row[i].strip())
+            to_send_metric_data.append(current_row)
+            logger.debug(str(current_row))
+            current_line_count += 1
+            row_count += 1
+            line = metric_file.readline()
+        # send final chunk
+        if len(to_send_metric_data) != 0:
+            send_data([to_send_metric_data, min_timestamp_epoch, max_timestamp_epoch], metric_file_path, chunk_count + 1)
+            chunk_count += 1
+        logger.debug("Total chunks created: " + str(chunk_count))
+
+        # clean up
+        try:
+            subprocess.check_output(
+                'rm -f ' + translated_file_path,
+                shell=True)
+        except subprocess.CalledProcessError:
+            logger.error('Could not clean up file. Please run "rm ' + translated_file_path + '"')
+    return
+
+
+def replay_network_log(log_file_path):
+    logger.info('Replaying network log file')
+    with open(log_file_path) as log_file:
+        line_count = 0
+        entry_count = 0
+        chunk_count = 0
+        current_row = []
+        start_time = time.time()
+        instance = log_file.name.split('/')[-1].split('.')[0]
+        for line in log_file:
+            # skip empty lines
+            if not line.strip():
+                continue
+
+            # if the last loop results in chunkLines being set...
+            if line_count == parameters['chunkLines']:
+                logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                send_data(current_row, log_file_path, chunk_count)
+                current_row = []
+                chunk_count += 1
+                line_count = 0
+                start_time = time.time()
+
+            # build json entry
+            timestamp_array = line.split()[:3]
+            # pad with 0 if needed
+            if len(timestamp_array[1]) == 1:
+                timestamp_array[1] = '0' + timestamp_array[1]
+            year_str = str(datetime.now().year)
+            entry = dict()
+            entry['tag'] = instance
+            entry['eventId'] = str(_get_timestamp_network_logs(' '.join(timestamp_array), year_str, parameters['timeZone']))
+            entry['data'] = line
+            current_row.append(entry)
+            line_count += 1
+            entry_count += 1
+
+        # last chunk
+        if line_count > 0:
+            logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+            send_data(current_row, log_file_path, chunk_count)
+            chunk_count += 1
+
+        logger.debug("Total chunks created: " + str(chunk_count))
+        logger.debug("Total log entries: " + str(entry_count))
+    return
+
+
+def replay_db2(log_file_path):
+    logger.info('Replaying db2 file')
+    with open(log_file_path) as log_file:
+        line_count = 0
+        entry_count = 0
+        chunk_count = 0
+        current_row = []
+        start_time = time.time()
+        current_obj = dict()
+        blank_key = 'no_field'
+        key = blank_key
+        field_name_regex = '[A-Z]+\s*#?[0-9]*\s*:'
+        localhost = socket.gethostname()
+        for line in log_file:
+            # skip empty lines
+            if not line.strip():
+                continue
+
+            try:
+                # new timestamp = new log entry
+                timestamp = _get_timestamp_db2(line.split('+')[0], parameters['timeZone'])
+                #####
+                # we will only hit the next block of code if the line starts with a valid timestamp
+                #####
+
+                # build json entry
+                if len(current_obj) > 0:
+                    entry = dict()
+                    if 'HOSTNAME' in current_obj and current_obj['HOSTNAME']:
+                        entry['tag'] = current_obj['HOSTNAME']
+                    else:
+                        entry['tag'] = localhost
+                    entry['eventId'] = str(current_obj.pop('timestamp'))
+                    if parameters['agentType'] == 'db2-json':
+                        current_obj.pop('as_string')
+                        entry['data'] = current_obj
+                    else:
+                        entry['data'] = current_obj['as_string']
+                    current_row.append(entry)
+                    line_count += 1
+                    entry_count += 1
+
+                    # if adding the most recent entry should trigger sending
+                    if line_count >= parameters['chunkLines']:
+                        logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                        send_data(current_row, log_file_path, chunk_count)
+                        current_row = []
+                        chunk_count += 1
+                        line_count = 0
+                        start_time = time.time()
+
+                # reset obj
+                current_obj = dict()
+                current_obj['timestamp'] = timestamp
+                current_obj['UNIQ'] = line.split()[1]
+                current_obj['LEVEL'] = line[line.rfind(' ') + 1:line.rfind('\n')]
+                current_obj['as_string'] = line
+                key = blank_key
+
+            except ValueError:
+                # build overall log entry string
+                current_obj['as_string'] += line
+                # check if line start with a field name or not
+                if re.match('^' + field_name_regex, line):
+                    key = extract_fields_db2(current_obj, line, field_name_regex)
+                else:
+                    # this should just be a continuation of the last key we've hit
+                    #   or of blank_key
+                    if key in current_obj:
+                        current_obj[key] = current_obj[key] + line
+                    else:
+                        # log error if the field name couldn't be parsed
+                        if key == blank_key:
+                            logger.error('Could not parse field name for log entry ' + current_obj['UNIQ'] +
+                                         '. This log entry will still be processed.')
+                        current_obj[key] = line
+
+        # wrap up last log entry
+        if len(current_obj) > 0:
+            # build json entry
+            entry = dict()
+            if 'HOSTNAME' in current_obj and current_obj['HOSTNAME']:
+                entry['tag'] = current_obj['HOSTNAME']
+            else:
+                entry['tag'] = localhost
+            entry['eventId'] = str(current_obj.pop('timestamp'))
+            if parameters['agentType'] == 'db2-json':
+                current_obj.pop('as_string')
+                entry['data'] = current_obj
+            else:
+                entry['data'] = current_obj['as_string']
+            current_row.append(entry)
+            line_count += 1
+            entry_count += 1
+
+        # last chunk
+        if line_count > 0:
+            logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+            send_data(current_row, log_file_path, chunk_count)
+            chunk_count += 1
+
+        logger.debug("Total chunks created: " + str(chunk_count))
+        logger.debug("Total log entries: " + str(entry_count))
+    return
+
+
+def extract_fields_db2(obj, line, field_name_regex):
+    line = '#'.join(re.split('\s*#', line))
+
+    last_key = ''
+    field_names = re.findall(field_name_regex, line)
+    for field in reversed(field_names):
+        split_at = line.find(field) + len(field)
+        field_name = re.split('\s*:', field)[0]
+        # don't overwrite existing fields
+        if field_name in obj:
+            continue
+        else:
+            obj[field_name] = ' '.join(line[split_at:].split())
+            if not last_key:
+                last_key = field_name
+        line = line[:split_at - len(field)]
+    return last_key
+
+
+def replay_gpfs(log_file_path):
+    logger.info('Replaying gpfs file')
+    with open(log_file_path) as log_file:
+        line_count = 0
+        entry_count = 0
+        chunk_count = 0
+        current_row = []
+        start_time = time.time()
+        instance = log_file.name.split('/')[-1].split('.')[-1]
+        for line in log_file:
+            # skip empty lines
+            if not line.strip():
+                continue
+            # if the last loop results in chunkLines being set...
+            if line_count == parameters['chunkLines']:
+                logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+                send_data(current_row, log_file_path, chunk_count)
+                current_row = []
+                chunk_count += 1
+                line_count = 0
+                start_time = time.time()
+            # build json entry
+            entry = dict()
+            entry['tag'] = instance
+            entry['eventId'] = str(_get_timestamp_gpfs(line.split('+')[0], parameters['timeZone']))
+            entry['data'] = line
+            current_row.append(entry)
+            line_count += 1
+            entry_count += 1
+        # last chunk
+        if line_count > 0:
+            logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
+            send_data(current_row, log_file_path, chunk_count)
+            chunk_count += 1
+        logger.debug("Total chunks created: " + str(chunk_count))
+        logger.debug("Total log entries: " + str(entry_count))
+    return
+
+
+def _get_timestamp_sar(date, time, ampm, tz, format):
+    return _get_timestamp_with_timezone(date + ' ' + time + ' ' + ampm, tz, format)
+
+
+def _get_timestamp_gpfs(timestamp_str, tz):
+    return _get_timestamp_with_timezone(timestamp_str, tz, '%Y-%m-%d_%H:%M:%S.%f')
+
+
+def _get_timestamp_network_logs(timestamp_str, year, tz):
+    return _get_timestamp_with_timezone(timestamp_str + ' ' + year, tz, '%b %d %H:%M:%S %Y')
+
+
+def _get_timestamp_db2(timestamp_str, tz):
+    return _get_timestamp_with_timezone(timestamp_str, tz, '%Y-%m-%d-%H.%M.%S.%f')
+
+
+def _get_timestamp_with_timezone(date_string, time_zone, format):
+    timestamp_datetime = datetime.strptime(date_string, format)
+    tz = pytz.timezone(time_zone)
+    time_in_tz = tz.localize(timestamp_datetime)
+    epoch = long((time_in_tz - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds())*1000
+    return epoch
+
+
+def get_normalization(grouping_map, metric_key):
+    if len(normalization_ids_map) != 0:
+        if metric_key in normalization_ids_map:
+            group_id = int(normalization_ids_map[metric_key])
+        else:
+            group_id = get_grouping_id(metric_key, grouping_map)
+    return group_id
+
+
+def save_grouping(metric_grouping):
+    """
+    Saves the grouping data to grouping.json
+    Parameters:
+        - `grouping_map` : metric_name-grouping_id dict
+    :return: None
+    """
+    with open('grouping.json', 'w+') as f:
+        f.write(json.dumps(metric_grouping))
+
+
+def load_grouping():
+    """
+    Loads the grouping data from grouping.json
+    :return: grouping JSON string
+    """
+    if os.path.isfile('grouping.json'):
+        logger.debug("Grouping file exists. Loading..")
+        with open('grouping.json', 'r+') as f:
+            try:
+                grouping_json = json.loads(f.read())
+            except ValueError:
+                grouping_json = json.loads("{}")
+                logger.debug("Error parsing grouping.json.")
+    else:
+        grouping_json = json.loads("{}")
+    return grouping_json
+
+
+def get_grouping_id(metric_key, metric_grouping):
+    """
+    Get grouping id for a metric key
+    Parameters:
+    - `metric_key` : metric key str to get group id.
+    - `metric_grouping` : metric_key-grouping id map
+    """
+    if metric_key in metric_grouping:
+        grouping_id = int(metric_grouping[metric_key])
+        return grouping_id
+    for index in range(3):
+        grouping_candidate = random.randint(GROUPING_START, GROUPING_END)
+        if grouping_candidate not in map(int, metric_grouping.values()):
+            metric_grouping[metric_key] = grouping_candidate
+            return grouping_candidate
+    return GROUPING_START
+
+
+def set_logger_config(level):
+    """Set up logging according to the defined log level"""
     # Get the root logger
-    logger = logging.getLogger(__name__)
-    # Have to set the root logger level, it defaults to logging.WARNING
-    logger.setLevel(logging.INFO)
+    logger_obj = logging.getLogger(__name__)
+    # Have to set the root logger level, it defaults to logging.INFO
+    logger_obj.setLevel(level)
     # route INFO and DEBUG logging to stdout from stderr
     logging_handler_out = logging.StreamHandler(sys.stdout)
     logging_handler_out.setLevel(logging.DEBUG)
-    logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
-    logger.addHandler(logging_handler_out)
+    # create a logging format
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(process)d - %(threadName)s - %(levelname)s - %(message)s')
+    logging_handler_out.setFormatter(formatter)
+    logger_obj.addHandler(logging_handler_out)
 
     logging_handler_err = logging.StreamHandler(sys.stderr)
     logging_handler_err.setLevel(logging.WARNING)
-    logger.addHandler(logging_handler_err)
-    return logger
+    logger_obj.addHandler(logging_handler_err)
+    return logger_obj
+
 
 class LessThanFilter(logging.Filter):
     def __init__(self, exclusive_maximum, name=""):
@@ -446,46 +946,53 @@ class LessThanFilter(logging.Filter):
         self.max_level = exclusive_maximum
 
     def filter(self, record):
-        #non-zero return means we log this message
+        # non-zero return means we log this message
         return 1 if record.levelno < self.max_level else 0
 
-def getFileListForDirectory(rootPath):
-    fileList = []
-    for path, subdirs, files in os.walk(rootPath):
+
+def get_file_list_for_directory(root_path):
+    file_list = []
+    for path, subdirs, files in os.walk(root_path):
         for name in files:
-            if parameters['agentType'] == "metricFileReplay" and "csv" in name:
-                fileList.append(os.path.join(path, name))
-            if parameters['agentType'] == "LogFileReplay" and "json" in name:
-                fileList.append(os.path.join(path, name))
-    return fileList
+            if parameters['mode'] == "metricFileReplay" and "csv" in name:
+                file_list.append(os.path.join(path, name))
+            if parameters['mode'] == "logFileReplay" and "json" in name:
+                file_list.append(os.path.join(path, name))
+    return file_list
+
+
 if __name__ == '__main__':
+    GROUPING_START = 31000
+    GROUPING_END = 33000
     prog_start_time = time.time()
-    logger = setloggerConfig()
-    dataDirectory = 'data/'
-    parameters = getParameters()
-    agentConfigVars = getAgentConfigVars()
-    reportingConfigVars = getReportingConfigVars()
+    normalization_ids_map = dict()
+    data_directory = 'data/'
+    parameters = get_parameters()
+    logger = set_logger_config(parameters['logLevel'])
+    agent_config_vars = get_agent_config_vars(normalization_ids_map)
 
     if parameters['agentType'] == "hypervisor":
         import urllib
     else:
         import requests
 
-    # locate time range and date range
-    prevEndtimeEpoch = reportingConfigVars['prev_endtime']
-    newPrevEndtimeEpoch = 0
-    startTimeEpoch = 0
-    startTimeEpoch = updateDataStartTime()
-
+    # if no input options, stream
     if parameters['inputFile'] is None and parameters['logFolder'] is None:
-        processStreaming(newPrevEndtimeEpoch)
-    else:
+        reporting_config_vars = get_reporting_config_vars()
+        # locate time range and date range
+        prev_endtime_epoch = reporting_config_vars['prev_endtime']
+        new_prev_endtime_epoch = 0
+        start_time_epoch = 0
+        start_time_epoch = update_data_start_time()
+
+        process_streaming(new_prev_endtime_epoch)
+    else: # replay from a folder (strict .csv or .json) or single file
         if parameters['logFolder'] is None:
-            inputFilePath = os.path.join(parameters['homepath'], parameters['inputFile'])
-            processReplay(inputFilePath)
+            input_file_path = os.path.join(parameters['homepath'], parameters['inputFile'])
+            process_replay(input_file_path)
         else:
-            fileList = getFileListForDirectory(parameters['logFolder'])
-            for filePath in fileList:
-                processReplay(filePath)
+            file_list = get_file_list_for_directory(parameters['logFolder'])
+            for file_path in file_list:
+                process_replay(file_path)
 
     logger.info("--- Total runtime: %s seconds ---" % (time.time() - prog_start_time))

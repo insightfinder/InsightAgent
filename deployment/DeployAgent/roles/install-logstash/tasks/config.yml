@@ -1,0 +1,21 @@
+---
+- name: Create Logstash output file.
+  template:
+    src: "{{ item }}.j2"
+    dest: "/etc/logstash/conf.d/{{ item }}"
+    owner: root
+    group: root
+    mode: 0644
+  with_items:
+    - 03-http-output.conf
+  notify: restart logstash
+
+- include: config-default.yml
+  when: (agentType=="logstash" or agentType=="metric-log")
+
+- include: config-aws-cloudtrail.yml
+  when: agentType=="awsCloudtrail"
+
+- include: config-google-pubsub.yml
+  when: agentType=="googlePubSub"
+  

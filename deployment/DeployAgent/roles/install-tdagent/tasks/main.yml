@@ -136,7 +136,7 @@
      when: ansible_pkg_mgr == 'apt'
    - name: td-agent | Install td-agent
      become: yes
-     shell: "http_proxy={{ http_proxy }} curl -k -L https://toolbelt.treasuredata.com/sh/install-redhat-td-agent2.sh | sh"
+     shell: "http_proxy={{ http_proxy }} curl -k -L https://toolbelt.treasuredata.com/sh/install-redhat-td-agent3.sh | sh"
      when: ansible_pkg_mgr == 'yum'
    - name: td-agent | Copy setup script
      become: yes

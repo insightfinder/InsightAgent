@@ -19,6 +19,22 @@
   selinux:
     state: disabled
   when: p.stat.exists == True
+- name: Monit | Install Monit
+  yum:
+    name: monit
+    state: present
+  when: ansible_pkg_mgr == 'yum'
+- name: Monit | Install Monit
+  apt:
+    name: monit
+    state: present
+  when: ansible_pkg_mgr == 'apt'
+- name: Monit | Restart Monit daemon
+  systemd:
+    name: monit.service
+    enabled: yes
+    daemon_reload: yes
+    state: restarted
 - name: Delete Old Tar Bundle for Agent
   become: yes
   file:
@@ -73,50 +89,45 @@
   shell: "http_proxy={{ http_proxy }} python {{ansible_env.HOME}}/get-pip.py --no-index --find-links={{ansible_env.HOME}}/pip_packages/"
 - name: Install pip packages for Agent
   shell: "pip install --no-index --find-links='{{ansible_env.HOME}}/pip_packages/' requests pytz kafka"
-- name: Deploy Replay Agent
-  shell: "no_proxy={{ no_proxy }} ./deployment/install.sh
-    -i {{ projectName }}
-    -u {{ userName }}
-    -k {{ licenseKey }}
-    -s {{ samplingInterval }}
-    -t {{ agentType }}
-    -w {{ reportingUrl }}"
-  become: true
-  args:
-    chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
-- name: td-agent | Copy setup script
-  become: yes
-  template: src=config.ini dest={{ansible_env.HOME}}/InsightAgent-master/kafka/config.ini
-- name: Monit | Install Monit
-  yum:
-    name: monit
-    state: present
-  when: ansible_pkg_mgr == 'yum'
-- name: Monit | Install Monit
-  apt:
-    name: monit
-    state: present
-  when: ansible_pkg_mgr == 'apt'
-- name: Monit | Start Monit daemon
-  systemd:
-    name: monit.service
-    enabled: yes
-    daemon_reload: yes
-    state: started
-- name: Monit | Add Monit config
+- name: Agent | Add config.ini
   template:
-    src: monitrc
-    dest: /etc/monitrc
+    src: config.ini.j2
+    dest: "{{ansible_env.HOME}}/InsightAgent-master/kafka/config.ini"
     owner: root
     group: root
-    mode: 0600
-- name: Monit | Add Monit config
-  template:
-    src: monitrc
+    mode: 0644
+- name: Monit | Add default config file
+  copy:
+    src: files/monit.conf
     dest: /etc/monit.conf
     owner: root
     group: root
-    mode: 0600
+    mode: 0644
+    force: no
+- name: Monit | Add Kafka metric config file
+  template:
+    src: kafka-metrics.monit.j2
+    dest: /etc/monit.d/kafka-metrics
+    owner: root
+    group: root
+    mode: 0644
+- name: Monit | Restart Monit daemon
+  systemd:
+    name: monit.service
+    enabled: yes 
+    daemon_reload: yes 
+    state: restarted
+#- name: Deploy Replay Agent
+#  shell: "no_proxy={{ no_proxy }} ./deployment/install.sh
+#    -i {{ projectName }}
+#    -u {{ userName }}
+#    -k {{ licenseKey }}
+#    -s {{ samplingInterval }}
+#    -t {{ agentType }}
+#    -w {{ reportingUrl }}"
+#  become: true
+#  args:
+#    chdir: "{{ansible_env.HOME}}/InsightAgent-master/"
 - name: Monit | Restart Monit daemon
   systemd:
     name: monit.service

@@ -1,0 +1,9 @@
+---
+- name: Copy Pub/Sub input plugin file to server
+  copy:
+     src: logstash-offline-plugin-pubsub-input-6.6.0.zip
+     dest: /tmp/logstash-offline-plugin-pubsub-input-6.6.0.zip
+- name: Install google_pubsub input plugin
+  command: >
+    ./bin/logstash-plugin install file:////tmp/logstash-offline-plugin-pubsub-input-6.6.0.zip
+    chdir={{ logstash_dir }}

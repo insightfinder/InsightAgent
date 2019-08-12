@@ -7,6 +7,7 @@ import sys
 import time
 from ConfigParser import SafeConfigParser
 from datetime import datetime
+from multiprocessing import Process
 from optparse import OptionParser
 
 import pytz
@@ -18,19 +19,19 @@ this script gathers logs from kafka and send to InsightFinder
 '''
 
 
-def getParameters():
+def get_parameters():
     usage = "Usage: %prog [options]"
     parser = OptionParser(usage=usage)
     parser.add_option("-d", "--directory",
                       action="store", dest="homepath", help="Directory to run from")
     parser.add_option("-t", "--timeout",
                       action="store", dest="timeout", help="Timeout in seconds. Default is 30")
-    parser.add_option("-p", "--topic",
-                      action="store", dest="topic", help="Kafka topic to read data from")
     parser.add_option("-w", "--serverUrl",
                       action="store", dest="serverUrl", help="Server Url")
     parser.add_option("-l", "--chunkLines",
                       action="store", dest="chunkLines", help="Max number of lines in chunk")
+    parser.add_option("-p", "--project",
+                      action="store", dest="project", help="Insightfinder Project to send data to")
     (options, args) = parser.parse_args()
 
     parameters = {}
@@ -38,104 +39,152 @@ def getParameters():
         parameters['homepath'] = os.getcwd()
     else:
         parameters['homepath'] = options.homepath
-    if options.serverUrl == None:
+    if options.serverUrl is None:
         parameters['serverUrl'] = 'https://app.insightfinder.com'
     else:
         parameters['serverUrl'] = options.serverUrl
-    if options.topic == None:
-        parameters['topic'] = 'insightfinder_csv'
-    else:
-        parameters['topic'] = options.topic
-    if options.timeout == None:
-        parameters['timeout'] = 30
+    if options.timeout is None:
+        parameters['timeout'] = 86400
     else:
         parameters['timeout'] = int(options.timeout)
     if options.chunkLines is None:
-        parameters['chunkLines'] = 1000
+        parameters['chunk_lines'] = 1000
     else:
-        parameters['chunkLines'] = int(options.chunkLines)
+        parameters['chunk_lines'] = int(options.chunkLines)
+    if options.project is None:
+        parameters['project'] = None
+    else:
+        parameters['project'] = options.project
 
     return parameters
 
-
-def getAgentConfigVars():
-    configVars = {}
-    try:
-        with open(os.path.join(parameters['homepath'], ".agent.bashrc"), 'r') as configFile:
-            fileContent = configFile.readlines()
-            if len(fileContent) < 6:
-                logger.error("Agent not correctly configured. Check .agent.bashrc file.")
-                sys.exit(1)
-            # get license key
-            licenseKeyLine = fileContent[0].split(" ")
-            if len(licenseKeyLine) != 2:
-                logger.error("Agent not correctly configured(license key). Check .agent.bashrc file.")
-                sys.exit(1)
-            configVars['licenseKey'] = licenseKeyLine[1].split("=")[1].strip()
-            # get project name
-            projectNameLine = fileContent[1].split(" ")
-            if len(projectNameLine) != 2:
-                logger.error("Agent not correctly configured(project name). Check .agent.bashrc file.")
-                sys.exit(1)
-            configVars['projectName'] = projectNameLine[1].split("=")[1].strip()
-            # get username
-            userNameLine = fileContent[2].split(" ")
-            if len(userNameLine) != 2:
-                logger.error("Agent not correctly configured(username). Check .agent.bashrc file.")
-                sys.exit(1)
-            configVars['userName'] = userNameLine[1].split("=")[1].strip()
-            # get sampling interval
-            samplingIntervalLine = fileContent[4].split(" ")
-            if len(samplingIntervalLine) != 2:
-                logger.error("Agent not correctly configured(sampling interval). Check .agent.bashrc file.")
-                sys.exit(1)
-            configVars['samplingInterval'] = samplingIntervalLine[1].split("=")[1].strip()
-    except IOError:
-        logger.error("Agent not correctly configured. Missing .agent.bashrc file.")
-    return configVars
-
-
-def getReportingConfigVars():
-    reportingConfigVars = {}
+def get_reporting_config_vars():
+    reporting_config_vars = {}
     with open(os.path.join(parameters['homepath'], "reporting_config.json"), 'r') as f:
         config = json.load(f)
     reporting_interval_string = config['reporting_interval']
-    is_second_reporting = False
     if reporting_interval_string[-1:] == 's':
-        is_second_reporting = True
         reporting_interval = float(config['reporting_interval'][:-1])
-        reportingConfigVars['reporting_interval'] = float(reporting_interval / 60.0)
+        reporting_config_vars['reporting_interval'] = float(reporting_interval / 60.0)
     else:
-        reportingConfigVars['reporting_interval'] = int(config['reporting_interval'])
-        reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
-        reportingConfigVars['prev_endtime'] = config['prev_endtime']
-        reportingConfigVars['deltaFields'] = config['delta_fields']
+        reporting_config_vars['reporting_interval'] = int(config['reporting_interval'])
+        reporting_config_vars['keep_file_days'] = int(config['keep_file_days'])
+        reporting_config_vars['prev_endtime'] = config['prev_endtime']
+        reporting_config_vars['deltaFields'] = config['delta_fields']
 
-    reportingConfigVars['keep_file_days'] = int(config['keep_file_days'])
-    reportingConfigVars['prev_endtime'] = config['prev_endtime']
-    reportingConfigVars['deltaFields'] = config['delta_fields']
-    return reportingConfigVars
+    reporting_config_vars['keep_file_days'] = int(config['keep_file_days'])
+    reporting_config_vars['prev_endtime'] = config['prev_endtime']
+    reporting_config_vars['deltaFields'] = config['delta_fields']
+    return reporting_config_vars
 
 
-def getKafkaConfig():
+def get_agent_config_vars():
+    config_vars = {}
+    try:
+        if os.path.exists(os.path.join(parameters['homepath'], "kafka_logs", "config.ini")):
+            parser = SafeConfigParser()
+            parser.read(os.path.join(parameters['homepath'], "kafka_logs", "config.ini"))
+            insightFinder_license_key = parser.get('kafka', 'insightFinder_license_key')
+            insightFinder_project_name = parser.get('kafka', 'insightFinder_project_name')
+            insightFinder_user_name = parser.get('kafka', 'insightFinder_user_name')
+            sampling_interval = parser.get('kafka', 'sampling_interval')
+            client_id = parser.get('kafka', 'client_id')
+            group_id = parser.get('kafka', 'group_id')
+
+            # SSL
+            security_protocol = parser.get('kafka', 'security_protocol')
+            ssl_context = parser.get('kafka','ssl_context')
+            ssl_check_hostname = parser.get('kafka','ssl_check_hostname')
+            ssl_ca = parser.get('kafka','ssl_ca')
+            ssl_certificate = parser.get('kafka','ssl_certificate')
+            ssl_key = parser.get('kafka','ssl_key')
+            ssl_password = parser.get('kafka','ssl_password')
+            ssl_crl = parser.get('kafka','ssl_crl')
+            ssl_ciphers = parser.get('kafka','ssl_ciphers')
+
+            # SASL
+            sasl_mechanism = parser.get('kafka', 'sasl_mechanism')
+            sasl_plain_username = parser.get('kafka', 'sasl_plain_username')
+            sasl_plain_password = parser.get('kafka', 'sasl_plain_password')
+            sasl_kerberos_service_name = parser.get('kafka', 'sasl_kerberos_service_name')
+            sasl_kerberos_domain_name = parser.get('kafka', 'sasl_kerberos_domain_name')
+            sasl_oauth_token_provider = parser.get('kafka', 'sasl_oauth_token_provider')
+
+            if len(insightFinder_license_key) == 0:
+                logger.error("Agent not correctly configured(license key). Check config file.")
+                sys.exit(1)
+            if len(insightFinder_project_name) == 0:
+                logger.error("Agent not correctly configured(project name). Check config file.")
+                sys.exit(1)
+            if len(insightFinder_user_name) == 0:
+                logger.error("Agent not correctly configured(username). Check config file.")
+                sys.exit(1)
+            if len(sampling_interval) == 0:
+                logger.error("Agent not correctly configured(sampling interval). Check config file.")
+                sys.exit(1)
+            if len(group_id) == 0:
+                logger.error("Agent not correctly configured(group id). Check config file.")
+                sys.exit(1)
+
+            if len(security_protocol) == 0:
+                logger.info('security_protocol not defined, assuming PLAINTEXT')
+                security_protocol = 'PLAINTEXT'
+
+            config_vars['licenseKey'] = insightFinder_license_key
+            config_vars['projectName'] = insightFinder_project_name
+            config_vars['userName'] = insightFinder_user_name
+            config_vars['samplingInterval'] = sampling_interval
+            config_vars['groupId'] = group_id
+            config_vars['clientId'] = client_id
+
+            # SSL
+            config_vars['security_protocol'] = security_protocol
+            config_vars['ssl_context'] = ssl_context
+            config_vars['ssl_check_hostname'] = ssl_check_hostname
+            config_vars['ssl_ca'] = ssl_ca
+            config_vars['ssl_certificate'] = ssl_certificate
+            config_vars['ssl_key'] = ssl_key
+            config_vars['ssl_password'] = ssl_password
+            config_vars['ssl_crl'] = ssl_crl
+            config_vars['ssl_ciphers'] = ssl_ciphers
+ 
+            #SASL
+            config_vars['sasl_mechanism'] = sasl_mechanism
+            config_vars['sasl_plain_username'] = sasl_plain_username
+            config_vars['sasl_plain_password'] = sasl_plain_password
+            config_vars['sasl_kerberos_service_name'] = sasl_kerberos_service_name
+            config_vars['sasl_kerberos_domain_name'] = sasl_kerberos_domain_name
+            config_vars['sasl_oauth_token_provider'] = sasl_oauth_token_provider            
+
+    except IOError:
+        logger.error("config.ini file is missing")
+    return config_vars
+
+
+def get_kafka_config():
     if os.path.exists(os.path.join(parameters['homepath'], "kafka_logs", "config.ini")):
         parser = SafeConfigParser()
         parser.read(os.path.join(parameters['homepath'], "kafka_logs", "config.ini"))
         bootstrap_servers = parser.get('kafka', 'bootstrap_servers').split(",")
         topic = parser.get('kafka', 'topic')
+        filter_hosts = parser.get('kafka', 'filter_hosts').split(",")
+
         if len(bootstrap_servers) == 0:
             logger.info("Using default server localhost:9092")
             bootstrap_servers = ['localhost:9092']
         if len(topic) == 0:
             print "using default topic"
             topic = 'insightfinder_logs'
+        if len(filter_hosts[0]) == 0:
+            filter_hosts = []
     else:
         bootstrap_servers = ['localhost:9092']
         topic = 'insightfinder_logs'
-    return (bootstrap_servers, topic)
+        filter_hosts = []
+    return bootstrap_servers, topic, filter_hosts
 
 
-def isTimeFormat(timeString, format):
+def is_time_format(time_string, datetime_format):
     """
     Determines the validity of the input date-time string according to the given format
     Parameters:
@@ -143,90 +192,99 @@ def isTimeFormat(timeString, format):
     - `temp_id` : datetime format to compare with
     """
     try:
-        datetime.strptime(str(timeString), format)
+        datetime.strptime(str(time_string), datetime_format)
         return True
     except ValueError:
         return False
 
 
-def getTimestampForZone(dateString, timeZone, format):
-    dtexif = datetime.strptime(dateString, format)
-    tz = pytz.timezone(timeZone)
+def get_timestamp_for_zone(date_string, time_zone, datetime_format):
+    dtexif = datetime.strptime(date_string, datetime_format)
+    tz = pytz.timezone(time_zone)
     tztime = tz.localize(dtexif)
     epoch = long((tztime - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
     return epoch
 
 
-def sendData(metricData):
+def send_data(metric_data):
     """ Sends parsed metric data to InsightFinder """
-    sendDataTime = time.time()
+    send_data_time = time.time()
     # prepare data for metric streaming agent
-    toSendDataDict = {}
-    toSendDataDict["metricData"] = json.dumps(metricData)
-    toSendDataDict["licenseKey"] = agentConfigVars['licenseKey']
-    toSendDataDict["projectName"] = agentConfigVars['projectName']
-    toSendDataDict["userName"] = agentConfigVars['userName']
-    toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
-    toSendDataDict["samplingInterval"] = str(int(reportingConfigVars['reporting_interval'] * 60))
-    toSendDataDict["agentType"] = "LogStreaming"
+    to_send_data_dict = dict()
+    to_send_data_dict["metricData"] = json.dumps(metric_data)
+    to_send_data_dict["licenseKey"] = agent_config_vars['licenseKey']
+    if parameters['project'] is None:
+        to_send_data_dict["projectName"] = agent_config_vars['projectName']
+    else:
+        to_send_data_dict["projectName"] = parameters['project']
+    to_send_data_dict["userName"] = agent_config_vars['userName']
+    to_send_data_dict["instanceName"] = socket.gethostname().partition(".")[0]
+    to_send_data_dict["samplingInterval"] = str(int(agent_config_vars['samplingInterval'] * 60))
+    to_send_data_dict["agentType"] = "LogStreaming"
 
-    toSendDataJSON = json.dumps(toSendDataDict)
-    logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))))
+    to_send_data_json = json.dumps(to_send_data_dict)
+    # logger.debug("TotalData: " + str(len(bytearray(to_send_data_json))))
+    # logger.debug("Data: " + str(to_send_data_json))
 
     # send the data
-    postUrl = parameters['serverUrl'] + "/customprojectrawdata"
-    response = requests.post(postUrl, data=json.loads(toSendDataJSON))
+    post_url = parameters['serverUrl'] + "/customprojectrawdata"
+    response = requests.post(post_url, data=json.loads(to_send_data_json))
     if response.status_code == 200:
-        logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
+        logger.info(str(len(bytearray(to_send_data_json))) + " bytes of data are reported.")
     else:
         logger.info("Failed to send data.")
-    logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
+    logger.debug("--- Send data time: %s seconds ---" % (time.time() - send_data_time))
 
 
-def parseConsumerMessages(consumer):
-    lineCount = 0
-    chunkCount = 0
-    currentRow = []
+def parse_consumer_messages(consumer, filter_hosts):
+    line_count = 0
+    chunk_count = 0
+    current_row = []
     start_time = time.time()
     for message in consumer:
         try:
             json_message = json.loads(message.value)
+            # logger.info(json_message)
             host_name = json_message.get('beat', {}).get('hostname', {})
             message = json_message.get('message', {})
             timestamp = json_message.get('@timestamp', {})[:-5]
 
-            if lineCount == parameters['chunkLines']:
+            if len(filter_hosts) != 0 and host_name.upper() not in (filter_host.upper() for filter_host in
+                                                                    filter_hosts):
+                continue
+
+            if line_count == parameters['chunk_lines']:
                 logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-                sendData(currentRow)
-                currentRow = []
-                chunkCount += 1
-                lineCount = 0
+                send_data(current_row)
+                current_row = []
+                chunk_count += 1
+                line_count = 0
                 start_time = time.time()
 
             pattern = "%Y-%m-%dT%H:%M:%S"
-            if isTimeFormat(timestamp, pattern):
+            if is_time_format(timestamp, pattern):
                 try:
-                    epoch = getTimestampForZone(timestamp, "GMT", pattern)
+                    epoch = get_timestamp_for_zone(timestamp, "GMT", pattern)
                 except ValueError:
                     continue
 
-            currentLogMsg = {}
-            currentLogMsg['timestamp'] = epoch
-            currentLogMsg['tag'] = host_name
-            currentLogMsg['data'] = message
-            currentRow.append(currentLogMsg)
-            lineCount += 1
+            current_log_msg = dict()
+            current_log_msg['timestamp'] = epoch
+            current_log_msg['tag'] = host_name
+            current_log_msg['data'] = message
+            current_row.append(current_log_msg)
+            line_count += 1
         except:
             continue
 
-    if len(currentRow) != 0:
+    if len(current_row) != 0:
         logger.debug("--- Chunk creation time: %s seconds ---" % (time.time() - start_time))
-        sendData(currentRow)
-        chunkCount += 1
-    logger.debug("Total chunks created: " + str(chunkCount))
+        send_data(current_row)
+        chunk_count += 1
+    logger.debug("Total chunks created: " + str(chunk_count))
 
 
-def setloggerConfig():
+def set_logger_config():
     # Get the root logger
     logger = logging.getLogger(__name__)
     # Have to set the root logger level, it defaults to logging.WARNING
@@ -253,23 +311,81 @@ class LessThanFilter(logging.Filter):
         return 1 if record.levelno < self.max_level else 0
 
 
+def kafka_data_consumer(consumer_id):
+    logger.info("Started log consumer number " + consumer_id)
+    # Kafka consumer configuration
+    (brokers, topic, filter_hosts) = get_kafka_config()
+
+    # initialize shared kwargs 
+    kafka_kwargs = {
+            'bootstrap_servers': brokers,
+            'auto_offset_reset': 'latest',
+            'consumer_timeout_ms': 1000 * parameters['timeout'],
+            'group_id': agent_config_vars['groupId'],
+            'api_version': (0, 9)
+            }
+
+    # add client ID if given
+    if agent_config_vars["clientId"] != "":
+        kafka_kwargs['client_id'] = agent_config_vars["clientId"]
+    # add SSL info
+    if agent_config_vars['security_protocol'] == 'SSL': 
+        kafka_kwargs['security_protocol'] = 'SSL'
+        if agent_config_vars['ssl_context'] != "":
+            kafka_kwargs['ssl_context'] = agent_config_vars['ssl_context']
+        if agent_config_vars['ssl_check_hostname'] == "False":
+            kafka_kwargs['ssl_check_hostname'] = False
+        if agent_config_vars['ssl_ca'] != "":
+            kafka_kwargs['ssl_cafile'] = agent_config_vars['ssl_ca']
+        if agent_config_vars['ssl_certificate'] != "":
+            kafka_kwargs['ssl_certfile'] = agent_config_vars['ssl_certificate']
+        if agent_config_vars['ssl_key'] != "":
+            kafka_kwargs['ssl_keyfile'] = agent_config_vars['ssl_key']
+        if agent_config_vars['ssl_password'] != "":
+            kafka_kwargs['ssl_password'] = agent_config_vars['ssl_password'].strip()
+        if agent_config_vars['ssl_crl'] != "":
+            kafka_kwargs['ssl_crlfile'] = agent_config_vars['ssl_crl']
+        if agent_config_vars['ssl_ciphers'] != "":
+            kafka_kwargs['ssl_ciphers'] = agent_config_vars['ssl_ciphers']
+        
+    # add SASL info
+    if len(agent_config_vars['sasl_mechanism']) != 0:
+        kafka_kwargs['sasl_mechanism'] = agent_config_vars['sasl_mechanism']
+
+        if agent_config_vars['sasl_plain_username'] != "":
+            kafka_kwargs['sasl_plain_username'] = agent_config_vars['sasl_plain_username'] 
+            
+        if agent_config_vars['sasl_plain_password'] != "":
+            kafka_kwargs['sasl_plain_password'] = agent_config_vars['sasl_plain_password'] 
+
+        if agent_config_vars['sasl_kerberos_service_name'] != "": 
+            kafka_kwargs['sasl_kerberos_service_name'] = agent_config_vars['sasl_kerberos_service_name'] 
+
+        if agent_config_vars['sasl_kerberos_domain_name'] != "": 
+            kafka_kwargs['sasl_kerberos_domain_name'] = agent_config_vars['sasl_kerberos_domain_name'] 
+
+        if agent_config_vars['sasl_oauth_token_provider '] != "":
+            kafka_kwargs['sasl_oauth_token_provider '] = agent_config_vars['sasl_oauth_token_provider '] 
+            
+    logger.debug(kafka_kwargs)
+    consumer = KafkaConsumer(**kafka_kwargs)
+
+    consumer.subscribe([topic])
+    parse_consumer_messages(consumer, filter_hosts)
+    consumer.close()
+    logger.info("Closed log consumer number " + consumer_id)
+
+
 if __name__ == "__main__":
-    CHUNK_SIZE = 4000000
-    logger = setloggerConfig()
-    parameters = getParameters()
-    agentConfigVars = getAgentConfigVars()
-    reportingConfigVars = getReportingConfigVars()
+    logger = set_logger_config()
+    parameters = get_parameters()
+    agent_config_vars = get_agent_config_vars()
+    # reportingConfigVars = get_reporting_config_vars()
 
     try:
-        # Kafka consumer configuration
-        datadir = 'data/'
-        (brokers, topic) = getKafkaConfig()
-        consumer = KafkaConsumer(bootstrap_servers=brokers,
-                                 auto_offset_reset='earliest', consumer_timeout_ms=1000 * parameters['timeout'],
-                                 group_id="if_consumers")
-        consumer.subscribe([topic])
-        parseConsumerMessages(consumer)
-        consumer.close()
-
+        t1 = Process(target=kafka_data_consumer, args=('1',))
+        t2 = Process(target=kafka_data_consumer, args=('2',))
+        t1.start()
+        t2.start()
     except KeyboardInterrupt:
         print "Interrupt from keyboard"

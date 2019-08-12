@@ -1,0 +1,30 @@
+[kafka]
+bootstrap_servers = localhost:9092
+topic = 
+filter_hosts =
+client_id =
+group_id =
+sampling_interval = 1
+insightFinder_license_key =
+insightFinder_project_name =
+insightFinder_user_name =
+
+# SSL
+security_protocol = 
+ssl_context =
+ssl_check_hostname =
+ssl_ca =
+ssl_certificate =
+ssl_key = 
+ssl_password = 
+ssl_crl = 
+ssl_ciphers = 
+
+# SASL
+sasl_mechanism = 
+sasl_plain_username = 
+sasl_plain_password = 
+sasl_kerberos_service_name = 
+sasl_kerberos_domain_name = 
+sasl_oauth_token_provider =
+

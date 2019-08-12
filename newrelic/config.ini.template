@@ -1,0 +1,36 @@
+[newrelic]
+api_key = 
+# application-level metrics (app) or host-level (host)
+# if app-level metrics are selected, the app name will be used as the project name
+app_or_host = host
+# set to 'yes' to send data to a project based on the app name
+auto_create_project = no
+# set to 'yes' to containerize the hostname info (ie treat each host 
+# as a device within the app). only applies when app_or_host = host
+containerize = no
+# applications to include (default all)
+app_name_filter = 
+app_id_filter = 
+# hosts to include (default all)
+host_filter = 
+# metrics to include (default all)
+# this should be formatted as metric_name:value|value,metric_name:value|value
+app_metrics = Apdex:score,EndUser/Apdex:score,HttpDispatcher:average_call_time|call_count,WebFrontend/QueueTime:average_call_time|call_count,Errors/all:error_count
+host_metrics = CPU/User Time:percent,Memory/Heap/Used:used_mb_by_host,Memory/Physical:used_mb_by_host,Instance/connectsReqPerMin:requests_per_minute,Controller/reports/show:average_response_time|calls_per_minute|call_count|min_response_time|max_response_time|average_exclusive_time|average_value|total_call_time_per_minute|requests_per_minute|standard_deviation|throughput|average_call_time|min_call_time|max_call_time|total_call_time
+# how frequently (in min) to run this agent (must change value here and in /etc/cron.d/ifagent)
+run_interval = 
+agent_http_proxy = 
+agent_https_proxy = 
+
+[insightfinder]
+user_name = 
+license_key =
+project_name = 
+system_name = 
+token = 
+sampling_interval = 
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+url = https://app.insightfinder.com
+if_http_proxy = 
+if_https_proxy = 

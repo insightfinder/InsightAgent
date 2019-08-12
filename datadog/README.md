@@ -36,16 +36,7 @@ Untar using this command.
 tar -xvf insightagent.tar.gz
 ```
 
-2) In InsightAgent-master directory, make changes to the config file.
-```
-datadog/datadog.cfg
-```
-Update the APP_KEY and API_KEY. These keys can be obtained by clicking on Integartions >  API tab > Create keys on datadog website.
-
-Update the hostlists to include the host names which you want to monitor. You can find the hostnames on the datadog dashboard.
-(If you want to monitor multiple hosts write the name of the hosts separated by comma)
-
-3) run the following commands to install and use python virtual environment for insightfinder agent:
+2) run the following commands to install and use python virtual environment for insightfinder agent:
 ```
 ./deployment/checkpackages.sh -env
 ```
@@ -53,13 +44,20 @@ Update the hostlists to include the host names which you want to monitor. You ca
 source pyenv/bin/activate
 ```
 
-4) Install the datadog package in python if you are running it for the first time
+For offline installation of packages do:
 ```
-pip install datadog
+tar xvf InsightAgent-master/deployment/DeployAgent/files/pip_packages.tar.gz
+sudo pip install --no-index --find-links='pip_packages' datadog requests
 ```
 
 5) Run the below command to install agent.(The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required)
 ```
-./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -r REPORTING_INTERVAL_MINUTE -t AGENT_TYPE -w SERVER_URL
+./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -s SAMPLING_INTERVAL_MINUTE -t datadog -w SERVER_URL
 ```
 After using the agent, use command "deactivate" to get out of python virtual environment.
+
+6) In InsightAgent-master directory, make changes to the config file.
+```
+datadog/config.ini
+```
+Update the app_key and api_key. These keys can be obtained by clicking on Integrations >  API tab > Create keys on datadog website.

@@ -1,0 +1,19 @@
+[zipkin]
+url = http://localhost:9411
+# define services to include (default all)
+services_filter = 
+# define span names to include (default all)
+span_filter = 
+zipkin_http_proxy = 
+zipkin_https_proxy = 
+
+[insightfinder]
+user_name = 
+license_key =
+project_name = 
+sampling_interval = 
+# log projects treat this as chunk_lines * 100
+chunk_lines = 50
+url = https://app.insightfinder.com
+if_http_proxy = 
+if_https_proxy = 
