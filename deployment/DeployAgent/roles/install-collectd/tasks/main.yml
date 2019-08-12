@@ -153,6 +153,11 @@
    name: collectd
    state: restarted
   become: true
+- name: Enable collectd on startup
+  service:
+   name: collectd
+   enabled: yes
+  become: true
 - name: Create Python Virtual Environment for Agent
   command: ./deployment/checkpackages.sh -env
   args:
