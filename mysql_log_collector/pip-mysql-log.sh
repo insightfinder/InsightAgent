@@ -1,7 +1,7 @@
 #!/bin/bash
 # hard-coded definition
 PIP_VERSION="pip-19.2.2.tar.gz"
-PIP_PACKAGES="mysql-connector"
+PIP_PACKAGES="mysql-connector requests pytz configparser"
 if [[ -z "${PIP_PACKAGES}" ]]; then
     # try to read from stdin
     PIP_PACKAGES=$@
