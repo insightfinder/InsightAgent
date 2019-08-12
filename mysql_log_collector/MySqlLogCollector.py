@@ -41,7 +41,7 @@ def get_config_map():
             mysql_config_map[Constant.TABLE_CONFIG] = parser.get(Constant.MYSQL_TAG, Constant.TABLE_CONFIG)
             mysql_config_map[Constant.INSTANCE_NAME_FIELD_CONFIG] = parser.get(Constant.MYSQL_TAG, Constant.INSTANCE_NAME_FIELD_CONFIG)
             mysql_config_map[Constant.TIMESTAMP_FIELD_CONFIG] = parser.get(Constant.MYSQL_TAG, Constant.TIMESTAMP_FIELD_CONFIG)
-            mysql_config_map[Constant.TIMESTAMP_FORMAT_CONFIG] = parser.get(Constant.MYSQL_TAG, Constant.TIMESTAMP_FORMAT_CONFIG)
+            mysql_config_map[Constant.TIMESTAMP_FORMAT_CONFIG] = parser.get(Constant.MYSQL_TAG, Constant.TIMESTAMP_FORMAT_CONFIG, raw=True)
             check_config_parameters(mysql_config_map)
             # InsightFinder config
             if_config_map[Constant.LICENSE_KEY_CONFIG] = parser.get(Constant.IF_TAG, Constant.LICENSE_KEY_CONFIG)
