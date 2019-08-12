@@ -41,7 +41,7 @@ def get_config_map():
             mysql_config_map[Constant.TABLE_CONFIG] = parser.get(Constant.MYSQL_TAG, Constant.TABLE_CONFIG)
             mysql_config_map[Constant.INSTANCE_NAME_FIELD_CONFIG] = parser.get(Constant.MYSQL_TAG, Constant.INSTANCE_NAME_FIELD_CONFIG)
             mysql_config_map[Constant.TIMESTAMP_FIELD_CONFIG] = parser.get(Constant.MYSQL_TAG, Constant.TIMESTAMP_FIELD_CONFIG)
-            mysql_config_map[Constant.TIMESTAMP_FORMAT_CONFIG] = parser.get(Constant.MYSQL_TAG, Constant.TIMESTAMP_FORMAT_CONFIG)
+            mysql_config_map[Constant.TIMESTAMP_FORMAT_CONFIG] = parser.get(Constant.MYSQL_TAG, Constant.TIMESTAMP_FORMAT_CONFIG, raw=True)
             check_config_parameters(mysql_config_map)
             # InsightFinder config
             if_config_map[Constant.LICENSE_KEY_CONFIG] = parser.get(Constant.IF_TAG, Constant.LICENSE_KEY_CONFIG)
@@ -182,28 +182,37 @@ def get_log_events(cursor, table, instance_column, timestamp_column, timestamp_f
 '''
 Send the collected log to the IF system
 '''
+def send_chunk_data(config, events_to_send):
+    # generate the json object send to the IF system
+    to_send_data_dict = dict()
+    to_send_data_dict[Constant.METRIC_DATA] = json.dumps(events_to_send)
+    to_send_data_dict[Constant.LICENSE_KEY] = config[Constant.LICENSE_KEY_CONFIG]
+    to_send_data_dict[Constant.PROJECT_NAME] = config[Constant.PROJECT_NAME_CONFIG]
+    to_send_data_dict[Constant.USER_NAME] = config[Constant.USER_NAME_CONFIG]
+    to_send_data_dict[Constant.AGENT_TYPE] = Constant.AGENT_TYPE_LOG_STREAMING
+    to_send_data_json = json.dumps(to_send_data_dict)
+
+    # send the data
+    post_url = config[Constant.SERVER_URL_CONFIG] + Constant.CUSTOM_PROJECT_RAW_DATA_URL
+    response = requests.post(post_url, data=json.loads(to_send_data_json))
+    if response.status_code == Constant.SUCCESS_CODE:
+        print("Send data successfully, size: " + str(len(str(to_send_data_dict))))
+    else:
+        print("Got status code: " + str(response.status_code))
+
+
+'''
+Chunk the data
+'''
 def send_data(events, config):
     events_to_send = []
     for event in events:
         events_to_send.append(event)
         if len(events_to_send) >= Constant.CHUNK_SIZE:
-            # generate the json object send to the IF system
-            to_send_data_dict = dict()
-            to_send_data_dict[Constant.METRIC_DATA] = json.dumps(events_to_send)
-            to_send_data_dict[Constant.LICENSE_KEY] = config[Constant.LICENSE_KEY_CONFIG]
-            to_send_data_dict[Constant.PROJECT_NAME] = config[Constant.PROJECT_NAME_CONFIG]
-            to_send_data_dict[Constant.USER_NAME] = config[Constant.USER_NAME_CONFIG]
-            to_send_data_dict[Constant.AGENT_TYPE] = Constant.AGENT_TYPE_LOG_STREAMING
-            to_send_data_json = json.dumps(to_send_data_dict)
-
-            # send the data
-            post_url = config[Constant.SERVER_URL_CONFIG] + Constant.CUSTOM_PROJECT_RAW_DATA_URL
-            response = requests.post(post_url, data=json.loads(to_send_data_json))
+            send_chunk_data(config, events_to_send)
             events_to_send = []
-            if response.status_code == Constant.SUCCESS_CODE:
-                print("Send data successfully, size: " + str(len(str(to_send_data_dict))))
-            else:
-                print("Got status code: " + str(response.status_code))
+    if len(events_to_send) != 0:
+        send_chunk_data(config, events_to_send)
 
 
 if __name__ == "__main__":
@@ -226,3 +235,4 @@ if __name__ == "__main__":
         close_database_connection(connection)
     except Exception as e:
         traceback.print_exc()
+
