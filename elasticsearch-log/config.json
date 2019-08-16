@@ -1,12 +1,14 @@
-{
+ {
   "elasticsearchHost": "localhost",
   "elasticsearchPort": 9200,
-  "elasticsearchIndex": "index_containing_logs",
-  "timeFieldName": "timestamp",
+  "elasticsearchIndex": "syslog",
+  "timeFieldName": "@timestamp",
   "isTimestamp": true,
   "hostNameField": "host",
   "dateFormatInJodaTime": "yyyy-MM-dd'T'HH:mm:ss",
   "dateFormatInStrptime": "%Y-%m-%dT%H:%M:%S",
   "dataTimeZone": "Asia/Shanghai",
-  "localTimeZone": "US/Eastern"
+  "localTimeZone": "US/Eastern",
+  "homepath": "",
+  "prev_endtime":"190813202346"
 }
