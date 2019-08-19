@@ -133,27 +133,26 @@ def set_logger_config(level):
 
 def get_elastic_config():
     reportingConfigVars = {}
-    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.json"))):
-        with open(os.path.join(parameters['homepath'], "config.json"), 'r') as f:
-            config = json.load(f)
-    try:
-        reportingConfigVars['elasticsearchIndex'] = str(config['elasticsearchIndex'])
-        reportingConfigVars['elasticsearchHost'] = str(config['elasticsearchHost'])
-        reportingConfigVars['elasticsearchPort'] = int(config['elasticsearchPort'])
-        reportingConfigVars['timeFieldName'] = str(config['timeFieldName'])
-        reportingConfigVars['isTimestamp'] = bool(config['isTimestamp'])
-        reportingConfigVars['hostNameField'] = str(config['hostNameField'])
-        reportingConfigVars['prev_endtime'] = str(config['prev_endtime'])
-    except ConfigParser.NoOptionError:
-        logger.error(
-            "Required configuration parameters are missing. Check config.Json.")
-        sys.exit(1)
+    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
+        config_parser = ConfigParser.SafeConfigParser()
+        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
+        try:
+            reportingConfigVars['elasticsearchIndex'] = str(config_parser.get('elastic_search', 'elasticsearchIndex'))
+            reportingConfigVars['elasticsearchHost'] = str(config_parser.get('elastic_search', 'elasticsearchHost'))
+            reportingConfigVars['elasticsearchPort'] = int(config_parser.get('elastic_search', 'elasticsearchPort'))
+            reportingConfigVars['timeFieldName'] = str(config_parser.get('elastic_search', 'timeFieldName'))
+            reportingConfigVars['isTimestamp'] = bool(config_parser.get('elastic_search', 'isTimestamp'))
+            reportingConfigVars['hostNameField'] = str(config_parser.get('elastic_search', 'hostNameField'))
+            reportingConfigVars['prev_endtime'] = str(config_parser.get('elastic_search', 'prev_endtime'))
+        except ConfigParser.NoOptionError:
+            logger.error("Required configuration parameters are missing.Check config.ini")
+            sys.exit(1)
     if not reportingConfigVars['isTimestamp']:
-        reportingConfigVars['dateFormatES'] = str(config['dateFormatInJodaTime'])
-        reportingConfigVars['dateFormatPython'] = str(config['dateFormatInStrptime'])
-        if 'dataTimeZone' in config and 'localTimeZone' in config:
-            reportingConfigVars['dataTimeZone'] = str(config['dataTimeZone'])
-            reportingConfigVars['localTimeZone'] = str(config['localTimeZone'])
+        reportingConfigVars['dateFormatES'] = str(config_parser.get('elastic_search', 'dateFormatInJodaTime'))
+        reportingConfigVars['dateFormatPython'] = str(config_parser.get('elastic_search', 'dateFormatInStrptime'))
+        if config_parser.get('elastic_search', 'dataTimeZone') and config_parser.get('elastic_search', 'localTimeZone'):
+            reportingConfigVars['dataTimeZone'] = str(config_parser.get('elastic_search', 'dataTimeZone'))
+            reportingConfigVars['localTimeZone'] = str(config_parser.get('elastic_search', 'localTimeZone'))
     return reportingConfigVars
 
 
@@ -192,17 +191,12 @@ def getDateForZone(timestamp, datatimeZone, localTimezone, format):
     return dateString
 
 
-# def update_timestamp(prev_endtime,elasticsearchConfigVars):
-#    with open(os.path.join(elasticsearchConfigVars['homepath'], "config.json"), 'r') as f:
-#        config = json.load(f)
-#    config['prev_endtime'] = prev_endtime
-#    with open(os.path.join(elasticsearchConfigVars['homepath'], "config.json"), "w") as f:
-#        json.dump(config, f)
-
 def getLogsFromElastic(elasticsearch, elasticsearchConfigVars):
     if elasticsearchConfigVars['isTimestamp']:
         start_time = getDataStartTime(elasticsearchConfigVars)
         end_time = current_milli_time()
+        print(start_time)
+        print(end_time)
         query_body = {"query":
                           {"range":
                                {elasticsearchConfigVars['timeFieldName']:
@@ -251,42 +245,30 @@ def getLogsFromElastic(elasticsearch, elasticsearchConfigVars):
     #
 
     #    res2["hits"]["hits"][n]["_source"]["groupdata"][k]["data"]
+    if len(res2["hits"]["hits"]) > 0:
+        for n in range(0, len(res2["hits"]["hits"])):
+            logentry = {}
+            # print(res2["hits"]["hits"][n]["_source"].keys())
+            logentry["data"] = res2["hits"]["hits"][n]["_source"]["message"]
+            logentry["tag"] = res2["hits"]["hits"][n]["_source"]['host']
+            logentry["timestamp"] = time_converter(res2["hits"]["hits"][n]["_source"]["@timestamp"])
+            jsonData.append(logentry)
 
-    for n in range(0, len(res2["hits"]["hits"])):
-        logentry = {}
-        #	logentry["timestamp"] = res2["hits"]["hits"][n]['sort'][0]
-        #	logentry["tag"] ="ip-172-31-22-90"
-        #	for entry in range(0,len(res2['hits']['hits'][n]["_source"]["groupdata"][
-        logentry["data"] = res2["hits"]["hits"][n]["_source"]["groupdata"]
-        logentry["timestamp"] = res2["hits"]["hits"][n]['sort'][0]
-        logentry["tag"] = "ip-172-31-22-90"
-        jsonData.append(logentry)
-
-    #    minTimeStamp = sys.maxsize+1
-    #    maxTimeStamp = 0
-    #    print(res2)
-    #    if len(res2['hits']['hits']) != 0: # if there are updated values after the last read record
-    #        currentLog = {}
-    #        latest_time = res2['hits']['hits'][0]['sort'][0]  # update the last read record timestamp
-    #        currentLog['eventId'] = latest_time
-    #        minTimeStamp = min(minTimeStamp, long(latest_time))
-    #        maxTimeStamp = max(maxTimeStamp, long(latest_time))
-    #        currentLog['data'] = json.dumps(res2['hits']['hits'][0]["_source"])
-
-    #        try:
-    #            currentLog['tag'] = res2['hits']['hits'][0]["_source"]['groupdata']
-    #
-    #        except:
-    #            logger.error("Unable to get data from elasticsearch. Check config file.")
-    #    print(res2)
-    #   for keys in res2.keys():
-    #	print(keys)
-    #    jsonData=res2["hits"]["hits"][0]["_source"]["groupdata"]
-    #    if len(jsonData) != 0:
-    #        newPrevEndtimeInSec = math.ceil(long(end_time) / 1000.0)
-    #        newPrevEndtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(newPrevEndtimeInSec)))
-    # update_timestamp(newPrevEndtime)
+    if len(jsonData) != 0:
+        newPrevEndtimeInSec = math.ceil(long(end_time) / 1000.0)
+        newPrevEndtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(newPrevEndtimeInSec)))
+        print(newPrevEndtime)
+        update_timestamp(newPrevEndtime)
     return jsonData
+
+
+def update_timestamp(prev_endtime):
+    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
+        config_parser = ConfigParser.SafeConfigParser()
+        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
+        config_parser.set('elastic_search', 'prev_endtime', prev_endtime)
+        with open(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")), "w") as configfile:
+            config_parser.write(configfile)
 
 
 def sendData(metricData):
@@ -309,9 +291,9 @@ def sendData(metricData):
     # send the data
 
     postUrl = "http://stg.insightfinder.com" + "/customprojectrawdata"
-    print(postUrl)
-    response = requests.post(postUrl, data=json.loads(toSendDataJSON))
     print(toSendDataJSON)
+    response = requests.post(postUrl, data=json.loads(toSendDataJSON))
+    # print(toSendDataJSON)
     if response.status_code == 200:
 
         logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
