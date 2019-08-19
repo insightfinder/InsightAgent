@@ -1,5 +1,5 @@
 # !/usr/bin/python
-import datetime
+from datetime import datetime
 import json
 import logging
 import math
@@ -47,6 +47,12 @@ def get_parameters():
     return params
 
 
+def time_converter(time_string):
+    utc_time = datetime.strptime(time_string, "%Y-%m-%dT%H:%M:%S.%fZ")
+    epoch_time = (utc_time - datetime(1970, 1, 1)).total_seconds()
+    return int(epoch_time) * 1000
+
+
 def get_agent_config_vars():
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
         config_parser = ConfigParser.SafeConfigParser()
@@ -67,7 +73,7 @@ def get_agent_config_vars():
             sys.exit(1)
 
         if server_url is '':
-            server_url = 'https://stg.insightfinder.com'
+            server_url = 'http://stg.insightfinder.com'
 
         if len(user_name) == 0:
             logger.warning(
