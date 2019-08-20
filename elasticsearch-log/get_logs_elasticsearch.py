@@ -1,4 +1,4 @@
-# !/usr/bin/python
+#!/usr/bin/python
 from datetime import datetime
 import json
 import logging
@@ -19,10 +19,8 @@ import ConfigParser
 def get_parameters():
     usage = "Usage: %prog [options]"
     parser = OptionParser(usage=usage)
-    parser.add_option("-w", "--serverUrl",
-                      action="store", dest="serverUrl", help="Server Url")
-    parser.add_option("-l", "--logLevel",
-                      action="store", dest="logLevel", help="Change log verbosity(WARNING: 0, INFO: 1, DEBUG: 2)")
+    parser.add_option("-v", "--verbose",
+                      action="store", dest="verbose", help="Enable verbose logging")
     parser.add_option("-d", "--directory",
                       action="store", dest="homepath", help="Directory to run from")
     (options, args) = parser.parse_args()
@@ -31,18 +29,9 @@ def get_parameters():
 
     if options.homepath is None:
         params['homepath'] = os.getcwd()
-    if options.serverUrl is None:
-        params['serverUrl'] = 'http://stg.insightfinder.com'
-    else:
-        params['serverUrl'] = options.serverUrl
-
     params['logLevel'] = logging.INFO
-    if options.logLevel == '0':
-        params['logLevel'] = logging.WARNING
-    elif options.logLevel == '1':
-        params['logLevel'] = logging.INFO
-    elif options.logLevel >= '2':
-        params['logLevel'] = logging.DEBUG
+    if options.verbose:
+        params['log_level'] = logging.DEBUG
 
     return params
 
@@ -62,10 +51,10 @@ def get_agent_config_vars():
             license_key = config_parser.get('insightfinder', 'license_key')
             project_name = config_parser.get('insightfinder', 'project_name')
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
-            server_url = config_parser.get('reporting_parameters', 'serverUrl')
+            server_url = config_parser.get('insightfinder', 'serverUrl')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
-            reporting_interval = config_parser.get('reporting_parameters', 'reporting_interval')
+            reporting_interval = config_parser.get('insightfinder', 'reporting_interval')
 
         except ConfigParser.NoOptionError:
             logger.error(
@@ -143,13 +132,12 @@ def get_elastic_config():
             reportingConfigVars['timeFieldName'] = str(config_parser.get('elastic_search', 'timeFieldName'))
             reportingConfigVars['isTimestamp'] = bool(config_parser.get('elastic_search', 'isTimestamp'))
             reportingConfigVars['hostNameField'] = str(config_parser.get('elastic_search', 'hostNameField'))
-            reportingConfigVars['prev_endtime'] = str(config_parser.get('elastic_search', 'prev_endtime'))
         except ConfigParser.NoOptionError:
             logger.error("Required configuration parameters are missing.Check config.ini")
             sys.exit(1)
     if not reportingConfigVars['isTimestamp']:
-        reportingConfigVars['dateFormatES'] = str(config_parser.get('elastic_search', 'dateFormatInJodaTime'))
-        reportingConfigVars['dateFormatPython'] = str(config_parser.get('elastic_search', 'dateFormatInStrptime'))
+        reportingConfigVars['dateFormatES'] = str(config_parser.get('elastic_search', 'dateFormatInJodaTime', raw=True))
+        reportingConfigVars['dateFormatPython'] = str(config_parser.get('elastic_search', 'dateFormatInStrptime', raw=True))
         if config_parser.get('elastic_search', 'dataTimeZone') and config_parser.get('elastic_search', 'localTimeZone'):
             reportingConfigVars['dataTimeZone'] = str(config_parser.get('elastic_search', 'dataTimeZone'))
             reportingConfigVars['localTimeZone'] = str(config_parser.get('elastic_search', 'localTimeZone'))
@@ -166,15 +154,10 @@ def getElasticSearchConnection(elasticsearchConfigVars):
     return es
 
 
-def getDataStartTime(elasticsearchConfigVars):
-    if elasticsearchConfigVars['prev_endtime'] != "0":
-        startTime = elasticsearchConfigVars['prev_endtime']
-        # pad a second after prev_endtime
-        startTimeEpoch = 1000 + long(1000 * time.mktime(time.strptime(startTime, "%Y%m%d%H%M%S")));
-        end_time_epoch = startTimeEpoch + 1000 * 60 * int(agent_config_vars['reporting_interval'])
-    else:  # prev_endtime == 0
-        end_time_epoch = int(time.time()) * 1000
-        startTimeEpoch = end_time_epoch - 1000 * 60 * int(agent_config_vars['reporting_interval'])
+def getDataStartTime():
+
+    end_time_epoch = int(time.time()) * 1000
+    startTimeEpoch = end_time_epoch - 1000 * 60 * int(agent_config_vars['reporting_interval'])
     return startTimeEpoch
 
 
@@ -191,9 +174,10 @@ def getDateForZone(timestamp, datatimeZone, localTimezone, format):
     return dateString
 
 
-def getLogsFromElastic(elasticsearch, elasticsearchConfigVars):
+def getLogsFromElastic(elasticsearch,index, elasticsearchConfigVars):
+
     if elasticsearchConfigVars['isTimestamp']:
-        start_time = getDataStartTime(elasticsearchConfigVars)
+        start_time = getDataStartTime()
         end_time = current_milli_time()
         print(start_time)
         print(end_time)
@@ -237,7 +221,8 @@ def getLogsFromElastic(elasticsearch, elasticsearchConfigVars):
                       "size": 1440  # max number or records per min per day
                       }
     try:
-        res2 = elasticsearch.search(index=elasticsearchConfigVars['elasticsearchIndex'], body=query_body)
+
+        res2 = elasticsearch.search(index=index, body=query_body)
     except:
         logger.error("Unable to get data from elasticsearch. Check config file.")
         exit()
@@ -254,21 +239,7 @@ def getLogsFromElastic(elasticsearch, elasticsearchConfigVars):
             logentry["timestamp"] = time_converter(res2["hits"]["hits"][n]["_source"]["@timestamp"])
             jsonData.append(logentry)
 
-    if len(jsonData) != 0:
-        newPrevEndtimeInSec = math.ceil(long(end_time) / 1000.0)
-        newPrevEndtime = time.strftime("%Y%m%d%H%M%S", time.localtime(long(newPrevEndtimeInSec)))
-        print(newPrevEndtime)
-        update_timestamp(newPrevEndtime)
     return jsonData
-
-
-def update_timestamp(prev_endtime):
-    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini"))):
-        config_parser = ConfigParser.SafeConfigParser()
-        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")))
-        config_parser.set('elastic_search', 'prev_endtime', prev_endtime)
-        with open(os.path.abspath(os.path.join(__file__, os.pardir, "config.ini")), "w") as configfile:
-            config_parser.write(configfile)
 
 
 def sendData(metricData):
@@ -279,12 +250,8 @@ def sendData(metricData):
     toSendDataDict["userName"] = agent_config_vars['userName']
     toSendDataDict["projectName"] = agent_config_vars['projectName']
     toSendDataDict["licenseKey"] = agent_config_vars['licenseKey']
-    # toSendDataDict["instanceName"] = socket.gethostname().partition(".")[0]
-    # toSendDataDict["samplingInterval"] = str(int(agent_config_vars['reporting_interval'] * 60))
     toSendDataDict['agentType'] = 'LogStreaming'
     toSendDataDict["metricData"] = json.dumps(metricData)
-    #    toSendDataDict['minTimestamp'] = str(minTimestamp)
-    #    toSendDataDict['maxTimestamp'] = str(maxTimestamp)
     toSendDataJSON = json.dumps(toSendDataDict)
     logger.debug("TotalData: " + str(len(bytearray(toSendDataJSON))))
 
@@ -315,9 +282,13 @@ if __name__ == "__main__":
     parameters = get_parameters()
 
     elasticsearch = getElasticSearchConnection(elasticsearchConfigVars)
-    logData = getLogsFromElastic(elasticsearch, elasticsearchConfigVars)
+    index_all = elasticsearchConfigVars['elasticsearchIndex']
+    indexnames = index_all.split(',')
 
-    if len(logData) == 0:
-        logger.info("No data to send.")
-    else:
-        sendData(logData)
+    for index in indexnames:
+        logData = getLogsFromElastic(elasticsearch,index, elasticsearchConfigVars)
+
+        if len(logData) == 0:
+            logger.info("No data to send.")
+        else:
+            sendData(logData)
