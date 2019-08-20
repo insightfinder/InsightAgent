@@ -25,14 +25,13 @@ CRON_FILE="/etc/cron.d/${AGENT}.cron"
 touch ${CRON_FILE}
 CRON_COMMAND="/usr/bin/python ${AGENT_FULL_PATH} &>${AGENT_FULL_PATH_LOG}"
 RUN_INTERVAL_UNIT="${RUN_INTERVAL: -1}"
-echo "${RUN_INTERVAL_UNIT}"
 RUN_INTERVAL_VAL="${RUN_INTERVAL:0:${#RUN_INTERVAL}-1}"
-echo "${RUN_INTERVAL_VAL}"
 
 # handle secs
-if [[ "${RUN_INTERVAL_UNIT}" = "s" ]] && [[ "${RUN_INTERVAL_VAL}" -gt 0 ]]; then
-    SLEEP=0
-    while [[ ${SLEEP} -lt 59 ]]; do
+if [[ "${RUN_INTERVAL_UNIT}" = "s" ]] && [[ "${RUN_INTERVAL_VAL}" -gt 0 ]] && [[ $((60 % ${RUN_INTERVAL_VAL})) -eq 0 ]]; then
+    echo "* * * * * ${CRON_COMMAND}" > ${CRON_FILE}
+    SLEEP=${RUN_INTERVAL_VAL}
+    while [[ ${SLEEP} -lt 60 ]]; do
         echo "* * * * * sleep ${SLEEP}; ${CRON_COMMAND}" >> ${CRON_FILE}
         let SLEEP=${SLEEP}+${RUN_INTERVAL_VAL}
     done
@@ -48,6 +47,8 @@ elif [[ "${RUN_INTERVAL_UNIT}" = "m" ]]  && [[ "${RUN_INTERVAL_VAL}" -gt 0 ]]; t
 elif [[ "${RUN_INTERVAL}" -gt 0 ]]; then
     echo "*/${RUN_INTERVAL} * * * * ${CRON_COMMAND}" > ${CRON_FILE}
 else
-    echo "Invalid run interval specified. Please specify how often the cron should run \
-        in seconds (\"6s\"), minutes (default, \"6m\" or \"6\"), hours (\"6h\"), or days (\"6d\")"
+    echo "Invalid run interval specified. Please specify how often the cron should run in seconds (\"6s\" - must be an integer divisor of 60), minutes (default, \"6m\" or \"6\"), hours (\"6h\"), or days (\"6d\")"
+    exit 1
 fi
+
+echo "Cron config created at ${CRON_FILE}"
