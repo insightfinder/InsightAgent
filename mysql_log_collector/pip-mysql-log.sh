@@ -39,6 +39,7 @@ if [[ -n "${PIP_PACKAGES}" ]]; then
         fi
         if [[ ! -d "pip_packages" ]]; then
             echo "Could not find pip_packages folder or tar. Exiting..."
+            exit 1
         fi
         if [[ ! $(pip install --no-index --find-links='pip_packages' ${PIP_PACKAGES}) ]]; then
             echo "Could not install all required pip_packages. Exiting..."
