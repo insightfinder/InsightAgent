@@ -126,7 +126,7 @@ def get_raw_data(row, column_name_map, columns_to_filter):
     raw_data = {}
     for key in column_name_map.keys():
         if key not in columns_to_filter:
-            raw_data[key] = row[column_name_map[key]]
+            raw_data[key] = str(row[column_name_map[key]])
     return raw_data
 
 
