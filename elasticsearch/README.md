@@ -3,7 +3,7 @@ Agent Type: Getting metrics about ElasticSearch server
 
 Platform: Linux
 
-InsightFinder agent can be used to collect metrics from elasticsearch.
+InsightFinder agent can be used to collect logs from elasticsearch.
 
 Tested on Elasticsearch-2.3.3 in Centos 7.
 
