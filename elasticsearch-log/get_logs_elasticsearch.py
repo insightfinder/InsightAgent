@@ -203,7 +203,7 @@ def getLogsFromElastic(elasticsearch,index, elasticsearchConfigVars):
         else:
             start_date = datetime.datetime.fromtimestamp(start_time / 1000).strftime(
                 elasticsearchConfigVars['dateFormatPython'])
-            end_date = datetime.datetime.fromtimestamp(int(start_time / 1000)).strftime(
+            end_date = datetime.datetime.fromtimestamp(int(end_time / 1000)).strftime(
                 elasticsearchConfigVars['dateFormatPython'])
         query_body = {"query":
                           {"range":
