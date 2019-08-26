@@ -8,7 +8,7 @@ import socket
 import sys
 import time
 from optparse import OptionParser
-
+import urlparse
 import pytz
 import requests
 import elasticsearch
@@ -19,6 +19,8 @@ import ConfigParser
 def get_parameters():
     usage = "Usage: %prog [options]"
     parser = OptionParser(usage=usage)
+    parser.add_option("-w", "--serverUrl",
+                      action="store", dest="serverUrl", help="Server Url")
     parser.add_option("-v", "--verbose",
                       action="store", dest="verbose", help="Enable verbose logging")
     parser.add_option("-d", "--directory",
@@ -26,6 +28,11 @@ def get_parameters():
     (options, args) = parser.parse_args()
 
     params = dict()
+
+    if options.serverUrl is None:
+        params['serverUrl'] = 'https://app.insightfinder.com'
+    else:
+        params['serverUrl'] = options.serverUrl
 
     if options.homepath is None:
         params['homepath'] = os.getcwd()
@@ -50,19 +57,14 @@ def get_agent_config_vars():
             user_name = config_parser.get('insightfinder', 'user_name')
             license_key = config_parser.get('insightfinder', 'license_key')
             project_name = config_parser.get('insightfinder', 'project_name')
-            sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
-            server_url = config_parser.get('insightfinder', 'serverUrl')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
-            reporting_interval = config_parser.get('insightfinder', 'reporting_interval')
+            sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
 
         except ConfigParser.NoOptionError:
             logger.error(
                 "Agent not correctly configured. Check config file.")
             sys.exit(1)
-
-        if server_url is '':
-            server_url = 'http://stg.insightfinder.com'
 
         if len(user_name) == 0:
             logger.warning(
@@ -76,7 +78,7 @@ def get_agent_config_vars():
             logger.warning(
                 "Agent not correctly configured(project_name). Check config file.")
             sys.exit(1)
-        if len(reporting_interval) == 0:
+        if len(sampling_interval) == 0:
             logger.warning(
                 "Agent not correctly configured(sampling_interval). Check config file.")
             sys.exit(1)
@@ -87,9 +89,7 @@ def get_agent_config_vars():
             "projectName": project_name,
             "httpProxy": if_http_proxy,
             "httpsProxy": if_https_proxy,
-            "serverUrl": server_url,
-            "reporting_interval": reporting_interval,
-            "sampling_interval": sampling_interval
+            "sampling_interval": sampling_interval,
         }
 
         return config_vars
@@ -157,7 +157,7 @@ def getElasticSearchConnection(elasticsearchConfigVars):
 def getDataStartTime():
 
     end_time_epoch = int(time.time()) * 1000
-    startTimeEpoch = end_time_epoch - 1000 * 60 * int(agent_config_vars['reporting_interval'])
+    startTimeEpoch = end_time_epoch - 1000 * 60 * int(agent_config_vars['sampling_interval'])
     return startTimeEpoch
 
 
@@ -179,8 +179,6 @@ def getLogsFromElastic(elasticsearch,index, elasticsearchConfigVars):
     if elasticsearchConfigVars['isTimestamp']:
         start_time = getDataStartTime()
         end_time = current_milli_time()
-        print(start_time)
-        print(end_time)
         query_body = {"query":
                           {"range":
                                {elasticsearchConfigVars['timeFieldName']:
@@ -257,16 +255,18 @@ def sendData(metricData):
 
     # send the data
 
-    postUrl = "http://stg.insightfinder.com" + "/customprojectrawdata"
-    print(toSendDataJSON)
+    postUrl = urlparse.urljoin(parameters['serverUrl'], "/customprojectrawdata")
     response = requests.post(postUrl, data=json.loads(toSendDataJSON))
-    # print(toSendDataJSON)
+
     if response.status_code == 200:
 
         logger.info(str(len(bytearray(toSendDataJSON))) + " bytes of data are reported.")
     else:
         logger.info("Failed to send data.")
+    logger.info(str(toSendDataJSON))
     logger.debug("--- Send data time: %s seconds ---" % (time.time() - sendDataTime))
+
+
 
 
 if __name__ == "__main__":
@@ -278,7 +278,6 @@ if __name__ == "__main__":
 
     elasticsearchConfigVars = get_elastic_config()
 
-    # sampling_interval_secs= int(agent_config_vars['samplingInterval'])*60
     parameters = get_parameters()
 
     elasticsearch = getElasticSearchConnection(elasticsearchConfigVars)
