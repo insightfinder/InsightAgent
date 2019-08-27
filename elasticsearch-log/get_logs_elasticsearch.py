@@ -22,7 +22,7 @@ def get_parameters():
     parser.add_option("-w", "--serverUrl",
                       action="store", dest="serverUrl", help="Server Url")
     parser.add_option("-v", "--verbose",
-                      action="store", dest="verbose", help="Enable verbose logging")
+                      action="store_true", dest="verbose", help="Enable verbose logging")
     parser.add_option("-d", "--directory",
                       action="store", dest="homepath", help="Directory to run from")
     (options, args) = parser.parse_args()
