@@ -44,7 +44,7 @@ elif [[ "${RUN_INTERVAL_UNIT}" = "h" ]] && [[ "${RUN_INTERVAL_VAL}" -gt 0 ]] && 
 # handle minutes
 elif [[ "${RUN_INTERVAL_UNIT}" = "m" ]]  && [[ "${RUN_INTERVAL_VAL}" -gt 0 ]] && [[ $((${RUN_INTERVAL_VAL} % 1)) -eq 0 ]]; then
     echo "*/${RUN_INTERVAL_VAL} * * * * ${CRON_COMMAND}" > ${CRON_FILE}
-elif [[ "${RUN_INTERVAL}" -gt 0 ]]; then
+elif [[ "${RUN_INTERVAL}" -gt 0 ]] && [[ $((${RUN_INTERVAL_VAL} % 1)) -eq 0 ]]; then
     echo "*/${RUN_INTERVAL} * * * * ${CRON_COMMAND}" > ${CRON_FILE}
 else
     echo "Invalid run interval specified. Please specify how often the cron should run in seconds (\"6s\" - must be an integer divisor of 60), minutes (default, \"6m\" or \"6\"), hours (\"6h\"), or days (\"6d\")"
