@@ -38,6 +38,7 @@ def get_config_map():
             mssql_config_map[Constant.USER_CONFIG] = parser.get(Constant.MSSQL_TAG, Constant.USER_CONFIG)
             mssql_config_map[Constant.PASSWORD_CONFIG] = parser.get(Constant.MSSQL_TAG, Constant.PASSWORD_CONFIG)
             mssql_config_map[Constant.TABLE_CONFIG] = parser.get(Constant.MSSQL_TAG, Constant.TABLE_CONFIG)
+            mssql_config_map[Constant.DRIVER_CONFIG] = parser.get(Constant.MSSQL_TAG, Constant.DRIVER_CONFIG)
             mssql_config_map[Constant.INSTANCE_NAME_FIELD_CONFIG] = parser.get(Constant.MSSQL_TAG, Constant.INSTANCE_NAME_FIELD_CONFIG)
             mssql_config_map[Constant.TIMESTAMP_FIELD_CONFIG] = parser.get(Constant.MSSQL_TAG, Constant.TIMESTAMP_FIELD_CONFIG)
             mssql_config_map[Constant.TIMESTAMP_FORMAT_CONFIG] = parser.get(Constant.MSSQL_TAG, Constant.TIMESTAMP_FORMAT_CONFIG, raw=True)
@@ -58,9 +59,9 @@ def get_config_map():
 '''
 Connect to the database by the given credentials
 '''
-def connect_to_database(host, database, user, password):
+def connect_to_database(driver,host, database, user, password):
     try:
-        connection = pyodbc.connect('DRIVER={ODBC Driver 17 for SQL Server};SERVER='+host+';DATABASE='+database+';UID='+user+';PWD='+ password)
+        connection = pyodbc.connect('DRIVER='+driver+';SERVER='+host+';DATABASE='+database+';UID='+user+';PWD='+ password)
         return connection
     except Exception as e:
         print ("Error while connecting to database", e)
@@ -219,7 +220,8 @@ if __name__ == "__main__":
     end_time = get_current_time()
     start_time = end_time - Constant.ONE_MINUTE * int(if_config[Constant.SAMPLING_INTERVAL])
     try:
-        connection = connect_to_database(mssql_config[Constant.HOST_CONFIG],
+        connection = connect_to_database(mssql_config[Constant.DRIVER_CONFIG],
+                                         mssql_config[Constant.HOST_CONFIG],
                                          mssql_config[Constant.DATABASE_CONFIG],
                                          mssql_config[Constant.USER_CONFIG],
                                          mssql_config[Constant.PASSWORD_CONFIG])
