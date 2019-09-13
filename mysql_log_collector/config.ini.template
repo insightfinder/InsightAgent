@@ -1,0 +1,21 @@
+[MYSQL]
+host = localhost
+database = test
+user = root
+password = root
+table = 
+#Column in the table that stands for the host/instance of the log
+#If set as "NONE" then it will assign the table name as the host/instance for all collected log
+instance_name_column = NONE
+#Column in the table that stands for the timestamp of the log
+timestamp_column = 
+#Timestamp format in the table, Example: %Y-%m-%d %H:%M:%S stands for timestamp: 2019-12-12 12:50:23
+#If the timestamp in table is epoch time(13-digit long) then set as "NONE"
+timestamp_format = 
+
+[INSIGHTFINDER]
+license_key = 
+project_name =
+user_name = 
+server_url =
+sampling_interval = 1
