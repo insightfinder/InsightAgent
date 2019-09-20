@@ -19,6 +19,7 @@ import urlparse
 import httplib
 import requests
 import subprocess
+import statistics
 
 '''
 This script gathers data to send to Insightfinder
@@ -818,7 +819,7 @@ def transpose_metrics():
         for key in track['current_dict'][timestamp]:
             value = track['current_dict'][timestamp][key]
             if '|' in value:
-                value = median(map(lambda v: int(v), value.split('|')))
+                value = statistics.median(map(lambda v: float(v), value.split('|')))
             new_row[key] = str(value)
         track['current_row'].append(new_row)
 
