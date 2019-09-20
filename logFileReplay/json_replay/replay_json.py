@@ -25,42 +25,30 @@ This script gathers data to send to Insightfinder
 
 
 def start_data_processing(thread_number):
-    """ TODO: replace with your code.
-    Most work regarding sending to IF is abstracted away for you.
-    This function will get the data to send and prepare it for the API.
-    The general outline should be:
-    0. Define the project type in config.ini
-    1. Parse config options
-    2. Gather data
-    3. Parse each entry
-    4. Call the appropriate handoff function
-        metric_handoff()
-        log_handoff()
-        alert_handoff()
-        incident_handoff()
-        deployment_handoff()
-    See zipkin for an example that uses os.fork to send both metric and log data.
-    """
+    # get list of file(s)
+    if agent_config_vars['file_path'][-1:] == '/':
+        files = get_file_list_for_directory(agent_config_vars['file_path'])
+    else:
+        files = [agent_config_vars['file_path']]
+    logger.debug('File list: ' + str(files))
+
+    for replay_file in files:
+        logger.debug('Replaying file ' + str(replay_file))
+        replay_data(replay_file)
+        if cli_config_vars['testing']:
+            logger.debug('Skipping files:\n' + str(files[1:]))
+            break
 
 
-def raw_parse_log(message):
-    # call as log_handoff(*raw_parse(message))
-    timestamp = get_timestamp_from_date_string(time.time()) 
-    data = 'data'
-    instance = 'instance'
-    device = 'device'
-    return timestamp, data, instance, device
+def replay_data(replay_file):
+    with open(replay_file) as json_file:
+        try:
+            parse_json_message(json.load(json_file))
+        except Exception as e:
+            logger.warn('Error when parsing message')
+            logger.warn(str(e))
+            continue
 
-
-def raw_parse_metric(message):
-    # call as metric_handoff(*raw_parse(message))
-    timestamp = get_timestamp_from_date_string(time.time()) 
-    metric = 'metric'
-    data = 'data'
-    instance = 'instance'
-    device = 'device'
-    return timestamp, metric, data, instance, device
-    
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
@@ -68,19 +56,14 @@ def get_agent_config_vars():
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
         try:
-            ## TODO: fill out the fields to grab. examples given below
-            ## replace 'agent' with the appropriate section header.
-            # fields to grab
-            agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
-            agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
-            
+            # file path
+            file_path = config_parser.get('agent', 'file_path')
+
             # filters
             filters_include = config_parser.get('agent', 'filters_include')
             filters_exclude = config_parser.get('agent', 'filters_exclude')
 
             # message parsing
-            data_format = config_parser.get('agent', 'data_format').upper()
-            csv_field_names = config_parser.get('agent', 'csv_field_names')
             json_top_level = config_parser.get('agent', 'json_top_level')
             project_field = config_parser.get('agent', 'project_field')
             instance_field = config_parser.get('agent', 'instance_field')
@@ -95,100 +78,19 @@ def get_agent_config_vars():
             sys.exit(1)
          
         # any post-processing
-        agent_proxies = dict()
-        if len(agent_http_proxy) > 0:
-            agent_proxies['http'] = agent_http_proxy
-        if len(agent_https_proxy) > 0:
-            agent_proxies['https'] = agent_https_proxy
-            
         if len(filters_include) != 0:
             filters_include = filters_include.split('|')
         if len(filters_exclude) != 0:
             filters_exclude = filters_exclude.split('|')
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
-        
-        if data_format not in { 'CSV', 'JSON' }:
-            data_format = 'RAW'
-
-        # CSV-specific
-        if data_format == 'CSV':
-            if len(csv_field_names) == 0:
-                logger.warning(
-                    'Agent not correctly configured (csv_field_names)')
-                sys.exit()
-            csv_field_names = csv_field_names.split(',')
-
-            # timestamp
-            timestamp_field = get_field_index(csv_field_names, timestamp_field, 'timestamp_field', True)
-
-            # project
-            if len(project_field) != 0:
-                project_field_temp = get_field_index(csv_field_names, project_field, 'project_field')
-                if isinstance(project_field_temp, int):
-                    project_field = project_field_temp
-                else:
-                    project_field = ''
-
-            # instance
-            if len(instance_field) != 0:
-                instance_field_temp = get_field_index(csv_field_names, instance_field, 'instance_field')
-                if isinstance(instance_field_temp, int):
-                    instance_field = instance_field_temp
-                else:
-                    instance_field = ''
-
-            # device
-            if len(device_field) != 0:
-                device_field_temp = get_field_index(csv_field_names, device_field, 'device_field')
-                if isinstance(device_field_temp, int):
-                    device_field = device_field_temp
-                else:
-                    device_field = ''
-
-            # data
-            if len(data_fields) != 0:
-                data_fields_temp = []
-                for data_field in data_fields:
-                    data_field_temp = get_field_index(csv_field_names, data_field, 'data_field')
-                    if isinstance(data_field_temp, int):
-                        data_fields_temp.append(data_field_temp)
-                data_fields = data_fields_temp
-            if len(data_fields) == 0:
-                # use all non-timestamp fields
-                data_fields = range(len(csv_field_names))
-                data_fields.pop(timestamp_field)
-
-            # filters
-            if len(filters_include) != 0:
-                temp_filters_include = []
-                for _filter in filters_include:
-                    filter_field = _filter.split(':')[0]          
-                    filter_vals = _filter.split(':')[1]
-                    filter_field_temp = get_field_index(csv_field_names, filter_field, 'filter_field')
-                    if isinstance(filter_field_temp, int):
-                        temp_filter = str(filter_field_temp) + ':' + filter_vals
-                        temp_filters_include.append(temp_filter)
-                filters_include = temp_filters_include
-
-            if len(filters_exclude) != 0:
-                temp_filters_exclude = []
-                for _filter in filters_exclude:
-                    filter_field = _filter.split(':')[0]          
-                    filter_vals = _filter.split(':')[1]
-                    filter_field_temp = get_field_index(csv_field_names, filter_field, 'filter_field')
-                    if isinstance(filter_field_temp, int):
-                        temp_filter = str(filter_field_temp) + ':' + filter_vals
-                        temp_filters_exclude.append(temp_filter)
-                filters_exclude = temp_filters_exclude
 
         # add parsed variables to a global
         config_vars = {
-            'proxies': agent_proxies,
+            'file_path': file_path,
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
-            'data_format': data_format,
-            'csv_field_names': csv_field_names,
+            'data_format': 'JSON',
             'json_top_level': json_top_level,
             'project_field': project_field,
             'instance_field': instance_field,
@@ -241,6 +143,7 @@ def get_if_config_vars():
                 'Agent not correctly configured (project_name). Check config file.')
             sys.exit(1)
         if len(project_type) == 0:
+            timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
             logger.warning(
                 'Agent not correctly configured (project_type). Check config file.')
             sys.exit(1)
@@ -582,14 +485,14 @@ def parse_json_message_single(message):
                     return
         logger.debug('passed filter (exclusion)')
 
-    # get timestamp
-    timestamp = get_json_field(message, 'timestamp_field')
-    timestamp = get_timestamp_from_date_string(timestamp)
-
-    # get instance & device
+    # get project, instance, & device
     check_project(get_json_field(message, 'project_field', if_config_vars['project_name']))
     instance = get_json_field(message, 'instance_field', HOSTNAME)
     device = get_json_field(message, 'device_field')
+
+    # get timestamp
+    timestamp = get_json_field(message, 'timestamp_field')
+    timestamp = get_timestamp_from_date_string(timestamp)
 
     # get data
     log_data = dict()
@@ -656,22 +559,18 @@ def parse_csv_message(message):
         logger.debug('passed filter (exclusion)')
 
     # project
-    project = if_config_vars['project_name']
-    if isinstance(if_config_vars['project_name'], int):
-        project_field = agent_config_vars['project_field']
-        check_project(message[int(project_field)])
+    if isinstance(agent_config_vars['project_field'], int):
+        check_project(message[agent_config_vars['project_field']])
 
     # instance
     instance = HOSTNAME
     if isinstance(agent_config_vars['instance_field'], int):
-        instance_field = agent_config_vars['instance_field']
-        instance = message[int(instance_field)]
+        instance = message[agent_config_vars['instance_field']]
 
     # device
     device = ''
     if isinstance(agent_config_vars['device_field'], int):
-        device_field = agent_config_vars['device_field']
-        device = message[int(device_field)]
+        device = message[agent_config_vars['device_field']]
 
     # data & timestamp
     columns = [agent_config_vars['timestamp_field']] + agent_config_vars['data_fields']
