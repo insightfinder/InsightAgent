@@ -17,14 +17,16 @@ filters_exclude =
 # for multi-entry messages, define the top-level
 # if messages are [{message1}, {message2}], set top_level = []
 # it's expected that the top level will be a list
-json_top_level = 
+json_top_level =
+# if none given, project_name under [insightfinder] will be used 
+project_field =
+# if no instance given, the local hostname will be used
+instance_field = 
+device_field = 
 # give format as per python strptime
 timestamp_format = 
 # fields in json can be defined as level0.level.timestamp
 timestamp_field = 
-# if no instance given, the local hostname will be used
-instance_field = 
-device_field = 
 # multiple fields are separated by commas.
 data_fields =
 
