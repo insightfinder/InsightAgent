@@ -79,14 +79,14 @@ def get_agent_config_vars():
             filters_exclude = config_parser.get('agent', 'filters_exclude')
 
             # message parsing
+            data_format = config_parser.get('agent', 'data_format').upper()
+            csv_field_names = config_parser.get('agent', 'csv_field_names')
+            json_top_level = config_parser.get('agent', 'json_top_level')
             timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
             timestamp_field = config_parser.get('agent', 'timestamp_field') or 'timestamp'
             instance_field = config_parser.get('agent', 'instance_field')
             device_field = config_parser.get('agent', 'device_field')
-            json_top_level = config_parser.get('kafka', 'json_top_level')
-            csv_field_names = config_parser.get('agent', 'csv_field_names')
             data_fields = config_parser.get('agent', 'data_fields')
-            data_format = config_parser.get('agent', 'data_format').upper()
                     
         except ConfigParser.NoOptionError:
             logger.error(
@@ -180,6 +180,7 @@ def get_agent_config_vars():
             'filters_exclude': filters_exclude,
             'data_format': data_format,
             'csv_field_names': csv_field_names,
+            'json_top_level': json_top_level,
             'timestamp_format': timestamp_format,
             'timestamp_field': timestamp_field,
             'instance_field': instance_field,
