@@ -44,6 +44,7 @@ def start_data_processing(thread_number):
 def replay_data(replay_file):
     with open(replay_file) as json_file:
         try:
+            if_config_vars['project_name'] = if_config_vars['project_name_orig']
             check_project(os.path.splitext(os.path.basename(replay_file))[0])
             for line in json_file:
                 parse_json_message(json.loads(line))
@@ -217,6 +218,7 @@ def get_if_config_vars():
             'license_key': license_key,
             'token': token,
             'project_name': project_name,
+            'project_name_orig': project_name,
             'project_type': project_type,
             'sampling_interval': int(sampling_interval),     # as seconds
             'chunk_size': int(chunk_size_kb) * 1024,         # as bytes
@@ -279,7 +281,6 @@ def get_cli_config_vars():
 
     return config_vars
 
-
 def check_project(project_name):
     if 'token' in if_config_vars and len(if_config_vars['token']) != 0:
         logger.debug(project_name)
@@ -293,13 +294,13 @@ def check_project(project_name):
                 create_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/add-custom-project')
                 output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars['token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=' + get_data_type_from_project_type() + '&samplingInterval=' + str(if_config_vars['sampling_interval'] / 60) +  '&samplingIntervalInSeconds=' + str(if_config_vars['sampling_interval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_insight_agent_type_from_project_type() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + create_url + '?tzOffset=-18000000', shell=True)
             # set project name to proposed name
-            if_config_vars['projectName'] = project_name
+            if_config_vars['project_name'] = project_name
             # try to add new project to system
             if 'system_name' in if_config_vars and len(if_config_vars['system_name']) != 0:
                 system_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/projects/update')
                 output_update_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars['token'] + '&operation=updateprojsettings&projectName=' + project_name + '&systemName=' + if_config_vars['system_name'] + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + system_url + '?tzOffset=-18000000', shell=True)
         except subprocess.CalledProcessError as e:
-            logger.error('Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars['projectName'])
+            logger.error('Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars['project_name'])
 
 
 def get_field_index(field_names, field, label, is_required=False):
@@ -438,20 +439,16 @@ def json_format_field_value(value):
 def parse_json_message(messages):
     if len(agent_config_vars['json_top_level']) != 0:
         if agent_config_vars['json_top_level'] == '[]' and isinstance(messages, list):
-            logger.debug('parsing message as list of messages')
             for message in messages:
                 parse_json_message_single(message)
         else:
             top_level = _get_json_field_helper(messages, agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM), True)
             if isinstance(top_level, list):
-                logger.debug('parsing message as embedded list of messages')
                 for message in top_level:
                     parse_json_message_single(message)
             else:
-                logger.debug('parsing message as embedded message')
                 parse_json_message_single(top_level)
     else:
-        logger.debug('parsing message as single message')
         parse_json_message_single(messages)
 
 
@@ -979,6 +976,7 @@ def initialize_api_post_data():
     to_send_data_dict['agentType'] = get_agent_type_from_project_type()
     if 'METRIC' in if_config_vars['project_type'] and 'sampling_interval' in if_config_vars:
         to_send_data_dict['samplingInterval'] = str(if_config_vars['sampling_interval'])
+    logger.debug(to_send_data_dict)
     return to_send_data_dict
 
 
