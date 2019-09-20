@@ -18,6 +18,7 @@ from dateutil.tz import tzlocal
 import urlparse
 import httplib
 import requests
+import subprocess
 
 '''
 This script gathers data to send to Insightfinder
@@ -43,11 +44,13 @@ def start_data_processing(thread_number):
 def replay_data(replay_file):
     with open(replay_file) as json_file:
         try:
-            parse_json_message(json.load(json_file))
+            check_project(os.path.splitext(os.path.basename(replay_file))[0])
+            for line in json_file:
+                parse_json_message(json.loads(line))
+            send_data_wrapper()
         except Exception as e:
             logger.warn('Error when parsing message')
             logger.warn(str(e))
-            continue
 
 
 def get_agent_config_vars():
@@ -85,6 +88,22 @@ def get_agent_config_vars():
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
 
+        # strptime() doesn't allow timezone info
+        if '%Z' in timestamp_format:
+            logger.warning('%Z cannot be used in the default agent. Please contact support for a custom parser.')
+            sys.exit(1)
+        if '%z' in timestamp_format:
+            position = timestamp_format.index('%z')
+            if len(timestamp_format) > (position + 2):
+                timestamp_format = timestamp_format[:position] + timestamp_format[position+2:]
+            else:
+                timestamp_format = timestamp_format[:position]
+            if cli_config_vars['time_zone'] == pytz.timezone('UTC'):
+                logger.warning('Time zone info will be stripped from timestamps, but no time zone info was supplied in the config. Assuming UTC')
+            strip_tz = True
+        else:
+            strip_tz = False
+
         # add parsed variables to a global
         config_vars = {
             'file_path': file_path,
@@ -97,6 +116,7 @@ def get_agent_config_vars():
             'device_field': device_field,
             'timestamp_field': timestamp_field,
             'timestamp_format': timestamp_format,
+            'strip_tz': strip_tz,
             'data_fields': data_fields
         }
 
@@ -117,6 +137,7 @@ def get_if_config_vars():
         try:
             user_name = config_parser.get('insightfinder', 'user_name')
             license_key = config_parser.get('insightfinder', 'license_key')
+            token = config_parser.get('insightfinder', 'token')
             project_name = config_parser.get('insightfinder', 'project_name')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
@@ -242,7 +263,7 @@ def get_cli_config_vars():
         'threads': 1,
         'testing': False,
         'log_level': logging.INFO,
-        'time_zone': pytz.utc
+        'time_zone': pytz.timezone('UTC')
         }
 
     if options.testing:
@@ -250,7 +271,7 @@ def get_cli_config_vars():
 
     if options.verbose or options.testing:
         config_vars['log_level'] = logging.DEBUG
-    elif options.quiet:
+    if options.quiet:
         config_vars['log_level'] = logging.WARNING
 
     if len(options.time_zone) != 0 and options.time_zone in pytz.all_timezones:
@@ -261,21 +282,22 @@ def get_cli_config_vars():
 
 def check_project(project_name):
     if 'token' in if_config_vars and len(if_config_vars['token']) != 0:
+        logger.debug(project_name)
         try:
             # check for existing project
-            check_url = urlparse.urljoin(if_config_vars['ifURL'], '/api/v1/getprojectstatus'
-            output_check_project = subprocess.check_output('curl "' + check_url + '?userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + project_name + '%22%2C%22customerName%22%3A%22' + if_config_vars['userName'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"', shell=True)
+            check_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/getprojectstatus')
+            output_check_project = subprocess.check_output('curl "' + check_url + '?userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars['token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + project_name + '%22%2C%22customerName%22%3A%22' + if_config_vars['user_name'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"', shell=True)
             # create project if no existing project
             if project_name not in output_check_project:
                 logger.debug('creating project')
-                create_url = urlparse.urljoin(if_config_vars['ifURL'], '/api/v1/add-custom-project')
-                output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=Metric&samplingInterval=' + str(if_config_vars['samplingInterval'] / 60) +  '&samplingIntervalInSeconds=' + str(if_config_vars['samplingInterval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_agent_type_from_mode_wrap() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + create_url + '?tzOffset=-18000000', shell=True)
+                create_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/add-custom-project')
+                output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars['token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=' + get_data_type_from_project_type() + '&samplingInterval=' + str(if_config_vars['sampling_interval'] / 60) +  '&samplingIntervalInSeconds=' + str(if_config_vars['sampling_interval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_insight_agent_type_from_project_type() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + create_url + '?tzOffset=-18000000', shell=True)
             # set project name to proposed name
             if_config_vars['projectName'] = project_name
             # try to add new project to system
-            if 'systemName' in if_config_vars and len(if_config_vars['systemName']) != 0:
-                system_url = urlparse.urljoin(if_config_vars['ifURL'], '/api/v1/projects/update')
-                output_update_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&operation=updateprojsettings&projectName=' + project_name + '&systemName=' + if_config_vars['systemName'] + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + system_url + '?tzOffset=-18000000', shell=True)
+            if 'system_name' in if_config_vars and len(if_config_vars['system_name']) != 0:
+                system_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/projects/update')
+                output_update_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars['token'] + '&operation=updateprojsettings&projectName=' + project_name + '&systemName=' + if_config_vars['system_name'] + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + system_url + '?tzOffset=-18000000', shell=True)
         except subprocess.CalledProcessError as e:
             logger.error('Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars['projectName'])
 
@@ -357,59 +379,47 @@ def get_json_field(message, config_setting, default=''):
     field_val = json_format_field_value(_get_json_field_helper(message, agent_config_vars[config_setting].split(JSON_LEVEL_DELIM)))
     if len(field_val) == 0:
         field_val = default
-    logger.debug(str(field_val))
     return field_val
 
 
 def _get_json_field_helper(nested_value, next_fields, allow_list=False):
     if len(next_fields) == 0:
-        logger.debug('len(next_fields) == 0')
         return ''
     elif isinstance(nested_value, list):
-        logger.debug('isinstance(nested_value, list)')
         return json_gather_list_values(nested_value, next_fields)
     elif not isinstance(nested_value, dict):
-        logger.debug('not isinstance(nested_value, dict)')
         return ''
     next_field = next_fields.pop(0)
     next_value = nested_value.get(next_field)
     if next_value is None:
-        logger.debug('next_value is None')
         return ''
     elif len(bytes(next_value)) == 0:
-        logger.debug('len(bytes(next_value)) == 0')
         return ''
     elif next_fields is None:
-        logger.debug('next_fields is None')
         return next_value
     elif len(next_fields) == 0:
-        logger.debug('len(next_fields) == 0')
         return next_value
     elif isinstance(next_value, set):
-        logger.debug('isinstance(next_value, set)')
         next_value_all = ''
         for item in next_value:
             next_value_all += str(item)
         return next_value_all
     elif isinstance(next_value, list):
-        logger.debug('isinstance(next_value, list)')
         if allow_list: 
             return json_gather_list_values(next_value, next_fields)
         else:
             raise Exception('encountered list in json when not allowed')
             return ''
     elif isinstance(next_value, dict):
-        logger.debug('isinstance(next_value, dict)')
         return _get_json_field_helper(next_value, next_fields, allow_list)
     else:
-        logger.info('given field could not be found')
+        logger.debug('given field could not be found')
         return ''
 
 
 def json_gather_list_values(l, fields):
     sub_field_value = []
     for sub_value in l:
-        logger.debug('checking sub val ' + str(sub_value))
         fields_copy = list(fields[i] for i in range(len(fields)))
         json_value = json_format_field_value(_get_json_field_helper(sub_value, fields_copy, True))
         if len(json_value) != 0:
@@ -419,12 +429,9 @@ def json_gather_list_values(l, fields):
 
 def json_format_field_value(value):
     if isinstance(value, (dict, list)):
-        logger.debug('returning dictionary/list')
         if len(value) == 1 and isinstance(value, list):
             return value.pop(0)
         return value
-    else:
-        logger.debug('returning stringified value')
     return str(value)
 
 
@@ -457,10 +464,8 @@ def parse_json_message_single(message):
             filter_field = _filter.split(':')[0]
             filter_vals = _filter.split(':')[1].split(',')
             filter_check = str(_get_json_field_helper(message, filter_field.split(JSON_LEVEL_DELIM), True))
-            logger.debug('filter_check: ' + str(filter_check))
             # check if a valid value
             for filter_val in filter_vals:
-                logger.debug('checking ' + str(filter_val))
                 if filter_val.upper() in filter_check.upper():
                     is_valid = True
                     break
@@ -486,7 +491,7 @@ def parse_json_message_single(message):
         logger.debug('passed filter (exclusion)')
 
     # get project, instance, & device
-    check_project(get_json_field(message, 'project_field', if_config_vars['project_name']))
+    # check_project(get_json_field(message, 'project_field', if_config_vars['project_name']))
     instance = get_json_field(message, 'instance_field', HOSTNAME)
     device = get_json_field(message, 'device_field')
 
@@ -498,7 +503,6 @@ def parse_json_message_single(message):
     log_data = dict()
     if len(agent_config_vars['data_fields']) != 0: 
         for data_field in agent_config_vars['data_fields']:
-            logger.debug(data_field)
             data_value = json_format_field_value(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM), True))
             if len(data_value) != 0:
                 if 'METRIC' in if_config_vars['project_type']:
@@ -509,7 +513,6 @@ def parse_json_message_single(message):
         if 'METRIC' in if_config_vars['project_type']:
             # assume metric data is in top level
             for data_field in message:
-                logger.debug(data_field)
                 data_value = str(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM), True))
                 if data_value is not None:
                     metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
@@ -522,8 +525,6 @@ def parse_json_message_single(message):
 
 
 def parse_csv_message(message):
-    logger.debug(message)
-
     # filter
     if len(agent_config_vars['filters_include']) != 0:
         # for each provided filter, check if there are any allowed valued
@@ -559,8 +560,8 @@ def parse_csv_message(message):
         logger.debug('passed filter (exclusion)')
 
     # project
-    if isinstance(agent_config_vars['project_field'], int):
-        check_project(message[agent_config_vars['project_field']])
+    # if isinstance(agent_config_vars['project_field'], int):
+    #    check_project(message[agent_config_vars['project_field']])
 
     # instance
     instance = HOSTNAME
@@ -610,7 +611,8 @@ def parse_csv_row(row, field_names, instance, device=''):
 
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
-
+    if 'strip_tz' in agent_config_vars and agent_config_vars['strip_tz']:
+        date_string = ''.join(PCT_z_FMT.split(date_string))
     if 'timestamp_format' in agent_config_vars:
         if agent_config_vars['timestamp_format'] == 'epoch':
             timestamp_datetime = get_datetime_from_unix_epoch(date_string)
@@ -900,6 +902,37 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     return -1
 
 
+def get_data_type_from_project_type():
+    if 'METRIC' in if_config_vars['project_type']:
+        return 'Metric'
+    elif 'LOG' in if_config_vars['project_type']:
+        return 'Log'
+    elif 'ALERT' in if_config_vars['project_type']:
+        return 'Alert'
+    elif 'INCIDENT' in if_config_vars['project_type']:
+        return 'Incident'
+    elif 'DEPLOYMENT' in if_config_vars['project_type']:
+        return 'Deployment'
+    else:
+        logger.warning('Project Type not correctly configured')
+        sys.exit(1)
+
+
+def get_insight_agent_type_from_project_type():
+    if 'containerize' in agent_config_vars and agent_config_vars['containerize']:
+        if 'REPLAY' in if_config_vars['project_type']:
+            return 'containerReplay'
+        else:
+            return 'containerStreaming'
+    elif 'REPLAY' in if_config_vars['project_type']:
+        if 'METRIC' in if_config_vars['project_type']:
+            return 'MetricFile'
+        else:
+            return 'LogFile'
+    else:
+        return 'Custom'
+
+
 def get_agent_type_from_project_type():
     """ use project type to determine agent type """
     if 'METRIC' in if_config_vars['project_type']:
@@ -958,6 +991,7 @@ if __name__ == "__main__":
     RIGHT_BRACE = re.compile(r"\]")
     PERIOD = re.compile(r"\.")
     NON_ALNUM = re.compile(r"[^a-zA-Z0-9]")
+    PCT_z_FMT = re.compile(r"[\+\-][0-9]{4}")
     HOSTNAME = socket.gethostname().partition('.')[0]
     JSON_LEVEL_DELIM = '.'
     ATTEMPTS = 3
