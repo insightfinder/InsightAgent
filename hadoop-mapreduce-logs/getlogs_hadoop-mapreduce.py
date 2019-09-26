@@ -116,6 +116,26 @@ def get_agent_config_vars():
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
 
+        # strptime() doesn't allow timezone info
+	strip_tz = False
+        strip_tz_fmt = ''
+        if '%Z' in timestamp_format:
+            position = timestamp_format.index('%Z')
+            strip_tz = True
+            strip_tz_fmt = PCT_Z_FMT
+        if '%z' in timestamp_format:
+            position = timestamp_format.index('%z')
+            strip_tz = True
+            strip_tz_fmt = PCT_z_FMT
+
+        if strip_tz:
+            if len(timestamp_format) > (position + 2):
+                timestamp_format = timestamp_format[:position] + timestamp_format[position+2:]
+            else:
+                timestamp_format = timestamp_format[:position]
+            if cli_config_vars['time_zone'] == pytz.timezone('UTC'):
+                logger.warning('Time zone info will be stripped from timestamps, but no time zone info was supplied in the config. Assuming UTC')
+
         # add parsed variables to a global
         config_vars = {
             'api_url': api_url,
@@ -130,6 +150,8 @@ def get_agent_config_vars():
             'device_field': device_field,
             'timestamp_field': timestamp_field,
             'timestamp_format': timestamp_format,
+            'strip_tz': strip_tz,
+            'strip_tz_fmt': strip_tz_fmt,
             'data_fields': data_fields
         }
 
@@ -554,7 +576,7 @@ def parse_csv_message(message):
         else:
             logger.debug('passed filter (inclusion)')
 
-    if len(agent_config_vars['filters_exclude']) != 0:
+ # rough approximation.    if len(agent_config_vars['filters_exclude']) != 0:
         # for each provided filter, check if there are any disallowed values
         for _filter in agent_config_vars['filters_exclude']:          
             filter_field = _filter.split(':')[0]              
@@ -620,7 +642,7 @@ def parse_csv_row(row, field_names, instance, device=''):
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
     if 'strip_tz' in agent_config_vars and agent_config_vars['strip_tz']:
-        date_string = ''.join(PCT_z_FMT.split(date_string))
+        date_string = ''.join(agent_config_vars['strip_tz_fmt'].split(date_string))
     if 'timestamp_format' in agent_config_vars:
         if agent_config_vars['timestamp_format'] == 'epoch':
             timestamp_datetime = get_datetime_from_unix_epoch(date_string)
@@ -1001,6 +1023,7 @@ if __name__ == "__main__":
     PERIOD = re.compile(r"\.")
     NON_ALNUM = re.compile(r"[^a-zA-Z0-9]")
     PCT_z_FMT = re.compile(r"[\+\-][0-9]{4}")
+    PCT_Z_FMT = re.compile(r"[\s][A-Z]{3,4}") # rough approximation.
     HOSTNAME = socket.gethostname().partition('.')[0]
     JSON_LEVEL_DELIM = '.'
     ATTEMPTS = 3
