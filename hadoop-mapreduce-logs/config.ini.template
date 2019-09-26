@@ -1,0 +1,51 @@
+[agent]
+## mapreduce info
+# (required) uri for history server. <scheme>://server:port
+history_server_uri = 
+# (optional) user to find jobs for
+user =
+# (optional) queue to find jobs for
+queue =
+
+## filters (optional)
+# define a list of filters to use as field:allowed values|field:allowed values
+# for example:
+#   message.env:stg,prd|message.status:complete
+filters_include = 
+# as above, but instead include values that are not allowed
+# for example:
+#   message.env:dev,cde|message.status:draft
+filters_exclude = 
+
+## message parsing
+# for multi-entry messages, define the top-level
+# if messages are [{message1}, {message2}], set top_level = []
+# it's expected that the top level will be a list
+json_top_level = job
+# give format as per python strptime
+timestamp_format = epoch
+# fields in json can be defined as level0.level.timestamp
+timestamp_field = finishTime
+# if no instance given, the local hostname will be used
+instance_field = queue
+device_field = 
+# multiple fields are separated by commas.
+data_fields =
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
+[insightfinder]
+user_name = 
+license_key = 
+token =
+project_name = 
+# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
+project_type = log
+sampling_interval = 10
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
