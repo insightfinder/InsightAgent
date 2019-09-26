@@ -117,7 +117,7 @@ def get_agent_config_vars():
             data_fields = data_fields.split(',')
 
         # strptime() doesn't allow timezone info
-	strip_tz = False
+        strip_tz = False
         strip_tz_fmt = ''
         if '%Z' in timestamp_format:
             position = timestamp_format.index('%Z')
