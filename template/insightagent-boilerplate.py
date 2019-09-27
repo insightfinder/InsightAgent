@@ -70,7 +70,7 @@ def get_agent_config_vars():
         try:
             ## TODO: fill out the fields to grab. examples given below
             ## replace 'agent' with the appropriate section header.
-            # fields to grab
+            # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
             
@@ -90,23 +90,29 @@ def get_agent_config_vars():
             data_fields = config_parser.get('agent', 'data_fields')
                     
         except ConfigParser.NoOptionError:
-            logger.error(
-                'Agent not correctly configured. Check config file.')
+            logger.error('Agent not correctly configured. Check config file.')
             sys.exit(1)
          
-        # any post-processing
+        # proxies
         agent_proxies = dict()
         if len(agent_http_proxy) > 0:
             agent_proxies['http'] = agent_http_proxy
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
-            
+        
+        # fitlers
         if len(filters_include) != 0:
             filters_include = filters_include.split('|')
         if len(filters_exclude) != 0:
             filters_exclude = filters_exclude.split('|')
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
+        
+        # timestamp format
+        if '%z' in timestamp_format or '%Z' in timestamp_format:
+            ts_format_info = strip_tz_info(timestamp_format)
+        else:
+            ts_format_info = {'strip_tz': False, 'strip_tz_fmt': '', 'timestamp_format': timestamp_format}
         
         if data_format not in { 'CSV', 'JSON' }:
             data_format = 'RAW'
@@ -117,70 +123,28 @@ def get_agent_config_vars():
                 logger.warning(
                     'Agent not correctly configured (csv_field_names)')
                 sys.exit()
-            csv_field_names = csv_field_names.split(',')
-
-            # timestamp
-            timestamp_field = get_field_index(csv_field_names, timestamp_field, 'timestamp_field', True)
-
-            # project
-            if len(project_field) != 0:
-                project_field_temp = get_field_index(csv_field_names, project_field, 'project_field')
-                if isinstance(project_field_temp, int):
-                    project_field = project_field_temp
-                else:
-                    project_field = ''
-
-            # instance
-            if len(instance_field) != 0:
-                instance_field_temp = get_field_index(csv_field_names, instance_field, 'instance_field')
-                if isinstance(instance_field_temp, int):
-                    instance_field = instance_field_temp
-                else:
-                    instance_field = ''
-
-            # device
-            if len(device_field) != 0:
-                device_field_temp = get_field_index(csv_field_names, device_field, 'device_field')
-                if isinstance(device_field_temp, int):
-                    device_field = device_field_temp
-                else:
-                    device_field = ''
-
-            # data
-            if len(data_fields) != 0:
-                data_fields_temp = []
-                for data_field in data_fields:
-                    data_field_temp = get_field_index(csv_field_names, data_field, 'data_field')
-                    if isinstance(data_field_temp, int):
-                        data_fields_temp.append(data_field_temp)
-                data_fields = data_fields_temp
-            if len(data_fields) == 0:
-                # use all non-timestamp fields
-                data_fields = range(len(csv_field_names))
+                
+            filters = {'filters_include': {'name': filters_include},
+                       'filters_exclude': {'name': filters_exclude}}
+            optional_fields = {'project_field': {'name': project_field},
+                               'instance_field': {'name': instance_field},
+                               'device_field': {'name': device_field}}
+            required_fields = {'timestamp_field': {'name': timestamp_field}}
+            all_fields = {'filters': filter_fields,
+                          'required_fields': required_fields,
+                          'optional_fields': optional_fields,
+                          'data_fields': data_fields}
+            all_fields = check_csv_field_indeces(csv_field_names.split(','), all_fields)
+            filters_include = all_fields['filters']['filters_include']['filter']
+            filters_exclude = all_fields['filters']['filters_exclude']['filter']
+            project_field = all_fields['optional_fields']['project_field']['index']
+            instance_field = all_fields['optional_fields']['instance_field']['index']
+            device_field = all_fields['optional_fields']['device_field']['index']
+            data_fields = all_fields['data_fields']
+            timestamp_field = all_fields['required_fields']['timestamp_field']['index']
+            
+            if timestamp_field in data_fields:
                 data_fields.pop(timestamp_field)
-
-            # filters
-            if len(filters_include) != 0:
-                temp_filters_include = []
-                for _filter in filters_include:
-                    filter_field = _filter.split(':')[0]          
-                    filter_vals = _filter.split(':')[1]
-                    filter_field_temp = get_field_index(csv_field_names, filter_field, 'filter_field')
-                    if isinstance(filter_field_temp, int):
-                        temp_filter = str(filter_field_temp) + ':' + filter_vals
-                        temp_filters_include.append(temp_filter)
-                filters_include = temp_filters_include
-
-            if len(filters_exclude) != 0:
-                temp_filters_exclude = []
-                for _filter in filters_exclude:
-                    filter_field = _filter.split(':')[0]          
-                    filter_vals = _filter.split(':')[1]
-                    filter_field_temp = get_field_index(csv_field_names, filter_field, 'filter_field')
-                    if isinstance(filter_field_temp, int):
-                        temp_filter = str(filter_field_temp) + ':' + filter_vals
-                        temp_filters_exclude.append(temp_filter)
-                filters_exclude = temp_filters_exclude
 
         # add parsed variables to a global
         config_vars = {
@@ -188,14 +152,16 @@ def get_agent_config_vars():
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
             'data_format': data_format,
-            'csv_field_names': csv_field_names,
             'json_top_level': json_top_level,
+            'csv_field_names': csv_field_names,
             'project_field': project_field,
             'instance_field': instance_field,
             'device_field': device_field,
+            'data_fields': data_fields,
             'timestamp_field': timestamp_field,
-            'timestamp_format': timestamp_format,
-            'data_fields': data_fields
+            'timestamp_format': ts_format_info['timestamp_format'],
+            'strip_tz': ts_format_info['strip_tz'],
+            'strip_tz_fmt': ts_format_info['strip_tz_fmt']
         }
 
         return config_vars
@@ -223,26 +189,21 @@ def get_if_config_vars():
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
         except ConfigParser.NoOptionError:
-            logger.error(
-                'Agent not correctly configured. Check config file.')
+            logger.error('Agent not correctly configured. Check config file.')
             sys.exit(1)
 
         # check required variables
         if len(user_name) == 0:
-            logger.warning(
-                'Agent not correctly configured (user_name). Check config file.')
+            logger.warning('Agent not correctly configured (user_name). Check config file.')
             sys.exit(1)
         if len(license_key) == 0:
-            logger.warning(
-                'Agent not correctly configured (license_key). Check config file.')
+            logger.warning('Agent not correctly configured (license_key). Check config file.')
             sys.exit(1)
         if len(project_name) == 0:
-            logger.warning(
-                'Agent not correctly configured (project_name). Check config file.')
+            logger.warning('Agent not correctly configured (project_name). Check config file.')
             sys.exit(1)
         if len(project_type) == 0:
-            logger.warning(
-                'Agent not correctly configured (project_type). Check config file.')
+            logger.warning('Agent not correctly configured (project_type). Check config file.')
             sys.exit(1)
         
         if project_type not in {
@@ -257,14 +218,12 @@ def get_if_config_vars():
                 'DEPLOYMENT',
                 'DEPLOYMENTREPLAY'
                 }:
-           logger.warning(
-                'Agent not correctly configured (project_type). Check config file.')
+           logger.warning('Agent not correctly configured (project_type). Check config file.')
            sys.exit(1)  
 
         if len(sampling_interval) == 0:
             if 'METRIC' in project_type:
-                logger.warning(
-                    'Agent not correctly configured (sampling_interval). Check config file.')
+                logger.warning('Agent not correctly configured (sampling_interval). Check config file.')
                 sys.exit(1)
             else:
                 # set default for non-metric
@@ -302,8 +261,7 @@ def get_if_config_vars():
 
         return config_vars
     else:
-        logger.error(
-            'Agent not correctly configured. Check config file.')
+        logger.error('Agent not correctly configured. Check config file.')
         sys.exit(1)
 
 
@@ -316,15 +274,15 @@ def get_cli_config_vars():
     parser.add_option('--threads', default=1,
                       action='store', dest='threads', help='Number of threads to run')
     """
-    parser.add_option('--tz', default='UTC',
-                      action='store', dest='time_zone', help='Timezone of the data. See pytz.all_timezones')
-    parser.add_option('-q', '--quiet',
-                      action='store_true', dest='quiet', help='Only display warning and error log messages')
-    parser.add_option('-v', '--verbose',
-                      action='store_true', dest='verbose', help='Enable verbose logging')
-    parser.add_option('-t', '--testing',
-                      action='store_true', dest='testing', help='Set to testing mode (do not send data).' +
-                                                                ' Automatically turns on verbose logging')
+    parser.add_option('--tz', default='UTC', action='store', dest='time_zone', 
+                      help='Timezone of the data. See pytz.all_timezones')
+    parser.add_option('-q', '--quiet', action='store_true', dest='quiet', 
+                      help='Only display warning and error log messages')
+    parser.add_option('-v', '--verbose', action='store_true', dest='verbose', 
+                      help='Enable verbose logging')
+    parser.add_option('-t', '--testing', action='store_true', dest='testing', 
+                      help='Set to testing mode (do not send data).' +
+                           ' Automatically turns on verbose logging')
     (options, args) = parser.parse_args()
 
     """
@@ -356,25 +314,89 @@ def get_cli_config_vars():
     return config_vars
 
 
+def strip_tz_info(timestamp_format):
+    # strptime() doesn't allow timezone info
+    if '%Z' in timestamp_format:
+        position = timestamp_format.index('%Z')
+        strip_tz_fmt = PCT_Z_FMT
+    if '%z' in timestamp_format:
+        position = timestamp_format.index('%z')
+        strip_tz_fmt = PCT_z_FMT
+    
+    if len(timestamp_format) > (position + 2):
+        timestamp_format = timestamp_format[:position] + timestamp_format[position+2:]
+    else:
+        timestamp_format = timestamp_format[:position]
+    if cli_config_vars['time_zone'] == pytz.timezone('UTC'):
+        logger.warning('Time zone info will be stripped from timestamps, but no time zone info was supplied in the config. Assuming UTC')
+    
+    return {'strip_tz': True, 'strip_tz_fmt': strip_tz_fmt, 'timestamp_format': timestamp_format}
+
+
+def check_csv_fieldnames(csv_field_names, all_fields):
+    # required
+    for field in all_fields['required_fields']:
+        all_fields['required_fields'][field]['index'] = 
+            get_field_index(csv_field_names, all_fields['optional_fields'][field]['name'], field, True)
+
+    # optional
+    for field in all_fields['optional_fields']:
+        if len(all_fields['optional_fields'][field]['name']) != 0:
+            index = get_field_index(csv_field_names, all_fields['optional_fields'][field]['name'], field)
+            if isinstance(index, int):
+                all_fields['optional_fields'][field]['index'] = index
+            else:
+                all_fields['optional_fields'][field]['index'] = ''
+
+    # filters
+    for field in all_fields['filters']:
+        if len(all_fields['filters'][field]['name']) != 0:
+            filters_temp = []
+            for _filter in all_fields['filters'][field]['name']:
+                filter_field = _filter.split(':')[0]          
+                filter_vals = _filter.split(':')[1]
+                filter_index = get_field_index(csv_field_names, filter_field, field)
+                if isinstance(filter_index, int):
+                    filter_temp = str(filter_index) + ':' + filter_vals
+                    filters_temp.append(filter_temp)
+            all_fields['filters'][field]['filter'] = filters_temp
+
+    # data
+    data_fields = all_fields['data_fields']
+    if len(all_fields['data_fields']) != 0:
+        data_fields_temp = []
+        for data_field in all_fields['data_fields']:
+            data_field_temp = get_field_index(csv_field_names, data_field, 'data_field')
+            if isinstance(data_field_temp, int):
+                data_fields_temp.append(data_field_temp)
+        all_fields['data_fields'] = data_fields_temp
+    if len(all_fields['data_fields']) == 0:
+        # use all non-timestamp fields
+        all_fields['data_fields'] = range(len(csv_field_names))
+
+    return all_fields
+
+
 def check_project(project_name):
     if 'token' in if_config_vars and len(if_config_vars['token']) != 0:
+        logger.debug(project_name)
         try:
             # check for existing project
-            check_url = urlparse.urljoin(if_config_vars['ifURL'], '/api/v1/getprojectstatus'
-            output_check_project = subprocess.check_output('curl "' + check_url + '?userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + project_name + '%22%2C%22customerName%22%3A%22' + if_config_vars['userName'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"', shell=True)
+            check_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/getprojectstatus')
+            output_check_project = subprocess.check_output('curl "' + check_url + '?userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars['token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + project_name + '%22%2C%22customerName%22%3A%22' + if_config_vars['user_name'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"', shell=True)
             # create project if no existing project
             if project_name not in output_check_project:
                 logger.debug('creating project')
-                create_url = urlparse.urljoin(if_config_vars['ifURL'], '/api/v1/add-custom-project')
-                output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=Metric&samplingInterval=' + str(if_config_vars['samplingInterval'] / 60) +  '&samplingIntervalInSeconds=' + str(if_config_vars['samplingInterval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_agent_type_from_mode_wrap() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + create_url + '?tzOffset=-18000000', shell=True)
+                create_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/add-custom-project')
+                output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars['token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=' + get_data_type_from_project_type() + '&samplingInterval=' + str(if_config_vars['sampling_interval'] / 60) +  '&samplingIntervalInSeconds=' + str(if_config_vars['sampling_interval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_insight_agent_type_from_project_type() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + create_url + '?tzOffset=-18000000', shell=True)
             # set project name to proposed name
-            if_config_vars['projectName'] = project_name
+            if_config_vars['project_name'] = project_name
             # try to add new project to system
-            if 'systemName' in if_config_vars and len(if_config_vars['systemName']) != 0:
-                system_url = urlparse.urljoin(if_config_vars['ifURL'], '/api/v1/projects/update')
-                output_update_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['userName'] + '&token=' + if_config_vars['token'] + '&operation=updateprojsettings&projectName=' + project_name + '&systemName=' + if_config_vars['systemName'] + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + system_url + '?tzOffset=-18000000', shell=True)
+            if 'system_name' in if_config_vars and len(if_config_vars['system_name']) != 0:
+                system_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/projects/update')
+                output_update_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars['token'] + '&operation=updateprojsettings&projectName=' + project_name + '&systemName=' + if_config_vars['system_name'] + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + system_url + '?tzOffset=-18000000', shell=True)
         except subprocess.CalledProcessError as e:
-            logger.error('Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars['projectName'])
+            logger.error('Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars['project_name'])
 
 
 def get_field_index(field_names, field, label, is_required=False):
@@ -396,8 +418,7 @@ def get_field_index(field_names, field, label, is_required=False):
             field = err_code
     finally:
         if field == err_code:
-            logger.warn(
-                'Agent not configured correctly (' + label + ')\n' + err_msg)
+            logger.warn('Agent not configured correctly (' + label + ')\n' + err_msg)
             if is_required:
                 sys.exit(1)
             return
@@ -451,62 +472,51 @@ def parse_raw_message(message):
 def get_json_field(message, config_setting, default=''):
     if len(agent_config_vars[config_setting]) == 0:
         return default
-    field_val = json_format_field_value(_get_json_field_helper(message, agent_config_vars[config_setting].split(JSON_LEVEL_DELIM)))
+    field_val = json_format_field_value(
+                    _get_json_field_helper(message, agent_config_vars[config_setting].split(JSON_LEVEL_DELIM)))
     if len(field_val) == 0:
         field_val = default
-    logger.debug(str(field_val))
     return field_val
 
 
 def _get_json_field_helper(nested_value, next_fields, allow_list=False):
     if len(next_fields) == 0:
-        logger.debug('len(next_fields) == 0')
         return ''
     elif isinstance(nested_value, list):
-        logger.debug('isinstance(nested_value, list)')
         return json_gather_list_values(nested_value, next_fields)
     elif not isinstance(nested_value, dict):
-        logger.debug('not isinstance(nested_value, dict)')
         return ''
     next_field = next_fields.pop(0)
     next_value = nested_value.get(next_field)
     if next_value is None:
-        logger.debug('next_value is None')
         return ''
     elif len(bytes(next_value)) == 0:
-        logger.debug('len(bytes(next_value)) == 0')
         return ''
     elif next_fields is None:
-        logger.debug('next_fields is None')
         return next_value
     elif len(next_fields) == 0:
-        logger.debug('len(next_fields) == 0')
         return next_value
     elif isinstance(next_value, set):
-        logger.debug('isinstance(next_value, set)')
         next_value_all = ''
         for item in next_value:
             next_value_all += str(item)
         return next_value_all
     elif isinstance(next_value, list):
-        logger.debug('isinstance(next_value, list)')
         if allow_list: 
             return json_gather_list_values(next_value, next_fields)
         else:
             raise Exception('encountered list in json when not allowed')
             return ''
     elif isinstance(next_value, dict):
-        logger.debug('isinstance(next_value, dict)')
         return _get_json_field_helper(next_value, next_fields, allow_list)
     else:
-        logger.info('given field could not be found')
+        logger.debug('given field could not be found')
         return ''
 
 
 def json_gather_list_values(l, fields):
     sub_field_value = []
     for sub_value in l:
-        logger.debug('checking sub val ' + str(sub_value))
         fields_copy = list(fields[i] for i in range(len(fields)))
         json_value = json_format_field_value(_get_json_field_helper(sub_value, fields_copy, True))
         if len(json_value) != 0:
@@ -516,32 +526,25 @@ def json_gather_list_values(l, fields):
 
 def json_format_field_value(value):
     if isinstance(value, (dict, list)):
-        logger.debug('returning dictionary/list')
         if len(value) == 1 and isinstance(value, list):
             return value.pop(0)
         return value
-    else:
-        logger.debug('returning stringified value')
     return str(value)
 
 
 def parse_json_message(messages):
     if len(agent_config_vars['json_top_level']) != 0:
         if agent_config_vars['json_top_level'] == '[]' and isinstance(messages, list):
-            logger.debug('parsing message as list of messages')
             for message in messages:
                 parse_json_message_single(message)
         else:
             top_level = _get_json_field_helper(messages, agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM), True)
             if isinstance(top_level, list):
-                logger.debug('parsing message as embedded list of messages')
                 for message in top_level:
                     parse_json_message_single(message)
             else:
-                logger.debug('parsing message as embedded message')
                 parse_json_message_single(top_level)
     else:
-        logger.debug('parsing message as single message')
         parse_json_message_single(messages)
 
 
@@ -554,10 +557,8 @@ def parse_json_message_single(message):
             filter_field = _filter.split(':')[0]
             filter_vals = _filter.split(':')[1].split(',')
             filter_check = str(_get_json_field_helper(message, filter_field.split(JSON_LEVEL_DELIM), True))
-            logger.debug('filter_check: ' + str(filter_check))
             # check if a valid value
             for filter_val in filter_vals:
-                logger.debug('checking ' + str(filter_val))
                 if filter_val.upper() in filter_check.upper():
                     is_valid = True
                     break
@@ -582,20 +583,19 @@ def parse_json_message_single(message):
                     return
         logger.debug('passed filter (exclusion)')
 
+    # get project, instance, & device
+    # check_project(get_json_field(message, 'project_field', if_config_vars['project_name']))
+    instance = get_json_field(message, 'instance_field', HOSTNAME)
+    device = get_json_field(message, 'device_field')
+
     # get timestamp
     timestamp = get_json_field(message, 'timestamp_field')
     timestamp = get_timestamp_from_date_string(timestamp)
-
-    # get instance & device
-    check_project(get_json_field(message, 'project_field', if_config_vars['project_name']))
-    instance = get_json_field(message, 'instance_field', HOSTNAME)
-    device = get_json_field(message, 'device_field')
 
     # get data
     log_data = dict()
     if len(agent_config_vars['data_fields']) != 0: 
         for data_field in agent_config_vars['data_fields']:
-            logger.debug(data_field)
             data_value = json_format_field_value(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM), True))
             if len(data_value) != 0:
                 if 'METRIC' in if_config_vars['project_type']:
@@ -606,7 +606,6 @@ def parse_json_message_single(message):
         if 'METRIC' in if_config_vars['project_type']:
             # assume metric data is in top level
             for data_field in message:
-                logger.debug(data_field)
                 data_value = str(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM), True))
                 if data_value is not None:
                     metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
@@ -619,8 +618,6 @@ def parse_json_message_single(message):
 
 
 def parse_csv_message(message):
-    logger.debug(message)
-
     # filter
     if len(agent_config_vars['filters_include']) != 0:
         # for each provided filter, check if there are any allowed valued
@@ -656,22 +653,18 @@ def parse_csv_message(message):
         logger.debug('passed filter (exclusion)')
 
     # project
-    project = if_config_vars['project_name']
-    if isinstance(if_config_vars['project_name'], int):
-        project_field = agent_config_vars['project_field']
-        check_project(message[int(project_field)])
+    # if isinstance(agent_config_vars['project_field'], int):
+    #    check_project(message[agent_config_vars['project_field']])
 
     # instance
     instance = HOSTNAME
     if isinstance(agent_config_vars['instance_field'], int):
-        instance_field = agent_config_vars['instance_field']
-        instance = message[int(instance_field)]
+        instance = message[agent_config_vars['instance_field']]
 
     # device
     device = ''
     if isinstance(agent_config_vars['device_field'], int):
-        device_field = agent_config_vars['device_field']
-        device = message[int(device_field)]
+        device = message[agent_config_vars['device_field']]
 
     # data & timestamp
     columns = [agent_config_vars['timestamp_field']] + agent_config_vars['data_fields']
@@ -692,9 +685,8 @@ def parse_csv_data(csv_data, instance, device=''):
 
     # go through each row
     for row in csv_data:
-        if len(row) == 0:
-            continue
-        parse_csv_row(row.split(','), field_names, instance, device)
+        if len(row) > 0:
+            parse_csv_row(row.split(','), field_names, instance, device)
 
 
 def parse_csv_row(row, field_names, instance, device=''):
@@ -711,7 +703,8 @@ def parse_csv_row(row, field_names, instance, device=''):
 
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
-
+    if 'strip_tz' in agent_config_vars and agent_config_vars['strip_tz']:
+        date_string = ''.join(PCT_z_FMT.split(date_string))
     if 'timestamp_format' in agent_config_vars:
         if agent_config_vars['timestamp_format'] == 'epoch':
             timestamp_datetime = get_datetime_from_unix_epoch(date_string)
@@ -753,7 +746,7 @@ def make_safe_instance_string(instance, device=''):
     instance = UNDERSCORE.sub('.', instance)
     # if there's a device, concatenate it to the instance with an underscore
     if len(device) != 0:
-        instance += '_' + make_safe_instance_string(device)
+        instance = make_safe_instance_string(device) + '_' + instance
     return instance
 
 
@@ -920,7 +913,7 @@ def transpose_metrics():
         for key in track['current_dict'][timestamp]:
             value = track['current_dict'][timestamp][key]
             if '|' in value:
-                value = median(map(lambda v: int(v), value.split('|')))
+                value = statistics.median(map(lambda v: float(v), value.split('|')))
             new_row[key] = str(value)
         track['current_row'].append(new_row)
 
@@ -972,7 +965,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     if mode.upper() == 'POST':
         req = requests.post
 
-    for _ in xrange(ATTEMPTS):
+    for i in xrange(ATTEMPTS):
         try:
             response = req(url, **request_passthrough)
             if response.status_code == httplib.OK:
@@ -984,21 +977,48 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
                              'TEXT: ' + str(response.text))
         # handle various exceptions
         except requests.exceptions.Timeout:
-            logger.exception(
-                'Timed out. Reattempting...')
+            logger.exception('Timed out. Reattempting...')
             continue
         except requests.exceptions.TooManyRedirects:
-            logger.exception(
-                'Too many redirects.')
+            logger.exception('Too many redirects.')
             break
         except requests.exceptions.RequestException as e:
-            logger.exception(
-                'Exception ' + str(e))
+            logger.exception('Exception ' + str(e))
             break
 
-    logger.error(
-        'Failed! Gave up after %d attempts.', ATTEMPTS)
+    logger.error('Failed! Gave up after %d attempts.', i)
     return -1
+
+
+def get_data_type_from_project_type():
+    if 'METRIC' in if_config_vars['project_type']:
+        return 'Metric'
+    elif 'LOG' in if_config_vars['project_type']:
+        return 'Log'
+    elif 'ALERT' in if_config_vars['project_type']:
+        return 'Alert'
+    elif 'INCIDENT' in if_config_vars['project_type']:
+        return 'Incident'
+    elif 'DEPLOYMENT' in if_config_vars['project_type']:
+        return 'Deployment'
+    else:
+        logger.warning('Project Type not correctly configured')
+        sys.exit(1)
+
+
+def get_insight_agent_type_from_project_type():
+    if 'containerize' in agent_config_vars and agent_config_vars['containerize']:
+        if 'REPLAY' in if_config_vars['project_type']:
+            return 'containerReplay'
+        else:
+            return 'containerStreaming'
+    elif 'REPLAY' in if_config_vars['project_type']:
+        if 'METRIC' in if_config_vars['project_type']:
+            return 'MetricFile'
+        else:
+            return 'LogFile'
+    else:
+        return 'Custom'
 
 
 def get_agent_type_from_project_type():
@@ -1047,6 +1067,7 @@ def initialize_api_post_data():
     to_send_data_dict['agentType'] = get_agent_type_from_project_type()
     if 'METRIC' in if_config_vars['project_type'] and 'sampling_interval' in if_config_vars:
         to_send_data_dict['samplingInterval'] = str(if_config_vars['sampling_interval'])
+    logger.debug(to_send_data_dict)
     return to_send_data_dict
 
 
@@ -1059,6 +1080,7 @@ if __name__ == "__main__":
     RIGHT_BRACE = re.compile(r"\]")
     PERIOD = re.compile(r"\.")
     NON_ALNUM = re.compile(r"[^a-zA-Z0-9]")
+    PCT_z_FMT = re.compile(r"[\+\-][0-9]{4}")
     HOSTNAME = socket.gethostname().partition('.')[0]
     JSON_LEVEL_DELIM = '.'
     ATTEMPTS = 3
