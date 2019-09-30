@@ -9,6 +9,7 @@ import socket
 import sys
 import time
 import pytz
+import gzip
 from optparse import OptionParser
 from multiprocessing import Process
 from itertools import islice
@@ -36,23 +37,45 @@ def start_data_processing(thread_number):
 
     for replay_file in files:
         logger.debug('Replaying file ' + str(replay_file))
-        replay_data(replay_file)
+        # project name
+        if_config_vars['project_name'] = if_config_vars['project_name_orig']
+        check_project(os.path.splitext(os.path.basename(replay_file))[0])
+        try:
+            if replay_file[-3:] == '.gz':
+                with gzip.open(replay_file) as json_file:
+                    replay_data(json_file)
+            else:
+                with open(replay_file) as json_file:
+                    replay_data(json_file)
+        except Exception as e:
+            logger.warn('Error when parsing message')
+            logger.warn(str(e)) 
         if cli_config_vars['testing']:
             logger.debug('Skipping files:\n' + str(files[1:]))
             break
 
 
-def replay_data(replay_file):
-    with open(replay_file) as json_file:
-        try:
-            if_config_vars['project_name'] = if_config_vars['project_name_orig']
-            check_project(os.path.splitext(os.path.basename(replay_file))[0])
-            for line in json_file:
-                parse_json_message(json.loads(line))
-            send_data_wrapper()
-        except Exception as e:
-            logger.warn('Error when parsing message')
-            logger.warn(str(e))
+def replay_data(json_file):
+    json_object = ''
+    for line in json_file:
+        if agent_config_vars['multiline']:
+            json_object = add_to_json_obj(json_object, str(line))
+        else:
+            parse_json_message(json.loads(line))
+    send_data_wrapper()
+
+
+def add_to_json_obj(json_object, line):
+    line = line.rstrip()
+    if line == '[' or line == ']':
+        return json_object
+    elif line == ' }' or line == ' },':
+        json_object += '}'
+        logger.debug('parsing single message\n' + json_object)
+        parse_json_message(json.loads(json_object))
+        return ''
+    else:
+        return json_object + line
 
 
 def get_agent_config_vars():
@@ -63,6 +86,7 @@ def get_agent_config_vars():
         try:
             # file path
             file_path = config_parser.get('agent', 'file_path')
+            multiline = config_parser.get('agent', 'multiline').upper()
 
             # filters
             filters_include = config_parser.get('agent', 'filters_include')
@@ -90,6 +114,11 @@ def get_agent_config_vars():
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
 
+        if multiline == 'YES' or multiline == 'Y':
+            multiline = True
+        else:
+            multiline = False
+
         # strptime() doesn't allow timezone info
         if '%Z' in timestamp_format:
             logger.warning('%Z cannot be used in the default agent. Please contact support for a custom parser.')
@@ -112,6 +141,7 @@ def get_agent_config_vars():
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
             'data_format': 'JSON',
+            'multiline': multiline,
             'json_top_level': json_top_level,
             'project_field': project_field,
             'instance_field': instance_field,
