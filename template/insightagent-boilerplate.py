@@ -681,12 +681,12 @@ def parse_csv_data(csv_data, instance, device=''):
     """
 
     # get field names from header row
-    field_names = csv_data.pop(0).split(',')[1:]
+    field_names = csv_data.pop(0).split(CSV_DELIM)[1:]
 
     # go through each row
     for row in csv_data:
         if len(row) > 0:
-            parse_csv_row(row.split(','), field_names, instance, device)
+            parse_csv_row(row.split(CSV_DELIM), field_names, instance, device)
 
 
 def parse_csv_row(row, field_names, instance, device=''):
@@ -1083,6 +1083,7 @@ if __name__ == "__main__":
     PCT_z_FMT = re.compile(r"[\+\-][0-9]{4}")
     HOSTNAME = socket.gethostname().partition('.')[0]
     JSON_LEVEL_DELIM = '.'
+    CSV_DELIM = ','
     ATTEMPTS = 3
     track = dict()
 
