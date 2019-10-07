@@ -1,0 +1,47 @@
+[agent]
+# path to the file or directory of files to replay
+#   if a directory, indicate so by including a trailing '/'
+file_path = 
+# YES or NO if json objects to be sent are split over multiple lines
+multiline = 
+
+## filters
+# define a list of filters to use as field:allowed values|field:allowed values
+# for example:
+#   message.env:stg,prd|message.status:complete
+filters_include = 
+# as above, but instead include values that are not allowed
+# for example:
+#   message.env:dev,cde|message.status:draft
+filters_exclude = 
+
+## message parsing
+# for multi-entry messages, define the top-level
+# if messages are [{message1}, {message2}], set top_level = []
+# it's expected that the top level will be a list
+json_top_level =
+# if none given, project_name under [insightfinder] will be used 
+project_field =
+# if no instance given, the local hostname will be used
+instance_field = 
+device_field = 
+# give format as per python strptime
+timestamp_format = 
+# fields in json can be defined as level0.level.timestamp
+timestamp_field = 
+# multiple fields are separated by commas.
+data_fields =
+
+[insightfinder]
+user_name = 
+license_key = 
+token =
+project_name = 
+# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
+project_type = 
+sampling_interval = 10
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =

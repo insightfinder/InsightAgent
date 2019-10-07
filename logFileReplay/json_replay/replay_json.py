@@ -9,6 +9,7 @@ import socket
 import sys
 import time
 import pytz
+import gzip
 from optparse import OptionParser
 from multiprocessing import Process
 from itertools import islice
@@ -18,6 +19,8 @@ from dateutil.tz import tzlocal
 import urlparse
 import httplib
 import requests
+import subprocess
+import statistics
 
 '''
 This script gathers data to send to Insightfinder
@@ -25,42 +28,55 @@ This script gathers data to send to Insightfinder
 
 
 def start_data_processing(thread_number):
-    """ TODO: replace with your code.
-    Most work regarding sending to IF is abstracted away for you.
-    This function will get the data to send and prepare it for the API.
-    The general outline should be:
-    0. Define the project type in config.ini
-    1. Parse config options
-    2. Gather data
-    3. Parse each entry
-    4. Call the appropriate handoff function
-        metric_handoff()
-        log_handoff()
-        alert_handoff()
-        incident_handoff()
-        deployment_handoff()
-    See zipkin for an example that uses os.fork to send both metric and log data.
-    """
+    # get list of file(s)
+    if agent_config_vars['file_path'][-1:] == '/':
+        files = get_file_list_for_directory(agent_config_vars['file_path'])
+    else:
+        files = [agent_config_vars['file_path']]
+    logger.debug('File list: ' + str(files))
+
+    for replay_file in files:
+        logger.debug('Replaying file ' + str(replay_file))
+        # project name
+        if_config_vars['project_name'] = if_config_vars['project_name_orig']
+        check_project(os.path.splitext(os.path.basename(replay_file))[0])
+        try:
+            if replay_file[-3:] == '.gz':
+                with gzip.open(replay_file) as json_file:
+                    replay_data(json_file)
+            else:
+                with open(replay_file) as json_file:
+                    replay_data(json_file)
+        except Exception as e:
+            logger.warn('Error when parsing message')
+            logger.warn(str(e)) 
+        if cli_config_vars['testing']:
+            logger.debug('Skipping files:\n' + str(files[1:]))
+            break
 
 
-def raw_parse_log(message):
-    # call as log_handoff(*raw_parse(message))
-    timestamp = get_timestamp_from_date_string(time.time()) 
-    data = 'data'
-    instance = 'instance'
-    device = 'device'
-    return timestamp, data, instance, device
+def replay_data(json_file):
+    json_object = ''
+    for line in json_file:
+        if agent_config_vars['multiline']:
+            json_object = add_to_json_obj(json_object, str(line))
+        else:
+            parse_json_message(json.loads(line))
+    send_data_wrapper()
 
 
-def raw_parse_metric(message):
-    # call as metric_handoff(*raw_parse(message))
-    timestamp = get_timestamp_from_date_string(time.time()) 
-    metric = 'metric'
-    data = 'data'
-    instance = 'instance'
-    device = 'device'
-    return timestamp, metric, data, instance, device
-    
+def add_to_json_obj(json_object, line):
+    line = line.rstrip()
+    if line == '[' or line == ']':
+        return json_object
+    elif line == ' }' or line == ' },':
+        json_object += '}'
+        logger.debug('parsing single message\n' + json_object)
+        parse_json_message(json.loads(json_object))
+        return ''
+    else:
+        return json_object + line
+
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
@@ -68,19 +84,15 @@ def get_agent_config_vars():
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
         try:
-            ## TODO: fill out the fields to grab. examples given below
-            ## replace 'agent' with the appropriate section header.
-            # proxies
-            agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
-            agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
-            
+            # file path
+            file_path = config_parser.get('agent', 'file_path')
+            multiline = config_parser.get('agent', 'multiline').upper()
+
             # filters
             filters_include = config_parser.get('agent', 'filters_include')
             filters_exclude = config_parser.get('agent', 'filters_exclude')
 
             # message parsing
-            data_format = config_parser.get('agent', 'data_format').upper()
-            csv_field_names = config_parser.get('agent', 'csv_field_names')
             json_top_level = config_parser.get('agent', 'json_top_level')
             project_field = config_parser.get('agent', 'project_field')
             instance_field = config_parser.get('agent', 'instance_field')
@@ -90,78 +102,54 @@ def get_agent_config_vars():
             data_fields = config_parser.get('agent', 'data_fields')
                     
         except ConfigParser.NoOptionError:
-            logger.error('Agent not correctly configured. Check config file.')
+            logger.error(
+                'Agent not correctly configured. Check config file.')
             sys.exit(1)
          
-        # proxies
-        agent_proxies = dict()
-        if len(agent_http_proxy) > 0:
-            agent_proxies['http'] = agent_http_proxy
-        if len(agent_https_proxy) > 0:
-            agent_proxies['https'] = agent_https_proxy
-        
-        # fitlers
+        # any post-processing
         if len(filters_include) != 0:
             filters_include = filters_include.split('|')
         if len(filters_exclude) != 0:
             filters_exclude = filters_exclude.split('|')
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
-        
-        # timestamp format
-        if '%z' in timestamp_format or '%Z' in timestamp_format:
-            ts_format_info = strip_tz_info(timestamp_format)
-        else:
-            ts_format_info = {'strip_tz': False, 'strip_tz_fmt': '', 'timestamp_format': timestamp_format}
-        
-        if data_format not in { 'CSV', 'JSON' }:
-            data_format = 'RAW'
 
-        # CSV-specific
-        if data_format == 'CSV':
-            if len(csv_field_names) == 0:
-                logger.warning(
-                    'Agent not correctly configured (csv_field_names)')
-                sys.exit()
-                
-            filters = {'filters_include': {'name': filters_include},
-                       'filters_exclude': {'name': filters_exclude}}
-            optional_fields = {'project_field': {'name': project_field},
-                               'instance_field': {'name': instance_field},
-                               'device_field': {'name': device_field}}
-            required_fields = {'timestamp_field': {'name': timestamp_field}}
-            all_fields = {'filters': filter_fields,
-                          'required_fields': required_fields,
-                          'optional_fields': optional_fields,
-                          'data_fields': data_fields}
-            all_fields = check_csv_field_indeces(csv_field_names.split(','), all_fields)
-            filters_include = all_fields['filters']['filters_include']['filter']
-            filters_exclude = all_fields['filters']['filters_exclude']['filter']
-            project_field = all_fields['optional_fields']['project_field']['index']
-            instance_field = all_fields['optional_fields']['instance_field']['index']
-            device_field = all_fields['optional_fields']['device_field']['index']
-            data_fields = all_fields['data_fields']
-            timestamp_field = all_fields['required_fields']['timestamp_field']['index']
-            
-            if timestamp_field in data_fields:
-                data_fields.pop(timestamp_field)
+        if multiline == 'YES' or multiline == 'Y':
+            multiline = True
+        else:
+            multiline = False
+
+        # strptime() doesn't allow timezone info
+        if '%Z' in timestamp_format:
+            logger.warning('%Z cannot be used in the default agent. Please contact support for a custom parser.')
+            sys.exit(1)
+        if '%z' in timestamp_format:
+            position = timestamp_format.index('%z')
+            if len(timestamp_format) > (position + 2):
+                timestamp_format = timestamp_format[:position] + timestamp_format[position+2:]
+            else:
+                timestamp_format = timestamp_format[:position]
+            if cli_config_vars['time_zone'] == pytz.timezone('UTC'):
+                logger.warning('Time zone info will be stripped from timestamps, but no time zone info was supplied in the config. Assuming UTC')
+            strip_tz = True
+        else:
+            strip_tz = False
 
         # add parsed variables to a global
         config_vars = {
-            'proxies': agent_proxies,
+            'file_path': file_path,
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
-            'data_format': data_format,
+            'data_format': 'JSON',
+            'multiline': multiline,
             'json_top_level': json_top_level,
-            'csv_field_names': csv_field_names,
             'project_field': project_field,
             'instance_field': instance_field,
             'device_field': device_field,
-            'data_fields': data_fields,
             'timestamp_field': timestamp_field,
-            'timestamp_format': ts_format_info['timestamp_format'],
-            'strip_tz': ts_format_info['strip_tz'],
-            'strip_tz_fmt': ts_format_info['strip_tz_fmt']
+            'timestamp_format': timestamp_format,
+            'strip_tz': strip_tz,
+            'data_fields': data_fields
         }
 
         return config_vars
@@ -181,6 +169,7 @@ def get_if_config_vars():
         try:
             user_name = config_parser.get('insightfinder', 'user_name')
             license_key = config_parser.get('insightfinder', 'license_key')
+            token = config_parser.get('insightfinder', 'token')
             project_name = config_parser.get('insightfinder', 'project_name')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
@@ -189,21 +178,27 @@ def get_if_config_vars():
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
         except ConfigParser.NoOptionError:
-            logger.error('Agent not correctly configured. Check config file.')
+            logger.error(
+                'Agent not correctly configured. Check config file.')
             sys.exit(1)
 
         # check required variables
         if len(user_name) == 0:
-            logger.warning('Agent not correctly configured (user_name). Check config file.')
+            logger.warning(
+                'Agent not correctly configured (user_name). Check config file.')
             sys.exit(1)
         if len(license_key) == 0:
-            logger.warning('Agent not correctly configured (license_key). Check config file.')
+            logger.warning(
+                'Agent not correctly configured (license_key). Check config file.')
             sys.exit(1)
         if len(project_name) == 0:
-            logger.warning('Agent not correctly configured (project_name). Check config file.')
+            logger.warning(
+                'Agent not correctly configured (project_name). Check config file.')
             sys.exit(1)
         if len(project_type) == 0:
-            logger.warning('Agent not correctly configured (project_type). Check config file.')
+            timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
+            logger.warning(
+                'Agent not correctly configured (project_type). Check config file.')
             sys.exit(1)
         
         if project_type not in {
@@ -218,12 +213,14 @@ def get_if_config_vars():
                 'DEPLOYMENT',
                 'DEPLOYMENTREPLAY'
                 }:
-           logger.warning('Agent not correctly configured (project_type). Check config file.')
+           logger.warning(
+                'Agent not correctly configured (project_type). Check config file.')
            sys.exit(1)  
 
         if len(sampling_interval) == 0:
             if 'METRIC' in project_type:
-                logger.warning('Agent not correctly configured (sampling_interval). Check config file.')
+                logger.warning(
+                    'Agent not correctly configured (sampling_interval). Check config file.')
                 sys.exit(1)
             else:
                 # set default for non-metric
@@ -252,6 +249,7 @@ def get_if_config_vars():
             'license_key': license_key,
             'token': token,
             'project_name': project_name,
+            'project_name_orig': project_name,
             'project_type': project_type,
             'sampling_interval': int(sampling_interval),     # as seconds
             'chunk_size': int(chunk_size_kb) * 1024,         # as bytes
@@ -261,7 +259,8 @@ def get_if_config_vars():
 
         return config_vars
     else:
-        logger.error('Agent not correctly configured. Check config file.')
+        logger.error(
+            'Agent not correctly configured. Check config file.')
         sys.exit(1)
 
 
@@ -274,15 +273,15 @@ def get_cli_config_vars():
     parser.add_option('--threads', default=1,
                       action='store', dest='threads', help='Number of threads to run')
     """
-    parser.add_option('--tz', default='UTC', action='store', dest='time_zone', 
-                      help='Timezone of the data. See pytz.all_timezones')
-    parser.add_option('-q', '--quiet', action='store_true', dest='quiet', 
-                      help='Only display warning and error log messages')
-    parser.add_option('-v', '--verbose', action='store_true', dest='verbose', 
-                      help='Enable verbose logging')
-    parser.add_option('-t', '--testing', action='store_true', dest='testing', 
-                      help='Set to testing mode (do not send data).' +
-                           ' Automatically turns on verbose logging')
+    parser.add_option('--tz', default='UTC',
+                      action='store', dest='time_zone', help='Timezone of the data. See pytz.all_timezones')
+    parser.add_option('-q', '--quiet',
+                      action='store_true', dest='quiet', help='Only display warning and error log messages')
+    parser.add_option('-v', '--verbose',
+                      action='store_true', dest='verbose', help='Enable verbose logging')
+    parser.add_option('-t', '--testing',
+                      action='store_true', dest='testing', help='Set to testing mode (do not send data).' +
+                                                                ' Automatically turns on verbose logging')
     (options, args) = parser.parse_args()
 
     """
@@ -297,7 +296,7 @@ def get_cli_config_vars():
         'threads': 1,
         'testing': False,
         'log_level': logging.INFO,
-        'time_zone': pytz.utc
+        'time_zone': pytz.timezone('UTC')
         }
 
     if options.testing:
@@ -305,77 +304,13 @@ def get_cli_config_vars():
 
     if options.verbose or options.testing:
         config_vars['log_level'] = logging.DEBUG
-    elif options.quiet:
+    if options.quiet:
         config_vars['log_level'] = logging.WARNING
 
     if len(options.time_zone) != 0 and options.time_zone in pytz.all_timezones:
         config_vars['time_zone'] = pytz.timezone(options.time_zone)
 
     return config_vars
-
-
-def strip_tz_info(timestamp_format):
-    # strptime() doesn't allow timezone info
-    if '%Z' in timestamp_format:
-        position = timestamp_format.index('%Z')
-        strip_tz_fmt = PCT_Z_FMT
-    if '%z' in timestamp_format:
-        position = timestamp_format.index('%z')
-        strip_tz_fmt = PCT_z_FMT
-    
-    if len(timestamp_format) > (position + 2):
-        timestamp_format = timestamp_format[:position] + timestamp_format[position+2:]
-    else:
-        timestamp_format = timestamp_format[:position]
-    if cli_config_vars['time_zone'] == pytz.timezone('UTC'):
-        logger.warning('Time zone info will be stripped from timestamps, but no time zone info was supplied in the config. Assuming UTC')
-    
-    return {'strip_tz': True, 'strip_tz_fmt': strip_tz_fmt, 'timestamp_format': timestamp_format}
-
-
-def check_csv_fieldnames(csv_field_names, all_fields):
-    # required
-    for field in all_fields['required_fields']:
-        all_fields['required_fields'][field]['index'] = 
-            get_field_index(csv_field_names, all_fields['optional_fields'][field]['name'], field, True)
-
-    # optional
-    for field in all_fields['optional_fields']:
-        if len(all_fields['optional_fields'][field]['name']) != 0:
-            index = get_field_index(csv_field_names, all_fields['optional_fields'][field]['name'], field)
-            if isinstance(index, int):
-                all_fields['optional_fields'][field]['index'] = index
-            else:
-                all_fields['optional_fields'][field]['index'] = ''
-
-    # filters
-    for field in all_fields['filters']:
-        if len(all_fields['filters'][field]['name']) != 0:
-            filters_temp = []
-            for _filter in all_fields['filters'][field]['name']:
-                filter_field = _filter.split(':')[0]          
-                filter_vals = _filter.split(':')[1]
-                filter_index = get_field_index(csv_field_names, filter_field, field)
-                if isinstance(filter_index, int):
-                    filter_temp = str(filter_index) + ':' + filter_vals
-                    filters_temp.append(filter_temp)
-            all_fields['filters'][field]['filter'] = filters_temp
-
-    # data
-    data_fields = all_fields['data_fields']
-    if len(all_fields['data_fields']) != 0:
-        data_fields_temp = []
-        for data_field in all_fields['data_fields']:
-            data_field_temp = get_field_index(csv_field_names, data_field, 'data_field')
-            if isinstance(data_field_temp, int):
-                data_fields_temp.append(data_field_temp)
-        all_fields['data_fields'] = data_fields_temp
-    if len(all_fields['data_fields']) == 0:
-        # use all non-timestamp fields
-        all_fields['data_fields'] = range(len(csv_field_names))
-
-    return all_fields
-
 
 def check_project(project_name):
     if 'token' in if_config_vars and len(if_config_vars['token']) != 0:
@@ -418,7 +353,8 @@ def get_field_index(field_names, field, label, is_required=False):
             field = err_code
     finally:
         if field == err_code:
-            logger.warn('Agent not configured correctly (' + label + ')\n' + err_msg)
+            logger.warn(
+                'Agent not configured correctly (' + label + ')\n' + err_msg)
             if is_required:
                 sys.exit(1)
             return
@@ -472,8 +408,7 @@ def parse_raw_message(message):
 def get_json_field(message, config_setting, default=''):
     if len(agent_config_vars[config_setting]) == 0:
         return default
-    field_val = json_format_field_value(
-                    _get_json_field_helper(message, agent_config_vars[config_setting].split(JSON_LEVEL_DELIM)))
+    field_val = json_format_field_value(_get_json_field_helper(message, agent_config_vars[config_setting].split(JSON_LEVEL_DELIM)))
     if len(field_val) == 0:
         field_val = default
     return field_val
@@ -681,12 +616,13 @@ def parse_csv_data(csv_data, instance, device=''):
     """
 
     # get field names from header row
-    field_names = csv_data.pop(0).split(CSV_DELIM)[1:]
+    field_names = csv_data.pop(0).split(',')[1:]
 
     # go through each row
     for row in csv_data:
-        if len(row) > 0:
-            parse_csv_row(row.split(CSV_DELIM), field_names, instance, device)
+        if len(row) == 0:
+            continue
+        parse_csv_row(row.split(','), field_names, instance, device)
 
 
 def parse_csv_row(row, field_names, instance, device=''):
@@ -746,7 +682,7 @@ def make_safe_instance_string(instance, device=''):
     instance = UNDERSCORE.sub('.', instance)
     # if there's a device, concatenate it to the instance with an underscore
     if len(device) != 0:
-        instance = make_safe_instance_string(device) + '_' + instance
+        instance += '_' + make_safe_instance_string(device)
     return instance
 
 
@@ -965,7 +901,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     if mode.upper() == 'POST':
         req = requests.post
 
-    for i in xrange(ATTEMPTS):
+    for _ in xrange(ATTEMPTS):
         try:
             response = req(url, **request_passthrough)
             if response.status_code == httplib.OK:
@@ -977,16 +913,20 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
                              'TEXT: ' + str(response.text))
         # handle various exceptions
         except requests.exceptions.Timeout:
-            logger.exception('Timed out. Reattempting...')
+            logger.exception(
+                'Timed out. Reattempting...')
             continue
         except requests.exceptions.TooManyRedirects:
-            logger.exception('Too many redirects.')
+            logger.exception(
+                'Too many redirects.')
             break
         except requests.exceptions.RequestException as e:
-            logger.exception('Exception ' + str(e))
+            logger.exception(
+                'Exception ' + str(e))
             break
 
-    logger.error('Failed! Gave up after %d attempts.', i)
+    logger.error(
+        'Failed! Gave up after %d attempts.', ATTEMPTS)
     return -1
 
 
@@ -1083,7 +1023,6 @@ if __name__ == "__main__":
     PCT_z_FMT = re.compile(r"[\+\-][0-9]{4}")
     HOSTNAME = socket.gethostname().partition('.')[0]
     JSON_LEVEL_DELIM = '.'
-    CSV_DELIM = ','
     ATTEMPTS = 3
     track = dict()
 
