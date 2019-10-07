@@ -79,18 +79,6 @@ HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
 ##install or uninstall
 ifAction=install
 
-##Login User In Insightfinder Application
-ifUserName=
-
-##Project Name In Insightfinder Application
-ifProjectName=
-
-##User's License Key in Application
-ifLicenseKey=
-
-##Sampling interval could be an integer indicating the number of minutes or "10s" indicating 10 seconds.
-ifSamplingInterval=1
-
 ##Agent type
 #
 ifAgent=script_runner
