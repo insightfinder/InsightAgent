@@ -48,7 +48,7 @@ def get_job_data(job_id):
 
 def set_time_range():
     end_time = int(time.time())
-    start_time = end_time - if_config_vars['sampling_interval'] * 1000
+    start_time = end_time - if_config_vars['sampling_interval']
     agent_config_vars['parameters']['finishedTimeBegin'] = start_time
     agent_config_vars['parameters']['finishedTimeEnd'] = end_time
 
