@@ -36,7 +36,7 @@ def start_data_processing(thread_number):
 def get_job_list():
     response_raw = send_request(agent_config_vars['api_url'], data=agent_config_vars['parameters'], proxies=agent_config_vars['proxies'])
     response_json = json.loads(response_raw.text)
-    return _get_json_field_helper(messages, 'jobs.job'.split(JSON_LEVEL_DELIM), True)
+    return _get_json_field_helper(response_json, 'jobs.job'.split(JSON_LEVEL_DELIM), True)
 
 
 def get_job_data(job_id):
