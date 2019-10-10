@@ -2,6 +2,7 @@
 
 # TODO: fill here
 AGENT=""
+AGENT_SCRIPT=".py"
 
 # run as root
 if [[ $EUID -ne 0 ]]; then
@@ -15,7 +16,6 @@ if [[ -z "${RUN_INTERVAL}" ]]; then
     exit 1
 fi
 
-AGENT_SCRIPT="${AGENT}.py"
 AGENT_FULL_PATH="$(pwd)/${AGENT_SCRIPT}"
 AGENT_FULL_PATH_CONFIG="$(pwd)/config.ini"
 AGENT_FULL_PATH_LOG="$(pwd)/log.out"
