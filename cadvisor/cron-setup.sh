@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # TODO: fill here
-AGENT="cadvisor2"
+AGENT="cadvisor"
 AGENT_SCRIPT="getmetrics_cadvisor.py"
 
 # run as root
