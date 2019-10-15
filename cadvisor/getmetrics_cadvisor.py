@@ -81,6 +81,10 @@ def get_metric_data(container_id, metric_data):
 
 
 def calc_cpu(timestamp, cpu_data_prev, cpu_data_curr, container_id):
+    if not cpu_data_prev or not cpu_data_curr:
+        logger.warning('no cpu data to report')
+        return
+    
     usage_prev = cpu_data_prev['usage']['total']
     usage_curr = cpu_data_curr['usage']['total']
     cpu_pct = float((usage_curr - usage_prev) / 1000000000.0)
@@ -88,18 +92,30 @@ def calc_cpu(timestamp, cpu_data_prev, cpu_data_curr, container_id):
 
 
 def calc_mem(timestamp, mem_data_prev, mem_data_curr, container_id):
+    if not mem_data_prev or not mem_data_curr:
+        logger.warning('no memory data to report')
+        return
+    
     mem_curr = mem_data_curr['usage']
     mem_used = float(mem_curr / (1024.0 * 1024.0))
     append_metric_data_to_entry(timestamp, 'memory', abs(mem_used), agent_config_vars['hostname'], container_id)
 
 
 def calc_fs(timestamp, fs_data_prev, fs_data_curr, container_id):
+    if not fs_data_prev or not fs_data_curr:
+        logger.warning('no filesystem data to report')
+        return
+    
     fs_curr = sum(map(lambda x: x['usage'], fs_data_curr))
     fs_used = float(fs_curr / (1024.0 * 1024.0))
     append_metric_data_to_entry(timestamp, 'filesystem/used', abs(fs_used), agent_config_vars['hostname'], container_id)
 
 
 def calc_io(timestamp, io_data_prev, io_data_curr, container_id):
+    if not io_data_prev or not io_data_curr:
+        logger.warning('no diskio data to report')
+        return
+
     io_prev = io_data_prev['io_service_bytes']
     io_read_prev = sum(map(lambda x: x['stats']['Read'], io_prev))
     io_write_prev = sum(map(lambda x: x['stats']['Write'], io_prev))
@@ -115,6 +131,10 @@ def calc_io(timestamp, io_data_prev, io_data_curr, container_id):
     
 
 def calc_network(timestamp, network_data_prev, network_data_curr, container_id):
+    if not network_data_prev or not network_data_curr:
+        logger.warning('no network data to report')
+        return
+
     network_tx_prev = network_data_prev['tx_bytes']
     network_rx_prev = network_data_prev['rx_bytes']
 
