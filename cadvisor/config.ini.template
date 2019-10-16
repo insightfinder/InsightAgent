@@ -1,0 +1,27 @@
+[agent]
+# (required) uri for REST API requests. <scheme>://server:port
+api_uri = http://localhost:8080
+
+# multiple fields are separated by commas.
+# select from [cpu, memory, network, filesystem, diskio]
+# leave blank for all
+data_fields =
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
+[insightfinder]
+user_name = 
+license_key = 
+token =
+project_name = 
+# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
+project_type = 
+# for cadvisor, sampling_interval must be 90s
+sampling_interval = 90s
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
