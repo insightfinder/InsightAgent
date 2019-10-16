@@ -120,8 +120,7 @@ def get_agent_config_vars():
         # CSV-specific
         if data_format == 'CSV':
             if len(csv_field_names) == 0:
-                logger.warning(
-                    'Agent not correctly configured (csv_field_names)')
+                logger.warning('Agent not correctly configured (csv_field_names)')
                 sys.exit()
                 
             filters = {'filters_include': {'name': filters_include},
@@ -181,6 +180,7 @@ def get_if_config_vars():
         try:
             user_name = config_parser.get('insightfinder', 'user_name')
             license_key = config_parser.get('insightfinder', 'license_key')
+            token = config_parser.get('insightfinder', 'token')
             project_name = config_parser.get('insightfinder', 'project_name')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
@@ -336,8 +336,7 @@ def strip_tz_info(timestamp_format):
 def check_csv_fieldnames(csv_field_names, all_fields):
     # required
     for field in all_fields['required_fields']:
-        all_fields['required_fields'][field]['index'] = 
-            get_field_index(csv_field_names, all_fields['optional_fields'][field]['name'], field, True)
+        all_fields['required_fields'][field]['index'] = get_field_index(csv_field_names, all_fields['optional_fields'][field]['name'], field, True)
 
     # optional
     for field in all_fields['optional_fields']:
@@ -704,7 +703,8 @@ def parse_csv_row(row, field_names, instance, device=''):
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
     if 'strip_tz' in agent_config_vars and agent_config_vars['strip_tz']:
-        date_string = ''.join(PCT_z_FMT.split(date_string))
+        date_string = ''.join(agent_config_vars['strip_tz_fmt'].split(date_string))
+
     if 'timestamp_format' in agent_config_vars:
         if agent_config_vars['timestamp_format'] == 'epoch':
             timestamp_datetime = get_datetime_from_unix_epoch(date_string)
@@ -780,7 +780,7 @@ def set_logger_config(level):
     logging_handler_out = logging.StreamHandler(sys.stdout)
     logging_handler_out.setLevel(logging.DEBUG)
     # create a logging format
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(process)d - %(threadName)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s [pid %(process)d] %(levelname)-8s %(module)s.%(funcName)s():%(lineno)d %(message)s')
     logging_handler_out.setFormatter(formatter)
     logger_obj.addHandler(logging_handler_out)
 
@@ -1081,6 +1081,7 @@ if __name__ == "__main__":
     PERIOD = re.compile(r"\.")
     NON_ALNUM = re.compile(r"[^a-zA-Z0-9]")
     PCT_z_FMT = re.compile(r"[\+\-][0-9]{4}")
+    PCT_Z_FMT = re.compile(r"[A-Z]{3,4}")
     HOSTNAME = socket.gethostname().partition('.')[0]
     JSON_LEVEL_DELIM = '.'
     CSV_DELIM = ','
