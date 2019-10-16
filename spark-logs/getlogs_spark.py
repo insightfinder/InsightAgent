@@ -55,7 +55,7 @@ def get_app_data(app):
 
 def set_time_range():
     end_time = int(time.time())
-    start_time = end_time - if_config_vars['sampling_interval'] * 1000
+    start_time = end_time - if_config_vars['sampling_interval']
     agent_config_vars['parameters']['minEndDate'] = datetime.fromtimestamp(start_time).strftime('%Y-%m-%dT%H:%M:%S.%f%Z')
     agent_config_vars['parameters']['maxEndDate'] = datetime.fromtimestamp(end_time).strftime('%Y-%m-%dT%H:%M:%S.%f%Z')
 
