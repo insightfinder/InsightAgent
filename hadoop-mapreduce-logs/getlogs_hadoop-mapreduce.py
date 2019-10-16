@@ -34,13 +34,13 @@ def start_data_processing(thread_number):
 
 
 def get_job_list():
-    response_raw = send_request(agent_config_vars['api_url'], data=agent_config_vars['parameters'], proxies=agent_config_vars['proxies'])
+    response_raw = send_request(agent_config_vars['api_url'], params=agent_config_vars['parameters'], proxies=agent_config_vars['proxies'])
     response_json = json.loads(response_raw.text)
     return _get_json_field_helper(response_json, 'jobs.job'.split(JSON_LEVEL_DELIM), True)
 
 
 def get_job_data(job_id):
-    job_api_url = urlparse.urljoin(agent_config_vars['api_url'], '/' + job_id)
+    job_api_url = urlparse.urljoin(agent_config_vars['api_url'], job_id)
     response_raw = send_request(job_api_url, proxies=agent_config_vars['proxies'])
     response_json = json.loads(response_raw.text)
     parse_json_message(response_json)
@@ -49,8 +49,8 @@ def get_job_data(job_id):
 def set_time_range():
     end_time = int(time.time())
     start_time = end_time - if_config_vars['sampling_interval']
-    agent_config_vars['parameters']['finishedTimeBegin'] = start_time
-    agent_config_vars['parameters']['finishedTimeEnd'] = end_time
+    agent_config_vars['parameters']['finishedTimeBegin'] = start_time * 1000
+    agent_config_vars['parameters']['finishedTimeEnd'] = end_time * 1000
 
 
 def get_agent_config_vars():
@@ -84,15 +84,14 @@ def get_agent_config_vars():
             data_fields = config_parser.get('agent', 'data_fields')
                     
         except ConfigParser.NoOptionError:
-            logger.error(
-                'Agent not correctly configured. Check config file.')
+            logger.error('Agent not correctly configured. Check config file.')
             sys.exit(1)
         
         # api
         if len(hx_server_uri) == 0:
             logger.error('Agent not correctly configured (history_server_uri). Check config file.')
             sys.exit(1)
-        api_url = urlparse.urljoin(hx_server_uri, '/ws/v1/history/mapreduce/jobs')
+        api_url = urlparse.urljoin(hx_server_uri, '/ws/v1/history/mapreduce/jobs/')
 
         # parameters
         parameters = dict()
@@ -180,8 +179,7 @@ def get_if_config_vars():
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
         except ConfigParser.NoOptionError:
-            logger.error(
-                'Agent not correctly configured. Check config file.')
+            logger.error('Agent not correctly configured. Check config file.')
             sys.exit(1)
 
         # check required variables
@@ -651,7 +649,7 @@ def get_timestamp_from_date_string(date_string):
     else:
         try:
             timestamp_datetime = dateutil.parse.parse(date_string)
-        except e:
+        except:
             timestamp_datetime = get_datetime_from_unix_epoch(date_string)
             agent_config_vars['timestamp_format'] = 'epoch'
 
@@ -1023,7 +1021,7 @@ if __name__ == "__main__":
     PERIOD = re.compile(r"\.")
     NON_ALNUM = re.compile(r"[^a-zA-Z0-9]")
     PCT_z_FMT = re.compile(r"[\+\-][0-9]{4}")
-    PCT_Z_FMT = re.compile(r"[\s][A-Z]{3,4}") # rough approximation.
+    PCT_Z_FMT = re.compile(r"[A-Z]{3,4}") # rough approximation.
     HOSTNAME = socket.gethostname().partition('.')[0]
     JSON_LEVEL_DELIM = '.'
     ATTEMPTS = 3
