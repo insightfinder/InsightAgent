@@ -28,7 +28,7 @@ sudo ./cron-setup.sh <sampling_interval>
 ```
 
 ### Config Variables
-* `history_server_uri`: Set to the uri for the history server as `scheme://host:port`
+* **`history_server_uri`**: Set to the uri for the history server as `scheme://host:port`.
 * `YARN_cluster`: Set to `YES` if this is set up as a YARN cluster.
 * `filters_include`: Used to filter messages based on allowed values.
 * `filters_exclude`: Used to filter messages based on unallowed values.
