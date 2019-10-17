@@ -33,10 +33,7 @@ sudo ./cron-setup.sh <sampling_interval>
 * `queue`: Queue to find jobs for
 * `filters_include`: Used to filter messages based on allowed values.
 * `filters_exclude`: Used to filter messages based on unallowed values.
-* **`data_format`**: The format of the data to parse: CSV, JSON, or RAW
-* **`csv_field_names`**: A list of field names for CSV input. Required, even if the CSV to parse has a header.
 * `json_top_level`: The top-level of fields to parse in JSON. Default is `job` and should be left as such.
-then this should be set to `output.parsed`.
 * `timestamp_format`: Format of the timestamp, in python [strftime](http://strftime.org/). If the timestamp is in Unix epoch, this can be left blank or set to `epoch`.
 * `timestamp_field`: Field name for the timestamp. Default is `finishTime`.
 * `instance_field`: Field name for the instance name. Default is `queue`. If not set or the field is not found, the instance name is the hostname of the machine the agent is installed on.
