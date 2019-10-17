@@ -28,7 +28,7 @@ mv new_agent.tar.gz new_agent
 Then, delete this section from the `README.md` and update it as appropriate.
 
 ## Installing the Agent
-**Download the agent [tarball](link_to_tar) and untar it:**
+**Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/new_agent/new_agent.tar.gz) and untar it:**
 ```
 tar xvf new_agent.tar.gz && cd new_agent
 ```
