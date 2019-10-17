@@ -1,36 +1,8 @@
-# Template
-This is a template for developing new agents.
-To start a new agent, recursively copy this folder.
-`cp -r template/ new_agent/ && cd new_agent`
-
-In your new agent folder, rename the script
-`mv insightagent-boilerplate.py getmessages_agent.py`
-
-Depending on whether or not the agent should run on a cron (occasionally collect and send data) or monit (continuously monitor data). Delete the other script, then modify the needed script with the agent name and script name.
-```
-$ vi {cron-setup.sh|monit-setup.sh}
-...
-AGENT="new_agent"
-AGENT_SCRIPT="getmessages_agent.py"
-...
-```
-
-Start writing your new agent, modifying `config.ini.template` to have the required input parameters. If your script requires a new pip package, download the `.whl` or `.tar.gz`, place it in pip_packages, then update `pip-setup.sh`.
-
-Once you're done, create a tar for the agent and move it into the agent folder.
-
-```
-cd ..
-tar -czvf new_agent.tar.gz
-mv new_agent.tar.gz new_agent
-```
-
-Then, delete this section from the `README.md` and update it as appropriate.
-
+# Kafka
 ## Installing the Agent
-**Download the agent [tarball](link_to_tar) and untar it:**
+**Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/kafka2/kafka.tar.gz) and untar it:**
 ```
-tar xvf new_agent.tar.gz && cd new_agent
+tar xvf kafka.tar.gz && cd kafka
 ```
 
 **Copy `config.ini.template` to `config.ini` and edit it:**
@@ -47,17 +19,19 @@ sudo ./pip-setup.sh
 
 **Test the agent:**
 ```
-python getmessages_agent.py -t
+python getmessages_kafka.py -t
 ```
 
 **If satisfied with the output, configure the agent to run continuously:**
 ```
-sudo ./cron-setup.sh <sampling_interval>
-or
 sudo ./monit-setup.sh
 ```
 
 ### Config Variables
+* **`bootstrap_servers`**: Comma-delimited list of bootstrap servers as host:port
+* **`topics`**: Comma-delimited list of topics to subscribe to.
+* `group_id`: Group ID to join. Default is None.
+* `client_id`: Client ID used when subscribing to topics. Default is `kafka-python-{version}` (from KafkaConsumer API). 
 * `filters_include`: Used to filter messages based on allowed values.
 * `filters_exclude`: Used to filter messages based on unallowed values.
 * **`data_format`**: The format of the data to parse: CSV, JSON, or RAW
@@ -82,11 +56,27 @@ then this should be set to `output.parsed`.
 * `instance_field`: Field name for the instance name. If not set or the field is not found, the instance name is the hostname of the machine the agent is installed on.
 * `device_field`: Field name for the device/container for containerized projects.
 * `data_fields`: Comma-delimited list of field names to use as data fields. If not set, all fields will be reported.
+
+For the following fields, please refer to the [KafkaConsumer API](https://kafka-python.readthedocs.io/en/master/apidoc/KafkaConsumer.html).
+* `security_protocol`: Set to `SSL` in order to use SSL.
+* `ssl_context`
+* `ssl_check_hostname`: `True` or `False`
+* `ssl_cafile`
+* `ssl_certfile`
+* `ssl_keyfile`
+* `ssl_password`
+* `ssl_crlfile`
+* `ssl_ciphers`
+* `sasl_mechanism`: One of PLAIN, GSSAPI, OAUTHBEARER
+* `sasl_plain_username`
+* `sasl_plain_password`
+* `sasl_kerberos_service_name`
+* `sasl_kerberos_domain_name`
+* `sasl_oauth_token_provider`
 * `agent_http_proxy`: HTTP proxy used to connect to the agent.
 * `agent_https_proxy`: As above, but HTTPS.
 * **`user_name`**: User name in InsightFinder
 * **`license_key`**: License Key from your Account Profile in the InsightFinder UI.
-* `token`: Token from your Account Profile in the InsightFinder UI.
 * **`project_name`**: Name of the project created in the InsightFinder UI.
 * **`project_type`**: Type of the project - one of `metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay`.
 * **`sampling_interval`**: How frequently data is collected. Should match the interval used in cron.
