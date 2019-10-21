@@ -30,6 +30,7 @@ Then, delete this section from the `README.md` and update it as appropriate.
 ## Installing the Agent
 **Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/new_agent/new_agent.tar.gz) and untar it:**
 ```
+wget https://github.com/insightfinder/InsightAgent/raw/master/new_agent/new_agent.tar.g
 tar xvf new_agent.tar.gz && cd new_agent
 ```
 

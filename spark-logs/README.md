@@ -2,6 +2,7 @@
 ## Installing the Agent
 **Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/spark-logs/spark-logs.tar.gz) and untar it:**
 ```
+wget https://github.com/insightfinder/InsightAgent/raw/master/spark-logs/spark-logs.tar.gz
 tar xvf spark-logs.tar.gz && cd spark-logs
 ```
 
