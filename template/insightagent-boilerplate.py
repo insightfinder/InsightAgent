@@ -713,7 +713,7 @@ def get_timestamp_from_date_string(date_string):
     else:
         try:
             timestamp_datetime = dateutil.parse.parse(date_string)
-        except e:
+        except:
             timestamp_datetime = get_datetime_from_unix_epoch(date_string)
             agent_config_vars['timestamp_format'] = 'epoch'
 

@@ -25,7 +25,7 @@ touch ${AGENT_FULL_PATH_LOG}
 CRON_FILE="/etc/cron.d/${AGENT}"
 touch ${CRON_FILE}
 CRON_USER="root"
-CRON_COMMAND="\$(command -v python) ${AGENT_FULL_PATH} &>${AGENT_FULL_PATH_LOG}"
+CRON_COMMAND="\$(command -v python) ${AGENT_FULL_PATH} >${AGENT_FULL_PATH_LOG}"
 RUN_INTERVAL_UNIT="${RUN_INTERVAL: -1}"
 RUN_INTERVAL_VAL="${RUN_INTERVAL:0:${#RUN_INTERVAL}-1}"
 
@@ -52,6 +52,8 @@ else
     echo "Invalid run interval specified. Please specify how often the cron should run in seconds (\"6s\" - must be an integer divisor of 60), minutes (default, \"6m\" or \"6\"), hours (\"6h\"), or days (\"6d\")"
     exit 1
 fi
+# end with a blank line
+echo "" >> ${CRON_FILE}
 
 echo "Cron config created at ${CRON_FILE}"
 cat ${CRON_FILE}
