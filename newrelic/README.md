@@ -1,88 +1,52 @@
-# InsightAgent: newrelic
-Agent Type: newrelic
-
-Platform: Linux
-
-InsightFinder agent can be used to monitor system performance metrics on bare metal machines or virtual machines.
-
-##### Instructions to register a project in Insightfinder.com
-- Go to [insightfinder.com](https://insightfinder.com/)
-- Sign in with the user credentials or sign up for a new account.
-- Go to Settings and Register for a project under "Insight Agent" tab.
-- Give a project name, select Project Type as "Private Cloud".
-- View your account information by clicking on your user id at the top right corner of the webpage. Note the license key number.
-
-##### Pre-requisites:
-Python 2.7.
-
-Python 2.7 must be installed in order to launch deployInsightAgent.sh. For Debian and Ubuntu, the following command will ensure that the required dependencies are present
+# New Relic
+## Installing the Agent
+**Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/newrelic/newrelic.tar.gz) and untar it:**
 ```
-sudo apt-get upgrade
-sudo apt-get install build-essential libssl-dev libffi-dev python-dev wget
-```
-For Fedora and RHEL-derivatives
-```
-sudo yum update
-sudo yum install gcc libffi-devel python-devel openssl-devel wget
+tar xvf newrelic.tar.gz && cd newrelic
 ```
 
-##### To install agent on the machine
-1) Use the following command to download the insightfinder agent code.
+**Copy `config.ini.template` to `config.ini` and edit it:**
 ```
-wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
+cp config.ini.template config.ini
+vi config.ini
 ```
-Untar using this command.
+See below for a further explanation of each variable.
+
+**Setup pip & required packages:**
 ```
-tar -xvf insightagent.tar.gz
+sudo ./pip-setup.sh
 ```
 
-2) run the following commands to install and use python virtual environment for insightfinder agent:
+**Test the agent:**
 ```
-./deployment/checkpackages.sh -env
-```
-```
-source pyenv/bin/activate
+python getmetrics_newrelic.py -t
 ```
 
-3) Run the below command to install agent.(The -w parameter can be used to give server url example ***-w http://192.168.78.85:8080***  in case you have an on-prem installation otherwise it is not required)
+**If satisfied with the output, configure the agent to run continuously:**
 ```
-sudo ./deployment/install.sh -i PROJECT_NAME -u USER_NAME -k LICENSE_KEY -r REPORTING_INTERVAL -t newrelic -w SERVER_URL -s SAMPLING_INTERVAL
+sudo ./cron-setup.sh <sampling_interval>
+```
 
-Required: PROJECT_NAME, USER_NAME, LICENSE_KEY, SAMPLING_INTERVAL  
-REPORTING_INTERVAL is the time interval for backend collectior
-SAMPLING_INTERVAL is the time interval for data sampling interval 
-```
-After using the agent, use command "deactivate" to get out of python virtual environment.
-
-4) In InsightAgent-master directory, make changes to the config file. api_key is required, and can be found in the https://docs.newrelic.com/docs/apis/rest-api-v2/application-examples-v2/list-your-app-id-metric-timeslice-data-v2
-
-```
-newrelic/config.ini
-```
-config file template
-```
-[newrelic]
-api_key = 
-# applications to include (default all)
-app_name_filter = 
-# hosts to include (default all)
-host_filter = 
-# mectrics to include (default all)
-# this should be formatted as metric_name:value|value,metric_name:value|value
-metrics = CPU/User Time:percent,Memory/Heap/Used:used_mb_by_host,Memory/Physical:used_mb_by_host,Instance/connectsReqPerMin:requests_per_minute,Controller/reports/show:average_response_time|calls_per_minute|call_count|min_response_time|max_response_time|average_exclusive_time|average_value|total_call_time_per_minute|requests_per_minute|standard_deviation|throughput|average_call_time|min_call_time|max_call_time|total_call_time
-# how frequently (in min) to run this agent (must change value here and in /etc/cron.d/ifagent)
-run_interval = 
-agent_http_proxy = 
-agent_https_proxy = 
-
-[insightfinder]
-user_name = 
-license_key = 
-project_name = 
-sampling_interval = 
-# what size to limit chunks sent to IF to, as kb
-chunk_size_kb = 1024
-url = https://app.insightfinder.com
-if_http_proxy = 
-if_https_proxy = 
-```
+### Config Variables
+* **`api_key`**: API key for New Relic.
+* `app_or_host`: APP, HOST, or BOTH, depending on what type of metrics to collect.
+* `auto_create_project`: Set to `YES` to send data to a project based on the app name, which will be automatically created if it doesn't exist.
+* `containerize`: Set to `YES` to treat each host as a device within the app. Only applies when `app_or_host` is `HOST` or `BOTH`
+* `app_name_filter`: A comma-delimited list of app names to include. Default is all app names.
+* `app_id_filter`: A comma-delimited list of app IDs to include. Default is all app IDs.
+* `host_filter`: A comma-delimited list of hosts to include. Default is all hosts.
+* `app_metrics`: A comma-delimited list of app_metric_name:value|value. Default is `Apdex:score,EndUser/Apdex:score,HttpDispatcher:average_call_time|call_count,WebFrontend/QueueTime:average_call_time|call_count,Errors/all:error_count`
+* `host_metrics`: A comma-delimited list of host_metric_name:value|value. Default is `CPU/User Time:percent,Memory/Heap/Used:used_mb_by_host,Memory/Physical:used_mb_by_host,Instance/connectsReqPerMin:requests_per_minute,Controller/reports/show:average_response_time|calls_per_minute|call_count|min_response_time|max_response_time|average_exclusive_time|average_value|total_call_time_per_minute|requests_per_minute|standard_deviation|throughput|average_call_time|min_call_time|max_call_time|total_call_time`
+* **`run_interval`**: How frequently (in min) this agent is ran.
+* `agent_http_proxy`: HTTP proxy used to connect to the agent.
+* `agent_https_proxy`: As above, but HTTPS.
+* **`user_name`**: User name in InsightFinder
+* **`license_key`**: License Key from your Account Profile in the InsightFinder UI.
+* `token`: Token from your Account Profile in the InsightFinder UI.
+* **`project_name`**: Name of the project created in the InsightFinder UI.
+* `system_name`: System name to add to each project data is sent to from this agent.
+* **`sampling_interval`**: How frequently data is collected. Should match the interval used in cron.
+* `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
+* `url`: URL for InsightFinder. Default is `https://app.insightfinder.com`.
+* `if_http_proxy`: HTTP proxy used to connect to InsightFinder.
+* `if_https_proxy`: As above, but HTTPS.

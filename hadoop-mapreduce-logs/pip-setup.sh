@@ -1,6 +1,6 @@
 #!/bin/bash
 # hard-coded definition. TODO: add any required pip packages
-PIP_PACKAGES="requests pytz configparser"
+PIP_PACKAGES="urllib3 certifi chardet idna requests docutils statistics six python-dateutil pytz configparser"
 if [[ -z "${PIP_PACKAGES}" ]]; then
     # try to read from stdin
     PIP_PACKAGES=$@
@@ -16,10 +16,16 @@ fi
 # if pip packages are needed
 if [[ -n "${PIP_PACKAGES}" ]]; then
     # make sure pip is installed
+    # attempt offline install
+    if [[ -z $(command -v pip) ]] && [[ -x "get-pip.py"]]; then
+        echo "Package \"pip\" not installed. Attempting to install offline now..."
+        $(command -v python) get-pip.py
+    fi
+
     # attempt online install
     if [[ -z $(command -v pip) ]]; then
-        echo "Package \"pip\" not installed. Attempting to install now..."
-        python <(curl --connect-timeout 3 https://bootstrap.pypa.io/get-pip.py)
+        echo "Package \"pip\" not installed. Attempting to install online now..."
+        $(command -v python) <(curl --connect-timeout 3 https://bootstrap.pypa.io/get-pip.py)
     fi
 
     # if still not found, quit
