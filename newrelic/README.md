@@ -2,6 +2,7 @@
 ## Installing the Agent
 **Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/newrelic/newrelic.tar.gz) and untar it:**
 ```
+wget https://github.com/insightfinder/InsightAgent/raw/master/newrelic/newrelic.tar.gz
 tar xvf newrelic.tar.gz && cd newrelic
 ```
 

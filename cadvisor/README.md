@@ -2,6 +2,7 @@
 ## Installing the Agent
 **Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/cadvisor/cadvisor.tar.gz) and untar it:**
 ```
+wget https://github.com/insightfinder/InsightAgent/raw/master/cadvisor/cadvisor.tar.gz
 tar xvf cadvisor.tar.gz && cd cadvisor
 ```
 
