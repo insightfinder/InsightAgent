@@ -25,7 +25,7 @@ python getmetrics_newrelic.py -t
 
 **If satisfied with the output, configure the agent to run continuously:**
 ```
-sudo ./cron-setup.sh <sampling_interval>
+sudo ./cron-config.sh <sampling_interval>
 ```
 
 ### Config Variables
