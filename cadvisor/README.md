@@ -25,7 +25,7 @@ python getmetrics_cadvisor.py -t
 
 **If satisfied with the output, configure the agent to run continuously:**
 ```
-sudo ./cron-setup.sh
+sudo ./cron-config.sh
 ```
 
 ### Config Variables

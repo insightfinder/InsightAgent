@@ -53,9 +53,9 @@ python getmessages_agent.py -t
 
 **If satisfied with the output, configure the agent to run continuously:**
 ```
-sudo ./cron-setup.sh <sampling_interval>
+sudo ./cron-config.sh <sampling_interval>
 or
-sudo ./monit-setup.sh
+sudo ./monit-config.sh
 ```
 
 ### Config Variables
