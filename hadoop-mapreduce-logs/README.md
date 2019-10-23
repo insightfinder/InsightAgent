@@ -2,6 +2,7 @@
 ## Installing the Agent
 **Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/hadoop-mapreduce-logs/hadoop-mapreduce-logs.tar.gz) and untar it:**
 ```
+wget https://github.com/insightfinder/InsightAgent/raw/master/hadoop-mapreduce-logs/hadoop-mapreduce-logs.tar.gz
 tar xvf hadoop-mapreduce-logs.tar.gz && cd hadoop-mapreduce-logs
 ```
 
@@ -24,7 +25,7 @@ python getlogs_hadoop-mapreduce.py -t
 
 **If satisfied with the output, configure the agent to run continuously:**
 ```
-sudo ./cron-setup.sh <sampling_interval>
+sudo ./cron-config.sh <sampling_interval>
 ```
 
 ### Config Variables
