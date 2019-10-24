@@ -2,6 +2,7 @@
 ## Installing the Agent
 **Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/file_replay/json/json_replay.tar.gz) and untar it:**
 ```
+wget https://github.com/insightfinder/InsightAgent/raw/master/file_replay/json/json_replay.tar.gz
 tar xvf json_replay.tar.gz && cd json
 ```
 
