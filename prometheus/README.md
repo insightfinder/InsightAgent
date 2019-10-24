@@ -1,6 +1,7 @@
 ## Installing the Agent
 **Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/prometheus/prometheus.tar.gz) and untar it:**
 ```
+wget https://github.com/insightfinder/InsightAgent/raw/master/prometheus/prometheus.tar.gz
 tar xvf prometheus.tar.gz && cd prometheus
 ```
 
