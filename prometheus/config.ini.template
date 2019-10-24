@@ -3,10 +3,10 @@
 prometheus_uri = http://localhost:9090
 
 ## metrics
-# label selector to use when querying for metrics, ie {namespace="monitoring"}
-query_label_selector = 
 # metrics to query for. If none specified, all metrics returned from /api/v1/label/__names__/values will be used
 metrics = 
+# label selector to use when querying for metrics, ie {namespace="monitoring"}
+query_label_selector = 
 
 ## proxy
 agent_http_proxy =
