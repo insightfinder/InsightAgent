@@ -18,6 +18,7 @@ from dateutil.tz import tzlocal
 import urlparse
 import httplib
 import requests
+import statistics
 
 '''
 This script gathers data to send to Insightfinder
@@ -100,7 +101,7 @@ def get_agent_config_vars():
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
         
-        # fitlers
+        # filters
         if len(filters_include) != 0:
             filters_include = filters_include.split('|')
         if len(filters_exclude) != 0:
