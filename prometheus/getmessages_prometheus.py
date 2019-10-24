@@ -52,7 +52,7 @@ def dispatch_metric_agent(time):
         query_string = query + agent_config_vars['query_label_selector']
         agent_config_vars['api_parameters']['query'] = query_string
         response_json = call_prometheus_api()
-        metricss = _get_json_field_helper(response_json, agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM), True)
+        metrics = _get_json_field_helper(response_json, agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM), True)
         # result_type = response_json['resultType'].upper() # if needed for branching logic
         for metric in metrics:
             extract_metric(metric)
@@ -95,9 +95,9 @@ def prepare_metric_agent(time):
     agent_config_vars['project_field'] = '' # metric.namespace
     agent_config_vars['instance_field'] = 'metric.instance'
     agent_config_vars['device_field'] = 'metric.pod'
-    agent_config_vars['timestamp_field'] = '_time' # will need to parse from ['value'][0] or ['values'][][0]
+    agent_config_vars['timestamp_field'] = '_time' # will need to parse from ['value'][0] or ['values'][i][0]
     agent_config_vars['timestamp_format'] = 'epoch'
-    agent_config_vars['metric_name_field'] = 'metric.__name__' # will need to parse from ['value'][1] or ['values'][][1]
+    agent_config_vars['metric_name_field'] = 'metric.__name__' # will need to parse from ['value'][1] or ['values'][i][1]
 
 
 def get_all_metrics():
@@ -166,7 +166,7 @@ def get_agent_config_vars():
             prometheus_uri = config_parser.get('agent', 'prometheus_uri')
             query_label_selector = config_parser.get('agent', 'query_label_selector')
             metrics = config_parser.get('agent', 'metrics')
-            data_fields = config_parser.get('agent', 'alert_data_fields')
+            #data_fields = config_parser.get('agent', 'alert_data_fields') # II-5158
 
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
@@ -193,9 +193,9 @@ def get_agent_config_vars():
         if len(metrics) != 0:
             metrics = metrics.split(',')
 
-        # alert data fields
-        if len(data_fields) != 0:
-            data_fields = data_fields.split(',')
+        # alert data fields II-5158
+        #if len(data_fields) != 0:
+        #    data_fields = data_fields.split(',')
         
         # add parsed variables to a global
         config_vars = {
@@ -209,7 +209,7 @@ def get_agent_config_vars():
             'json_top_level': '',
             'project_field': '',
             'instance_field': '',
-            'data_fields': data_fields,
+            'data_fields': '', # data_fields, II-5158
             'device_field': '',
             'metrics': metrics,
             'metrics_copy': list(metrics),
