@@ -30,6 +30,7 @@ Then, delete this section from the `README.md` and update it as appropriate.
 ## Installing the Agent
 **Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/new_agent/new_agent.tar.gz) and untar it:**
 ```
+wget https://github.com/insightfinder/InsightAgent/raw/master/new_agent/new_agent.tar.gz
 tar xvf new_agent.tar.gz && cd new_agent
 ```
 
@@ -52,9 +53,9 @@ python getmessages_agent.py -t
 
 **If satisfied with the output, configure the agent to run continuously:**
 ```
-sudo ./cron-setup.sh <sampling_interval>
+sudo ./cron-config.sh <sampling_interval>
 or
-sudo ./monit-setup.sh
+sudo ./monit-config.sh
 ```
 
 ### Config Variables
