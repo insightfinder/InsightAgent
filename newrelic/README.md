@@ -2,6 +2,7 @@
 ## Installing the Agent
 **Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/newrelic/newrelic.tar.gz) and untar it:**
 ```
+wget https://github.com/insightfinder/InsightAgent/raw/master/newrelic/newrelic.tar.gz
 tar xvf newrelic.tar.gz && cd newrelic
 ```
 
@@ -24,7 +25,7 @@ python getmetrics_newrelic.py -t
 
 **If satisfied with the output, configure the agent to run continuously:**
 ```
-sudo ./cron-setup.sh <sampling_interval>
+sudo ./cron-config.sh <sampling_interval>
 ```
 
 ### Config Variables
