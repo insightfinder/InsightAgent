@@ -18,6 +18,7 @@ from dateutil.tz import tzlocal
 import urlparse
 import httplib
 import requests
+import statistics
 
 '''
 This script gathers data to send to Insightfinder
@@ -28,62 +29,128 @@ def start_data_processing(thread_number):
     end_time = int(time.time())
     start_time = end_time - if_config_vars['sampling_interval']
 
-    pid = os.fork()
-    if pid == 0 and 'METRIC' in if_config_vars['project_type']:
+    pid = 0
+    if len(if_config_vars['project_type']) > 1:
+        pid = os.fork()
+    if pid == 0:
         # metric
-        all_metrics = get_all_metrics()
-        nestedpid = os.fork()
-        if nestedpid == 0:
-            prepare_metric_agent_timepoint(end_time)
-        else:
-            prepare_metric_agent_range(start_time, end_time)
         logger.debug(str(os.getpid()) + ' is running the metric agent')
+        dispatch_metric_agent(end_time)
     else:
         # alert agent
-        ### remove in II-5158
-        logger.error('Unsupported operation')
-        system.exit(1)
-        ###
-        prepare_alert_agent()
-        logger.debug(str(os.getpid()) + ' is running the ' + if_config_vars['project_type'].lower() + ' agent')
+        logger.debug(str(os.getpid()) + ' is running the alert agent')
+        dispatch_alert_agent(start_time)
     
 
-def prepare_metric_agent_timepoint(time):
+def dispatch_metric_agent(time):
+    if len(agent_config_vars['metrics_copy']) == 0:
+        get_all_metrics()
+    prepare_metric_agent(time)
+    print_summary_info()
+
+    for query in agent_config_vars['metrics_copy']:
+        query_string = query + agent_config_vars['query_label_selector']
+        agent_config_vars['api_parameters']['query'] = query_string
+        response_json = call_prometheus_api()
+        metricss = _get_json_field_helper(response_json, agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM), True)
+        # result_type = response_json['resultType'].upper() # if needed for branching logic
+        for metric in metrics:
+            extract_metric(metric)
+
+
+def extract_metric(metric):
+    metric_name = get_json_field(metric, 'metric_name_field')
+    logger.debug(metric_name)
+    if 'value' in metric: # vector
+        logger.debug('vector')
+        metric.update(extract_time_and_value(metric['value'], metric_name))
+        if metric_name in agent_config_vars['metrics_copy']:
+            agent_config_vars['data_fields'] = [metric_name]
+            logger.debug(metric)
+            parse_json_message_single(metric)
+    elif 'values' in metric: # matrix
+        logger.debug('matrix')
+        for value in metric['values']:
+            metric.update(extract_time_and_value(value, metric_name))
+            if metric_name in agent_config_vars['metrics_copy']:
+                agent_config_vars['data_fields'] = [metric_name]
+                parse_json_message_single(metric)
+
+
+def extract_time_and_value(to_extract, metric_name):
+    return {'_time': to_extract[0], metric_name: to_extract[1]}
+    
+
+def prepare_metric_queries():
+    for metric in agent_config_vars['metrics_copy']:
+        query_string = metric + agent_config_vars['query_label_selector']
+
+
+def prepare_metric_agent(time):
     if_config_vars['project_type'] = 'METRIC'
+
     agent_config_vars['api_endpoint'] = 'query'
     agent_config_vars['api_parameters']['time'] = time
-    agent_config_vars['api_parameters_list'] = 
     agent_config_vars['json_top_level'] = 'result'
+    agent_config_vars['project_field'] = '' # metric.namespace
+    agent_config_vars['instance_field'] = 'metric.instance'
+    agent_config_vars['device_field'] = 'metric.pod'
+    agent_config_vars['timestamp_field'] = '_time' # will need to parse from ['value'][0] or ['values'][][0]
+    agent_config_vars['timestamp_format'] = 'epoch'
+    agent_config_vars['metric_name_field'] = 'metric.__name__' # will need to parse from ['value'][1] or ['values'][][1]
 
 
-def prepare_metric_agent_range(start_time, end_time):
-    if_config_vars['project_type'] = 'METRIC'
-    agent_config_vars['api_endpoint'] = 'query_range'
-    agent_config_vars['api_parameters']['start'] = start_time
-    agent_config_vars['api_parameters']['end'] = end_time
-    agent_config_vars['api_parameters']['step'] = if_config_vars['sampling_interval']
-    agent_config_vars['api_parameters_list'] = 
-    agent_config_vars['json_top_level'] = 'result'
+def get_all_metrics():
+    agent_config_vars['api_endpoint'] = 'label/__name__/values'
+    metrics_list = call_prometheus_api()
+    # make sure all supplied metrics are valid
+    agent_config_vars['metrics'] = metrics_list
+    agent_config_vars['metrics_copy'] = metrics_list
+
+
+def dispatch_alert_agent(time):
+    prepare_alert_agent()
+    print_summary_info()
+    ### remove in II-5158
+    logger.error('Unsupported operation')
+    system.exit(0)
+    ###
+    response_json = call_prometheus_api()
+    alerts = _get_json_field_helper(response_json, agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM), True)
+    logger.debug(alerts)
+    for alert in alerts:
+        logger.debug(alert)
+        alert[agent_config_vars['timestamp_field']] = get_timestamp_from_date_string(alert[agent_config_vars['timestamp_field']].split('.')[0])
+    agent_config_vars['timestamp_format'] = 'epoch'
+    alerts_sorted = sorted(alerts, key=lambda alert: alert[agent_config_vars['timestamp_field']])
+    for alert in alerts_sorted:
+        if alert[agent_config_vars['timestamp_field']] < time:
+            break
+        parse_json_message_single(alert)
 
 
 def prepare_alert_agent():
     if_config_vars['project_type'].remove('METRIC')
     if_config_vars['project_type'] = if_config_vars['project_type'][0]
+    if_config_vars['project_name'] = if_config_vars['project_name_alert']
+    
     agent_config_vars['api_endpoint'] = 'alerts'
     agent_config_vars['json_top_level'] = 'alerts'
-    
-
-def get_all_metrics():
-    agent_config_vars['api_endpoint'] = 'label/__name__/values'
-    agent_config_vars['json_top_level'] = ''
-    metrics_list = call_prometheus_api()
+    agent_config_vars['timestamp_field'] = 'activeAt'
+    agent_config_vars['timestamp_format'] = '%Y-%m-%dT%H:%M:%S'
 
 
 def call_prometheus_api():
+    logger.debug(agent_config_vars['api_parameters'])
     response_raw = send_request(make_api_req_url(), params=agent_config_vars['api_parameters'], proxies=agent_config_vars['proxies'])
-    response_json = json.loads(response_raw)
-    if response_json['status'] == 'success' and len(response_json['data']) != 0:
-        return response_json['data']
+    response_json = json.loads(response_raw.text)
+    return check_api_call_success(response_json)
+
+
+def check_api_call_success(response_json):
+    data = _get_json_field_helper(response_json, ['data'], True)
+    if _get_json_field_helper(response_json, ['status'], False) == 'success' and len(data) != 0:
+        return data
     else:
         logger.error('Error when contacting api at ' + str(make_api_req_url()))
         sys.exit(1)
@@ -96,26 +163,14 @@ def get_agent_config_vars():
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
         try:
             # uri
-            prometheus_uris = config_parser.get('agent', 'prometheus_uris')
-            metrics = config_parser.get('agent', 'metrics')
+            prometheus_uri = config_parser.get('agent', 'prometheus_uri')
             query_label_selector = config_parser.get('agent', 'query_label_selector')
+            metrics = config_parser.get('agent', 'metrics')
+            data_fields = config_parser.get('agent', 'alert_data_fields')
 
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
-
-            # filters
-            filters_include = config_parser.get('agent', 'filters_include')
-            filters_exclude = config_parser.get('agent', 'filters_exclude')
-
-            # message parsing
-            json_top_level = config_parser.get('agent', 'json_top_level')
-            project_field = config_parser.get('agent', 'project_field')
-            instance_field = config_parser.get('agent', 'instance_field')
-            device_field = config_parser.get('agent', 'device_field')
-            timestamp_field = config_parser.get('agent', 'timestamp_field') or 'timestamp'
-            timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
-            data_fields = config_parser.get('agent', 'data_fields')
                     
         except ConfigParser.NoOptionError:
             logger.error('Agent not correctly configured. Check config file.')
@@ -134,36 +189,34 @@ def get_agent_config_vars():
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
         
-        # filters
-        if len(filters_include) != 0:
-            filters_include = filters_include.split('|')
-        if len(filters_exclude) != 0:
-            filters_exclude = filters_exclude.split('|')
+        # metrics
+        if len(metrics) != 0:
+            metrics = metrics.split(',')
+
+        # alert data fields
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
         
-        # timestamp format
-        if '%z' in timestamp_format or '%Z' in timestamp_format:
-            ts_format_info = strip_tz_info(timestamp_format)
-        else:
-            ts_format_info = {'strip_tz': False, 'strip_tz_fmt': '', 'timestamp_format': timestamp_format}
-        
         # add parsed variables to a global
         config_vars = {
+            'query_label_selector': query_label_selector,
             'proxies': agent_proxies,
+            'api_url': api_url,
             'api_parameters': dict(),
-            'filters_include': filters_include,
-            'filters_exclude': filters_exclude,
+            'filters_include': '',
+            'filters_exclude': '',
             'data_format': 'JSON',
-            'json_top_level': json_top_level,
-            'project_field': project_field,
-            'instance_field': instance_field,
-            'device_field': device_field,
+            'json_top_level': '',
+            'project_field': '',
+            'instance_field': '',
             'data_fields': data_fields,
-            'timestamp_field': timestamp_field,
-            'timestamp_format': ts_format_info['timestamp_format'],
-            'strip_tz': ts_format_info['strip_tz'],
-            'strip_tz_fmt': ts_format_info['strip_tz_fmt']
+            'device_field': '',
+            'metrics': metrics,
+            'metrics_copy': list(metrics),
+            'timestamp_field': '',
+            'timestamp_format': '',
+            'strip_tz': False,
+            'strip_tz_fmt': ''
         }
 
         return config_vars
@@ -185,6 +238,7 @@ def get_if_config_vars():
             license_key = config_parser.get('insightfinder', 'license_key')
             token = config_parser.get('insightfinder', 'token')
             project_name = config_parser.get('insightfinder', 'project_name')
+            project_name_alert = config_parser.get('insightfinder', 'project_name_alert')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             chunk_size_kb = config_parser.get('insightfinder', 'chunk_size_kb')
@@ -213,15 +267,10 @@ def get_if_config_vars():
         for p_type in project_type:
             if p_type not in {
                     'METRIC',
-                    'METRICREPLAY',
                     #'LOG',                 ## enable these when addressing II-5158
-                    #'LOGREPLAY',
                     #'INCIDENT',
-                    #'INCIDENTREPLAY',
                     #'ALERT',
-                    #'ALERTREPLAY',
                     #'DEPLOYMENT'
-                    #'DEPLOYMENTREPLAY'
                     }:
                logger.warning('Agent not correctly configured (project_type). Check config file.')
                sys.exit(1)  
@@ -257,6 +306,7 @@ def get_if_config_vars():
             'license_key': license_key,
             'token': token,
             'project_name': project_name,
+            'project_name_alert': project_name_alert,
             'project_type': project_type,
             'sampling_interval': int(sampling_interval),     # as seconds
             'chunk_size': int(chunk_size_kb) * 1024,         # as bytes
@@ -478,6 +528,9 @@ def parse_raw_message(message):
 
 
 def get_json_field(message, config_setting, default=''):
+    '''
+    Get the value of a JSON field based on agent config setting, return default if unable to get value
+    '''
     if len(agent_config_vars[config_setting]) == 0:
         return default
     field_val = json_format_field_value(
@@ -488,6 +541,10 @@ def get_json_field(message, config_setting, default=''):
 
 
 def _get_json_field_helper(nested_value, next_fields, allow_list=False):
+    '''
+    Recursively get the next field in nested json.
+    !! This is the one you want to use to get the raw value of a field !!
+    '''
     if len(next_fields) == 0:
         return ''
     elif isinstance(nested_value, list):
@@ -525,7 +582,7 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False):
 def json_gather_list_values(l, fields):
     sub_field_value = []
     for sub_value in l:
-        fields_copy = list(fields[i] for i in range(len(fields)))
+        fields_copy = list(fields_copy)
         json_value = json_format_field_value(_get_json_field_helper(sub_value, fields_copy, True))
         if len(json_value) != 0:
             sub_field_value.append(json_value)
@@ -600,25 +657,34 @@ def parse_json_message_single(message):
     timestamp = get_json_field(message, 'timestamp_field')
     timestamp = get_timestamp_from_date_string(timestamp)
 
+    logger.debug(instance)
+    logger.debug(device)
+    logger.debug(timestamp)
     # get data
     log_data = dict()
     if len(agent_config_vars['data_fields']) != 0: 
+        logger.debug(agent_config_vars['data_fields'])
         for data_field in agent_config_vars['data_fields']:
             data_value = json_format_field_value(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM), True))
             if len(data_value) != 0:
                 if 'METRIC' in if_config_vars['project_type']:
+                    logger.debug('adding metric data')
                     metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
                 else:
+                    logger.debug('adding log data')
                     log_data[data_field.replace('.', '/')] = data_value
     else:    
+        logger.debug('no data_fields defined')
         if 'METRIC' in if_config_vars['project_type']:
             # assume metric data is in top level
             for data_field in message:
                 data_value = str(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM), True))
                 if data_value is not None:
                     metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
+                    logger.debug('adding metric data')
         else:
             log_data = message
+            logger.debug('adding log data')
 
     # hand off to log
     if 'METRIC' not in if_config_vars['project_type']:

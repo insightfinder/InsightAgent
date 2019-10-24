@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # TODO: fill here
-AGENT=""
-AGENT_SCRIPT=".py"
+AGENT="prometheus"
+AGENT_SCRIPT="getmessages_prometheus.py"
 
 # run as root
 if [[ $EUID -ne 0 ]]; then
