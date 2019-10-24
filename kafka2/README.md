@@ -1,8 +1,9 @@
 # Kafka
 ## Installing the Agent
-**Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/kafka2/kafka.tar.gz) and untar it:**
+**Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/kafka2/kafka2.tar.gz) and untar it:**
 ```
-tar xvf kafka.tar.gz && cd kafka
+wget https://github.com/insightfinder/InsightAgent/raw/master/kafka2/kafka2.tar.gz
+tar xvf kafka2.tar.gz && cd kafka2
 ```
 
 **Copy `config.ini.template` to `config.ini` and edit it:**
@@ -24,7 +25,7 @@ python getmessages_kafka.py -t
 
 **If satisfied with the output, configure the agent to run continuously:**
 ```
-sudo ./monit-setup.sh
+sudo ./monit-config.sh
 ```
 
 ### Config Variables

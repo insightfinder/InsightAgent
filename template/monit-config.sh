@@ -10,6 +10,12 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# check for monit
+if [[ -z $(command -v monit) ]]; then
+    echo "Warning: monit not installed. Please install monit before running this script."
+    exit 1
+fi
+
 AGENT_FULL_PATH="$(pwd)/${AGENT_SCRIPT}"
 AGENT_FULL_PATH_CONFIG="$(pwd)/config.ini"
 AGENT_FULL_PATH_LOG="$(pwd)/log.out"
