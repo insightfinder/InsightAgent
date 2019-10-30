@@ -33,15 +33,16 @@ def start_data_processing(thread_number):
         container = response_json[container_key]
         logger.debug(container.keys())
         # verify metrics and get image name
-        application = parse_spec(container['spec'])
+        image = parse_spec(container['spec'])
         # get container id. if possible, use an alias other than the id as the container id
         container_id = container['id']
         aliases = set(container['aliases'])
         aliases.remove(container_id)
         if len(aliases) > 0:
             container_id = list(aliases)[0]
-        logger.debug(str(container_id))
-        get_metric_data(container_id, container['stats'])
+        container_name = make_safe_string(image) + '/' + make_safe_string(container_id)
+        logger.info(str(container_name))
+        get_metric_data(container_name, container['stats'])
     # hold off on sending until all containers have reported for this timestamp
     send_data_wrapper()
     
@@ -813,13 +814,12 @@ def make_safe_metric_key(metric):
 
 def make_safe_string(string):
     """
-    Take a single string and return the same string with spaces, slashes,
-    underscores, and non-alphanumeric characters subbed out.
+    Take a single string and return the same string with spaces, slashes, and underscores subbed out.
     """
     string = SPACES.sub('-', string)
-    string = SLASHES.sub('.', string)
+    string = FWD_SLASHES.sub('.', string)
     string = UNDERSCORE.sub('.', string)
-    string = NON_ALNUM.sub('', string)
+    string = COLONS.sub('-', string)
     return string
 
 
@@ -1127,8 +1127,9 @@ def initialize_api_post_data():
 if __name__ == "__main__":
     # declare a few vars
     SPACES = re.compile(r"\s+")
-    SLASHES = re.compile(r"\/+")
+    FWD_SLASHES = re.compile(r"\/+")
     UNDERSCORE = re.compile(r"\_+")
+    COLONS = re.compile(r"\:+")
     LEFT_BRACE = re.compile(r"\[")
     RIGHT_BRACE = re.compile(r"\]")
     PERIOD = re.compile(r"\.")
