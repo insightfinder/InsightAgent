@@ -819,6 +819,7 @@ def make_safe_string(string):
     string = SPACES.sub('-', string)
     string = FWD_SLASHES.sub('.', string)
     string = UNDERSCORE.sub('.', string)
+    string = COLONS.sub('-', string)
     return string
 
 
@@ -1128,6 +1129,7 @@ if __name__ == "__main__":
     SPACES = re.compile(r"\s+")
     FWD_SLASHES = re.compile(r"\/+")
     UNDERSCORE = re.compile(r"\_+")
+    COLONS = re.compile(r"\:+")
     LEFT_BRACE = re.compile(r"\[")
     RIGHT_BRACE = re.compile(r"\]")
     PERIOD = re.compile(r"\.")
