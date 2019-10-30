@@ -1,16 +1,28 @@
-#example for config
-#if done locally bootstrap_servers = localhost:9092
-[prometheus]
-prometheus_urls= http://100.26.98.182:9090
-prometheus_metrics_file=
-#the normalization id needs to be given between 0 and 1000
-normalization_id =
-all_metrics = node_load5,node_load1,node_load15
-filter_hosts =
+[agent]
+# uri to prometheus API as scheme://host:port
+prometheus_uri = http://localhost:9090
+
+## metrics
+# metrics to query for. If none specified, all metrics returned from /api/v1/label/__names__/values will be used
+metrics = 
+# label selector to use when querying for metrics, ie {namespace="monitoring"}
+query_label_selector = 
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
 
 [insightfinder]
-license_key = a333bd39662ad1edf64e99e97e4b776109827234
-project_name = test_prometheus
-user_name = user
-sampling_interval = 1
-ssl_verify =
+user_name = 
+license_key = 
+token =
+project_name = 
+project_name_alert = 
+# optionally add (comma-delimited) one of log, alert, deployment, incident
+project_type = metric
+sampling_interval = 10
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
