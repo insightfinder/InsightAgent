@@ -1,9 +1,9 @@
 # Replay JSON
 ## Installing the Agent
-**Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/file_replay/json/json_replay.tar.gz) and untar it:**
+**Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/file_replay/json/file_replay-json.tar.gz) and untar it:**
 ```
-wget https://github.com/insightfinder/InsightAgent/raw/master/file_replay/json/json_replay.tar.gz
-tar xvf json_replay.tar.gz && cd json
+wget https://github.com/insightfinder/InsightAgent/raw/master/file_replay/json/file_replay-json.tar.gz
+tar xvf file_replay-json.tar.gz && cd json
 ```
 
 **Copy `config.ini.template` to `config.ini` and edit it:**
