@@ -1,9 +1,9 @@
 # Replay CSV
 ## Installing the Agent
-**Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/file_replay/csv/csv_replay.tar.gz) and untar it:**
+**Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/file_replay/csv/file_replay-csv.tar.gz) and untar it:**
 ```
-wget https://github.com/insightfinder/InsightAgent/raw/master/file_replay/csv/csv_replay.tar.gz
-tar xvf csv_replay.tar.gz && cd csv
+wget https://github.com/insightfinder/InsightAgent/raw/master/file_replay/csv/file_replay-csv.tar.gz
+tar xvf file_replay-csv.tar.gz && cd csv
 ```
 
 **Copy `config.ini.template` to `config.ini` and edit it:**
