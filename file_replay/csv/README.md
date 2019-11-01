@@ -3,7 +3,7 @@
 **Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/file_replay/csv/file_replay-csv.tar.gz) and untar it:**
 ```
 wget https://github.com/insightfinder/InsightAgent/raw/master/file_replay/csv/file_replay-csv.tar.gz
-tar xvf file_replay-csv.tar.gz && cd csv
+tar xvf file_replay-csv.tar.gz && cd file_replay/csv
 ```
 
 **Copy `config.ini.template` to `config.ini` and edit it:**
