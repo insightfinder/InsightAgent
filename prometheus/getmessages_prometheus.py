@@ -61,6 +61,8 @@ def dispatch_metric_agent(time):
 def extract_metric(metric):
     metric_name = get_json_field(metric, 'metric_name_field')
     logger.debug(metric_name)
+    # add host:
+    metric.update(extract_host(metric))
     if 'value' in metric: # vector
         logger.debug('vector')
         metric.update(extract_time_and_value(metric['value'], metric_name))
@@ -76,6 +78,10 @@ def extract_metric(metric):
                 agent_config_vars['data_fields'] = [metric_name]
                 parse_json_message_single(metric)
 
+
+def extract_host(metric):
+    return {'_host': _get_json_field_helper(metric, 'metric.instance'.split(JSON_LEVEL_DELIM)).split(':')[0]}
+    
 
 def extract_time_and_value(to_extract, metric_name):
     return {'_time': to_extract[0], metric_name: to_extract[1]}
@@ -93,7 +99,7 @@ def prepare_metric_agent(time):
     agent_config_vars['api_parameters']['time'] = time
     agent_config_vars['json_top_level'] = 'result'
     agent_config_vars['project_field'] = '' # metric.namespace
-    agent_config_vars['instance_field'] = 'metric.instance'
+    agent_config_vars['instance_field'] = '_host' # parse from 'metric.instance'
     agent_config_vars['device_field'] = 'metric.pod'
     agent_config_vars['timestamp_field'] = '_time' # will need to parse from ['value'][0] or ['values'][i][0]
     agent_config_vars['timestamp_format'] = 'epoch'
