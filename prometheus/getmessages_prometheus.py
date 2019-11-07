@@ -823,8 +823,9 @@ def get_datetime_from_unix_epoch(date_string):
 
 def make_safe_instance_string(instance, device=''):
     """ make a safe instance name string, concatenated with device if appropriate """
-    # strip underscores
+    # strip underscore and colon
     instance = UNDERSCORE.sub('.', instance)
+    instance = COLONS.sub('-', instance)
     # if there's a device, concatenate it to the instance with an underscore
     if len(device) != 0:
         instance = make_safe_instance_string(device) + '_' + instance
@@ -836,6 +837,7 @@ def make_safe_metric_key(metric):
     metric = LEFT_BRACE.sub('(', metric)
     metric = RIGHT_BRACE.sub(')', metric)
     metric = PERIOD.sub('/', metric)
+    metric = COLONS.sub('/', metric)
     return metric
 
 
@@ -1160,6 +1162,7 @@ if __name__ == "__main__":
     LEFT_BRACE = re.compile(r"\[")
     RIGHT_BRACE = re.compile(r"\]")
     PERIOD = re.compile(r"\.")
+    COLONS = re.compile(r"\:+")
     NON_ALNUM = re.compile(r"[^a-zA-Z0-9]")
     PCT_z_FMT = re.compile(r"[\+\-][0-9]{4}")
     PCT_Z_FMT = re.compile(r"[A-Z]{3,4}")
