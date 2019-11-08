@@ -27,7 +27,7 @@ This script gathers data to send to Insightfinder
 
 def start_data_processing(thread_number):
     end_time = int(time.time())
-    start_time = end_time - if_config_vars['sampling_interval']
+    start_time = end_time - if_config_vars['run_interval']
 
     pid = 0
     if len(if_config_vars['project_type']) > 1:
@@ -35,17 +35,18 @@ def start_data_processing(thread_number):
     if pid == 0:
         # metric
         logger.debug(str(os.getpid()) + ' is running the metric agent')
-        dispatch_metric_agent(end_time)
+        dispatch_metric_agent(start_time, end_time)
     else:
         # alert agent
         logger.debug(str(os.getpid()) + ' is running the alert agent')
         dispatch_alert_agent(start_time)
     
 
-def dispatch_metric_agent(time):
+def dispatch_metric_agent(start_time, end_time):
     if len(agent_config_vars['metrics_copy']) == 0:
         get_all_metrics()
-    prepare_metric_agent(time)
+    build_metric_name_map()
+    prepare_metric_agent(start_time, end_time)
     print_summary_info()
 
     for query in agent_config_vars['metrics_copy']:
@@ -55,34 +56,97 @@ def dispatch_metric_agent(time):
         metrics = _get_json_field_helper(response_json, agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM), True)
         # result_type = response_json['resultType'].upper() # if needed for branching logic
         for metric in metrics:
-            extract_metric(metric)
+           extract_metric(metric)
+
+
+def build_metric_name_map():
+    metrics = agent_config_vars['metrics_copy']
+    parsed_names = dict()
+    for metric in metrics:
+        metric_name = str(metric).strip(':')
+        metric_name = COLONS.sub('/', metric_name)
+        metric_name = UNDERSCORE.sub('/', metric_name)
+        metric_name_parsed = metric_name.split('/')
+        current_path = parsed_names
+        for part in metric_name_parsed:
+            if part not in current_path:
+                current_path[part] = dict()
+            current_path = current_path[part]
+        current_path['_name'] = metric
+    agent_config_vars['metrics_names'] = dict()
+    folded = dict()
+    for node_name in parsed_names:
+        fold_up(folded, node_name, parsed_names[node_name])
+
+
+def fold_up(current_path, node_name, node):
+    while len(node.keys()) == 1 or '_name' in node.keys():
+        keys = node.keys()
+        # if we've reached a terminal end
+        if '_name' in keys:
+            agent_config_vars['metrics_names'][node['_name']] = node_name
+            keys.remove('_name')
+            node.pop('_name')
+        # if there's still a single key path to follow
+        if len(keys) == 1:
+            next_key = keys[0]
+            node_name += '_' + next_key
+            node = node[next_key]
+        else:
+            break
+    current_path[node_name] = node
+    for node_nested in node:
+        if isinstance(node[node_nested], str):
+            agent_config_vars['metrics_names'][node[node_nested]] = node_name
+            return
+        else:
+            fold_up(current_path, node_name + '/' + node_nested, node[node_nested])
 
 
 def extract_metric(metric):
     metric_name = get_json_field(metric, 'metric_name_field')
+    metric_name = agent_config_vars['metrics_names'][metric_name] 
+    agent_config_vars['data_fields'] = [metric_name]
     logger.debug(metric_name)
-    # add host:
-    metric.update(extract_host(metric))
+    # add host and device
+    metric.update(extract_host(metric['metric']))
+    metric.update(extract_device(metric['metric']))
     if 'value' in metric: # vector
         logger.debug('vector')
         metric.update(extract_time_and_value(metric['value'], metric_name))
-        if metric_name in agent_config_vars['metrics_copy']:
-            agent_config_vars['data_fields'] = [metric_name]
-            logger.debug(metric)
-            parse_json_message_single(metric)
+        parse_json_message_single(metric)
     elif 'values' in metric: # matrix
         logger.debug('matrix')
         for value in metric['values']:
             metric.update(extract_time_and_value(value, metric_name))
-            if metric_name in agent_config_vars['metrics_copy']:
-                agent_config_vars['data_fields'] = [metric_name]
-                parse_json_message_single(metric)
+            parse_json_message_single(metric)
 
 
 def extract_host(metric):
-    return {'_host': _get_json_field_helper(metric, 'metric.instance'.split(JSON_LEVEL_DELIM)).split(':')[0]}
+    host_value = get_json_field_by_pri(metric, ['node', 'host', 'host_ip', 'instance', 'address'])
+    parsed = urlparse.urlparse(host_value)
+    host = parsed.hostname or parsed.path.split(':')[0]
+    return {'_host': host}
     
 
+def extract_device(metric):
+    dev_pod = get_json_field_by_pri(metric, ['device', 'pod' ,'pod_ip'])
+    dev_pod = SLASHES.sub(r"\\", dev_pod)
+    container = get_json_field_by_pri(metric, ['container', 'container_id', 'image_id'])
+    container = SLASHES.sub(r"\\", container)
+    group = get_json_field_by_pri(metric, ['deployment', 'service', 'job'])
+    group = SLASHES.sub(r"\\", group)
+    # default to most granular level
+    device = dev_pod or container or group
+    if dev_pod and group:
+        device = group + '/' + dev_pod
+    elif dev_pod and container:
+        device = container + '/' + dev_pod
+    elif group and container:
+        device = group + '/' + container
+    return {'_device': device}
+
+    
 def extract_time_and_value(to_extract, metric_name):
     return {'_time': to_extract[0], metric_name: to_extract[1]}
     
@@ -92,15 +156,17 @@ def prepare_metric_queries():
         query_string = metric + agent_config_vars['query_label_selector']
 
 
-def prepare_metric_agent(time):
+def prepare_metric_agent(start_time, end_time):
     if_config_vars['project_type'] = 'METRIC'
 
-    agent_config_vars['api_endpoint'] = 'query'
-    agent_config_vars['api_parameters']['time'] = time
+    agent_config_vars['api_endpoint'] = 'query_range'
+    agent_config_vars['api_parameters']['start'] = start_time
+    agent_config_vars['api_parameters']['end'] = end_time
+    agent_config_vars['api_parameters']['step'] = if_config_vars['sampling_interval']
     agent_config_vars['json_top_level'] = 'result'
     agent_config_vars['project_field'] = '' # metric.namespace
-    agent_config_vars['instance_field'] = '_host' # parse from 'metric.instance'
-    agent_config_vars['device_field'] = 'metric.pod'
+    agent_config_vars['instance_field'] = '_host' # see extract_host()
+    agent_config_vars['device_field'] = '_device' # see extract_device()
     agent_config_vars['timestamp_field'] = '_time' # will need to parse from ['value'][0] or ['values'][i][0]
     agent_config_vars['timestamp_format'] = 'epoch'
     agent_config_vars['metric_name_field'] = 'metric.__name__' # will need to parse from ['value'][1] or ['values'][i][1]
@@ -109,7 +175,6 @@ def prepare_metric_agent(time):
 def get_all_metrics():
     agent_config_vars['api_endpoint'] = 'label/__name__/values'
     metrics_list = call_prometheus_api()
-    # make sure all supplied metrics are valid
     agent_config_vars['metrics'] = metrics_list
     agent_config_vars['metrics_copy'] = metrics_list
 
@@ -247,6 +312,7 @@ def get_if_config_vars():
             project_name_alert = config_parser.get('insightfinder', 'project_name_alert')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
+            run_interval = config_parser.get('insightfinder', 'run_interval')
             chunk_size_kb = config_parser.get('insightfinder', 'chunk_size_kb')
             if_url = config_parser.get('insightfinder', 'if_url')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
@@ -287,12 +353,25 @@ def get_if_config_vars():
                 sys.exit(1)
             else:
                 # set default for non-metric
-                sampling_interval = 10
+                sampling_interval = 1
+
+        if len(run_interval) == 0:
+            if 'METRIC' in project_type:
+                logger.warning('Agent not correctly configured (run_interval). Check config file.')
+                sys.exit(1)
+            else:
+                # set default for non-metric
+                run_interval = 10
 
         if sampling_interval.endswith('s'):
             sampling_interval = int(sampling_interval[:-1])
         else:
             sampling_interval = int(sampling_interval) * 60
+
+        if run_interval.endswith('s'):
+            run_interval = int(run_interval[:-1])
+        else:
+            run_interval = int(run_interval) * 60
 
         # defaults
         if len(chunk_size_kb) == 0:
@@ -315,6 +394,7 @@ def get_if_config_vars():
             'project_name_alert': project_name_alert,
             'project_type': project_type,
             'sampling_interval': int(sampling_interval),     # as seconds
+            'run_interval': int(run_interval),               # as seconds
             'chunk_size': int(chunk_size_kb) * 1024,         # as bytes
             'if_url': if_url,
             'if_proxies': if_proxies
@@ -543,7 +623,15 @@ def get_json_field(message, config_setting, default=''):
                     _get_json_field_helper(message, agent_config_vars[config_setting].split(JSON_LEVEL_DELIM)))
     if len(field_val) == 0:
         field_val = default
+        logger.warning('using default value for ' + config_setting)
     return field_val
+
+
+def get_json_field_by_pri(message, pri_list):
+    value = ''
+    while value == '' and len(pri_list) != 0:
+        value = _get_json_field_helper(message, pri_list.pop(0).split(JSON_LEVEL_DELIM))
+    return value
 
 
 def _get_json_field_helper(nested_value, next_fields, allow_list=False):
@@ -876,19 +964,19 @@ def set_logger_config(level):
 def print_summary_info():
     # info to be sent to IF
     post_data_block = '\nIF settings:'
-    for i in if_config_vars.keys():
+    for i in sorted(if_config_vars.keys()):
         post_data_block += '\n\t' + i + ': ' + str(if_config_vars[i])
     logger.debug(post_data_block)
 
     # variables from agent-specific config
     agent_data_block = '\nAgent settings:'
-    for j in agent_config_vars.keys():
+    for j in sorted(agent_config_vars.keys()):
         agent_data_block += '\n\t' + j + ': ' + str(agent_config_vars[j])
     logger.debug(agent_data_block)
 
     # variables from cli config
     cli_data_block = '\nCLI settings:'
-    for k in cli_config_vars.keys():
+    for k in sorted(cli_config_vars.keys()):
         cli_data_block += '\n\t' + k + ': ' + str(cli_config_vars[k])
     logger.debug(cli_data_block)
 
@@ -990,6 +1078,7 @@ def append_metric_data_to_entry(timestamp, field_name, data, instance, device=''
 def transpose_metrics():
     """ flatten data up to the timestamp"""
     for timestamp in track['current_dict'].keys():
+        logger.debug(timestamp)
         track['line_count'] += 1
         new_row = dict()
         new_row['timestamp'] = timestamp

@@ -20,7 +20,10 @@ project_name =
 project_name_alert = 
 # optionally add (comma-delimited) one of log, alert, deployment, incident
 project_type = metric
-sampling_interval = 10
+# how often to run the agent
+run_interval = 10
+# how frequently data is reported
+sampling_interval = 1
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
 if_url = https://app.insightfinder.com
