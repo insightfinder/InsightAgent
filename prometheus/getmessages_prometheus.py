@@ -43,12 +43,14 @@ def start_data_processing(thread_number):
     
 
 def dispatch_metric_agent(start_time, end_time):
+    # get all metrics from api if none specified
     if len(agent_config_vars['metrics_copy']) == 0:
         get_all_metrics()
     build_metric_name_map()
     prepare_metric_agent(start_time, end_time)
     print_summary_info()
 
+    # send a query for each metric
     for query in agent_config_vars['metrics_copy']:
         query_string = query + agent_config_vars['query_label_selector']
         agent_config_vars['api_parameters']['query'] = query_string
@@ -60,26 +62,74 @@ def dispatch_metric_agent(start_time, end_time):
 
 
 def build_metric_name_map():
+    '''
+    Contstructs a hash of <raw_metric_name>: <formatted_metric_name>
+    '''
+    # get metrics from the global
     metrics = agent_config_vars['metrics_copy']
-    parsed_names = dict()
-    for metric in metrics:
-        metric_name = str(metric).strip(':')
-        metric_name = COLONS.sub('/', metric_name)
-        metric_name = UNDERSCORE.sub('/', metric_name)
-        metric_name_parsed = metric_name.split('/')
-        current_path = parsed_names
-        for part in metric_name_parsed:
-            if part not in current_path:
-                current_path[part] = dict()
-            current_path = current_path[part]
-        current_path['_name'] = metric
+    # initialize the hash of formatted names
     agent_config_vars['metrics_names'] = dict()
+    tree = build_sentence_tree(metrics)
+    min_tree = fold_up(tree)
+
+
+def build_sentence_tree(sentences):
+    '''
+    Takes a list of sentences and builds a tree from the words
+        I ate two red apples ----\                      /---> "red" -> "apples"
+        I ate two green pears ----> "I" -> "ate" --> "two" -> "green" -> "pears"
+        I ate one yellow banana -/            \----> "one" -> "yellow" -> "banana"
+    '''
+    tree = dict()
+    for sentence in sentences:
+        words = format_sentence(sentence)
+        current_path = tree
+        for word in words:
+            if word not in current_path:
+                current_path[word] = dict()
+            current_path = current_path[word]
+        # add a terminal _name node with the raw sentence as the value
+        current_path['_name'] = sentence
+    return tree
+
+
+def format_sentence(sentence):
+    '''
+    Takes a sentence and chops it into an array by word
+    Implementation-specifc
+    '''
+    words = sentence.strip(':')
+    words = COLONS.sub('/', words)
+    words = UNDERSCORE.sub('/', words)
+    words = words.split('/')
+    return words
+
+
+def fold_up(sentence_tree):
+    '''
+    Entry point for fold_up. See fold_up_helper for details
+    '''
     folded = dict()
-    for node_name in parsed_names:
-        fold_up(folded, node_name, parsed_names[node_name])
+    for node_name in sentence_tree:
+        fold_up_helper(folded, node_name, sentence_tree[node_name])
+    return folded
 
 
-def fold_up(current_path, node_name, node):
+def fold_up_helper(current_path, node_name, node):
+    '''
+    Recursively build a new sentence tree, where, 
+        for each node that has only one child,
+        that child is "folded up" into its parent.
+    The tree therefore treats unique phrases as words s.t.
+                       /---> "red apples"
+        "I ate" --> "two" -> "green pears"
+             \----> "one" -> "yellow banana"
+    As a side effect, if there are terminal '_name' nodes,
+        this also builds a hash in 
+            agent_config_vars['metrics_names']
+        of raw_name = formatted name, as this was
+        probably the goal of calling this in the first place.
+    '''
     while len(node.keys()) == 1 or '_name' in node.keys():
         keys = node.keys()
         # if we've reached a terminal end
@@ -96,11 +146,10 @@ def fold_up(current_path, node_name, node):
             break
     current_path[node_name] = node
     for node_nested in node:
-        if isinstance(node[node_nested], str):
+        if node_nested == '_name':
             agent_config_vars['metrics_names'][node[node_nested]] = node_name
-            return
         else:
-            fold_up(current_path, node_name + '/' + node_nested, node[node_nested])
+            fold_up_helper(current_path, node_name + '/' + node_nested, node[node_nested])
 
 
 def extract_metric(metric):
