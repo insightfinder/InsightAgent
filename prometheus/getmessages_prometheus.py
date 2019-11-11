@@ -76,9 +76,9 @@ def build_metric_name_map():
 def build_sentence_tree(sentences):
     '''
     Takes a list of sentences and builds a tree from the words
-        I ate two red apples ----\                      /---> "red" -> "apples"
-        I ate two green pears ----> "I" -> "ate" --> "two" -> "green" -> "pears"
-        I ate one yellow banana -/            \----> "one" -> "yellow" -> "banana"
+        I ate two red apples ----\                     /---> "red" ----> "apples" -> "_name" -> "I ate two red apples"
+        I ate two green pears ----> "I" -> "ate" -> "two" -> "green" --> "pears" --> "_name" -> "I ate two green pears"
+        I ate one yellow banana -/             \--> "one" -> "yellow" -> "banana" -> "_name" -> "I ate one yellow banana"
     '''
     tree = dict()
     for sentence in sentences:
@@ -121,9 +121,9 @@ def fold_up_helper(current_path, node_name, node):
         for each node that has only one child,
         that child is "folded up" into its parent.
     The tree therefore treats unique phrases as words s.t.
-                       /---> "red apples"
-        "I ate" --> "two" -> "green pears"
-             \----> "one" -> "yellow banana"
+                      /---> "red apples"
+        "I ate" -> "two" -> "green pears"
+             \---> "one" -> "yellow banana"
     As a side effect, if there are terminal '_name' nodes,
         this also builds a hash in 
             agent_config_vars['metrics_names']
@@ -405,12 +405,8 @@ def get_if_config_vars():
                 sampling_interval = 1
 
         if len(run_interval) == 0:
-            if 'METRIC' in project_type:
-                logger.warning('Agent not correctly configured (run_interval). Check config file.')
-                sys.exit(1)
-            else:
-                # set default for non-metric
-                run_interval = 10
+            logger.warning('Agent not correctly configured (run_interval). Check config file.')
+            sys.exit(1)
 
         if sampling_interval.endswith('s'):
             sampling_interval = int(sampling_interval[:-1])
