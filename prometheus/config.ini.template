@@ -14,7 +14,7 @@ alert_data_fields =
 # for example:
 #   message.env:stg,prd|message.status:complete
 alert_filters_include = 
-# as above, but instead include values that are not allowed
+# as above, but instead define values that are not allowed
 # for example:
 #   message.env:dev,cde|message.status:draft:
 alert_filters_exclude =
