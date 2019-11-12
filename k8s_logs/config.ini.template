@@ -2,7 +2,7 @@
 ## filters
 # define a list of filters to use as a comma-delimited list (only one need be present)
 filters_include = 
-# as above, but instead include values that are not allowed
+# as above, but instead define values that are not allowed
 filters_exclude =
 
 ## namespaces & pods
