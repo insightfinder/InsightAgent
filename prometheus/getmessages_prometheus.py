@@ -219,6 +219,9 @@ def prepare_metric_agent(start_time, end_time):
     agent_config_vars['timestamp_format'] = 'epoch'
     agent_config_vars['metric_name_field'] = 'metric.__name__' # will need to parse from ['value'][1] or ['values'][i][1]
 
+    agent_config_vars['filters_include'] = ''
+    agent_config_vars['filters_exclude'] = ''
+
 
 def get_all_metrics():
     agent_config_vars['api_endpoint'] = 'label/__name__/values'
@@ -234,8 +237,8 @@ def dispatch_alert_agent(time):
     alerts = _get_json_field_helper(response_json, agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM), True)
     for alert in alerts:
         alert[agent_config_vars['timestamp_field']] = get_timestamp_from_date_string(alert[agent_config_vars['timestamp_field']].split('.')[0])
-    alerts_sorted = sorted(alerts, key=lambda alert: alert[agent_config_vars['timestamp_field']])
     agent_config_vars['timestamp_format'] = 'epoch'
+    alerts_sorted = sorted(alerts, key=lambda alert: alert[agent_config_vars['timestamp_field']])
     for alert in alerts_sorted:
         if alert[agent_config_vars['timestamp_field']] < time:
             break
@@ -282,6 +285,10 @@ def get_agent_config_vars():
             metrics = config_parser.get('agent', 'metrics')
             data_fields = config_parser.get('agent', 'alert_data_fields')
 
+            # filters
+            filters_include = config_parser.get('agent', 'alert_filters_include')
+            filters_exclude = config_parser.get('agent', 'alert_filters_exclude')
+
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
@@ -310,15 +317,21 @@ def get_agent_config_vars():
         # alert data fields
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
-        
+
+        # filters
+        if len(filters_include) != 0:
+            filters_include = filters_include.split('|')
+        if len(filters_exclude) != 0:
+            filters_exclude = filters_exclude.split('|')
+
         # add parsed variables to a global
         config_vars = {
             'query_label_selector': query_label_selector,
             'proxies': agent_proxies,
             'api_url': api_url,
             'api_parameters': dict(),
-            'filters_include': '',
-            'filters_exclude': '',
+            'filters_include': filters_include,
+            'filters_exclude': filters_exclude,
             'data_format': 'JSON',
             'json_top_level': '',
             'project_field': '',

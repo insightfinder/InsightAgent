@@ -37,6 +37,9 @@ sudo ./cron-config.sh <sampling_interval>
 * `query_label_selector`: Label selector to use when querying for metrics, such as `{namespace="monitoring"}`. 
 * `agent_http_proxy`: HTTP proxy used to connect to the agent.
 * `agent_https_proxy`: As above, but HTTPS.
+* `alert_data_fields`: Comma-delimited list of field names to use as data fields for alerts. If not set, all fields will be reported.
+* `alert_filters_include`: Used to filter alerts based on allowed values.
+* `alert_filters_exclude`: Used to filter alerts based on unallowed values.
 * **`user_name`**: User name in InsightFinder
 * **`license_key`**: License Key from your Account Profile in the InsightFinder UI.
 * `token`: Token from your Account Profile in the InsightFinder UI.
