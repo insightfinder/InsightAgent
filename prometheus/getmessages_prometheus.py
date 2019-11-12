@@ -29,7 +29,7 @@ def start_data_processing(thread_number):
     end_time = int(time.time())
     start_time = end_time - if_config_vars['run_interval']
 
-    pid = 0
+    pid = 0 if 'METRIC' in if_config_vars['project_type'] else 1
     if len(if_config_vars['project_type']) > 1:
         pid = os.fork()
     if pid == 0:
@@ -56,7 +56,6 @@ def dispatch_metric_agent(start_time, end_time):
         agent_config_vars['api_parameters']['query'] = query_string
         response_json = call_prometheus_api()
         metrics = _get_json_field_helper(response_json, agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM), True)
-        # result_type = response_json['resultType'].upper() # if needed for branching logic
         for metric in metrics:
            extract_metric(metric)
 
@@ -179,20 +178,20 @@ def extract_host(metric):
     
 
 def extract_device(metric):
-    dev_pod = get_json_field_by_pri(metric, ['device', 'pod' ,'pod_ip'])
-    dev_pod = SLASHES.sub(r"\\", dev_pod)
     container = get_json_field_by_pri(metric, ['container', 'container_id', 'image_id'])
     container = SLASHES.sub(r"\\", container)
-    group = get_json_field_by_pri(metric, ['deployment', 'service', 'job'])
+    dev_pod = get_json_field_by_pri(metric, ['device', 'pod' ,'pod_ip'])
+    dev_pod = SLASHES.sub(r"\\", dev_pod)
+    group = get_json_field_by_pri(metric, ['deployment', 'service', 'job', 'namespace'])
     group = SLASHES.sub(r"\\", group)
     # default to most granular level
-    device = dev_pod or container or group
-    if dev_pod and group:
+    device = container or dev_pod or group
+    if group and dev_pod:
         device = group + '/' + dev_pod
-    elif dev_pod and container:
-        device = container + '/' + dev_pod
     elif group and container:
         device = group + '/' + container
+    elif dev_pod and container:
+        device = dev_pod + '/' + container
     return {'_device': device}
 
     
@@ -231,18 +230,12 @@ def get_all_metrics():
 def dispatch_alert_agent(time):
     prepare_alert_agent()
     print_summary_info()
-    ### remove in II-5158
-    logger.error('Unsupported operation')
-    system.exit(0)
-    ###
     response_json = call_prometheus_api()
     alerts = _get_json_field_helper(response_json, agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM), True)
-    logger.debug(alerts)
     for alert in alerts:
-        logger.debug(alert)
         alert[agent_config_vars['timestamp_field']] = get_timestamp_from_date_string(alert[agent_config_vars['timestamp_field']].split('.')[0])
-    agent_config_vars['timestamp_format'] = 'epoch'
     alerts_sorted = sorted(alerts, key=lambda alert: alert[agent_config_vars['timestamp_field']])
+    agent_config_vars['timestamp_format'] = 'epoch'
     for alert in alerts_sorted:
         if alert[agent_config_vars['timestamp_field']] < time:
             break
@@ -250,7 +243,8 @@ def dispatch_alert_agent(time):
 
 
 def prepare_alert_agent():
-    if_config_vars['project_type'].remove('METRIC')
+    if 'METRIC' in if_config_vars['project_type']:
+        if_config_vars['project_type'].remove('METRIC')
     if_config_vars['project_type'] = if_config_vars['project_type'][0]
     if_config_vars['project_name'] = if_config_vars['project_name_alert']
     
@@ -286,7 +280,7 @@ def get_agent_config_vars():
             prometheus_uri = config_parser.get('agent', 'prometheus_uri')
             query_label_selector = config_parser.get('agent', 'query_label_selector')
             metrics = config_parser.get('agent', 'metrics')
-            #data_fields = config_parser.get('agent', 'alert_data_fields') # II-5158
+            data_fields = config_parser.get('agent', 'alert_data_fields')
 
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
@@ -313,9 +307,9 @@ def get_agent_config_vars():
         if len(metrics) != 0:
             metrics = metrics.split(',')
 
-        # alert data fields II-5158
-        #if len(data_fields) != 0:
-        #    data_fields = data_fields.split(',')
+        # alert data fields
+        if len(data_fields) != 0:
+            data_fields = data_fields.split(',')
         
         # add parsed variables to a global
         config_vars = {
@@ -388,10 +382,10 @@ def get_if_config_vars():
         for p_type in project_type:
             if p_type not in {
                     'METRIC',
-                    #'LOG',                 ## enable these when addressing II-5158
-                    #'INCIDENT',
-                    #'ALERT',
-                    #'DEPLOYMENT'
+                    'LOG',                 
+                    'INCIDENT',
+                    'ALERT',
+                    'DEPLOYMENT'
                     }:
                logger.warning('Agent not correctly configured (project_type). Check config file.')
                sys.exit(1)  
@@ -795,6 +789,7 @@ def parse_json_message_single(message):
     # get timestamp
     timestamp = get_json_field(message, 'timestamp_field')
     timestamp = get_timestamp_from_date_string(timestamp)
+    message.pop(agent_config_vars['timestamp_field'])
 
     logger.debug(instance)
     logger.debug(device)

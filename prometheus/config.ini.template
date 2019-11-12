@@ -8,6 +8,8 @@ metrics =
 # label selector to use when querying for metrics, ie {namespace="monitoring"}
 query_label_selector = 
 
+alert_data_fields = 
+
 ## proxy
 agent_http_proxy =
 agent_https_proxy =
@@ -18,7 +20,7 @@ license_key =
 token =
 project_name = 
 project_name_alert = 
-# optionally add (comma-delimited) one of log, alert, deployment, incident
+# metric and/or (comma-delimited) one of log, alert, deployment, incident
 project_type = metric
 # how often to run the agent
 run_interval = 10
