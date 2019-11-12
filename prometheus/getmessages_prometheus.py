@@ -220,7 +220,7 @@ def prepare_metric_agent(start_time, end_time):
     agent_config_vars['metric_name_field'] = 'metric.__name__' # will need to parse from ['value'][1] or ['values'][i][1]
 
     agent_config_vars['filters_include'] = ''
-    agent_config_vars['filters_exclude'] = ''
+    agent_config_vars['filters_exclude'] = ['metric.__name__:' + agent_config_vars['metrics_to_ignore']]
 
 
 def get_all_metrics():
@@ -281,11 +281,14 @@ def get_agent_config_vars():
         try:
             # uri
             prometheus_uri = config_parser.get('agent', 'prometheus_uri')
+
+            # metrics
             query_label_selector = config_parser.get('agent', 'query_label_selector')
             metrics = config_parser.get('agent', 'metrics')
-            data_fields = config_parser.get('agent', 'alert_data_fields')
+            metrics_to_ignore = config_parser.get('agent', 'metrics_to_ignore')
 
-            # filters
+            # alerts
+            data_fields = config_parser.get('agent', 'alert_data_fields')
             filters_include = config_parser.get('agent', 'alert_filters_include')
             filters_exclude = config_parser.get('agent', 'alert_filters_exclude')
 
@@ -336,9 +339,10 @@ def get_agent_config_vars():
             'json_top_level': '',
             'project_field': '',
             'instance_field': '',
-            'data_fields': '', # data_fields, II-5158
+            'data_fields': data_fields,
             'device_field': '',
             'metrics': metrics,
+            'metrics_to_ignore': metrics_to_ignore,
             'metrics_copy': list(metrics),
             'timestamp_field': '',
             'timestamp_format': '',
