@@ -52,7 +52,7 @@ cd ..
 sudo -E ./installAnsible.sh
 ```
 
-4) Open and modify the inventory file. Note that ifUserName, ifProjectName, and, ifLicenseKey are all required.
+4) Open and modify the inventory file.
 ```
 # vi inventory
 [nodes]
