@@ -153,6 +153,8 @@ def fold_up_helper(current_path, node_name, node):
 
 def extract_metric(metric):
     metric_name = get_json_field(metric, 'metric_name_field')
+    if metric_name in agent_config_vars['metrics_to_ignore']:
+        return
     metric_name = agent_config_vars['metrics_names'][metric_name] 
     agent_config_vars['data_fields'] = [metric_name]
     logger.debug(metric_name)
@@ -220,7 +222,7 @@ def prepare_metric_agent(start_time, end_time):
     agent_config_vars['metric_name_field'] = 'metric.__name__' # will need to parse from ['value'][1] or ['values'][i][1]
 
     agent_config_vars['filters_include'] = ''
-    agent_config_vars['filters_exclude'] = ['metric.__name__:' + agent_config_vars['metrics_to_ignore']]
+    agent_config_vars['filters_exclude'] = ''
 
 
 def get_all_metrics():
@@ -317,6 +319,9 @@ def get_agent_config_vars():
         if len(metrics) != 0:
             metrics = metrics.split(',')
 
+        if len(metrics_to_ignore) != 0:
+            metrics_to_ignore = metrics_to_ignore.split(',')
+
         # alert data fields
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
@@ -342,8 +347,8 @@ def get_agent_config_vars():
             'data_fields': data_fields,
             'device_field': '',
             'metrics': metrics,
-            'metrics_to_ignore': metrics_to_ignore,
             'metrics_copy': list(metrics),
+            'metrics_to_ignore': metrics_to_ignore,
             'timestamp_field': '',
             'timestamp_format': '',
             'strip_tz': False,
