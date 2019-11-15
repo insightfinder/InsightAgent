@@ -798,6 +798,7 @@ def make_safe_instance_string(instance, device=''):
     """ make a safe instance name string, concatenated with device if appropriate """
     # strip underscores
     instance = UNDERSCORE.sub('.', instance)
+    instance = COLONS.sub('-')
     # if there's a device, concatenate it to the instance with an underscore
     if len(device) != 0:
         instance = make_safe_instance_string(device) + '_' + instance
