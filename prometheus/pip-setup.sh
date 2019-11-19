@@ -17,7 +17,7 @@ fi
 if [[ -n "${PIP_PACKAGES}" ]]; then
     # make sure pip is installed
     # attempt offline install
-    if [[ -z $(command -v pip) && -x "get-pip.py" ]]; then
+    if [[ -z $(command -v pip) ]] && [[ -x "get-pip.py"]]; then
         echo "Package \"pip\" not installed. Attempting to install offline now..."
         $(command -v python) get-pip.py
     fi
