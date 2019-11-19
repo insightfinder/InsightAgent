@@ -10,10 +10,10 @@ then
     DIR="${DIR:0:${#DIR}-1}"
 fi 
 # get py file, fallback to template file
-PYFILE=$(find ${DIR} -depth 1 -type f -name "get[^\-]*.py" -print)
+PYFILE=$(find ${DIR} -maxdepth 1 -type f -name "get[^\-]*.py" -print)
 if [[ -z ${PYFILE} ]];
 then
-    PYFILE=$(find ${DIR} -depth 1 -type f -name "replay*.py" -print)
+    PYFILE=$(find ${DIR} -maxdepth 1 -type f -name "replay*.py" -print)
 fi
 if [[ -z ${PYFILE} ]];
 then
