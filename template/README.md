@@ -1,7 +1,8 @@
 # Template
 This is a template for developing new agents.
 To start a new agent, recursively copy this folder.
-```cp -r template/ new_agent/ && cd new_agent
+```
+cp -r template/ new_agent/ && cd new_agent
 ```
 
 In your new agent folder, rename the script
