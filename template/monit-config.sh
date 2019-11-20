@@ -63,7 +63,6 @@ echo ""
 if [[ ${DRY_RUN} -eq 0 ]];
 then
     echo "Monit config file created at ${MONIT_FILE}"
-    cat ${MONIT_FILE}
     monit reload
 else
     echo "Rerun this script in commit mode to create the above monit config at ${MONIT_FILE}"
