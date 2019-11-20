@@ -115,7 +115,6 @@ then
         echo "No script found. Exiting..."
         exit 1
     fi
-    AGENT_SCRIPT=${AGENT_SCRIPT:2:${#AGENT_SCRIPT}}
     if is_dry_run;
     then
         echo "Proposed changes:"
