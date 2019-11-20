@@ -1,37 +1,34 @@
 # Template
 This is a template for developing new agents.
 To start a new agent, recursively copy this folder.
-`cp -r template/ new_agent/ && cd new_agent`
+```cp -r template/ new_agent/ && cd new_agent
+```
 
 In your new agent folder, rename the script
-`mv insightagent-boilerplate.py getmessages_agent.py`
-
-Depending on whether or not the agent should run on a cron (occasionally collect and send data) or monit (continuously monitor data). Delete the other script, then modify the needed script with the agent name and script name.
 ```
-$ vi {cron-setup.sh|monit-setup.sh}
-...
-AGENT="new_agent"
-AGENT_SCRIPT="getmessages_agent.py"
-...
+mv insightagent-boilerplate.py get{logs|metrics|messages}_new-agent.py
 ```
 
-Start writing your new agent, modifying `config.ini.template` to have the required input parameters. If your script requires a new pip package, download the `.whl` or `.tar.gz`, place it in pip_packages, then update `pip-setup.sh`.
+Depending on whether or not the agent should run on a cron (occasionally collect and send data) or monit (continuously monitor data), delete the other script
+```
+$ rm {cron-setup.sh|monit-setup.sh}
+```
 
-Once you're done, create a tar for the agent and move it into the agent folder.
+Start writing your new agent, modifying `config.ini.template` to have the required input parameters. If your script requires a new pip package, download the `.whl` or `.tar.gz`, place it in `pip_packages`, then update `pip-setup.sh`.
 
+Once you're done, make the installer
 ```
 cd ..
-tar -czvf new_agent.tar.gz
-mv new_agent.tar.gz new_agent
+./makeAgentInstaller.sh
 ```
 
-Then, delete this section from the `README.md` and update it as appropriate.
+Then, delete this section and update it as appropriate.
 
 ## Installing the Agent
-**Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/new_agent/new_agent.tar.gz) and untar it:**
+**Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/new-agent/new-agent.tar.gz) and untar it:**
 ```
-wget https://github.com/insightfinder/InsightAgent/raw/master/new_agent/new_agent.tar.gz
-tar xvf new_agent.tar.gz && cd new_agent
+wget https://github.com/insightfinder/InsightAgent/raw/master/new-agent/new-agent.tar.gz
+tar xvf new-agent.tar.gz && cd new-agent
 ```
 
 **Copy `config.ini.template` to `config.ini` and edit it:**
@@ -41,6 +38,19 @@ vi config.ini
 ```
 See below for a further explanation of each variable.
 
+### Automated Install
+Simply run 
+```
+sudo ./install.sh -c -s <sampling_interval>
+```
+
+### Manual Install
+**Check Python version & upgrade if using Python 3**
+```
+if [[ $(python -V 2>&1 | awk '{ print substr($NF, 1, 1) }') == "3" ]]; then \
+2to3 -w get{logs|metrics|messages}_new-agent.py; fi
+```
+
 **Setup pip & required packages:**
 ```
 sudo ./pip-setup.sh
@@ -48,7 +58,7 @@ sudo ./pip-setup.sh
 
 **Test the agent:**
 ```
-python getmessages_agent.py -t
+python get{logs|metrics|messages}_new-agent.py -t
 ```
 
 **If satisfied with the output, configure the agent to run continuously:**
