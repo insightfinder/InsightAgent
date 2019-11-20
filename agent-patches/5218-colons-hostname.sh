@@ -4,37 +4,43 @@
 DIR="$1"
 if [[ -z ${DIR} ]];
 then
-    DIR='.'
-elif [[ "${DIR: -1}" = '/' ]];
+    DIR="."
+elif [[ "${DIR: -1}" == '/' ]];
 then
     DIR="${DIR:0:${#DIR}-1}"
 fi 
 # get py file, fallback to template file
-PYFILE=$(find ${DIR} -depth 1 -type f -name "get[^\-]*.py" -print)
-if [[ -z ${PYFILE} ]];
+AGENT_SCRIPT=$(\ls -l ${DIR} | grep get[^\-]*.py | awk '{print $NF}')
+if [[ -z ${AGENT_SCRIPT} ]];
 then
-    PYFILE=$(find ${DIR} -depth 1 -type f -name "replay*.py" -print)
+    AGENT_SCRIPT=$(\ls -l ${DIR} | grep replay*.py | awk '{print $NF}')
 fi
-if [[ -z ${PYFILE} ]];
+if [[ -z ${AGENT_SCRIPT} ]];
 then
-    PYFILE="${DIR}/insightagent-boilerplate.py"
+    AGENT_SCRIPT="insightagent-boilerplate.py"
 fi
-echo "${PYFILE}"
+if [[ -z ${AGENT_SCRIPT} ]];
+then
+    echo "No script found. Exiting..."
+    exit 1
+fi
+AGENT_SCRIPT="${DIR}/${AGENT_SCRIPT}"
+echo "${AGENT_SCRIPT}"
 
 ###
 EXT="$2"
 
-if [[ $(grep -E "instance = COLONS\.sub\(\'\-\'\)" ${PYFILE} | wc -l) -eq 0 ]];
+if [[ $(grep -E "instance = COLONS\.sub\(\'\-\'\)" ${AGENT_SCRIPT} | wc -l) -eq 0 ]];
 then 
     echo "adding to instance string building"
     sed -E -e "/instance = UNDERSCORE\.sub\(\'\.\', instance\)/a\\                  
-\ \ \ \ instance = COLONS\.sub\(\'\-'\)" -i ${EXT} ${PYFILE}
+\ \ \ \ instance = COLONS\.sub\(\'\-'\)" -i ${EXT} ${AGENT_SCRIPT}
 fi
  
-if [[ $(grep -E "COLONS = re\.compile\(r\"\\\:\+\"\)" ${PYFILE} | wc -l) -eq 0 ]];
+if [[ $(grep -E "COLONS = re\.compile\(r\"\\\:\+\"\)" ${AGENT_SCRIPT} | wc -l) -eq 0 ]];
 then
     echo "adding to global declaratinos"
     sed -E -e "/UNDERSCORE = re\.compile\(r\"\\\_\+\"\)/a\\
-\ \ \ \ COLONS = re\.compile\(r\"\\\:\+\"\)" -i ${EXT} ${PYFILE}
+\ \ \ \ COLONS = re\.compile\(r\"\\\:\+\"\)" -i ${EXT} ${AGENT_SCRIPT}
 fi
 
