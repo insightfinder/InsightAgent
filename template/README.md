@@ -42,14 +42,15 @@ See below for a further explanation of each variable.
 ### Automated Install
 Simply run 
 ```
-sudo ./install.sh -c -s <sampling_interval>
+sudo ./install.sh --create --sampling-interval <sampling_interval>
 ```
 
 ### Manual Install
 **Check Python version & upgrade if using Python 3**
 ```
 if [[ $(python -V 2>&1 | awk '{ print substr($NF, 1, 1) }') == "3" ]]; then \
-2to3 -w get{logs|metrics|messages}_new-agent.py; fi
+2to3 -w get{logs|metrics|messages}_new-agent.py; \
+else echo "No upgrade needed"; fi
 ```
 
 **Setup pip & required packages:**
