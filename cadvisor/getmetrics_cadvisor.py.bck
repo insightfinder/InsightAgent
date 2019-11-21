@@ -25,33 +25,128 @@ This script gathers data to send to Insightfinder
 
 
 def start_data_processing(thread_number):
-    # get list of file(s)
-    if agent_config_vars['file_path'][-1:] == '/':
-        files = get_file_list_for_directory(agent_config_vars['file_path'])
-    else:
-        files = [agent_config_vars['file_path']]
-    logger.debug('File list: ' + str(files))
-
-    delim = re.compile(agent_config_vars['field_delimiter'])
-    for replay_file in files:
-        logger.debug('Replaying file ' + str(replay_file))
-        try:
-            csv_data = []
-            with open(replay_file) as csv_file:
-                for line in csv_file:
-                    csv_data.append(delim.split(line.rstrip()))
-            # sort by timestamp
-            logger.debug('sorting data')
-            csv_data.sort(key=lambda x: x[agent_config_vars['timestamp_field']])
-            for row in csv_data:
-                parse_csv_message(row)
-        except Exception as e:
-            logger.warn('Error when parsing message')
-            logger.warn(str(e)) 
-        if cli_config_vars['testing']:
-            logger.debug('Skipping files:\n' + str(files[1:]))
-            break
+    # force sampling interval
+    if_config_vars['sampling_interval'] = 90
+    response_json = get_api_response()
+    logger.debug(response_json)
+    for container_key in response_json:
+        container = response_json[container_key]
+        logger.debug(container.keys())
+        # verify metrics and get image name
+        image = parse_spec(container['spec'])
+        # get container id. if possible, use an alias other than the id as the container id
+        container_id = container['id']
+        aliases = set(container['aliases'])
+        aliases.remove(container_id)
+        if len(aliases) > 0:
+            container_id = list(aliases)[0]
+        container_name = make_safe_string(image) + '/' + make_safe_string(container_id)
+        logger.info(str(container_name))
+        get_metric_data(container_name, container['stats'])
+    # hold off on sending until all containers have reported for this timestamp
+    send_data_wrapper()
     
+
+def get_api_response():
+    response_raw = send_request(agent_config_vars['api_url'], proxies=agent_config_vars['proxies'])
+    return json.loads(response_raw.text)
+
+
+def parse_spec(spec):
+    data_fields = set()
+    for field in agent_config_vars['data_fields']:
+        metric_check = 'has_' + field
+        if metric_check in spec:
+            data_fields.add(field)    
+    logger.debug(str(data_fields))
+    agent_config_vars['data_fields'] = data_fields
+    return spec['image']
+
+
+def get_metric_data(container_id, metric_data):
+    data_prev = metric_data[0]
+    data_curr = metric_data[-1]
+    timestamp = get_timestamp_from_date_string(str(data_curr['timestamp']).split('.')[0])
+    for metric in agent_config_vars['data_fields']:
+        if metric in data_prev and metric in data_curr:
+            if metric == 'cpu':
+                calc_cpu(timestamp, data_prev[metric], data_curr[metric], container_id)
+            elif metric == 'memory':
+                calc_mem(timestamp, data_prev[metric], data_curr[metric], container_id)
+            elif metric == 'network':
+                calc_network(timestamp, data_prev[metric], data_curr[metric], container_id)
+            elif metric == 'filesystem':
+                calc_fs(timestamp, data_prev[metric], data_curr[metric], container_id)
+            elif metric == 'diskio':
+                calc_io(timestamp, data_prev[metric], data_curr[metric], container_id)
+
+
+def calc_cpu(timestamp, cpu_data_prev, cpu_data_curr, container_id):
+    if not cpu_data_prev or not cpu_data_curr:
+        logger.warning('no cpu data to report')
+        return
+    
+    usage_prev = cpu_data_prev['usage']['total']
+    usage_curr = cpu_data_curr['usage']['total']
+    cpu_pct = float((usage_curr - usage_prev) / 1000000000.0)
+    append_metric_data_to_entry(timestamp, 'cpu', abs(cpu_pct), agent_config_vars['hostname'], container_id)
+
+
+def calc_mem(timestamp, mem_data_prev, mem_data_curr, container_id):
+    if not mem_data_prev or not mem_data_curr:
+        logger.warning('no memory data to report')
+        return
+    
+    mem_curr = mem_data_curr['usage']
+    mem_used = float(mem_curr / (1024.0 * 1024.0))
+    append_metric_data_to_entry(timestamp, 'memory', abs(mem_used), agent_config_vars['hostname'], container_id)
+
+
+def calc_fs(timestamp, fs_data_prev, fs_data_curr, container_id):
+    if not fs_data_prev or not fs_data_curr:
+        logger.warning('no filesystem data to report')
+        return
+    
+    fs_curr = sum(map(lambda x: x['usage'], fs_data_curr))
+    fs_used = float(fs_curr / (1024.0 * 1024.0))
+    append_metric_data_to_entry(timestamp, 'filesystem/used', abs(fs_used), agent_config_vars['hostname'], container_id)
+
+
+def calc_io(timestamp, io_data_prev, io_data_curr, container_id):
+    if not io_data_prev or not io_data_curr:
+        logger.warning('no diskio data to report')
+        return
+
+    io_prev = io_data_prev['io_service_bytes']
+    io_read_prev = sum(map(lambda x: x['stats']['Read'], io_prev))
+    io_write_prev = sum(map(lambda x: x['stats']['Write'], io_prev))
+
+    io_curr = io_data_curr['io_service_bytes']
+    io_read_curr = sum(map(lambda x: x['stats']['Read'], io_curr))
+    io_write_curr = sum(map(lambda x: x['stats']['Write'], io_curr))
+
+    io_read = float((io_read_curr - io_read_prev) / (1024.0 * 1024.0))
+    io_write = float((io_write_curr - io_write_prev) / (1024.0 * 1024.0))
+    append_metric_data_to_entry(timestamp, 'io_read', io_read, agent_config_vars['hostname'], container_id)
+    append_metric_data_to_entry(timestamp, 'io_write', io_write, agent_config_vars['hostname'], container_id)
+    
+
+def calc_network(timestamp, network_data_prev, network_data_curr, container_id):
+    if not network_data_prev or not network_data_curr:
+        logger.warning('no network data to report')
+        return
+
+    network_tx_prev = network_data_prev['tx_bytes']
+    network_rx_prev = network_data_prev['rx_bytes']
+
+    network_tx_curr = network_data_curr['tx_bytes']
+    network_rx_curr = network_data_curr['rx_bytes']
+
+    network_tx = float((network_tx_curr - network_tx_prev) / (1024.0 * 1024.0))
+    network_rx = float((network_rx_curr - network_rx_prev) / (1024.0 * 1024.0))
+    append_metric_data_to_entry(timestamp, 'network_tx', network_tx, agent_config_vars['hostname'], container_id)
+    append_metric_data_to_entry(timestamp, 'network_rx', network_rx, agent_config_vars['hostname'], container_id)
+
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
@@ -59,106 +154,69 @@ def get_agent_config_vars():
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
         try:
-            # file path
-            file_path = config_parser.get('agent', 'file_path')
-            # delimiter
-            field_delimiter = config_parser.get('agent', 'field_delimiter')            
+            # api uri
+            api_uri = config_parser.get('agent', 'api_uri')
 
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
-            
-            # filters
-            filters_include = config_parser.get('agent', 'filters_include')
-            filters_exclude = config_parser.get('agent', 'filters_exclude')
 
-            # message parsing
-            csv_field_names = config_parser.get('agent', 'csv_field_names')
-            #project_field = config_parser.get('agent', 'project_field')
-            instance_field = config_parser.get('agent', 'instance_field')
-            device_field = config_parser.get('agent', 'device_field')
-            timestamp_field = config_parser.get('agent', 'timestamp_field') or 'timestamp'
-            timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
-            data_fields = config_parser.get('agent', 'data_fields')
+            # fields to grab
+            data_fields = config_parser.get('agent', 'data_fields').lower()
                     
         except ConfigParser.NoOptionError:
-            logger.error('Agent not correctly configured. Check config file.')
+            logger.error('Agent not correctly configured ([agent]). Check config file.')
             sys.exit(1)
-         
+        
+        # api uri
+        if len(api_uri) == 0:
+            api_uri = 'http://localhost:8080'
+        api_url = urlparse.urljoin(api_uri, '/api/v1.3/docker/')
+
         # proxies
         agent_proxies = dict()
         if len(agent_http_proxy) > 0:
             agent_proxies['http'] = agent_http_proxy
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
-        
-        # fitlers
-        if len(filters_include) != 0:
-            filters_include = filters_include.split('|')
-        if len(filters_exclude) != 0:
-            filters_exclude = filters_exclude.split('|')
+
+        # data fields
+        available_fields = {'cpu', 'memory', 'network', 'filesystem', 'diskio'}
         if len(data_fields) != 0:
-            data_fields = data_fields.split(',')
+            data_fields = set(data_fields.split(','))
+        else:
+            data_fields = available_fields
+        data_fields_temp = set()
+        for field in data_fields:
+            if field in available_fields:
+                data_fields_temp.add(field)
+        data_fields = data_fields_temp
         
         # timestamp format
+        timestamp_format = '%Y-%m-%dT%H:%M:%S'
         if '%z' in timestamp_format or '%Z' in timestamp_format:
             ts_format_info = strip_tz_info(timestamp_format)
         else:
-            ts_format_info = {'strip_tz': False, 'strip_tz_fmt': '', 'timestamp_format': timestamp_format} 
-
-        # CSV-specific
-        data_format = 'CSV'
-        if len(csv_field_names) == 0:
-            logger.warning('Agent not correctly configured (csv_field_names)')
-            sys.exit()
-        csv_field_names = csv_field_names.split(',')
-            
-        filters = {'filters_include': {'name': filters_include},
-                   'filters_exclude': {'name': filters_exclude}}
-        optional_fields = {#'project_field': {'name': project_field},
-                           'instance_field': {'name': instance_field},
-                           'device_field': {'name': device_field}}
-        required_fields = {'timestamp_field': {'name': timestamp_field}}
-        all_fields = {'filters': filters,
-                      'required_fields': required_fields,
-                      'optional_fields': optional_fields,
-                      'data_fields': data_fields}
-        all_fields = check_csv_field_indeces(csv_field_names, all_fields)
-        csv_vars = dict()
-        for filter_type in all_fields['filters']:
-            if 'filter' in all_fields['filters'][filter_type]:
-                csv_vars[filter_type] = all_fields['filters'][filter_type]['filter']
-            else:
-                csv_vars[filter_type] = ''
-        for optional_field in all_fields['optional_fields']:
-            if 'index' in all_fields['optional_fields'][optional_field]:
-                csv_vars[optional_field] = all_fields['optional_fields'][optional_field]['index']
-            else:
-                csv_vars[optional_field] = ''
-        for required_field in all_fields['required_fields']:
-            if 'index' in all_fields['required_fields'][required_field]:
-                csv_vars[required_field] = all_fields['required_fields'][required_field]['index']
-            else:
-                csv_vars[required_field] = ''
-        csv_vars['data_fields'] = all_fields['data_fields']
+            ts_format_info = {'strip_tz': False, 'strip_tz_fmt': '', 'timestamp_format': timestamp_format}
         
-        if timestamp_field in data_fields:
-                data_fields.pop(timestamp_field)
-
         # add parsed variables to a global
         config_vars = {
-            'file_path': file_path,
-            'field_delimiter': field_delimiter,
+            'api_url': api_url,
+            'hostname': urlparse.urlparse(api_url).hostname,
             'proxies': agent_proxies,
-            'data_format': 'CSV',
-            'csv_field_names': csv_field_names,
+            'filters_include': '',
+            'filters_exclude': '',
+            'data_format': 'JSON',
+            'json_top_level': '',
+            'project_field': '',
+            'instance_field': '',
+            'device_field': '',
+            'data_fields': data_fields,
+            'timestamp_field': 'timestamp',
             'timestamp_format': ts_format_info['timestamp_format'],
             'strip_tz': ts_format_info['strip_tz'],
             'strip_tz_fmt': ts_format_info['strip_tz_fmt']
         }
-
-        # add csv variables to config_vars
-        config_vars.update(csv_vars)
 
         return config_vars
     else:
@@ -186,7 +244,7 @@ def get_if_config_vars():
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
         except ConfigParser.NoOptionError:
-            logger.error('Agent not correctly configured. Check config file.')
+            logger.error('Agent not correctly configured ([insightfinder]). Check config file.')
             sys.exit(1)
 
         # check required variables
@@ -330,10 +388,10 @@ def strip_tz_info(timestamp_format):
     return {'strip_tz': True, 'strip_tz_fmt': strip_tz_fmt, 'timestamp_format': timestamp_format}
 
 
-def check_csv_field_indeces(csv_field_names, all_fields):
+def check_csv_fieldnames(csv_field_names, all_fields):
     # required
     for field in all_fields['required_fields']:
-        all_fields['required_fields'][field]['index'] = get_field_index(csv_field_names, all_fields['required_fields'][field]['name'], field, True)
+        all_fields['required_fields'][field]['index'] = get_field_index(csv_field_names, all_fields['optional_fields'][field]['name'], field, True)
 
     # optional
     for field in all_fields['optional_fields']:
@@ -355,7 +413,7 @@ def check_csv_field_indeces(csv_field_names, all_fields):
                 if isinstance(filter_index, int):
                     filter_temp = str(filter_index) + ':' + filter_vals
                     filters_temp.append(filter_temp)
-            all_fields['filters'][field]['filter'] = str(filters_temp)
+            all_fields['filters'][field]['filter'] = filters_temp
 
     # data
     data_fields = all_fields['data_fields']
@@ -370,7 +428,6 @@ def check_csv_field_indeces(csv_field_names, all_fields):
         # use all non-timestamp fields
         all_fields['data_fields'] = range(len(csv_field_names))
 
-    logger.debug(all_fields)
     return all_fields
 
 
@@ -676,18 +733,14 @@ def parse_csv_data(csv_data, instance, device=''):
         header row:  timestamp,field_1,field_2,...,field_n
         n data rows: TIMESTAMP,value_1,value_2,...,value_n
     """
-    # determine delimiter
-    delim = CSV_DELIM
-    if 'field_delimiter' in agent_config_vars and len(agent_config_vars['field_delimiter']) != 0:
-        delim = field_delimiter
 
     # get field names from header row
-    field_names = csv_data.pop(0).split(delim)[1:]
+    field_names = csv_data.pop(0).split(CSV_DELIM)[1:]
 
     # go through each row
     for row in csv_data:
         if len(row) > 0:
-            parse_csv_row(row.split(delim), field_names, instance, device)
+            parse_csv_row(row.split(CSV_DELIM), field_names, instance, device)
 
 
 def parse_csv_row(row, field_names, instance, device=''):
@@ -762,13 +815,12 @@ def make_safe_metric_key(metric):
 
 def make_safe_string(string):
     """
-    Take a single string and return the same string with spaces, slashes,
-    underscores, and non-alphanumeric characters subbed out.
+    Take a single string and return the same string with spaces, slashes, and underscores subbed out.
     """
     string = SPACES.sub('-', string)
-    string = SLASHES.sub('.', string)
+    string = FWD_SLASHES.sub('.', string)
     string = UNDERSCORE.sub('.', string)
-    string = NON_ALNUM.sub('', string)
+    string = COLONS.sub('-', string)
     return string
 
 
@@ -944,7 +996,6 @@ def send_data_to_if(chunk_metric_data):
     data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
 
     logger.debug('First:\n' + str(chunk_metric_data[0]))
-    logger.debug('Second:\n' + str(chunk_metric_data[1]))
     logger.debug('Last:\n' + str(chunk_metric_data[-1]))
     logger.debug('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
     logger.debug('Total Lines: ' + str(track['line_count']))
@@ -1077,7 +1128,7 @@ def initialize_api_post_data():
 if __name__ == "__main__":
     # declare a few vars
     SPACES = re.compile(r"\s+")
-    SLASHES = re.compile(r"\/+")
+    FWD_SLASHES = re.compile(r"\/+")
     UNDERSCORE = re.compile(r"\_+")
     COLONS = re.compile(r"\:+")
     LEFT_BRACE = re.compile(r"\[")

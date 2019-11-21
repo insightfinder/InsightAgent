@@ -27,7 +27,7 @@ echo "Removing old tarball"
 rm ${TARBALL_PATH}
 
 echo "Creating tarball ${TARBALL_NAME}"
-tar czvf ${TARBALL_NAME} --exclude='*.out' --exclude='config.ini' --exclude='*.pyc' --exclude='.*' ${AGENT_PATH}
+tar czvf ${TARBALL_NAME} --exclude='*.out' --exclude='config.ini' --exclude='*.pyc' --exclude='*.bck' --exclude='.*' ${AGENT_PATH}
 
 echo "Moving tarball into ${AGENT_PATH}"
 mv ${TARBALL_NAME} ${AGENT_PATH}
