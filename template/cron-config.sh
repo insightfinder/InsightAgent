@@ -6,22 +6,6 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-function echo_usage() {
-    echo "No or invalid run interval specified in config.ini."
-    echo "Please edit config.ini and specify how often the cron should run in"
-    echo "\tseconds: \"6s\" - must be an integer divisor of 60,"
-    echo "\tminutes: \"6m\" or \"6\" (default),"
-    echo "\thours: \"6h\", or"
-    echo "\tdays: \"6d\""
-    exit 1
-}
-
-if [[ ! -f config.ini ]];
-then
-    cp config.ini.template config.ini
-    echo_usage
-fi
-
 # get input params
 function echo_params() {
     echo "Usage:"
@@ -47,19 +31,53 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
+# is config.ini configured?
+function get_config_setting() {
+    cat config.ini | grep "$1" | awk -F '=' '{print $NF}' | tr -d [:space:]
+}
+function echo_config_err() {
+    echo "config.ini is not configured."
+    echo "Please configure config.ini before running this script"
+    exit 1
+}
+if [[ ! -f "config.ini" ]];
+then
+    cp config.ini.template config.ini
+    echo_config_err
+else
+    USER_NAME=$(get_config_setting ^user_name)
+    LICENSE_KEY=$(get_config_setting ^license_key)
+    PROJECT_NAME=$(get_config_setting ^project_name)
+    if [[ -z ${USER_NAME} || -z ${LICENSE_KEY} || -z ${PROJECT_NAME} ]];
+    then
+        echo_config_err
+    fi
+fi
+
 # Dry run mode?
 function is_dry_run() {
     [[ ${DRY_RUN} -gt 0 ]]
 }
 
-# get interval
-function get_interval() {
-    cat config.ini | grep "$1" | awk -F "=" '{print $NF}' | tr -d '[:space:]'
+#######################
+# shared portion done #
+#######################
+
+function echo_usage() {
+    echo "No or invalid run interval specified in config.ini."
+    echo "Please edit config.ini and specify how often the cron should run in"
+    echo "\tseconds: \"6s\" - must be an integer divisor of 60,"
+    echo "\tminutes: \"6m\" or \"6\" (default),"
+    echo "\thours: \"6h\", or"
+    echo "\tdays: \"6d\""
+    exit 1
 }
-RUN_INTERVAL=$(get_interval run_interval)
+
+# get interval
+RUN_INTERVAL=$(get_config_setting ^run_interval)
 if [[ -z "${RUN_INTERVAL}" ]];
 then
-    RUN_INTERVAL=$(get_interval sampling_interval)
+    RUN_INTERVAL=$(get_config_setting ^sampling_interval)
 fi
 if [[ -z "${RUN_INTERVAL}" ]];
 then

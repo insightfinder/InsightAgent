@@ -3,7 +3,7 @@
 This is a template for developing new agents.
 To start a new agent, recursively copy this folder.
 ```
-cp -r template/ {{NEWAGENT}}/ && cd {{NEWAGENT}}
+cp -r template/* {{NEWAGENT}}/ && cd {{NEWAGENT}}
 ```
 
 In your new agent folder, rename the script
@@ -43,7 +43,7 @@ sudo ./install.sh --create
 ### Long Version
 **Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/{{NEWAGENT}}/{{NEWAGENT}}.tar.gz) and untar it:**
 ```
-wget https://github.com/insightfinder/InsightAgent/raw/master/{{NEWAGENT}}/{{NEWAGENT}}.tar.gz
+curl -L https://github.com/insightfinder/InsightAgent/raw/master/{{NEWAGENT}}/{{NEWAGENT}}.tar.gz -o {{NEWAGENT}}.tar.gz
 tar xvf {{NEWAGENT}}.tar.gz && cd {{NEWAGENT}}
 ```
 

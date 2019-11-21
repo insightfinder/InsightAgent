@@ -6,14 +6,6 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-# is config.ini configured?
-if [[ ! -f "config.ini" ]];
-then
-    echo "Please configure config.ini before running this script"
-    cp config.ini.template config.ini
-    exit 1
-fi
-
 # get input params
 function echo_params() {
     echo "Usage:"
@@ -39,10 +31,37 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
+# is config.ini configured?
+function get_config_setting() {
+    cat config.ini | grep "$1" | awk -F '=' '{print $NF}' | tr -d [:space:]
+}
+function echo_config_err() {
+    echo "config.ini is not configured."
+    echo "Please configure config.ini before running this script"
+    exit 1
+}
+if [[ ! -f "config.ini" ]];
+then
+    cp config.ini.template config.ini
+    echo_config_err
+else
+    USER_NAME=$(get_config_setting ^user_name)
+    LICENSE_KEY=$(get_config_setting ^license_key)
+    PROJECT_NAME=$(get_config_setting ^project_name)
+    if [[ -z ${USER_NAME} || -z ${LICENSE_KEY} || -z ${PROJECT_NAME} ]];
+    then
+        echo_config_err
+    fi
+fi
+
 # Dry run mode?
 function is_dry_run() {
     [[ ${DRY_RUN} -gt 0 ]]
 }
+
+#######################
+# shared portion done #
+#######################
 
 if is_dry_run;
 then
