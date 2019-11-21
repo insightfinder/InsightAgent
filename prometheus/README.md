@@ -34,9 +34,13 @@ sudo ./cron-config.sh <sampling_interval>
 -->
 * `prometheus_uri`: URI to Prometheus API as `scheme://host:port`. For example, `http://localhost:9090`.
 * `metrics`: Metrics to query Prometheus for. If none specified, all metrics returned from `/api/v1/label/__names__/values` will be used.
+* `metrics_to_ignore`: Metrics to not report. By default, this is set to `ALERTS,ALERTS_FOR_STATE`.
 * `query_label_selector`: Label selector to use when querying for metrics, such as `{namespace="monitoring"}`. 
 * `agent_http_proxy`: HTTP proxy used to connect to the agent.
 * `agent_https_proxy`: As above, but HTTPS.
+* `alert_data_fields`: Comma-delimited list of field names to use as data fields for alerts. If not set, all fields will be reported.
+* `alert_filters_include`: Used to filter alerts based on allowed values.
+* `alert_filters_exclude`: Used to filter alerts based on unallowed values.
 * **`user_name`**: User name in InsightFinder
 * **`license_key`**: License Key from your Account Profile in the InsightFinder UI.
 * `token`: Token from your Account Profile in the InsightFinder UI.
