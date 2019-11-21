@@ -8,6 +8,12 @@ then
     exit 1
 else
     AGENT=$(echo ${AGENT} | sed -E -e 's:^(.*)\/$:\1:')
+    # for now, we exist in multiple worlds for agent installs
+    if [[ ! ${AGENT} =~ cadvisor|hadoop-mapreduce-logs|k8s_logs|kafka2|newrelic|prometheus|spark-logs ]];
+    then
+        echo "Not a valid option for this style of installer. Please see the relevant README."
+        exit 1
+    fi
     AGENT_TAR="${AGENT}.tar.gz"
 fi
 
