@@ -9,12 +9,36 @@ if [[ -z ${AGENT} ]]; then
 fi
 
 # determine agent name and path
+AGENT_PATH="${AGENT}/"
 if [[ "${AGENT: -1}" = '/' ]]; then
     AGENT_PATH=${AGENT}
     AGENT="${AGENT:0:${#AGENT}-1}"
-else
-    AGENT_PATH="${AGENT}/"
 fi
+
+#### get some vars from the agent folder ####
+cd ${AGENT_PATH}
+# get agent script
+function get_agent_script() {
+    \ls -l | awk '{print $NF}' | grep $1
+}
+AGENT_SCRIPT=$(get_agent_script ^get[^\-].*\.py$)
+if [[ -z ${AGENT_SCRIPT} ]];
+then
+    AGENT_SCRIPT=$(get_agent_script ^replay*\.py$)
+fi
+
+# get cronit
+CRONIT_SCRIPT="$(\ls -l | awk '{print $NF}' | grep ^.*-config\.sh$)"
+
+# update readme
+sed -e '/^{{{/,/^}}}/{d;}' -i "" README.md
+sed -e "s/{{NEWAGENT}}/${AGENT}/g" -i "" README.md
+sed -e "s/{{NEWAGENT&script}}/${AGENT_SCRIPT}/g" -i "" README.md
+sed -e "s/{{NEWAGENT&cronit}}/${CRONIT_SCRIPT}/g" -i "" README.md
+
+# return
+cd -
+####
 
 # scrub any slashes in the name (ie neseted folders)
 AGENT_SCRUBBED=$(sed -e "s:\/:\-:g" <<< ${AGENT})
