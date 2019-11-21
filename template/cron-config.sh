@@ -127,28 +127,28 @@ fi
 # make scron file
 case "${RUN_INTERVAL_UNIT}" in
     s)      # seconds
-        echo "* * * * * ${CRON_USER} ${CRON_COMMAND}" |& if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
+        echo "* * * * * ${CRON_USER} ${CRON_COMMAND}" 2>&1 | if is_dry_run; then awk '{print}'; else tee ${CRON_FILE}; fi
         SLEEP="${RUN_INTERVAL_VAL}"
         while [[ "${SLEEP}" -lt 60 ]]; do
-            echo "* * * * * ${CRON_USER} sleep ${SLEEP}; ${CRON_COMMAND}" |& if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
+            echo "* * * * * ${CRON_USER} sleep ${SLEEP}; ${CRON_COMMAND}" 2>&1 | if is_dry_run; then awk '{print}'; else tee -a ${CRON_FILE}; fi
             SLEEP=$((${SLEEP}+${RUN_INTERVAL_VAL}))
         done
         ;;
     d)      # days
-        echo "* * */${RUN_INTERVAL_VAL} * * ${CRON_USER} ${CRON_COMMAND}" |& if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
+        echo "* * */${RUN_INTERVAL_VAL} * * ${CRON_USER} ${CRON_COMMAND}" 2>&1 | if is_dry_run; then awk '{print}'; else tee ${CRON_FILE}; fi
         ;;
     h)      # hours
-        echo "* */${RUN_INTERVAL_VAL} * * * ${CRON_USER} ${CRON_COMMAND}" |& if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
+        echo "* */${RUN_INTERVAL_VAL} * * * ${CRON_USER} ${CRON_COMMAND}" 2>&1 | if is_dry_run; then awk '{print}'; else tee ${CRON_FILE}; fi
         ;;
     [m0-9]) # minutes
-        echo "*/${RUN_INTERVAL_VAL} * * * * ${CRON_USER} ${CRON_COMMAND}" |& if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
+        echo "*/${RUN_INTERVAL_VAL} * * * * ${CRON_USER} ${CRON_COMMAND}" 2>&1 | if is_dry_run; then awk '{print}'; else tee ${CRON_FILE}; fi
         ;;
     *)      # shouldn't get here
         echo_usage
         ;;
 esac
 # end with a blank line
-echo "" |& if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
+echo "" 2>&1 | if is_dry_run; then awk '{print}'; else tee -a ${CRON_FILE}; fi
 
 if is_dry_run;
 then
