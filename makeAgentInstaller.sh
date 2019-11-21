@@ -3,8 +3,9 @@
 # pass agent as parameter
 AGENT=$1
 if [[ -z ${AGENT} ]]; then
-    echo "No agent to build specified. Please supply an agent name"
-    exit 1
+    AGENT=$(\ls -lrt | grep ^d | tail -n1 | awk '{print $NF}')
+    echo "No agent to build specified. Using most recently modified folder: ${AGENT}"
+    read -p "Press [Enter] to continue, [Ctrl+C] to quit"
 fi
 
 # determine agent name and path
@@ -26,7 +27,7 @@ echo "Removing old tarball"
 rm ${TARBALL_PATH}
 
 echo "Creating tarball ${TARBALL_NAME}"
-tar czvf ${TARBALL_NAME} --exclude='config.ini' --exclude='*.pyc' --exclude='.*' ${AGENT_PATH}
+tar czvf ${TARBALL_NAME} --exclude='*.out' --exclude='config.ini' --exclude='*.pyc' --exclude='*.bck' --exclude='.*' ${AGENT_PATH}
 
 echo "Moving tarball into ${AGENT_PATH}"
 mv ${TARBALL_NAME} ${AGENT_PATH}

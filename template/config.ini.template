@@ -4,7 +4,7 @@
 # for example:
 #   message.env:stg,prd|message.status:complete
 filters_include = 
-# as above, but instead include values that are not allowed
+# as above, but instead define values that are not allowed
 # for example:
 #   message.env:dev,cde|message.status:draft
 filters_exclude = 
