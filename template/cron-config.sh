@@ -7,44 +7,74 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 function echo_usage() {
-    echo "No or invalid run interval specified. Please call this script as"
-    echo "./cron-config.sh <run-interval> [-c|--commit]"
-    echo "Where run-interval is how often the cron should run in"
+    echo "No or invalid run interval specified in config.ini."
+    echo "Please edit config.ini and specify how often the cron should run in"
     echo "\tseconds: \"6s\" - must be an integer divisor of 60,"
     echo "\tminutes: \"6m\" or \"6\" (default),"
     echo "\thours: \"6h\", or"
     echo "\tdays: \"6d\""
+    exit 1
 }
 
+if [[ ! -f config.ini ]];
+then
+    cp config.ini.template config.ini
+    echo_usage
+fi
+
 # get input params
-SHOPT_EXTGLOB=$(shopt -p extglob)
-shopt -s extglob
+function echo_params() {
+    echo "Usage:"
+    echo "-c --create   Set to run this in commit mode."
+    echo "-h --help     Display this help text and exit."
+    exit 1
+}
+
 DRY_RUN=1
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -c|--create)
             DRY_RUN=0
+            ;;  
+        -h|--help)
+            echo_params
             ;;
-        +([0-9])?([mhd0-9s]))
-            RUN_INTERVAL="$1"
+        *)
+            echo "Improper flag or parameter passed to script."
+            echo_params
             ;;
     esac
     shift
 done
-eval $SHOPT_EXTGLOB
 
+# Dry run mode?
+function is_dry_run() {
+    [[ ${DRY_RUN} -gt 0 ]]
+}
+
+# get interval
+function get_interval() {
+    cat config.ini | grep "$1" | awk -F "=" '{print $NF}' | tr -d '[:space:]'
+}
+RUN_INTERVAL=$(get_interval run_interval)
+if [[ -z "${RUN_INTERVAL}" ]];
+then
+    RUN_INTERVAL=$(get_interval sampling_interval)
+fi
 if [[ -z "${RUN_INTERVAL}" ]];
 then
     echo_usage
-    exit 1
 fi
 
 # get agent
 AGENT=$(pwd | awk -F "/" '{print $NF}')
-AGENT_SCRIPT=$(\ls -l | awk '{print $NF}' | grep ^get[^\-].*\.py$)
+function get_agent_script() {
+    \ls -l | awk '{print $NF}' | grep $1
+}
+AGENT_SCRIPT=$(get_agent_script ^get[^\-].*\.py$)
 if [[ -z ${AGENT_SCRIPT} ]];
 then
-    AGENT_SCRIPT=$(\ls -l | awk '{print $NF}' | grep ^replay*\.py$)
+    AGENT_SCRIPT=$(get_agent_script ^replay*\.py$)
 fi
 if [[ -z ${AGENT_SCRIPT} ]];
 then
@@ -74,40 +104,39 @@ fi
 if [[ "${RUN_INTERVAL_UNIT}" =~ [^dhm0-9s] || "${RUN_INTERVAL_VAL}" -le 0 || $((${RUN_INTERVAL_VAL} % 1)) -ne 0 || ("${RUN_INTERVAL_UNIT}" = "s" && $((60 % ${RUN_INTERVAL_VAL})) -ne 0) ]];
 then
     echo_usage
-    exit 1
 fi
 
+# make scron file
 case "${RUN_INTERVAL_UNIT}" in
     s)      # seconds
-        echo "* * * * * ${CRON_USER} ${CRON_COMMAND}" |& if [[ ${DRY_RUN} -eq 0 ]]; then tee ${CRON_FILE}; else awk '{print}'; fi
+        echo "* * * * * ${CRON_USER} ${CRON_COMMAND}" |& if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
         SLEEP="${RUN_INTERVAL_VAL}"
         while [[ "${SLEEP}" -lt 60 ]]; do
-            echo "* * * * * ${CRON_USER} sleep ${SLEEP}; ${CRON_COMMAND}" |& if [[ ${DRY_RUN} -eq 0 ]]; then tee -a ${CRON_FILE}; else awk '{print}'; fi
+            echo "* * * * * ${CRON_USER} sleep ${SLEEP}; ${CRON_COMMAND}" |& if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
             SLEEP=$((${SLEEP}+${RUN_INTERVAL_VAL}))
         done
         ;;
     d)      # days
-        echo "* * */${RUN_INTERVAL_VAL} * * ${CRON_USER} ${CRON_COMMAND}" |& if [[ ${DRY_RUN} -eq 0 ]]; then tee ${CRON_FILE}; else awk '{print}'; fi
+        echo "* * */${RUN_INTERVAL_VAL} * * ${CRON_USER} ${CRON_COMMAND}" |& if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
         ;;
     h)      # hours
-        echo "* */${RUN_INTERVAL_VAL} * * * ${CRON_USER} ${CRON_COMMAND}" |& if [[ ${DRY_RUN} -eq 0 ]]; then tee ${CRON_FILE}; else awk '{print}'; fi
+        echo "* */${RUN_INTERVAL_VAL} * * * ${CRON_USER} ${CRON_COMMAND}" |& if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
         ;;
     [m0-9]) # minutes
-        echo "*/${RUN_INTERVAL_VAL} * * * * ${CRON_USER} ${CRON_COMMAND}" |& if [[ ${DRY_RUN} -eq 0 ]]; then tee ${CRON_FILE}; else awk '{print}'; fi
+        echo "*/${RUN_INTERVAL_VAL} * * * * ${CRON_USER} ${CRON_COMMAND}" |& if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
         ;;
     *)      # shouldn't get here
         echo_usage
-        exit 1
         ;;
 esac
 # end with a blank line
-echo "" |& if [[ ${DRY_RUN} -eq 0 ]]; then tee -a ${CRON_FILE}; fi
+echo "" |& if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
 
-if [[ ${DRY_RUN} -eq 0 ]];
+if is_dry_run;
 then
-    echo "Cron config created at ${CRON_FILE}"
-else
     echo "To create a cron config at ${CRON_FILE}, run this again as"
-    echo "./cron-config ${RUN_INTERVAL} --create"
+    echo "./cron-config --create"
+else
+    echo "Cron config created at ${CRON_FILE}"
 fi
 exit 0

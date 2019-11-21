@@ -13,15 +13,34 @@ if [[ -z $(command -v monit) ]]; then
 fi
 
 # get input params
+function echo_params() {
+    echo "Usage:"
+    echo "-c --create   Set to run this in commit mode."
+    echo "-h --help     Display this help text and exit."
+    exit 1
+}
+
 DRY_RUN=1
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -c|--create)
             DRY_RUN=0
             ;;
+        -h|--help)
+            echo_params
+            ;;
+        *)
+            echo "Improper flag or parameter passed to script."
+            echo_params
+            ;;
     esac
     shift
 done
+
+# Dry run mode?
+function is_dry_run() {
+    [[ ${DRY_RUN} -gt 0 ]]
+}
 
 # get agent
 AGENT=$(pwd | awk -F "/" '{print $NF}')
@@ -40,8 +59,12 @@ AGENT_FULL_PATH_CONFIG="$(pwd)/config.ini"
 AGENT_FULL_PATH_LOG="$(pwd)/log.out"
 MONIT_FILE="/etc/monit.d/${AGENT}"
 
-if [[ ${DRY_RUN} -eq 0 ]];
+if is_dry_run;
 then
+    echo "In dry-run mode. Run as"
+    echo "    ./monit-cronfig.sh --create"
+    echo "to create the monit config."
+else
     touch ${AGENT_FULL_PATH_LOG}
     touch ${MONIT_FILE}
 fi
@@ -57,15 +80,12 @@ check file ${AGENT}_config path \"${AGENT_FULL_PATH_CONFIG}\"
     if changed timestamp then restart
     start program = \"/bin/bash -c \'\$(command -v python) ${AGENT_FULL_PATH} &>${AGENT_FULL_PATH_LOG}\"'
     stop program = \"/bin/bash -c \'\$(command -v pkill) -f ${AGENT_FULL_PATH}\"'
-" |& if [[ ${DRY_RUN} -eq 0 ]]; then tee ${MONIT_FILE}; else awk '{print}'; fi
+" |& if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
 echo ""
 
-if [[ ${DRY_RUN} -eq 0 ]];
+if ! is_dry_run;
 then
     echo "Monit config file created at ${MONIT_FILE}"
     monit reload
-else
-    echo "Rerun this script in commit mode to create the above monit config at ${MONIT_FILE}"
-    echo "./monit-config.sh --create"
 fi
 exit 0
