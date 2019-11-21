@@ -43,11 +43,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 # check sampling interval
-#CRONIT_SCRIPT=$(find . -type f -name '*-config.sh' -print)
-CRONIT_SCRIPT=$(\ls -l | grep config\.sh | awk '{print $NF}')
-CRONIT=$(echo "${CRONIT_SCRIPT}" | sed -E  -e 's:^\.\/(monit|cron)-config\.sh$:\1:')
+CRONIT_SCRIPT=$(\ls -l | awk '{print $NF}' | grep ^.*-config\.sh$)
+CRONIT=$(echo "${CRONIT_SCRIPT}" | sed -E  -e 's:^(monit|cron)-config\.sh$:\1:')
 ERR_MSG="No sampling interval given, but this agent runs on a cron."
-if [[ "${CRONIT}" == "cron" ]];
+if [[ "${CRONIT}" = "cron" ]];
 then
     if [[ -n ${SAMPLING_INTERVAL} ]];
     then
@@ -61,13 +60,12 @@ then
         fi
 
         # check input
-        if [[ "${SAMPLING_INTERVAL_UNIT}" =~ [dhm0-9] || "${SAMPLING_INTERVAL_VAL}" -le 0 || $((${SAMPLING_INTERVAL_VAL} % 1)) -ne 0 || ("${SAMPLING_INTERVAL_UNIT}" = "s" && $((60 % ${SAMPLING_INTERVAL_VAL})) -eq 0) ]];
+        if [[ "${SAMPLING_INTERVAL_UNIT}" =~ [^dhm0-9s] || "${SAMPLING_INTERVAL_VAL}" -le 0 || $((${SAMPLING_INTERVAL_VAL} % 1)) -ne 0 || ("${SAMPLING_INTERVAL_UNIT}" = "s" && $((60 % ${SAMPLING_INTERVAL_VAL})) -ne 0) ]];
         then
             echo "${ERR_MSG}"
             echo_usage
         fi
-
-        CRONIT_SCRIPT="${CRONIT_SCRIPT} ${SAMPLING_INTERVAL}"
+        CRONIT_SCRIPT="./${CRONIT_SCRIPT} ${SAMPLING_INTERVAL}"
     else
         echo "${ERR_MSG}"
         echo_usage
@@ -103,12 +101,10 @@ echo "Using Python version ${PY_VER}."
 if [[ ${PY_MAJ_VER} -eq 3 ]];
 then
     echo "Need to upgrade the python script for compatability."
-    #AGENT_SCRIPT=$(find . -type f -name "get[^\-]*.py" -print)
-    AGENT_SCRIPT=$(\ls -l | grep get[^\-]*.py | awk '{print $NF}')
+    AGENT_SCRIPT=$(\ls -l | awk '{print $NF}' | grep ^get[^\-].*\.py$)
     if [[ -z ${AGENT_SCRIPT} ]];
     then
-        #AGENT_SCRIPT=$(find . -type f -name "replay*.py" -print)
-        AGENT_SCRIPT=$(\ls -l | grep replay*.py | awk '{print $NF}')
+        AGENT_SCRIPT=$(\ls -l | awk '{print $NF}' | grep ^replay.*\.py$)
     fi
     if [[ -z ${AGENT_SCRIPT} ]];
     then
@@ -134,11 +130,12 @@ fi
 
 # Set up cron/monit
 echo "== Setting up ${CRONIT} =="
-echo "Setup script: \"${CRONIT_SCRIPT}\""
 if ! is_dry_run;
 then
-    ${CRONIT_SCRIPT}
+    CRONIT_SCRIPT="${CRONIT_SCRIPT} --create"
 fi
+echo "Setup script: \"${CRONIT_SCRIPT}\""
+${CRONIT_SCRIPT}
 
 # done
 echo "Done with installation."
