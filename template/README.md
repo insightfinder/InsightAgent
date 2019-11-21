@@ -2,7 +2,7 @@
 This is a template for developing new agents.
 To start a new agent, recursively copy this folder.
 ```
-cp -r template/ new_agent/ && cd new_agent
+cp -r template/ new-agent/ && cd new-agent
 ```
 
 In your new agent folder, rename the script
@@ -12,7 +12,7 @@ mv insightagent-boilerplate.py get{logs|metrics|messages}_new-agent.py
 
 Depending on whether or not the agent should run on a cron (occasionally collect and send data) or monit (continuously monitor data), delete the other script
 ```
-$ rm {cron-setup.sh|monit-setup.sh}
+$ rm {cron|monit}-setup.sh
 ```
 
 Start writing your new agent, modifying `config.ini.template` to have the required input parameters. If your script requires a new pip package, download the `.whl` or `.tar.gz`, place it in `pip_packages`, then update `pip-setup.sh`.
@@ -26,6 +26,16 @@ cd ..
 Then, delete this section and update it as appropriate.
 
 ## Installing the Agent
+
+### Short Version
+```
+agent=new-agent
+bash <(curl https://raw.githubusercontent.com/insightfinder/InsightAgent/master/online-install.sh) $agent && cd $agent
+vi config.ini
+sudo ./install.sh --create
+```
+
+### Long Version
 **Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/new-agent/new-agent.tar.gz) and untar it:**
 ```
 wget https://github.com/insightfinder/InsightAgent/raw/master/new-agent/new-agent.tar.gz
@@ -39,13 +49,18 @@ vi config.ini
 ```
 See below for a further explanation of each variable.
 
-### Automated Install
-Simply run 
+#### Automated Install
+Review propsed changes from install:
 ```
-sudo ./install.sh --create --sampling-interval <sampling_interval>
+sudo ./install.sh
 ```
 
-### Manual Install
+Once satisfied, run 
+```
+sudo ./install.sh --create
+```
+
+#### Manual Install
 **Check Python version & upgrade if using Python 3**
 ```
 if [[ $(python -V 2>&1 | awk '{ print substr($NF, 1, 1) }') == "3" ]]; then \
@@ -65,9 +80,7 @@ python get{logs|metrics|messages}_new-agent.py -t
 
 **If satisfied with the output, configure the agent to run continuously:**
 ```
-sudo ./cron-config.sh <sampling_interval>
-or
-sudo ./monit-config.sh
+sudo ./{cron|monit}-config.sh
 ```
 
 ### Config Variables

@@ -6,71 +6,38 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-function echo_usage() {
+# is config.ini configured?
+if [[ ! -f "config.ini" ]];
+then
+    echo "Please configure config.ini before running this script"
+    cp config.ini.template config.ini
+    exit 1
+fi
+
+# get input params
+function echo_params() {
     echo "Usage:"
-    echo "'-c'   or '--commit'             : Set this flag to commit the changes from the install."
-    echo "'-s N' or '--sampling-interval N': How often to run the cron for this agent in seconds (\"6s\" - must be an integer divisor of 60), minutes (default, \"6m\" or \"6\"), hours (\"6h\"), or days (\"6d\")."
-    echo "'-h'   or '--help'               : Display this help text and exit."
+    echo "-c --create   Set to run this in commit mode."
+    echo "-h --help     Display this help text and exit."
     exit 1
 }
 
-# Get parameters
 DRY_RUN=1
-SAMPLING_INTERVAL=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -c|--commit)
+        -c|--create)
             DRY_RUN=0
-            ;;
-        -s|--sampling-interval)
-            shift
-            SAMPLING_INTERVAL="$1"
-            ;;
-        -cs)
-            DRY_RUN=0
-            shift
-            SAMPLING_INTERVAL="$1"
-            ;;
-        -h|--help)  
-            echo_usage
-            ;;
-        *)
-            echo "Improper parameter or flag passed."
-            echo_usage
-            ;;
+            ;;  
+        -h|--help)
+            echo_params
+            ;;  
+        *)  
+            echo "Improper flag or parameter passed to script."
+            echo_params
+            ;;  
     esac
     shift
 done
-
-# check sampling interval
-CRONIT_SCRIPT=$(\ls -l | awk '{print $NF}' | grep ^.*-config\.sh$)
-CRONIT=$(echo "${CRONIT_SCRIPT}" | sed -E  -e 's:^(monit|cron)-config\.sh$:\1:')
-ERR_MSG="No sampling interval given, but this agent runs on a cron."
-if [[ "${CRONIT}" = "cron" ]];
-then
-    if [[ -n ${SAMPLING_INTERVAL} ]];
-    then
-        SAMPLING_INTERVAL_VAL=${SAMPLING_INTERVAL}
-        SAMPLING_INTERVAL_UNIT="${SAMPLING_INTERVAL: -1}"
-
-        # strip unit
-        if [[ ${SAMPLING_INTERVAL_UNIT} =~ [^0-9] ]];
-        then
-            SAMPLING_INTERVAL_VAL="${SAMPLING_INTERVAL:0:${#SAMPLING_INTERVAL}-1}"
-        fi
-
-        # check input
-        if [[ "${SAMPLING_INTERVAL_UNIT}" =~ [^dhm0-9s] || "${SAMPLING_INTERVAL_VAL}" -le 0 || $((${SAMPLING_INTERVAL_VAL} % 1)) -ne 0 || ("${SAMPLING_INTERVAL_UNIT}" = "s" && $((60 % ${SAMPLING_INTERVAL_VAL})) -ne 0) ]];
-        then
-            echo "${ERR_MSG}"
-            echo_usage
-        fi
-        CRONIT_SCRIPT="./${CRONIT_SCRIPT} ${SAMPLING_INTERVAL}"
-    else
-        echo "${ERR_MSG}"
-        echo_usage
-    fi
-fi
 
 # Dry run mode?
 function is_dry_run() {
@@ -79,18 +46,9 @@ function is_dry_run() {
 
 if is_dry_run;
 then
-    echo "Running in dry-run mode. Run with '-c' or '--commit' flag to execute the changes below."
+    echo "Running in dry-run mode. Run with '-c' or '--create' flag to execute the changes below."
 else
-    # check if config.ini exists
-    if [[ ! -f "config.ini" ]];
-    then
-        echo "Please configure config.ini before running this in commit mode."
-        echo "Ignoring commit flag and running in dry-run mode"
-        cp config.ini.template config.ini
-        DRY_RUN=1
-    else
-        read -p "Running in commit mode. Press [Enter] to continue, or [Ctrl+C] to quit"
-    fi
+    read -p "Running in commit mode. Press [Enter] to continue, or [Ctrl+C] to quit"
 fi
 
 # Python 3 compatability
@@ -122,20 +80,22 @@ then
 fi
 
 # pip
-if ! is_dry_run;
+if ! is_dry_run && [[ -f "pip-setup.sh" ]];
 then
     echo "Setting up pip..."
     ./pip-setup.sh
 fi
 
 # Set up cron/monit
+CRONIT_SCRIPT="$(\ls -l | awk '{print $NF}' | grep ^.*-config\.sh$)"
+CRONIT=$(echo "${CRONIT_SCRIPT}" | sed -E  -e 's:^(monit|cron)-config\.sh$:\1:')
 echo "== Setting up ${CRONIT} =="
 if ! is_dry_run;
 then
     CRONIT_SCRIPT="${CRONIT_SCRIPT} --create"
 fi
 echo "Setup script: \"${CRONIT_SCRIPT}\""
-${CRONIT_SCRIPT}
+./${CRONIT_SCRIPT}
 
 # done
 echo "Done with installation."
