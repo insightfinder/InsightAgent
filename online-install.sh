@@ -17,8 +17,8 @@ echo "Setting up agent ${AGENT}"
 if [[ ! -d ${AGENT} ]];
 then 
     echo "Downloading..."
-    wget "https://github.com/insightfinder/InsightAgent/raw/master/${AGENT}/${AGENT_TAR}"
-    echo "Extracing..."
+    curl -L "https://github.com/insightfinder/InsightAgent/raw/master/${AGENT}/${AGENT_TAR}" -o ${AGENT_TAR}
+    echo "Extracting..."
     tar xvf ${AGENT_TAR}
 fi
 
@@ -27,15 +27,8 @@ cd ${AGENT}
 cp config.ini.template config.ini
 
 # install script call
-INSTALL_CALL="./install.sh"
-CRONIT=$(\ls -l | awk '{print $NF}' | grep ^.*-config\.sh$ | sed -E  -e 's:^(monit|cron)-config\.sh$:\1:')
-if [[ "${CRONIT}" = "cron" ]];
-then
-    INSTALL_CALL="${INSTALL_CALL} --sampling-interval <N>"
-fi
-
 echo "Created config.ini. Once that has been configured, run"
-echo "${INSTALL_CALL}"
+echo "    ./install.sh"
 echo "to test out the installation, then"
-echo "${INSTALL_CALL} --create"
+echo "    ./install.sh --create"
 echo "to commit the installation."
