@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # virtualenv
-./offline/pip/get-pip.py
 pip install virtualenv
 virtualenv nopip
 . nopip/bin/activate
