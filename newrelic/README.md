@@ -1,8 +1,15 @@
 # New Relic
+
+### Pre-requisites
+This agent collects data from the New Relic API; it does not install the New Relic agent(s) itself.
+Otherwise, the same set of pre-requisites applies as for other agents:
+* `python`
+* `python-utils` if using Python version 3+
+
 ## Installing the Agent
 **Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/newrelic/newrelic.tar.gz) and untar it:**
 ```
-wget https://github.com/insightfinder/InsightAgent/raw/master/newrelic/newrelic.tar.gz
+curl -L https://github.com/insightfinder/InsightAgent/raw/master/newrelic/newrelic.tar.gz -o newrelic.tar.gz
 tar xvf newrelic.tar.gz && cd newrelic
 ```
 
