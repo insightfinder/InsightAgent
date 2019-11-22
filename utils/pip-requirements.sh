@@ -8,7 +8,6 @@ virtualenv nopip
 mkdir -p ./offline/pip/packages
 
 # check required pip packages
-echo "Modules:"
 AGENT_SCRIPT=$(\ls -l | awk '{print $NF}' | grep ^get[^\-].*)
 PIP_PACKAGES=$(cat ${AGENT_SCRIPT} | grep import \
    | xargs -I {} python -c 'exec "try: {}\nexcept: print(\"{}\")"' \
@@ -16,6 +15,9 @@ PIP_PACKAGES=$(cat ${AGENT_SCRIPT} | grep import \
    | sed -E -e 's/^[\s]*([^\.]*)\..*/\1/' \
    | tr -s [:space:] \\n | sort -u \
    | tee requirements.txt)
+
+echo "Modules:"
+cat requirements.txt
 
 # get packages
 echo "Attempting to download pip package(s)"
