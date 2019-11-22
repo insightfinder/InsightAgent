@@ -13,8 +13,7 @@ from optparse import OptionParser
 from multiprocessing import Process
 from itertools import islice
 from datetime import datetime
-import dateutil
-from dateutil.tz import tzlocal
+import datefinder
 import urlparse
 import httplib
 import requests
@@ -713,8 +712,10 @@ def get_timestamp_from_date_string(date_string):
             timestamp_datetime = datetime.strptime(date_string, agent_config_vars['timestamp_format'])
     else:
         try:
-            timestamp_datetime = dateutil.parse.parse(date_string)
+            # try a guess
+            timestamp_datetime = datefinder.find_date(date_string)[0]
         except:
+            # maybe it's an epoch?
             timestamp_datetime = get_datetime_from_unix_epoch(date_string)
             agent_config_vars['timestamp_format'] = 'epoch'
 
