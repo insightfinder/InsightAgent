@@ -48,7 +48,8 @@ else
     USER_NAME=$(get_config_setting ^user_name)
     LICENSE_KEY=$(get_config_setting ^license_key)
     PROJECT_NAME=$(get_config_setting ^project_name)
-    if [[ -z ${USER_NAME} || -z ${LICENSE_KEY} || -z ${PROJECT_NAME} ]];
+    PROJECT_TYPE=$(get_config_setting ^project_type)
+    if [[ -z ${USER_NAME} || -z ${LICENSE_KEY} || -z ${PROJECT_NAME} || -z ${PROJECT_TYPE} ]];
     then
         echo_config_err
     fi

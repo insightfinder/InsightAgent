@@ -48,7 +48,8 @@ else
     USER_NAME=$(get_config_setting ^user_name)
     LICENSE_KEY=$(get_config_setting ^license_key)
     PROJECT_NAME=$(get_config_setting ^project_name)
-    if [[ -z ${USER_NAME} || -z ${LICENSE_KEY} || -z ${PROJECT_NAME} ]];
+    PROJECT_TYPE=$(get_config_setting ^project_type)
+    if [[ -z ${USER_NAME} || -z ${LICENSE_KEY} || -z ${PROJECT_NAME} || -z ${PROJECT_TYPE} ]];
     then
         echo_config_err
     fi
@@ -62,6 +63,27 @@ function is_dry_run() {
 #######################
 # shared portion done #
 #######################
+
+# check if run interval is required
+CRONIT_SCRIPT="$(\ls -l | awk '{print $NF}' | grep ^.*-config\.sh$)"
+CRONIT=$(echo "${CRONIT_SCRIPT}" | sed -E  -e 's:^(monit|cron)-config\.sh$:\1:')
+SHOPT_NOCASEMATCH=$(shopt -p nocasematch)
+shopt -s nocasematch
+if [[ ${PROJECT_TYPE} =~ .*metric.* || ${CRONIT} = "cron" ]];
+then
+    # get run interval
+    # same checks as in cron-config.sh
+    RUN_INTERVAL=$(get_config_setting ^run_interval)
+    if [[ -z "${RUN_INTERVAL}" ]]; 
+        then
+        RUN_INTERVAL=$(get_config_setting ^sampling_interval)
+    fi
+    if [[ -z "${RUN_INTERVAL}" ]];
+    then
+        echo_config_err
+    fi
+fi
+${SHOPT_NOCASEMATCH}
 
 if is_dry_run;
 then
@@ -106,8 +128,6 @@ then
 fi
 
 # Set up cron/monit
-CRONIT_SCRIPT="$(\ls -l | awk '{print $NF}' | grep ^.*-config\.sh$)"
-CRONIT=$(echo "${CRONIT_SCRIPT}" | sed -E  -e 's:^(monit|cron)-config\.sh$:\1:')
 echo "== Setting up ${CRONIT} =="
 if ! is_dry_run;
 then
