@@ -33,8 +33,11 @@ cd ${AGENT}
 cp config.ini.template config.ini
 
 # install script call
-echo "Created config.ini. Once that has been configured, run"
+echo "Created config.ini. Once that has been configured,"
+echo "  in order to install on one machine, run:
 echo "    ./install.sh"
-echo "to test out the installation, then"
+echo "  to test out the installation, then"
 echo "    ./install.sh --create"
-echo "to commit the installation."
+echo "  to commit the installation."
+echo "Or, if you want to install on multiple nodes,"
+echo "    ./distribute.sh"
