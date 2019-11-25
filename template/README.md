@@ -72,7 +72,7 @@ sudo ./install.sh --create
 
 To deploy on multiple hosts, instead call 
 ```bash
-./install-remote.sh list_of_nodes -f <nodelist_file>
+sudo ./install-remote.sh list_of_nodes -f <nodelist_file>
 ```
 Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
 
