@@ -39,7 +39,6 @@ REMOTE_SCRIPT=remote-install-autogen.sh
 cat <<EOF > ${REMOTE_SCRIPT}
 #!/bin/bash
 
-cd /root
 tar xvf /tmp/\$1 && cd \$2
 ./install.sh --create
 EOF
@@ -54,7 +53,7 @@ tar czvf ${AGENT_TAR} ${AGENT}
 for NODE in ${NODES};
 do
     scp ${AGENT_TAR} ${NODE}:/tmp
-    ssh ${NODE} 'bash -s' < ${PWD}/${REMOTE_SCRIPT} ${AGENT_TAR} ${AGENT}
+    ssh ${NODE} 'sudo bash -s' < ${PWD}/${REMOTE_SCRIPT} ${AGENT_TAR} ${AGENT}
 done
 
-rm -f ${REMOTE_SCRIPT}
+rm -f ${PWD}/${REMOTE_SCRIPT}

@@ -3,7 +3,7 @@
 This is a template for developing new agents.
 To start a new agent, recursively copy this folder.
 ```bash
-cp -r template/* {{NEWAGENT}}/ && cd {{NEWAGENT}}
+mkdir {{NEWAGENT}} && cp -r template/* {{NEWAGENT}}/ && cd {{NEWAGENT}}
 ```
 
 In your new agent folder, rename the script
