@@ -142,8 +142,7 @@ then
     CRONIT_SCRIPT="${CRONIT_SCRIPT} --create"
 fi
 echo "Setup script: \"${CRONIT_SCRIPT}\""
-alias cronit="./${CRONIT_SCRIPT}"
-cronit
+./${CRONIT_SCRIPT}
 
 # done
 echo "Done with installation."
