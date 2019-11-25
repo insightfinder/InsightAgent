@@ -10,13 +10,6 @@ else
     cat requirements.txt
 fi
 
-# as root or user
-PIP_CMD_BASE=pip
-if [[ $EUID -ne 0 ]];
-then
-    PIP_CMD_BASE="${PIP_CMD_BASE} --user"
-fi
-
 # are offline packages available?
 TRY_OFFLINE=0
 if [[ -d ./offline/pip/ ]];
@@ -43,10 +36,17 @@ then
     exit 1
 fi
 
+# as root or user
+PIP_CMD_BASE="pip install"
+if [[ $EUID -ne 0 ]];
+then
+    PIP_CMD_BASE="${PIP_CMD_BASE} --user"
+fi
+
 # install packages
 if [[ ${TRY_OFFLINE} -gt 0 ]];
 then
-    PIP_CMD_BASE="${PIP_CMD_BASE} --no-index --find-links='./offline/pip/packages'"
+    PIP_CMD_BASE="${PIP_CMD_BASE} --no-index --find-links=./offline/pip/packages/"
 fi
 echo "Installing pip packages"
-${PIP_CMD_BASE} install -r requirements.txt
+${PIP_CMD_BASE} -r requirements.txt

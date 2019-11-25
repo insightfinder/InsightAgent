@@ -13,8 +13,7 @@ from optparse import OptionParser
 from multiprocessing import Process
 from itertools import islice
 from datetime import datetime
-import dateutil
-from dateutil.tz import tzlocal
+import datefinder
 import urlparse
 import httplib
 import requests
@@ -27,8 +26,8 @@ This script gathers data to send to Insightfinder
 
 def start_data_processing(thread_number):
     # run for run_interval +/- sampling_interval/2
-    now_epoch = time.time() + (agent_config_vars['sampling_interval'] / 2)
-    start_epoch = now_epoch - agent_config_vars['run_interval'] - agent_config_vars['sampling_interval']
+    now_epoch = time.time() + (if_config_vars['sampling_interval'] / 2)
+    start_epoch = now_epoch - if_config_vars['run_interval'] - if_config_vars['sampling_interval']
     get_metrics_to_collect()
     send_sar_data(datetime.fromtimestamp(start_epoch).strftime("%H:%M:%S"),
                   datetime.fromtimestamp(end_epoch).strftime("%H:%M:%S"))
@@ -38,9 +37,10 @@ def send_sar_data(start_time, end_time):
     for key in { 'nodev', 'dev' }:
         if key == 'dev':
             agent_config_vars['device_field'] = 3
+            data_start_col = 4
         else:
             agent_config_vars['device_field'] = ''
-        data_start_col = int(agent_config_vars['device_field']) + 1
+            data_start_col = 3
         sar_data = []
         if 'REPLAY' in agent_config_vars['project_type']:
             for replay_file in agent_config_vars['replay_sa_file']:
@@ -48,7 +48,7 @@ def send_sar_data(start_time, end_time):
                                 replay_file,
                                 agent_config_vars['flags'][key]).split('\n'))
         else:
-            sar_data.extend(get_sar_data(
+            sar_data.extend(get_sar_data_stream(
                             start_time, end_time,
                             agent_config_vars['flags'][key]).split('\n'))
         for line in sar_data:
@@ -59,25 +59,24 @@ def send_sar_data(start_time, end_time):
                 agent_config_vars['csv_field_names'] = field_names
                 agent_config_vars['data_fields'] = range(data_start_col, len(field_names))
             else:
-                parse_csv_message(line)
+                parse_csv_message(line.split(CSV_DELIM))
 
 
 def get_sar_data_file(filename, flags):
-    sar_data = json.loads(
-            subprocess.check_output(
-                'sadf -dU {filename} -- {flags}'.format(
-                    filename=filename, flags=flags), 
-                shell=True))
-    return _get_json_field_helper(messages, 'sysstat.hosts'.split(JSON_LEVEL_DELIM), True)
+    call = 'sadf -dU {filename} -- {flags}'.format(
+            filename=filename, flags=flags)
+    return get_sar_data(call)
 
 
-def get_sar_data(start_time, end_time, flags):
-    sar_data = json.loads(
-            subprocess.check_output(
-                'sadf -dU -- -s {start_time} -e {end_time} {flags}'.format(
-                    start_time=start_time, end_time=end_time, flags=flags), 
-                shell=True))
-    return _get_json_field_helper(messages, 'sysstat.hosts'.split(JSON_LEVEL_DELIM), True)
+def get_sar_data_stream(start_time, end_time, flags):
+    call = 'sadf -dU -- -s {start_time} -e {end_time} {flags}'.format(
+            start_time=start_time, end_time=end_time, flags=flags)
+    return get_sar_data(call)
+
+
+def get_sar_data(call):
+    logger.debug(call)
+    return subprocess.check_output(call, shell=True)
 
 
 def get_metrics_to_collect():
@@ -93,6 +92,9 @@ def get_metrics_to_collect():
         metric_name = metric_nodev.keys()[0]
         if metric_name in metrics:
             agent_config_vars['flags']['nodev'] += metric_nodev[metric_name]
+
+    if agent_config_vars['exclude_devices']:
+        return
 
     # has device
     metrics_dev  = [ {'network': '-n DEV -n EDEV'},
@@ -731,7 +733,7 @@ def get_timestamp_from_date_string(date_string):
             timestamp_datetime = datetime.strptime(date_string, agent_config_vars['timestamp_format'])
     else:
         try:
-            timestamp_datetime = dateutil.parse.parse(date_string)
+            timestamp_datetime = datefinder.find_dates(date_string)[0]
         except:
             timestamp_datetime = get_datetime_from_unix_epoch(date_string)
             agent_config_vars['timestamp_format'] = 'epoch'

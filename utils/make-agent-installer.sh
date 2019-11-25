@@ -3,7 +3,7 @@
 # get input params
 function echo_params() {
     echo "Usage:"
-    echo "./utils/makeAgentInstaller [agent] [-m] [-r] [-b] [-n]"
+    echo "./utils/make-agent-installer.sh [agent] [-m] [-r] [-b] [-n]"
     echo "-m --monit    If set, monit-config.sh will be used. Default: cron-config.sh"
     echo "-r --readme   If set, the README for this agent will be remade from the template."
     echo "-b --build    If set, the supporting files will be overwritten"
@@ -15,8 +15,8 @@ function echo_params() {
 
 README=0
 REBUILD=0
-alias add="git add "
 CRONIT="cron"
+add="git add "
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -r|--readme)
@@ -29,11 +29,12 @@ while [[ $# -gt 0 ]]; do
             CRONIT="monit"
             ;;
         -n|--no-git)
-            alias add="ls -l "
+            add="ls -l "
+            ;;
         -h|--help)
             echo_params
             ;;  
-        *)  shift
+        *)
             AGENT=$1
             ;;  
     esac
@@ -80,7 +81,7 @@ echo "Updating README.md"
 if [[ ${README} -gt 0 || ! -f "${AGENT_PATH}README.md" ]];
 then
     echo "  Copying template README.md"
-    \cp ../template/README.md ${AGENT_PATH}
+    \cp ../template/README.md .
 fi
 sed -e '/^{{{$/,/^}}}$/{d;}' -i "" README.md
 sed -e "s/{{NEWAGENT}}/${AGENT}/g" -i "" README.md
@@ -88,24 +89,24 @@ sed -e "s/{{NEWAGENT@script}}/${AGENT_SCRIPT}/g" -i "" README.md
 sed -e "s/{{NEWAGENT@cronit}}/${CRONIT_SCRIPT}/g" -i "" README.md
 
 echo "  Adding config variables"
-sed -e '/^{{CONFIGVARS}}/{r _CONFIGVARS.md' -e 'd;}' -i "" README.md
+sed -e '/^{{CONFIGVARS}}/{r @CONFIGVARS.md' -e 'd;}' -i "" README.md
 
 # additional info
 echo "  Adding extra data"
-if [[ -f _EXTRA.md && $(tail -n1 _EXTRA.md | wc | awk '{print $NF}') -gt 0 ]];
+if [[ -f @EXTRA.md && $(tail -n1 @EXTRA.md | wc | awk '{print $NF}') -gt 0 ]];
 then
     # end file with an empty line
     echo "" >> EXTRA.md
 fi
-if [[ -f _EXTRA.md && $(head -n1 _EXTRA.md | wc | awk '{print $NF}') -gt 0 ]];
+if [[ -f @EXTRA.md && $(head -n1 @EXTRA.md | wc | awk '{print $NF}') -gt 0 ]];
 then
     # start file with an empty line
-    echo $'\n'"$(cat _EXTRA.md)" > _EXTRA.md
+    echo $'\n'"$(cat @EXTRA.md)" > @EXTRA.md
 fi
-sed -e '/^{{EXTRA}}/{r _EXTRA.md' -e 'd;}' -i "" README.md
+sed -e '/^{{EXTRA}}/{r @EXTRA.md' -e 'd;}' -i "" README.md
 
 # add everything currently in agent folder
-add ./*
+${add} ./*
 
 # go up to top level
 cd ..
@@ -120,8 +121,7 @@ fi
 cp -r shared/offline/* ${AGENT_PATH}offline/
 cp shared/install.sh ${AGENT_PATH}
 cp shared/install-remote.sh ${AGENT_PATH}
-cp shared/distribute.sh ${AGENT_PATH}
-cp shared/pip-setup.sh ${AGENT_PATH}
+cp shared/pip-config.sh ${AGENT_PATH}
 cp shared/${CRONIT_SCRIPT} ${AGENT_PATH}
 
 echo "Creating package"
@@ -136,24 +136,23 @@ echo "  Removing old tarball"
 rm ${TARBALL_PATH}
 
 echo "  Creating tarball ${TARBALL_NAME}"
-EXCLUDE_LIST="'*.out' '*.pyc' '*.bck' '*.old' '.*' 'config.ini'"
+EXCLUDE_LIST="'*.tar.gz' '@*' '*.out' '*.pyc' '*.bck' '*.old' '.*' 'config.ini'"
 EXCLUDE_STMT=""
 for EXCLUDE in ${EXCLUDE_LIST};
 do
     EXCLUDE_STMT="${EXCLUDE_STMT} --exclude=${EXCLUDE}"
 done
-tar czvf ${TARBALL_NAME} ${EXCLUDE_STMT} ${AGENT_PATH}
+TAR_CMD="tar czvf ${TARBALL_NAME} ${EXCLUDE_STMT} ${AGENT_PATH}"
+echo "${TAR_CMD}" | bash -
 
 echo "  Moving tarball into ${AGENT_PATH}"
 mv ${TARBALL_NAME} ${AGENT_PATH}
-add ${TARBALL_PATH}
+${add} ${TARBALL_PATH}
 
 # add to list of valid agents
 echo "Installer created."
 if [[ $(cat utils/new-agents | grep ${AGENT} | wc -l) -eq 0 ]];
 then
-    echo -n "|${AGENT}" >> utils/new-agents
-    add utils/new-agents
+    printf "%s" "|${AGENT}" >> utils/new-agents
+    ${add} utils/new-agents
 fi
-
-echo "Installer created."

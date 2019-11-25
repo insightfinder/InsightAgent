@@ -19,7 +19,10 @@ token =
 project_name = 
 # metric or metricreplay
 project_type = 
-sampling_interval = 10
+# data frequency
+sampling_interval = 1
+# cron frequency
+run_interval = 10
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
 if_url = https://app.insightfinder.com

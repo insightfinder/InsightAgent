@@ -65,9 +65,9 @@ function is_dry_run() {
 #######################
 
 # check if run interval is required
-CRONIT_SCRIPT="$(\ls -l | awk '{print $NF}' | grep ^.*-config\.sh$)"
+CRONIT_SCRIPT="$(\ls -l | awk '{print $NF}' | grep -E ^\(monit\|cron\)-config\.sh$)"
 CRONIT=$(sed -E  -e 's:^(monit|cron)-config\.sh$:\1:' <<< ${CRONIT_SCRIPT})
-alias SHOPT_NOCASEMATCH=$(shopt -p nocasematch)
+SHOPT_NOCASEMATCH=$(shopt -p nocasematch)
 shopt -s nocasematch
 if [[ ${PROJECT_TYPE} =~ .*metric.* || ${CRONIT} = "cron" ]];
 then
@@ -83,7 +83,7 @@ then
         echo_config_err
     fi
 fi
-SHOPT_NOCASEMATCH
+${SHOPT_NOCASEMATCH}
 
 if is_dry_run;
 then
