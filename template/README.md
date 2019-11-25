@@ -38,7 +38,7 @@ This agent collects data from {{NEWAGENT}} and sends it to Insightfinder.
 
 ### Short Version
 ```bash
-bash <(curl https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/get-agent.sh) {{NEWAGENT}} && cd {{NEWAGENT}}
+bash <(curl https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) {{NEWAGENT}} && cd {{NEWAGENT}}
 vi config.ini
 sudo ./install.sh --create # install on localhost
 ## or 

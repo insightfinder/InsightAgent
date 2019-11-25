@@ -3,10 +3,10 @@
 # get input params
 function echo_params() {
     echo "Usage:"
-    echo "./utils/makeAgentInstaller [agent] [-r] [-b] [-m]"
+    echo "./utils/makeAgentInstaller [agent] [-m] [-r] [-b] [-n]"
+    echo "-m --monit    If set, monit-config.sh will be used. Default: cron-config.sh"
     echo "-r --readme   If set, the README for this agent will be remade from the template."
     echo "-b --build    If set, the supporting files will be overwritten"
-    echo "-m --monit    If set, monit-config.sh will be used. Default: cron-config.sh"
     echo "-n --no-git   If set, nothing will be added to git. Default: Created files are added to git"
     echo "-h --help     Display this help text and exit."
     echo "If no agent is specified, the most recently modified folder will be used."
@@ -29,7 +29,7 @@ while [[ $# -gt 0 ]]; do
             CRONIT="monit"
             ;;
         -n|--no-git)
-            alias add="echo "
+            alias add="ls -l "
         -h|--help)
             echo_params
             ;;  

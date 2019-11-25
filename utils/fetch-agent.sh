@@ -9,11 +9,11 @@ then
 else
     AGENT=$(sed -E -e 's:^(.*)\/$:\1:' <<< ${AGENT})
     # for now, we exist in multiple worlds for agent installs and can't guarentee anything made without make-agent-installer will work
-#    if [[ ! ${AGENT} =~ $(curl -sS https://github.com/insightfinder/InsightAgent/raw/master/utils/new-agents) ]];
-#    then
-#        echo "Not a valid option for this style of installer. Please see the relevant README."
-#        exit 1
-#    fi
+    if [[ ! ${AGENT} =~ $(curl -sS https://github.com/insightfinder/InsightAgent/raw/master/utils/new-agents) ]];
+    then
+        echo "Not a valid option for this style of installer. Please see the relevant README."
+        exit 1
+    fi
     AGENT_TAR="${AGENT}.tar.gz"
 fi
 
