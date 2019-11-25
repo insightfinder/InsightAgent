@@ -67,7 +67,7 @@ function is_dry_run() {
 # check if run interval is required
 CRONIT_SCRIPT="$(\ls -l | awk '{print $NF}' | grep ^.*-config\.sh$)"
 CRONIT=$(sed -E  -e 's:^(monit|cron)-config\.sh$:\1:' <<< ${CRONIT_SCRIPT})
-SHOPT_NOCASEMATCH=$(shopt -p nocasematch)
+alias SHOPT_NOCASEMATCH=$(shopt -p nocasematch)
 shopt -s nocasematch
 if [[ ${PROJECT_TYPE} =~ .*metric.* || ${CRONIT} = "cron" ]];
 then
@@ -83,7 +83,7 @@ then
         echo_config_err
     fi
 fi
-${SHOPT_NOCASEMATCH}
+SHOPT_NOCASEMATCH
 
 if is_dry_run;
 then
@@ -142,7 +142,8 @@ then
     CRONIT_SCRIPT="${CRONIT_SCRIPT} --create"
 fi
 echo "Setup script: \"${CRONIT_SCRIPT}\""
-./${CRONIT_SCRIPT}
+alias cronit="./${CRONIT_SCRIPT}"
+cronit
 
 # done
 echo "Done with installation."

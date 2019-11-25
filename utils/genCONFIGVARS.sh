@@ -13,9 +13,18 @@ then
     fi
 
     cd ${AGENT}
+else
+    AGENT=${DIR}
 fi
 
-FILE="_CONFIGVARS.md"
+# check for config.ini.template file
+if [[ ! -f config.ini.template ]];
+then
+    echo "This script requires that the agent uses config.ini.template."
+    exit 1
+fi
+
+FILE="@CONFIGVARS.md"
 PARAMS=$(cat config.ini.template | grep ^[^#].*=.* | awk '{print $1}')
 
 touch ${FILE}

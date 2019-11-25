@@ -8,7 +8,7 @@ cp -r template/* {{NEWAGENT}}/ && cd {{NEWAGENT}}
 
 In your new agent folder, rename the script
 ```bash
-mv insightagent-boilerplate.py {{NEWAGENT&script}}
+mv insightagent-boilerplate.py {{NEWAGENT@script}}
 ```
 
 Start writing your new agent, modifying `config.ini.template` to have the required input parameters.
@@ -16,8 +16,8 @@ Start writing your new agent, modifying `config.ini.template` to have the requir
 Once you're done, update the documentation
 ```bash
 ../utils/genCONFIGVARS.sh
-vi _CONFIGVARS.md
-vi _SPECIAL.md # if there's additional documentation to add. Replaces `{{EXTRA}}` below.
+vi @CONFIGVARS.md
+vi @EXTRA.md # if there's additional documentation to add. Replaces `{{EXTRA}}` below.
 ```
 
 Then, add make `requirements.txt` and add the pip packages:
@@ -25,11 +25,6 @@ Then, add make `requirements.txt` and add the pip packages:
 ../utils/pip-requirements.sh
 ```
 and resolve any errors.
-
-Add new files to github:
-```bash
-git add .
-```
 
 Finally, make the installer 
 ```bash
@@ -47,7 +42,7 @@ bash <(curl https://raw.githubusercontent.com/insightfinder/InsightAgent/master/
 vi config.ini
 sudo ./install.sh --create # install on localhost
 ## or 
-sudo ./distrubute.sh list_of_nodes # install on each of list_of_nodes
+sudo ./install-remote.sh list_of_nodes # install on each of list_of_nodes
 ```
 
 ### Long Version
@@ -64,7 +59,7 @@ vi config.ini
 ```
 See below for a further explanation of each variable.
 
-#### Automated Install
+#### Automated Install (local or remote)
 **Review propsed changes from install:**
 ```bash
 sudo ./install.sh
@@ -75,11 +70,17 @@ sudo ./install.sh
 sudo ./install.sh --create
 ```
 
-#### Manual Install (localhost only)
+To deploy on multiple hosts, instead call 
+```bash
+./install-remote.sh list_of_nodes -f <nodelist_file>
+```
+Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
+
+#### Manual Install (local only)
 **Check Python version & upgrade if using Python 3**
 ```bash
 if [[ $(python -V 2>&1 | awk '{ print substr($NF, 1, 1) }') == "3" ]]; then \
-2to3 -w {{NEWAGENT&script}}; \
+2to3 -w {{NEWAGENT@script}}; \
 else echo "No upgrade needed"; fi
 ```
 
@@ -90,19 +91,12 @@ sudo ./pip-config.sh
 
 **Test the agent:**
 ```bash
-python {{NEWAGENT&script}} -t
+python {{NEWAGENT@script}} -t
 ```
 
 **If satisfied with the output, configure the agent to run continuously:**
 ```bash
-sudo ./{{NEWAGENT&cronit}}
+sudo ./{{NEWAGENT@cronit}}
 ```
-
-### On Multiple Hosts
-In order to install this agent on multiple hosts, instead of calling `./install.sh --create`, simply run
-```bash
-./distribute.sh list_of_nodes
-```
-Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
 
 {{CONFIGVARS}}
