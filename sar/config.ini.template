@@ -1,0 +1,27 @@
+[agent]
+# comma-delimited list of metrics to include (default all)
+# valid values: paging,io,mem,network,os,filesystem,power,cpu
+metrics = paging,io,mem,network,os,filesystem,power,cpu
+
+# set to true to not include device data (non-container project)
+exclude_devices = False
+
+## replay - if project_type in metricreplay, use one of the below options
+# set to a comma-delimited list of days to replay (files from /var/log/sa/saDD)
+replay_days = 
+# set to a comma-delimited list of sa files to replay, or a directory (end with '/')
+replay_sa_files = 
+
+[insightfinder]
+user_name = 
+license_key = 
+token =
+project_name = 
+# metric or metricreplay
+project_type = 
+sampling_interval = 10
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
