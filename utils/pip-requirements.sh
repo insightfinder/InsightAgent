@@ -13,12 +13,16 @@ then
     fi
 
     cd ${AGENT}
+else
+    AGENT=${DIR}
 fi
 
 # currently used packages
+echo "Freezing current environment packages"
 pip freeze > pip-freeze
 
 # virtualenv
+echo "Creating virtual environment"
 pip install virtualenv
 virtualenv nopip
 . nopip/bin/activate
@@ -26,7 +30,7 @@ virtualenv nopip
 mkdir -p ./offline/pip/packages
 
 # check required pip packages
-echo "Modules:"
+echo "Modules used in this agent:"
 \ls -l | awk '{print $NF}' | grep ^get[^\-].*                                   \
     | xargs cat | grep import                                                   \
     | xargs -I {} python -c 'exec "try: {}\nexcept: print(\"{}\")"'             \
@@ -43,8 +47,7 @@ pip -qq download -r requirements.txt -d ./offline/pip/packages
 echo "Please review any errors from the output above."
 
 # exit virtualenv
+echo "Exiting virtual environment"
 deactivate
 rm -rf nopip
-rm -rf pip-freeze
-
-cd -
+rm -f pip-freeze
