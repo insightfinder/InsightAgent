@@ -44,3 +44,4 @@ done
 
 echo "${FILE} created"
 cat ${FILE}
+rm ${FILE_TEMP}
