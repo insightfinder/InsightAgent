@@ -4,7 +4,7 @@ This agent collects data from sar and sends it to Insightfinder.
 
 ### Short Version
 ```bash
-bash <(curl https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) sar && cd sar
+bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) sar && cd sar
 vi config.ini
 sudo ./install.sh --create # install on localhost
 ## or 
@@ -14,7 +14,7 @@ sudo ./install-remote.sh list_of_nodes # install on each of list_of_nodes
 ### Long Version
 **Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/sar/sar.tar.gz) and untar it:**
 ```bash
-curl -L https://github.com/insightfinder/InsightAgent/raw/master/sar/sar.tar.gz -o sar.tar.gz
+curl -sSL https://github.com/insightfinder/InsightAgent/raw/master/sar/sar.tar.gz -o sar.tar.gz
 tar xvf sar.tar.gz && cd sar
 ```
 
