@@ -16,19 +16,13 @@ Start writing your new agent, modifying `config.ini.template` to have the requir
 Once you're done, update the documentation
 ```bash
 ../utils/genCONFIGVARS.sh
-vi @CONFIGVARS.md
-vi @EXTRA.md # if there's additional documentation to add. Replaces `{{EXTRA}}` below.
+vi @CONFIGVARS.md   
+vi @EXTRA.md        # if there's additional documentation to add. Replaces `{{EXTRA}}` below.
 ```
-
-Then, add make `requirements.txt` and add the pip packages:
-```bash
-../utils/pip-requirements.sh
-```
-and resolve any errors.
 
 Finally, make the installer 
 ```bash
-../utils/makeAgentInstaller.sh [--monit]
+../utils/make-agent-installer.sh [--monit]
 ```
 }}}
 # {{NEWAGENT}}
