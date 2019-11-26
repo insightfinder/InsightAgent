@@ -18,6 +18,7 @@ import urlparse
 import httplib
 import requests
 import statistics
+import subprocess
 
 '''
 This script gathers data to send to Insightfinder
@@ -29,64 +30,77 @@ def start_data_processing(thread_number):
     now_epoch = time.time() + (if_config_vars['sampling_interval'] / 2)
     start_epoch = now_epoch - if_config_vars['run_interval'] - if_config_vars['sampling_interval']
     get_metrics_to_collect()
-    send_sar_data(datetime.fromtimestamp(start_epoch).strftime("%H:%M:%S"),
-                  datetime.fromtimestamp(end_epoch).strftime("%H:%M:%S"))
+    if 'REPLAY' in if_config_vars['project_type']:
+        for replay_file in agent_config_vars['replay_sa_files']:
+            # break into 1h segments
+            for h in range(0, 24):
+                get_sar_data(
+                        '{:02d}:00:00'.format(h),
+                        '{:02d}:59:59'.format(h),
+                        replay_file)
+                # send each chunk to keep mem usage low
+                send_data_wrapper()
+    else:
+        get_sar_data(
+                datetime.fromtimestamp(start_epoch).strftime('%H:%M:%S'),
+                datetime.fromtimestamp(now_epoch).strftime('%H:%M:%S'))
 
 
-def send_sar_data(start_time, end_time):
-    for key in { 'nodev', 'dev' }:
+def get_sar_data(start_time, end_time, replay_file=''):
+    # the csv data is always host,interval,timestamp[,device],data...
+    # collect all data from this time period
+    freeze_send()
+
+    for key in agent_config_vars['flags']:
         if key == 'dev':
+            # if these are device-level metrics
             agent_config_vars['device_field'] = 3
             data_start_col = 4
         else:
             agent_config_vars['device_field'] = ''
             data_start_col = 3
-        sar_data = []
-        if 'REPLAY' in agent_config_vars['project_type']:
-            for replay_file in agent_config_vars['replay_sa_file']:
-                sar_data.extend(get_sar_data_file(
-                                replay_file,
-                                agent_config_vars['flags'][key]).split('\n'))
-        else:
-            sar_data.extend(get_sar_data_stream(
-                            start_time, end_time,
-                            agent_config_vars['flags'][key]).split('\n'))
+
+        sar_data = get_sar_data_sadf(
+                        agent_config_vars['flags'][key],
+                        start_time, end_time,
+                        replay_file
+                        ).split('\n')
+
         for line in sar_data:
-            if line.startswith('#'):
-                # new header
-                field_names = SLASHES.sub('_per_', line.strip('# '))
-                field_names = field_names.split(CSV_DELIM)
-                agent_config_vars['csv_field_names'] = field_names
-                agent_config_vars['data_fields'] = range(data_start_col, len(field_names))
-            else:
-                parse_csv_message(line.split(CSV_DELIM))
+            if line:
+                if line.startswith('#'):
+                    # new header
+                    field_names = SLASHES.sub('_per_', line.strip('# '))
+                    field_names = field_names.split(CSV_DELIM)
+                    agent_config_vars['csv_field_names'] = field_names
+                    agent_config_vars['data_fields'] = range(data_start_col, len(field_names))
+                else:
+                    parse_csv_message(line.split(CSV_DELIM))
+
+    resume_send()
 
 
-def get_sar_data_file(filename, flags):
-    call = 'sadf -dU {filename} -- {flags}'.format(
-            filename=filename, flags=flags)
-    return get_sar_data(call)
+def get_sar_data_sadf(flags, start_time, end_time, filename=''):
+    cmd = 'sadf -dU {filename} -s {start_time} -e {end_time} -- {flags}'.format(
+            filename=filename, start_time=start_time, end_time=end_time, flags=flags)
+    return get_sar_data_cmd(cmd)
 
 
-def get_sar_data_stream(start_time, end_time, flags):
-    call = 'sadf -dU -- -s {start_time} -e {end_time} {flags}'.format(
-            start_time=start_time, end_time=end_time, flags=flags)
-    return get_sar_data(call)
-
-
-def get_sar_data(call):
+def get_sar_data_cmd(call):
     logger.debug(call)
     return subprocess.check_output(call, shell=True)
 
 
 def get_metrics_to_collect():
     metrics = agent_config_vars['metrics']
+    agent_config_vars['flags'] = dict()
     # deviceless
     metrics_nodev = [ {'paging': ' -BSW'},
                       {'io': ' -bHq'},
                       {'mem': ' -Rr'},
                       {'os': ' -vw'},
-                      {'network': ' -n NFS -n NFSD -n SOCK -n SOCK6 -n IP -n EIP -n ICMP -n EICMP -n TCP -n ETCP -n UDP -n IP6 -n EIP6 -n ICMP6 -n EICMP6 -n UDP6'} ]
+                      {'network': ' -n NFS -n NFSD -n SOCK -n IP -n EIP -n ICMP -n EICMP -n TCP -n ETCP -n UDP' },
+                      {'network6': ' -n SOCK6 -n IP6 -n EIP6 -n ICMP6 -n EICMP6 -n UDP6'} ]
     agent_config_vars['flags']['nodev'] = ''
     for metric_nodev in metrics_nodev:
         metric_name = metric_nodev.keys()[0]
@@ -117,7 +131,7 @@ def get_agent_config_vars():
         try:
             # message parsing
             metrics = config_parser.get('agent', 'metrics') or 'paging,io,mem,network,os,filesystem,power,cpu'
-            exclude_devices = config_parser.get('agent', 'exclude_devices') or False
+            exclude_devices = config_parser.get('agent', 'exclude_devices')
 
             # replay
             replay_days = config_parser.get('agent', 'replay_days')
@@ -126,20 +140,31 @@ def get_agent_config_vars():
         except ConfigParser.NoOptionError:
             logger.error('Agent not correctly configured. Check config file.')
             sys.exit(1)
-         
-        metrics = metrics.split(',')
-
-        containerize = True
-        if exclude_devices:
-            containerize = False
             
-        # check for a valid replay
-        if len(replay_days) != 0 and len(replay_sa_files) == 0:
-            replay_days = replay_days.split(',')
-            for replay_day in replay_days:
-                if replay_day > 31 || replay_day < 1:
-                    replay_day = datetime.fromtimestamp(time.time()).strftime('%d')
-                replay_sa_files += '/var/log/sa/sa{}'.format(replay_day)
+        # translate to bool
+        exclude_devices = True if re.match(r"T(RUE)?", exclude_devices.upper()) else False
+
+        # check for a valid replaa days and add those to the list of replay filesy
+        if len(replay_days) != 0:
+            all_days = []
+            last = ''
+            # fill date ranges
+            for days in replay_days.split('-'):
+                days = days.split(',')
+                first = int(days[0])
+                if last:
+                    fill = range(last + 1, first)
+                    all_days.extend(fill)
+                all_days.extend(days)
+                last = int(all_days[-1])
+            # add valid files to replay
+            for replay_day in all_days:
+                if 1 <= int(replay_day) and int(replay_day) <= 31:
+                    filename = '/var/log/sa/sa{}'.format(replay_day)
+                    if replay_sa_files:
+                        replay_sa_files += ',' + filename
+                    else:
+                        replay_sa_files = filename
 
         # get list of replay files
         if len(replay_sa_files) != 0:
@@ -148,31 +173,30 @@ def get_agent_config_vars():
             for fileloc in replay_sa_files:
                 if fileloc[-1] == '/':
                     files = get_file_list_for_directory(fileloc)
-                    for _file in files:
-                        if os.path.basename(_file)[:1] == 'sa':
-                            replay_sa_files_temp.append(_file)
                 else:
-                    if os.path.exists(fileloc) && os.path.basename(fileloc)[:1] == 'sa':
-                        replay_sa_files_temp.append(fileloc)
-            replay_sa_files = replay_sa_files_temp
+                    if os.path.exists(fileloc):
+                        files = [fileloc]
+                replay_sa_files_temp.extend(files)
+            replay_sa_files = sorted(set(replay_sa_files_temp))
 
         # add parsed variables to a global
         config_vars = {
-            'metrics': metrics,
+            'metrics': metrics.split(','),
             'exclude_devices': exclude_devices,
-            'containerize': containerize,
+            'containerize': not exclude_devices,
             'replay_sa_files': replay_sa_files,
+            'data_format': 'CSV',
+            'csv_field_names': '', # read and determine from header
+            'timestamp_format': 'epoch',
+            'timestamp_field': 2,
+            'instance_field': 0,
+            'device_field': '', # when there is a device, we'll set this
+            'data_fields': '',  # read and determine from header. 
+            # keep for keyerrors
             'proxies': '',
             'filters_include': '',
             'filters_exclude': '',
-            'data_format': 'CSV',
-            'csv_field_names': '',
             'project_field': '',
-            'instance_field': 0,
-            'device_field': '',
-            'data_fields': '',
-            'timestamp_field': 2,
-            'timestamp_format': 'epoch',
             'strip_tz': False,
             'strip_tz_fmt': '' 
         }
@@ -277,7 +301,8 @@ def get_if_config_vars():
             'run_interval': int(run_interval),     # as seconds
             'chunk_size': int(chunk_size_kb) * 1024,         # as bytes
             'if_url': if_url,
-            'if_proxies': if_proxies
+            'if_proxies': if_proxies,
+            '_send': True
         }
 
         return config_vars
@@ -943,10 +968,24 @@ def transpose_metrics():
 ################################
 # Functions to send data to IF #
 ################################
+def freeze_send():
+    if_config_vars['_send'] = False
+
+
+def resume_send():
+    if_config_vars['_send'] = True
+
+
 def send_data_wrapper():
     """ wrapper to send data """
+    # check for freeze
+    if if_config_vars['_send']:
+        pass
+
+    # collect metrics by timestamp
     if 'METRIC' in if_config_vars['project_type']:
         transpose_metrics()
+
     logger.debug('--- Chunk creation time: %s seconds ---' % round(time.time() - track['start_time'], 2))
     send_data_to_if(track['current_row'])
     track['chunk_count'] += 1

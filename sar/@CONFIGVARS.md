@@ -1,5 +1,5 @@
 ### Config Variables
-* `metrics`: Metrics to report to InsightFinder. Multiple `sar` flags have been grouped as below; see `man sar` for more information on each flag.
+* `metrics`: Metrics to report to InsightFinder. Multiple `sar` flags have been grouped as below; see `man sar` for more information on each flag. By default, all metrics but `network6` are reported.
     * `os`: `-vw` (host level)
     * `mem`: `-Rr` (host level only)
     * `paging`: `-BSW` (host level only)
@@ -8,9 +8,10 @@
         * Device Level: `-y`
     * `network`: 
         * Device Level: `-n DEV -n EDEV`
-        * Host Level: `-n NFS -n NFSD -n SOCK -n SOCK6 -n IP -n EIP -n ICMP -n EICMP -n TCP -n ETCP -n UDP -n IP6 -n EIP6 -n ICMP6 -n EICMP6 -n UDP6`
+        * Host Level: `-n NFS -n NFSD -n SOCK -n IP -n EIP -n ICMP -n EICMP -n TCP -n ETCP -n UDP`
+    * `network6`: `-n SOCK6 -n IP6 -n EIP6 -n ICMP6 -n EICMP6 -n UDP6` (host level only - **not** a default metric)
     * `filesystem`: `-dF` (device level)
-    * `power`: `-m FAN -m IN -m TEMP -m USB` (device level)
+    * `power`: `-m FAN -m IN -m TEMP -m USB` (device level only)
     * `cpu`: `-m CPU -m FREQ -u ALL -P ALL` (per-core and host level)
 * `exclude_devices`: Set to True to not report device-level data. Note that this will prevent CPU, power, filesystem, some I/O, and some network metrics from being reported. By default, device-level data is reported.
 * `replay_days`: A comma-delimited list of days within the last fiscal month to replay (from `/var/log/sa/saDD`)
