@@ -28,7 +28,7 @@ then
 fi
 if [[ -z $(command -v pip) ]];
 then
-    python <(curl --connect-timeout 3 https://bootstrap.pypa.io/get-pip.py)
+    python <(curl -sS --connect-timeout 3 https://bootstrap.pypa.io/get-pip.py)
 fi
 if [[ -z $(command -v pip) ]];
 then
