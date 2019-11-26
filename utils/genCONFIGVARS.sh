@@ -25,13 +25,21 @@ then
 fi
 
 FILE="@CONFIGVARS.md"
+FILE_TEMP="temp.CONFIGVARS.md"
+CONTENTS=$(cat ${FILE})
 PARAMS=$(cat config.ini.template | grep ^[^#].*=.* | awk '{print $1}')
 
-touch ${FILE}
+\cp ../template/${FILE} ${FILE_TEMP}
 echo "### Config Variables" > ${FILE}
 for PARAM in $PARAMS;
 do
-    echo "* \`${PARAM}\`: " >> ${FILE}
+    EXISTING_LINE=$(cat ${FILE_TEMP} | grep -E \`${PARAM}\`)
+    if [[ -n ${EXISTING_LINE} ]];
+    then
+        echo "${EXISTING_LINE}" >> ${FILE}
+    else
+        echo "* \`${PARAM}\`: " >> ${FILE}
+    fi
 done
 
 echo "${FILE} created"
