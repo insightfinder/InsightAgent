@@ -3,12 +3,12 @@
 # get input params
 function echo_params() {
     echo "Usage:"
-    echo "./utils/make-agent-installer.sh [agent] [-m] [-r] [-b] [-n]"
+    echo "./utils/make-agent-installer.sh [agent] [-m] [-r] [-b] [-g]"
     echo "-m --monit    If set, monit-config.sh will be used. Default: cron-config.sh"
-    echo "-r --readme   If set, the README for this agent will be remade from the template."
-    echo "-b --build    If set, the supporting files will be overwritten"
-    echo "-n --no-git   If set, nothing will be added to git. Default: Created files are added to git"
-    echo "-h --help     Display this help text and exit."
+    echo "-r --readme   If set, the README for this agent will be remade from the template"
+    echo "-b --build    If set, the supporting files will be overwritten. Implies -r|--readme"
+    echo "-g --git-add  If set, the agent folder will be added to git. Default: nothing added"
+    echo "-h --help     Display this help text and exit"
     echo "If no agent is specified, the most recently modified folder will be used."
     exit 1
 }
@@ -16,20 +16,21 @@ function echo_params() {
 README=0
 REBUILD=0
 CRONIT="cron"
-add="git add "
+ADD="ls -l"
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -m|--monit)
+            CRONIT="monit"
+            ;;
         -r|--readme)
             README=1
             ;;
         -b|--build)
+            README=1
             REBUILD=1
             ;;
-        -m|--monit)
-            CRONIT="monit"
-            ;;
-        -n|--no-git)
-            add="ls -l "
+        -g|--git-add)
+            ADD="git add "
             ;;
         -h|--help)
             echo_params
@@ -105,8 +106,11 @@ then
 fi
 sed -e '/^{{EXTRA}}/{r @EXTRA.md' -e 'd;}' -i "" README.md
 
-# add everything currently in agent folder
-${add} ./*
+# set up pip if needed
+if [[ (! -d ./offline/pip/packages || ! -f requirements.txt) && -f ../utils/pip-requirements.sh ]];
+then
+    ../utils/pip-requirements.sh
+fi
 
 # go up to top level
 cd ..
@@ -136,7 +140,7 @@ echo "  Removing old tarball"
 rm ${TARBALL_PATH}
 
 echo "  Creating tarball ${TARBALL_NAME}"
-EXCLUDE_LIST="'*.tar.gz' '@*' '*.out' '*.pyc' '*.bck' '*.old' '.*' 'config.ini'"
+EXCLUDE_LIST="'@*' '*.out' '*.pyc' '*.bck' '*.old' '.*' 'config.ini'"
 EXCLUDE_STMT=""
 for EXCLUDE in ${EXCLUDE_LIST};
 do
@@ -147,12 +151,12 @@ echo "${TAR_CMD}" | bash -
 
 echo "  Moving tarball into ${AGENT_PATH}"
 mv ${TARBALL_NAME} ${AGENT_PATH}
-${add} ${TARBALL_PATH}
 
-# add to list of valid agents
 echo "Installer created."
+${ADD} ${AGENT_PATH}
+# add to list of valid agents
 if [[ $(cat utils/new-agents | grep ${AGENT} | wc -l) -eq 0 ]];
 then
     printf "%s" "|${AGENT}" >> utils/new-agents
-    ${add} utils/new-agents
+    ${ADD} utils/new-agents
 fi
