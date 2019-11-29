@@ -131,7 +131,7 @@ def get_agent_config_vars():
         try:
             # message parsing
             metrics = config_parser.get('agent', 'metrics') or 'paging,io,mem,network,os,filesystem,power,cpu'
-            exclude_devices = config_parser.get('agent', 'exclude_devices')
+            exclude_devices = config_parser.get('agent', 'exclude_devices').upper()
 
             # replay
             replay_days = config_parser.get('agent', 'replay_days')
@@ -142,9 +142,19 @@ def get_agent_config_vars():
             sys.exit(1)
             
         # translate to bool
-        exclude_devices = True if re.match(r"T(RUE)?", exclude_devices.upper()) else False
+        exclude_devices = True if re.match(r"T(RUE)?", exclude_devices) else False
 
-        # check for a valid replaa days and add those to the list of replay filesy
+        # get list of replay files
+        replay_sa_files = replay_sa_files.split(',')
+        if len(replay_sa_files) > 1: ## ''.split(',') == [''] => len(['']) == 1
+            replay_sa_files = [ i for i in                              # for each generated sublist \
+                    j for j in map(lambda k:                            #   for each item in replay_sa_files \ 
+                        get_file_list_for_directory(k) if k[-1] == '/'  #     for directories, get files in dir \
+                        else k if os.path.exists(k) else '',            #     otherwise, make sure it's a valid filepath \
+                        replay_sa_files)                                # \
+                    if j ]                                              # keep only non-null values
+
+        # check for a valid replay days and add those to the list of replay files
         if len(replay_days) != 0:
             all_days = []
             last = ''
@@ -157,34 +167,19 @@ def get_agent_config_vars():
                     all_days.extend(fill)
                 all_days.extend(days)
                 last = int(all_days[-1])
-            # add valid files to replay
-            for replay_day in all_days:
-                if 1 <= int(replay_day) and int(replay_day) <= 31:
-                    filename = '/var/log/sa/sa{}'.format(replay_day)
-                    if replay_sa_files:
-                        replay_sa_files += ',' + filename
-                    else:
-                        replay_sa_files = filename
+            all_days = sorted(set(all_days))
 
-        # get list of replay files
-        if len(replay_sa_files) != 0:
-            replay_sa_files = replay_sa_files.split(',')
-            replay_sa_files_temp = []
-            for fileloc in replay_sa_files:
-                if fileloc[-1] == '/':
-                    files = get_file_list_for_directory(fileloc)
-                else:
-                    if os.path.exists(fileloc):
-                        files = [fileloc]
-                replay_sa_files_temp.extend(files)
-            replay_sa_files = sorted(set(replay_sa_files_temp))
+            # add valid files to replay
+            sa_file_regex = r"^sa[0-9]*({})".format(map(lambda x: str(x), '|'.join(all_days)))
+            sa_files = get_file_list_for_directory('/var/log/sa/', sa_file_regex)
+            replay_sa_files.extend(sa_files)
 
         # add parsed variables to a global
         config_vars = {
             'metrics': metrics.split(','),
             'exclude_devices': exclude_devices,
             'containerize': not exclude_devices,
-            'replay_sa_files': replay_sa_files,
+            'replay_sa_files': sorted(set(replay_sa_files)),
             'data_format': 'CSV',
             'csv_field_names': '', # read and determine from header
             'timestamp_format': 'epoch',
@@ -499,11 +494,12 @@ def chunk_map(data, SIZE=50):
         yield {k: data[k] for k in islice(it, SIZE)}
 
 
-def get_file_list_for_directory(root_path):
+def get_file_list_for_directory(root_path, file_name_regex=''):
     file_list = []
     for path, subdirs, files in os.walk(root_path):
         for name in files:
-            file_list.append(os.path.join(path, name))
+            if not file_name_regex or (file_name_regex and re.match(file_name_regex, name)):
+                file_list.append(os.path.join(path, name))
     return file_list
 
 

@@ -28,6 +28,7 @@ virtualenv nopip
 . nopip/bin/activate
 
 mkdir -p ./offline/pip/packages
+rm -rf ./offline/pip/packages/*
 
 # check required pip packages
 echo "Modules used in this agent:"

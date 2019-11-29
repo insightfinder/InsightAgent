@@ -1,5 +1,7 @@
 # sar
 This agent collects data from sar and sends it to Insightfinder.
+
+This package also includes a set of scripts to automate installing `sysstat`. Please see the `offline` folder for more information.
 ## Installing the Agent
 
 ### Short Version
@@ -68,7 +70,7 @@ sudo ./cron-config.sh
 ### Config Variables
 * `metrics`: Metrics to report to InsightFinder. Multiple `sar` flags have been grouped as below; see `man sar` for more information on each flag. By default, all metrics but `network6` are reported.
     * `os`: `-vw` (host level)
-    * `mem`: `-Rr` (host level only)
+    * `mem`: `-r ALL` (host level only)
     * `paging`: `-BSW` (host level only)
     * `io`: 
         * Host Level: `-bHq`
