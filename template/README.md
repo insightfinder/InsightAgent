@@ -20,6 +20,17 @@ vi @CONFIGVARS.md
 vi @EXTRA.md        # if there's additional documentation to add. Replaces `{{EXTRA}}` below.
 ```
 
+<!-- Process in progress -->
+If there are offline packages to add, put them in the `./offline/` folder. There are scripts which can help install from source if
+1. The source is a git repo
+2. It is installed using `./configure && make && make install`
+CLI args can be avoided by setting the full repo in `./offline/target`. See `sar` for an example of this.
+Much like this README.md, there are `{{REPLACEMENTS}}` in `./offline/README.md`.
+Otherwise, remove the __files__ in `./offline/` (leave the `./offline/pip` folder in place).
+```bash
+rm -f ./offline/* 2>/dev/null
+```
+
 Finally, make the installer 
 ```bash
 ../utils/make-agent-installer.sh [--monit]

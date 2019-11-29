@@ -31,7 +31,7 @@ cd ${TARGET_MASTER}
 # configure
 if [[ "$@" =~ --interactive && -f ./iconfig ]];
 then
-    ./iconfig
+    CONFIGURE="./iconfig"
 elif [[ "$@" =~ --help ]];
 then
     echo "Displaying configure help text"
@@ -39,18 +39,15 @@ then
     ./configure --help
     echo ""
     echo "Enter parameters to configure sysstat with."
-    echo "[Enter] for none, [Ctrl+C] to quit and continue later:"
+    echo "[Enter] to accept (leave blank for defaults), [Ctrl+C] to quit and continue later:"
     read -p 'Parameters: ' PARAMS
-    ./configure ${PARAMS}
+    CONFIGURE="./configure ${PARAMS}">
 else
-    ./configure "$@"
+    CONFIGURE="./configure $@"
 fi
+bash ${CONFIGURE}
 
-# compile
-make
-
-# make a tar from the compiled program
+# make a tar from the configured program
 cd ..
-TAR_CMD="tar czf ${OUTPUT_TAR} -s /^${TARGET_MASTER}/${TARGET_REPO}/ ${TARGET_MASTER}/"
-echo ${TAR_CMD} | bash -
+tar czf ${OUTPUT_TAR} --transform "s/${TARGET_MASTER}/${TARGET_REPO}/" ${TARGET_MASTER}/
 cd -

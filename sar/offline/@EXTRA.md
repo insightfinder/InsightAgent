@@ -1,14 +1,3 @@
-# Offline Install
-These scripts provide support for installing sysstat from source. To use them, simply run (from an internet-connected machine):
-```bash
-./prepare-git-repo.sh
-```
-
-```bash
-./make-install.sh   # to install locally
-                    # or, to install on remote machine(s):
-./remote-cp-run.sh -t sysstat-make.tar.gz -s make-install.sh -p sysstat [-f nodefile list_of_nodes]
-```
 
 If the installation does not automatically create a cron entry, something like the following should be ran on the target machine as root.
 ```bash

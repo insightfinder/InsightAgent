@@ -43,7 +43,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 CRONIT_SCRIPT="${CRONIT}-config.sh"
-PWD=$(pwd)
 DIR=$(pwd | awk -F '/' '{print $NF}')
 if [[ $(\ls -l | awk '{print $NF}' | grep ${DIR} | wc -l) -eq 0 ]]; # probably not an agent folder
 then
@@ -60,6 +59,7 @@ else
 fi
 
 # determine agent name and path
+AGENT_DIR=$(pwd)
 AGENT_PATH="${AGENT}/"
 if [[ "${AGENT: -1}" = '/' ]]; then
     AGENT_PATH=${AGENT}
@@ -77,34 +77,50 @@ then
     AGENT_SCRIPT=$(get_agent_script ^replay*\.py$)
 fi
 
-# update readme
+## update readme
 echo "Updating README.md"
 if [[ ${README} -gt 0 || ! -f "${AGENT_PATH}README.md" ]];
 then
     echo "  Copying template README.md"
     \cp ../template/README.md .
 fi
-sed -e '/^{{{$/,/^}}}$/{d;}' -i "" README.md
-sed -e "s/{{NEWAGENT}}/${AGENT}/g" -i "" README.md
-sed -e "s/{{NEWAGENT@script}}/${AGENT_SCRIPT}/g" -i "" README.md
-sed -e "s/{{NEWAGENT@cronit}}/${CRONIT_SCRIPT}/g" -i "" README.md
-
-echo "  Adding config variables"
-sed -e '/^{{CONFIGVARS}}/{r @CONFIGVARS.md' -e 'd;}' -i "" README.md
-
-# additional info
-echo "  Adding extra data"
-if [[ -f @EXTRA.md && $(tail -n1 @EXTRA.md | wc | awk '{print $NF}') -gt 0 ]];
+if [[ ${README} -gt 0 || ! -f "${AGENT_PATH}offline/README.md" ]];
 then
-    # end file with an empty line
-    echo "" >> EXTRA.md
+    echo "  Copying template offline/README.md"
+    \cp ../template/offline/README.md ./offline/
 fi
-if [[ -f @EXTRA.md && $(head -n1 @EXTRA.md | wc | awk '{print $NF}') -gt 0 ]];
-then
-    # start file with an empty line
-    echo $'\n'"$(cat @EXTRA.md)" > @EXTRA.md
-fi
-sed -e '/^{{EXTRA}}/{r @EXTRA.md' -e 'd;}' -i "" README.md
+LOCS=". ./offline"
+for LOC in ${LOCS};
+do
+    cd ${LOC} # agent dir, then offline
+    sed -e '/^{{{$/,/^}}}$/{d;}' -i "" README.md
+
+    sed -e "s/{{NEWAGENT}}/${AGENT}/g" -i "" README.md
+    sed -e "s/{{NEWAGENT@script}}/${AGENT_SCRIPT}/g" -i "" README.md
+    sed -e "s/{{NEWAGENT@cronit}}/${CRONIT_SCRIPT}/g" -i "" README.md
+    
+    TARGET=$(cat target 2>/dev/null | awk -F '/' '{print $NF}')
+    sed -e "s/{{TARGET}}/${TARGET}/g" -i "" README.md
+
+    echo "  Adding config variables"
+    sed -e '/^{{CONFIGVARS}}/{r @CONFIGVARS.md' -e 'd;}' -i "" README.md
+
+    # additional info
+    echo "  Adding extra data"
+    if [[ -f @EXTRA.md && $(tail -n1 @EXTRA.md | wc | awk '{print $NF}') -gt 0 ]];
+    then
+        # end file with an empty line
+        echo "" >> @EXTRA.md
+    fi
+    if [[ -f @EXTRA.md && $(head -n1 @EXTRA.md | wc | awk '{print $NF}') -gt 0 ]];
+    then
+        # start file with an empty line
+        echo $'\n'"$(cat @EXTRA.md)" > @EXTRA.md
+    fi
+    sed -e '/^{{EXTRA}}/{r @EXTRA.md' -e 'd;}' -i "" README.md
+done
+cd ${AGENT_DIR}
+## finished README
 
 # set up pip if needed
 if [[ (! -d ./offline/pip/packages || ! -f requirements.txt) && -f ../utils/pip-requirements.sh ]];
@@ -116,11 +132,11 @@ fi
 cd ..
 
 echo "Copying files from shared/"
-alias cp=\cp
+alias cp="\cp "
 if [[ ${REBUILD} -eq 0 ]];
 then
     # no clobber
-    alias cp="cp -n"
+    alias cp="cp -n "
 fi
 cp -r shared/offline/* ${AGENT_PATH}offline/
 cp shared/install.sh ${AGENT_PATH}
