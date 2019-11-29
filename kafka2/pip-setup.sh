@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # hard-coded definition. TODO: add any required pip packages
 PIP_PACKAGES="urllib3 certifi chardet idna requests docutils statistics six python-dateutil pytz configparser kafka-python"
 if [[ -z "${PIP_PACKAGES}" ]]; then

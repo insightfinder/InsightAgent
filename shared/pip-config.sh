@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # anything in requirements.txt?
 if [[ $(cat requirements.txt | wc -l) -eq 0 ]];
