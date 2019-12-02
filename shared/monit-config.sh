@@ -102,13 +102,13 @@ fi
 echo "
 check process ${AGENT} matching \"${AGENT_FULL_PATH}\"
     if does not exist then start
-    start program = \"/bin/bash -c '\$(command -v python) ${AGENT_FULL_PATH} &>${AGENT_FULL_PATH_LOG}'\"
-    stop program = \"/bin/bash -c '\$(command -v pkill) -f ${AGENT_FULL_PATH}'\"
+    start program = \"\$(command -v bash) -c '\$(command -v python) ${AGENT_FULL_PATH} &>${AGENT_FULL_PATH_LOG}'\"
+    stop program = \"\$(command -v bash) -c '\$(command -v pkill) -f ${AGENT_FULL_PATH}'\"
 
 check file ${AGENT}_config path \"${AGENT_FULL_PATH_CONFIG}\"
     if changed timestamp then restart
-    start program = \"/bin/bash -c '\$(command -v python) ${AGENT_FULL_PATH} &>${AGENT_FULL_PATH_LOG}'\"
-    stop program = \"/bin/bash -c '\$(command -v pkill) -f ${AGENT_FULL_PATH}'\"
+    start program = \"\$(command -v bash) -c '\$(command -v python) ${AGENT_FULL_PATH} &>${AGENT_FULL_PATH_LOG}'\"
+    stop program = \"\$(command -v bash) -c '\$(command -v pkill) -f ${AGENT_FULL_PATH}'\"
 " 2>&1 | if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
 echo ""
 

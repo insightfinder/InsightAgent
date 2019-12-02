@@ -84,15 +84,17 @@ fi
 
 ## update readme
 echo "Updating README.md"
+COPY=$(command -v cp)
 LOCS=". offline" # agent dir, then offline
 for LOC in ${LOCS};
 do
+    mkdir -p "${LOC}"
     cd "${LOC}"
 
     if [[ ${README} -eq 1 || ! -f README.md ]];
     then
         echo "  Copying template README.md"
-        \cp ${TEMPLATE_DIR}/${LOC}/README.md .
+        ${COPY} ${TEMPLATE_DIR}/${LOC}/README.md .
     fi
 
     sed -e '/^{{{$/,/^}}}$/{d;}' -i "" README.md 2>/dev/null
@@ -134,17 +136,16 @@ fi
 cd ${BASE_DIR}
 
 echo "Copying files from shared/"
-alias cp='\cp '
 if [[ ${REBUILD} -eq 0 ]];
 then
     # no clobber
-    alias cp='cp -n '
+    COPY="${COPY} -n"
 fi
-cp -r ${SHARED_DIR}/offline/* ${AGENT_DIR}/offline/
-cp ${SHARED_DIR}/install.sh ${AGENT_DIR}
-cp ${SHARED_DIR}/remote-cp-run.sh ${AGENT_DIR}
-cp ${SHARED_DIR}/pip-config.sh ${AGENT_DIR}
-cp ${SHARED_DIR}/${CRONIT_SCRIPT} ${AGENT_DIR}
+${COPY} -r ${SHARED_DIR}/offline/* ${AGENT_DIR}/offline/
+${COPY} ${SHARED_DIR}/install.sh ${AGENT_DIR}
+${COPY} ${SHARED_DIR}/remote-cp-run.sh ${AGENT_DIR}
+${COPY} ${SHARED_DIR}/pip-config.sh ${AGENT_DIR}
+${COPY} ${SHARED_DIR}/${CRONIT_SCRIPT} ${AGENT_DIR}
 
 echo "Creating package"
 # scrub any slashes in the name (ie neseted folders)
