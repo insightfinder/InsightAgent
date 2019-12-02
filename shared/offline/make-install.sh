@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 
 # read from file
-if [[ -f target ]];
+if [[ -n "$1" ]];
+then
+    TARBALL="$1"
+elif [[ -f target ]];
 then
     TARGET=$(cat target | awk -F '/' '{print $NF}')
+    TARBALL="${TARGET}-make.tar.gz"
 else
-    TARGET="$1"
-fi
-if [[ -z ${TARGET} ]];
-then
-    echo "No target specified (as first parameter)"
+    echo "No target file and no tarball specified (as first parameter)"
+    exit 1
 fi
 
 # get tarball
-TARBALL="${TARGET}-make.tar.gz"
 TARBALL_LOC=$(find . -type f -name ${TARBALL} -print)
 if [[ ! -f ${TARBALL_LOC} || -z ${TARBALL_LOC} ]];
 then
@@ -22,16 +22,17 @@ fi
 if [[ ! -f ${TARBALL_LOC} || -z ${TARBALL_LOC} ]];
 then
     echo "No tarball could be found in $(pwd) or /tmp"
-else
-    tar xf ${TARBALL_LOC}
+    exit 1
 fi
 
-# make sure target folder exists
-if [[ ! -d ${TARGET} ]];
+CD_DIR=$(tar tf ${TARBALL_LOC} | head -n1)
+tar xf ${TARBALL_LOC}
+cd ${CD_DIR}
+if [[ -n $(command -v make) ]];
 then
-    echo "Could not find directory ${TARGET}"
+    make
+    make install
+else
+    echo "Installing make..."
+    ./build.sh
 fi
-
-cd ${TARGET}
-make
-make install

@@ -23,7 +23,7 @@ then
     echo "Package \"pip\" not installed. Attempting to install now..."
     if [[ ${TRY_OFFLINE} -gt 0 ]];
     then
-        ./offline/pip/get-pip.py
+        python ./offline/pip/get-pip.py
     fi
 fi
 if [[ -z $(command -v pip) ]];
@@ -37,7 +37,7 @@ then
 fi
 
 # as root or user
-PIP_CMD_BASE="pip install"
+PIP_CMD_BASE="python -m pip install"
 if [[ $EUID -ne 0 ]];
 then
     PIP_CMD_BASE="${PIP_CMD_BASE} --user"

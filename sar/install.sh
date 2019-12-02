@@ -113,10 +113,10 @@ then
     if is_dry_run;
     then
         echo "Proposed changes:"
-        2to3 ${AGENT_SCRIPT}
+        python -m lib2to3 ${AGENT_SCRIPT}
     else
         echo "Upgrading ${AGENT_SCRIPT}"
-        2to3 -w ${AGENT_SCRIPT}
+        python -m lib2to3 -w ${AGENT_SCRIPT}
     fi
 fi
 
