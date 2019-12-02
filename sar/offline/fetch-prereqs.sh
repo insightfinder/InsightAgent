@@ -4,6 +4,8 @@ GNU_MIRROR="$1"
 if [[ -z ${GNU_MIRROR} ]];
 then
     GNU_MIRROR="ftp://prep.ai.mit.edu/pub/gnu/"
+else
+    shift
 fi
 # really just for debugging
 ALWAYS_DOWNLOAD=1
@@ -12,6 +14,7 @@ CURL="curl -sSL"
 
 function configure() {
     TAR="$1"
+    shift
     if [[ -n ${TAR} && -f ${TAR} ]];
     then
         DIR=$(tar tf ${TAR} | head -n1)
