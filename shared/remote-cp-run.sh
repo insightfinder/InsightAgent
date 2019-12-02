@@ -53,6 +53,11 @@ while [[ $# -gt 0 ]]; do
 			shift
             PARAMS="${PARAMS} $1"
             ;;
+		-cp)
+			shift
+            TO_COPY="${TO_COPY} $1"
+            PARAMS="${PARAMS} $1"
+            ;;
         -d|--definition-file)
             shift
             DEFNS="$1"
@@ -77,12 +82,9 @@ then
     then
         TO_COPY=$(cat ${DEFNS} | grep TO_COPY | awk -F '=' '{print $NF}')
     fi
-    if [[ -z ${SCRIPT} ]];
+    if [[ -z ${COMMAND} && -z ${SCRIPT} ]];
     then
         SCRIPT=$(cat ${DEFNS} | grep SCRIPT | awk -F '=' '{print $NF}')
-    fi
-    if [[ -z ${COMMAND} ]];
-    then
         COMMAND=$(cat ${DEFNS} | grep COMMAND | awk -F '=' '{print $NF}')
     fi
     if [[ -z ${PARAMS} ]];
@@ -136,11 +138,11 @@ echo "${NODES}" > "${NODE_FILE}"
 
 # create definitions
 echo "Creating/updating definitions file ${DEFNS}"
-echo "NODE_FILE=${NODE_FILE}" > ${DEFNS}
-echo "TO_COPY=${TO_COPY}" >> ${DEFNS}
-echo "SCRIPT=${SCRIPT}" >> ${DEFNS}
-echo "COMMAND=${COMMAND}" >> ${DEFNS}
-echo "PARAMS=${PARAMS}" >> ${DEFNS}
+echo "NODE_FILE=${NODE_FILE//[[:space:]]/}" > ${DEFNS}
+echo "TO_COPY=${TO_COPY//[[:space:]]/}" >> ${DEFNS}
+echo "SCRIPT=${SCRIPT//[[:space:]]/}" >> ${DEFNS}
+echo "COMMAND=${COMMAND//[[:space:]]/}" >> ${DEFNS}
+echo "PARAMS=${PARAMS//[[:space:]]/}" >> ${DEFNS}
 
 # make offline installer tar; move check here so
 #  defn file is created anyway
@@ -170,13 +172,28 @@ then
     echo_params
 fi
 
+function scp_ssh_syntax() {
+    TO_COPY_tmp="$1"
+    shift
+    DEST="$@"
+    if [[ $(echo ${DEST} | wc -w) -gt 1 ]];
+    then
+        FLAGS_tmp=$(echo ${DEST} | awk '{$NF=""; print $0}')
+        NODE_tmp=$(echo ${DEST} | awk '{print $NF}')
+    else
+        FLAGS_tmp=""
+        NODE_tmp=${DEST}
+    fi
+    scp ${FLAGS_tmp} ${TO_COPY_tmp} ${NODE_tmp}:/tmp
+}
+
 # actually do the work on each node
 for NODE in ${NODES};
 do
     if [[ -n ${TO_COPY} ]];
     then
         echo "Copying ${TO_COPY} to ${NODE}:/tmp"
-        scp ${TO_COPY} ${NODE}:/tmp
+        scp_ssh_syntax ${TO_COPY} ${NODE}
     fi
 
     if [[ -f ${SCRIPT} ]];

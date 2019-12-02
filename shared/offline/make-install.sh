@@ -1,15 +1,35 @@
 #!/usr/bin/env bash
 
+# extract flag(s)
+IGNORE_ERRS=0
+HELP=0
+PARAMS=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -i|--ignore-errors)
+            IGNORE_ERRS=1
+            ;;  
+        -t|--tarball)
+            shift
+            TARBALL="$1" 
+            ;;
+        -h|--help)
+            HELP=1
+            ;;  
+        *)  
+            PARAMS="${PARAMS} $1"
+            ;;  
+    esac
+    shift
+done
+
 # read from file
-if [[ -n "$1" ]];
-then
-    TARBALL="$1"
-elif [[ -f target ]];
+if [[ -z ${TARBALL} && -f target ]];
 then
     TARGET=$(cat target | awk -F '/' '{print $NF}')
     TARBALL="${TARGET}-make.tar.gz"
 else
-    echo "No target file and no tarball specified (as first parameter)"
+    echo "No target file and no tarball specified"
     exit 1
 fi
 
@@ -25,14 +45,33 @@ then
     exit 1
 fi
 
-CD_DIR=$(tar tf ${TARBALL_LOC} | head -n1)
+echo "Unpacking tar..."
 tar xf ${TARBALL_LOC}
-cd ${CD_DIR}
+cd $(tar tf ${TARBALL_LOC} | head -n1)
+
+if [[ ${HELP} -eq 1 ]];
+then
+    ./configure --help
+    exit 0
+fi
+
+echo "Configuring..."
+ERRS=$(./configure --quiet ${PARAMS} || ./configure ${PARAMS})
+if [[ -n ${ERRS} && ${IGNORE_ERRORS} -eq 0 ]];
+then
+    echo "  Please review these error(s) before continuing."
+    echo "${ERRS}"
+    echo "  If these errors can be safely ignored, run this again with -i or --ignore-errors"
+    exit 1
+else
+    echo "  Configured successfully."
+fi
+
+echo "Installing..."
 if [[ -n $(command -v make) ]];
 then
     make
     make install
 else
-    echo "Installing make..."
     ./build.sh
 fi
