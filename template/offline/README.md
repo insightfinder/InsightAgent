@@ -3,7 +3,7 @@
 This is a template `README.d` for use when there is a __git__ repo that can be installed using `./configure && make && make install`.
 
 {{TARGET}} will be replaced in the same way the `target` file is used in these scripts.
-{{EXTRA}} will be replaced with `@EXTRA.md`
+{{EXTRA}} will be replaced with `.EXTRA.md`
 }}}
 # Offline Install
 These scripts provide support for installing {{TARGET}} from source. To use them, simply run (from an internet-connected machine):

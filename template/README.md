@@ -3,7 +3,7 @@
 This is a template for developing new agents.
 To start a new agent, recursively copy this folder.
 ```bash
-mkdir {{NEWAGENT}} && cp -r template/* {{NEWAGENT}}/ && cd {{NEWAGENT}}
+mkdir -p {{NEWAGENT}} && cp -r template/* {{NEWAGENT}}/ && cd {{NEWAGENT}}
 ```
 
 In your new agent folder, rename the script
@@ -15,9 +15,9 @@ Start writing your new agent, modifying `config.ini.template` to have the requir
 
 Once you're done, update the documentation
 ```bash
-../utils/genCONFIGVARS.sh
-vi @CONFIGVARS.md   
-vi @EXTRA.md        # if there's additional documentation to add. Replaces `{{EXTRA}}` below.
+../utils/generate-CONFIGVARS.sh
+vi .CONFIGVARS.md   
+vi .EXTRA.md        # if there's additional documentation to add. Replaces `{{EXTRA}}` below.
 ```
 
 <!-- Process in progress -->
@@ -26,10 +26,6 @@ If there are offline packages to add, put them in the `./offline/` folder. There
 2. It is installed using `./configure && make && make install`
 CLI args can be avoided by setting the full repo in `./offline/target`. See `sar` for an example of this.
 Much like this README.md, there are `{{REPLACEMENTS}}` in `./offline/README.md`.
-Otherwise, remove the __files__ in `./offline/` (leave the `./offline/pip` folder in place).
-```bash
-rm -f ./offline/* 2>/dev/null
-```
 
 Finally, make the installer 
 ```bash
@@ -47,7 +43,7 @@ bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/mas
 vi config.ini
 sudo ./install.sh --create # install on localhost
 ## or 
-sudo ./install-remote.sh list_of_nodes # install on each of list_of_nodes
+sudo ./remote-cp-run.sh list_of_nodes # install on each of list_of_nodes
 ```
 
 ### Long Version
@@ -77,7 +73,7 @@ sudo ./install.sh --create
 
 To deploy on multiple hosts, instead call 
 ```bash
-sudo ./install-remote.sh list_of_nodes -f <nodelist_file>
+sudo ./remote-cp-run.sh list_of_nodes -f <nodelist_file>
 ```
 Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
 

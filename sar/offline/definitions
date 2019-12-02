@@ -1,0 +1,5 @@
+NODE_FILE=nodes
+TO_COPY=sar-offline.tar.gz
+SCRIPT=remote-install-autogen.sh
+COMMAND=
+PARAMS=sar-offline.tar.gz

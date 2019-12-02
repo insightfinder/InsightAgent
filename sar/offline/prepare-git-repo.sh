@@ -41,7 +41,7 @@ then
     echo "Enter parameters to configure sysstat with."
     echo "[Enter] to accept (leave blank for defaults), [Ctrl+C] to quit and continue later:"
     read -p 'Parameters: ' PARAMS
-    CONFIGURE="./configure ${PARAMS}">
+    CONFIGURE="./configure ${PARAMS}"
 else
     CONFIGURE="./configure $@"
 fi

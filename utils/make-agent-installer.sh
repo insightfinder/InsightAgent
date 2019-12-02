@@ -6,27 +6,27 @@ function echo_params() {
     echo "./utils/make-agent-installer.sh [agent] [-m] [-r] [-b] [-g]"
     echo "-m --monit    If set, monit-config.sh will be used. Default: cron-config.sh"
     echo "-r --readme   If set, the README for this agent will be remade from the template"
-    echo "-b --build    If set, the supporting files will be overwritten. Implies -r|--readme"
+    echo "-b --build    If set, the supporting files (other than READMEs) will be overwritten."
     echo "-g --git-add  If set, the agent folder will be added to git. Default: nothing added"
     echo "-h --help     Display this help text and exit"
     echo "If no agent is specified, the most recently modified folder will be used."
     exit 1
 }
 
+# see if cronit_script is already in there
 README=0
 REBUILD=0
-CRONIT="cron"
 ADD="ls -l"
+CRONIT_SCRIPT="cron-config.sh"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -m|--monit)
-            CRONIT="monit"
+            CRONIT_SCRIPT="monit-config.sh"
             ;;
         -r|--readme)
             README=1
             ;;
         -b|--build)
-            README=1
             REBUILD=1
             ;;
         -g|--git-add)
@@ -42,34 +42,33 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-CRONIT_SCRIPT="${CRONIT}-config.sh"
 DIR=$(pwd | awk -F '/' '{print $NF}')
 if [[ $(\ls -l | awk '{print $NF}' | grep ${DIR} | wc -l) -eq 0 ]]; # probably not an agent folder
 then
     # pass agent as parameter
     if [[ -z ${AGENT} || ! -d ${AGENT} ]];
     then
-        AGENT=$(\ls -lrt | grep ^d | tail -n1 | awk '{print $NF}')
+        AGENT=$(\ls -lrt | grep -E $(cat utils/new-agents) | tail -n1 | awk '{print $NF}')
         echo "No agent to build specified. Using most recently modified folder: ${AGENT}"
         read -p "Press [Enter] to continue, [Ctrl+C] to quit"
     fi
-    cd ${AGENT}
+    BASE_DIR=$(pwd)
 else
+    BASE_DIR=$(pwd | awk -F '/' '{$NF=""; print $0}' | tr [:space:] '/')
+    if [[ "${AGENT: -1}" = '/' ]]; then
+        AGENT="${AGENT:0:${#AGENT}-1}"
+    fi
     AGENT=${DIR}
 fi
+TEMPLATE_DIR="${BASE_DIR}/template"
+SHARED_DIR="${BASE_DIR}/shared"
+UTILS_DIR="${BASE_DIR}/utils"
+AGENT_DIR="${BASE_DIR}/${AGENT}"
 
-# determine agent name and path
-AGENT_DIR=$(pwd)
-AGENT_PATH="${AGENT}/"
-if [[ "${AGENT: -1}" = '/' ]]; then
-    AGENT_PATH=${AGENT}
-    AGENT="${AGENT:0:${#AGENT}-1}"
-fi
-
-#### get some vars from the agent folder ####
-# get agent script
+# get agent script from the agent folder
+cd ${AGENT_DIR}
 function get_agent_script() {
-    \ls -l | awk '{print $NF}' | grep $1
+    ls -l | awk '{print $NF}' | grep $1
 }
 AGENT_SCRIPT=$(get_agent_script ^get[^\-].*\.py$)
 if [[ -z ${AGENT_SCRIPT} ]];
@@ -79,70 +78,67 @@ fi
 
 ## update readme
 echo "Updating README.md"
-if [[ ${README} -gt 0 || ! -f "${AGENT_PATH}README.md" ]];
-then
-    echo "  Copying template README.md"
-    \cp ../template/README.md .
-fi
-if [[ ${README} -gt 0 || ! -f "${AGENT_PATH}offline/README.md" ]];
-then
-    echo "  Copying template offline/README.md"
-    \cp ../template/offline/README.md ./offline/
-fi
-LOCS=". ./offline"
+LOCS="${AGENT_DIR} ${AGENT_DIR}/offline" # agent dir, then offline
 for LOC in ${LOCS};
 do
-    cd ${LOC} # agent dir, then offline
-    sed -e '/^{{{$/,/^}}}$/{d;}' -i "" README.md
+    cd "${LOC}"
 
-    sed -e "s/{{NEWAGENT}}/${AGENT}/g" -i "" README.md
-    sed -e "s/{{NEWAGENT@script}}/${AGENT_SCRIPT}/g" -i "" README.md
-    sed -e "s/{{NEWAGENT@cronit}}/${CRONIT_SCRIPT}/g" -i "" README.md
+    if [[ ${README} -eq 1 || ! -f README.md ]];
+    then
+        echo "  Copying template README.md"
+        \cp ${TEMPLATE_DIR}/README.md .
+    fi
+
+    sed -e '/^{{{$/,/^}}}$/{d;}' -i "" README.md 2>/dev/null
+
+    sed -e "s/{{NEWAGENT}}/${AGENT}/g" -i "" README.md 2>/dev/null
+    sed -e "s/{{NEWAGENT@script}}/${AGENT_SCRIPT}/g" -i "" README.md 2>/dev/null
+    sed -e "s/{{NEWAGENT@cronit}}/${CRONIT_SCRIPT}/g" -i "" README.md 2>/dev/null
     
     TARGET=$(cat target 2>/dev/null | awk -F '/' '{print $NF}')
-    sed -e "s/{{TARGET}}/${TARGET}/g" -i "" README.md
+    sed -e "s/{{TARGET}}/${TARGET}/g" -i "" README.md 2>/dev/null
 
     echo "  Adding config variables"
-    sed -e '/^{{CONFIGVARS}}/{r @CONFIGVARS.md' -e 'd;}' -i "" README.md
+    sed -e '/^{{CONFIGVARS}}/{r .CONFIGVARS.md' -e 'd;}' -i "" README.md 2>/dev/null
 
     # additional info
     echo "  Adding extra data"
-    if [[ -f @EXTRA.md && $(tail -n1 @EXTRA.md | wc | awk '{print $NF}') -gt 0 ]];
+    if [[ -f .EXTRA.md && $(tail -n1 .EXTRA.md | wc | awk '{print $NF}') -gt 1 ]];
     then
         # end file with an empty line
-        echo "" >> @EXTRA.md
+        echo "" >> .EXTRA.md
     fi
-    if [[ -f @EXTRA.md && $(head -n1 @EXTRA.md | wc | awk '{print $NF}') -gt 0 ]];
+    if [[ -f .EXTRA.md && $(head -n1 .EXTRA.md | wc | awk '{print $NF}') -gt 1 ]];
     then
         # start file with an empty line
-        echo $'\n'"$(cat @EXTRA.md)" > @EXTRA.md
+        echo $'\n'"$(cat .EXTRA.md)" > .EXTRA.md
     fi
-    sed -e '/^{{EXTRA}}/{r @EXTRA.md' -e 'd;}' -i "" README.md
+    sed -e '/^{{EXTRA}}/{r .EXTRA.md' -e 'd;}' -i "" README.md 2>/dev/null
 done
 cd ${AGENT_DIR}
 ## finished README
 
 # set up pip if needed
-if [[ (! -d ./offline/pip/packages || ! -f requirements.txt) && -f ../utils/pip-requirements.sh ]];
+if [[ (! -d ./offline/pip/packages || ! -f requirements.txt) && -f ${UTILS_DIR}/pip-requirements.sh ]];
 then
-    ../utils/pip-requirements.sh
+   ${UTILS_DIR}/pip-requirements.sh
 fi
 
 # go up to top level
-cd ..
+cd ${BASE_DIR}
 
 echo "Copying files from shared/"
-alias cp="\cp "
+alias cp='\cp '
 if [[ ${REBUILD} -eq 0 ]];
 then
     # no clobber
-    alias cp="cp -n "
+    alias cp='cp -n '
 fi
-cp -r shared/offline/* ${AGENT_PATH}offline/
-cp shared/install.sh ${AGENT_PATH}
-cp shared/install-remote.sh ${AGENT_PATH}
-cp shared/pip-config.sh ${AGENT_PATH}
-cp shared/${CRONIT_SCRIPT} ${AGENT_PATH}
+cp -r ${SHARED_DIR}/offline/* ${AGENT_DIR}/offline/
+cp ${SHARED_DIR}/install.sh ${AGENT_DIR}
+cp ${SHARED_DIR}/remote-cp-run.sh ${AGENT_DIR}
+cp ${SHARED_DIR}/pip-config.sh ${AGENT_DIR}
+cp ${SHARED_DIR}/${CRONIT_SCRIPT} ${AGENT_DIR}
 
 echo "Creating package"
 # scrub any slashes in the name (ie neseted folders)
@@ -150,7 +146,7 @@ AGENT_SCRUBBED=$(sed -e "s:\/:\-:g" <<< ${AGENT})
 
 # determine tarball name
 TARBALL_NAME="${AGENT_SCRUBBED}.tar.gz"
-TARBALL_PATH="${AGENT_PATH}${TARBALL_NAME}"
+TARBALL_PATH="${AGENT_DIR}/${TARBALL_NAME}"
 
 echo "  Removing old tarball"
 rm ${TARBALL_PATH}
@@ -162,17 +158,17 @@ for EXCLUDE in ${EXCLUDE_LIST};
 do
     EXCLUDE_STMT="${EXCLUDE_STMT} --exclude=${EXCLUDE}"
 done
-TAR_CMD="tar czvf ${TARBALL_NAME} ${EXCLUDE_STMT} ${AGENT_PATH}"
+TAR_CMD="tar czvf ${TARBALL_NAME} ${EXCLUDE_STMT} ${AGENT}"
 echo "${TAR_CMD}" | bash -
 
-echo "  Moving tarball into ${AGENT_PATH}"
-mv ${TARBALL_NAME} ${AGENT_PATH}
+echo "  Moving tarball into ${AGENT_DIR}"
+mv ${TARBALL_NAME} ${AGENT_DIR}
 
 echo "Installer created."
-${ADD} ${AGENT_PATH}
+${ADD} ${AGENT_DIR}
 # add to list of valid agents
-if [[ $(cat utils/new-agents | grep ${AGENT} | wc -l) -eq 0 ]];
+if [[ $(cat ${UTILS_DIR}/new-agents | grep ${AGENT} | wc -l) -eq 0 ]];
 then
-    printf "%s" "|${AGENT}" >> utils/new-agents
-    ${ADD} utils/new-agents
+    printf "%s" "|${AGENT}" >> ${UTILS_DIR}/new-agents
+    ${ADD} ${UTILS_DIR}/new-agents
 fi

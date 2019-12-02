@@ -24,16 +24,14 @@ then
     exit 1
 fi
 
-FILE="@CONFIGVARS.md"
-FILE_TEMP="temp.CONFIGVARS.md"
+FILE=".CONFIGVARS.md"
 CONTENTS=$(cat ${FILE})
 PARAMS=$(cat config.ini.template | grep ^[^#].*=.* | awk '{print $1}')
 
-\cp ../template/${FILE} ${FILE_TEMP}
 echo "### Config Variables" > ${FILE}
 for PARAM in $PARAMS;
 do
-    EXISTING_LINE=$(cat ${FILE_TEMP} | grep -E \`${PARAM}\`)
+    EXISTING_LINE=$(echo "${CONTENTS}" | grep -E \`${PARAM}\`)
     if [[ -n ${EXISTING_LINE} ]];
     then
         echo "${EXISTING_LINE}" >> ${FILE}
@@ -44,4 +42,3 @@ done
 
 echo "${FILE} created"
 cat ${FILE}
-rm ${FILE_TEMP}

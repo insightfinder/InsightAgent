@@ -2,6 +2,7 @@
 This agent collects data from sar and sends it to Insightfinder.
 
 This package also includes a set of scripts to automate installing `sysstat`. Please see the `offline` folder for more information.
+
 ## Installing the Agent
 
 ### Short Version
@@ -10,7 +11,7 @@ bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/mas
 vi config.ini
 sudo ./install.sh --create # install on localhost
 ## or 
-sudo ./install-remote.sh list_of_nodes # install on each of list_of_nodes
+sudo ./remote-cp-run.sh list_of_nodes # install on each of list_of_nodes
 ```
 
 ### Long Version
@@ -40,7 +41,7 @@ sudo ./install.sh --create
 
 To deploy on multiple hosts, instead call 
 ```bash
-sudo ./install-remote.sh list_of_nodes -f <nodelist_file>
+sudo ./remote-cp-run.sh list_of_nodes -f <nodelist_file>
 ```
 Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
 
