@@ -5,6 +5,7 @@ function echo_params() {
     echo "Usage:"
     echo "./utils/make-agent-installer.sh [agent] [-m] [-r] [-b] [-g]"
     echo "-m --monit    If set, monit-config.sh will be used. Default: cron-config.sh"
+    echo "-c --cron     If set, cron-config.sh will be used. This is the default"
     echo "-r --readme   If set, the README for this agent will be remade from the template"
     echo "-b --build    If set, the supporting files (other than READMEs) will be overwritten."
     echo "-g --git-add  If set, the agent folder will be added to git. Default: nothing added"
@@ -13,7 +14,6 @@ function echo_params() {
     exit 1
 }
 
-# see if cronit_script is already in there
 README=0
 REBUILD=0
 ADD="ls -l"
@@ -22,6 +22,9 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -m|--monit)
             CRONIT_SCRIPT="monit-config.sh"
+            ;;
+        -c|--cron)
+            CRONIT_SCRIPT="cron-config.sh"
             ;;
         -r|--readme)
             README=1
@@ -43,9 +46,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 DIR=$(pwd | awk -F '/' '{print $NF}')
-if [[ $(\ls -l | awk '{print $NF}' | grep ${DIR} | wc -l) -eq 0 ]]; # probably not an agent folder
+if [[ $(\ls -l | grep -E ^[^d] | awk '{print $NF}' | grep ${DIR} | wc -l) -eq 0 ]]; # probably not an agent folder
 then
-    # pass agent as parameter
     if [[ -z ${AGENT} || ! -d ${AGENT} ]];
     then
         AGENT=$(\ls -lrt | grep -E $(cat utils/new-agents) | tail -n1 | awk '{print $NF}')
@@ -54,16 +56,20 @@ then
     fi
     BASE_DIR=$(pwd)
 else
-    BASE_DIR=$(pwd | awk -F '/' '{$NF=""; print $0}' | tr [:space:] '/')
-    if [[ "${AGENT: -1}" = '/' ]]; then
-        AGENT="${AGENT:0:${#AGENT}-1}"
+    if [[ -z ${AGENT} ]];
+    then
+        AGENT=${DIR}
     fi
-    AGENT=${DIR}
+    BASE_DIR=$(pwd | awk -F '/' '{$NF=""; print $0}' | tr [:space:] '/')
 fi
 TEMPLATE_DIR="${BASE_DIR}/template"
 SHARED_DIR="${BASE_DIR}/shared"
 UTILS_DIR="${BASE_DIR}/utils"
 AGENT_DIR="${BASE_DIR}/${AGENT}"
+
+if [[ "${AGENT: -1}" = '/' ]]; then
+    AGENT="${AGENT:0:${#AGENT}-1}"
+fi
 
 # get agent script from the agent folder
 cd ${AGENT_DIR}
@@ -78,7 +84,7 @@ fi
 
 ## update readme
 echo "Updating README.md"
-LOCS="${AGENT_DIR} ${AGENT_DIR}/offline" # agent dir, then offline
+LOCS=". offline" # agent dir, then offline
 for LOC in ${LOCS};
 do
     cd "${LOC}"
@@ -86,7 +92,7 @@ do
     if [[ ${README} -eq 1 || ! -f README.md ]];
     then
         echo "  Copying template README.md"
-        \cp ${TEMPLATE_DIR}/README.md .
+        \cp ${TEMPLATE_DIR}/${LOC}/README.md .
     fi
 
     sed -e '/^{{{$/,/^}}}$/{d;}' -i "" README.md 2>/dev/null
