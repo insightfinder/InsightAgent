@@ -6,6 +6,7 @@ This is a template `README.d` for use when there is a __git__ repo that can be i
 {{EXTRA}} will be replaced with `.EXTRA.md`
 }}}
 # Offline Install
+
 These scripts provide support for installing {{TARGET}} from source. To use them, simply run (from an internet-connected machine):
 ```bash
 ./prepare-git-repo.sh

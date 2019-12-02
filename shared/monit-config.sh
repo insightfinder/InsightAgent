@@ -93,8 +93,9 @@ then
     echo "    ./monit-cronfig.sh --create"
     echo "to create the monit config."
 else
-    touch ${AGENT_FULL_PATH_LOG}
     touch ${MONIT_FILE}
+    touch ${AGENT_FULL_PATH_LOG}
+    chmod 0666 ${AGENT_FULL_PATH_LOG}
 fi
 
 # monit control

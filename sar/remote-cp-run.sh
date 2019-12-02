@@ -131,6 +131,7 @@ fi
 
 # make nodefile
 echo "Creating/updating node file ${NODE_FILE}"
+NODES=$(sed '/^$/d' <<< "${NODES}")
 echo "${NODES}" > "${NODE_FILE}"
 
 # create definitions
@@ -148,8 +149,8 @@ then
     if [[ -f config.ini ]];
     then
         cd ..
-        tar czvf ${AGENT_TAR} ${AGENT_DIR}
-        mv ${AGENT_TAR} ${AGENT_DIR}
+        tar czvf ${TO_COPY} ${AGENT}
+        mv ${TO_COPY} ${AGENT_DIR}
         cd -
     else
         if [[ ${QUIET} -eq 1 ]];

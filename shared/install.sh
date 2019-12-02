@@ -142,7 +142,7 @@ then
     CRONIT_SCRIPT="${CRONIT_SCRIPT} --create"
 fi
 echo "Setup script: \"${CRONIT_SCRIPT}\""
-./${CRONIT_SCRIPT}
+sudo ./${CRONIT_SCRIPT}
 
 # done
 echo "Done with installation."

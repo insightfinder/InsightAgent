@@ -103,15 +103,25 @@ fi
 AGENT_FULL_PATH="$(pwd)/${AGENT_SCRIPT}"
 AGENT_FULL_PATH_CONFIG="$(pwd)/config.ini"
 AGENT_FULL_PATH_LOG="$(pwd)/log.out"
-touch ${AGENT_FULL_PATH_LOG}
 
 # crontab
 CRON_FILE="/etc/cron.d/${AGENT}"
-touch ${CRON_FILE}
 CRON_USER="root"
 CRON_COMMAND="\$(command -v python) ${AGENT_FULL_PATH} >${AGENT_FULL_PATH_LOG}"
 RUN_INTERVAL_VAL=${RUN_INTERVAL}
 RUN_INTERVAL_UNIT="${RUN_INTERVAL: -1}"
+
+# create files
+if is_dry_run;
+then
+    echo "In dry-run mode. Run as"
+    echo "    ./cron-cronfig.sh --create"
+    echo "to create the cron config."
+else
+    touch ${CRON_FILE}
+    touch ${AGENT_FULL_PATH_LOG}
+    chmod 0666 ${AGENT_FULL_PATH_LOG}
+fi
 
 # strip unit
 if [[ ${RUN_INTERVAL_UNIT} =~ [^0-9] ]];
