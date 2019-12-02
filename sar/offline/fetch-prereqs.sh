@@ -10,6 +10,27 @@ ALWAYS_DOWNLOAD=1
 
 CURL="curl -sSL"
 
+function configure() {
+    TAR="$1"
+    if [[ -n ${TAR} && -f ${TAR} ]];
+    then
+        DIR=$(tar tf ${TAR} | head -n1)
+        tar xf ${TAR}
+        rm ${TAR}
+        cd ${DIR}
+        ERRS=$(./configure -quiet)
+        if [[ -n ${ERRS} ]];
+        then
+            "Please review these error(s) before continuing."
+            echo ${ERRS}
+        else
+            cd -
+            tar czf ${TAR} ${DIR}
+            rm -rf ${DIR}
+        fi
+    fi
+}
+
 # get most recent make
 if [[ -z $(command -v make) || ${ALWAYS_DOWNLOAD} -eq 1 ]];
 then
@@ -28,14 +49,9 @@ then
     MONIT_DOWNLOAD="${CURL} ${MONIT_MIRROR}/${MONIT_VERSION}"
     MONIT_TAR=$(echo ${MONIT_VERSION} | awk -F '/' '{print $NF}')
     ${MONIT_DOWNLOAD} > ${MONIT_TAR}
-    MONIT_DIR=$(tar tf ${MONIT_TAR} | head -n1)
-    tar xf ${MONIT_TAR}
-    rm ${MONIT_TAR}
-    cd ${MONIT_DIR}
-    ./configure
-    cd -
-    tar czf ${MONIT_TAR} ${MONIT_DIR}
-    rm -rf ${MONIT_DIR}
+
+    # attempt to configure
+    configure ${MONIT_TAR}
 fi
 
 # get most recent python, python-utils, python-devel
@@ -48,12 +64,7 @@ then
     PY_DOWNLOAD="${CURL} ${PY_MIRROR}/${PY_VERSION}"
     PY_TAR=${PY_VERSION}
     ${PY_DOWNLOAD} > ${PY_TAR}
-    PY_DIR=$(tar tf ${PY_TAR} | head -n1)
-    tar xf ${PY_TAR}
-    rm ${PY_TAR}
-    cd ${PY_DIR}
-    ./configure
-    cd -
-    tar czf ${PY_TAR} ${PY_DIR}
-    rm -rf ${PY_DIR}
+
+    # attempt to configure
+    configure ${PY_TAR}
 fi
