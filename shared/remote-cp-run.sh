@@ -22,7 +22,7 @@ function echo_params() {
 NEWLINE=$'\n'
 QUIET=0
 DEFNS_DEFAULT="definitions"
-NODE_FILE_DEFAULT="nodes"
+NODE_FILE_DEFAULT="nodefile"
 DEFNS=${DEFNS_DEFAULT}
 NODE_FILE=${NODE_FILE_DEFAULT}
 NODES=""
@@ -173,7 +173,7 @@ fi
 # actually do the work on each node
 for NODE in ${NODES};
 do
-    if [[ -f ${TO_COPY} ]];
+    if [[ -n ${TO_COPY} ]];
     then
         echo "Copying ${TO_COPY} to ${NODE}:/tmp"
         scp ${TO_COPY} ${NODE}:/tmp

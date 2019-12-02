@@ -29,10 +29,7 @@ fi
 cd ${TARGET_MASTER}
 
 # configure
-if [[ "$@" =~ --interactive && -f ./iconfig ]];
-then
-    CONFIGURE="./iconfig"
-elif [[ "$@" =~ --help ]];
+if [[ "$@" =~ --help ]];
 then
     echo "Displaying configure help text"
     echo ""
@@ -45,9 +42,17 @@ then
 else
     CONFIGURE="./configure $@"
 fi
-bash ${CONFIGURE}
 
-# make a tar from the configured program
-cd ..
-tar czf ${OUTPUT_TAR} --transform "s/${TARGET_MASTER}/${TARGET_REPO}/" ${TARGET_MASTER}/
-cd -
+ERRS=$(${CONFIGURE} --quiet)
+
+if [[ -n ${ERRS} ]];
+then
+    "Please review these error(s) before continuing."
+    echo "${ERRS}"
+else
+    # make a tar from the configured program
+    cd ..
+    tar czf ${OUTPUT_TAR} --transform "s/${TARGET_MASTER}/${TARGET_REPO}/" ${TARGET_MASTER}/
+    rm -rf ${TARGET_MASTER}
+    cd -
+fi
