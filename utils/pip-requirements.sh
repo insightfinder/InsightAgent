@@ -32,23 +32,24 @@ rm -rf ./offline/pip/packages/*
 
 # check required pip packages
 echo "Modules used in this agent:"
-\ls -l | awk '{print $NF}' | grep ^get[^\-].*                                   \
-    | xargs cat | grep import                                                   \
-    | xargs -I {} python -c 'exec "try: {}\nexcept: print(\"{}\")"'             \
-    | sed -E -e 's/^(from[\s]*(.*)[\s]*import[\s]*.*)|(import[\s]*(.*))$/\2\4/' \
-    | sed -E -e 's/^[\s]*([^\.]*)\..*/\1/'                                      \
-    | tr -s [:space:] \\n | sort -u                                             \
-    | xargs -I {} grep {} pip-freeze                                            \
+\ls -l | awk '{print $NF}' | grep ^get[^\-].*                                       \
+    | xargs cat | grep import                                                       \
+    | xargs -I {} python -c 'exec("try: {}\nexcept: print(\"{}\")")'                \
+    | sed -E -e 's/^(from[\s]*(.*)[\s]*import[\s]*.*)|(import[\s]*(.*).*)$/\2\4/'   \
+    | sed -E -e 's/^[\s]*([^\.]*)\..*/\1/'                                          \
+    | tr -s [:space:] \\n | sort -u                                                 \
+    | xargs -I {} grep -i {} pip-freeze                                             \
     | tee requirements.txt
-
-# get packages
-echo "Attempting to download pip package(s)"
-pip -qq download -r requirements.txt -d ./offline/pip/packages
-
-echo "Please review any errors from the output above."
 
 # exit virtualenv
 echo "Exiting virtual environment"
 deactivate
 rm -rf nopip
 rm -f pip-freeze
+
+# get packages
+echo "Attempting to download pip package(s)"
+pip -qq download -r requirements.txt -d ./offline/pip/packages
+
+echo "Please review any errors from the output above."
+exit 0
