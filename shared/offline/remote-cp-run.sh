@@ -53,10 +53,11 @@ while [[ $# -gt 0 ]]; do
 			shift
             PARAMS="${PARAMS} $1"
             ;;
-		-cp)
+		-cp) # used for installing from source using 
 			shift
-            TO_COPY="${TO_COPY} $1"
-            PARAMS="${PARAMS} $1"
+            TO_COPY="$1"
+            PARAMS="-t ${1##*/}"
+            SCRIPT="make-install.sh"
             ;;
         -d|--definition-file)
             shift
@@ -113,6 +114,10 @@ then
     if [[ ${AGENT} == "offline" ]];
     then
         NODE_FILE="$(pwd)/${NODE_FILE}"
+        if [[ -f ${NODE_FILE} ]];
+        then
+            NODE_FILE="$(pwd)/${NODE_FILE}"
+        fi
         cd ..
         AGENT=$(pwd | awk -F '/' '{print $NF}')
     fi
@@ -120,8 +125,8 @@ then
 
     # set params
     INSTALL_AGENT=1
-    PARAMS="${AGENT_TAR}"
     TO_COPY="${AGENT_TAR}"
+    PARAMS="${AGENT_TAR##*/}"
     SCRIPT="AUTOGEN-remote-install.sh"
 
     # build script
@@ -149,8 +154,7 @@ echo "SCRIPT=${SCRIPT}"       | sed -E -e 's/\=\s*(.*)\s*$/=\1/' >> ${DEFNS}
 echo "COMMAND=${COMMAND}"     | sed -E -e 's/\=\s*(.*)\s*$/=\1/' >> ${DEFNS}
 echo "PARAMS=${PARAMS}"       | sed -E -e 's/\=\s*(.*)\s*$/=\1/' >> ${DEFNS}
 
-# make offline installer tar; move check here so
-#  defn file is created anyway
+# make offline installer tar
 if [[ ${INSTALL_AGENT} -eq 1 ]];
 then
     if [[ -f config.ini ]];
@@ -183,8 +187,8 @@ function scp_ssh_syntax() {
     DEST="$@"
     if [[ $(echo ${DEST} | wc -w) -gt 1 ]];
     then
-        FLAGS_tmp=$(echo ${DEST} | awk '{$NF=""; print $0}')
-        NODE_tmp=$(echo ${DEST} | awk '{print $NF}')
+        FLAGS_tmp=${DEST% *}
+        NODE_tmp=${DEST##* }
     else
         FLAGS_tmp=""
         NODE_tmp=${DEST}
