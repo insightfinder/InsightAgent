@@ -21,7 +21,7 @@ fi
 if [[ -z $(command -v pip) ]];
 then
     echo "Package \"pip\" not installed. Attempting to install now..."
-    if [[ ${TRY_OFFLINE} -gt 0 ]];
+    if [[ ${TRY_OFFLINE} -gt 0 && -f "./offline/pip/get-pip.py" ]];
     then
         python ./offline/pip/get-pip.py
     fi
