@@ -27,7 +27,7 @@ done
 if [[ -z ${TARBALL} && -f target ]];
 then
     TARGET=$(cat target | awk -F '/' '{print $NF}')
-    TARBALL="${TARGET}-make.tar.gz"
+    TARBALL="${TARGET}.tar.gz"
 else
     echo "No target file and no tarball specified"
     exit 1
@@ -49,22 +49,25 @@ echo "Unpacking tar..."
 tar xf ${TARBALL_LOC}
 cd $(tar tf ${TARBALL_LOC} | head -n1)
 
-if [[ ${HELP} -eq 1 ]];
+if [[ ! -f Makefile ]];
 then
-    ./configure --help
-    exit 0
-fi
+    if [[ ${HELP} -eq 1 ]];
+    then
+        ./configure --help
+        exit 0
+    fi
 
-echo "Configuring..."
-ERRS=$(./configure --quiet ${PARAMS} || ./configure ${PARAMS})
-if [[ -n ${ERRS} && ${IGNORE_ERRORS} -eq 0 ]];
-then
-    echo "  Please review these error(s) before continuing."
-    echo "${ERRS}"
-    echo "  If these errors can be safely ignored, run this again with -i or --ignore-errors"
-    exit 1
-else
-    echo "  Configured successfully."
+    echo "Configuring..."
+    ERRS=$(./configure --quiet ${PARAMS} || ./configure ${PARAMS})
+    if [[ -n ${ERRS} && ${IGNORE_ERRS} -eq 0 ]];
+    then
+        echo "  Please review these error(s) before continuing."
+        echo "${ERRS}"
+        echo "  If these errors can be safely ignored, run this again with -i or --ignore-errors"
+        exit 1
+    else
+        echo "  Configured successfully."
+    fi
 fi
 
 echo "Installing..."
