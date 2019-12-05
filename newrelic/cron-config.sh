@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 AGENT="newrelic"
 AGENT_SCRIPT="getmetrics_newrelic.py"

@@ -1,9 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # run as root
 if [[ $EUID -ne 0 ]]; then
-   echo "This script should be ran as root. Exiting..."
-   exit 1
+    echo "This script should be ran as root. Exiting..."
+    exit 1
 fi
 
 # get input params
@@ -93,21 +93,22 @@ then
     echo "    ./monit-cronfig.sh --create"
     echo "to create the monit config."
 else
-    touch ${AGENT_FULL_PATH_LOG}
     touch ${MONIT_FILE}
+    touch ${AGENT_FULL_PATH_LOG}
+    chmod 0666 ${AGENT_FULL_PATH_LOG}
 fi
 
 # monit control
 echo "
 check process ${AGENT} matching \"${AGENT_FULL_PATH}\"
     if does not exist then start
-    start program = \"/bin/bash -c '\$(command -v python) ${AGENT_FULL_PATH} &>${AGENT_FULL_PATH_LOG}'\"
-    stop program = \"/bin/bash -c '\$(command -v pkill) -f ${AGENT_FULL_PATH}'\"
+    start program = \"\$(command -v bash) -c '\$(command -v python) ${AGENT_FULL_PATH} &>${AGENT_FULL_PATH_LOG}'\"
+    stop program = \"\$(command -v bash) -c '\$(command -v pkill) -f ${AGENT_FULL_PATH}'\"
 
 check file ${AGENT}_config path \"${AGENT_FULL_PATH_CONFIG}\"
     if changed timestamp then restart
-    start program = \"/bin/bash -c '\$(command -v python) ${AGENT_FULL_PATH} &>${AGENT_FULL_PATH_LOG}'\"
-    stop program = \"/bin/bash -c '\$(command -v pkill) -f ${AGENT_FULL_PATH}'\"
+    start program = \"\$(command -v bash) -c '\$(command -v python) ${AGENT_FULL_PATH} &>${AGENT_FULL_PATH_LOG}'\"
+    stop program = \"\$(command -v bash) -c '\$(command -v pkill) -f ${AGENT_FULL_PATH}'\"
 " 2>&1 | if is_dry_run; then awk '{print}'; else tee ${MONIT_FILE}; fi
 echo ""
 

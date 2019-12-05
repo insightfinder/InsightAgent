@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 AGENT="spark-logs"
 AGENT_SCRIPT="getlogs_spark.py"

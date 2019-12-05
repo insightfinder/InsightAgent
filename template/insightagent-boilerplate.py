@@ -14,7 +14,6 @@ from multiprocessing import Process
 from itertools import islice
 from datetime import datetime
 import dateutil
-from dateutil.tz import tzlocal
 import urlparse
 import httplib
 import requests
