@@ -141,11 +141,14 @@ then
     # no clobber
     COPY="${COPY} -n"
 fi
-${COPY} -r ${SHARED_DIR}/offline/* ${AGENT_DIR}/offline/
 ${COPY} ${SHARED_DIR}/install.sh ${AGENT_DIR}
-${COPY} ${SHARED_DIR}/remote-cp-run.sh ${AGENT_DIR}
 ${COPY} ${SHARED_DIR}/pip-config.sh ${AGENT_DIR}
 ${COPY} ${SHARED_DIR}/${CRONIT_SCRIPT} ${AGENT_DIR}
+${COPY} ${SHARED_DIR}/offline/* ${AGENT_DIR}/offline/
+if [[ "${CRONIT_SCRIPT}" =~ monit ]];
+then
+    ${COPY} -r ${SHARED_DIR}/offline/monit/ ${AGENT_DIR}/offline/
+fi
 
 echo "Creating package"
 # scrub any slashes in the name (ie neseted folders)
@@ -176,6 +179,6 @@ ${ADD} ${AGENT_DIR}
 # add to list of valid agents
 if [[ $(cat ${UTILS_DIR}/new-agents | grep ${AGENT} | wc -l) -eq 0 ]];
 then
-    printf "%s" "|${AGENT}" >> ${UTILS_DIR}/new-agents
+    echo "$(cat ${UTILS_DIR}/new-agents)|${AGENT}" > ${UTILS_DIR}/new-agents
     ${ADD} ${UTILS_DIR}/new-agents
 fi

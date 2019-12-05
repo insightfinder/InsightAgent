@@ -123,11 +123,11 @@ fi
 # pip
 if ! is_dry_run;
 then
-    echo "Setting up pip..."
-    if [[ -f "pip-setup.sh" ]];
+    echo "== Setting up pip... =="
+    if [[ -f pip-setup.sh ]];
     then
         ./pip-setup.sh
-    elif [[ -f "pip-config.sh" && -f requirements.txt ]];
+    elif [[ -f pip-config.sh && -f requirements.txt ]];
     then
         ./pip-config.sh
     else
