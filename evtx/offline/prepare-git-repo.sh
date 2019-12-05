@@ -12,9 +12,15 @@ else
     exit 1
 fi
 
-for TARGET in ${TARGETS};
+echo "Downloading ${TARGETS[@]}"
+for TARGET in ${TARGETS[@]};
 do
-    TARGET_REPO=$(echo ${TARGET} | awk -F '/' '{print $NF}')
+    TARGET_REPO=${TARGET##*/}
     TARGET_TAR="${TARGET_REPO}.tar.gz"
     curl -sSL https://github.com/${TARGET}/archive/master.tar.gz -o ${TARGET_TAR}
+    echo "  Downloaded ${TARGET}. To install, run"
+    echo "      ./make-install.sh"
+    echo "  or, to install on multiple nodes"
+    echo "      ./remote-cp-run.sh -cp ${TARGET_TAR} [node1 node2 nodeN [-f nodefile]]"
 done
+

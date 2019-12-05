@@ -45,6 +45,7 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
+# make sure we have the agent to build and are in the agent directory
 DIR=$(pwd | awk -F '/' '{print $NF}')
 if [[ $(\ls -l | grep -E ^[^d] | awk '{print $NF}' | grep ${DIR} | wc -l) -eq 0 ]]; # probably not an agent folder
 then
@@ -66,7 +67,6 @@ TEMPLATE_DIR="${BASE_DIR}/template"
 SHARED_DIR="${BASE_DIR}/shared"
 UTILS_DIR="${BASE_DIR}/utils"
 AGENT_DIR="${BASE_DIR}/${AGENT}"
-
 if [[ "${AGENT: -1}" = '/' ]]; then
     AGENT="${AGENT:0:${#AGENT}-1}"
 fi
@@ -91,21 +91,33 @@ do
     mkdir -p "${LOC}"
     cd "${LOC}"
 
+    # copy from template
     if [[ ${README} -eq 1 || ! -f README.md ]];
     then
         echo "  Copying template README.md"
         ${COPY} ${TEMPLATE_DIR}/${LOC}/README.md .
     fi
 
+    # remove preamble
     sed -e '/^{{{$/,/^}}}$/{d;}' -i "" README.md 2>/dev/null
 
+    # replace AGENT variables
     sed -e "s/{{NEWAGENT}}/${AGENT}/g" -i "" README.md 2>/dev/null
     sed -e "s/{{NEWAGENT@script}}/${AGENT_SCRIPT}/g" -i "" README.md 2>/dev/null
     sed -e "s/{{NEWAGENT@cronit}}/${CRONIT_SCRIPT}/g" -i "" README.md 2>/dev/null
     
+    # Replace TARGET or TARGET preamble
     TARGET=$(cat target 2>/dev/null | awk -F '/' '{print $NF}')
-    sed -e "s/{{TARGET}}/${TARGET}/g" -i "" README.md 2>/dev/null
+    if [[ -n "${TARGET}" ]];
+    then
+        sed -e "s/{{TARGET}}/${TARGET}/g" -i "" README.md 2>/dev/null
+        sed -e '/^{{{TARGET$/{d;}' -i "" README.md 2>/dev/null
+        sed -e '/^TARGET}}}$/{d;}' -i "" README.md 2>/dev/null
+    else
+        sed -e '/^{{{TARGET$/,/^TARGET}}}$/{d;}' -i "" README.md 2>/dev/null
+    fi 
 
+    # add separate list of config variables
     echo "  Adding config variables"
     sed -e '/^{{CONFIGVARS}}/{r .CONFIGVARS.md' -e 'd;}' -i "" README.md 2>/dev/null
 
@@ -135,6 +147,7 @@ fi
 # go up to top level
 cd ${BASE_DIR}
 
+# add supporting files
 echo "Copying files from shared/"
 if [[ ${REBUILD} -eq 0 ]];
 then
@@ -150,6 +163,7 @@ then
     ${COPY} -r ${SHARED_DIR}/offline/monit/ ${AGENT_DIR}/offline/
 fi
 
+## create tar
 echo "Creating package"
 # scrub any slashes in the name (ie neseted folders)
 AGENT_SCRUBBED=$(sed -e "s:\/:\-:g" <<< ${AGENT})
@@ -182,3 +196,5 @@ then
     echo "$(cat ${UTILS_DIR}/new-agents)|${AGENT}" > ${UTILS_DIR}/new-agents
     ${ADD} ${UTILS_DIR}/new-agents
 fi
+
+exit 0

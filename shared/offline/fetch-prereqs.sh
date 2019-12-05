@@ -18,7 +18,7 @@ fi
 CURL="curl -sSL"
 
 # get most recent make
-if [[ -z $(command -v make) || ${ALWAYS_DOWNLOAD} -eq 1 ]];
+if [[ ${ALWAYS_DOWNLOAD} -eq 1 || -z $(command -v make) ]];
 then
     echo "Getting make..."
     mkdir -p make
@@ -27,10 +27,14 @@ then
     MAKE_FILE="make/${MAKE_VERISON}"
     MAKE_DOWNLOAD="${CURL} ${MAKE_MIRROR}/${MAKE_VERISON} -o ${MAKE_FILE}"
     ${MAKE_DOWNLOAD}
+    echo "  To install, run"
+    echo "      ./make-install.sh -t ${MAKE_FILE}"
+    echo "  or, to install on multiple nodes"
+    echo "      ./remote-cp-run.sh -cp ${MAKE_FILE} [node1 node2 nodeN [-f nodefile]]"
 fi
 
 # get most recent python
-if [[ -z $(command -v python) || ${ALWAYS_DOWNLOAD} -eq 1 ]];
+if [[ ${ALWAYS_DOWNLOAD} -eq 1 || -z $(command -v python) ]];
 then
     echo "Getting python..."
     mkdir -p python
@@ -41,9 +45,13 @@ then
     PY_FILE="python/${PY_VERSION}"
     PY_DOWNLOAD="${CURL} ${PY_MIRROR}/${PY_VERSION} -o ${PY_FILE}"
     ${PY_DOWNLOAD}
+    echo "  To install, run"
+    echo "      ./make-install.sh -t ${PY_FILE}"
+    echo "  or, to install on multiple nodes"
+    echo "      ./remote-cp-run.sh -cp ${PY_FILE} [node1 node2 nodeN [-f nodefile]]"
 fi
 
-if [[ -z $(command -v pip) || ${ALWAYS_DOWNLOAD} -eq 1 ]];
+if [[ ${ALWAYS_DOWNLOAD} -eq 1 || -z $(command -v pip) ]];
 then
     echo "Getting pip..."
     mkdir -p pip
@@ -51,10 +59,14 @@ then
     PIP_MIRROR="https://bootstrap.pypa.io/${PIP_FILE}"
     PIP_DOWNLOAD="${CURL} ${PIP_MIRROR} -o pip/${PIP_FILE}"
     ${PIP_DOWNLOAD}
+    echo "  To install, run" 
+    echo "      python pip/${PIP_FILE}"
+    echo "  or, to install on multiple nodes"
+    echo "      ./remote-cp-run.sh -c pip/${PIP_FILE} -x python -p ${PIP_FILE} [node1 node2 nodeN [-f nodefile]]"
 fi 
 
 # get most recent monit
-if [[ $(ls -l .. | grep monit | wc -l) -gt 0 && (-z $(command -v monit) || ${ALWAYS_DOWNLOAD} -eq 1) ]];
+if [[ (${ALWAYS_DOWNLOAD} -eq 1 || -z $(command -v monit)) && $(ls -l .. | grep monit | wc -l) -gt 0 ]];
 then
     echo "Getting monit..."
     mkdir -p monit
@@ -63,6 +75,17 @@ then
     MONIT_TAR=$(echo ${MONIT_VERSION} | awk -F '/' '{print $NF}')
     MONIT_DOWNLOAD="${CURL} ${MONIT_MIRROR}/${MONIT_VERSION} -o monit/${MONIT_TAR}"
     ${MONIT_DOWNLOAD}
-    echo "madler/zlib" >> target
+    echo "  To install, run"
+    echo "      ./make-install.sh -t monit/${MONIT_TAR}"
+    echo "  or, to install on multiple nodes"
+    echo "      ./remote-cp-run.sh -cp monit/${MONIT_TAR} [node1 node2 nodeN [-f nodefile]]"
+
+    # libz
+    if [[ ${ALWAYS_DOWNLOAD} -eq 1 || -z $(ldconfig -p | grep libz) ]];
+    then
+        echo "Getting libz..."
+        echo "madler/zlib" >> target
+        ./prepare-git-repo.sh
+    fi
 fi
 

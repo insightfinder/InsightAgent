@@ -2,8 +2,8 @@
 
 # run as root
 if [[ $EUID -ne 0 ]]; then
-   echo "This script should be ran as root. Exiting..."
-   exit 1
+    echo "This script should be ran as root. Exiting..."
+    exit 1
 fi
 
 # get input params
@@ -123,11 +123,11 @@ fi
 # pip
 if ! is_dry_run;
 then
-    echo "Setting up pip..."
-    if [[ -f "pip-setup.sh" ]];
+    echo "== Setting up pip... =="
+    if [[ -f pip-setup.sh ]];
     then
         ./pip-setup.sh
-    elif [[ -f "pip-config.sh" && -f requirements.txt ]];
+    elif [[ -f pip-config.sh && -f requirements.txt ]];
     then
         ./pip-config.sh
     else
