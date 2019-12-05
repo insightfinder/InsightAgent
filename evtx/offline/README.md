@@ -1,18 +1,4 @@
-{{{
-# Template
-This is a template `README.d` for use when there is a __git__ repo that can be installed using `./configure && make && make install`.
-
-{{TARGET}} will be replaced in the same way the `target` file is used in these scripts.
-{{EXTRA}} will be replaced with `.EXTRA.md`
-}}}
 # Offline Install
-{{{TARGET
-These scripts provide support for installing {{TARGET}} from source. To use them, simply run (from an internet-connected machine):
-```bash
-./prepare-git-repo.sh
-```
-
-TARGET}}}
 `fetch-prereqs.sh [--remote]` can be used to get source packages for install for:
 * `make` (requires `gcc` - *not* supplied as an offline package and must be installed from media or the internet)
 * `python` (requires `make`)
@@ -27,4 +13,3 @@ To install a tar from source, run:
                     # or, to install on remote machine(s):
 ./remote-cp-run.sh -cp <package>.tar.gz [node1 node2 nodeN [-f nodefile list_of_nodes]]
 ```
-{{EXTRA}}

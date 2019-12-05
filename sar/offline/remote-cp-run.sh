@@ -53,10 +53,11 @@ while [[ $# -gt 0 ]]; do
 			shift
             PARAMS="${PARAMS} $1"
             ;;
-		-cp)
+		-cp) # used for installing from source using 
 			shift
-            TO_COPY="${TO_COPY} $1"
-            PARAMS="${PARAMS} $1"
+            TO_COPY="$1"
+            PARAMS="-t ${1##*/}"
+            SCRIPT="make-install.sh"
             ;;
         -d|--definition-file)
             shift
@@ -109,43 +110,51 @@ fi
 INSTALL_AGENT=0
 if [[ -z ${COMMAND} && ! -f ${SCRIPT} && ! -f ${TO_COPY} ]];
 then
-    # build script
-    SCRIPT="AUTOGEN-remote-install.sh"
-    if [[ ! -f ${SCRIPT} ]];
-    then
-        echo "#!/usr/bin/env bash" > ${SCRIPT}
-        echo "" >> ${SCRIPT}
-        echo "dir=\$(tar tf /tmp/\$1 | head -n1)" >> ${SCRIPT}
-        echo "tar xvf /tmp/\$1 && cd \$dir" >> ${SCRIPT}
-        echo "./install.sh --create" >> ${SCRIPT}
-    fi
-    sudo chmod ug+x ${SCRIPT}
-
-    AGENT_DIR=$(pwd)
     AGENT=$(pwd | awk -F '/' '{print $NF}')
+    if [[ ${AGENT} == "offline" ]];
+    then
+        NODE_FILE="$(pwd)/${NODE_FILE}"
+        if [[ -f ${NODE_FILE} ]];
+        then
+            NODE_FILE="$(pwd)/${NODE_FILE}"
+        fi
+        cd ..
+        AGENT=$(pwd | awk -F '/' '{print $NF}')
+    fi
     AGENT_TAR="${AGENT}-offline.tar.gz"
 
     # set params
-    PARAMS="${AGENT_TAR}"
-    TO_COPY="${AGENT_TAR}"
     INSTALL_AGENT=1
+    TO_COPY="${AGENT_TAR}"
+    PARAMS="${AGENT_TAR##*/}"
+    SCRIPT="AUTOGEN-remote-install.sh"
+
+    # build script
+    if [[ ! -f ${SCRIPT} ]];
+    then
+        echo "#!/usr/bin/env bash"                  >  ${SCRIPT}
+        echo ""                                     >> ${SCRIPT}
+        echo "dir=\$(tar tf /tmp/\$1 | head -n1)"   >> ${SCRIPT}
+        echo "tar xvf /tmp/\$1 && cd \$dir"         >> ${SCRIPT}
+        echo "./install.sh --create"                >> ${SCRIPT}
+    fi
+    sudo chmod ug+x ${SCRIPT}
 fi
 
 # make nodefile
-echo "Creating/updating node file ${NODE_FILE}"
 NODES=$(sed '/^$/d' <<< "${NODES}")
+echo "Creating/updating node file ${NODE_FILE}"
 echo "${NODES}" > "${NODE_FILE}"
 
 # create definitions
 echo "Creating/updating definitions file ${DEFNS}"
-echo "NODE_FILE=${NODE_FILE//[[:space:]]/}" > ${DEFNS}
-echo "TO_COPY=${TO_COPY//[[:space:]]/}" >> ${DEFNS}
-echo "SCRIPT=${SCRIPT//[[:space:]]/}" >> ${DEFNS}
-echo "COMMAND=${COMMAND//[[:space:]]/}" >> ${DEFNS}
-echo "PARAMS=${PARAMS//[[:space:]]/}" >> ${DEFNS}
+echo "NODE_FILE=${NODE_FILE}" | sed -E -e 's/\=\s*(.*)\s*$/=\1/' >  ${DEFNS}
+echo "TO_COPY=${TO_COPY}"     | sed -E -e 's/\=\s*(.*)\s*$/=\1/' >> ${DEFNS}
+echo "SCRIPT=${SCRIPT}"       | sed -E -e 's/\=\s*(.*)\s*$/=\1/' >> ${DEFNS}
+echo "COMMAND=${COMMAND}"     | sed -E -e 's/\=\s*(.*)\s*$/=\1/' >> ${DEFNS}
+echo "PARAMS=${PARAMS}"       | sed -E -e 's/\=\s*(.*)\s*$/=\1/' >> ${DEFNS}
 
-# make offline installer tar; move check here so
-#  defn file is created anyway
+# make offline installer tar
 if [[ ${INSTALL_AGENT} -eq 1 ]];
 then
     if [[ -f config.ini ]];
@@ -178,8 +187,8 @@ function scp_ssh_syntax() {
     DEST="$@"
     if [[ $(echo ${DEST} | wc -w) -gt 1 ]];
     then
-        FLAGS_tmp=$(echo ${DEST} | awk '{$NF=""; print $0}')
-        NODE_tmp=$(echo ${DEST} | awk '{print $NF}')
+        FLAGS_tmp=${DEST% *}
+        NODE_tmp=${DEST##* }
     else
         FLAGS_tmp=""
         NODE_tmp=${DEST}

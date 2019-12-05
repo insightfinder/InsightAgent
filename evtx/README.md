@@ -1,13 +1,10 @@
-# sar
-This agent collects data from sar and sends it to Insightfinder.
-
-This package also includes a set of scripts to automate installing `sysstat`. Please see the `offline` folder for more information.
-
+# evtx
+This agent collects data from evtx and sends it to Insightfinder.
 ## Installing the Agent
 
 ### Short Version
 ```bash
-bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) sar && cd sar
+bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) evtx && cd evtx
 vi config.ini
 sudo ./install.sh --create # install on localhost
 ## or 
@@ -19,8 +16,8 @@ See the `offline` README for instructions on installing prerequisites.
 ### Long Version
 ###### Download the agent tarball and untar it:
 ```bash
-curl -sSL https://github.com/insightfinder/InsightAgent/raw/master/sar/sar.tar.gz -o sar.tar.gz
-tar xvf sar.tar.gz && cd sar
+curl -sSL https://github.com/insightfinder/InsightAgent/raw/master/evtx/evtx.tar.gz -o evtx.tar.gz
+tar xvf evtx.tar.gz && cd evtx
 ```
 
 ###### Copy `config.ini.template` to `config.ini` and edit it:
@@ -51,7 +48,7 @@ Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` 
 ###### Check Python version & upgrade if using Python 3
 ```bash
 if [[ $(python -V 2>&1 | awk '{ print substr($NF, 1, 1) }') == "3" ]]; then \
-2to3 -w getmetrics_sar.py; \
+2to3 -w getlogs_evtx.py; \
 else echo "No upgrade needed"; fi
 ```
 
@@ -62,7 +59,7 @@ sudo ./pip-config.sh
 
 ###### Test the agent:
 ```bash
-python getmetrics_sar.py -t
+python getlogs_evtx.py -t
 ```
 
 ###### If satisfied with the output, configure the agent to run continuously:
@@ -71,30 +68,21 @@ sudo ./cron-config.sh
 ```
 
 ### Config Variables
-* `metrics`: Metrics to report to InsightFinder. Multiple `sar` flags have been grouped as below; see `man sar` for more information on each flag. By default, all metrics but `network6` are reported.
-    * `os`: `-vw` (host level)
-    * `mem`: `-r ALL` (host level only)
-    * `paging`: `-BSW` (host level only)
-    * `io`: 
-        * Host Level: `-bHq`
-        * Device Level: `-y`
-    * `network`: 
-        * Device Level: `-n DEV -n EDEV`
-        * Host Level: `-n NFS -n NFSD -n SOCK -n IP -n EIP -n ICMP -n EICMP -n TCP -n ETCP -n UDP`
-    * `network6`: `-n SOCK6 -n IP6 -n EIP6 -n ICMP6 -n EICMP6 -n UDP6` (host level only - **not** a default metric)
-    * `filesystem`: `-dF` (device level)
-    * `power`: `-m FAN -m IN -m TEMP -m USB` (device level only)
-    * `cpu`: `-m CPU -m FREQ -u ALL -P ALL` (per-core and host level)
-* `exclude_devices`: Set to True to not report device-level data. Note that this will prevent CPU, power, filesystem, some I/O, and some network metrics from being reported. By default, device-level data is reported.
-* `replay_days`: A comma-delimited list of days within the last fiscal month to replay (from `/var/log/sa/saDD`)
-* `replay_sa_files`: A comma-delimited list of sa files or directories to replay.
+* **`file_path`**: Comma delimited list of files and directories (ending in '/') containing evtx files.
+* `filters_include`: Used to filter messages based on allowed values.
+* `filters_exclude`: Used to filter messages based on unallowed values.
+* `json_top_level`: The top-level of fields to parse in JSON. For example, if all fields of interest are nested like 
+* `timestamp_format`: Format of the timestamp, in python [strftime](http://strftime.org/). If the timestamp is in Unix epoch, this can be left blank or set to `epoch`.
+* `timestamp_field`: Field name for the timestamp. Default is `timestamp`.
+* `instance_field`: Field name for the instance name. If not set or the field is not found, the instance name is the hostname of the machine the agent is installed on. 
+* `device_field`: Field name for the device/container for containerized projects.
+* `data_fields`: Comma-delimited list of field names to use as data fields. If not set, all fields will be reported.
 * **`user_name`**: User name in InsightFinder
 * **`license_key`**: License Key from your Account Profile in the InsightFinder UI. 
 * `token`: Token from your Account Profile in the InsightFinder UI. 
 * **`project_name`**: Name of the project created in the InsightFinder UI. 
 * **`project_type`**: Type of the project - one of `metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay`.
-* **`sampling_interval`**: How frequently data is reported.
-* **`run_interval`**: How frequently data is collected. Should match the interval used in cron.
+* **`sampling_interval`**: How frequently data is collected. Should match the interval used in cron.
 * `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
 * `if_url`: URL for InsightFinder. Default is `https://app.insightfinder.com`.
 * `if_http_proxy`: HTTP proxy used to connect to InsightFinder.
