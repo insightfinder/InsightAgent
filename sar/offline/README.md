@@ -3,6 +3,7 @@ These scripts provide support for installing sysstat from source. To use them, s
 ```bash
 ./prepare-git-repo.sh
 ```
+
 `fetch-prereqs.sh [--remote]` can be used to get source packages for install for:
 * `make` (requires `gcc` - *not* supplied as an offline package and must be installed from media or the internet)
 * `python` (requires `make`)

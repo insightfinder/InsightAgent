@@ -157,7 +157,7 @@ fi
 ${COPY} ${SHARED_DIR}/install.sh ${AGENT_DIR}
 ${COPY} ${SHARED_DIR}/pip-config.sh ${AGENT_DIR}
 ${COPY} ${SHARED_DIR}/${CRONIT_SCRIPT} ${AGENT_DIR}
-${COPY} ${SHARED_DIR}/offline/* ${AGENT_DIR}/offline/
+${COPY} ${SHARED_DIR}/offline/* ${AGENT_DIR}/offline/ 2>/dev/null
 if [[ "${CRONIT_SCRIPT}" =~ monit ]];
 then
     ${COPY} -r ${SHARED_DIR}/offline/monit/ ${AGENT_DIR}/offline/
