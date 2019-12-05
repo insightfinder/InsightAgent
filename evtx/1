@@ -37,6 +37,10 @@ def start_data_processing(thread_number):
                     parse_json_message(json.loads(json.dumps(xmltodict.parse(record.xml()))))
 
 
+def is_evtx_file(f):
+    return os.path.exists(f) and os.path.basename(f).split('.')[-1] == 'evtx'
+    
+
 def get_agent_config_vars():
     """ Read and parse config.ini """
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))):
@@ -63,21 +67,17 @@ def get_agent_config_vars():
             sys.exit(1)
             
         if len(file_path) != 0:
-            file_regex = r".*\.evtx$"
             files = file_path.split(',')
             if len(files) > 1:
                 # get evtx files and files within directories
                 logger.debug(files)
-                files = [ i for j in 
-                            map(lambda k:
-                                get_file_list_for_directory(k, file_regex),
-                            files)
-                         for i in j if i]
+                files = [ i for i in 
+                          [ j for j in
+                                map(lambda k:
+                                    get_file_list_for_directory(k),
+                                files) ]]
             else:
-                files = get_file_list_for_directory(files[0], file_regex)
-        else:
-            logger.warning('Agent not correctly configured (file_path). Check config file.')
-            sys.exit(1)
+                files = get_file_list_for_directory(files[0]) if files[0][-1] == '/' else files
 
         # filters
         if len(filters_include) != 0:
@@ -285,8 +285,7 @@ def strip_tz_info(timestamp_format):
 def check_csv_fieldnames(csv_field_names, all_fields):
     # required
     for field in all_fields['required_fields']:
-        all_fields['required_fields'][field]['index'] = get_field_index(
-                csv_field_names, all_fields['optional_fields'][field]['name'], field, True)
+        all_fields['required_fields'][field]['index'] = get_field_index(csv_field_names, all_fields['optional_fields'][field]['name'], field, True)
 
     # optional
     for field in all_fields['optional_fields']:
@@ -403,12 +402,9 @@ def chunk_map(data, SIZE=50):
         yield {k: data[k] for k in islice(it, SIZE)}
 
 
-def get_file_list_for_directory(root_path='/', file_name_regex=''):
-    if root_path is None or len(root_path) == 0:
-        return []
-
+def get_file_list_for_directory(root_path, file_name_regex=''):
     if root_path[-1] != '/':
-        if os.path.exists(root_path) and (not file_name_regex or (file_name_regex and re.match(file_name_regex, root_path))):
+        if os.path.exists(root_path) and (not file_name_regex or (file_name_regex and re.match(file_name_regex, name))):
             return [root_path]
         else:
             return []
@@ -808,8 +804,7 @@ def set_logger_config(level):
     logging_handler_out = logging.StreamHandler(sys.stdout)
     logging_handler_out.setLevel(logging.DEBUG)
     # create a logging format
-    formatter = logging.Formatter(
-            '%(asctime)s [pid %(process)d] %(levelname)-8s %(module)s.%(funcName)s():%(lineno)d %(message)s')
+    formatter = logging.Formatter('%(asctime)s [pid %(process)d] %(levelname)-8s %(module)s.%(funcName)s():%(lineno)d %(message)s')
     logging_handler_out.setFormatter(formatter)
     logger_obj.addHandler(logging_handler_out)
 
@@ -822,20 +817,20 @@ def set_logger_config(level):
 def print_summary_info():
     # info to be sent to IF
     post_data_block = '\nIF settings:'
-    for i in sorted(if_config_vars.keys()):
-        post_data_block += '\n\t{}: {}'.format(i, if_config_vars[i])
+    for i in if_config_vars.keys():
+        post_data_block += '\n\t' + i + ': ' + str(if_config_vars[i])
     logger.debug(post_data_block)
 
     # variables from agent-specific config
     agent_data_block = '\nAgent settings:'
-    for j in sorted(agent_config_vars.keys()):
-        agent_data_block += '\n\t{}: {}'.format(j, agent_config_vars[j])
+    for j in agent_config_vars.keys():
+        agent_data_block += '\n\t' + j + ': ' + str(agent_config_vars[j])
     logger.debug(agent_data_block)
 
     # variables from cli config
     cli_data_block = '\nCLI settings:'
-    for k in sorted(cli_config_vars.keys()):
-        cli_data_block += '\n\t{}: {}'.format(k, cli_config_vars[k])
+    for k in cli_config_vars.keys():
+        cli_data_block += '\n\t' + k + ': ' + str(cli_config_vars[k])
     logger.debug(cli_data_block)
 
 
@@ -853,7 +848,7 @@ def initialize_data_gathering(thread_number):
 
 
     logger.debug('Total chunks created: ' + str(track['chunk_count']))
-    logger.debug('Total {} entries: {}'.format(if_config_vars['project_type'].lower(), track['entry_count']))
+    logger.debug('Total ' + if_config_vars['project_type'].lower() + ' entries: ' + str(track['entry_count']))
 
 
 def reset_track():
@@ -887,7 +882,7 @@ def log_handoff(timestamp, data, instance, device=''):
     if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
         send_data_wrapper()
     elif track['entry_count'] % 100 == 0:
-        logger.debug('Current data object size: {} bytes'.format(get_json_size_bytes(track['current_row'])))
+        logger.debug('Current data object size: ' + str(get_json_size_bytes(track['current_row'])) + ' bytes')
 
 
 def prepare_log_entry(timestamp, data, instance, device=''):
@@ -912,12 +907,12 @@ def metric_handoff(timestamp, field_name, data, instance, device=''):
     if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
         send_data_wrapper()
     elif track['entry_count'] % 500 == 0:
-        logger.debug('Current data object size: {} bytes'.format(get_json_size_bytes(track['current_dict'])))
+        logger.debug('Current data object size: ' + str(get_json_size_bytes(track['current_dict'])) + ' bytes')
 
 
 def append_metric_data_to_entry(timestamp, field_name, data, instance, device=''):
     """ creates the metric entry """
-    key = '{}[{}]'.format(make_safe_metric_key(field_name), make_safe_instance_string(instance, device))
+    key = make_safe_metric_key(field_name) + '[' + make_safe_instance_string(instance, device) + ']'
     ts_str = str(timestamp)
     if ts_str not in track['current_dict']:
         track['current_dict'][ts_str] = dict()
@@ -1036,7 +1031,7 @@ def fold_up_helper(current_path, node_name, node):
             continue
             #agent_config_vars['metrics_names'][node[node_nested]] = node_name
         else:
-            fold_up_helper(current_path, '{}/{}'.format(node_name, node_nested), node[node_nested])
+            fold_up_helper(current_path, node_name + '/' + node_nested, node[node_nested])
 
 
 ################################
