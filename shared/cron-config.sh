@@ -2,8 +2,8 @@
 
 # run as root
 if [[ $EUID -ne 0 ]]; then
-   echo "This script should be ran as root. Exiting..."
-   exit 1
+    echo "This script should be ran as root. Exiting..."
+    exit 1
 fi
 
 # get input params
