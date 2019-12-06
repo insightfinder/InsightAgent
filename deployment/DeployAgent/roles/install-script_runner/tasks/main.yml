@@ -67,6 +67,13 @@
     owner: root
     group: root
     mode: 0644
+ - name: Monit | Copy cleanup script
+   copy:
+     src: files/clean_disk.sh
+     dest: "{{ansible_env.HOME}}/clean_disk.sh"
+     owner: root
+     group: root
+     mode: 0774
 - name: Monit | Restart Monit daemon
   systemd:
     name: monit.service

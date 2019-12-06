@@ -1,4 +1,4 @@
 python-dateutil==1.5
-pytz==2013.7
+pytz==2019.3
 requests==2.22.0
 statistics==1.0.3.5
