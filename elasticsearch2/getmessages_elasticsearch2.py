@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import ConfigParser
-import collections
 import json
 import logging
 import os
@@ -11,13 +10,14 @@ import time
 import pytz
 from optparse import OptionParser
 from multiprocessing import Process
-from itertools import islice
 from datetime import datetime
 import dateutil
 import urlparse
 import httplib
 import requests
 import statistics
+import subprocess
+from elasticsearch import Elasticsearch
 
 '''
 This script gathers data to send to Insightfinder
@@ -25,41 +25,98 @@ This script gathers data to send to Insightfinder
 
 
 def start_data_processing(thread_number):
-    """ TODO: replace with your code.
-    Most work regarding sending to IF is abstracted away for you.
-    This function will get the data to send and prepare it for the API.
-    The general outline should be:
-    0. Define the project type in config.ini
-    1. Parse config options
-    2. Gather data
-    3. Parse each entry
-    4. Call the appropriate handoff function
-        metric_handoff()
-        log_handoff()
-        alert_handoff()
-        incident_handoff()
-        deployment_handoff()
-    See zipkin for an example that uses os.fork to send both metric and log data.
-    """
+    es_conn = get_es_connection()
+    for message in query_es_data(es_conn):
+        parse_json_message(message)
 
 
-def raw_parse_log(message):
-    # call as log_handoff(*raw_parse(message))
-    timestamp = get_timestamp_from_date_string(time.time())
-    data = 'data'
-    instance = 'instance'
-    device = 'device'
-    return timestamp, data, instance, device
+def query_es_data(es_conn):
+    """ send queries to es for parsing """
+    for query in build_es_query_body():
+        # send query
+        response = es_conn.search(
+                        body=query,
+                        index=agent_config_vars['indeces'],
+                        rest_total_hits_as_int=True,
+                        ignore_unavailable=False
+                            if 'REPLAY' in if_config_vars['project_type']
+                            else True)
+        # validate successs
+        if 'error' not in response:
+            # get full message
+            messages = _get_json_field_helper(
+                response,
+                'hits.hits'.split(JSON_LEVEL_DELIM))
+            for message in messages:
+                yield message
 
 
-def raw_parse_metric(message):
-    # call as metric_handoff(*raw_parse(message))
-    timestamp = get_timestamp_from_date_string(time.time())
-    metric = 'metric'
-    data = 'data'
-    instance = 'instance'
-    device = 'device'
-    return timestamp, metric, data, instance, device
+def build_es_query_body():
+    """ build up query body for es """
+    timestamp_field = agent_config_vars['timestamp_field'].split(JSON_LEVEL_DELIM)[-1]
+    # start building query
+    query_body = {'query': {
+                    'range': {
+                        timestamp_field: dict()}},
+                    'sort': [{timestamp_field: 'desc'}]
+                  }
+    # add user-defined query
+    if isinstance(agent_config_vars['query_json'], dict):
+        query_body.update(agent_config_vars['query_json'])
+    # for each date range, update the query
+    for date_range in get_date_ranges():
+        query_body['query']['range'][timestamp_field] = date_range
+        logger.debug(query_body)
+        yield query_body
+
+
+def get_date_ranges():
+    """ build date range dict for query_body """
+    if 'REPLAY' in if_config_vars['project_type']:
+        # get full range
+        _from = get_timestamp_from_date_string(agent_config_vars['from'])
+        _to   = get_timestamp_from_date_string(agent_config_vars['to'])
+        interval = if_config_vars['run_interval'] * 1000
+        # chunk date ranges by run interval
+        for from_ts in range(_from, _to, interval):
+            to_ts = from_ts + interval
+            yield {'format': 'epoch_millis', 'gte': from_ts, 'lte': to_ts}
+    else:
+        _from = 'now-{}s'.format(if_config_vars['run_interval'])
+        _to   = 'now'
+        yield {'gte': _from, 'lte': _to}
+
+
+def get_es_connection():
+    """ Try to connect to es """
+    hosts = build_es_connection_hosts()
+    try:
+        return Elasticsearch(hosts)
+    except Exception as e:
+        logger.warn('Could not contact ElasticSearch with provided configuration.')
+        logger.warn(e)
+        sys.exit(1)
+
+
+def build_es_connection_hosts():
+    """ Build array of host dicts """
+    hosts = []
+    for uri in agent_config_vars['es_uris']:
+        host = agent_config_vars['es_conn_info'].copy()
+        # parse uri for overrides
+        uri = urlparse.urlparse(uri)
+        host['host'] = uri.hostname or uri.path
+        host['port'] = uri.port or host['port']
+        host['http_auth'] = '{}:{}'.format(uri.username, uri.password) or host['http_auth']
+        if uri.scheme == 'https':
+            host['use_ssl'] = True
+
+        # add ssl info
+        if len(agent_config_vars['es_conn_info']) != 0:
+            host.update(agent_config_vars['es_conn_info'])
+        hosts.append(host)
+    logger.debug(hosts)
+    return hosts
 
 
 def get_agent_config_vars():
@@ -68,8 +125,28 @@ def get_agent_config_vars():
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
         try:
-            ## TODO: fill out the fields to grab. examples given below
-            ## replace 'agent' with the appropriate section header.
+            # es
+            query_json = config_parser.get('agent', 'query_json')
+            indeces = config_parser.get('agent', 'indeces')
+
+            es_uris = config_parser.get('agent', 'es_uris')
+            es_conn_info = {
+                'port': config_parser.get('agent', 'port'),
+                'http_auth': config_parser.get('agent', 'http_auth'),
+                'use_ssl': ternary_tfd(config_parser.get('agent', 'use_ssl')),
+                'ssl_version': config_parser.get('agent', 'ssl_version'),
+                'ssl_assert_hostname': ternary_tfd(config_parser.get('agent', 'ssl_assert_hostname')),
+                'ssl_assert_fingerprint': ternary_tfd(config_parser.get('agent', 'ssl_assert_fingerprint')),
+                'verify_certs': ternary_tfd(config_parser.get('agent', 'verify_certs')),
+                'ca_certs': config_parser.get('agent', 'ca_certs'),
+                'client_cert': config_parser.get('agent', 'client_cert'),
+                'client_key': config_parser.get('agent', 'client_key')
+            }
+
+            # date range for replay
+            _from = config_parser.get('agent', '_from')
+            _to = config_parser.get('agent', '_to')
+
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
@@ -79,19 +156,33 @@ def get_agent_config_vars():
             filters_exclude = config_parser.get('agent', 'filters_exclude')
 
             # message parsing
-            data_format = config_parser.get('agent', 'data_format').upper()
-            csv_field_names = config_parser.get('agent', 'csv_field_names')
-            json_top_level = config_parser.get('agent', 'json_top_level')
-            project_field = config_parser.get('agent', 'project_field')
-            instance_field = config_parser.get('agent', 'instance_field')
+            json_top_level = config_parser.get('agent', 'json_top_level') or '_source'
+            # project_field = config_parser.get('agent', 'project_field')
+            instance_field = config_parser.get('agent', 'instance_field') or 'host'
             device_field = config_parser.get('agent', 'device_field')
-            timestamp_field = config_parser.get('agent', 'timestamp_field') or 'timestamp'
-            timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
+            timestamp_field = config_parser.get('agent', 'timestamp_field') or '@timestamp'
+            timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True)
             data_fields = config_parser.get('agent', 'data_fields')
 
         except ConfigParser.NoOptionError:
             logger.error('Agent not correctly configured. Check config file.')
             sys.exit(1)
+
+        # uris required
+        if len(es_uris) != 0:
+            es_uris = es_uris.split(',')
+        else:
+            logger.error('Agent not correctly configured (es_uris). Check config file.')
+            sys.exit(1)
+
+        es_conn_info = {k: v for k, v in es_conn_info.items() if v}
+
+        if len(query_json) != 0:
+            try:
+                query_json = json.loads(query_json)
+            except Exception as e:
+                logger.error('Agent not correctly configured (query_json). Dropping.')
+                query_json = ''
 
         # proxies
         agent_proxies = dict()
@@ -109,53 +200,32 @@ def get_agent_config_vars():
             data_fields = data_fields.split(',')
 
         # timestamp format
+        timestamp_format = timestamp_format.partition('.')[0]
         if '%z' in timestamp_format or '%Z' in timestamp_format:
             ts_format_info = strip_tz_info(timestamp_format)
-        else:
+        elif timestamp_format:
             ts_format_info = {'strip_tz': False,
                               'strip_tz_fmt': '',
-                              'timestamp_format': timestamp_format}
-
-        if data_format not in { 'CSV', 'JSON' }:
-            data_format = 'RAW'
-
-        # CSV-specific
-        if data_format == 'CSV':
-            if len(csv_field_names) == 0:
-                logger.warning('Agent not correctly configured (csv_field_names)')
-                sys.exit()
-
-            filters = {'filters_include': {'name': filters_include},
-                       'filters_exclude': {'name': filters_exclude}}
-            optional_fields = {'project_field': {'name': project_field},
-                               'instance_field': {'name': instance_field},
-                               'device_field': {'name': device_field}}
-            required_fields = {'timestamp_field': {'name': timestamp_field}}
-            all_fields = {'filters': filter_fields,
-                          'required_fields': required_fields,
-                          'optional_fields': optional_fields,
-                          'data_fields': data_fields}
-            all_fields = check_csv_field_indeces(csv_field_names.split(','), all_fields)
-            filters_include = all_fields['filters']['filters_include']['filter']
-            filters_exclude = all_fields['filters']['filters_exclude']['filter']
-            project_field = all_fields['optional_fields']['project_field']['index']
-            instance_field = all_fields['optional_fields']['instance_field']['index']
-            device_field = all_fields['optional_fields']['device_field']['index']
-            data_fields = all_fields['data_fields']
-            timestamp_field = all_fields['required_fields']['timestamp_field']['index']
-
-            if timestamp_field in data_fields:
-                data_fields.pop(timestamp_field)
+                              'timestamp_format': [timestamp_format]}
+        else: # ISO8601?
+            ts_format_info = {'strip_tz': True,
+                              'strip_tz_fmt': PCT_z_FMT,
+                              'timestamp_format': ISO8601}
 
         # add parsed variables to a global
         config_vars = {
+            'es_uris': es_uris,
+            'es_conn_info': es_conn_info,
+            'indeces': indeces,
+            'query_json': query_json,
+            'from': _from,
+            'to': _to,
             'proxies': agent_proxies,
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
-            'data_format': data_format,
+            'data_format': 'JSON',
             'json_top_level': json_top_level,
-            'csv_field_names': csv_field_names,
-            'project_field': project_field,
+            'project_field': '',
             'instance_field': instance_field,
             'device_field': device_field,
             'data_fields': data_fields,
@@ -168,7 +238,7 @@ def get_agent_config_vars():
         return config_vars
     else:
         logger.warning('No config file found. Exiting...')
-        exit()
+        sys.exit(1)
 
 
 #########################
@@ -186,6 +256,7 @@ def get_if_config_vars():
             project_name = config_parser.get('insightfinder', 'project_name')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
+            run_interval = config_parser.get('insightfinder', 'run_interval')
             chunk_size_kb = config_parser.get('insightfinder', 'chunk_size_kb')
             if_url = config_parser.get('insightfinder', 'if_url')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
@@ -220,8 +291,8 @@ def get_if_config_vars():
                 'DEPLOYMENT',
                 'DEPLOYMENTREPLAY'
                 }:
-           logger.warning('Agent not correctly configured (project_type). Check config file.')
-           sys.exit(1)
+            logger.warning('Agent not correctly configured (project_type). Check config file.')
+            sys.exit(1)
 
         if len(sampling_interval) == 0:
             if 'METRIC' in project_type:
@@ -235,6 +306,15 @@ def get_if_config_vars():
             sampling_interval = int(sampling_interval[:-1])
         else:
             sampling_interval = int(sampling_interval) * 60
+
+        if len(run_interval) == 0:
+            logger.warning('Agent not correctly configured (run_interval). Check config file.')
+            sys.exit(1)
+
+        if run_interval.endswith('s'):
+            run_interval = int(run_interval[:-1])
+        else:
+            run_interval = int(run_interval) * 60
 
         # defaults
         if len(chunk_size_kb) == 0:
@@ -255,8 +335,9 @@ def get_if_config_vars():
             'token': token,
             'project_name': project_name,
             'project_type': project_type,
-            'sampling_interval': int(sampling_interval),     # as seconds
-            'chunk_size': int(chunk_size_kb) * 1024,         # as bytes
+            'sampling_interval': int(sampling_interval),    # as seconds
+            'run_interval': int(run_interval),              # as seconds
+            'chunk_size': int(chunk_size_kb) * 1024,        # as bytes
             'if_url': if_url,
             'if_proxies': if_proxies
         }
@@ -334,7 +415,7 @@ def strip_tz_info(timestamp_format):
 
     return {'strip_tz': True,
             'strip_tz_fmt': strip_tz_fmt,
-            'timestamp_format': timestamp_format}
+            'timestamp_format': [timestamp_format]}
 
 
 def check_csv_fieldnames(csv_field_names, all_fields):
@@ -391,6 +472,15 @@ def check_csv_fieldnames(csv_field_names, all_fields):
         all_fields['data_fields'] = range(len(csv_field_names))
 
     return all_fields
+
+
+def ternary_tfd(b, default=''):
+    if TRUE.match(b):
+        return True
+    elif FALSE.match(b):
+        return False
+    else:
+        return default
 
 
 def check_project(project_name):
@@ -455,19 +545,6 @@ def should_exclude_per_config(setting, value):
 def get_json_size_bytes(json_data):
     """ get size of json object in bytes """
     return len(bytearray(json.dumps(json_data)))
-
-
-def chunks(l, n):
-    """Yield successive n-sized chunks from l."""
-    for index in xrange(0, len(l), n):
-        yield l[index:index + n]
-
-
-def chunk_map(data, SIZE=50):
-    """Yield successive n-sized chunks from l."""
-    it = iter(data)
-    for i in xrange(0, len(data), SIZE):
-        yield {k: data[k] for k in islice(it, SIZE)}
 
 
 def get_file_list_for_directory(root_path='/', file_name_regex=''):
@@ -542,7 +619,7 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     elif len(next_fields) == 0:
         # final value in the list to walk down
         return next_value
-    elif isinstance(next_value, list) or isinstance(next_value, set):
+    elif isinstance(next_value, (list, set)):
         # we've reached an early terminal point, which may or may not be ok
         if allow_list:
             return json_gather_list_values(
@@ -657,16 +734,26 @@ def parse_json_message_single(message):
         logger.debug('passed filter (exclusion)')
 
     # get project, instance, & device
-    # check_project(get_json_field(message, 'project_field', default=if_config_vars['project_name']))
-    instance = get_json_field(message, 'instance_field', default=HOSTNAME)
-    device = get_json_field(message, 'device_field')
+    # check_project(get_json_field(message,
+    #                              'project_field',
+    #                              default=if_config_vars['project_name']),
+    #                              remove=True)
+    instance = get_json_field(message,
+                              'instance_field',
+                              default=HOSTNAME,
+                              remove=True)
+    device = get_json_field(message,
+                            'device_field',
+                            remove=True)
 
     # get timestamp
-    timestamp = get_json_field(message, 'timestamp_field', remove=True)
-    timestamp = get_timestamp_from_date_string(timestamp.partition('.')[0])
+    timestamp = get_json_field(message,
+                               'timestamp_field',
+                               remove=True)
+    timestamp = get_timestamp_from_date_string(timestamp)
 
     # get data
-    log_data = dict()
+    data = dict()
     if len(agent_config_vars['data_fields']) != 0:
         for data_field in agent_config_vars['data_fields']:
             data_value = json_format_field_value(
@@ -676,35 +763,30 @@ def parse_json_message_single(message):
                         allow_list=True))
             if len(data_value) != 0:
                 if 'METRIC' in if_config_vars['project_type']:
-                    metric_handoff(
-                            timestamp,
-                            data_field.replace('.', '/'),
-                            data_value,
-                            instance,
-                            device)
+                    data.update(data_value)
                 else:
-                    log_data[data_field.replace('.', '/')] = data_value
+                    data[data_field.replace('.', '/')] = data_value
     else:
         if 'METRIC' in if_config_vars['project_type']:
-            # assume metric data is in top level
-            for data_field in message:
-                data_value = str(_get_json_field_helper(
-                    message,
-                    data_field.split(JSON_LEVEL_DELIM),
-                    allow_list=True))
-                if data_value is not None:
-                    metric_handoff(
-                            timestamp,
-                            data_field.replace('.', '/'),
-                            data_value,
-                            instance,
-                            device)
+            data.update(message)
         else:
-            log_data = json.loads(json.dumps(message))
+            data = json.loads(json.dumps(message))
 
-    # hand off to log
-    if 'METRIC' not in if_config_vars['project_type']:
-        log_handoff(timestamp, log_data, instance, device)
+    # hand off
+    if 'METRIC' in if_config_vars['project_type']:
+        # put metric data in top level
+        data = fold_up(data, value_tree=True)
+        for data_field in data:
+            data_value = data[data_field]
+            if data_value is not None:
+                metric_handoff(
+                        timestamp,
+                        data_field.replace('.', '/'),
+                        data_value,
+                        instance,
+                        device)
+    else:
+        log_handoff(timestamp, data, instance, device)
 
 
 def parse_csv_message(message):
@@ -795,23 +877,34 @@ def parse_csv_row(row, field_names, instance, device=''):
 
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
+    timestamp_datetime = get_datetime_from_date_string(date_string.partition('.')[0])
+    return get_timestamp_from_datetime(timestamp_datetime)
+
+
+def get_datetime_from_date_string(date_string):
     if 'strip_tz' in agent_config_vars and agent_config_vars['strip_tz']:
         date_string = ''.join(agent_config_vars['strip_tz_fmt'].split(date_string))
 
     if 'timestamp_format' in agent_config_vars:
-        if agent_config_vars['timestamp_format'] == 'epoch':
-            timestamp_datetime = get_datetime_from_unix_epoch(date_string)
-        else:
-            timestamp_datetime = datetime.strptime(date_string,
-                                                   agent_config_vars['timestamp_format'])
+        for timestamp_format in agent_config_vars['timestamp_format']:
+            try:
+                if timestamp_format == 'epoch':
+                    timestamp_datetime = get_datetime_from_unix_epoch(date_string)
+                else:
+                    timestamp_datetime = datetime.strptime(date_string,
+                                                           timestamp_format)
+                break
+            except Exception as e:
+                logger.info('timestamp {} does not match {}'.format(
+                    date_string,
+                    timestamp_format))
     else:
         try:
             timestamp_datetime = dateutil.parse.parse(date_string)
         except:
             timestamp_datetime = get_datetime_from_unix_epoch(date_string)
-            agent_config_vars['timestamp_format'] = 'epoch'
-
-    return get_timestamp_from_datetime(timestamp_datetime)
+            agent_config_vars['timestamp_format'] = ['epoch']
+    return timestamp_datetime
 
 
 def get_timestamp_from_datetime(timestamp_datetime):
@@ -834,7 +927,7 @@ def get_datetime_from_unix_epoch(date_string):
         return datetime.fromtimestamp(epoch)
     except ValueError:
         # if the date cannot be converted into a number by built-in long()
-        logger.warn('Date format not defined & data does not look like unix epoch: ' + date_string)
+        logger.warn('Date format not defined & data does not look like unix epoch: {}'.format(date_string))
         sys.exit(1)
 
 
@@ -880,7 +973,14 @@ def set_logger_config(level):
     logging_handler_out.setLevel(logging.DEBUG)
     # create a logging format
     formatter = logging.Formatter(
-            '%(asctime)s [pid %(process)d] %(levelname)-8s %(module)s.%(funcName)s():%(lineno)d %(message)s')
+            '{ts} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
+                ts='%(asctime)s',
+                pid='%(process)d',
+                lvl='%(levelname)-8s',
+                mod='%(module)s',
+                func='%(funcName)s',
+                line='%(lineno)d',
+                msg='%(message)s'))
     logging_handler_out.setFormatter(formatter)
     logger_obj.addHandler(logging_handler_out)
 
@@ -959,7 +1059,8 @@ def log_handoff(timestamp, data, instance, device=''):
     if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
         send_data_wrapper()
     elif track['entry_count'] % 100 == 0:
-        logger.debug('Current data object size: {} bytes'.format(get_json_size_bytes(track['current_row'])))
+        logger.debug('Current data object size: {} bytes'.format(
+            get_json_size_bytes(track['current_row'])))
 
 
 def prepare_log_entry(timestamp, data, instance, device=''):
@@ -1030,7 +1131,7 @@ def build_metric_name_map():
     # initialize the hash of formatted names
     agent_config_vars['metrics_names'] = dict()
     tree = build_sentence_tree(metrics)
-    min_tree = fold_up(tree)
+    min_tree = fold_up(tree, sentence_tree=True)
 
 
 def build_sentence_tree(sentences):
@@ -1065,20 +1166,22 @@ def format_sentence(sentence):
     return words
 
 
-def fold_up(sentence_tree):
+def fold_up(tree, sentence_tree=False, value_tree=False):
     '''
     Entry point for fold_up. See fold_up_helper for details
     '''
     folded = dict()
-    for node_name in sentence_tree:
+    for node_name in tree:
         fold_up_helper(
             folded,
             node_name,
-            sentence_tree[node_name])
+            tree[node_name],
+            sentence_tree=sentence_tree,
+            value_tree=value_tree)
     return folded
 
 
-def fold_up_helper(current_path, node_name, node):
+def fold_up_helper(current_path, node_name, node, sentence_tree=False, value_tree=False):
     '''
     Recursively build a new sentence tree, where,
         for each node that has only one child,
@@ -1087,17 +1190,19 @@ def fold_up_helper(current_path, node_name, node):
                       /---> "red apples"
         "I ate" -> "two" -> "green pears"
              \---> "one" -> "yellow banana"
-    As a side effect, if there are terminal '_name' nodes,
-        this also builds a hash in
-            agent_config_vars['metrics_names']
-        of raw_name = formatted name, as this was
-        probably the goal of calling this in the first place.
+    If sentence_tree=True and there are terminal '_name' nodes,
+        this also returns a hash of
+            <raw_name : formatted name>
+    If value_tree=True and branches terminate in values,
+        this also returns a hash of
+            <formatted path : value>
     '''
-    while len(node.keys()) == 1 or '_name' in node.keys():
+    while isinstance(node, dict) and (len(node.keys()) == 1 or '_name' in node.keys()):
         keys = node.keys()
         # if we've reached a terminal end
         if '_name' in keys:
-            #agent_config_vars['metrics_names'][node['_name']] = node_name
+            if sentence_tree:
+                current_path[node['_name']] = node_name
             keys.remove('_name')
             node.pop('_name')
         # if there's still a single key path to follow
@@ -1105,17 +1210,19 @@ def fold_up_helper(current_path, node_name, node):
             next_key = keys[0]
             node_name += '_' + next_key
             node = node[next_key]
-        else:
-            break
-    current_path[node_name] = node
-    for node_nested in node:
-        if node_nested == '_name':
-            continue
-            #agent_config_vars['metrics_names'][node[node_nested]] = node_name
-        else:
-            fold_up_helper(current_path,
-                           '{}/{}'.format(node_name, node_nested),
-                           node[node_nested])
+
+    if not isinstance(node, dict):
+        if value_tree:
+            # node is the value of the metric node_name
+            current_path[node_name] = node
+    else:
+        for node_nested in node:
+            fold_up_helper(
+                current_path,
+                '{}/{}'.format(node_name, node_nested),
+                node[node_nested],
+                sentence_tree=sentence_tree,
+                value_tree=value_tree)
 
 
 ################################
@@ -1165,7 +1272,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     if mode.upper() == 'POST':
         req = requests.post
 
-    for i in xrange(ATTEMPTS):
+    for i in range(ATTEMPTS):
         try:
             response = req(url, **request_passthrough)
             if response.status_code == httplib.OK:
@@ -1273,6 +1380,8 @@ def initialize_api_post_data():
 
 if __name__ == "__main__":
     # declare a few vars
+    TRUE = re.compile(r"T(RUE)?", re.IGNORECASE)
+    FALSE = re.compile(r"F(ALSE)?", re.IGNORECASE)
     SPACES = re.compile(r"\s+")
     SLASHES = re.compile(r"\/+")
     UNDERSCORE = re.compile(r"\_+")
@@ -1281,9 +1390,10 @@ if __name__ == "__main__":
     RIGHT_BRACE = re.compile(r"\]")
     PERIOD = re.compile(r"\.")
     NON_ALNUM = re.compile(r"[^a-zA-Z0-9]")
-    PCT_z_FMT = re.compile(r"[\+\-][0-9]{4}")
+    PCT_z_FMT = re.compile(r"[\+\-][0-9]{2}[\:]?[0-9]{2}")
     PCT_Z_FMT = re.compile(r"[A-Z]{3,4}")
     HOSTNAME = socket.gethostname().partition('.')[0]
+    ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
     JSON_LEVEL_DELIM = '.'
     CSV_DELIM = ','
     ATTEMPTS = 3

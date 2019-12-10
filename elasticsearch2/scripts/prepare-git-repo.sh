@@ -3,9 +3,9 @@
 if [[ -n $1 ]];
 then
     TARGETS="$@"
-elif [[ -f target ]];
+elif [[ -f ./offline/target ]];
 then
-    TARGETS=$(cat target)
+    TARGETS=$(cat ./offline/target)
 else
     echo "Pass the target repo as the first argument, including the organization."
     echo "ie sysstat/sysstat"
