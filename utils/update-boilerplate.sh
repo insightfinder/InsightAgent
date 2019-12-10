@@ -4,7 +4,7 @@ IFS=$'\n\t'
 
 # agent/../utils/update-boilerplate -> push changes in current folder to template
 PULL_FROM="${1:-$(find $(pwd) -type f -name *.py)}"
-PUSH_TO=$(echo "$1/../../template/insightagent-boilerplate.py" | sed -e :a -e 's,[^/]*/\.\.\/,,' -e ta)
+PUSH_TO=$(realpath -m "${PULL_FROM}/../../template/insightagent-boilerplate.py")
 if [[ "${PULL_FROM}" =~ boilerplate ]];
 then
     PUSH_TO="$2"
