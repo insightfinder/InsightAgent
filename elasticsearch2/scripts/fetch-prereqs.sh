@@ -7,13 +7,8 @@ then
     shift
 fi
 
-GNU_MIRROR="$1"
-if [[ -z ${GNU_MIRROR} ]];
-then
-    GNU_MIRROR="ftp://prep.ai.mit.edu/pub/gnu/"
-else
-    shift
-fi
+# ./fetch-prereqs.sh --remote ftp://prep.ai.mit.edu/pub/gnu/
+GNU_MIRROR="${1:-ftp://prep.ai.mit.edu/pub/gnu/}"
 
 CURL="curl -sSL"
 

@@ -65,8 +65,8 @@ function is_dry_run() {
 #######################
 
 # check if run interval is required
-CRONIT_SCRIPT="$(\ls -l | awk '{print $NF}' | grep -E ^\(monit\|cron\)-config\.sh$)"
-CRONIT=$(sed -E  -e 's:^(monit|cron)-config\.sh$:\1:' <<< ${CRONIT_SCRIPT})
+CRONIT_SCRIPT=$(find . -regextype posix-extended -regex .*\(monit\|cron\)-config\.sh$ -type f -print)
+CRONIT=$(sed -E  -e 's:.*(monit|cron)-config\.sh$:\1:' <<< ${CRONIT_SCRIPT})
 SHOPT_NOCASEMATCH=$(shopt -p nocasematch)
 shopt -s nocasematch
 if [[ ${PROJECT_TYPE} =~ .*metric.* || ${CRONIT} = "cron" ]];
@@ -127,9 +127,9 @@ then
     if [[ -f pip-setup.sh ]];
     then
         ./pip-setup.sh
-    elif [[ -f pip-config.sh && -f requirements.txt ]];
+    elif [[ -f ./scripts/pip-config.sh && -f requirements.txt ]];
     then
-        ./pip-config.sh
+        ./scripts/pip-config.sh
     else
         echo "Error when attempting to set up pip."
     fi
