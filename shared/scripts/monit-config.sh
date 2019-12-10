@@ -87,12 +87,8 @@ AGENT_FULL_PATH_CONFIG="$(pwd)/config.ini"
 AGENT_FULL_PATH_LOG="$(pwd)/log.out"
 MONIT_FILE="/etc/monit.d/${AGENT}"
 
-if is_dry_run;
+if ! is_dry_run;
 then
-    echo "In dry-run mode. Run as"
-    echo "    ./monit-cronfig.sh --create"
-    echo "to create the monit config."
-else
     touch ${MONIT_FILE}
     touch ${AGENT_FULL_PATH_LOG}
     chmod 0666 ${AGENT_FULL_PATH_LOG}
@@ -116,5 +112,9 @@ if ! is_dry_run;
 then
     echo "Monit config file created at ${MONIT_FILE}"
     monit reload
+else
+    echo "In dry-run mode. Run as"
+    echo "  ./scripts/monit-cronfig.sh --create"
+    echo "to create the monit config."
 fi
 exit 0
