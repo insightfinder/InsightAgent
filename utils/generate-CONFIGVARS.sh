@@ -25,6 +25,10 @@ then
 fi
 
 FILE=".CONFIGVARS.md"
+if [[ ! -f "${FILE}" ]];
+then
+    cp ../template/${FILE} .
+fi
 CONTENTS=$(cat ${FILE})
 PARAMS=$(cat config.ini.template | grep ^[^#].*=.* | awk '{print $1}')
 

@@ -24,9 +24,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # read from file
-if [[ -z ${TARBALL} && -f target ]];
+if [[ -z ${TARBALL} && -f ./offline/target ]];
 then
-    TARGET=$(cat target | awk -F '/' '{print $NF}')
+    TARGET=$(cat ./offline/target | awk -F '/' '{print $NF}')
     TARBALL="${TARGET}.tar.gz"
 else
     echo "No target file and no tarball specified"

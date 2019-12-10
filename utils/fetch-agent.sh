@@ -23,7 +23,7 @@ echo "Setting up agent ${AGENT}"
 if [[ ! -d ${AGENT} ]];
 then 
     echo "Downloading..."
-    curl -sSL "https://github.com/insightfinder/InsightAgent/raw/master/${AGENT}/${AGENT_TAR}" -o ${AGENT_TAR}
+    curl -sSLO "https://github.com/insightfinder/InsightAgent/raw/master/${AGENT}/${AGENT_TAR}"
     echo "Extracting..."
     tar xvf ${AGENT_TAR}
 fi
@@ -35,10 +35,10 @@ cp config.ini.template config.ini
 # install script call
 echo "Created config.ini. Once that has been configured,"
 echo "  in order to install on one machine, run:"
-echo "    ./install.sh"
+echo "    ./scripts/install.sh"
 echo "  to test out the installation, then"
-echo "    ./install.sh --create"
+echo "    ./scripts/install.sh --create"
 echo "  to commit the installation."
 echo "Or, if you want to install on multiple nodes,"
-echo "    ./remote-cp-run.sh node1 node2 .. nodeN"
+echo "    ./scripts/remote-cp-run.sh node1 node2 .. nodeN"
 echo "Run either with --help for further information"
