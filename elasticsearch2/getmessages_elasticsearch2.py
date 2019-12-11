@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import ConfigParser
-import collections
 import json
 import logging
 import os
@@ -11,13 +10,14 @@ import time
 import pytz
 from optparse import OptionParser
 from multiprocessing import Process
-from itertools import islice
 from datetime import datetime
 import dateutil
 import urlparse
 import httplib
 import requests
 import statistics
+import subprocess
+from elasticsearch import Elasticsearch
 
 '''
 This script gathers data to send to Insightfinder
@@ -25,41 +25,98 @@ This script gathers data to send to Insightfinder
 
 
 def start_data_processing(thread_number):
-    """ TODO: replace with your code.
-    Most work regarding sending to IF is abstracted away for you.
-    This function will get the data to send and prepare it for the API.
-    The general outline should be:
-    0. Define the project type in config.ini
-    1. Parse config options
-    2. Gather data
-    3. Parse each entry
-    4. Call the appropriate handoff function
-        metric_handoff()
-        log_handoff()
-        alert_handoff()
-        incident_handoff()
-        deployment_handoff()
-    See zipkin for an example that uses os.fork to send both metric and log data.
-    """
+    es_conn = get_es_connection()
+    for message in query_es_data(es_conn):
+        parse_json_message(message)
 
 
-def raw_parse_log(message):
-    # call as log_handoff(*raw_parse(message))
-    timestamp = get_timestamp_from_date_string(time.time())
-    data = 'data'
-    instance = 'instance'
-    device = 'device'
-    return timestamp, data, instance, device
+def query_es_data(es_conn):
+    """ send queries to es for parsing """
+    for query in build_es_query_body():
+        # send query
+        response = es_conn.search(
+                        body=query,
+                        index=agent_config_vars['indeces'],
+                        rest_total_hits_as_int=True,
+                        ignore_unavailable=False
+                            if 'REPLAY' in if_config_vars['project_type']
+                            else True)
+        # validate successs
+        if 'error' not in response:
+            # get full message
+            messages = _get_json_field_helper(
+                response,
+                'hits.hits'.split(JSON_LEVEL_DELIM))
+            for message in messages:
+                yield message
 
 
-def raw_parse_metric(message):
-    # call as metric_handoff(*raw_parse(message))
-    timestamp = get_timestamp_from_date_string(time.time())
-    metric = 'metric'
-    data = 'data'
-    instance = 'instance'
-    device = 'device'
-    return timestamp, metric, data, instance, device
+def build_es_query_body():
+    """ build up query body for es """
+    timestamp_field = agent_config_vars['timestamp_field'].split(JSON_LEVEL_DELIM)[-1]
+    # start building query
+    query_body = {'query': {
+                    'range': {
+                        timestamp_field: dict()}},
+                    'sort': [{timestamp_field: 'desc'}]
+                  }
+    # add user-defined query
+    if isinstance(agent_config_vars['query_json'], dict):
+        query_body.update(agent_config_vars['query_json'])
+    # for each date range, update the query
+    for date_range in get_date_ranges():
+        query_body['query']['range'][timestamp_field] = date_range
+        logger.debug(query_body)
+        yield query_body
+
+
+def get_date_ranges():
+    """ build date range dict for query_body """
+    if 'REPLAY' in if_config_vars['project_type']:
+        # get full range
+        _from = get_timestamp_from_date_string(agent_config_vars['from'])
+        _to   = get_timestamp_from_date_string(agent_config_vars['to'])
+        interval = if_config_vars['run_interval'] * 1000
+        # chunk date ranges by run interval
+        for from_ts in range(_from, _to, interval):
+            to_ts = from_ts + interval
+            yield {'format': 'epoch_millis', 'gte': from_ts, 'lte': to_ts}
+    else:
+        _from = 'now-{}s'.format(if_config_vars['run_interval'])
+        _to   = 'now'
+        yield {'gte': _from, 'lte': _to}
+
+
+def get_es_connection():
+    """ Try to connect to es """
+    hosts = build_es_connection_hosts()
+    try:
+        return Elasticsearch(hosts)
+    except Exception as e:
+        logger.warn('Could not contact ElasticSearch with provided configuration.')
+        logger.warn(e)
+        sys.exit(1)
+
+
+def build_es_connection_hosts():
+    """ Build array of host dicts """
+    hosts = []
+    for uri in agent_config_vars['es_uris']:
+        host = agent_config_vars['es_conn_info'].copy()
+        # parse uri for overrides
+        uri = urlparse.urlparse(uri)
+        host['host'] = uri.hostname or uri.path
+        host['port'] = uri.port or host['port']
+        host['http_auth'] = '{}:{}'.format(uri.username, uri.password) or host['http_auth']
+        if uri.scheme == 'https':
+            host['use_ssl'] = True
+
+        # add ssl info
+        if len(agent_config_vars['es_conn_info']) != 0:
+            host.update(agent_config_vars['es_conn_info'])
+        hosts.append(host)
+    logger.debug(hosts)
+    return hosts
 
 
 def get_agent_config_vars():
@@ -68,8 +125,28 @@ def get_agent_config_vars():
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
         try:
-            ## TODO: fill out the fields to grab. examples given below
-            ## replace 'agent' with the appropriate section header.
+            # es
+            query_json = config_parser.get('agent', 'query_json')
+            indeces = config_parser.get('agent', 'indeces')
+
+            es_uris = config_parser.get('agent', 'es_uris')
+            es_conn_info = {
+                'port': config_parser.get('agent', 'port'),
+                'http_auth': config_parser.get('agent', 'http_auth'),
+                'use_ssl': ternary_tfd(config_parser.get('agent', 'use_ssl')),
+                'ssl_version': config_parser.get('agent', 'ssl_version'),
+                'ssl_assert_hostname': ternary_tfd(config_parser.get('agent', 'ssl_assert_hostname')),
+                'ssl_assert_fingerprint': ternary_tfd(config_parser.get('agent', 'ssl_assert_fingerprint')),
+                'verify_certs': ternary_tfd(config_parser.get('agent', 'verify_certs')),
+                'ca_certs': config_parser.get('agent', 'ca_certs'),
+                'client_cert': config_parser.get('agent', 'client_cert'),
+                'client_key': config_parser.get('agent', 'client_key')
+            }
+
+            # date range for replay
+            _from = config_parser.get('agent', '_from')
+            _to = config_parser.get('agent', '_to')
+
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
@@ -79,19 +156,33 @@ def get_agent_config_vars():
             filters_exclude = config_parser.get('agent', 'filters_exclude')
 
             # message parsing
-            data_format = config_parser.get('agent', 'data_format').upper()
-            csv_field_names = config_parser.get('agent', 'csv_field_names')
-            json_top_level = config_parser.get('agent', 'json_top_level')
-            project_field = config_parser.get('agent', 'project_field')
-            instance_field = config_parser.get('agent', 'instance_field')
+            json_top_level = config_parser.get('agent', 'json_top_level') or '_source'
+            # project_field = config_parser.get('agent', 'project_field')
+            instance_field = config_parser.get('agent', 'instance_field') or 'host'
             device_field = config_parser.get('agent', 'device_field')
-            timestamp_field = config_parser.get('agent', 'timestamp_field') or 'timestamp'
-            timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
+            timestamp_field = config_parser.get('agent', 'timestamp_field') or '@timestamp'
+            timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True)
             data_fields = config_parser.get('agent', 'data_fields')
 
         except ConfigParser.NoOptionError:
             logger.error('Agent not correctly configured. Check config file.')
             sys.exit(1)
+
+        # uris required
+        if len(es_uris) != 0:
+            es_uris = es_uris.split(',')
+        else:
+            logger.error('Agent not correctly configured (es_uris). Check config file.')
+            sys.exit(1)
+
+        es_conn_info = {k: v for k, v in es_conn_info.items() if v}
+
+        if len(query_json) != 0:
+            try:
+                query_json = json.loads(query_json)
+            except Exception as e:
+                logger.error('Agent not correctly configured (query_json). Dropping.')
+                query_json = ''
 
         # proxies
         agent_proxies = dict()
@@ -121,50 +212,20 @@ def get_agent_config_vars():
                               'strip_tz_fmt': PCT_z_FMT,
                               'timestamp_format': ISO8601}
 
-        if data_format not in { 'CSV', 'JSON' }:
-            data_format = 'RAW'
-
-        # CSV-specific
-        if data_format == 'CSV':
-            if len(csv_field_names) == 0:
-                logger.warning('Agent not correctly configured (csv_field_names)')
-                sys.exit()
-
-            filters = {'filters_include': {'name': filters_include},
-                       'filters_exclude': {'name': filters_exclude}}
-            optional_fields = {'project_field': {'name': project_field},
-                               'instance_field': {'name': instance_field},
-                               'device_field': {'name': device_field}}
-            required_fields = {'timestamp_field': {'name': timestamp_field}}
-            all_fields = {'filters': filter_fields,
-                          'required_fields': required_fields,
-                          'optional_fields': optional_fields,
-                          'data_fields': data_fields}
-            all_fields = check_csv_field_indeces(csv_field_names.split(','), all_fields)
-            filters_include = all_fields['filters']['filters_include']['filter']
-            filters_exclude = all_fields['filters']['filters_exclude']['filter']
-            project_field = all_fields['optional_fields']['project_field']['index']
-            instance_field = all_fields['optional_fields']['instance_field']['index']
-            device_field = all_fields['optional_fields']['device_field']['index']
-            data_fields = all_fields['data_fields']
-            timestamp_field = all_fields['required_fields']['timestamp_field']['index']
-
-            if timestamp_field in data_fields:
-                data_fields.pop(timestamp_field)
-            if instance_field in data_fields:
-                data_fields.pop(instance_field)
-            if device_field in data_fields:
-                data_fields.pop(device_field)
-
         # add parsed variables to a global
         config_vars = {
+            'es_uris': es_uris,
+            'es_conn_info': es_conn_info,
+            'indeces': indeces,
+            'query_json': query_json,
+            'from': _from,
+            'to': _to,
             'proxies': agent_proxies,
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
-            'data_format': data_format,
+            'data_format': 'JSON',
             'json_top_level': json_top_level,
-            'csv_field_names': csv_field_names,
-            'project_field': project_field,
+            'project_field': '',
             'instance_field': instance_field,
             'device_field': device_field,
             'data_fields': data_fields,
@@ -177,7 +238,7 @@ def get_agent_config_vars():
         return config_vars
     else:
         logger.warning('No config file found. Exiting...')
-        exit()
+        sys.exit(1)
 
 
 #########################
