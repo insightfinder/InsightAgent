@@ -154,9 +154,15 @@ then
     # no clobber
     COPY="${COPY} -n"
 fi
-${COPY} ${SHARED_DIR}/install.sh ${AGENT_DIR}
-${COPY} ${SHARED_DIR}/pip-config.sh ${AGENT_DIR}
-${COPY} ${SHARED_DIR}/${CRONIT_SCRIPT} ${AGENT_DIR}
+mkdir -p ${AGENT_DIR}/scripts/source
+${COPY} ${SHARED_DIR}/scripts/source/* ${AGENT_DIR}/scripts/source/
+${COPY} ${SHARED_DIR}/scripts/install.sh ${AGENT_DIR}/scripts/
+${COPY} ${SHARED_DIR}/scripts/make-install.sh ${AGENT_DIR}/scripts/
+${COPY} ${SHARED_DIR}/scripts/fetch-prereqs.sh ${AGENT_DIR}/scripts/
+${COPY} ${SHARED_DIR}/scripts/prepare-git-repo.sh ${AGENT_DIR}/scripts/
+${COPY} ${SHARED_DIR}/scripts/remote-cp-run.sh ${AGENT_DIR}/scripts/
+${COPY} ${SHARED_DIR}/scripts/pip-config.sh ${AGENT_DIR}/scripts/
+${COPY} ${SHARED_DIR}/scripts/${CRONIT_SCRIPT} ${AGENT_DIR}/scripts/
 ${COPY} ${SHARED_DIR}/offline/* ${AGENT_DIR}/offline/ 2>/dev/null
 if [[ "${CRONIT_SCRIPT}" =~ monit ]];
 then

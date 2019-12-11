@@ -3,9 +3,9 @@
 if [[ -n $1 ]];
 then
     TARGETS="$@"
-elif [[ -f target ]];
+elif [[ -f ./offline/target ]];
 then
-    TARGETS=$(cat target)
+    TARGETS=$(cat ./offline/target)
 else
     echo "Pass the target repo as the first argument, including the organization."
     echo "ie sysstat/sysstat"
@@ -19,8 +19,8 @@ do
     TARGET_TAR="${TARGET_REPO}.tar.gz"
     curl -sSL https://github.com/${TARGET}/archive/master.tar.gz -o ${TARGET_TAR}
     echo "  Downloaded ${TARGET}. To install, run"
-    echo "      ./make-install.sh"
+    echo "    ./scripts/make-install.sh"
     echo "  or, to install on multiple nodes"
-    echo "      ./remote-cp-run.sh -cp ${TARGET_TAR} [node1 node2 nodeN [-f nodefile]]"
+    echo "    ./scripts/remote-cp-run.sh -cp ${TARGET_TAR} [node1 node2 nodeN [-f nodefile]]"
 done
 

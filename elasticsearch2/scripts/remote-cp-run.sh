@@ -53,7 +53,7 @@ while [[ $# -gt 0 ]]; do
 			shift
             PARAMS="${PARAMS} $1"
             ;;
-		-cp) # used for installing from source using 
+		-cp|--from-source-tar)
 			shift
             TO_COPY="$1"
             PARAMS="-t ${1##*/}"
