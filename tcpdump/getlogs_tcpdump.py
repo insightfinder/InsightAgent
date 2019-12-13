@@ -26,41 +26,57 @@ This script gathers data to send to Insightfinder
 
 
 def start_data_processing(thread_number):
-    """ TODO: replace with your code.
-    Most work regarding sending to IF is abstracted away for you.
-    This function will get the data to send and prepare it for the API.
-    The general outline should be:
-    0. Define the project type in config.ini
-    1. Parse config options
-    2. Gather data
-    3. Parse each entry
-    4. Call the appropriate handoff function
-        metric_handoff()
-        log_handoff()
-        alert_handoff()
-        incident_handoff()
-        deployment_handoff()
-    See zipkin for an example that uses os.fork to send both metric and log data.
-    """
+    for pcap_file in agent_config_vars['files']:
+        pcap_out = read_pcap_file(pcap_file).split('\n')
+        process_pcap_file(pcap_out)
 
 
-def raw_parse_log(message):
-    # call as log_handoff(*raw_parse(message))
-    timestamp = get_timestamp_from_date_string(time.time())
-    data = 'data'
-    instance = 'instance'
-    device = 'device'
-    return timestamp, data, instance, device
+def process_pcap_file(pcap_file):
+    cur_log = dict()
+    timestamp = ''
+    for line in pcap_file:
+        # check if line start with timestamp
+        if re.match(r"^[0-9]{9,12}\.[0-9]{6}", line):
+            if timestamp and cur_log:
+                log_handoff(timestamp, cur_log, HOSTNAME)
+                cur_log = dict()
+            try:
+                line = SPACES.split(COMMA.sub('', line))
+                timestamp = line.pop(0).partition('.')[0]
+                i = 0
+                while i < (len(line) - 1):
+                    key = line[i];   i += 1
+                    value = line[i]; i += 1
+                    if '[' in value:
+                        while ']' not in value and i <= len(line):
+                            value += ' {}'.format(line[i]); i += 1
+                    cur_log[map_field_name(key)] = value
+            except Exception as e:
+                logger.error(e)
+                # logger.error('No timestamp could be parsed from {}'.format(timestamp))
+        else:
+            if '_log' not in cur_log:
+                cur_log['_log'] = line
+            else:
+                cur_log['_log'] += '\n{}'.format(line)
 
 
-def raw_parse_metric(message):
-    # call as metric_handoff(*raw_parse(message))
-    timestamp = get_timestamp_from_date_string(time.time())
-    metric = 'metric'
-    data = 'data'
-    instance = 'instance'
-    device = 'device'
-    return timestamp, metric, data, instance, device
+def map_field_name(name):
+    _map = {'IP': 'Source',
+            '>': 'Target'}
+    if name in _map:
+        return _map[name]
+    return name
+
+def read_pcap_file(pcap_file=''):
+    if pcap_file:
+        pcap_file = '-r {}'.format(pcap_file)
+    tcpdump_flags = agent_config_vars['tcpdump_flags']
+    cmd = 'tcpdump -tt {pcap_file} {tcpdump_flags}'.format(
+        pcap_file=pcap_file,
+        tcpdump_flags=tcpdump_flags)
+    logger.debug(cmd)
+    return subprocess.check_output(cmd, shell=True)
 
 
 def get_agent_config_vars():
@@ -69,48 +85,34 @@ def get_agent_config_vars():
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
         try:
-            ## TODO: fill out the fields to grab. examples given below
-            ## replace 'agent' with the appropriate section header.
-            # proxies
-            agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
-            agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
-
-            # filters
-            filters_include = config_parser.get('agent', 'filters_include')
-            filters_exclude = config_parser.get('agent', 'filters_exclude')
-
-            # message parsing
-            data_format = config_parser.get('agent', 'data_format').upper()
-            csv_field_names = config_parser.get('agent', 'csv_field_names')
-            json_top_level = config_parser.get('agent', 'json_top_level')
-            project_field = config_parser.get('agent', 'project_field')
-            instance_field = config_parser.get('agent', 'instance_field')
-            device_field = config_parser.get('agent', 'device_field')
-            timestamp_field = config_parser.get('agent', 'timestamp_field') or 'timestamp'
-            timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
-            data_fields = config_parser.get('agent', 'data_fields')
+            file_path = config_parser.get('agent', 'file_path')
+            ## Switch comments if you want to allow passing tcpdump_flags
+            # tcpdump_flags = config_parser.get('agent', 'tcpdump_flags') or '-SAvvv'
+            tcpdump_flags = '--'
 
         except ConfigParser.NoOptionError:
             logger.error('Agent not correctly configured. Check config file.')
             sys.exit(1)
 
-        # proxies
-        agent_proxies = dict()
-        if len(agent_http_proxy) > 0:
-            agent_proxies['http'] = agent_http_proxy
-        if len(agent_https_proxy) > 0:
-            agent_proxies['https'] = agent_https_proxy
-
-        # filters
-        if len(filters_include) != 0:
-            filters_include = filters_include.split('|')
-        if len(filters_exclude) != 0:
-            filters_exclude = filters_exclude.split('|')
-        if len(data_fields) != 0:
-            data_fields = data_fields.split(',')
+        if len(file_path) != 0:
+            file_regex = r".*\.pcap$"
+            files = file_path.split(',')
+            if len(files) > 1:
+                # get evtx files and files within directories
+                logger.debug(files)
+                files = [ i for j in
+                            map(lambda k:
+                                get_file_list_for_directory(k, file_regex),
+                            files)
+                         for i in j if i]
+            else:
+                files = get_file_list_for_directory(files[0], file_regex)
+        else:
+            logger.warning('Agent not correctly configured (file_path). Check config file.')
+            sys.exit(1)
 
         # timestamp format
-        timestamp_format = timestamp_format.partition('.')[0]
+        timestamp_format = 'epoch'
         if '%z' in timestamp_format or '%Z' in timestamp_format:
             ts_format_info = strip_tz_info(timestamp_format)
         elif timestamp_format:
@@ -122,54 +124,11 @@ def get_agent_config_vars():
                               'strip_tz_fmt': PCT_z_FMT,
                               'timestamp_format': ISO8601}
 
-        if data_format not in { 'CSV', 'JSON' }:
-            data_format = 'RAW'
-
-        # CSV-specific
-        if data_format == 'CSV':
-            if len(csv_field_names) == 0:
-                logger.warning('Agent not correctly configured (csv_field_names)')
-                sys.exit()
-
-            filters = {'filters_include': {'name': filters_include},
-                       'filters_exclude': {'name': filters_exclude}}
-            optional_fields = {'project_field': {'name': project_field},
-                               'instance_field': {'name': instance_field},
-                               'device_field': {'name': device_field}}
-            required_fields = {'timestamp_field': {'name': timestamp_field}}
-            all_fields = {'filters': filter_fields,
-                          'required_fields': required_fields,
-                          'optional_fields': optional_fields,
-                          'data_fields': data_fields}
-            all_fields = check_csv_field_indeces(csv_field_names.split(','), all_fields)
-            filters_include = all_fields['filters']['filters_include']['filter']
-            filters_exclude = all_fields['filters']['filters_exclude']['filter']
-            project_field = all_fields['optional_fields']['project_field']['index']
-            instance_field = all_fields['optional_fields']['instance_field']['index']
-            device_field = all_fields['optional_fields']['device_field']['index']
-            data_fields = all_fields['data_fields']
-            timestamp_field = all_fields['required_fields']['timestamp_field']['index']
-
-            if timestamp_field in data_fields:
-                data_fields.pop(timestamp_field)
-            if instance_field in data_fields:
-                data_fields.pop(instance_field)
-            if device_field in data_fields:
-                data_fields.pop(device_field)
-
         # add parsed variables to a global
         config_vars = {
-            'proxies': agent_proxies,
-            'filters_include': filters_include,
-            'filters_exclude': filters_exclude,
-            'data_format': data_format,
-            'json_top_level': json_top_level,
-            'csv_field_names': csv_field_names,
-            'project_field': project_field,
-            'instance_field': instance_field,
-            'device_field': device_field,
-            'data_fields': data_fields,
-            'timestamp_field': timestamp_field,
+            'files': files,
+            'tcpdump_flags': tcpdump_flags,
+            'data_format': 'RAW',
             'timestamp_format': ts_format_info['timestamp_format'],
             'strip_tz': ts_format_info['strip_tz'],
             'strip_tz_fmt': ts_format_info['strip_tz_fmt']
@@ -201,8 +160,9 @@ def get_if_config_vars():
             if_url = config_parser.get('insightfinder', 'if_url')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
-        except ConfigParser.NoOptionError:
+        except ConfigParser.NoOptionError as cp_noe:
             logger.error('Agent not correctly configured. Check config file.')
+            logger.error(cp_noe)
             sys.exit(1)
 
         # check required variables
@@ -822,9 +782,9 @@ def get_timestamp_from_date_string(date_string):
 
 
 def get_datetime_from_date_string(date_string):
+    timestamp_datetime = date_string.partition('.')[0]
     if 'strip_tz' in agent_config_vars and agent_config_vars['strip_tz']:
         date_string = ''.join(agent_config_vars['strip_tz_fmt'].split(date_string))
-
     if 'timestamp_format' in agent_config_vars:
         for timestamp_format in agent_config_vars['timestamp_format']:
             try:
@@ -838,13 +798,15 @@ def get_datetime_from_date_string(date_string):
                 logger.info('timestamp {} does not match {}'.format(
                     date_string,
                     timestamp_format))
+                return -1
     else:
         try:
             timestamp_datetime = dateutil.parse.parse(date_string)
         except:
             timestamp_datetime = get_datetime_from_unix_epoch(date_string)
             agent_config_vars['timestamp_format'] = ['epoch']
-    return get_timestamp_from_datetime(timestamp_datetime)
+
+    return timestamp_datetime
 
 
 def get_timestamp_from_datetime(timestamp_datetime):
@@ -920,7 +882,8 @@ def set_logger_config(level):
                 mod='%(module)s',
                 func='%(funcName)s',
                 line='%(lineno)d',
-                msg='%(message)s'))
+                msg='%(message)s'),
+            ISO8601[0])
     logging_handler_out.setFormatter(formatter)
     logger_obj.addHandler(logging_handler_out)
 
@@ -1329,6 +1292,7 @@ if __name__ == "__main__":
     LEFT_BRACE = re.compile(r"\[")
     RIGHT_BRACE = re.compile(r"\]")
     PERIOD = re.compile(r"\.")
+    COMMA = re.compile(r"\,")
     NON_ALNUM = re.compile(r"[^a-zA-Z0-9]")
     PCT_z_FMT = re.compile(r"[\+\-][0-9]{2}[\:]?[0-9]{2}")
     PCT_Z_FMT = re.compile(r"[A-Z]{3,4}")

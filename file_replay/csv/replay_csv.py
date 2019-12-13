@@ -18,6 +18,7 @@ from dateutil.tz import tzlocal
 import urlparse
 import httplib
 import requests
+import statistics
 
 '''
 This script gathers data to send to Insightfinder
@@ -39,19 +40,28 @@ def start_data_processing(thread_number):
             csv_data = []
             with open(replay_file) as csv_file:
                 for line in csv_file:
-                    csv_data.append(delim.split(line.rstrip()))
+                    line = line.rstrip()
+                    if line:
+                        line = delim.split(line)
+                        line[agent_config_vars['timestamp_field']] = str(get_timestamp_from_date_string(line[agent_config_vars['timestamp_field']]))
+                        csv_data.append(line)
             # sort by timestamp
             logger.debug('sorting data')
             csv_data.sort(key=lambda x: x[agent_config_vars['timestamp_field']])
+            ts_fmt_original = agent_config_vars['timestamp_format']
+            agent_config_vars['timestamp_format'] = 'epoch'
             for row in csv_data:
-                parse_csv_message(row)
+                if row:
+                    logger.debug(row)
+                    parse_csv_message(row)
+            agent_config_vars['timestamp_format'] = ts_fmt_original
         except Exception as e:
             logger.warn('Error when parsing message')
-            logger.warn(str(e)) 
+            logger.warn(str(e))
         if cli_config_vars['testing']:
             logger.debug('Skipping files:\n' + str(files[1:]))
             break
-    
+
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
@@ -62,12 +72,12 @@ def get_agent_config_vars():
             # file path
             file_path = config_parser.get('agent', 'file_path')
             # delimiter
-            field_delimiter = config_parser.get('agent', 'field_delimiter')            
+            field_delimiter = config_parser.get('agent', 'field_delimiter')
 
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
-            
+
             # filters
             filters_include = config_parser.get('agent', 'filters_include')
             filters_exclude = config_parser.get('agent', 'filters_exclude')
@@ -80,18 +90,18 @@ def get_agent_config_vars():
             timestamp_field = config_parser.get('agent', 'timestamp_field') or 'timestamp'
             timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
             data_fields = config_parser.get('agent', 'data_fields')
-                    
+
         except ConfigParser.NoOptionError:
             logger.error('Agent not correctly configured. Check config file.')
             sys.exit(1)
-         
+
         # proxies
         agent_proxies = dict()
         if len(agent_http_proxy) > 0:
             agent_proxies['http'] = agent_http_proxy
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
-        
+
         # fitlers
         if len(filters_include) != 0:
             filters_include = filters_include.split('|')
@@ -99,12 +109,12 @@ def get_agent_config_vars():
             filters_exclude = filters_exclude.split('|')
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
-        
+
         # timestamp format
         if '%z' in timestamp_format or '%Z' in timestamp_format:
             ts_format_info = strip_tz_info(timestamp_format)
         else:
-            ts_format_info = {'strip_tz': False, 'strip_tz_fmt': '', 'timestamp_format': timestamp_format} 
+            ts_format_info = {'strip_tz': False, 'strip_tz_fmt': '', 'timestamp_format': timestamp_format}
 
         # CSV-specific
         data_format = 'CSV'
@@ -112,7 +122,7 @@ def get_agent_config_vars():
             logger.warning('Agent not correctly configured (csv_field_names)')
             sys.exit()
         csv_field_names = csv_field_names.split(',')
-            
+
         filters = {'filters_include': {'name': filters_include},
                    'filters_exclude': {'name': filters_exclude}}
         optional_fields = {#'project_field': {'name': project_field},
@@ -141,7 +151,7 @@ def get_agent_config_vars():
             else:
                 csv_vars[required_field] = ''
         csv_vars['data_fields'] = all_fields['data_fields']
-        
+
         if timestamp_field in data_fields:
                 data_fields.pop(timestamp_field)
 
@@ -202,7 +212,7 @@ def get_if_config_vars():
         if len(project_type) == 0:
             logger.warning('Agent not correctly configured (project_type). Check config file.')
             sys.exit(1)
-        
+
         if project_type not in {
                 'METRIC',
                 'METRICREPLAY',
@@ -216,7 +226,7 @@ def get_if_config_vars():
                 'DEPLOYMENTREPLAY'
                 }:
            logger.warning('Agent not correctly configured (project_type). Check config file.')
-           sys.exit(1)  
+           sys.exit(1)
 
         if len(sampling_interval) == 0:
             if 'METRIC' in project_type:
@@ -271,13 +281,13 @@ def get_cli_config_vars():
     parser.add_option('--threads', default=1,
                       action='store', dest='threads', help='Number of threads to run')
     """
-    parser.add_option('--tz', default='UTC', action='store', dest='time_zone', 
+    parser.add_option('--tz', default='UTC', action='store', dest='time_zone',
                       help='Timezone of the data. See pytz.all_timezones')
-    parser.add_option('-q', '--quiet', action='store_true', dest='quiet', 
+    parser.add_option('-q', '--quiet', action='store_true', dest='quiet',
                       help='Only display warning and error log messages')
-    parser.add_option('-v', '--verbose', action='store_true', dest='verbose', 
+    parser.add_option('-v', '--verbose', action='store_true', dest='verbose',
                       help='Enable verbose logging')
-    parser.add_option('-t', '--testing', action='store_true', dest='testing', 
+    parser.add_option('-t', '--testing', action='store_true', dest='testing',
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
     (options, args) = parser.parse_args()
@@ -319,14 +329,14 @@ def strip_tz_info(timestamp_format):
     if '%z' in timestamp_format:
         position = timestamp_format.index('%z')
         strip_tz_fmt = PCT_z_FMT
-    
+
     if len(timestamp_format) > (position + 2):
         timestamp_format = timestamp_format[:position] + timestamp_format[position+2:]
     else:
         timestamp_format = timestamp_format[:position]
     if cli_config_vars['time_zone'] == pytz.timezone('UTC'):
         logger.warning('Time zone info will be stripped from timestamps, but no time zone info was supplied in the config. Assuming UTC')
-    
+
     return {'strip_tz': True, 'strip_tz_fmt': strip_tz_fmt, 'timestamp_format': timestamp_format}
 
 
@@ -349,7 +359,7 @@ def check_csv_field_indeces(csv_field_names, all_fields):
         if len(all_fields['filters'][field]['name']) != 0:
             filters_temp = []
             for _filter in all_fields['filters'][field]['name']:
-                filter_field = _filter.split(':')[0]          
+                filter_field = _filter.split(':')[0]
                 filter_vals = _filter.split(':')[1]
                 filter_index = get_field_index(csv_field_names, filter_field, field)
                 if isinstance(filter_index, int):
@@ -499,7 +509,7 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False):
             next_value_all += str(item)
         return next_value_all
     elif isinstance(next_value, list):
-        if allow_list: 
+        if allow_list:
             return json_gather_list_values(next_value, next_fields)
         else:
             raise Exception('encountered list in json when not allowed')
@@ -566,7 +576,7 @@ def parse_json_message_single(message):
             return
         else:
             logger.debug('passed filter (inclusion)')
-            
+
     if len(agent_config_vars['filters_exclude']) != 0:
         # for each provided filter
         for _filter in agent_config_vars['filters_exclude']:
@@ -591,7 +601,7 @@ def parse_json_message_single(message):
 
     # get data
     log_data = dict()
-    if len(agent_config_vars['data_fields']) != 0: 
+    if len(agent_config_vars['data_fields']) != 0:
         for data_field in agent_config_vars['data_fields']:
             data_value = json_format_field_value(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM), True))
             if len(data_value) != 0:
@@ -599,7 +609,7 @@ def parse_json_message_single(message):
                     metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
                 else:
                     log_data[data_field.replace('.', '/')] = data_value
-    else:    
+    else:
         if 'METRIC' in if_config_vars['project_type']:
             # assume metric data is in top level
             for data_field in message:
@@ -619,11 +629,11 @@ def parse_csv_message(message):
     if len(agent_config_vars['filters_include']) != 0:
         # for each provided filter, check if there are any allowed valued
         is_valid = False
-        for _filter in agent_config_vars['filters_include']:          
-            filter_field = _filter.split(':')[0]              
-            filter_vals = _filter.split(':')[1].split(',')    
+        for _filter in agent_config_vars['filters_include']:
+            filter_field = _filter.split(':')[0]
+            filter_vals = _filter.split(':')[1].split(',')
             filter_check = message[int(filter_field)]
-            # check if a valid value                          
+            # check if a valid value
             for filter_val in filter_vals:
                 if filter_val.upper() not in filter_check.upper():
                     is_valid = True
@@ -632,21 +642,21 @@ def parse_csv_message(message):
                 break
         if not is_valid:
             logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
-            return                                        
+            return
         else:
             logger.debug('passed filter (inclusion)')
 
     if len(agent_config_vars['filters_exclude']) != 0:
         # for each provided filter, check if there are any disallowed values
-        for _filter in agent_config_vars['filters_exclude']:          
-            filter_field = _filter.split(':')[0]              
-            filter_vals = _filter.split(':')[1].split(',')    
+        for _filter in agent_config_vars['filters_exclude']:
+            filter_field = _filter.split(':')[0]
+            filter_vals = _filter.split(':')[1].split(',')
             filter_check = message[int(filter_field)]
-            # check if a valid value                          
+            # check if a valid value
             for filter_val in filter_vals:
                 if filter_val.upper() in filter_check.upper():
                     logger.debug('filtered message (exclusion): ' + filter_check + ' in ' + str(filter_vals))
-                    return                                        
+                    return
         logger.debug('passed filter (exclusion)')
 
     # project
@@ -668,7 +678,7 @@ def parse_csv_message(message):
     row = list(message[i] for i in columns)
     fields = list(agent_config_vars['csv_field_names'][j] for j in agent_config_vars['data_fields'])
     parse_csv_row(row, fields, instance, device)
-    
+
 
 def parse_csv_data(csv_data, instance, device=''):
     """
@@ -700,7 +710,7 @@ def parse_csv_row(row, field_names, instance, device=''):
         for i in range(len(row)):
             json_message[field_names[i]] = row[i]
         log_handoff(timestamp, json_message, instance, device)
-            
+
 
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
@@ -745,7 +755,7 @@ def make_safe_instance_string(instance, device=''):
     """ make a safe instance name string, concatenated with device if appropriate """
     # strip underscores
     instance = UNDERSCORE.sub('.', instance)
-    instance = COLONS.sub('-')
+    instance = COLONS.sub('-', instance)
     # if there's a device, concatenate it to the instance with an underscore
     if len(device) != 0:
         instance = make_safe_instance_string(device) + '_' + instance

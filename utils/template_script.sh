@@ -9,7 +9,7 @@ set -euo pipefail
 IFS=$'\n\t'
 ### source
 # source from shared sourcefile
-. $($(command -v find) .. -type f -name source -maxdepth 3 -print)
+. $($(command -v find) .. -type f -name source -print -quit)
 
 #######################
 # <Script_Description>

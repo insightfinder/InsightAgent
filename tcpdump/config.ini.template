@@ -1,0 +1,18 @@
+[agent]
+# comma delimited list of files and directories (ending in '/') containing pcap files.
+file_path = 
+
+[insightfinder]
+user_name = 
+license_key = 
+token =
+project_name = 
+# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
+project_type = 
+sampling_interval = 10
+run_interval = 
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
