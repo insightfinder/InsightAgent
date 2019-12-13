@@ -19,7 +19,7 @@ fi
 
 # python version - works on my machine (tm)
 PYTHON=python
-if [[ $(python -V 2>&1 | awk '{print $NF}' | awk -F '.' '{print $1}') -gt 2 && -n $(command -v python2.7) ]];
+if [[ $(python -V 2>&1 | awk '{ print substr($NF, 1, 1) }') -gt 2 && -n $(command -v python2.7) ]];
 then
     PYTHON=python2.7
 else
@@ -42,13 +42,10 @@ rm -rf ./offline/pip/packages/*
 
 # check required pip packages
 echo "Modules used in this agent:"
-\ls -l | awk '{print $NF}' | grep ^get[^\-].*                                       \
-    | xargs cat | grep import                                                       \
-    | xargs -I {} ${PYTHON} -c 'exec("try: {}\nexcept: print(\"{}\")")'             \
-    | sed -E -e 's/^(from[\s]*(.*)[\s]*import[\s]*.*)|(import[\s]*(.*).*)$/\2\4/'   \
-    | sed -E -e 's/^[\s]*([^\.]*)\..*/\1/'                                          \
-    | tr -s [:space:] \\n | sort -u                                                 \
-    | xargs -I {} grep -i {} pip-freeze                                             \
+grep import *.py                                                            \
+    | xargs -I {} ${PYTHON} -c 'exec("try: {}\nexcept: print(\"{}\")")'     \
+    | sed -E -e 's/(from|import)\s+(\w+).*/\2/' | sort -u                   \
+    | xargs -I {} grep -i {} pip-freeze                                     \
     | tee requirements.txt
 
 # exit virtualenv
