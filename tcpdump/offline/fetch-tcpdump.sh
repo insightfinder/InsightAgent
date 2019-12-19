@@ -7,9 +7,6 @@ set -euo pipefail
 ### Inner Field Separator
 # set to only newline and tab
 IFS=$'\n\t'
-### source
-# source from shared sourcefile
-. $($(command -v find) .. -type f -name source -print -quit)
 
 #########
 # Globals
@@ -53,8 +50,9 @@ DEFAULT_MIRROR="${GNU_MIRROR}/${FETCH}"
 
     OUT_DIR="./offline/${FETCH}"
     mkdir -p "${OUT_DIR}"
-    TAR=$(echo "${CURL} ${MIRROR} ${TAR_PIPE}" | bash -)
-    TAR_OUT="${OUT_DIR}/$(echo "${TAR_FMT} <<< ${TAR}" | bash -)"
+    TAR=$(echo -e "${CURL} ${MIRROR} ${TAR_PIPE}" | bash -)
+    echo "${TAR}"
+    TAR_OUT="${OUT_DIR}/$(echo -e "${TAR_FMT} <<< ${TAR}" | bash -)"
     $(echo "${CURL} ${MIRROR}/${TAR} -o ${TAR_OUT}" | bash -)
     echo "  To install, run"
     echo "      ./offline/make-install.sh -t ${TAR_OUT}"
@@ -103,6 +101,9 @@ DEFAULT_MIRROR="${GNU_MIRROR}/${FETCH}"
 if [[ "$@" =~ -h|--help ]]; then
     :exit
 else
-    :main "${@:-}"
+    :main \
+    "| grep -Eo \>tcpdump-.*\.tar\.gz\< | tr -d '><' | sort -rV | head -n1" \
+    "sed -E 's/(.*)\/(.*)/\1-\2/'" \
+    "https://www.tcpdump.org/release"
     exit 0
 fi

@@ -1,0 +1,68 @@
+
+. $(command -p find .. -maxdepth 3 -type f -name strict_mode -print -quit)
+
+:arg() {
+    ARGS="${*:-$(</dev/stdin)}"
+    echo "${ARGS}"
+}
+
+:args() {
+    ARGS=( "${@:-$(</dev/stdin)}" )
+    echo "${ARGS[*]}"
+}
+
+:copy() {
+    command -p cp $(:arg "$@")
+}
+
+:move() {
+    command -p mv $(:arg "$@")
+}
+
+:remove() {
+    command -p rm $(:arg "$@")
+}
+
+:find_here() {
+    command -p find $(pwd) -maxdepth 1 $(:arg "$@")
+}
+
+:files_here() {
+    :find_here -type f -print
+}
+
+:dirs_here() {
+    :find_here -type d -print
+}
+
+:curl() {
+    curl -fsSL $(:arg "$@")
+}
+
+:curlo() {
+    curl -fsSLO $(:arg "$@")
+}
+
+:untar() {
+    tar xf $(:arg "$@")
+}
+
+:create_tar() {
+    local flags=( $(:args "$@") )
+    local dir="${flags[0]}"
+    tar czf "${dir%*/}.tar.gz" "${flags[*]}"
+}
+
+:tar_dir() {
+    echo $(tar tf $(:arg "$@") | head -n1)
+}
+
+:enter_tar_dir() {
+    cd $(:tar_dir $(:arg "$@"))
+}
+
+:open_tar() {
+    local tar=$(:arg "$@")
+    :untar "${tar}"
+    :enter_tar_dir "${tar}"
+}

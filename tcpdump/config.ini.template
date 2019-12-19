@@ -1,5 +1,21 @@
 [agent]
-# comma delimited list of files and directories (ending in '/') containing pcap files.
+# tcpdump expression. see tcpdump documentation (man tcpdump)
+expression = 
+# display packet as 'hex', 'ascii', or 'both'
+hex_ascii = 
+# set to 'ABS' to display absolute sequence number. default is relative/
+abs_or_rel_seq = 
+# comma delimited list of interfaces to listen on. see tcpdump documentation for `--interface=`
+interfaces = 
+# secret to use for validating TCP segment digests. see tcpdump documentation for `-M`
+secret = 
+# filter expression, direction, or file to use. see tcpdump documentation for `-Q` and `-F`
+filter = 
+
+# fields to extract from tcpdump. If left blank, all fields will be extracted.
+data_fields = 
+
+# for replay, comma delimited list of files and directories containing pcap files.
 file_path = 
 
 [insightfinder]
