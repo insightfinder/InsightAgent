@@ -136,11 +136,11 @@ def get_agent_config_vars():
             # replay
             replay_days = config_parser.get('agent', 'replay_days')
             replay_sa_files = config_parser.get('agent', 'replay_sa_files')
-                    
+
         except ConfigParser.NoOptionError:
             logger.error('Agent not correctly configured. Check config file.')
             sys.exit(1)
-            
+
         # translate to bool
         exclude_devices = True if re.match(r"T(RUE)?", exclude_devices) else False
 
@@ -148,7 +148,7 @@ def get_agent_config_vars():
         replay_sa_files = replay_sa_files.split(',')
         if len(replay_sa_files) > 1: ## ''.split(',') == [''] => len(['']) == 1
             replay_sa_files = [ i for i in                              # for each generated sublist \
-                    j for j in map(lambda k:                            #   for each item in replay_sa_files \ 
+                    j for j in map(lambda k:                            #   for each item in replay_sa_files \
                         get_file_list_for_directory(k) if k[-1] == '/'  #     for directories, get files in dir \
                         else k if os.path.exists(k) else '',            #     otherwise, make sure it's a valid filepath \
                         replay_sa_files)                                # \
@@ -186,14 +186,14 @@ def get_agent_config_vars():
             'timestamp_field': 2,
             'instance_field': 0,
             'device_field': '', # when there is a device, we'll set this
-            'data_fields': '',  # read and determine from header. 
+            'data_fields': '',  # read and determine from header.
             # keep for keyerrors
             'proxies': '',
             'filters_include': '',
             'filters_exclude': '',
             'project_field': '',
             'strip_tz': False,
-            'strip_tz_fmt': '' 
+            'strip_tz_fmt': ''
         }
 
         return config_vars
@@ -239,13 +239,13 @@ def get_if_config_vars():
         if len(project_type) == 0:
             logger.warning('Agent not correctly configured (project_type). Check config file.')
             sys.exit(1)
-        
+
         if project_type not in {
                 'METRIC',
                 'METRICREPLAY',
                 }:
            logger.warning('Agent not correctly configured (project_type). Check config file.')
-           sys.exit(1)  
+           sys.exit(1)
 
         if len(sampling_interval) == 0:
             if 'METRIC' in project_type:
@@ -315,13 +315,13 @@ def get_cli_config_vars():
     parser.add_option('--threads', default=1,
                       action='store', dest='threads', help='Number of threads to run')
     """
-    parser.add_option('--tz', default='UTC', action='store', dest='time_zone', 
+    parser.add_option('--tz', default='UTC', action='store', dest='time_zone',
                       help='Timezone of the data. See pytz.all_timezones')
-    parser.add_option('-q', '--quiet', action='store_true', dest='quiet', 
+    parser.add_option('-q', '--quiet', action='store_true', dest='quiet',
                       help='Only display warning and error log messages')
-    parser.add_option('-v', '--verbose', action='store_true', dest='verbose', 
+    parser.add_option('-v', '--verbose', action='store_true', dest='verbose',
                       help='Enable verbose logging')
-    parser.add_option('-t', '--testing', action='store_true', dest='testing', 
+    parser.add_option('-t', '--testing', action='store_true', dest='testing',
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
     (options, args) = parser.parse_args()
@@ -363,14 +363,14 @@ def strip_tz_info(timestamp_format):
     if '%z' in timestamp_format:
         position = timestamp_format.index('%z')
         strip_tz_fmt = PCT_z_FMT
-    
+
     if len(timestamp_format) > (position + 2):
         timestamp_format = timestamp_format[:position] + timestamp_format[position+2:]
     else:
         timestamp_format = timestamp_format[:position]
     if cli_config_vars['time_zone'] == pytz.timezone('UTC'):
         logger.warning('Time zone info will be stripped from timestamps, but no time zone info was supplied in the config. Assuming UTC')
-    
+
     return {'strip_tz': True, 'strip_tz_fmt': strip_tz_fmt, 'timestamp_format': timestamp_format}
 
 
@@ -393,7 +393,7 @@ def check_csv_fieldnames(csv_field_names, all_fields):
         if len(all_fields['filters'][field]['name']) != 0:
             filters_temp = []
             for _filter in all_fields['filters'][field]['name']:
-                filter_field = _filter.split(':')[0]          
+                filter_field = _filter.split(':')[0]
                 filter_vals = _filter.split(':')[1]
                 filter_index = get_field_index(csv_field_names, filter_field, field)
                 if isinstance(filter_index, int):
@@ -543,7 +543,7 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False):
             next_value_all += str(item)
         return next_value_all
     elif isinstance(next_value, list):
-        if allow_list: 
+        if allow_list:
             return json_gather_list_values(next_value, next_fields)
         else:
             raise Exception('encountered list in json when not allowed')
@@ -610,7 +610,7 @@ def parse_json_message_single(message):
             return
         else:
             logger.debug('passed filter (inclusion)')
-            
+
     if len(agent_config_vars['filters_exclude']) != 0:
         # for each provided filter
         for _filter in agent_config_vars['filters_exclude']:
@@ -635,7 +635,7 @@ def parse_json_message_single(message):
 
     # get data
     log_data = dict()
-    if len(agent_config_vars['data_fields']) != 0: 
+    if len(agent_config_vars['data_fields']) != 0:
         for data_field in agent_config_vars['data_fields']:
             data_value = json_format_field_value(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM), True))
             if len(data_value) != 0:
@@ -643,7 +643,7 @@ def parse_json_message_single(message):
                     metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
                 else:
                     log_data[data_field.replace('.', '/')] = data_value
-    else:    
+    else:
         if 'METRIC' in if_config_vars['project_type']:
             # assume metric data is in top level
             for data_field in message:
@@ -663,11 +663,11 @@ def parse_csv_message(message):
     if len(agent_config_vars['filters_include']) != 0:
         # for each provided filter, check if there are any allowed valued
         is_valid = False
-        for _filter in agent_config_vars['filters_include']:          
-            filter_field = _filter.split(':')[0]              
-            filter_vals = _filter.split(':')[1].split(',')    
+        for _filter in agent_config_vars['filters_include']:
+            filter_field = _filter.split(':')[0]
+            filter_vals = _filter.split(':')[1].split(',')
             filter_check = message[int(filter_field)]
-            # check if a valid value                          
+            # check if a valid value
             for filter_val in filter_vals:
                 if filter_val.upper() not in filter_check.upper():
                     is_valid = True
@@ -676,21 +676,21 @@ def parse_csv_message(message):
                 break
         if not is_valid:
             logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
-            return                                        
+            return
         else:
             logger.debug('passed filter (inclusion)')
 
     if len(agent_config_vars['filters_exclude']) != 0:
         # for each provided filter, check if there are any disallowed values
-        for _filter in agent_config_vars['filters_exclude']:          
-            filter_field = _filter.split(':')[0]              
-            filter_vals = _filter.split(':')[1].split(',')    
+        for _filter in agent_config_vars['filters_exclude']:
+            filter_field = _filter.split(':')[0]
+            filter_vals = _filter.split(':')[1].split(',')
             filter_check = message[int(filter_field)]
-            # check if a valid value                          
+            # check if a valid value
             for filter_val in filter_vals:
                 if filter_val.upper() in filter_check.upper():
                     logger.debug('filtered message (exclusion): ' + filter_check + ' in ' + str(filter_vals))
-                    return                                        
+                    return
         logger.debug('passed filter (exclusion)')
 
     # project
@@ -740,7 +740,7 @@ def parse_csv_row(row, field_names, instance, device=''):
         for i in range(len(row)):
             json_message[field_names[i]] = row[i]
         log_handoff(timestamp, json_message, instance, device)
-            
+
 
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
@@ -921,6 +921,13 @@ def prepare_log_entry(timestamp, data, instance, device=''):
 # Functions to handle Metric data #
 ###################################
 def metric_handoff(timestamp, field_name, data, instance, device=''):
+    # validata data
+    try:
+        data = float(data)
+    except Exception as e:
+        logger.warning(e)
+        return
+
     append_metric_data_to_entry(timestamp, field_name, data, instance, device)
     track['entry_count'] += 1
     if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
@@ -931,20 +938,20 @@ def metric_handoff(timestamp, field_name, data, instance, device=''):
 
 def append_metric_data_to_entry(timestamp, field_name, data, instance, device=''):
     """ creates the metric entry """
-    key = make_safe_metric_key(field_name) + '[' + make_safe_instance_string(instance, device) + ']'
+    # make metric key
+    key = '{}[{}]'.format(make_safe_metric_key(field_name), make_safe_instance_string(instance, device))
+
+    # ensure timestamp is a string and in the current dict
     ts_str = str(timestamp)
     if ts_str not in track['current_dict']:
         track['current_dict'][ts_str] = dict()
-    current_obj = track['current_dict'][ts_str]
 
-    # use the next non-null value to overwrite the prev value
-    # for the same metric in the same timestamp
+    # add to dict or running list of values for this timestamp
+    current_obj = track['current_dict'][ts_str]
     if key in current_obj.keys():
-        if data is not None and len(str(data)) > 0:
-            current_obj[key] += '|' + str(data)
+        current_obj[key] += '|' + str(data)
     else:
         current_obj[key] = str(data)
-    track['current_dict'][ts_str] = current_obj
 
 
 def transpose_metrics():
