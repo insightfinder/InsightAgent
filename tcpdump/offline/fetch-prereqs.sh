@@ -1,4 +1,4 @@
-#/scripts!/usr/bin/env bash
+#!/usr/bin/env bash
 
 ALWAYS_DOWNLOAD=0
 if [[ "$@" =~ -r|--remote ]];

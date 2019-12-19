@@ -67,3 +67,23 @@ python getlogs_tcpdump.py -t
 sudo ./scripts/cron-config.sh
 ```
 
+### Config Variables
+* `expression`: `tcpdump` expression. See `man tcpdump`.
+* `hex_ascii`: Display packet as 'hex', 'ascii', or 'both'.
+* `abs_or_rel_seq`: Set to 'abs' to display absolute sequence number. Default is relative.
+* `interfaces`: Comma-delimited list of interfaces to listen on. See `man tcpdump` for `--interface=`.
+* `secret`: Secret to use for validating TCP segment digests. See `man tcpdump` for `-M`.
+* `filter`: Filter expression, direction, or file to use. See `man tcpdump` for `-Q` and `-F`.
+* `data_fields`: Comma-delimited list of field names to use as data fields. If not set, all fields will be reported.
+* `file_path`: Comma-delimited list of files and directories containing pcap files to read. If not set, `tcpdump` will be streamed from the host machine.
+* **`user_name`**: User name in InsightFinder
+* **`license_key`**: License Key from your Account Profile in the InsightFinder UI. 
+* `token`: Token from your Account Profile in the InsightFinder UI. 
+* **`project_name`**: Name of the project created in the InsightFinder UI. 
+* **`project_type`**: Type of the project - one of `metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay`.
+* **`sampling_interval`**: How frequently data is collected. Should match the interval used in cron.
+* `run_interval`: 
+* `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
+* `if_url`: URL for InsightFinder. Default is `https://app.insightfinder.com`.
+* `if_http_proxy`: HTTP proxy used to connect to InsightFinder.
+* `if_https_proxy`: As above, but HTTPS.
