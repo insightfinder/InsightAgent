@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # anything in requirements.txt?
-if [[ $(cat requirements.txt | wc -l) -eq 0 ]];
+if [[ ! -f requirements.txt || $(cat requirements.txt | wc -l) -eq 0 ]];
 then
     echo "No pip packages to install."
     exit 0
@@ -23,12 +23,12 @@ then
     echo "Package \"pip\" not installed. Attempting to install now..."
     if [[ ${TRY_OFFLINE} -gt 0 && -f "./offline/pip/get-pip.py" ]];
     then
-        python ./offline/pip/get-pip.py
+        command -p python ./offline/pip/get-pip.py
     fi
 fi
 if [[ -z $(command -v pip) ]];
 then
-    python <(curl -sS --connect-timeout 3 https://bootstrap.pypa.io/get-pip.py)
+    command -p python <(curl -fsSL --connect-timeout 3 https://bootstrap.pypa.io/get-pip.py)
 fi
 if [[ -z $(command -v pip) ]];
 then
@@ -37,7 +37,7 @@ then
 fi
 
 # as root or user
-PIP_CMD_BASE="python -m pip install"
+PIP_CMD_BASE="command -p python -m pip install"
 if [[ $EUID -ne 0 ]];
 then
     PIP_CMD_BASE="${PIP_CMD_BASE} --user"

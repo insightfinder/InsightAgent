@@ -1,0 +1,25 @@
+
+:tracing.enable_trace() {
+    set -x
+}
+
+:tracing.disable_trace() {
+    set +x
+}
+
+:tracing.toggle_trace() {
+    if [[ "$-" =~ x ]]; then
+        :tracing.disable_trace
+    else
+        :tracing.enable_trace
+    fi
+}
+
+:tracing.set_trace() {
+    if [[ "${TRACE:-0}" -ne 1 ]]; then
+        :tracing.disable_trace
+    else
+        :tracing.enable_trace
+    fi
+}
+

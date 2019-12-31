@@ -64,8 +64,11 @@ else
     BASE_DIR=$(pwd | awk -F '/' '{$NF=""; print $0}' | tr [:space:] '/')
 fi
 TEMPLATE_DIR="${BASE_DIR}/template"
-SHARED_DIR="${BASE_DIR}/shared"
 UTILS_DIR="${BASE_DIR}/utils"
+SHARED_DIR="${BASE_DIR}/shared"
+SETUP_DIR="${SHARED_DIR}/setup"
+SOURCE_DIR="${SHARED_DIR}/source"
+OFFLINE_DIR="${SHARED_DIR}/offline"
 AGENT_DIR="${BASE_DIR}/${AGENT}"
 if [[ "${AGENT: -1}" = '/' ]]; then
     AGENT="${AGENT:0:${#AGENT}-1}"
@@ -84,7 +87,7 @@ fi
 
 ## update readme
 echo "Updating README.md"
-COPY=$(command -v cp)
+COPY=$(type -P cp)
 LOCS=". offline" # agent dir, then offline
 for LOC in ${LOCS};
 do
@@ -154,19 +157,16 @@ then
     # no clobber
     COPY="${COPY} -n"
 fi
-mkdir -p ${AGENT_DIR}/scripts/source
-${COPY} ${SHARED_DIR}/scripts/source/* ${AGENT_DIR}/scripts/source/
-${COPY} ${SHARED_DIR}/scripts/install.sh ${AGENT_DIR}/scripts/
-${COPY} ${SHARED_DIR}/scripts/make-install.sh ${AGENT_DIR}/scripts/
-${COPY} ${SHARED_DIR}/scripts/fetch-prereqs.sh ${AGENT_DIR}/scripts/
-${COPY} ${SHARED_DIR}/scripts/prepare-git-repo.sh ${AGENT_DIR}/scripts/
-${COPY} ${SHARED_DIR}/scripts/remote-cp-run.sh ${AGENT_DIR}/scripts/
-${COPY} ${SHARED_DIR}/scripts/pip-config.sh ${AGENT_DIR}/scripts/
-${COPY} ${SHARED_DIR}/scripts/${CRONIT_SCRIPT} ${AGENT_DIR}/scripts/
-${COPY} ${SHARED_DIR}/offline/* ${AGENT_DIR}/offline/ 2>/dev/null
+mkdir -p ${AGENT_DIR}/setup
+mkdir -p ${AGENT_DIR}/source
+${COPY} ${SETUP_DIR}/install.sh ${AGENT_DIR}/setup/
+${COPY} ${SETUP_DIR}/pip-config.sh ${AGENT_DIR}/setup/
+${COPY} ${SETUP_DIR}/${CRONIT_SCRIPT} ${AGENT_DIR}/setup/
+${COPY} ${SOURCE_DIR}/* ${AGENT_DIR}/source/
+${COPY} ${OFFLINE_DIR}/* ${AGENT_DIR}/offline/ 2>/dev/null
 if [[ "${CRONIT_SCRIPT}" =~ monit ]];
 then
-    ${COPY} -r ${SHARED_DIR}/offline/monit/ ${AGENT_DIR}/offline/
+    ${COPY} -r ${OFFLINE_DIR}/monit/ ${AGENT_DIR}/offline/
 fi
 
 ## create tar
