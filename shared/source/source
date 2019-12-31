@@ -1,8 +1,0 @@
-set -euo pipefail
-IFS=$'\n\t'
-
-:path_rel_to_abs() {
-    REL_PATH="${*:-$(</dev/stdin)}"
-    ABS_PATH=$(sed -e :a -e 's,[^/]*/\.\.\/,,' -e ta <<< ${REL_PATH})
-    echo ${ABS_PATH}
-}

@@ -861,10 +861,10 @@ def get_datetime_from_unix_epoch(date_string):
         # roughly check for a timestamp between ~1973 - ~2286
         if len(epoch) in range(13, 15):
             epoch = int(epoch) / 1000
-        elif len(epoch) in range(9, 12):
+        elif len(epoch) in range(9, 13):
             epoch = int(epoch)
 
-        return datetime.fromtimestamp(epoch)
+        return datetime.utcfromtimestamp(epoch)
     except ValueError:
         # if the date cannot be converted into a number by built-in long()
         logger.warn('Date format not defined & data does not look like unix epoch: {}'.format(date_string))
@@ -1020,13 +1020,22 @@ def prepare_log_entry(timestamp, data, instance, device=''):
 # Functions to handle Metric data #
 ###################################
 def metric_handoff(timestamp, field_name, data, instance, device=''):
-    append_metric_data_to_entry(timestamp, field_name, data, instance, device)
-    track['entry_count'] += 1
-    if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
-        send_data_wrapper()
-    elif track['entry_count'] % 500 == 0:
-        logger.debug('Current data object size: {} bytes'.format(
-            get_json_size_bytes(track['current_dict'])))
+    # validata data
+    try:
+        data = float(data)
+    except Exception as e:
+        logger.warning(e)
+        logger.warning(
+            'timestamp: {}\nfield_name: {}\ninstance: {}\ndevice: {}'.format(
+                timestamp, field_name, instance, device))
+    else:
+        append_metric_data_to_entry(timestamp, field_name, data, instance, device)
+        track['entry_count'] += 1
+        if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
+            send_data_wrapper()
+        elif track['entry_count'] % 500 == 0:
+            logger.debug('Current data object size: {} bytes'.format(
+                get_json_size_bytes(track['current_dict'])))
 
 
 def append_metric_data_to_entry(timestamp, field_name, data, instance, device=''):
