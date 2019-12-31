@@ -669,7 +669,7 @@ def parse_csv_message(message):
             filter_check = message[int(filter_field)]
             # check if a valid value
             for filter_val in filter_vals:
-                if filter_val.upper() not in filter_check.upper():
+                if filter_val.upper() in filter_check.upper():
                     is_valid = True
                     break
             if is_valid:
@@ -772,10 +772,10 @@ def get_datetime_from_unix_epoch(date_string):
         # roughly check for a timestamp between ~1973 - ~2286
         if len(epoch) in range(13, 15):
             epoch = int(epoch) / 1000
-        elif len(epoch) in range(9, 12):
+        elif len(epoch) in range(9, 13):
             epoch = int(epoch)
 
-        return datetime.fromtimestamp(epoch)
+        return datetime.utcfromtimestamp(epoch)
     except ValueError:
         # if the date cannot be converted into a number by built-in long()
         logger.warn('Date format not defined & data does not look like unix epoch: ' + date_string)
@@ -798,6 +798,7 @@ def make_safe_metric_key(metric):
     metric = LEFT_BRACE.sub('(', metric)
     metric = RIGHT_BRACE.sub(')', metric)
     metric = PERIOD.sub('/', metric)
+    metric = PCT.sub('PCT', metric)
     return metric
 
 
@@ -1145,6 +1146,7 @@ if __name__ == "__main__":
     RIGHT_BRACE = re.compile(r"\]")
     PERIOD = re.compile(r"\.")
     NON_ALNUM = re.compile(r"[^a-zA-Z0-9]")
+    PCT = re.compile(r"\%")
     PCT_z_FMT = re.compile(r"[\+\-][0-9]{4}")
     PCT_Z_FMT = re.compile(r"[A-Z]{3,4}")
     HOSTNAME = socket.gethostname().partition('.')[0]
