@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+IFS=$'\n\t'
 
 function echo_params() {
     if [[ ${QUIET} -eq 1 ]];
@@ -8,9 +9,8 @@ function echo_params() {
 
     echo "Usage:"
     echo "./remote-cp-run.sh [-d <definitionfile>] [node1 node2 .. nodeN [-f <nodefile>] [-c <file_to_copy>] [-s <script>|-x <command> [-p param1 -p param2 ... ]]]"
-    echo "-d --definition-file <>   The file containing definitions for the other parameters in this script. Default is '${DEFNS_DEFAULT}'"
-    echo "                              The file will be generated/updated on each run."
-    echo "-f --node-file <>         The file containing a list of target nodes. Optional if nodes passed as list. Default is '${NODE_FILE_DEFAULT}'"
+    echo "-d --definition-file <>   The file containing definitions for the other parameters in this script. Default is '${DEFNS_DEFAULT}'. The file will be generated/updated on each run."
+    echo "-f --node-file <>         The file containing a list of target nodes, one per line. Optional if nodes passed as list. Default is '${NODE_FILE_DEFAULT}'"
     echo "-c --copy-file <>         A file to copy to the remote machine(s); done before running any script. Can be used multiple times to copy multiple files. Optional."
     echo "-s --script <>            The script to execute on the remote machine(s). Optional."
     echo "-x --execute <>           The command to execute on the remote machine(s). Optional."
@@ -35,7 +35,7 @@ while [[ $# -gt 0 ]]; do
         -f|--node-file)
             shift
             NODE_FILE="$1"
-            NODES="${NODES}${NEWLINE}$(cat $1 | tr [:space:] '\n')"
+            NODES="${NODES}${NEWLINE}$(cat $1)"
             ;;  
 		-c|--copy-file)
 			shift

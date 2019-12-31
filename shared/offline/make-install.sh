@@ -34,10 +34,10 @@ else
 fi
 
 # get tarball
-TARBALL_LOC=$(find . -type f -name ${TARBALL} -print)
+TARBALL_LOC=$(find . -type f -name ${TARBALL} -print -quit)
 if [[ ! -f ${TARBALL_LOC} || -z ${TARBALL_LOC} ]];
 then
-    TARBALL_LOC=$(find /tmp -type f -name ${TARBALL} -print)
+    TARBALL_LOC=$(find /tmp -type f -name ${TARBALL} -print -quit)
 fi
 if [[ ! -f ${TARBALL_LOC} || -z ${TARBALL_LOC} ]];
 then
@@ -75,6 +75,7 @@ if [[ -n $(command -v make) ]];
 then
     make
     make install
-else
+elif [[ -f ./build.sh ]];
+then
     ./build.sh
 fi
