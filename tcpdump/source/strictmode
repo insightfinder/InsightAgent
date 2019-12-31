@@ -1,0 +1,18 @@
+
+. $(command -p find .. -maxdepth 3 -type f -name tracing -print -quit)
+
+:strict_mode.set_set() {
+    set -euo pipefail
+    :tracing.set_trace
+}
+
+:strict_mode.set_IFS() {
+    IFS=$'\n\t'
+}
+
+:strict_mode.set_strict_mode() {
+    :strict_mode.set_IFS
+    :strict_mode.set_set
+}
+
+:strict_mode.set_strict_mode

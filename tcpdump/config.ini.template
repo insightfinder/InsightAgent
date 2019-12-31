@@ -3,7 +3,7 @@
 expression = 
 # display packet as 'hex', 'ascii', or 'both'
 hex_ascii = 
-# set to 'ABS' to display absolute sequence number. default is relative/
+# set to 'ABS' to display absolute sequence number. default is relative
 abs_or_rel_seq = 
 # comma delimited list of interfaces to listen on. see tcpdump documentation for `--interface=`
 interfaces = 
