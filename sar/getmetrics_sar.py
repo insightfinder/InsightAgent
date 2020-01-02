@@ -145,14 +145,16 @@ def get_agent_config_vars():
         exclude_devices = True if re.match(r"T(RUE)?", exclude_devices) else False
 
         # get list of replay files
-        replay_sa_files = replay_sa_files.split(',')
-        if len(replay_sa_files) > 1: ## ''.split(',') == [''] => len(['']) == 1
-            replay_sa_files = [ i for i in                              # for each generated sublist \
-                    j for j in map(lambda k:                            #   for each item in replay_sa_files \
+        if len(replay_sa_files) != 0:
+            replay_sa_files = [
+                i for j in                                              # for each generated sublist \
+                    map(lambda k:                                       #   for each item in replay_sa_files \
                         get_file_list_for_directory(k) if k[-1] == '/'  #     for directories, get files in dir \
-                        else k if os.path.exists(k) else '',            #     otherwise, make sure it's a valid filepath \
-                        replay_sa_files)                                # \
-                    if j ]                                              # keep only non-null values
+                        else [k] if os.path.exists(k) else '',          #     otherwise, make sure it's a valid filepath \
+                    replay_sa_files.split(',')) for i in j if i ]       # keep only non-null values
+            logger.debug(replay_sa_files)
+        else:
+            replay_sa_files = []
 
         # check for a valid replay days and add those to the list of replay files
         if len(replay_days) != 0:
@@ -160,18 +162,22 @@ def get_agent_config_vars():
             last = ''
             # fill date ranges
             for days in replay_days.split('-'):
-                days = days.split(',')
-                first = int(days[0])
+                days = map(lambda x: int(x), days.split(','))
+                first = days[0]
                 if last:
                     fill = range(last + 1, first)
                     all_days.extend(fill)
                 all_days.extend(days)
-                last = int(all_days[-1])
-            all_days = sorted(set(all_days))
+                last = all_days[-1]
+            all_days = map(lambda x: str(x).rjust(2, '0'), sorted(set(all_days)))
+            logger.debug(all_days)
 
             # add valid files to replay
-            sa_file_regex = r"^sa[0-9]*({})".format(map(lambda x: str(x), '|'.join(all_days)))
-            sa_files = get_file_list_for_directory('/var/log/sa/', sa_file_regex)
+            sa_file_regex = r"^sa[0-9]*({})".format('|'.join(all_days))
+            for sysstat_folder in ('sa', 'sysstat'):
+                sa_files = get_file_list_for_directory('/var/log/{}/'.format(sysstat_folder), sa_file_regex)
+                if sa_files:
+                    break
             replay_sa_files.extend(sa_files)
 
         # add parsed variables to a global
