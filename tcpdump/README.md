@@ -1,14 +1,17 @@
 # tcpdump
 This agent collects data from tcpdump and sends it to Insightfinder.
+
+If you do not have `tcpdump` installed, you will need to install it before running the agent. An offline installation package is available in the `offline` folder.
+
 ## Installing the Agent
 
 ### Short Version
 ```bash
 bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) tcpdump && cd tcpdump
 vi config.ini
-sudo ./setup/install.sh --create  # install on localhost
+sudo ./scripts/install.sh --create  # install on localhost
                                     ## or on multiple nodes
-sudo ./setup/remote-cp-run.sh list_of_nodes
+sudo ./scripts/remote-cp-run.sh list_of_nodes
 ```
 
 See the `offline` README for instructions on installing prerequisites.
@@ -30,17 +33,17 @@ See below for a further explanation of each variable.
 #### Automated Install (local or remote)
 ###### Review propsed changes from install:
 ```bash
-sudo ./setup/install.sh
+sudo ./scripts/install.sh
 ```
 
 ###### Once satisfied, run:
 ```bash
-sudo ./setup/install.sh --create
+sudo ./scripts/install.sh --create
 ```
 
 ###### To deploy on multiple hosts, instead call 
 ```bash
-sudo ./setup/remote-cp-run.sh list_of_nodes -f <nodelist_file>
+sudo ./scripts/remote-cp-run.sh list_of_nodes -f <nodelist_file>
 ```
 Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
 
@@ -54,7 +57,7 @@ else echo "No upgrade needed"; fi
 
 ###### Setup pip & required packages:
 ```bash
-sudo ./setup/pip-config.sh
+sudo ./scripts/pip-config.sh
 ```
 
 ###### Test the agent:
@@ -64,7 +67,7 @@ python getlogs_tcpdump.py -t
 
 ###### If satisfied with the output, configure the agent to run continuously:
 ```bash
-sudo ./setup/cron-config.sh
+sudo ./scripts/cron-config.sh
 ```
 
 ### Config Variables

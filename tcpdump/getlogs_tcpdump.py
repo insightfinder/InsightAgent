@@ -599,7 +599,7 @@ def get_file_list_for_directory(root_path='/', file_name_regex_c=''):
     return []
 
 
-def check_regex(pattern_c, check):
+def check_regex(pattern_c='', check):
     return not pattern_c or pattern_c.match(check)
 
 
