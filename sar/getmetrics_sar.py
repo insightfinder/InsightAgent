@@ -675,7 +675,7 @@ def parse_csv_message(message):
             filter_check = message[int(filter_field)]
             # check if a valid value
             for filter_val in filter_vals:
-                if filter_val.upper() not in filter_check.upper():
+                if filter_val.upper() in filter_check.upper():
                     is_valid = True
                     break
             if is_valid:
@@ -778,10 +778,10 @@ def get_datetime_from_unix_epoch(date_string):
         # roughly check for a timestamp between ~1973 - ~2286
         if len(epoch) in range(13, 15):
             epoch = int(epoch) / 1000
-        elif len(epoch) in range(9, 12):
+        elif len(epoch) in range(9, 13):
             epoch = int(epoch)
 
-        return datetime.fromtimestamp(epoch)
+        return datetime.utcfromtimestamp(epoch)
     except ValueError:
         # if the date cannot be converted into a number by built-in long()
         logger.warn('Date format not defined & data does not look like unix epoch: ' + date_string)
