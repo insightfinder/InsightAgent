@@ -181,39 +181,29 @@ then
     echo_params
 fi
 
-function scp_ssh_syntax() {
-    TO_COPY_tmp="$1"
-    shift
-    DEST="$@"
-    if [[ $(echo ${DEST} | wc -w) -gt 1 ]];
-    then
-        FLAGS_tmp=${DEST% *}
-        NODE_tmp=${DEST##* }
-    else
-        FLAGS_tmp=""
-        NODE_tmp=${DEST}
-    fi
-    scp ${FLAGS_tmp} ${TO_COPY_tmp} ${NODE_tmp}:/tmp
-}
-
 # actually do the work on each node
 for NODE in ${NODES};
 do
     if [[ -n ${TO_COPY} ]];
     then
         echo "Copying ${TO_COPY} to ${NODE}:/tmp"
-        scp_ssh_syntax ${TO_COPY} ${NODE}
+        scp ${TO_COPY} "${NODE}:/tmp"
+        ssh ${NODE} mv "/tmp/${TO_COPY}" .
     fi
 
     if [[ -f ${SCRIPT} ]];
     then
+        echo "Copying ${SCRIPT} to ${NODE}:/tmp"
+        scp ${SCRIPT} "${NODE}:/tmp"
+        ssh ${NODE} mv "/tmp/${SCRIPT}" .
+
         echo "Running ${SCRIPT} ${PARAMS} on ${NODE}"
-        ssh ${NODE} 'sudo bash -s' < ${SCRIPT} ${PARAMS}
+        ssh ${NODE} "${SCRIPT} ${PARAMS}"
     fi
 
     if [[ -n ${COMMAND} ]];
     then
         echo "Running ${COMMAND} ${PARAMS} on ${NODE}"
-        ssh ${NODE} ${COMMAND} ${PARAMS}
+        ssh ${NODE} "${COMMAND} ${PARAMS}"
     fi
 done
