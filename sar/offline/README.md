@@ -16,7 +16,7 @@ To install a tar from source, run:
 ```bash
 ./make-install.sh   # to install locally
                     # or, to install on remote machine(s):
-./remote-cp-run.sh -cp <package>.tar.gz [node1 node2 nodeN [-f nodefile list_of_nodes]]
+./remote-cp-run.sh -cp <package>.tar.gz -p m -p --prefix=/usr [node1 node2 nodeN [-f nodefile list_of_nodes]]
 ```
 
 If the installation does not automatically create a cron entry, something like the following should be ran on the target machine as root.

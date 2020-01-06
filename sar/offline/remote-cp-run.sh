@@ -134,8 +134,8 @@ then
     then
         echo "#!/usr/bin/env bash"                  >  ${SCRIPT}
         echo ""                                     >> ${SCRIPT}
-        echo "dir=\$(tar tf /tmp/\$1 | head -n1)"   >> ${SCRIPT}
-        echo "tar xvf /tmp/\$1 && cd \$dir"         >> ${SCRIPT}
+        echo "dir=\$(tar tf \$1 | head -n1)"   >> ${SCRIPT}
+        echo "tar xvf \$1 && cd \$dir"         >> ${SCRIPT}
         echo "./install.sh --create"                >> ${SCRIPT}
     fi
     sudo chmod ug+x ${SCRIPT}
@@ -161,7 +161,7 @@ then
     then
         cd ..
         tar czvf ${TO_COPY} ${AGENT}
-        mv ${TO_COPY} ${AGENT_DIR}
+        mv ${TO_COPY} ${AGENT}
         cd -
     else
         if [[ ${QUIET} -eq 1 ]];
@@ -188,17 +188,17 @@ do
     then
         echo "Copying ${TO_COPY} to ${NODE}:/tmp"
         scp ${TO_COPY} "${NODE}:/tmp"
-        ssh ${NODE} mv "/tmp/${TO_COPY}" .
+        ssh ${NODE} mv "/tmp/${TO_COPY##*/}" .
     fi
 
     if [[ -f ${SCRIPT} ]];
     then
         echo "Copying ${SCRIPT} to ${NODE}:/tmp"
         scp ${SCRIPT} "${NODE}:/tmp"
-        ssh ${NODE} mv "/tmp/${SCRIPT}" .
+        ssh ${NODE} mv "/tmp/${SCRIPT##*/}" .
 
         echo "Running ${SCRIPT} ${PARAMS} on ${NODE}"
-        ssh ${NODE} "${SCRIPT} ${PARAMS}"
+        ssh ${NODE} "sudo ./${SCRIPT##*/} ${PARAMS}"
     fi
 
     if [[ -n ${COMMAND} ]];
