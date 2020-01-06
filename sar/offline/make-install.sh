@@ -2,6 +2,7 @@
 
 # extract flag(s)
 IGNORE_ERRS=0
+MAKE=0
 HELP=0
 PARAMS=""
 while [[ $# -gt 0 ]]; do
@@ -12,6 +13,9 @@ while [[ $# -gt 0 ]]; do
         -t|--tarball)
             shift
             TARBALL="$1" 
+            ;;
+        -m|--make)
+            MAKE=1
             ;;
         -h|--help)
             HELP=1
@@ -28,7 +32,8 @@ if [[ -z ${TARBALL} && -f target ]];
 then
     TARGET=$(cat target | awk -F '/' '{print $NF}')
     TARBALL="${TARGET}.tar.gz"
-else
+elif [[ -z ${TARBALL} ]];
+then
     echo "No target file and no tarball specified"
     exit 1
 fi
@@ -49,7 +54,7 @@ echo "Unpacking tar..."
 tar xf ${TARBALL_LOC}
 cd $(tar tf ${TARBALL_LOC} | head -n1)
 
-if [[ ! -f Makefile ]];
+if [[ ! -f Makefile || ${MAKE} -eq 1 ]];
 then
     if [[ ${HELP} -eq 1 ]];
     then
