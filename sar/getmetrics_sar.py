@@ -81,8 +81,12 @@ def get_sar_data(start_time, end_time, replay_file=''):
 
 
 def get_sar_data_sadf(flags, start_time, end_time, filename=''):
-    cmd = 'sadf -dU {filename} -s {start_time} -e {end_time} -- {flags}'.format(
-            filename=filename, start_time=start_time, end_time=end_time, flags=flags)
+    cmd = 'sadf -dU {filename} -s {start_time} -e {end_time} -- {flags} {interval}'.format(
+            filename=filename,
+            start_time=start_time,
+            end_time=end_time,
+            flags=flags,
+            interval=if_config_vars['sampling_interval'])
     return get_sar_data_cmd(cmd)
 
 
