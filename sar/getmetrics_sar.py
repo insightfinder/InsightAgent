@@ -60,22 +60,42 @@ def get_sar_data(start_time, end_time, replay_file=''):
             agent_config_vars['device_field'] = ''
             data_start_col = 3
 
-        sar_data = get_sar_data_sadf(
-                        agent_config_vars['flags'][key],
-                        start_time, end_time,
-                        replay_file
-                        ).split('\n')
+        for metric_class in agent_config_vars['flags'][key]:
+            sar_flags = agent_config_vars['flags'][key][metric_class]
 
-        for line in sar_data:
-            if line:
-                if line.startswith('#'):
-                    # new header
-                    field_names = SLASHES.sub('_per_', line.strip('# '))
-                    field_names = field_names.split(CSV_DELIM)
-                    agent_config_vars['csv_field_names'] = field_names
-                    agent_config_vars['data_fields'] = range(data_start_col, len(field_names))
-                else:
-                    parse_csv_message(line.split(CSV_DELIM))
+            sar_data = get_sar_data_sadf(
+                            sar_flags,
+                            start_time, end_time,
+                            replay_file
+                            ).split('\n')
+
+            for line in sar_data:
+                if line:
+                    if line.startswith('#'):
+                        # new header
+                        field_names = SLASHES.sub('_per_', line.strip('# '))
+                        field_names = field_names.split(CSV_DELIM)
+                        # prepend each field name with the metric class
+                        agent_config_vars['csv_field_names'] = map(lambda x: '{}/{}'.format(metric_class, x), field_names)
+                        agent_config_vars['data_fields'] = range(data_start_col, len(field_names))
+                    else:
+                        line = line.split(CSV_DELIM)
+
+                        # check device
+                        if agent_config_vars['device_field']:
+                            device = line[agent_config_vars['device_field']]
+                            # if the name is a numbered label, prepend with the device name
+                            try:
+                                device = int(device)
+                                if device == -1: # alias for ALL
+                                    device = 'ALL'
+                                line[agent_config_vars['device_field']] = '{}.{}'.format(
+                                    agent_config_vars['csv_field_names'][agent_config_vars['device_field']].split('/')[-1],
+                                    device)
+                            except ValueError as ve:
+                                pass
+
+                        parse_csv_message(line)
 
     resume_send()
 
@@ -92,7 +112,11 @@ def get_sar_data_sadf(flags, start_time, end_time, filename=''):
 
 def get_sar_data_cmd(call):
     logger.debug(call)
-    return subprocess.check_output(call, shell=True)
+    try:
+        return subprocess.check_output(call, shell=True)
+    except Exception as e:
+        logger.warning(e)
+        return ''
 
 
 def get_metrics_to_collect():
@@ -105,26 +129,28 @@ def get_metrics_to_collect():
                       {'os': ' -vw'},
                       {'network': ' -n NFS -n NFSD -n SOCK -n IP -n EIP -n ICMP -n EICMP -n TCP -n ETCP -n UDP' },
                       {'network6': ' -n SOCK6 -n IP6 -n EIP6 -n ICMP6 -n EICMP6 -n UDP6'} ]
-    agent_config_vars['flags']['nodev'] = ''
+    agent_config_vars['flags']['nodev'] = dict()
     for metric_nodev in metrics_nodev:
         metric_name = metric_nodev.keys()[0]
         if metric_name in metrics:
-            agent_config_vars['flags']['nodev'] += metric_nodev[metric_name]
+            #agent_config_vars['flags']['nodev'] += metric_nodev[metric_name]
+            agent_config_vars['flags']['nodev'][metric_name] = metric_nodev[metric_name]
 
     if agent_config_vars['exclude_devices']:
         return
 
     # has device
-    metrics_dev  = [ {'network': '-n DEV -n EDEV'},
+    metrics_dev  = [ {'network': ' -n DEV -n EDEV'},
                      {'filesystem': ' -dF'},
                      {'io': ' -y'},
                      {'power': ' -m FAN -m IN -m TEMP -m USB'},
                      {'cpu': ' -m CPU -m FREQ -u ALL -P ALL'} ]
-    agent_config_vars['flags']['dev'] = ''
+    agent_config_vars['flags']['dev'] = dict()
     for metric_dev in metrics_dev:
         metric_name = metric_dev.keys()[0]
         if metric_name in metrics:
-            agent_config_vars['flags']['dev'] += metric_dev[metric_name]
+            #agent_config_vars['flags']['dev'] += metric_dev[metric_name]
+            agent_config_vars['flags']['dev'][metric_name] = metric_dev[metric_name]
 
 
 def get_agent_config_vars():
