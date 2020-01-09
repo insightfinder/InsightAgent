@@ -75,8 +75,9 @@ def get_sar_data(start_time, end_time, replay_file=''):
                         # new header
                         field_names = SLASHES.sub('_per_', line.strip('# '))
                         field_names = field_names.split(CSV_DELIM)
-                        # prepend each field name with the metric class
-                        agent_config_vars['csv_field_names'] = map(lambda x: '{}/{}'.format(metric_class, x), field_names)
+                        ## prepend each field name with the metric class
+                        # agent_config_vars['csv_field_names'] = map(lambda x: '{}/{}'.format(metric_class, x), field_names)
+                        agent_config_vars['csv_field_names'] = field_names
                         agent_config_vars['data_fields'] = range(data_start_col, len(field_names))
                     else:
                         line = line.split(CSV_DELIM)
