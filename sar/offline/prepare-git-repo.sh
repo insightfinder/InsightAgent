@@ -19,8 +19,14 @@ do
     TARGET_TAR="${TARGET_REPO}.tar.gz"
     curl -sSL https://github.com/${TARGET}/archive/master.tar.gz -o ${TARGET_TAR}
     echo "  Downloaded ${TARGET}. To install, run"
+<<<<<<< HEAD
     echo "      ./make-install.sh"
     echo "  or, to install on multiple nodes"
     echo "      ./remote-cp-run.sh -cp ${TARGET_TAR} [node1 node2 nodeN [-f nodefile]]"
+=======
+    echo "      ./make-install.sh -m --prefix=/usr"
+    echo "  or, to install on multiple nodes"
+    echo "      ./remote-cp-run.sh -cp ${TARGET_TAR} -p -m -p --prefix=/usr [node1 node2 nodeN [-f nodefile]]"
+>>>>>>> master
 done
 
