@@ -134,8 +134,13 @@ then
     then
         echo "#!/usr/bin/env bash"                  >  ${SCRIPT}
         echo ""                                     >> ${SCRIPT}
+<<<<<<< HEAD
         echo "dir=\$(tar tf /tmp/\$1 | head -n1)"   >> ${SCRIPT}
         echo "tar xvf /tmp/\$1 && cd \$dir"         >> ${SCRIPT}
+=======
+        echo "dir=\$(tar tf \$1 | head -n1)"   >> ${SCRIPT}
+        echo "tar xvf \$1 && cd \$dir"         >> ${SCRIPT}
+>>>>>>> master
         echo "./install.sh --create"                >> ${SCRIPT}
     fi
     sudo chmod ug+x ${SCRIPT}
@@ -161,7 +166,11 @@ then
     then
         cd ..
         tar czvf ${TO_COPY} ${AGENT}
+<<<<<<< HEAD
         mv ${TO_COPY} ${AGENT_DIR}
+=======
+        mv ${TO_COPY} ${AGENT}
+>>>>>>> master
         cd -
     else
         if [[ ${QUIET} -eq 1 ]];
@@ -181,6 +190,7 @@ then
     echo_params
 fi
 
+<<<<<<< HEAD
 function scp_ssh_syntax() {
     TO_COPY_tmp="$1"
     shift
@@ -196,24 +206,44 @@ function scp_ssh_syntax() {
     scp ${FLAGS_tmp} ${TO_COPY_tmp} ${NODE_tmp}:/tmp
 }
 
+=======
+>>>>>>> master
 # actually do the work on each node
 for NODE in ${NODES};
 do
     if [[ -n ${TO_COPY} ]];
     then
         echo "Copying ${TO_COPY} to ${NODE}:/tmp"
+<<<<<<< HEAD
         scp_ssh_syntax ${TO_COPY} ${NODE}
+=======
+        scp ${TO_COPY} "${NODE}:/tmp"
+        ssh ${NODE} mv "/tmp/${TO_COPY##*/}" .
+>>>>>>> master
     fi
 
     if [[ -f ${SCRIPT} ]];
     then
+<<<<<<< HEAD
         echo "Running ${SCRIPT} ${PARAMS} on ${NODE}"
         ssh ${NODE} 'sudo bash -s' < ${SCRIPT} ${PARAMS}
+=======
+        echo "Copying ${SCRIPT} to ${NODE}:/tmp"
+        scp ${SCRIPT} "${NODE}:/tmp"
+        ssh ${NODE} mv "/tmp/${SCRIPT##*/}" .
+
+        echo "Running ${SCRIPT} ${PARAMS} on ${NODE}"
+        ssh ${NODE} "sudo ./${SCRIPT##*/} ${PARAMS}"
+>>>>>>> master
     fi
 
     if [[ -n ${COMMAND} ]];
     then
         echo "Running ${COMMAND} ${PARAMS} on ${NODE}"
+<<<<<<< HEAD
         ssh ${NODE} ${COMMAND} ${PARAMS}
+=======
+        ssh ${NODE} "${COMMAND} ${PARAMS}"
+>>>>>>> master
     fi
 done
