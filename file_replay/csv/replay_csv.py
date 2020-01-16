@@ -33,7 +33,11 @@ def start_data_processing(thread_number):
         files = [agent_config_vars['file_path']]
     logger.debug('File list: ' + str(files))
 
-    delim = re.compile(agent_config_vars['field_delimiter'])
+    # determine delimiter
+    delim = CSV_DELIM
+    if 'field_delimiter' in agent_config_vars:
+        delim = agent_config_vars['field_delimiter']
+
     for replay_file in files:
         logger.debug('Replaying file ' + str(replay_file))
         try:
@@ -42,7 +46,7 @@ def start_data_processing(thread_number):
                 for line in csv_file:
                     line = line.rstrip()
                     if line:
-                        line = delim.split(line)
+                        line = agent_config_vars['field_delimiter'].split(line)
                         line[agent_config_vars['timestamp_field']] = str(get_timestamp_from_date_string(line[agent_config_vars['timestamp_field']]))
                         csv_data.append(line)
             # sort by timestamp
@@ -74,7 +78,7 @@ def get_agent_config_vars():
             # file path
             file_path = config_parser.get('agent', 'file_path')
             # delimiter
-            field_delimiter = config_parser.get('agent', 'field_delimiter')
+            field_delimiter = config_parser.get('agent', 'field_delimiter', raw=True) or CSV_DELIM
 
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
@@ -160,7 +164,7 @@ def get_agent_config_vars():
         # add parsed variables to a global
         config_vars = {
             'file_path': file_path,
-            'field_delimiter': field_delimiter,
+            'field_delimiter': re.compile(field_delimiter),
             'proxies': agent_proxies,
             'data_format': 'CSV',
             'csv_field_names': csv_field_names,
@@ -691,15 +695,15 @@ def parse_csv_data(csv_data, instance, device=''):
     # determine delimiter
     delim = CSV_DELIM
     if 'field_delimiter' in agent_config_vars and len(agent_config_vars['field_delimiter']) != 0:
-        delim = field_delimiter
+        delim = agent_config_vars['field_delimiter']
 
     # get field names from header row
-    field_names = csv_data.pop(0).split(delim)[1:]
+    field_names = delim.split(csv_data.pop(0))[1:]
 
     # go through each row
     for row in csv_data:
         if len(row) > 0:
-            parse_csv_row(row.split(delim), field_names, instance, device)
+            parse_csv_row(delim.split(row), field_names, instance, device)
 
 
 def parse_csv_row(row, field_names, instance, device=''):
@@ -717,7 +721,7 @@ def parse_csv_row(row, field_names, instance, device=''):
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
     if 'strip_tz' in agent_config_vars and agent_config_vars['strip_tz']:
-        date_string = ''.join(PCT_z_FMT.split(date_string))
+        date_string = ''.join(agent_config_vars['strip_tz_fmt'].split(date_string))
     if 'timestamp_format' in agent_config_vars:
         if agent_config_vars['timestamp_format'] == 'epoch':
             timestamp_datetime = get_datetime_from_unix_epoch(date_string)
@@ -1099,7 +1103,7 @@ if __name__ == "__main__":
     PCT_z_FMT = re.compile(r"[\+\-][0-9]{4}")
     HOSTNAME = socket.gethostname().partition('.')[0]
     JSON_LEVEL_DELIM = '.'
-    CSV_DELIM = ','
+    CSV_DELIM = re.compile(r",")
     ATTEMPTS = 3
     track = dict()
 
