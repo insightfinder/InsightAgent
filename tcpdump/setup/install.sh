@@ -88,8 +88,6 @@ ${SHOPT_NOCASEMATCH}
 if is_dry_run;
 then
     echo "Running in dry-run mode. Run with '-c' or '--create' flag to execute the changes below."
-else
-    read -p "Running in commit mode. Press [Enter] to continue, or [Ctrl+C] to quit"
 fi
 
 # Python 3 compatability
