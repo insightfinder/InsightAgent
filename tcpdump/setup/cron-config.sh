@@ -160,7 +160,7 @@ echo "" 2>&1 | if is_dry_run; then awk '{print}'; else tee -a ${CRON_FILE}; fi
 if is_dry_run;
 then
     echo "To create a cron config at ${CRON_FILE}, run this again as"
-    echo "  ./scripts/cron-config --create"
+    echo "  ./setup/cron-config --create"
 else
     echo "Cron config created at ${CRON_FILE}"
 fi
