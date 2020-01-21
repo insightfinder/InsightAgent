@@ -9,11 +9,11 @@ This is a template `README.d` for use when there is a __git__ repo that can be i
 {{{TARGET
 These scripts provide support for installing {{TARGET}} from source. To use them, simply run (from an internet-connected machine):
 ```bash
-../scripts/prepare-git-repo.sh
+./prepare-git-repo.sh
 ```
 
 TARGET}}}
-`../scripts/fetch-prereqs.sh [--remote]` can be used to get source packages for install for:
+`./fetch-prereqs.sh [--remote]` can be used to get source packages for install for:
 * `make` (requires `gcc` - *not* supplied as an offline package and must be installed from media or the internet)
 * `python` (requires `make`)
 * `pip` (requires `python`)
@@ -23,8 +23,8 @@ This script is fairly fragile; if it breaks, please email [support](support@insi
 
 To install a tar from source, run:
 ```bash
-../scripts/make-install.sh  # to install locally
+./make-install.sh  # to install locally
                             # or, to install on remote machine(s):
-../scripts/remote-cp-run.sh -cp <package>.tar.gz [node1 node2 nodeN [-f nodefile list_of_nodes]]
+./remote-cp-run.sh -cp <package>.tar.gz [node1 node2 nodeN [-f nodefile list_of_nodes]]
 ```
 {{EXTRA}}

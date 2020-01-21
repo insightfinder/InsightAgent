@@ -6,9 +6,9 @@ This agent collects data from hadoop-mapreduce-logs and sends it to Insightfinde
 ```bash
 bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) hadoop-mapreduce-logs && cd hadoop-mapreduce-logs
 vi config.ini
-sudo ./scripts/install.sh --create  # install on localhost
-                                    ## or on multiple nodes
-sudo ./scripts/remote-cp-run.sh list_of_nodes
+sudo ./setup/install.sh --create  # install on localhost
+                                  ## or on multiple nodes
+sudo ./offline/remote-cp-run.sh list_of_nodes
 ```
 
 See the `offline` README for instructions on installing prerequisites.
@@ -16,7 +16,7 @@ See the `offline` README for instructions on installing prerequisites.
 ### Long Version
 ###### Download the agent tarball and untar it:
 ```bash
-curl -sSLO https://github.com/insightfinder/InsightAgent/raw/master/hadoop-mapreduce-logs/hadoop-mapreduce-logs.tar.gz
+curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/hadoop-mapreduce-logs/hadoop-mapreduce-logs.tar.gz
 tar xvf hadoop-mapreduce-logs.tar.gz && cd hadoop-mapreduce-logs
 ```
 
@@ -30,17 +30,17 @@ See below for a further explanation of each variable.
 #### Automated Install (local or remote)
 ###### Review propsed changes from install:
 ```bash
-sudo ./scripts/install.sh
+sudo ./setup/install.sh
 ```
 
 ###### Once satisfied, run:
 ```bash
-sudo ./scripts/install.sh --create
+sudo ./setup/install.sh --create
 ```
 
 ###### To deploy on multiple hosts, instead call 
 ```bash
-sudo ./scripts/remote-cp-run.sh list_of_nodes -f <nodelist_file>
+sudo ./offline/remote-cp-run.sh list_of_nodes -f <nodelist_file>
 ```
 Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
 
@@ -54,7 +54,7 @@ else echo "No upgrade needed"; fi
 
 ###### Setup pip & required packages:
 ```bash
-sudo ./scripts/pip-config.sh
+sudo ./setup/pip-config.sh
 ```
 
 ###### Test the agent:
@@ -64,7 +64,7 @@ python getlogs_hadoop-mapreduce.py -t
 
 ###### If satisfied with the output, configure the agent to run continuously:
 ```bash
-sudo ./scripts/cron-config.sh
+sudo ./setup/cron-config.sh
 ```
 
 ### Config Variables
@@ -74,6 +74,20 @@ sudo ./scripts/cron-config.sh
 * `filters_include`: Used to filter messages based on allowed values.
 * `filters_exclude`: Used to filter messages based on unallowed values.
 * `json_top_level`: The top-level of fields to parse in JSON. For example, if all fields of interest are nested like 
+```
+{ 
+  "output": {
+    "parsed": {
+      "time": time, 
+      "log": log message,
+      ... 
+    }   
+    ... 
+  }
+  ... 
+}
+```
+then this should be set to `output.parsed`.
 * `timestamp_format`: Format of the timestamp, in python [strftime](http://strftime.org/). If the timestamp is in Unix epoch, this can be left blank or set to `epoch`.
 * `timestamp_field`: Field name for the timestamp. Default is `timestamp`.
 * `instance_field`: Field name for the instance name. If not set or the field is not found, the instance name is the hostname of the machine the agent is installed on. 
