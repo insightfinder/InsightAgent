@@ -41,9 +41,9 @@ This agent collects data from {{NEWAGENT}} and sends it to Insightfinder.
 ```bash
 bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) {{NEWAGENT}} && cd {{NEWAGENT}}
 vi config.ini
-sudo ./scripts/install.sh --create  # install on localhost
-                                    ## or on multiple nodes
-sudo ./scripts/remote-cp-run.sh list_of_nodes
+sudo ./setup/install.sh --create  # install on localhost
+                                  ## or on multiple nodes
+sudo ./offline/remote-cp-run.sh list_of_nodes
 ```
 
 See the `offline` README for instructions on installing prerequisites.
@@ -51,7 +51,7 @@ See the `offline` README for instructions on installing prerequisites.
 ### Long Version
 ###### Download the agent tarball and untar it:
 ```bash
-curl -sSLO https://github.com/insightfinder/InsightAgent/raw/master/{{NEWAGENT}}/{{NEWAGENT}}.tar.gz
+curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/{{NEWAGENT}}/{{NEWAGENT}}.tar.gz
 tar xvf {{NEWAGENT}}.tar.gz && cd {{NEWAGENT}}
 ```
 
@@ -65,17 +65,17 @@ See below for a further explanation of each variable.
 #### Automated Install (local or remote)
 ###### Review propsed changes from install:
 ```bash
-sudo ./scripts/install.sh
+sudo ./setup/install.sh
 ```
 
 ###### Once satisfied, run:
 ```bash
-sudo ./scripts/install.sh --create
+sudo ./setup/install.sh --create
 ```
 
 ###### To deploy on multiple hosts, instead call 
 ```bash
-sudo ./scripts/remote-cp-run.sh list_of_nodes -f <nodelist_file>
+sudo ./offline/remote-cp-run.sh list_of_nodes -f <nodelist_file>
 ```
 Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
 
@@ -89,7 +89,7 @@ else echo "No upgrade needed"; fi
 
 ###### Setup pip & required packages:
 ```bash
-sudo ./scripts/pip-config.sh
+sudo ./setup/pip-config.sh
 ```
 
 ###### Test the agent:
@@ -99,7 +99,7 @@ python {{NEWAGENT@script}} -t
 
 ###### If satisfied with the output, configure the agent to run continuously:
 ```bash
-sudo ./scripts/{{NEWAGENT@cronit}}
+sudo ./setup/{{NEWAGENT@cronit}}
 ```
 
 {{CONFIGVARS}}
