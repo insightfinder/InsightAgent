@@ -961,17 +961,10 @@ def get_datetime_from_unix_epoch(date_string):
         # roughly check for a timestamp between ~1973 - ~2286
         if len(epoch) in range(13, 15):
             epoch = int(epoch) / 1000
-<<<<<<< HEAD
-        elif len(epoch) in range(9, 12):
-            epoch = int(epoch)
-
-        return datetime.fromtimestamp(epoch)
-=======
         elif len(epoch) in range(9, 13):
             epoch = int(epoch)
 
         return datetime.utcfromtimestamp(epoch)
->>>>>>> master
     except ValueError:
         # if the date cannot be converted into a number by built-in long()
         logger.warn('Date format not defined & data does not look like unix epoch: {}'.format(date_string))
