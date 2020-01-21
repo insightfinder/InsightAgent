@@ -7,13 +7,8 @@ then
     shift
 fi
 
-GNU_MIRROR="$1"
-if [[ -z ${GNU_MIRROR} ]];
-then
-    GNU_MIRROR="ftp://prep.ai.mit.edu/pub/gnu/"
-else
-    shift
-fi
+# ./fetch-prereqs.sh --remote ftp://prep.ai.mit.edu/pub/gnu/
+GNU_MIRROR="${1:-ftp://prep.ai.mit.edu/pub/gnu/}"
 
 CURL="curl -sSL"
 
@@ -21,48 +16,52 @@ CURL="curl -sSL"
 if [[ ${ALWAYS_DOWNLOAD} -eq 1 || -z $(command -v make) ]];
 then
     echo "Getting make..."
-    mkdir -p make
+    MAKE_DIR="./make"
+    mkdir -p "${MAKE_DIR}"
     MAKE_MIRROR="${GNU_MIRROR}/make/"
     MAKE_VERISON=$(${CURL} ${MAKE_MIRROR} | grep -o make-[0-9\.]*tar\.gz | uniq | sort -V | tail -n1)
-    MAKE_FILE="make/${MAKE_VERISON}"
+    MAKE_FILE="${MAKE_DIR}/${MAKE_VERISON}"
     MAKE_DOWNLOAD="${CURL} ${MAKE_MIRROR}/${MAKE_VERISON} -o ${MAKE_FILE}"
     ${MAKE_DOWNLOAD}
     echo "  To install, run"
-    echo "      ./make-install.sh -t ${MAKE_FILE} -m --prefix=/usr"
+    echo "      ./make-install.sh -t ${MAKE_FILE}"
     echo "  or, to install on multiple nodes"
-    echo "      ./remote-cp-run.sh -cp ${MAKE_FILE} -p -m -p --prefix=/usr [node1 node2 nodeN [-f nodefile]]"
+    echo "      ./remote-cp-run.sh -cp ${MAKE_FILE} [node1 node2 nodeN [-f nodefile]]"
 fi
 
 # get most recent python
 if [[ ${ALWAYS_DOWNLOAD} -eq 1 || -z $(command -v python) ]];
 then
     echo "Getting python..."
-    mkdir -p python
+    PY_DIR="./python"
+    mkdir -p "${PY_DIR}"
     PY_MIRROR="https://www.python.org/ftp/python/"
     PY_VERSION_NUM=$(${CURL} ${PY_MIRROR} | grep -oE [0-9]+\.[0-9]+\.[0-9]+\/ | tail -n1)
     PY_MIRROR="${PY_MIRROR}/${PY_VERSION_NUM}"
-    PY_VERSION=$(${CURL} ${PY_MIRROR} | grep -oE '>Python\-.*\.tgz<' | tr -d '><' | tail -n1)
-    PY_FILE="python/${PY_VERSION}"
+    PY_VERSION=$(${CURL} ${PY_MIRROR} | grep -oE '>Python\-.*\.tgz<' | tr -d '><')
+    PY_FILE="${PY_DIR}/${PY_VERSION}"
     PY_DOWNLOAD="${CURL} ${PY_MIRROR}/${PY_VERSION} -o ${PY_FILE}"
     ${PY_DOWNLOAD}
     echo "  To install, run"
-    echo "      ./make-install.sh -t ${PY_FILE} -m --prefix=/usr"
+    echo "      ./make-install.sh -t ${PY_FILE}"
     echo "  or, to install on multiple nodes"
-    echo "      ./remote-cp-run.sh -cp ${PY_FILE} -p -m -p --prefix=/usr [node1 node2 nodeN [-f nodefile]]"
+    echo "      ./remote-cp-run.sh -cp ${PY_FILE} [node1 node2 nodeN [-f nodefile]]"
 fi
 
 if [[ ${ALWAYS_DOWNLOAD} -eq 1 || -z $(command -v pip) ]];
 then
     echo "Getting pip..."
-    mkdir -p pip
-    PIP_FILE="get-pip.py"
-    PIP_MIRROR="https://bootstrap.pypa.io/${PIP_FILE}"
-    PIP_DOWNLOAD="${CURL} ${PIP_MIRROR} -o pip/${PIP_FILE}"
+    PIP_DIR="./pip"
+    mkdir -p "${PIP_DIR}"
+    PIP_SCRIPT="get-pip.py"
+    PIP_FILE="${PIP_DIR}/${PIP_SCRIPT}"
+    PIP_MIRROR="https://bootstrap.pypa.io/${PIP_SCRIPT}"
+    PIP_DOWNLOAD="${CURL} ${PIP_MIRROR} -o ${PIP_FILE}"
     ${PIP_DOWNLOAD}
     echo "  To install, run" 
-    echo "      python pip/${PIP_FILE}"
+    echo "      python ${PIP_FILE}"
     echo "  or, to install on multiple nodes"
-    echo "      ./remote-cp-run.sh -c pip/${PIP_FILE} -x python -p ${PIP_FILE} [node1 node2 nodeN [-f nodefile]]"
+    echo "      ./remote-cp-run.sh -c ${PIP_FILE} -x python -p ${PIP_FILE##*/} [node1 node2 nodeN [-f nodefile]]"
 fi 
 
 # get most recent monit
@@ -73,11 +72,18 @@ then
     MONIT_MIRROR="https://mmonit.com/monit"
     MONIT_VERSION=$(${CURL} ${MONIT_MIRROR}#download | grep -oE 'dist\/monit-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz')
     MONIT_TAR=$(echo ${MONIT_VERSION} | awk -F '/' '{print $NF}')
-    MONIT_DOWNLOAD="${CURL} ${MONIT_MIRROR}/${MONIT_VERSION} -o monit/${MONIT_TAR}"
+    MONIT_FILE="./monit/${MONIT_TAR}"
+    MONIT_DOWNLOAD="${CURL} ${MONIT_MIRROR}/${MONIT_VERSION} -o ${MONIT_FILE}"
     ${MONIT_DOWNLOAD}
     echo "  To install, run"
-    echo "      ./make-install.sh -t monit/${MONIT_TAR} -m --prefix=/usr"
+    echo "      ./make-install.sh -t ${MONIT_TAR} --without-pam --without-ssl"
     echo "  or, to install on multiple nodes"
-    echo "      ./remote-cp-run.sh -cp monit/${MONIT_TAR} -p -m -p --prefix=/usr [node1 node2 nodeN [-f nodefile]]"
+    echo "      ./remote-cp-run.sh -cp ${MONIT_TAR} --without-pam --without-ssl [node1 node2 nodeN [-f nodefile]]"
+    echo "  By default, PAM and SSL are included in monit, but the prereqs are not installed on many machines. Don't"
+    echo "   pass the --without-[option] flag if you can install the prereqs."
 fi
 
+# other fetch scripts - scripts in this directory named similarly, but not the same
+find "${0%/*}" -type f ! -name "${0##*/}" -regextype posix-extended -regex "^.*fetch-.*\.sh$" -exec {} \;
+# get anything defined in target file
+./prepare-git-repo.sh 

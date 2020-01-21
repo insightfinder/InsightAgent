@@ -107,17 +107,13 @@ AGENT_FULL_PATH_LOG="$(pwd)/log.out"
 # crontab
 CRON_FILE="/etc/cron.d/${AGENT}"
 CRON_USER="root"
-CRON_COMMAND="\$(command -v python) ${AGENT_FULL_PATH} >${AGENT_FULL_PATH_LOG}"
+CRON_COMMAND="command -p python ${AGENT_FULL_PATH} >${AGENT_FULL_PATH_LOG}"
 RUN_INTERVAL_VAL=${RUN_INTERVAL}
 RUN_INTERVAL_UNIT="${RUN_INTERVAL: -1}"
 
 # create files
-if is_dry_run;
+if ! is_dry_run;
 then
-    echo "In dry-run mode. Run as"
-    echo "    ./cron-cronfig.sh --create"
-    echo "to create the cron config."
-else
     touch ${CRON_FILE}
     touch ${AGENT_FULL_PATH_LOG}
     chmod 0666 ${AGENT_FULL_PATH_LOG}
@@ -164,7 +160,7 @@ echo "" 2>&1 | if is_dry_run; then awk '{print}'; else tee -a ${CRON_FILE}; fi
 if is_dry_run;
 then
     echo "To create a cron config at ${CRON_FILE}, run this again as"
-    echo "./cron-config --create"
+    echo "  ./setup/cron-config --create"
 else
     echo "Cron config created at ${CRON_FILE}"
 fi
