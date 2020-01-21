@@ -67,7 +67,7 @@ TEMPLATE_DIR="${BASE_DIR}/template"
 UTILS_DIR="${BASE_DIR}/utils"
 SHARED_DIR="${BASE_DIR}/shared"
 SETUP_DIR="${SHARED_DIR}/setup"
-SOURCE_DIR="${SHARED_DIR}/source"
+#SOURCE_DIR="${SHARED_DIR}/source"
 OFFLINE_DIR="${SHARED_DIR}/offline"
 AGENT_DIR="${BASE_DIR}/${AGENT}"
 if [[ "${AGENT: -1}" = '/' ]]; then
@@ -158,11 +158,11 @@ then
     COPY="${COPY} -n"
 fi
 mkdir -p ${AGENT_DIR}/setup
-mkdir -p ${AGENT_DIR}/source
+#mkdir -p ${AGENT_DIR}/source
 ${COPY} ${SETUP_DIR}/install.sh ${AGENT_DIR}/setup/
 ${COPY} ${SETUP_DIR}/pip-config.sh ${AGENT_DIR}/setup/
 ${COPY} ${SETUP_DIR}/${CRONIT_SCRIPT} ${AGENT_DIR}/setup/
-${COPY} ${SOURCE_DIR}/* ${AGENT_DIR}/source/
+#${COPY} ${SOURCE_DIR}/* ${AGENT_DIR}/source/
 ${COPY} ${OFFLINE_DIR}/* ${AGENT_DIR}/offline/ 2>/dev/null
 if [[ "${CRONIT_SCRIPT}" =~ monit ]];
 then

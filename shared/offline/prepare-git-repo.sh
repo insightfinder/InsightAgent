@@ -3,24 +3,24 @@
 if [[ -n $1 ]];
 then
     TARGETS="$@"
-elif [[ -f ./offline/target ]];
+elif [[ -f ./target ]];
 then
-    TARGETS=$(cat ./offline/target)
+    TARGETS=$(cat ./target)
 else
     echo "Pass the target repo as the first argument, including the organization."
-    echo "ie sysstat/sysstat"
+    echo "ie madler/zlib"
     exit 1
 fi
 
 echo "Downloading ${TARGETS[@]}"
 for TARGET in ${TARGETS[@]};
 do
-    TARGET_REPO=${TARGET##*/}
-    TARGET_TAR="${TARGET_REPO}.tar.gz"
-    curl -sSL https://github.com/${TARGET}/archive/master.tar.gz -o ${TARGET_TAR}
+    mkdir -p "${TARGET%/*}"
+    TARGET_TAR="${TARGET}.tar.gz"
+    curl -fsSL https://github.com/${TARGET}/archive/master.tar.gz -o ${TARGET_TAR}
     echo "  Downloaded ${TARGET}. To install, run"
-    echo "    ./scripts/make-install.sh"
+    echo "    ./make-install.sh -t ${TARGET_TAR}"
     echo "  or, to install on multiple nodes"
-    echo "    ./scripts/remote-cp-run.sh -cp ${TARGET_TAR} [node1 node2 nodeN [-f nodefile]]"
+    echo "    ./remote-cp-run.sh -cp ${TARGET_TAR} [node1 node2 nodeN [-f nodefile]]"
 done
 

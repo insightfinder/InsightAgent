@@ -2,8 +2,6 @@
 ## mapreduce info
 # (required) uri for history server. <scheme>://server:port
 history_server_uri = 
-# YES or NO
-YARN_cluster =
 
 ## filters (optional)
 # define a list of filters to use as field:allowed values|field:allowed values
