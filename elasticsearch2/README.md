@@ -1,5 +1,5 @@
-# ElasticSearch
-This agent collects data from ElasticSearch and sends it to Insightfinder.
+# elasticsearch2
+This agent collects data from elasticsearch2 and sends it to Insightfinder.
 ## Installing the Agent
 
 ### Short Version
@@ -86,6 +86,20 @@ sudo ./scripts/cron-config.sh
 * `filters_include`: Used to filter messages based on allowed values.
 * `filters_exclude`: Used to filter messages based on unallowed values.
 * `json_top_level`: The top-level of fields to parse in JSON. For example, if all fields of interest are nested like 
+```
+{ 
+  "output": {
+    "parsed": {
+      "time": time, 
+      "log": log message,
+      ... 
+    }   
+    ... 
+  }
+  ... 
+}
+```
+then this should be set to `output.parsed`.
 * `timestamp_format`: Format of the timestamp, in python [strftime](http://strftime.org/). If the timestamp is in Unix epoch, this can be left blank or set to `epoch`.
 * `timestamp_field`: Field name for the timestamp. Default is `timestamp`.
 * `instance_field`: Field name for the instance name. If not set or the field is not found, the instance name is the hostname of the machine the agent is installed on. 
