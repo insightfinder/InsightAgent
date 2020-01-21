@@ -38,21 +38,9 @@ then
     exit 1
 fi
 
-# get tarball
-TARBALL_LOC=$(find . -type f -name ${TARBALL} -print)
-if [[ ! -f ${TARBALL_LOC} || -z ${TARBALL_LOC} ]];
-then
-    TARBALL_LOC=$(find /tmp -type f -name ${TARBALL} -print)
-fi
-if [[ ! -f ${TARBALL_LOC} || -z ${TARBALL_LOC} ]];
-then
-    echo "No tarball could be found in $(pwd) or /tmp"
-    exit 1
-fi
-
 echo "Unpacking tar..."
-tar xf ${TARBALL_LOC}
-cd $(tar tf ${TARBALL_LOC} | head -n1)
+tar xf ${TARBALL}
+cd $(tar tf ${TARBALL} | head -n1)
 
 if [[ ! -f Makefile || ${MAKE} -eq 1 ]];
 then
