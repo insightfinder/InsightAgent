@@ -1,97 +1,105 @@
+{{{
 # Template
 This is a template for developing new agents.
 To start a new agent, recursively copy this folder.
-`cp -r template/ new_agent/ && cd new_agent`
+```bash
+mkdir -p {{NEWAGENT}} && cp -r template/* {{NEWAGENT}}/ && cd {{NEWAGENT}}
+```
 
 In your new agent folder, rename the script
-`mv insightagent-boilerplate.py getmessages_agent.py`
-
-Depending on whether or not the agent should run on a cron (occasionally collect and send data) or monit (continuously monitor data). Delete the other script, then modify the needed script with the agent name and script name.
-```
-$ vi {cron-setup.sh|monit-setup.sh}
-...
-AGENT="new_agent"
-AGENT_SCRIPT="getmessages_agent.py"
-...
+```bash
+mv insightagent-boilerplate.py {{NEWAGENT@script}}
 ```
 
-Start writing your new agent, modifying `config.ini.template` to have the required input parameters. If your script requires a new pip package, download the `.whl` or `.tar.gz`, place it in pip_packages, then update `pip-setup.sh`.
+Start writing your new agent, modifying `config.ini.template` to have the required input parameters.
 
-Once you're done, create a tar for the agent and move it into the agent folder.
-
+Once you're done, update the documentation
+```bash
+../utils/generate-CONFIGVARS.sh
+vi .CONFIGVARS.md   
+vi .EXTRA.md        # if there's additional documentation to add. Replaces `{{EXTRA}}` below.
 ```
-cd ..
-tar -czvf new_agent.tar.gz
-mv new_agent.tar.gz new_agent
+
+<!-- Process in progress -->
+If there are offline packages to add, put them in the `./offline/` folder. There are scripts which can help install from source if
+1. The source is a git repo
+2. It is installed using `./configure && make && make install`
+CLI args can be avoided by setting the full repo in `./offline/target`. See `sar` for an example of this.
+Much like this README.md, there are `{{REPLACEMENTS}}` in `./offline/README.md`.
+
+Finally, make the installer 
+```bash
+../utils/make-agent-installer.sh [--monit]
 ```
-
-Then, delete this section from the `README.md` and update it as appropriate.
-
+}}}
+# {{NEWAGENT}}
+This agent collects data from {{NEWAGENT}} and sends it to Insightfinder.
+{{EXTRA}}
 ## Installing the Agent
-**Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/new_agent/new_agent.tar.gz) and untar it:**
-```
-wget https://github.com/insightfinder/InsightAgent/raw/master/new_agent/new_agent.tar.gz
-tar xvf new_agent.tar.gz && cd new_agent
+
+### Short Version
+```bash
+bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) {{NEWAGENT}} && cd {{NEWAGENT}}
+vi config.ini
+sudo ./setup/install.sh --create  # install on localhost
+                                  ## or on multiple nodes
+sudo ./offline/remote-cp-run.sh list_of_nodes
 ```
 
-**Copy `config.ini.template` to `config.ini` and edit it:**
+See the `offline` README for instructions on installing prerequisites.
+
+### Long Version
+###### Download the agent tarball and untar it:
+```bash
+curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/{{NEWAGENT}}/{{NEWAGENT}}.tar.gz
+tar xvf {{NEWAGENT}}.tar.gz && cd {{NEWAGENT}}
 ```
+
+###### Copy `config.ini.template` to `config.ini` and edit it:
+```bash
 cp config.ini.template config.ini
 vi config.ini
 ```
 See below for a further explanation of each variable.
 
-**Setup pip & required packages:**
-```
-sudo ./pip-setup.sh
-```
-
-**Test the agent:**
-```
-python getmessages_agent.py -t
+#### Automated Install (local or remote)
+###### Review propsed changes from install:
+```bash
+sudo ./setup/install.sh
 ```
 
-**If satisfied with the output, configure the agent to run continuously:**
-```
-sudo ./cron-config.sh <sampling_interval>
-or
-sudo ./monit-config.sh
+###### Once satisfied, run:
+```bash
+sudo ./setup/install.sh --create
 ```
 
-### Config Variables
-* `filters_include`: Used to filter messages based on allowed values.
-* `filters_exclude`: Used to filter messages based on unallowed values.
-* **`data_format`**: The format of the data to parse: CSV, JSON, or RAW
-* **`csv_field_names`**: A list of field names for CSV input. Required, even if the CSV to parse has a header.
-* `json_top_level`: The top-level of fields to parse in JSON. For example, if all fields of interest are nested like 
+###### To deploy on multiple hosts, instead call 
+```bash
+sudo ./offline/remote-cp-run.sh list_of_nodes -f <nodelist_file>
 ```
-{ 
-  "output": {
-    "parsed": {
-      "time": time, 
-      "log": log message,
-      ...
-    }
-    ...
-  }
-  ...
-}
+Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
+
+#### Manual Install (local only)
+###### Check Python version & upgrade if using Python 3
+```bash
+if [[ $(python -V 2>&1 | awk '{ print substr($NF, 1, 1) }') == "3" ]]; then \
+2to3 -w {{NEWAGENT@script}}; \
+else echo "No upgrade needed"; fi
 ```
-then this should be set to `output.parsed`.
-* `timestamp_format`: Format of the timestamp, in python [strftime](http://strftime.org/). If the timestamp is in Unix epoch, this can be left blank or set to `epoch`.
-* `timestamp_field`: Field name for the timestamp. Default is `timestamp`.
-* `instance_field`: Field name for the instance name. If not set or the field is not found, the instance name is the hostname of the machine the agent is installed on.
-* `device_field`: Field name for the device/container for containerized projects.
-* `data_fields`: Comma-delimited list of field names to use as data fields. If not set, all fields will be reported.
-* `agent_http_proxy`: HTTP proxy used to connect to the agent.
-* `agent_https_proxy`: As above, but HTTPS.
-* **`user_name`**: User name in InsightFinder
-* **`license_key`**: License Key from your Account Profile in the InsightFinder UI.
-* `token`: Token from your Account Profile in the InsightFinder UI.
-* **`project_name`**: Name of the project created in the InsightFinder UI.
-* **`project_type`**: Type of the project - one of `metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay`.
-* **`sampling_interval`**: How frequently data is collected. Should match the interval used in cron.
-* `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
-* `if_url`: URL for InsightFinder. Default is `https://app.insightfinder.com`.
-* `if_http_proxy`: HTTP proxy used to connect to InsightFinder.
-* `if_https_proxy`: As above, but HTTPS.
+
+###### Setup pip & required packages:
+```bash
+sudo ./setup/pip-config.sh
+```
+
+###### Test the agent:
+```bash
+python {{NEWAGENT@script}} -t
+```
+
+###### If satisfied with the output, configure the agent to run continuously:
+```bash
+sudo ./setup/{{NEWAGENT@cronit}}
+```
+
+{{CONFIGVARS}}
