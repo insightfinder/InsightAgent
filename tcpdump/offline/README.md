@@ -1,5 +1,5 @@
 # Offline Install
-`../scripts/fetch-prereqs.sh [--remote]` can be used to get source packages for install for:
+`./fetch-prereqs.sh [--remote]` can be used to get source packages for install for:
 * `make` (requires `gcc` - *not* supplied as an offline package and must be installed from media or the internet)
 * `python` (requires `make`)
 * `pip` (requires `python`)
@@ -9,9 +9,9 @@ This script is fairly fragile; if it breaks, please email [support](support@insi
 
 To install a tar from source, run:
 ```bash
-../scripts/make-install.sh  # to install locally
+./make-install.sh  # to install locally
                             # or, to install on remote machine(s):
-../scripts/remote-cp-run.sh -cp <package>.tar.gz [node1 node2 nodeN [-f nodefile list_of_nodes]]
+./remote-cp-run.sh -cp <package>.tar.gz [node1 node2 nodeN [-f nodefile list_of_nodes]]
 ```
 
 Also included is a script to get an offline package of `tcpdump` for installation/distribution:

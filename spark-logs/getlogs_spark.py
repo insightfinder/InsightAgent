@@ -51,7 +51,7 @@ def get_app_data(app):
         # add app data to job
         job.update(app)
         parse_json_message(job)
-    
+
 
 def set_time_range():
     end_time = int(time.time())
@@ -68,12 +68,11 @@ def get_agent_config_vars():
         try:
             # api url
             hx_server_uri = config_parser.get('agent', 'history_server_uri')
-            YARN_cluster = config_parser.get('agent', 'YARN_cluster').upper()
 
             # proxy
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
-            
+
             # filters
             filters_include = config_parser.get('agent', 'filters_include')
             filters_exclude = config_parser.get('agent', 'filters_exclude')
@@ -86,17 +85,16 @@ def get_agent_config_vars():
             timestamp_field = config_parser.get('agent', 'timestamp_field') or 'completionTime'
             timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
             data_fields = config_parser.get('agent', 'data_fields')
-                    
+
         except ConfigParser.NoOptionError:
             logger.error('Agent not correctly configured. Check config file.')
             sys.exit(1)
-        
+
         # api
         if len(hx_server_uri) == 0:
             logger.error('Agent not correctly configured (history_server_uri). Check config file.')
             sys.exit(1)
         api_url = urlparse.urljoin(hx_server_uri, '/api/v1/applications/')
-        YARN_cluster = True if YARN_cluster == 'YES' else False
 
         # parameters
         parameters = {'status': 'completed'}
@@ -107,7 +105,7 @@ def get_agent_config_vars():
             agent_proxies['http'] = agent_http_proxy
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
-            
+
         # filter
         if len(filters_include) != 0:
             filters_include = filters_include.split('|')
@@ -139,7 +137,6 @@ def get_agent_config_vars():
         # add parsed variables to a global
         config_vars = {
             'api_url': api_url,
-            'YARN_cluster': YARN_cluster,
             'parameters': parameters,
             'proxies': agent_proxies,
             'filters_include': filters_include,
@@ -203,7 +200,7 @@ def get_if_config_vars():
             logger.warning(
                 'Agent not correctly configured (project_type). Check config file.')
             sys.exit(1)
-        
+
         if project_type not in {
                 'METRIC',
                 'METRICREPLAY',
@@ -218,7 +215,7 @@ def get_if_config_vars():
                 }:
            logger.warning(
                 'Agent not correctly configured (project_type). Check config file.')
-           sys.exit(1)  
+           sys.exit(1)
 
         if len(sampling_interval) == 0:
             if 'METRIC' in project_type:
@@ -440,7 +437,7 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False):
             next_value_all += str(item)
         return next_value_all
     elif isinstance(next_value, list):
-        if allow_list: 
+        if allow_list:
             return json_gather_list_values(next_value, next_fields)
         else:
             raise Exception('encountered list in json when not allowed')
@@ -507,7 +504,7 @@ def parse_json_message_single(message):
             return
         else:
             logger.debug('passed filter (inclusion)')
-            
+
     if len(agent_config_vars['filters_exclude']) != 0:
         # for each provided filter
         for _filter in agent_config_vars['filters_exclude']:
@@ -532,7 +529,7 @@ def parse_json_message_single(message):
 
     # get data
     log_data = dict()
-    if len(agent_config_vars['data_fields']) != 0: 
+    if len(agent_config_vars['data_fields']) != 0:
         for data_field in agent_config_vars['data_fields']:
             data_value = json_format_field_value(_get_json_field_helper(message, data_field.split(JSON_LEVEL_DELIM), True))
             if len(data_value) != 0:
@@ -540,7 +537,7 @@ def parse_json_message_single(message):
                     metric_handoff(timestamp, data_field.replace('.', '/'), data_value, instance, device)
                 else:
                     log_data[data_field.replace('.', '/')] = data_value
-    else:    
+    else:
         if 'METRIC' in if_config_vars['project_type']:
             # assume metric data is in top level
             for data_field in message:
@@ -560,11 +557,11 @@ def parse_csv_message(message):
     if len(agent_config_vars['filters_include']) != 0:
         # for each provided filter, check if there are any allowed valued
         is_valid = False
-        for _filter in agent_config_vars['filters_include']:          
-            filter_field = _filter.split(':')[0]              
-            filter_vals = _filter.split(':')[1].split(',')    
+        for _filter in agent_config_vars['filters_include']:
+            filter_field = _filter.split(':')[0]
+            filter_vals = _filter.split(':')[1].split(',')
             filter_check = message[int(filter_field)]
-            # check if a valid value                          
+            # check if a valid value
             for filter_val in filter_vals:
                 if filter_val.upper() not in filter_check.upper():
                     is_valid = True
@@ -573,21 +570,21 @@ def parse_csv_message(message):
                 break
         if not is_valid:
             logger.debug('filtered message (inclusion): ' + filter_check + ' not in ' + str(filter_vals))
-            return                                        
+            return
         else:
             logger.debug('passed filter (inclusion)')
 
  # rough approximation.    if len(agent_config_vars['filters_exclude']) != 0:
         # for each provided filter, check if there are any disallowed values
-        for _filter in agent_config_vars['filters_exclude']:          
-            filter_field = _filter.split(':')[0]              
-            filter_vals = _filter.split(':')[1].split(',')    
+        for _filter in agent_config_vars['filters_exclude']:
+            filter_field = _filter.split(':')[0]
+            filter_vals = _filter.split(':')[1].split(',')
             filter_check = message[int(filter_field)]
-            # check if a valid value                          
+            # check if a valid value
             for filter_val in filter_vals:
                 if filter_val.upper() in filter_check.upper():
                     logger.debug('filtered message (exclusion): ' + filter_check + ' in ' + str(filter_vals))
-                    return                                        
+                    return
         logger.debug('passed filter (exclusion)')
 
     # project
@@ -609,7 +606,7 @@ def parse_csv_message(message):
     row = list(message[i] for i in columns)
     fields = list(agent_config_vars['csv_field_names'][j] for j in agent_config_vars['data_fields'])
     parse_csv_row(row, fields, instance, device)
-    
+
 
 def parse_csv_data(csv_data, instance, device=''):
     """
@@ -638,7 +635,7 @@ def parse_csv_row(row, field_names, instance, device=''):
         for i in range(len(row)):
             json_message[field_names[i]] = row[i]
         log_handoff(timestamp, json_message, instance, device)
-            
+
 
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
@@ -905,7 +902,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     req = requests.get
     if mode.upper() == 'POST':
         req = requests.post
-    
+
     logger.debug(url)
 
     for _ in xrange(ATTEMPTS):
