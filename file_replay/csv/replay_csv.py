@@ -69,13 +69,13 @@ def start_data_processing(thread_number):
         agent_config_vars['timestamp_format'] = 'epoch'
         agent_config_vars['strip_tz'] = False
         cli_config_vars['time_zone'] = pytz.utc
-        try:
-            for row in csv_data:
-                if row:
+        for row in csv_data:
+            if row:
+                try:
                     parse_csv_message(row)
-        except Exception as e:
-            logger.warn('Error when parsing messages')
-            logger.warn(e)
+                except Exception as e:
+                    logger.warn('Error when parsing messages')
+                    logger.warn(e)
 
 
 def get_agent_config_vars():
