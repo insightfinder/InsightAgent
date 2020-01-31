@@ -17,5 +17,6 @@ timestamp_format =
 license_key = 
 project_name =
 user_name = 
-server_url =
+# no trailing /
+server_url = https://app.insightfinder.com
 sampling_interval = 1
