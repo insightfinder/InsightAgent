@@ -37,6 +37,8 @@ instance_field =
 device_field = 
 # multiple fields are separated by commas.
 data_fields =
+# if this is set, only the first value in `data_fields` will be used as the field containing the value for the metric who's name is contained here
+metric_name_field = 
 
 ## proxy
 agent_http_proxy =
