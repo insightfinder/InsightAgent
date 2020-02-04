@@ -38,35 +38,44 @@ def start_data_processing(thread_number):
     if 'field_delimiter' in agent_config_vars:
         delim = agent_config_vars['field_delimiter']
 
+    ts_fmt_original = agent_config_vars['timestamp_format']
+    strip_tz_original = agent_config_vars['strip_tz']
+    tz_original = cli_config_vars['time_zone']
+
     for replay_file in files:
         logger.debug('Replaying file ' + str(replay_file))
-        try:
-            csv_data = []
-            with open(replay_file) as csv_file:
-                for line in csv_file:
-                    line = line.rstrip()
-                    if line:
-                        line = agent_config_vars['field_delimiter'].split(line)
+        # make sure we're using the original values when parsing the message
+        agent_config_vars['timestamp_format'] = ts_fmt_original
+        agent_config_vars['strip_tz'] = strip_tz_original
+        cli_config_vars['time_zone'] = tz_original
+        csv_data = []
+        with open(replay_file) as csv_file:
+            for line in csv_file:
+                line = line.rstrip()
+                if line:
+                    line = agent_config_vars['field_delimiter'].split(line)
+                    try:
                         line[agent_config_vars['timestamp_field']] = str(get_timestamp_from_date_string(line[agent_config_vars['timestamp_field']]))
                         csv_data.append(line)
-            # sort by timestamp
-            logger.debug('sorting data')
-            csv_data.sort(key=lambda x: x[agent_config_vars['timestamp_field']])
-            ts_fmt_original = agent_config_vars['timestamp_format']
-            tz_original = cli_config_vars['time_zone']
-            agent_config_vars['timestamp_format'] = 'epoch'
-            cli_config_vars['time_zone'] = pytz.utc
-            for row in csv_data:
-                if row:
+                    except Exception as e:
+                        logger.warn('Error when parsing file')
+                        logger.warn(e)
+                        continue
+
+        # sort by timestamp
+        logger.debug('sorting data')
+        csv_data.sort(key=lambda x: x[agent_config_vars['timestamp_field']])
+
+        agent_config_vars['timestamp_format'] = 'epoch'
+        agent_config_vars['strip_tz'] = False
+        cli_config_vars['time_zone'] = pytz.utc
+        for row in csv_data:
+            if row:
+                try:
                     parse_csv_message(row)
-            agent_config_vars['timestamp_format'] = ts_fmt_original
-            cli_config_vars['time_zone'] = tz_original
-        except Exception as e:
-            logger.warn('Error when parsing message')
-            logger.warn(str(e))
-        if cli_config_vars['testing']:
-            logger.debug('Skipping files:\n' + str(files[1:]))
-            break
+                except Exception as e:
+                    logger.warn('Error when parsing messages')
+                    logger.warn(e)
 
 
 def get_agent_config_vars():
@@ -722,6 +731,8 @@ def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
     if 'strip_tz' in agent_config_vars and agent_config_vars['strip_tz']:
         date_string = ''.join(agent_config_vars['strip_tz_fmt'].split(date_string))
+
+    date_string = date_string.strip()
     if 'timestamp_format' in agent_config_vars:
         if agent_config_vars['timestamp_format'] == 'epoch':
             timestamp_datetime = get_datetime_from_unix_epoch(date_string)
@@ -730,7 +741,7 @@ def get_timestamp_from_date_string(date_string):
     else:
         try:
             timestamp_datetime = dateutil.parse.parse(date_string)
-        except e:
+        except Exception as e:
             timestamp_datetime = get_datetime_from_unix_epoch(date_string)
             agent_config_vars['timestamp_format'] = 'epoch'
 
@@ -743,7 +754,7 @@ def get_timestamp_from_date_string(date_string):
 def get_datetime_from_unix_epoch(date_string):
     try:
         # strip leading whitespace and zeros
-        epoch = date_string.lstrip(' 0')
+        epoch = date_string.lstrip(' 0').rstrip()
         # roughly check for a timestamp between ~1973 - ~2286
         if len(epoch) in range(13, 15):
             epoch = int(epoch) / 1000
