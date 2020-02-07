@@ -187,6 +187,18 @@ def get_agent_config_vars():
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
 
+        timestamp_format = timestamp_format.partition('.')[0]
+        if '%z' in timestamp_format or '%Z' in timestamp_format:
+            ts_format_info = strip_tz_info(timestamp_format)
+        elif timestamp_format:
+            ts_format_info = {'strip_tz': False,
+                              'strip_tz_fmt': '',
+                              'timestamp_format': [timestamp_format]}
+        else: # ISO8601?
+            ts_format_info = {'strip_tz': True,
+                              'strip_tz_fmt': PCT_z_FMT,
+                              'timestamp_format': ISO8601}
+
         # add parsed variables to a global
         config_vars = {
             'kafka_kwargs': kafka_kwargs,
@@ -196,7 +208,9 @@ def get_agent_config_vars():
             'data_format': data_format,
             'csv_field_names': csv_field_names,
             'json_top_level': json_top_level,
-            'timestamp_format': timestamp_format,
+            'timestamp_format': ts_format_info['timestamp_format'],
+            'strip_tz': ts_format_info['strip_tz'],
+            'strip_tz_fmt': ts_format_info['strip_tz_fmt'],
             'timestamp_field': timestamp_field,
             'instance_field': instance_field,
             'device_field': device_field,
@@ -564,7 +578,7 @@ def is_formatted(setting_value):
     return check_regex(FORMAT_STR, setting_value)
 
 
-def parse_formatted(setting_value, message, default='', allow_list=False, remove=False):
+def parse_formatted(message, setting_value, default='', allow_list=False, remove=False):
     """ fill a format string with values """
     fields = { field: get_json_field(message,
                                      field,
@@ -598,10 +612,15 @@ def parse_raw_message(message):
         log_handoff(*raw_parse_log(message))
 
 
-def get_single_value(setting_value, message, default='', allow_list=False, remove=False):
+def get_single_value(message, config_setting, default='', allow_list=False, remove=False):
+    if config_setting not in agent_config_vars or len(agent_config_vars[config_setting]) == 0:
+        return default
+    setting_value = agent_config_vars[config_setting]
+    if isinstance(setting_value, (set, list, tuple)):
+        setting_value = setting_value[0]
     if is_formatted(setting_value):
-        return parse_formatted(setting_value,
-                               message,
+        return parse_formatted(message,
+                               setting_value,
                                default=default,
                                allow_list=False,
                                remove=remove)
@@ -612,10 +631,7 @@ def get_single_value(setting_value, message, default='', allow_list=False, remov
                           remove=remove)
 
 
-def get_json_field(message, config_setting, default='', allow_list=False, remove=False):
-    if config_setting not in agent_config_vars or len(agent_config_vars[config_setting]) == 0:
-        return default
-    setting_value = agent_config_vars[config_setting]
+def get_json_field(message, setting_value, default='', allow_list=False, remove=False):
     field_val = json_format_field_value(
                     _get_json_field_helper(
                         message,
@@ -654,19 +670,25 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     elif len(bytes(next_value)) == 0:
         # no next value set
         return ''
-    elif next_fields is None:
-        # some error, but return the value
-        return next_value
-    elif len(next_fields) == 0:
-        # final value in the list to walk down
-        return next_value
+
+    # sometimes payloads come in formatted
+    try:
+        next_value = json.loads(next_value)
+    except Exception as ex:
+        next_value = json.loads(json.dumps(next_value))
 
     # handle simple lists
     while isinstance(next_value, (list, set, tuple)) and len(next_value) == 1:
         next_value = next_value.pop()
 
     # continue traversing?
-    if isinstance(next_value, (list, set, tuple)):
+    if next_fields is None:
+        # some error, but return the value
+        return next_value
+    elif len(next_fields) == 0:
+        # final value in the list to walk down
+        return next_value
+    elif isinstance(next_value, (list, set, tuple)):
         # we've reached an early terminal point, which may or may not be ok
         if allow_list:
             return json_gather_list_values(
@@ -674,18 +696,22 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
                 next_fields,
                 remove=remove)
         else:
-            raise Exception('encountered list or set in json when not allowed')
-            return ''
+            raise ListNotAllowedError
     elif isinstance(next_value, dict):
         # there's more tree to walk down
         return _get_json_field_helper(
-                next_value,
+                json.loads(json.dumps(next_value)),
                 next_fields,
                 allow_list=allow_list,
                 remove=remove)
     else:
         # catch-all
         return ''
+
+
+class ListNotAllowedError():
+    print('encountered list or set in json when not allowed')
+    pass
 
 
 def json_gather_list_values(l, fields, remove=False):
@@ -733,14 +759,15 @@ def parse_json_message(messages):
                     parse_json_message_single(message)
             else:
                 parse_json_message_single(top_level)
-    elif isinstance(message, (list, set, tuple)):
-        for message_single in message:
+    elif isinstance(messages, (list, set, tuple)):
+        for message_single in messages:
             parse_json_message_single(message_single)
     else:
         parse_json_message_single(messages)
 
 
 def parse_json_message_single(message):
+    message = json.loads(json.dumps(message))
     # filter
     if len(agent_config_vars['filters_include']) != 0:
         # for each provided filter
@@ -785,31 +812,47 @@ def parse_json_message_single(message):
 
     # get project, instance, & device
     # check_project(get_single_value(message,
-    #                               'project_field',
-    #                               default=if_config_vars['project_name']),
-    #                               remove=True)
+    #                                'project_field',
+    #                                default=if_config_vars['project_name']),
+    #                                remove=True)
     instance = get_single_value(message,
-                               'instance_field',
-                               default=HOSTNAME,
-                               remove=True)
+                                'instance_field',
+                                default=HOSTNAME,
+                                remove=True)
     device = get_single_value(message,
-                             'device_field',
-                             remove=True)
+                              'device_field',
+                              remove=True)
 
     # get timestamp
-    timestamp = get_single_value(message,
-                                'timestamp_field',
-                                remove=True)
-    timestamp = get_timestamp_from_date_string(timestamp)
+    try:
+        timestamp = get_single_value(message,
+                                     'timestamp_field',
+                                     remove=True)
+    except ListNotAllowedError as lnae:
+        timestamp = get_single_value(message,
+                                     'timestamp_field',
+                                     remove=True,
+                                     allow_list=True)
+    finally:
+        ts_val_list = isinstance(timestamp, (set, tuple, list))
 
+    logger.debug(timestamp)
     # get data
     data = dict()
     if len(agent_config_vars['data_fields']) != 0:
-        if len(agent_config_vars['metric_name_field']) != 0:
+        if len(agent_config_vars['metric_name_field']) != 0 and 'METRIC' in if_config_vars['project_type']:
             # this object is one message
             name = get_single_value(message, 'metric_name_field')
-            value = get_single_value(message, 'data_field')
-            data[name] = value
+            data_value = json_format_field_value(
+                            _get_json_field_helper(
+                                message,
+                                agent_config_vars['data_fields'][0].split(JSON_LEVEL_DELIM),
+                                allow_list=True))
+            if ts_val_list and isinstance(data_value, (set, tuple, list)):
+                for i in list(range(minlen(data_value, timestamp))):
+                    data[timestamp[i]] = {name: data_value[i]}
+            else:
+                data[timestamp] = {name: data_value}
         else:
             for data_field in agent_config_vars['data_fields']:
                 data_value = json_format_field_value(
@@ -818,27 +861,36 @@ def parse_json_message_single(message):
                                     data_field.split(JSON_LEVEL_DELIM),
                                     allow_list=True))
                 if len(data_value) != 0:
-                    merge_data(data, data_field, data_value)
+                    if ts_val_list and isinstance(data_value, (set, tuple, list)):
+                        for i in list(range(minlen(data_value, timestamp))):
+                            data[timestamp[i]] = merge_data(data_field, data_value[i])
+                    else:
+                        data[timestamp] = merge_data(data_field, data_value)
     else:
-        data = json.loads(json.dumps(message))
+        if ts_val_list and isinstance(message, (set, tuple, list)):
+            for i in list(range(minlen(message, timestamp))):
+                data[timestamp[i]] = message[i]
+        else:
+            data[timestamp] = json.loads(json.dumps(message))
 
     # hand off
-    if 'METRIC' in if_config_vars['project_type']:
-        # put metric data in top level
-        data = fold_up(data, value_tree=True)
-        for data_field, data_value in data.items():
-            if data_value is not None:
-                metric_handoff(
-                        timestamp,
-                        data_field,
-                        data_value,
-                        instance,
-                        device)
-    else:
-        log_handoff(timestamp, data, instance, device)
+    for timestamp, report_data in data.items():
+        ts = get_timestamp_from_date_string(timestamp)
+        if 'METRIC' in if_config_vars['project_type']:
+            data_folded = fold_up(report_data, value_tree=True)  # put metric data in top level
+            for data_field, data_value in data_folded.items():
+                if data_value is not None:
+                    metric_handoff(
+                            ts,
+                            data_field,
+                            data_value,
+                            instance,
+                            device)
+        else:
+            log_handoff(ts, report_data, instance, device)
 
 
-def merge_data(data, field, value):
+def merge_data(field, value, data={}):
     fields = field.split(JSON_LEVEL_DELIM)
     for i in range(len(fields) - 1):
         field = fields[i]
@@ -846,6 +898,7 @@ def merge_data(data, field, value):
             data[field] = dict()
         data = data[field]
     data[fields[-1]] = value
+    return data
 
 
 def parse_csv_message(message):
@@ -957,7 +1010,7 @@ def get_datetime_from_date_string(date_string):
                 logger.info('timestamp {} does not match {}'.format(
                     date_string,
                     timestamp_format))
-                return -1
+                continue
     else:
         try:
             timestamp_datetime = dateutil.parse.parse(date_string)
@@ -1188,8 +1241,8 @@ def send_metric(timestamp, field_name, data, instance, device=''):
     except Exception as e:
         logger.warning(e)
         logger.warning(
-            'timestamp: {}\nfield_name: {}\ninstance: {}\ndevice: {}'.format(
-                timestamp, field_name, instance, device))
+                'timestamp: {}\nfield_name: {}\ninstance: {}\ndevice: {}\ndata: {}'.format(
+                timestamp, field_name, instance, device, data))
     else:
         append_metric_data_to_entry(timestamp, field_name, data, instance, device)
         track['entry_count'] += 1
@@ -1221,7 +1274,7 @@ def append_metric_data_to_entry(timestamp, field_name, data, instance, device=''
 
 def transpose_metrics():
     """ flatten data up to the timestamp"""
-    for timestamp, kvs in track['current_dict'].itemss():
+    for timestamp, kvs in track['current_dict'].items():
         track['line_count'] += 1
         new_row = dict()
         new_row['timestamp'] = timestamp

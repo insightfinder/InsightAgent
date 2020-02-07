@@ -69,10 +69,12 @@ sasl_oauth_token_provider =
 [insightfinder]
 user_name = 
 license_key = 
+token = 
 project_name = 
 # metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
 project_type = 
-sampling_interval = 10
+sampling_interval = 1
+run_interval = 10
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
 if_url = https://app.insightfinder.com
