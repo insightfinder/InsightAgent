@@ -168,7 +168,7 @@ def get_agent_config_vars():
             'raw_start_regex': raw_start_regex,
             'json_top_level': json_top_level,
             'csv_field_names': csv_field_names,
-			'csv_field_delimiter': csv_field_delimiter,
+	    'csv_field_delimiter': csv_field_delimiter,
             # 'project_field': project_field,
             'instance_field': instance_field,
             'device_field': device_field,
