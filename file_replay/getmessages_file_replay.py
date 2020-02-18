@@ -45,16 +45,22 @@ def start_data_processing(thread_number):
     # start with current file or first in queue
     current_file = agent_config_vars['state']['current_file']
     if current_file:
-        _file = {str(os.stat(current_file).st_ino): current_file}
-        file_list.pop(file_list.index(_file))
+        _file = json.loads(current_file)
+        _file_st_ino, _file_name = _file.items()[0]
+        if str(os.stat(_file_name).st_ino) != _file_st_ino:
+            # between the last read and now, this file has rotated
+            update_state('current_file', '')
+            update_state('current_file_offset', 0)
+            _file = file_list.pop(0)
+        else:
+            file_list.pop(file_list.index(_file))
     else:
         _file = file_list.pop(0)
     # while there's a file to read
     while _file:
         logger.debug(_file)
         # get file info
-        st_ino_orig = _file.keys()[0]
-        file_name = _file[st_ino_orig]
+        st_ino_orig, file_name = _file.items()[0]
         if st_ino_orig in completed_files_st_ino:
             logger.debug('already streamed file {}'.format(file_name))
             _file = file_list.pop(0) if len(file_list) != 0 else None
@@ -138,7 +144,7 @@ def reader(_format, _file, st_ino):
         with open(_file, mode) as data:
             # preformatting on all data
             if 'TAIL' in _format:
-                update_state('current_file', _file)
+                update_state('current_file', json.dumps({st_ino: _file}))
                 data.seek(int(agent_config_vars['state']['current_file_offset'])) # read from state
             if _format == 'XML':
                 data = xml2dict.parse(data)
@@ -179,20 +185,24 @@ def tail_file(_file, data):
 
 
 def update_state(setting, value, append=False):
-    config_ini = config_ini_path()
-    if os.path.exists(config_ini):
+    # update in-mem
+    if append:
+        current = agent_config_vars['state'][setting]
+        value = '{},{}'.format(current, value) if current else value
+        agent_config_vars['state'][setting] = value.split(',')
+    else:
+        agent_config_vars['state'][setting] = value
+    logger.debug('setting {} to {}'.format(setting, value))
+    # update config file
+    if os.path.exists(config_ini_path()):
         config_parser = ConfigParser.SafeConfigParser()
-        config_parser.read(config_ini)
-        if append:
-            current = config_parser.get('state', setting, value)
-            value = '{},{}'.format(current, value) if current else value
-            agent_config_vars['state'][setting] = value.split(',')
-        else:
-            agent_config_vars['state'][setting] = value
-        logger.debug('setting {} to {}'.format(setting, value))
-        config_parser.set('state', setting, str(value))
-        with open(config_ini, 'w') as config_file:
-            config_parser.write(config_file)
+        # only write to config if tailing
+        if 'TAIL' in agent_config_vars['data_format']:
+            config_parser.set('state', setting, str(value))
+            with open(config_ini, 'w') as config_file:
+                config_parser.write(config_file)
+    # return new value (if append)
+    return value
 
 
 def get_agent_config_vars():
@@ -325,7 +335,7 @@ def get_agent_config_vars():
         # add parsed variables to a global
         config_vars = {
             'state': {
-                'current_file': current_file if os.path.isfile(current_file) else '',
+                'current_file': current_file,
                 'current_file_offset': int(current_file_offset),
                 'completed_files_st_ino': completed_files_st_ino.split(',')
                 },
