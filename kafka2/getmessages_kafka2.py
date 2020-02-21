@@ -19,28 +19,40 @@ import statistics
 import subprocess
 import shlex
 
+from kafka import KafkaConsumer
 '''
 This script gathers data to send to Insightfinder
 '''
 
-
 def start_data_processing(thread_number):
-    """ TODO: replace with your code.
-    Most work regarding sending to IF is abstracted away for you.
-    This function will get the data to send and prepare it for the API.
-    The general outline should be:
-    0. Define the project type in config.ini
-    1. Parse config options
-    2. Gather data
-    3. Parse each entry
-    4. Call the appropriate handoff function
-        metric_handoff()
-        log_handoff()
-        alert_handoff()
-        incident_handoff()
-        deployment_handoff()
-    See zipkin for an example that uses os.fork to send both metric and log data.
-    """
+    # open consumer
+    consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
+    logger.info('Started consumer number ' + str(thread_number))
+    # subscribe to given topics
+    consumer.subscribe(agent_config_vars['topics'])
+    logger.info('Successfully subscribed to topics' + str(agent_config_vars['topics']))
+    # start consuming messages
+    parse_messages_kafka(consumer)
+    consumer.close()
+    logger.info('Closed consumer number ' + str(thread_number))
+
+
+def parse_messages_kafka(consumer):
+    logger.info('Reading messages')
+    for message in consumer:
+        try:
+            logger.info('Message received')
+            logger.debug(message.value)
+            if 'JSON' in agent_config_vars['data_format']:
+                parse_json_message(json.loads(str(message.value)))
+            elif 'CSV' in agent_config_vars['data_format']:
+                parse_json_message(label_message(message.value.split(',')))
+            else:
+                parse_raw_message(message)
+        except Exception as e:
+            logger.warn('Error when parsing message')
+            logger.warn(e)
+            continue
 
 
 def get_agent_config_vars():
@@ -49,34 +61,92 @@ def get_agent_config_vars():
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
         try:
-            ## TODO: fill out the fields to grab. examples given below
-            ## replace 'agent' with the appropriate section header.
-            # proxies
-            agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
-            agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
+            # proxy settings
+            agent_http_proxy = config_parser.get('kafka', 'agent_http_proxy')
+            agent_https_proxy = config_parser.get('kafka', 'agent_https_proxy')
+
+            # kafka settings
+            kafka_config = {
+                # hardcoded
+                'api_version': (0, 9),
+                'auto_offset_reset': 'latest',
+                'consumer_timeout_ms': if_config_vars['sampling_interval'] * 1000 if 'METRIC' in if_config_vars['project_type'] or 'LOG' in if_config_vars['project_type'] else None,
+
+                # consumer settings
+                'group_id': config_parser.get('kafka', 'group_id'),
+                'client_id': config_parser.get('kafka', 'client_id'),
+
+                # SSL
+                'security_protocol': 'SSL' if config_parser.get('kafka', 'security_protocol') == 'SSL' else 'PLAINTEXT',
+                'ssl_context': config_parser.get('kafka', 'ssl_context'),
+                'ssl_cafile': config_parser.get('kafka', 'ssl_cafile'),
+                'ssl_certfile': config_parser.get('kafka', 'ssl_certfile'),
+                'ssl_keyfile': config_parser.get('kafka', 'ssl_keyfile'),
+                'ssl_password': config_parser.get('kafka', 'ssl_password'),
+                'ssl_crlfile': config_parser.get('kafka', 'ssl_crlfile'),
+                'ssl_ciphers': config_parser.get('kafka', 'ssl_ciphers'),
+                'ssl_check_hostname': ternary_tfd(config_parser.get('kafka', 'ssl_check_hostname')),
+
+                # SASL
+                'sasl_mechanism': config_parser.get('kafka', 'sasl_mechanism'),
+                'sasl_plain_username': config_parser.get('kafka', 'sasl_plain_username'),
+                'sasl_plain_password': config_parser.get('kafka', 'sasl_plain_password'),
+                'sasl_kerberos_service_name': config_parser.get('kafka', 'sasl_kerberos_service_name'),
+                'sasl_kerberos_domain_name': config_parser.get('kafka', 'sasl_kerberos_domain_name'),
+                'sasl_oauth_token_provider': config_parser.get('kafka', 'sasl_oauth_token_provider')
+            }
+
+            # only keep settings with values
+            kafka_kwargs = { k:v for (k, v) in kafka_config.items() if v }
+
+            # handle required arrays
+            # bootstrap serverss
+            if len(config_parser.get('kafka', 'bootstrap_servers')) != 0:
+                kafka_kwargs['bootstrap_servers'] = config_parser.get('kafka', 'bootstrap_servers').strip().split(',')
+            else:
+                config_error('bootstrap_servers')
+
+            # topics
+            if len(config_parser.get('kafka', 'topics')) != 0:
+                topics = config_parser.get('kafka', 'topics').split(',')
+            else:
+                config_error('topics')
 
             # filters
-            filters_include = config_parser.get('agent', 'filters_include')
-            filters_exclude = config_parser.get('agent', 'filters_exclude')
+            filters_include = config_parser.get('kafka', 'filters_include')
+            filters_exclude = config_parser.get('kafka', 'filters_exclude')
 
             # message parsing
-            data_format = config_parser.get('agent', 'data_format').upper()
-            raw_regex = config_parser.get('agent', 'raw_regex', raw=True)
-            raw_start_regex = config_parser.get('agent', 'raw_start_regex', raw=True)
-            csv_field_names = config_parser.get('agent', 'csv_field_names')
-            csv_field_delimiter = config_parser.get('agent', 'csv_field_delimiter', raw=True) or ',|\t'
-            json_top_level = config_parser.get('agent', 'json_top_level')
-            # project_field = config_parser.get('agent', 'project_field', raw=True)
-            instance_field = config_parser.get('agent', 'instance_field', raw=True)
-            device_field = config_parser.get('agent', 'device_field', raw=True)
-            timestamp_field = config_parser.get('agent', 'timestamp_field', raw=True) or 'timestamp'
-            timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
-            timezone = config_parser.get('agent', 'timezone')
-            data_fields = config_parser.get('agent', 'data_fields', raw=True)
+            timestamp_format = config_parser.get('kafka', 'timestamp_format', raw=True)
+            timestamp_field = config_parser.get('kafka', 'timestamp_field', raw=True) or 'timestamp'
+            timezone = config_parser.get('kafka', 'timezone') or 'UTC'
+            instance_field = config_parser.get('kafka', 'instance_field', raw=True)
+            device_field = config_parser.get('kafka', 'device_field', raw=True)
+            data_fields = config_parser.get('kafka', 'data_fields', raw=True)
 
-        except ConfigParser.NoOptionError as cp_noe:
-            logger.error(cp_noe)
+            # definitions
+            data_format = config_parser.get('kafka', 'data_format').upper()
+            csv_field_names = config_parser.get('kafka', 'csv_field_names')
+            csv_field_delimiter = config_parser.get('kafka', 'csv_field_delimiter', raw=True) or ',|\t'
+            json_top_level = config_parser.get('kafka', 'json_top_level')
+            raw_regex = config_parser.get('kafka', 'raw_regex', raw=True)
+            raw_start_regex = config_parser.get('kafka', 'raw_start_regex', raw=True)
+
+        except ConfigParser.NoOptionError:
             config_error()
+
+        # any post-processing
+        # check SASL
+        if 'sasl_mechanism' in kafka_kwargs:
+            if kafka_kwargs['sasl_mechanism'] not in { 'PLAIN', 'GSSAPI', 'OAUTHBEARER' }:
+                logger.warn('sasl_mechanism not one of PLAIN, GSSAPI, or OAUTHBEARER')
+                kafka_kwargs.pop('sasl_mechanism')
+            elif kafka_kwargs['sasl_mechanism'] == 'PLAIN':
+                # set required vars for plain sasl if not present
+                if 'sasl_plain_username' not in kafka_kwargs:
+                    kafka_kwargs['sasl_plain_username'] = ''
+                if 'sasl_plain_password' not in kafka_kwargs:
+                    kafka_kwargs['sasl_plain_password'] = ''
 
         # proxies
         agent_proxies = dict()
@@ -107,7 +177,7 @@ def get_agent_config_vars():
             if timestamp_field in data_fields:
                 data_fields.pop(data_fields.index(timestamp_field))
 
-        # timestamp format
+        # timestamp
         timestamp_format = timestamp_format.partition('.')[0]
         if '%z' in timestamp_format or '%Z' in timestamp_format:
             ts_format_info = strip_tz_info(timestamp_format)
@@ -125,30 +195,20 @@ def get_agent_config_vars():
             timezone = pytz.timezone(timezone)
 
         # data format
-        if data_format in {'CSV',
-                           'XLS',
-                           'XLSX'}:
-            # field names
+        if data_format == 'CSV':
             if len(csv_field_names) == 0:
                 config_error('csv_field_names')
-            else:
-                csv_field_names = csv_field_names.split(',')
-
-            # field delim
+            csv_field_names = csv_field_names.split(',')
             try:
                 csv_field_delimiter = regex.compile(csv_field_delimiter)
             except Exception as e:
                 config_error('csv_field_delimiter')
-        elif data_format in {'JSON',
-                             'AVRO',
-                             'XML'}:
-            pass
-        elif data_format in {'RAW',
-                             'TAIL'}:
+        elif data_format == 'RAW':
             try:
                 raw_regex = regex.compile(raw_regex)
             except Exception as e:
                 config_error('raw_regex')
+            # multiline
             if len(raw_start_regex) != 0:
                 if raw_start_regex[0] != '^':
                     config_error('raw_start_regex')
@@ -156,29 +216,32 @@ def get_agent_config_vars():
                     raw_start_regex = regex.compile(raw_start_regex)
                 except Exception as e:
                     config_error('raw_start_regex')
+        elif data_format == 'JSON':
+            pass
         else:
             config_error('data_format')
 
         # add parsed variables to a global
         config_vars = {
-            'proxies': agent_proxies,
+            'kafka_kwargs': kafka_kwargs,
+            'topics': topics,
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
             'data_format': data_format,
             'raw_regex': raw_regex,
             'raw_start_regex': raw_start_regex,
-            'json_top_level': json_top_level,
             'csv_field_names': csv_field_names,
-	    'csv_field_delimiter': csv_field_delimiter,
-            # 'project_field': project_field,
+            'csv_field_delimiter': csv_field_delimiter,
+            'json_top_level': json_top_level,
+            'timestamp_format': ts_format_info['timestamp_format'],
+            'strip_tz': ts_format_info['strip_tz'],
+            'strip_tz_fmt': ts_format_info['strip_tz_fmt'],
+            'timezone': timezone,
+            'timestamp_field': timestamp_field,
             'instance_field': instance_field,
             'device_field': device_field,
             'data_fields': data_fields,
-            'timestamp_field': timestamp_field,
-            'timezone': timezone,
-            'timestamp_format': ts_format_info['timestamp_format'],
-            'strip_tz': ts_format_info['strip_tz'],
-            'strip_tz_fmt': ts_format_info['strip_tz_fmt']
+            'proxies': agent_proxies
         }
 
         return config_vars
