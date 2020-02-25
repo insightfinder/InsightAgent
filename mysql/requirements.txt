@@ -1,0 +1,4 @@
+configparser==4.0.2
+mysql-connector==2.2.9
+pytz==2019.3
+requests==2.23.0
