@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import ConfigParser
-import collections
 import json
 import logging
 import os
@@ -11,7 +10,6 @@ import time
 import pytz
 from optparse import OptionParser
 from multiprocessing import Process
-from itertools import islice
 from datetime import datetime
 import dateutil
 import urlparse
@@ -20,7 +18,6 @@ import requests
 import statistics
 import subprocess
 import shlex
-import numexpr
 
 '''
 This script gathers data to send to Insightfinder
@@ -67,19 +64,56 @@ def get_agent_config_vars():
             raw_regex = config_parser.get('agent', 'raw_regex', raw=True)
             raw_start_regex = config_parser.get('agent', 'raw_start_regex', raw=True)
             csv_field_names = config_parser.get('agent', 'csv_field_names')
-            csv_field_delimiter = config_parser.get('agent', 'csv_field_delimiter', raw=True) or ',|\t'
+            csv_field_delimiter = config_parser.get('agent', 'csv_field_delimiter', raw=True) or CSV_DELIM
             json_top_level = config_parser.get('agent', 'json_top_level')
             # project_field = config_parser.get('agent', 'project_field', raw=True)
             instance_field = config_parser.get('agent', 'instance_field', raw=True)
             device_field = config_parser.get('agent', 'device_field', raw=True)
             timestamp_field = config_parser.get('agent', 'timestamp_field', raw=True) or 'timestamp'
             timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
-            timezone = config_parser.get('agent', 'timezone')
+            timezone = config_parser.get('agent', 'timezone') or 'UTC'
             data_fields = config_parser.get('agent', 'data_fields', raw=True)
 
         except ConfigParser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
+
+        # data format
+        if data_format in {'CSV',
+                           'CSVTAIL',
+                           'XLS',
+                           'XLSX'}:
+            # field names
+            if len(csv_field_names) == 0:
+                config_error('csv_field_names')
+            else:
+                csv_field_names = csv_field_names.split(',')
+
+            # field delim
+            try:
+                csv_field_delimiter = regex.compile(csv_field_delimiter)
+            except Exception as e:
+                config_error('csv_field_delimiter')
+        elif data_format in {'JSON',
+                             'JSONTAIL',
+                             'AVRO',
+                             'XML'}:
+            pass
+        elif data_format in {'RAW',
+                             'RAWTAIL'}:
+            try:
+                raw_regex = regex.compile(raw_regex)
+            except Exception as e:
+                config_error('raw_regex')
+            if len(raw_start_regex) != 0:
+                if raw_start_regex[0] != '^':
+                    config_error('raw_start_regex')
+                try:
+                    raw_start_regex = regex.compile(raw_start_regex)
+                except Exception as e:
+                    config_error('raw_start_regex')
+        else:
+            config_error('data_format')
 
         # proxies
         agent_proxies = dict()
@@ -95,20 +129,24 @@ def get_agent_config_vars():
             filters_exclude = filters_exclude.split('|')
 
         # fields
-        # project_field = project_field.split(',')
-        instance_field = instance_field.split(',')
-        device_field = device_field.split(',')
-        timestamp_field = timestamp_field.split(',')
+        # project_fields = project_field.split(',')
+        instance_fields = instance_field.split(',')
+        device_fields = device_field.split(',')
+        timestamp_fields = timestamp_field.split(',')
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
-            # if project_field in data_fields:
-            #    data_fields.pop(data_fields.index(project_field))
-            if instance_field in data_fields:
-                data_fields.pop(data_fields.index(instance_field))
-            if device_field in data_fields:
-                data_fields.pop(data_fields.index(device_field))
-            if timestamp_field in data_fields:
-                data_fields.pop(data_fields.index(timestamp_field))
+            # for project_field in project_fields:
+            #   if project_field in data_fields:
+            #       data_fields.pop(data_fields.index(project_field))
+            for instance_field in instance_fields:
+                if instance_field in data_fields:
+                    data_fields.pop(data_fields.index(instance_field))
+            for device_field in device_fields:
+                if device_field in data_fields:
+                    data_fields.pop(data_fields.index(device_field))
+            for timestamp_field in timestamp_fields:
+                if timestamp_field in data_fields:
+                    data_fields.pop(data_fields.index(timestamp_field))
 
         # timestamp format
         timestamp_format = timestamp_format.partition('.')[0]
@@ -122,41 +160,10 @@ def get_agent_config_vars():
             ts_format_info = {'strip_tz': True,
                               'strip_tz_fmt': PCT_z_FMT,
                               'timestamp_format': ISO8601}
-
-        # data format
-        if data_format in {'CSV',
-                           'XLS',
-                           'XLSX'}:
-            # field names
-            if len(csv_field_names) == 0:
-                config_error('csv_field_names')
-            else:
-                csv_field_names = csv_field_names.split(',')
-
-            # field delim
-            try:
-                csv_field_delimiter = regex.compile(csv_field_delimiter)
-            except Exception as e:
-                config_error('csv_field_delimiter')
-        elif data_format in {'JSON',
-                             'AVRO',
-                             'XML'}:
-            pass
-        elif data_format in {'RAW',
-                             'TAIL'}:
-            try:
-                raw_regex = regex.compile(raw_regex)
-            except Exception as e:
-                config_error('raw_regex')
-            if len(raw_start_regex) != 0:
-                if raw_start_regex[0] != '^':
-                    config_error('raw_start_regex')
-                try:
-                    raw_start_regex = regex.compile(raw_start_regex)
-                except Exception as e:
-                    config_error('raw_start_regex')
+        if timezone not in pytz.all_timezones:
+            config_error('timezone')
         else:
-            config_error('data_format')
+            timezone = pytz.timezone(timezone)
 
         # add parsed variables to a global
         config_vars = {
@@ -169,11 +176,11 @@ def get_agent_config_vars():
             'json_top_level': json_top_level,
             'csv_field_names': csv_field_names,
 	    'csv_field_delimiter': csv_field_delimiter,
-            # 'project_field': project_field,
-            'instance_field': instance_field,
-            'device_field': device_field,
+            # 'project_field': project_fields,
+            'instance_field': instance_fields,
+            'device_field': device_fields,
             'data_fields': data_fields,
-            'timestamp_field': timestamp_field,
+            'timestamp_field': timestamp_fields,
             'timezone': timezone,
             'timestamp_format': ts_format_info['timestamp_format'],
             'strip_tz': ts_format_info['strip_tz'],
@@ -190,9 +197,10 @@ def get_agent_config_vars():
 #########################
 def get_if_config_vars():
     """ get config.ini vars """
-    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))):
+    config_ini = config_ini_path()
+    if os.path.exists(config_ini):
         config_parser = ConfigParser.SafeConfigParser()
-        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
+        config_parser.read(config_ini)
         try:
             user_name = config_parser.get('insightfinder', 'user_name')
             license_key = config_parser.get('insightfinder', 'license_key')
@@ -284,6 +292,14 @@ def get_if_config_vars():
         config_error_no_config()
 
 
+def config_ini_path():
+    return abs_path_from_cur(cli_config_vars['config'])
+
+
+def abs_path_from_cur(filename=''):
+    return os.path.abspath(os.path.join(__file__, os.pardir, filename))
+
+
 def get_cli_config_vars():
     """ get CLI options. use of these options should be rare """
     usage = 'Usage: %prog [options]'
@@ -293,11 +309,13 @@ def get_cli_config_vars():
     parser.add_option('--threads', default=1, action='store', dest='threads',
                       help='Number of threads to run')
     """
-    parser.add_option('-q', '--quiet', action='store_true', dest='quiet',
+    parser.add_option('-c', '--config', action='store', dest='config', default=abs_path_from_cur('config.ini'),
+                      help='Path to the config file to use. Defaults to {}'.format(abs_path_from_cur('config.ini')))
+    parser.add_option('-q', '--quiet', action='store_true', dest='quiet', default=False,
                       help='Only display warning and error log messages')
-    parser.add_option('-v', '--verbose', action='store_true', dest='verbose',
+    parser.add_option('-v', '--verbose', action='store_true', dest='verbose', default=False,
                       help='Enable verbose logging')
-    parser.add_option('-t', '--testing', action='store_true', dest='testing',
+    parser.add_option('-t', '--testing', action='store_true', dest='testing', default=False,
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
     (options, args) = parser.parse_args()
@@ -311,6 +329,7 @@ def get_cli_config_vars():
     """
 
     config_vars = {
+        'config': options.config if os.path.isfile(options.config) else abs_path_from_cur('config.ini'),
         'threads': 1,
         'testing': False,
         'log_level': logging.INFO
@@ -352,8 +371,6 @@ def strip_tz_info(timestamp_format):
         timestamp_format = timestamp_format[:position] + timestamp_format[position+2:]
     else:
         timestamp_format = timestamp_format[:position]
-    if agent_config_vars['timezone'] == pytz.timezone('UTC'):
-        logger.warning('Time zone info will be stripped from timestamps, but no time zone info was supplied in the config. Assuming UTC')
 
     return {'strip_tz': True,
             'strip_tz_fmt': strip_tz_fmt,
@@ -540,6 +557,7 @@ def parse_raw_line(message, line):
 
 
 def parse_raw_message(message):
+    logger.debug(message)
     matches = agent_config_vars['raw_regex'].match(message)
     if matches:
         message_json = matches.groupdict()
@@ -629,7 +647,7 @@ def get_data_value(message, setting_value):
                                     default=value,
                                     allow_list=True)
         if evaluate:
-            value = numexpr.evaluate(value).item()
+            value = eval(value)
     else:
         name = setting_value
         value = get_json_field(message,
@@ -899,7 +917,7 @@ def parse_json_message_single(message):
 
 def label_message(message, fields=[]):
     """ turns unlabeled, split data into labeled data """
-    if agent_config_vars['data_format'] == 'CSV':
+    if agent_config_vars['data_format'] in {'CSV', 'CSVTAIL', 'IFEXPORT'}:
         fields = agent_config_vars['csv_field_names']
     json = dict()
     for i in range(minlen(fields, message)):
@@ -1241,10 +1259,10 @@ def prepare_log_entry(timestamp, data, instance, device=''):
 # Functions to handle Metric data #
 ###################################
 def metric_handoff(timestamp, field_name, data, instance, device=''):
-    send_metric(timestamp, field_name, data, instance or HOSTNAME, device)
+    add_and_send_metric(timestamp, field_name, data, instance or HOSTNAME, device)
 
 
-def send_metric(timestamp, field_name, data, instance, device=''):
+def add_and_send_metric(timestamp, field_name, data, instance, device=''):
     # validate data
     try:
         data = float(data)
@@ -1255,12 +1273,16 @@ def send_metric(timestamp, field_name, data, instance, device=''):
                 timestamp, field_name, instance, device, data))
     else:
         append_metric_data_to_entry(timestamp, field_name, data, instance, device)
-        track['entry_count'] += 1
-        if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
-            send_data_wrapper()
-        elif track['entry_count'] % 500 == 0:
-            logger.debug('Current data object size: {} bytes'.format(
-                get_json_size_bytes(track['current_dict'])))
+        send_metric()
+
+
+def send_metric():
+    track['entry_count'] += 1
+    if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
+        send_data_wrapper()
+    elif track['entry_count'] % 500 == 0:
+        logger.debug('Current data object size: {} bytes'.format(
+            get_json_size_bytes(track['current_dict'])))
 
 
 def append_metric_data_to_entry(timestamp, field_name, data, instance, device=''):
@@ -1570,19 +1592,20 @@ if __name__ == "__main__":
     PERIOD = regex.compile(r"\.")
     COMMA = regex.compile(r"\,")
     NON_ALNUM = regex.compile(r"[^a-zA-Z0-9]")
-    PCT_z_FMT = regex.compile(r"[\+\-][0-9]{2}[\:]?[0-9]{2}")
+    PCT_z_FMT = regex.compile(r"[\+\-][0-9]{2}[\:]?[0-9]{2}|\w+\s+\w+\s+\w+")
     PCT_Z_FMT = regex.compile(r"[A-Z]{3,4}")
     FORMAT_STR = regex.compile(r"{(.*?)}")
     HOSTNAME = socket.gethostname().partition('.')[0]
     ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
     JSON_LEVEL_DELIM = '.'
-    CSV_DELIM = ','
+    CSV_DELIM = r",|\t"
     ATTEMPTS = 3
     track = dict()
 
     # get config
     cli_config_vars = get_cli_config_vars()
     logger = set_logger_config(cli_config_vars['log_level'])
+    logger.debug(cli_config_vars)
     if_config_vars = get_if_config_vars()
     agent_config_vars = get_agent_config_vars()
     print_summary_info()
