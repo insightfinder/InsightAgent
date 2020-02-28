@@ -25,32 +25,28 @@ This script gathers data to send to Insightfinder
 
 
 def start_data_processing(thread_number):
-    """ TODO: replace with your code.
-    Most work regarding sending to IF is abstracted away for you.
-    This function will get the data to send and prepare it for the API.
-    The general outline should be:
-    0. Define the project type in config.ini
-    1. Parse config options
-    2. Gather data
-    3. Parse each entry
-    4. Call the appropriate handoff function
-        metric_handoff()
-        log_handoff()
-        alert_handoff()
-        incident_handoff()
-        deployment_handoff()
-    See zipkin for an example that uses os.fork to send both metric and log data.
-    """
+    api_response = send_request(agent_config_vars['api_url'], auth=agent_config_vars['auth'])
+    try:
+        api_json = json.loads(api_response.content)
+        parse_json_message(api_json)
+    except Exception as e:
+        logger.warning(e)
+        pass
 
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
-    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))):
+    config_ini = config_ini_path()
+    if os.path.exists(config_ini):
         config_parser = ConfigParser.SafeConfigParser()
-        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
+        config_parser.read(config_ini)
         try:
-            ## TODO: fill out the fields to grab. examples given below
-            ## replace 'agent' with the appropriate section header.
+            # api
+            base_url = config_parser.get('agent', 'base_url')
+            api_endpoint = config_parser.get('agent', 'api_endpoint')
+            username = config_parser.get('agent', 'username')
+            password = config_parser.get('agent', 'password')
+
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
@@ -60,11 +56,6 @@ def get_agent_config_vars():
             filters_exclude = config_parser.get('agent', 'filters_exclude')
 
             # message parsing
-            data_format = config_parser.get('agent', 'data_format').upper()
-            raw_regex = config_parser.get('agent', 'raw_regex', raw=True)
-            raw_start_regex = config_parser.get('agent', 'raw_start_regex', raw=True)
-            csv_field_names = config_parser.get('agent', 'csv_field_names')
-            csv_field_delimiter = config_parser.get('agent', 'csv_field_delimiter', raw=True) or CSV_DELIM
             json_top_level = config_parser.get('agent', 'json_top_level')
             # project_field = config_parser.get('agent', 'project_field', raw=True)
             instance_field = config_parser.get('agent', 'instance_field', raw=True)
@@ -78,42 +69,11 @@ def get_agent_config_vars():
             logger.error(cp_noe)
             config_error()
 
-        # data format
-        if data_format in {'CSV',
-                           'CSVTAIL',
-                           'XLS',
-                           'XLSX'}:
-            # field names
-            if len(csv_field_names) == 0:
-                config_error('csv_field_names')
-            else:
-                csv_field_names = csv_field_names.split(',')
-
-            # field delim
-            try:
-                csv_field_delimiter = regex.compile(csv_field_delimiter)
-            except Exception as e:
-                config_error('csv_field_delimiter')
-        elif data_format in {'JSON',
-                             'JSONTAIL',
-                             'AVRO',
-                             'XML'}:
-            pass
-        elif data_format in {'RAW',
-                             'RAWTAIL'}:
-            try:
-                raw_regex = regex.compile(raw_regex)
-            except Exception as e:
-                config_error('raw_regex')
-            if len(raw_start_regex) != 0:
-                if raw_start_regex[0] != '^':
-                    config_error('raw_start_regex')
-                try:
-                    raw_start_regex = regex.compile(raw_start_regex)
-                except Exception as e:
-                    config_error('raw_start_regex')
-        else:
-            config_error('data_format')
+        # API
+        api_url = urlparse.urljoin(base_url, api_endpoint)
+        if len(api_url) == 0:
+            config_error('base_url or api_endpoint')
+        auth = (username, password)
 
         # proxies
         agent_proxies = dict()
@@ -167,15 +127,13 @@ def get_agent_config_vars():
 
         # add parsed variables to a global
         config_vars = {
+            'api_url': api_url,
+            'auth': auth,
             'proxies': agent_proxies,
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
-            'data_format': data_format,
-            'raw_regex': raw_regex,
-            'raw_start_regex': raw_start_regex,
+            'data_format': 'JSON',
             'json_top_level': json_top_level,
-            'csv_field_names': csv_field_names,
-	    'csv_field_delimiter': csv_field_delimiter,
             # 'project_field': project_fields,
             'instance_field': instance_fields,
             'device_field': device_fields,
