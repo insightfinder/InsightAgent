@@ -1,4 +1,12 @@
 [agent]
+## API
+# base url for the API, ie `https://frontend.com`
+base_url = 
+# endpoint for the API, ie `/api/v1/messages`
+api_endpoint = 
+username = 
+password = 
+
 ## filters
 # define a list of filters to use as field:allowed values|field:allowed values
 # for example:
@@ -9,26 +17,7 @@ filters_include =
 #   message.env:dev,cde|message.status:draft
 filters_exclude = 
 
-# raw, rawtail, csv, csvtail, xls, xlsx, json, jsontail, avro, or xml
-# *tail formats keep track of the current file & position + completed files in [state] below
-data_format = 
-
-## RAW
-# if raw data, the regex used to parse the log. It must use named capture groups `(?<name>.*)` that correspond to the *_field config variables below (ie  `(?<timestamp>.*)`,  `(?<host>.*)`,  `(?<device>.*)`,  `(?<etc>.*)`. The raw message will be treated as a field named `_raw`
-raw_regex = 
-# if the log is multiline, the regex that indicates that the line is the start of a new message. this MUST start with ^ (unless blank)
-raw_start_regex = 
-
-## CSV, XLS, XLSX
-# Required - field names, in order as timestamp,field1,field2...
-csv_field_names =
-# a regex string used to delimit "csv" fields (ie the default ,|\t matches a comma or tab character)
-csv_field_delimiter = ,|\t
-
-## JSON, AVRO, XML
 # for multi-entry messages, define the top-level
-#   if messages are [{message1}, {message2}], set top_level = []
-#   it's expected that the top level will be a list
 # fields in json can be defined as level0.level1.levelN
 json_top_level = 
 

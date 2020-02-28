@@ -1,1 +1,1 @@
-cadvisor|hadoop-mapreduce-logs|k8s_logs|kafka2|newrelic|prometheus|spark-logs|sar|evtx|elasticsearch2|tcpdump|file_replay
+cadvisor|hadoop-mapreduce-logs|k8s_logs|kafka2|newrelic|prometheus|spark-logs|sar|evtx|elasticsearch2|tcpdump|file_replay|servicenow
