@@ -3,8 +3,9 @@
 # base url for the API, ie `https://frontend.com`
 base_url = 
 # endpoint for the API, ie `/api/v1/messages`
-api_endpoint = 
+api_endpoint = /api/now/v1/table/incident
 username = 
+# do not set password below. Instead, run `python ifobfuscate.py`
 password_encrypted = 
 
 ## filters
