@@ -60,7 +60,11 @@ tar xvf {{NEWAGENT}}.tar.gz && cd {{NEWAGENT}}
 cp config.ini.template config.ini
 vi config.ini
 ```
-See below for a further explanation of each variable.
+See below for a further explanation of each variable. If any variable ends in `_encrypted`, run
+```
+python ifobfuscate.py
+```
+to set it.
 
 #### Automated Install (local or remote)
 ###### Review propsed changes from install:
