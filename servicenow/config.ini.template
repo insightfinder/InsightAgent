@@ -5,7 +5,7 @@ base_url =
 # endpoint for the API, ie `/api/v1/messages`
 api_endpoint = 
 username = 
-password = 
+password_encrypted = 
 
 ## filters
 # define a list of filters to use as field:allowed values|field:allowed values
