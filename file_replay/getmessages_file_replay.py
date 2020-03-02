@@ -353,9 +353,9 @@ def get_agent_config_vars():
         # add parsed variables to a global
         config_vars = {
             'state': {
-                'current_file': current_file,
-                'current_file_offset': int(current_file_offset),
-                'completed_files_st_ino': completed_files_st_ino.split(',')
+                'current_file': current_file if 'TAIL' in data_format else '',
+                'current_file_offset': int(current_file_offset) if 'TAIL' in data_format else 0,
+                'completed_files_st_ino': completed_files_st_ino.split(',') if 'TAIL' in data_format else []
                 },
             'file_path': file_path,
             'file_name_regex': file_name_regex,
