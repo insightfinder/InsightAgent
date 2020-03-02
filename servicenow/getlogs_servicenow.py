@@ -18,6 +18,7 @@ import requests
 import statistics
 import subprocess
 import shlex
+import ifobfuscate
 
 '''
 This script gathers data to send to Insightfinder
@@ -45,7 +46,7 @@ def get_agent_config_vars():
             base_url = config_parser.get('agent', 'base_url')
             api_endpoint = config_parser.get('agent', 'api_endpoint')
             username = config_parser.get('agent', 'username')
-            password = config_parser.get('agent', 'password')
+            password = config_parser.get('agent', 'password_encrypted')
 
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
@@ -73,7 +74,7 @@ def get_agent_config_vars():
         api_url = urlparse.urljoin(base_url, api_endpoint)
         if len(api_url) == 0:
             config_error('base_url or api_endpoint')
-        auth = (username, password)
+        auth = (username, ifobfuscate.decode(password))
 
         # proxies
         agent_proxies = dict()
@@ -333,58 +334,6 @@ def strip_tz_info(timestamp_format):
     return {'strip_tz': True,
             'strip_tz_fmt': strip_tz_fmt,
             'timestamp_format': [timestamp_format]}
-
-
-def check_csv_fieldnames(csv_field_names, all_fields):
-    # required
-    for field, _map in all_fields['required_fields']:
-        _map['index'] = get_field_index(
-                csv_field_names,
-                _map['name'],
-                field,
-                True)
-
-    # optional
-    for field, _map in all_fields['optional_fields']:
-        if len(_map['name']) != 0:
-            index = get_field_index(
-                csv_field_names,
-                _map['name'],
-                field)
-            _map['index'] = index if isinstance(index, int) else ''
-
-    # filters
-    for field, _map in all_fields['filters']:
-        if len(_map['name']) != 0:
-            filters_temp = []
-            for _filter in _map['name']:
-                filter_field = _filter.split(':')[0]
-                filter_vals = _filter.split(':')[1]
-                filter_index = get_field_index(
-                    csv_field_names,
-                    filter_field,
-                    field)
-                if isinstance(filter_index, int):
-                    filter_temp = '{}:{}'.format(filter_index, filter_vals)
-                    filters_temp.append(filter_temp)
-            _map['filter'] = filters_temp
-
-    # data
-    if len(all_fields['data_fields']) != 0:
-        data_fields_temp = []
-        for data_field in all_fields['data_fields']:
-            data_field_temp = get_field_index(
-                csv_field_names,
-                data_field,
-                'data_field')
-            if isinstance(data_field_temp, int):
-                data_fields_temp.append(data_field_temp)
-        all_fields['data_fields'] = data_fields_temp
-    if len(all_fields['data_fields']) == 0:
-        # use all non-timestamp fields
-        all_fields['data_fields'] = range(len(csv_field_names))
-
-    return all_fields
 
 
 def ternary_tfd(b, default=''):
@@ -688,7 +637,7 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     if next_value is None:
         # no next value defined
         return ''
-    elif len(bytes(next_value)) == 0:
+    elif len(next_value) == 0:
         # no next value set
         return ''
 
@@ -757,7 +706,10 @@ def json_format_field_value(value):
     elif isinstance(value, dict):
         return value
     # stringify everything else
-    return str(value)
+    try:
+        return str(value)
+    except Exception as e:
+        return value.encode('utf-8')
 
 
 def parse_json_message(messages):
@@ -766,7 +718,7 @@ def parse_json_message(messages):
             parse_json_message(message)
     else:
         if len(agent_config_vars['json_top_level']) == 0:
-            parse_json_message_single(message)
+            parse_json_message_single(messages)
         else:
             top_level = _get_json_field_helper(
                     messages,
