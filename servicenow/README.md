@@ -20,16 +20,11 @@ curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/servicenow/
 tar xvf servicenow.tar.gz && cd servicenow
 ```
 
-###### Copy `config.ini.template` to `config.ini` and edit it:
+###### Set up `config.ini`
 ```bash
-cp config.ini.template config.ini
-vi config.ini
+python configure.py
 ```
-See below for a further explanation of each variable. If any variable ends in `_encrypted`, run
-```
-python ifobfuscate.py
-```
-to set it.
+See below for a further explanation of each variable. 
 
 #### Automated Install (local or remote)
 ###### Review propsed changes from install:
@@ -74,8 +69,8 @@ sudo ./setup/cron-config.sh
 ### Config Variables
 * **`base_url`**: Base URL to build the API off of.
 * **`api_endpoint`**: API endpoint to call.
-* `username`: Username to authenticate with.
-* `password_encrypted`: Password, encoded in base64. To set this, run `python ifobfuscate.py`.
+* **`username`**: Username to authenticate with.
+* **`password_encrypted`**: Password, encoded in base64. To set this, run `python configure.py`.
 * `filters_include`: Used to filter messages based on allowed values.
 * `filters_exclude`: Used to filter messages based on unallowed values.
 * `json_top_level`: The top-level of fields to parse in JSON/AVRO/XML. For example, if all fields of interest are nested like 

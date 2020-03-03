@@ -26,13 +26,23 @@ This script gathers data to send to Insightfinder
 
 
 def start_data_processing(thread_number):
-    api_response = send_request(agent_config_vars['api_url'], auth=agent_config_vars['auth'])
-    try:
-        api_json = json.loads(api_response.content)
-        parse_json_message(api_json)
-    except Exception as e:
-        logger.warning(e)
-        pass
+    api_response = ''
+    passthru = {'sysparm_limit': 100,
+                'sysparm_offset': 0}
+    auth = (agent_config_vars['username'], ifobfuscate.decode(agent_config_vars['password']))
+    while api_response != -1:
+        logger.info('Getting next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
+        api_response = send_request(agent_config_vars['api_url'], auth=auth, data=passthru)
+        if api_response == -1:
+            break
+        else:
+            passthru['sysparm_offset'] = passthru['sysparm_offset'] + passthru['sysparm_limit']
+        try:
+            api_json = json.loads(api_response.content)
+            parse_json_message(api_json)
+        except Exception as e:
+            logger.warning(e)
+            pass
 
 
 def get_agent_config_vars():
@@ -74,7 +84,10 @@ def get_agent_config_vars():
         api_url = urlparse.urljoin(base_url, api_endpoint)
         if len(api_url) == 0:
             config_error('base_url or api_endpoint')
-        auth = (username, ifobfuscate.decode(password))
+        if len(username) == 0:
+            config_error('username')
+        if len(password) == 0:
+            config_error('password')
 
         # proxies
         agent_proxies = dict()
@@ -129,7 +142,8 @@ def get_agent_config_vars():
         # add parsed variables to a global
         config_vars = {
             'api_url': api_url,
-            'auth': auth,
+            'username': username,
+            'password': password,
             'proxies': agent_proxies,
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
@@ -521,7 +535,6 @@ def get_data_values(timestamp, message):
     setting_values = agent_config_vars['data_fields'] or message.keys()
     # reverse list so it's in priority order, as shared fields names will get overwritten
     setting_values.reverse()
-    logger.debug(setting_values)
     data = { x: dict() for x in timestamp }
     for setting_value in setting_values:
         name, value = get_data_value(message, setting_value)
@@ -734,7 +747,7 @@ def parse_json_message(messages):
 
 def parse_json_message_single(message):
     message = json.loads(json.dumps(message))
-    logger.debug(message)
+    #logger.debug(message)
     # filter
     if len(agent_config_vars['filters_include']) != 0:
         # for each provided filter
@@ -744,7 +757,7 @@ def parse_json_message_single(message):
             filter_vals = _filter.split(':')[1].split(',')
             filter_check = get_json_field(
                 message,
-                filter_field.split(JSON_LEVEL_DELIM),
+                filter_field,
                 allow_list=True)
             # check if a valid value
             for filter_val in filter_vals:
@@ -767,7 +780,7 @@ def parse_json_message_single(message):
             filter_vals = _filter.split(':')[1].split(',')
             filter_check = get_json_field(
                 message,
-                filter_field.split(JSON_LEVEL_DELIM),
+                filter_field,
                 allow_list=True)
             # check if a valid value
             for filter_val in filter_vals:
