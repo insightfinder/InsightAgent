@@ -196,7 +196,7 @@ def tail_file(_file, data):
 def update_state(setting, value, append=False):
     # update in-mem
     if append:
-        current = agent_config_vars['state'][setting]
+        current = ','.join(agent_config_vars['state'][setting])
         value = '{},{}'.format(current, value) if current else value
         agent_config_vars['state'][setting] = value.split(',')
     else:
