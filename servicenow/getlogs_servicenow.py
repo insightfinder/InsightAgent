@@ -521,6 +521,7 @@ def get_data_values(timestamp, message):
     setting_values = agent_config_vars['data_fields'] or message.keys()
     # reverse list so it's in priority order, as shared fields names will get overwritten
     setting_values.reverse()
+    logger.debug(setting_values)
     data = { x: dict() for x in timestamp }
     for setting_value in setting_values:
         name, value = get_data_value(message, setting_value)
@@ -709,7 +710,7 @@ def json_format_field_value(value):
     try:
         return str(value)
     except Exception as e:
-        return value.encode('utf-8')
+        return str(value.encode('utf-8'))
 
 
 def parse_json_message(messages):
@@ -1381,6 +1382,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     if mode.upper() == 'POST':
         req = requests.post
 
+    logger.debug(url)
     for i in range(ATTEMPTS):
         try:
             response = req(url, **request_passthrough)
@@ -1402,7 +1404,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
             logger.exception('Exception ' + str(e))
             break
 
-    logger.error('Failed! Gave up after {} attempts.'.format(i))
+    logger.error('Failed! Gave up after {} attempts.'.format(i + 1))
     return -1
 
 
