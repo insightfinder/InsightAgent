@@ -69,6 +69,7 @@ sudo ./setup/cron-config.sh
 ### Config Variables
 * **`base_url`**: Base URL to build the API off of.
 * **`api_endpoint`**: API endpoint to call.
+* `sysparm_offset`: Offset to use when calling the API. Generally speaking, you should not touch this setting.
 * **`username`**: Username to authenticate with.
 * **`password_encrypted`**: Password, encoded in base64. To set this, run `python configure.py`.
 * `filters_include`: Used to filter messages based on allowed values.
