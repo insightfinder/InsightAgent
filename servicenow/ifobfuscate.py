@@ -8,4 +8,7 @@ def decode(obfuscated):
 
 def obfuscate(to_obfuscate):
     """ obfuscate a string """
-    return base64.b64encode(to_obfuscate).encode('utf-8')
+    try:
+        return base64.b64encode(to_obfuscate).decode('utf-8')
+    except Exception:
+        return base64.b64encode(to_obfuscate.encode('utf-8')).decode('utf-8')

@@ -59,13 +59,17 @@ if __name__ == "__main__":
                     # ask for value
                     value = getpass.getpass(prompt='{}: '.format(option))
                     # encode
-                    value = ifobfuscate.obfuscate(value)
-                    # write to /dev/tty
-                    with open('/dev/tty', mode='w+', buffering=1) as stream:
-                        stream.write(overwrite_line('{}: {}'.format(option, value)))
-                        stream.flush()
-                except Exception as e:
+                    value = str(ifobfuscate.obfuscate(value))
+                except Exception:
                     value = ''
+                # write to /dev/tty
+                if value:
+                    try:
+                        with open('/dev/tty', mode='w+', buffering=1) as stream:
+                            stream.write(overwrite_line('{}: {}'.format(option, value)))
+                            stream.flush()
+                    except Exception as e:
+                        pass
             else:
                 default = line.partition('=')[2].strip()
                 value = prompt(option, default)
