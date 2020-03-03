@@ -26,23 +26,50 @@ This script gathers data to send to Insightfinder
 
 
 def start_data_processing(thread_number):
-    api_response = ''
     passthru = {'sysparm_limit': 100,
-                'sysparm_offset': agent_config_vars['sysparm_offset']}
+                'sysparm_offset': agent_config_vars['state']['sysparm_offset']}
     auth = (agent_config_vars['username'], ifobfuscate.decode(agent_config_vars['password']))
-    while api_response != -1:
-        logger.info('Getting next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
-        api_response = send_request(agent_config_vars['api_url'], auth=auth, data=passthru)
-        if api_response == -1:
-            break
-        else:
-            passthru['sysparm_offset'] = passthru['sysparm_offset'] + passthru['sysparm_limit']
+    api_response = send_request(agent_config_vars['api_url'], auth=auth, params=passthru)
+    count = int(api_response.headers['X-Total-Count'])
+    while api_response != -1 and passthru['sysparm_offset'] < count:
+        # parse messages
         try:
             api_json = json.loads(api_response.content)
             parse_json_message(api_json)
         except Exception as e:
             logger.warning(e)
             pass
+        # set limit and offset
+        passthru['sysparm_offset'] = passthru['sysparm_offset'] + passthru['sysparm_limit']
+        passthru['sysparm_limit'] = min(100, count - passthru['sysparm_offset'])
+        if passthru['sysparm_offset'] >= count or passthru['sysparm_limit'] <= 0:
+            break
+        # call API for next cycle
+        logger.info('Getting next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
+        api_response = send_request(agent_config_vars['api_url'], auth=auth, params=passthru)
+    update_state('sysparm_offset', count)
+
+
+
+def update_state(setting, value, append=False):
+    # update in-mem
+    if append:
+        current = ','.join(agent_config_vars['state'][setting])
+        value = '{},{}'.format(current, value) if current else value
+        agent_config_vars['state'][setting] = value.split(',')
+    else:
+        agent_config_vars['state'][setting] = value
+    logger.debug('setting {} to {}'.format(setting, value))
+    # update config file
+    config_ini = config_ini_path()
+    if os.path.exists(config_ini):
+        config_parser = ConfigParser.SafeConfigParser()
+        config_parser.read(config_ini)
+        config_parser.set('state', setting, str(value))
+        with open(config_ini, 'w') as config_file:
+            config_parser.write(config_file)
+    # return new value (if append)
+    return value
 
 
 def get_agent_config_vars():
@@ -52,10 +79,12 @@ def get_agent_config_vars():
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(config_ini)
         try:
+            # state
+            sysparm_offset = config_parser.get('state', 'sysparm_offset')
+
             # api
             base_url = config_parser.get('agent', 'base_url')
             api_endpoint = config_parser.get('agent', 'api_endpoint')
-            sysparm_offset = config_parser.get('agent', 'sysparm_offset')
             username = config_parser.get('agent', 'username')
             password = config_parser.get('agent', 'password_encrypted')
 
@@ -147,10 +176,10 @@ def get_agent_config_vars():
 
         # add parsed variables to a global
         config_vars = {
+            'state': { 'sysparm_offset': sysparm_offset },
             'api_url': api_url,
             'username': username,
             'password': password,
-            'sysparm_offset': sysparm_offset,
             'proxies': agent_proxies,
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,

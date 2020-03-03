@@ -4,7 +4,6 @@
 base_url = 
 # endpoint for the API, ie `/api/v1/messages`
 api_endpoint = /api/now/v1/table/incident
-sysparm_offset = 0
 username = 
 # do not set password below. Instead, run `python ifobfuscate.py`
 password_encrypted = 
@@ -53,3 +52,6 @@ chunk_size_kb = 2048
 if_url = https://app.insightfinder.com
 if_http_proxy =
 if_https_proxy =
+
+[state]
+sysparm_offset = 0
