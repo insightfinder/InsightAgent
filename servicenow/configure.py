@@ -16,7 +16,7 @@ def overwrite_line(newline):
 
 def prompt(option, default=''):
     """ prompt for input using /dev/tty. inspired by getpass """
-    prompt = u'{}: '.format(option) if not default else u'{} [Defualt: {}]: '.format(option, default)
+    prompt = u'{}: '.format(option) if not default else u'{} [Default: {}]: '.format(option, default)
     # open /dev/tty
     with open('/dev/tty', mode='w+', buffering=1) as stream:
         # ask the question
