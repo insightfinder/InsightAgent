@@ -360,6 +360,27 @@ def config_error_no_config():
     sys.exit(1)
 
 
+def update_state(setting, value, append=False):
+    # update in-mem
+    if append:
+        current = ','.join(agent_config_vars['state'][setting])
+        value = '{},{}'.format(current, value) if current else value
+        agent_config_vars['state'][setting] = value.split(',')
+    else:
+        agent_config_vars['state'][setting] = value
+    logger.debug('setting {} to {}'.format(setting, value))
+    # update config file
+    config_ini = config_ini_path()
+    if os.path.exists(config_ini):
+        config_parser = ConfigParser.SafeConfigParser()
+        config_parser.read(config_ini)
+        config_parser.set('state', setting, str(value))
+        with open(config_ini, 'w') as config_file:
+            config_parser.write(config_file)
+    # return new value (if append)
+    return value
+
+
 def strip_tz_info(timestamp_format):
     # strptime() doesn't allow timezone info
     if '%Z' in timestamp_format:
