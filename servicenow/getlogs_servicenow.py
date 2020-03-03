@@ -28,7 +28,7 @@ This script gathers data to send to Insightfinder
 def start_data_processing(thread_number):
     api_response = ''
     passthru = {'sysparm_limit': 100,
-                'sysparm_offset': 0}
+                'sysparm_offset': agent_config_vars['sysparm_offset']}
     auth = (agent_config_vars['username'], ifobfuscate.decode(agent_config_vars['password']))
     while api_response != -1:
         logger.info('Getting next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
@@ -55,6 +55,7 @@ def get_agent_config_vars():
             # api
             base_url = config_parser.get('agent', 'base_url')
             api_endpoint = config_parser.get('agent', 'api_endpoint')
+            sysparm_offset = config_parser.get('agent', 'sysparm_offset')
             username = config_parser.get('agent', 'username')
             password = config_parser.get('agent', 'password_encrypted')
 
@@ -139,11 +140,17 @@ def get_agent_config_vars():
         else:
             timezone = pytz.timezone(timezone)
 
+        try:
+            sysparm_offset = int(sysparm_offset)
+        except Exception:
+            sysparm_offset = 0
+
         # add parsed variables to a global
         config_vars = {
             'api_url': api_url,
             'username': username,
             'password': password,
+            'sysparm_offset': sysparm_offset,
             'proxies': agent_proxies,
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
