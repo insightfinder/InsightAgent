@@ -84,8 +84,7 @@ sudo ./setup/cron-config.sh
 * `timestamp_field`: Field name for the timestamp. Default is `timestamp`.
 * `instance_field`: Field name for the instance name. If not set or the field is not found, the instance name is the hostname of the machine the agent is installed on. This can also use curly formatting or a priority list.
 * `device_field`: Field name for the device/container for containerized projects. This can also use curly formatting or a priority list.
-* `data_fields`: Comma-delimited list of field names to use as data fields. If not set, all fields will be reported. Each data field can either be a field name (`name`) or a labeled field (`<name>:<value>` or `<name>:=<value>`), where `<name>` and `<value>` can be raw strings (`fieldname:fieldvalue`) or curly-formatted (`{na} [{me}]:={val} - {ue}`). If `:=` is used as the separator, `<value>` is treated as a mathematical expression that can be evaluated with `numexpr.evaluate()`.
-* `metric_name_field`: If this is set, only the first value in `data_fields` will be used as the field containing the value for the metric who's name is contained here. For example, if `data_fields = count` and `metric_name_field = status`, and the data is `{"count": 20, "status": "success"}`, then the data reported will be `success: 20`.
+* `data_fields`: Comma-delimited list of field names to use as data fields. If not set, all fields will be reported. Each data field can either be a field name (`name`) or a labeled field (`<name>:<value>` or `<name>:=<value>`), where `<name>` and `<value>` can be raw strings (`fieldname:fieldvalue`) or curly-formatted (`{na} [{me}]:={val} - {ue}`). If `:=` is used as the separator, `<value>` is treated as a mathematical expression that can be evaluated with `eval()`.
 * `agent_http_proxy`: HTTP proxy used to connect to the agent.
 * `agent_https_proxy`: As above, but HTTPS.
 * **`user_name`**: User name in InsightFinder
