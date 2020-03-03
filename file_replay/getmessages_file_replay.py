@@ -1026,7 +1026,7 @@ def parse_json_message_single(message):
             filter_vals = _filter.split(':')[1].split(',')
             filter_check = get_json_field(
                 message,
-                filter_field.split(JSON_LEVEL_DELIM),
+                filter_field,
                 allow_list=True)
             # check if a valid value
             for filter_val in filter_vals:
@@ -1049,7 +1049,7 @@ def parse_json_message_single(message):
             filter_vals = _filter.split(':')[1].split(',')
             filter_check = get_json_field(
                 message,
-                filter_field.split(JSON_LEVEL_DELIM),
+                filter_field,
                 allow_list=True)
             # check if a valid value
             for filter_val in filter_vals:
