@@ -7,12 +7,11 @@ import shutil
 import ifobfuscate
 
 
-def overwrite_line(newline):
-    return '\033[F{}\n'.format(newline)
-
-
 def prompt(option, default='', silent=False):
     """ prompt for input using /dev/tty. inspired by getpass """
+    def tell_value(prompt, value):
+        return '\033[F{}{}\n'.format(prompt, value)
+
     prompt = u'{}: '.format(option) if not default else u'{} [Default: {}]: '.format(option, default)
     # open /dev/tty
     with open('/dev/tty', mode='w+', buffering=1) as stream:
@@ -23,12 +22,18 @@ def prompt(option, default='', silent=False):
         if silent:
             os.system('stty -echo')
         value = stream.readline().strip()
-        os.system('stty sane')
+        stream.flush()
+        if silent:
+            os.system('stty sane')
+            stream.write('\n')
         # if no given value, let the user know the default will be used
         if not value and default:
             value = default
-            stream.write(overwrite_line('{}{}'.format(prompt, value)))
-        stream.flush()
+            stream.write(tell_value(prompt, value))
+        # if value given and output was silent, obfuscate the output then give it
+        elif value and silent:
+            value = str(ifobfuscate.obfuscate(value))
+            stream.write(tell_value(prompt, value))
     return value
 
 
@@ -55,24 +60,7 @@ if __name__ == "__main__":
             # check if an encrypted option
             option = line.partition('=')[0].strip()
             default = line.partition('=')[2].strip()
-            if option.endswith(encrypted_str):
-                try:
-                    # ask for value
-                    value = prompt(option, silent=True)
-                    # encode
-                    value = str(ifobfuscate.obfuscate(value)) if value else default
-                except Exception:
-                    value = ''
-                # write to /dev/tty
-                if value:
-                    try:
-                        with open('/dev/tty', mode='w+', buffering=1) as stream:
-                            stream.write(overwrite_line('\n{}: {}'.format(option, value)))
-                            stream.flush()
-                    except Exception as e:
-                        pass
-            else:
-                value = prompt(option, default)
+            value = prompt(option, default, silent=option.endswith(encrypted_str))
             line = '{} = {}\n'.format(option, value)
         # write line to config file
         sys.stdout.write(line)
