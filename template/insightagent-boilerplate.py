@@ -294,6 +294,28 @@ def get_if_config_vars():
         config_error_no_config()
 
 
+def update_state(setting, value, append=False, write=False):
+    # update in-mem
+    if append:
+        current = ','.join(agent_config_vars['state'][setting])
+        value = '{},{}'.format(current, value) if current else value
+        agent_config_vars['state'][setting] = value.split(',')
+    else:
+        agent_config_vars['state'][setting] = value
+    logger.debug('setting {} to {}'.format(setting, value))
+    # update config file
+    if write:
+        config_ini = config_ini_path()
+        if os.path.exists(config_ini):
+            config_parser = ConfigParser.SafeConfigParser()
+            config_parser.read(config_ini)
+            config_parser.set('state', setting, str(value))
+            with open(config_ini, 'w') as config_file:
+                config_parser.write(config_file)
+    # return new value (if append)
+    return value
+
+
 def config_ini_path():
     return abs_path_from_cur(cli_config_vars['config'])
 
@@ -358,27 +380,6 @@ def config_error(setting=''):
 def config_error_no_config():
     logger.error('No config file found. Exiting...')
     sys.exit(1)
-
-
-def update_state(setting, value, append=False):
-    # update in-mem
-    if append:
-        current = ','.join(agent_config_vars['state'][setting])
-        value = '{},{}'.format(current, value) if current else value
-        agent_config_vars['state'][setting] = value.split(',')
-    else:
-        agent_config_vars['state'][setting] = value
-    logger.debug('setting {} to {}'.format(setting, value))
-    # update config file
-    config_ini = config_ini_path()
-    if os.path.exists(config_ini):
-        config_parser = ConfigParser.SafeConfigParser()
-        config_parser.read(config_ini)
-        config_parser.set('state', setting, str(value))
-        with open(config_ini, 'w') as config_file:
-            config_parser.write(config_file)
-    # return new value (if append)
-    return value
 
 
 def strip_tz_info(timestamp_format):
@@ -542,11 +543,16 @@ def check_regex(pattern_c, check):
 
 def is_formatted(setting_value):
     """ returns True if the setting is a format string """
-    return check_regex(FORMAT_STR, setting_value)
+    return len(FORMAT_STR.findall(setting_value)) != 0
+
+
+def is_complex(setting_value):
+    """ returns True if the setting is 'complex' """
+    return '!!' in setting_value
 
 
 def is_math_expr(setting_value):
-    return '=' in setting_value
+    return '==' in setting_value
 
 
 def get_math_expr(setting_value):
@@ -554,7 +560,7 @@ def get_math_expr(setting_value):
 
 
 def is_named_data_field(setting_value):
-    return ':' in setting_value
+    return '::' in setting_value
 
 
 def merge_data(field, value, data={}):
@@ -570,12 +576,14 @@ def merge_data(field, value, data={}):
 
 def parse_formatted(message, setting_value, default='', allow_list=False, remove=False):
     """ fill a format string with values """
+    logger.debug(setting_value)
     fields = { field: get_json_field(message,
                                      field,
                                      default='',
                                      allow_list=allow_list,
                                      remove=remove)
               for field in FORMAT_STR.findall(setting_value) }
+    logger.debug(fields)
     if len(fields) == 0:
         return default
     return setting_value.format(**fields)
@@ -585,7 +593,6 @@ def get_data_values(timestamp, message):
     setting_values = agent_config_vars['data_fields'] or message.keys()
     # reverse list so it's in priority order, as shared fields names will get overwritten
     setting_values.reverse()
-    logger.debug(setting_values)
     data = { x: dict() for x in timestamp }
     for setting_value in setting_values:
         name, value = get_data_value(message, setting_value)
@@ -599,50 +606,125 @@ def get_data_values(timestamp, message):
 
 def get_data_value(message, setting_value):
     if is_named_data_field(setting_value):
-        setting_value = setting_value.split(':')
+        logger.debug('named data value {}'.format(setting_value))
+        name, value = setting_value.split('::')
         # get name
-        name = setting_value[0]
-        if is_formatted(name):
-            name = parse_formatted(message,
-                                   name,
-                                   default=name)
-        # get value
-        value = setting_value[1]
+        name = get_single_value(message,
+                                name,
+                                default=name,
+                                allow_list=False,
+                                remove=False)
         # check if math
         evaluate = False
         if is_math_expr(value):
             evaluate = True
             value = get_math_expr(value)
-        if is_formatted(value):
-            value = parse_formatted(message,
-                                    value,
-                                    default=value,
-                                    allow_list=True)
-        if evaluate:
+        value = get_single_value(message,
+                                 value,
+                                 default='',
+                                 allow_list=evaluate,
+                                 remove=False)
+        if value and evaluate:
             value = eval(value)
+    elif is_complex(setting_value):
+        logger.debug('complex data value {}'.format(setting_value))
+        this_field, metadata, that_field = setting_value.split('!!')
+        name = this_field
+        value = get_complex_value(message,
+                                  this_field,
+                                  metadata,
+                                  that_field,
+                                  default=that_field,
+                                  allow_list=True,
+                                  remove=False)
     else:
+        logger.debug('simple data value {}'.format(setting_value))
         name = setting_value
-        value = get_json_field(message,
-                               setting_value,
-                               allow_list=True)
+        value = get_single_value(message,
+                                 setting_value,
+                                 default='',
+                                 allow_list=True,
+                                 remove=False)
     return (name, value)
 
 
-def get_single_value(message, config_setting, default='', allow_list=False, remove=False):
+def get_complex_value(message, this_field, metadata, that_field, default='', allow_list=False, remove=False):
+    metadata = metadata.split('&')
+    data_type, data_return = metadata[0].upper().split('=')
+    if data_type != 'REF':
+        logger.warning('Unsupported complex setting {}!!{}!!{}'.format(this_field, metadata, that_field))
+        return default
+    else:
+        ref = get_single_value(message,
+                               this_field,
+                               default='',
+                               allow_list=False,
+                               remove=remove)
+        if not ref:
+            return default
+        passthrough = {'mode': 'GET'}
+        for param in metadata[1:]:
+            if '=' in param:
+                key, value = param.split('=')
+            else:
+                key = param
+                value = REQUESTS[key]
+            passthrough[key] = value
+        response = send_request(ref, **passthrough)
+        if response == -1:
+            return default
+        data = response.content
+        if data_return == 'RAW':
+            return data
+        elif data_return == 'CSV':
+            data = label_message(agent_config_vars['csv_field_delimiter'].split(data))
+        elif data_return == 'XML':
+            data = xml2dict.parse(data)
+        elif data_return == 'JSON':
+            data = json.loads(data)
+        return get_single_value(data,
+                                that_field,
+                                default=default,
+                                allow_list=True,
+                                remove=False)
+
+
+def get_setting_value(message, config_setting, default='', allow_list=False, remove=False):
     if config_setting not in agent_config_vars or len(agent_config_vars[config_setting]) == 0:
         return default
     setting_value = agent_config_vars[config_setting]
+    return get_single_value(message,
+                            setting_value,
+                            default=default,
+                            allow_list=allow_list,
+                            remove=remove)
+
+
+def get_single_value(message, setting_value, default='', allow_list=False, remove=False):
     if isinstance(setting_value, (set, list, tuple)):
         setting_value_single = setting_value[0]
     else:
         setting_value_single = setting_value
-    if is_formatted(setting_value_single):
+        setting_value = [setting_value]
+    if is_complex(setting_value_single):
+        logger.debug('complex: {}'.format(setting_value_single))
+        this_field, metadata, that_field = setting_value_single.split('!!')
+        return get_complex_value(message,
+                                 this_field,
+                                 metadata,
+                                 that_field,
+                                 default=default,
+                                 allow_list=allow_list,
+                                 remove=remove)
+    elif is_formatted(setting_value_single):
+        logger.debug('formatted: {}'.format(setting_value_single))
         return parse_formatted(message,
                                setting_value_single,
                                default=default,
                                allow_list=False,
                                remove=remove)
     else:
+        logger.debug('simple: {}'.format(setting_value))
         return get_json_field_by_pri(message,
                                     [i for i in setting_value],
                                     default=default,
@@ -694,9 +776,12 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     # get the next value
     next_field = next_fields.pop(0)
     next_value = json.loads(json.dumps(nested_value.get(next_field)))
-    if len(next_fields) == 0 and remove:
-        # last field to grab, so remove it
-        nested_value.pop(next_field)
+    try:
+        if len(next_fields) == 0 and remove:
+            # last field to grab, so remove it
+            nested_value.pop(next_field)
+    except Exception:
+        pass
 
     # check the next value
     if next_value is None:
@@ -842,28 +927,28 @@ def parse_json_message_single(message):
         logger.debug('passed filter (exclusion)')
 
     # get project, instance, & device
-    # check_project(get_single_value(message,
+    # check_project(get_setting_value(message,
     #                                'project_field',
     #                                default=if_config_vars['project_name']),
     #                                remove=True)
-    instance = get_single_value(message,
-                                'instance_field',
-                                default=HOSTNAME,
-                                remove=True)
-    device = get_single_value(message,
-                              'device_field',
-                              remove=True)
+    instance = get_setting_value(message,
+                                 'instance_field',
+                                 default=HOSTNAME,
+                                 remove=True)
+    device = get_setting_value(message,
+                               'device_field',
+                               remove=True)
     # get timestamp
     try:
-        timestamp = get_single_value(message,
-                                     'timestamp_field',
-                                     remove=True)
+        timestamp = get_setting_value(message,
+                                      'timestamp_field',
+                                      remove=True)
         timestamp = [timestamp]
     except ListNotAllowedError as lnae:
-        timestamp = get_single_value(message,
-                                     'timestamp_field',
-                                     remove=True,
-                                     allow_list=True)
+        timestamp = get_setting_value(message,
+                                      'timestamp_field',
+                                      remove=True,
+                                      allow_list=True)
     except Exception as e:
         logger.warn(e)
         sys.exit(1)
@@ -1446,7 +1531,10 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     if mode.upper() == 'POST':
         req = requests.post
 
-    logger.debug(url)
+    global REQUESTS
+    REQUESTS.update(request_passthrough)
+    logger.debug(REQUESTS)
+
     for i in range(ATTEMPTS):
         try:
             response = req(url, **request_passthrough)
@@ -1578,6 +1666,7 @@ if __name__ == "__main__":
     JSON_LEVEL_DELIM = '.'
     CSV_DELIM = r",|\t"
     ATTEMPTS = 3
+    REQUESTS = dict()
     track = dict()
 
     # get config
