@@ -26,10 +26,42 @@ This script gathers data to send to Insightfinder
 
 
 def start_data_processing(thread_number):
+    # set sysparm limi/offset
     passthru = {'sysparm_limit': 100,
-                'sysparm_offset': agent_config_vars['state']['sysparm_offset']}
+                'sysparm_offset': agent_config_vars['state']['sysparm_offset'],
+                'sysparm_query': ''}
+    # add timestamp query (does not seem to be functional)
+    # earliest_datetime = datetime.strftime(
+    #        datetime.fromtimestamp(
+    #            time.time() - if_config_vars['run_interval']),
+    #        agent_config_vars['timestamp_format'][0])
+    #for timestamp_field in agent_config_vars['timestamp_field']:
+    #    if not is_formatted(timestamp_field):
+    #        statement = '{}>={}'.format(timestamp_field, earliest_datetime)
+    #        passthru['sysparm_query'] = '{}^OR{}'.format(passthru['sysparm_query'], statement) if len(passthru['sysparm_query']) != 0 else statement
+    #if len(passthru['sysparm_query']) != 0:
+    #    passthru['sysparm_query'] = '({})'.format(passthru['sysparm_query'])
+    
+    # add applicable keyword filtering
+    for _filter in agent_config_vars['filters_include']:
+        _filter = _filter.split(':')
+        filter_keyword = _filter[0]
+        filter_values = _filter[1]
+        statement = '{}IN{}'.format(filter_keyword, filter_values)
+        passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], statement) if len(passthru['sysparm_query']) != 0 else statement
+    for _filter in agent_config_vars['filters_exclude']:
+        _filter = _filter.split(':')
+        filter_keyword = _filter[0]
+        filter_values = _filter[1]
+        statement = '{}NOT IN{}'.format(filter_keyword, filter_values)
+        passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], statement) if len(passthru['sysparm_query']) != 0 else statement
+    # build auth
     auth = (agent_config_vars['username'], ifobfuscate.decode(agent_config_vars['password']))
+    # call API
+    logger.info('Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
+    logger.debug(passthru)
     api_response = send_request(agent_config_vars['api_url'], auth=auth, params=passthru)
+    logger.debug(api_response.headers)
     count = int(api_response.headers['X-Total-Count'])
     while api_response != -1 and passthru['sysparm_offset'] < count:
         # parse messages
@@ -46,10 +78,9 @@ def start_data_processing(thread_number):
         if passthru['sysparm_offset'] >= count or passthru['sysparm_limit'] <= 0:
             break
         # call API for next cycle
-        logger.info('Getting next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
+        logger.info('Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
         api_response = send_request(agent_config_vars['api_url'], auth=auth, params=passthru)
     update_state('sysparm_offset', count)
-
 
 
 def update_state(setting, value, append=False):
