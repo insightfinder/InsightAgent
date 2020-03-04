@@ -42,6 +42,7 @@ def start_data_processing(thread_number):
         # set limit and offset
         passthru['sysparm_offset'] = passthru['sysparm_offset'] + passthru['sysparm_limit']
         passthru['sysparm_limit'] = min(100, count - passthru['sysparm_offset'])
+        update_state('sysparm_offset', passthru['sysparm_offset'])
         if passthru['sysparm_offset'] >= count or passthru['sysparm_limit'] <= 0:
             break
         # call API for next cycle
