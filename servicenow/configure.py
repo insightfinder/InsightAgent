@@ -1,10 +1,7 @@
 #!/usr/bin/env python
 from optparse import OptionParser
 import os
-import io
-import contextlib
 import fileinput
-import getpass
 import sys
 import shutil
 import ifobfuscate
@@ -14,7 +11,7 @@ def overwrite_line(newline):
     return '\033[F{}\n'.format(newline)
 
 
-def prompt(option, default=''):
+def prompt(option, default='', silent=False):
     """ prompt for input using /dev/tty. inspired by getpass """
     prompt = u'{}: '.format(option) if not default else u'{} [Default: {}]: '.format(option, default)
     # open /dev/tty
@@ -23,7 +20,10 @@ def prompt(option, default=''):
         stream.write(prompt)
         stream.flush()
         # get the input
+        if silent:
+            os.system('stty -echo')
         value = stream.readline().strip()
+        os.system('stty sane')
         # if no given value, let the user know the default will be used
         if not value and default:
             value = default
@@ -54,24 +54,24 @@ if __name__ == "__main__":
         if len(line) != 0 and not line.startswith('#') and not line.startswith('[') and '=' in line:
             # check if an encrypted option
             option = line.partition('=')[0].strip()
+            default = line.partition('=')[2].strip()
             if option.endswith(encrypted_str):
                 try:
                     # ask for value
-                    value = getpass.getpass(prompt='{}: '.format(option))
+                    value = prompt(option, silent=True)
                     # encode
-                    value = str(ifobfuscate.obfuscate(value))
+                    value = str(ifobfuscate.obfuscate(value)) if value else default
                 except Exception:
                     value = ''
                 # write to /dev/tty
                 if value:
                     try:
                         with open('/dev/tty', mode='w+', buffering=1) as stream:
-                            stream.write(overwrite_line('{}: {}'.format(option, value)))
+                            stream.write(overwrite_line('\n{}: {}'.format(option, value)))
                             stream.flush()
                     except Exception as e:
                         pass
             else:
-                default = line.partition('=')[2].strip()
                 value = prompt(option, default)
             line = '{} = {}\n'.format(option, value)
         # write line to config file
