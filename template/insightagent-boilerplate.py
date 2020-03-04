@@ -666,6 +666,10 @@ def get_complex_value(message, this_field, metadata, that_field, default='', all
         for param in metadata[1:]:
             if '=' in param:
                 key, value = param.split('=')
+                try:
+                    value = json.loads(value)
+                except Exception:
+                    value = value
             else:
                 key = param
                 value = REQUESTS[key]
