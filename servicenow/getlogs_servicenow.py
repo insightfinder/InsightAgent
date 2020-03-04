@@ -330,9 +330,9 @@ def update_state(setting, value, append=False, write=False):
         agent_config_vars['state'][setting] = value.split(',')
     else:
         agent_config_vars['state'][setting] = value
-    logger.debug('setting {} to {}'.format(setting, value)
+    logger.debug('setting {} to {}'.format(setting, value))
     # update config file
-    if write: 
+    if write:
         config_ini = config_ini_path()
         if os.path.exists(config_ini):
             config_parser = ConfigParser.SafeConfigParser()
@@ -694,6 +694,10 @@ def get_complex_value(message, this_field, metadata, that_field, default='', all
         for param in metadata[1:]:
             if '=' in param:
                 key, value = param.split('=')
+                try:
+                    value = json.loads(value)
+                except Exception:
+                    value = value
             else:
                 key = param
                 value = REQUESTS[key]
