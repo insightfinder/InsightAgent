@@ -50,7 +50,7 @@ def start_data_processing(thread_number):
         filter_keyword, filter_values = in_filter.split(':')
         filter_statement = ''
         for filter_value in filter_values.split(','):
-            statement = '{}IN{}'.format(filter_keyword, filter_value)
+            statement = '{}*{}'.format(filter_keyword, filter_value)
             # OR between values
             filter_statement = '{}^OR{}'.format(filter_statement, statement) if len(filter_statement) != 0 else statement
         # AND between keywords
@@ -73,7 +73,7 @@ def start_data_processing(thread_number):
     # call API
     logger.info('Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
     api_response = send_request(agent_config_vars['api_url'], auth=auth, params=passthru)
-    count = 1 #int(api_response.headers['X-Total-Count'])
+    count = int(api_response.headers['X-Total-Count'])
     while api_response != -1 and passthru['sysparm_offset'] < count:
         # parse messages
         try:
