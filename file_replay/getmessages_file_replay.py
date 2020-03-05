@@ -114,11 +114,19 @@ def read_xls(_file):
                 # build dict of <field name: value>
                 d = label_message(list(map(lambda x: x.value, row)))
                 # turn datetime into epoch
-                d[agent_config_vars['timestamp_field']] = get_timestamp_from_datetime(
-                    datetime(
+                timestamp = ''
+                while timestamp == '' and len(agent_config_vars['timestamp_field']) != 0:
+                    timestamp_field = agent_config_vars['timestamp_field'].pop(0)
+                    try:
+                        timestamp_xlrd = d[timestamp_field]
+                    except KeyError:
+                        continue
+                    timestamp = get_timestamp_from_datetime(datetime(
                         *xlrd.xldate_as_tuple(
-                            d[agent_config_vars['timestamp_field']],
+                            timestamp_xlrd,
                             sheet.book.datemode)))
+                d[timestamp_field] = timestamp
+                agent_config_vars['timestamp_field'] = [timestamp_field]
                 yield d
 
 
@@ -203,10 +211,11 @@ def update_state(setting, value, append=False):
         agent_config_vars['state'][setting] = value
     logger.debug('setting {} to {}'.format(setting, value))
     # update config file
-    if os.path.exists(config_ini_path()):
-        config_parser = ConfigParser.SafeConfigParser()
-        # only write to config if tailing
-        if 'TAIL' in agent_config_vars['data_format']:
+    if 'TAIL' in agent_config_vars['data_format']:
+        config_ini = config_ini_path()
+        if os.path.exists(config_ini):
+            config_parser = ConfigParser.SafeConfigParser()
+            config_parser.read(config_ini)
             config_parser.set('state', setting, str(value))
             with open(config_ini, 'w') as config_file:
                 config_parser.write(config_file)
