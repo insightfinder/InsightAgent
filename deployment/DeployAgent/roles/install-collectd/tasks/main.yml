@@ -163,6 +163,7 @@
   args:
     chdir: "{{ansible_env.HOME}}/InsightAgent-master"
   when: ansible_pkg_mgr != 'zypper'
+  ignore_errors: yes
 - name: Download pip packages for Agent
   shell: http_proxy={{ http_proxy }} pip install requests pytz
   when: ansible_pkg_mgr == 'zypper'
