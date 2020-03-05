@@ -49,7 +49,7 @@ def start_data_processing(thread_number):
         filter_keyword, filter_values = in_filter.split(':')
         filter_statement = ''
         for filter_value in filter_values.split(','):
-            statement = '{}*{}'.format(filter_keyword, filter_value)
+            statement = '{}IN{}'.format(filter_keyword, filter_value)
             # OR between values
             filter_statement = '{}^OR{}'.format(filter_statement, statement) if len(filter_statement) != 0 else statement
         # AND between keywords
@@ -72,7 +72,7 @@ def start_data_processing(thread_number):
     # call API
     logger.info('Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
     api_response = send_request(agent_config_vars['api_url'], auth=auth, params=passthru)
-    count = int(api_response.headers['X-Total-Count'])
+    count = 1 #int(api_response.headers['X-Total-Count'])
     while api_response != -1 and passthru['sysparm_offset'] < count:
         # parse messages
         try:
@@ -604,14 +604,12 @@ def merge_data(field, value, data={}):
 
 def parse_formatted(message, setting_value, default='', allow_list=False, remove=False):
     """ fill a format string with values """
-    logger.debug(setting_value)
     fields = { field: get_json_field(message,
                                      field,
-                                     default='',
+                                     default=0 if default == 0 else '', # special case for evaluate func
                                      allow_list=allow_list,
                                      remove=remove)
               for field in FORMAT_STR.findall(setting_value) }
-    logger.debug(fields)
     if len(fields) == 0:
         return default
     return setting_value.format(**fields)
@@ -649,8 +647,8 @@ def get_data_value(message, setting_value):
             value = get_math_expr(value)
         value = get_single_value(message,
                                  value,
-                                 default='',
-                                 allow_list=evaluate,
+                                 default=0 if evaluate else '',
+                                 allow_list=not evaluate,
                                  remove=False)
         if value and evaluate:
             value = eval(value)
@@ -679,10 +677,7 @@ def get_data_value(message, setting_value):
 def get_complex_value(message, this_field, metadata, that_field, default='', allow_list=False, remove=False):
     metadata = metadata.split('&')
     data_type, data_return = metadata[0].upper().split('=')
-    if data_type != 'REF':
-        logger.warning('Unsupported complex setting {}!!{}!!{}'.format(this_field, metadata, that_field))
-        return default
-    else:
+    if data_type == 'REF':
         ref = get_single_value(message,
                                this_field,
                                default='',
@@ -719,6 +714,9 @@ def get_complex_value(message, this_field, metadata, that_field, default='', all
                                 default=default,
                                 allow_list=True,
                                 remove=False)
+    else:
+        logger.warning('Unsupported complex setting {}!!{}!!{}'.format(this_field, metadata, that_field))
+        return default
 
 
 def get_setting_value(message, config_setting, default='', allow_list=False, remove=False):
