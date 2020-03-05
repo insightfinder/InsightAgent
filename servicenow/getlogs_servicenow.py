@@ -18,6 +18,7 @@ import requests
 import statistics
 import subprocess
 import shlex
+import xml2dict
 import ifobfuscate
 
 '''
