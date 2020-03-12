@@ -1,6 +1,5 @@
 # kafka2
-This agent collects data from Kafka and sends it to Insightfinder.
-
+This agent collects data from kafka2 and sends it to Insightfinder.
 ## Installing the Agent
 
 ### Short Version
@@ -65,7 +64,7 @@ python getmessages_kafka2.py -t
 
 ###### If satisfied with the output, configure the agent to run continuously:
 ```bash
-sudo ./setup/cron-config.sh --monitor
+sudo ./setup/monit-config.sh
 ```
 
 ### Config Variables
