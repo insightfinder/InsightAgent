@@ -304,7 +304,7 @@ def update_state(setting, value, append=False, write=False):
         agent_config_vars['state'][setting] = value
     logger.debug('setting {} to {}'.format(setting, value))
     # update config file
-    if write:
+    if write and not cli_config_vars['testing']:
         config_ini = config_ini_path()
         if os.path.exists(config_ini):
             config_parser = ConfigParser.SafeConfigParser()
@@ -604,7 +604,6 @@ def get_data_values(timestamp, message):
 
 def get_data_value(message, setting_value):
     if is_named_data_field(setting_value):
-        logger.debug('named data value {}'.format(setting_value))
         name, value = setting_value.split('::')
         # get name
         name = get_single_value(message,
@@ -625,7 +624,6 @@ def get_data_value(message, setting_value):
         if value and evaluate:
             value = eval(value)
     elif is_complex(setting_value):
-        logger.debug('complex data value {}'.format(setting_value))
         this_field, metadata, that_field = setting_value.split('!!')
         name = this_field
         value = get_complex_value(message,
@@ -636,7 +634,6 @@ def get_data_value(message, setting_value):
                                   allow_list=True,
                                   remove=False)
     else:
-        logger.debug('simple data value {}'.format(setting_value))
         name = setting_value
         value = get_single_value(message,
                                  setting_value,
@@ -709,7 +706,6 @@ def get_single_value(message, setting_value, default='', allow_list=False, remov
         setting_value_single = setting_value
         setting_value = [setting_value]
     if is_complex(setting_value_single):
-        logger.debug('complex: {}'.format(setting_value_single))
         this_field, metadata, that_field = setting_value_single.split('!!')
         return get_complex_value(message,
                                  this_field,
@@ -719,14 +715,12 @@ def get_single_value(message, setting_value, default='', allow_list=False, remov
                                  allow_list=allow_list,
                                  remove=remove)
     elif is_formatted(setting_value_single):
-        logger.debug('formatted: {}'.format(setting_value_single))
         return parse_formatted(message,
                                setting_value_single,
                                default=default,
                                allow_list=False,
                                remove=remove)
     else:
-        logger.debug('simple: {}'.format(setting_value))
         return get_json_field_by_pri(message,
                                     [i for i in setting_value],
                                     default=default,
@@ -885,7 +879,6 @@ def parse_json_message(messages):
 
 def parse_json_message_single(message):
     message = json.loads(json.dumps(message))
-    logger.debug(message)
     # filter
     if len(agent_config_vars['filters_include']) != 0:
         # for each provided filter
@@ -937,6 +930,7 @@ def parse_json_message_single(message):
                                  'instance_field',
                                  default=HOSTNAME,
                                  remove=True)
+    logger.warn(instance)
     device = get_setting_value(message,
                                'device_field',
                                remove=True)
@@ -954,6 +948,7 @@ def parse_json_message_single(message):
     except Exception as e:
         logger.warn(e)
         sys.exit(1)
+    logger.warn(timestamp)
 
     # get data
     data = get_data_values(timestamp, message)
@@ -1081,7 +1076,7 @@ def parse_csv_row(row, field_names, instance, device=''):
 
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
-    timestamp_datetime = get_datetime_from_date_string(date_string.partition('.')[0])
+    timestamp_datetime = get_datetime_from_date_string(date_string)
     return get_timestamp_from_datetime(timestamp_datetime)
 
 
@@ -1114,9 +1109,11 @@ def get_datetime_from_date_string(date_string):
 
 
 def get_timestamp_from_datetime(timestamp_datetime):
+    # add tzinfo
     timestamp_localize = agent_config_vars['timezone'].localize(timestamp_datetime)
 
-    epoch = long((timestamp_localize - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
+    # calc seconds since Unix Epoch 0
+    epoch = long((timestamp_localize - datetime(1970, 1, 1, tzinfo=agent_config_vars['timezone'])).total_seconds()) * 1000
     return epoch
 
 
@@ -1130,7 +1127,7 @@ def get_datetime_from_unix_epoch(date_string):
         elif len(epoch) in range(9, 13):
             epoch = int(epoch)
 
-        return datetime.utcfromtimestamp(epoch)
+        return datetime.fromtimestamp(epoch)
     except ValueError:
         # if the date cannot be converted into a number by built-in long()
         logger.warn('Date format not defined & data does not look like unix epoch: {}'.format(date_string))
@@ -1535,7 +1532,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
 
     global REQUESTS
     REQUESTS.update(request_passthrough)
-    logger.debug(REQUESTS)
+    #logger.debug(REQUESTS)
 
     for i in range(ATTEMPTS):
         try:
