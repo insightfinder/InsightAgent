@@ -17,6 +17,7 @@ filters_include =
 # for example:
 #   message.env:dev,cde|message.status:draft
 filters_exclude = 
+sysparm_query = 
 
 # for multi-entry messages, define the top-level
 # fields in json can be defined as level0.level1.levelN
