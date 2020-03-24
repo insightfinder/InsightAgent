@@ -18,6 +18,11 @@ import requests
 import statistics
 import subprocess
 import shlex
+import xlrd
+import xml2dict
+import avro.datafile
+import avro.io
+
 
 '''
 This script gathers data to send to Insightfinder
@@ -25,35 +30,215 @@ This script gathers data to send to Insightfinder
 
 
 def start_data_processing(thread_number):
-    """ TODO: replace with your code.
-    Most work regarding sending to IF is abstracted away for you.
-    This function will get the data to send and prepare it for the API.
-    The general outline should be:
-    0. Define the project type in config.ini
-    1. Parse config options
-    2. Gather data
-    3. Parse each entry
-    4. Call the appropriate handoff function
-        metric_handoff()
-        log_handoff()
-        alert_handoff()
-        incident_handoff()
-        deployment_handoff()
-    See zipkin for an example that uses os.fork to send both metric and log data.
-    """
+    data_format = agent_config_vars['data_format']
+    # treat file_list as a queue
+    file_list = get_all_files(
+            agent_config_vars['file_path'],
+            agent_config_vars['file_name_regex'])
+    # sort by update time, reading oldest first
+    file_list.sort(key=lambda x: os.path.getmtime(x))
+    # create list of [{st_ino: filename}, {st_ino: filename}, ...]
+    file_list = [{str(os.stat(i).st_ino): i} for i in file_list]
+    # track st_ino of filenames
+    completed_files_st_ino = agent_config_vars['state']['completed_files_st_ino']
+    # start with current file or first in queue
+    current_file = agent_config_vars['state']['current_file']
+    if current_file:
+        _file = json.loads(current_file)
+        _file_st_ino, _file_name = _file.items()[0]
+        if str(os.stat(_file_name).st_ino) != _file_st_ino:
+            # between the last read and now, this file has rotated
+            update_state('current_file', '')
+            update_state('current_file_offset', 0)
+            _file = file_list.pop(0)
+        else:
+            file_list.pop(file_list.index(_file))
+    else:
+        _file = file_list.pop(0)
+    # while there's a file to read
+    while _file:
+        logger.debug(_file)
+        # get file info
+        st_ino_orig, file_name = _file.items()[0]
+        if st_ino_orig in completed_files_st_ino:
+            logger.debug('already streamed file {}'.format(file_name))
+            _file = file_list.pop(0) if len(file_list) != 0 else None
+            continue
+        # read from the file
+        message = ''
+        for line in reader(data_format, file_name, st_ino_orig):
+            if line:
+                logger.debug(line)
+                try:
+                    if 'IFEXPORT' in data_format:
+                        track['current_row'].append(line)
+                        send_metric()
+                    elif 'RAW' in data_format:
+                        message = parse_raw_line(message, line)
+                    else:  # everything else gets converted to a dict
+                        parse_json_message(line)
+                except Exception as e:
+                    logger.debug('Error when processing line {}'.format(line))
+                    logger.debug(e)
+        # get last message
+        if 'RAW' in data_format:
+            try:
+                parse_raw_message(message)
+            except Exception as e:
+                logger.debug('Error when processing line {}'.format(message))
+                logger.debug(e)
+        # mark as done
+        completed_files_st_ino.append(st_ino_orig)
+        # update file_list
+        cur_files = get_all_files(
+                agent_config_vars['file_path'],
+                agent_config_vars['file_name_regex'])
+        # queue add'l files
+        new_files = [{str(os.stat(i).st_ino): i} for i in cur_files if ({str(os.stat(i).st_ino): i} not in file_list and str(os.stat(i).st_ino) not in completed_files_st_ino)]
+        file_list += new_files
+        file_list.sort(key=lambda x: os.path.getmtime(x.values()[0]))
+        logger.debug(file_list)
+        # dequeue next file
+        _file = file_list.pop(0) if len(file_list) != 0 else None
+
+
+def read_xls(_file):
+    agent_config_vars['data_format'] = 'CSV' # treat as CSV from here out
+    agent_config_vars['timestamp_format'] = ['epoch']
+    # open workbook
+    with xlrd.open_workbook(_file) as wb:
+        # for each sheet in the workbook
+        for sheet in wb.sheets():
+            # for each row in the sheet
+            for row in sheet.get_rows():
+                # build dict of <field name: value>
+                d = label_message(list(map(lambda x: x.value, row)))
+                # turn datetime into epoch
+                timestamp = ''
+                while timestamp == '' and len(agent_config_vars['timestamp_field']) != 0:
+                    timestamp_field = agent_config_vars['timestamp_field'].pop(0)
+                    try:
+                        timestamp_xlrd = d[timestamp_field]
+                    except KeyError:
+                        continue
+                    timestamp = get_timestamp_from_datetime(datetime(
+                        *xlrd.xldate_as_tuple(
+                            timestamp_xlrd,
+                            sheet.book.datemode)))
+                d[timestamp_field] = timestamp
+                agent_config_vars['timestamp_field'] = [timestamp_field]
+                yield d
+
+
+def reader_next_line(_format, data, line):
+    # preformatting on each line
+    if 'RAW' not in _format:
+        try:
+            line = line.strip('\r\n')
+        except Exception as e:
+            pass
+    if 'CSV' in _format or 'IFEXPORT' in _format:
+        line = label_message(agent_config_vars['csv_field_delimiter'].split(line))
+    elif 'JSON' in _format:
+        line = json.loads(line)
+    if 'TAIL' in _format:
+        pos = data.tell()
+        # write to state
+        update_state('current_file_offset', pos)
+    return line
+
+
+def reader(_format, _file, st_ino):
+    if _format in {'XLS', 'XLSX'}:
+        for line in read_xls(_file):
+            yield line
+    else:
+        mode = 'r' if _format != 'AVRO' else 'rb'
+        with open(_file, mode) as data:
+            # get field names from header
+            if 'IFEXPORT' in _format:
+                agent_config_vars['csv_field_names'] = data.readline().strip().split(',')
+            # preformatting on all data
+            if 'TAIL' in _format:
+                update_state('current_file', json.dumps({st_ino: _file}))
+                data.seek(int(agent_config_vars['state']['current_file_offset'])) # read from state
+            elif _format == 'AVRO':
+                data = avro.datafile.DataFileReader(data, avro.io.DatumReader())
+            # read data
+            if _format == 'XML':
+                data = xml2dict.parse(data)
+                yield data
+            else:
+                # read each line
+                logger.debug('reading each line')
+                for line in data:
+                    yield reader_next_line(_format, data, line)
+                if 'TAIL' in _format:
+                    if 'TAILF' in _format:
+                        logger.debug('tailing file')
+                        # keep reading file
+                        for line2 in tail_file(_file, data):
+                            yield reader_next_line(_format, data, line2)
+                        # move from current file to completed, reset position
+                        update_state('completed_files_st_ino', st_ino, append=True)
+                        update_state('current_file', '')
+                        update_state('current_file_offset', 0)
+
+
+def tail_file(_file, data):
+    # start at end of file
+    data.seek(0,2)
+    # start reading in new lines
+    while os.path.getmtime(_file) > (get_timestamp_from_datetime(datetime.now())/1000 - if_config_vars['run_interval']):
+        line = ''
+        # build the line while it doesn't end in a newline
+        while not line.endswith(('\r', '\n', '\r\n')):
+            tail = data.readline()
+            if not tail:
+                time.sleep(0.1)
+                continue
+            line += tail
+        yield line
+
+
+def update_state(setting, value, append=False):
+    # update in-mem
+    if append:
+        current = ','.join(agent_config_vars['state'][setting])
+        value = '{},{}'.format(current, value) if current else value
+        agent_config_vars['state'][setting] = value.split(',')
+    else:
+        agent_config_vars['state'][setting] = value
+    logger.debug('setting {} to {}'.format(setting, value))
+    # update config file
+    if 'TAIL' in agent_config_vars['data_format']:
+        config_ini = config_ini_path()
+        if os.path.exists(config_ini):
+            config_parser = ConfigParser.SafeConfigParser()
+            config_parser.read(config_ini)
+            config_parser.set('state', setting, str(value))
+            with open(config_ini, 'w') as config_file:
+                config_parser.write(config_file)
+    # return new value (if append)
+    return value
 
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
-    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))):
+    config_ini = config_ini_path()
+    if os.path.exists(config_ini):
         config_parser = ConfigParser.SafeConfigParser()
-        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
+        config_parser.read(config_ini)
+        logger.debug('Loaded config file')
         try:
-            ## TODO: fill out the fields to grab. examples given below
-            ## replace 'agent' with the appropriate section header.
-            # proxies
-            agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
-            agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
+            # state
+            current_file = config_parser.get('state', 'current_file')
+            current_file_offset = config_parser.get('state', 'current_file_offset') or 0
+            completed_files_st_ino = config_parser.get('state', 'completed_files_st_ino')
+
+            # files
+            file_path = config_parser.get('agent', 'file_path')
+            file_name_regex = config_parser.get('agent', 'file_name_regex')
 
             # filters
             filters_include = config_parser.get('agent', 'filters_include')
@@ -99,6 +284,12 @@ def get_agent_config_vars():
                              'AVRO',
                              'XML'}:
             pass
+        elif data_format in {'IFEXPORT'}:
+            csv_field_delimiter = regex.compile(CSV_DELIM)
+            timestamp_field = 'timestamp'
+            timestamp_format = 'epoch'
+            instance_field = ''
+            device_field = ''
         elif data_format in {'RAW',
                              'RAWTAIL'}:
             try:
@@ -115,12 +306,15 @@ def get_agent_config_vars():
         else:
             config_error('data_format')
 
-        # proxies
-        agent_proxies = dict()
-        if len(agent_http_proxy) > 0:
-            agent_proxies['http'] = agent_http_proxy
-        if len(agent_https_proxy) > 0:
-            agent_proxies['https'] = agent_https_proxy
+        # files
+        try:
+            file_name_regex = regex.compile(file_name_regex)
+        except Exception as e:
+            config_error('file_name_regex')
+        if len(file_path) != 0:
+            file_path = file_path.split(',')
+        else:
+            config_error('file_path')
 
         # filters
         if len(filters_include) != 0:
@@ -148,7 +342,7 @@ def get_agent_config_vars():
                 if timestamp_field in data_fields:
                     data_fields.pop(data_fields.index(timestamp_field))
 
-        # timestamp format
+        # timestamp
         timestamp_format = timestamp_format.partition('.')[0]
         if '%z' in timestamp_format or '%Z' in timestamp_format:
             ts_format_info = strip_tz_info(timestamp_format)
@@ -167,7 +361,13 @@ def get_agent_config_vars():
 
         # add parsed variables to a global
         config_vars = {
-            'proxies': agent_proxies,
+            'state': {
+                'current_file': current_file if 'TAIL' in data_format else '',
+                'current_file_offset': int(current_file_offset) if 'TAIL' in data_format else 0,
+                'completed_files_st_ino': completed_files_st_ino.split(',') if 'TAIL' in data_format else []
+                },
+            'file_path': file_path,
+            'file_name_regex': file_name_regex,
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
             'data_format': data_format,
@@ -175,7 +375,7 @@ def get_agent_config_vars():
             'raw_start_regex': raw_start_regex,
             'json_top_level': json_top_level,
             'csv_field_names': csv_field_names,
-	    'csv_field_delimiter': csv_field_delimiter,
+            'csv_field_delimiter': csv_field_delimiter,
             # 'project_field': project_fields,
             'instance_field': instance_fields,
             'device_field': device_fields,
@@ -835,7 +1035,7 @@ def parse_json_message_single(message):
             filter_vals = _filter.split(':')[1].split(',')
             filter_check = get_json_field(
                 message,
-                filter_field.split(JSON_LEVEL_DELIM),
+                filter_field,
                 allow_list=True)
             # check if a valid value
             for filter_val in filter_vals:
@@ -858,7 +1058,7 @@ def parse_json_message_single(message):
             filter_vals = _filter.split(':')[1].split(',')
             filter_check = get_json_field(
                 message,
-                filter_field.split(JSON_LEVEL_DELIM),
+                filter_field,
                 allow_list=True)
             # check if a valid value
             for filter_val in filter_vals:
