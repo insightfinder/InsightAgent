@@ -186,7 +186,7 @@ def parse_combine_data(fout, same_timestamp, same_timestamp_rows, same_timestamp
 
 def main():
     """
-    Example：python merge_csv_files.py -f same -m 100 -i "./*.csv" -o ./output.csv
+    Example：python2 merge_csv_files.py -f same -m 100 -i "./*.csv" -o ./output.csv
     """
     usage = "Usage: %prog [options]"
     parser = OptionParser(usage=usage)
@@ -210,9 +210,9 @@ def main():
     if memory is None:
         memory = 100
     if in_file_path is None:
-        in_file_path = "/Users/zhangzinan/Downloads/dd-test/*.csv"
+        in_file_path = "./*.csv"
     if out_file_path is None:
-        out_file_path = "/Users/zhangzinan/Downloads/dd-test-out/all_metrics.csv"
+        out_file_path = "./output/all_metrics.csv"
 
     file_paths = glob.glob(in_file_path)
     if len(file_paths) == 0:
