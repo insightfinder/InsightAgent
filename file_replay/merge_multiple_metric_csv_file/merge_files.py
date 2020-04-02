@@ -6,8 +6,10 @@ import commands
 from optparse import OptionParser
 from csvsort import csvsort
 
+# global options
 UNDERSCORE = regex.compile(r"\_+")
 PERIOD = regex.compile(r"\.")
+FILE_READ_CHUNK_SIZE = 1024 * 1024 * 1024
 
 
 def handle_same_format_files(file_paths, out_file_path):
@@ -118,22 +120,26 @@ def handle_diff_format_files(file_paths, out_file_path, step, memory):
             header_cols = file_header_cols[index]
             pre_cols = ['' for i in range(0, header_points)]
             post_cols = ['' for i in range(0, header_lens - header_points - len(header_cols))]
-            for line in item:
-                cols = line.replace('\r', '').replace('\n', '').split(',')
-                time_cols = cols[:1]
-                data_cols = cols[1:]
-                new_cols = time_cols + pre_cols + data_cols + post_cols
-                data_str = ','.join(new_cols) + '\n'
 
-                if len(new_cols) != len(new_headers) + 1:
-                    print "Error merge row {}".format(num)
-                    continue
+            buf_lines = item.readlines(FILE_READ_CHUNK_SIZE)
+            while buf_lines:
+                for line in buf_lines:
+                    cols = line.replace('\r', '').replace('\n', '').split(',')
+                    time_cols = cols[:1]
+                    data_cols = cols[1:]
+                    new_cols = time_cols + pre_cols + data_cols + post_cols
+                    data_str = ','.join(new_cols) + '\n'
 
-                fout.write(data_str)
-                num += 1
-                if num % 10000 == 0:
-                    fout.flush()
-                    print "Complete {} rows".format(num)
+                    if len(new_cols) != len(new_headers) + 1:
+                        print "Error merge row {}".format(num)
+                        continue
+
+                    fout.write(data_str)
+                    num += 1
+                    if num % 10000 == 0:
+                        fout.flush()
+                        print "Complete {} rows".format(num)
+                buf_lines = item.readlines(FILE_READ_CHUNK_SIZE)
         print "Complete {} rows".format(num)
 
         # close files
@@ -173,36 +179,42 @@ def handle_diff_format_files(file_paths, out_file_path, step, memory):
 
             num = -1
             row_num = 0
-            for line in sorted_file:
-                num += 1
-                if num == 0:
-                    # write header
-                    fout.write(line)
-                else:
-                    # write data
-                    cols = line.replace('\r', '').replace('\n', '').split(',')
-                    timestamp = cols[0]
-                    data_cols = cols[1:]
 
-                    if num == 1:
-                        same_timestamp = timestamp
-                        same_timestamp_rows = [data_cols]
+            buf_lines = sorted_file.readlines(FILE_READ_CHUNK_SIZE)
+            while buf_lines:
+                for line in buf_lines:
+                    num += 1
+                    if num == 0:
+                        # write header
+                        fout.write(line)
                     else:
-                        if timestamp == same_timestamp:
-                            same_timestamp_rows.append(data_cols)
-                        else:
-                            # combine rows
-                            parse_combine_data(fout, same_timestamp, same_timestamp_rows, same_timestamp_data_map)
-                            row_num += 1
-                            if row_num % 10000 == 0:
-                                fout.flush()
-                                print "Complete {} rows".format(row_num)
+                        # write data
+                        cols = line.replace('\r', '').replace('\n', '').split(',')
+                        timestamp = cols[0]
+                        data_cols = cols[1:]
 
-                            # reset timestamp and data
+                        if num == 1:
                             same_timestamp = timestamp
                             same_timestamp_rows = [data_cols]
-                            same_timestamp_data_map = {}
+                        else:
+                            if timestamp == same_timestamp:
+                                same_timestamp_rows.append(data_cols)
+                            else:
+                                # combine rows
+                                parse_combine_data(fout, same_timestamp, same_timestamp_rows, same_timestamp_data_map)
+                                row_num += 1
+                                if row_num % 10000 == 0:
+                                    fout.flush()
+                                    print "Complete {} rows".format(row_num)
 
+                                # reset timestamp and data
+                                same_timestamp = timestamp
+                                same_timestamp_rows = [data_cols]
+                                same_timestamp_data_map = {}
+
+                buf_lines = sorted_file.readlines(FILE_READ_CHUNK_SIZE)
+
+            # last row
             if same_timestamp and len(same_timestamp_rows) > 0:
                 # combine rows
                 parse_combine_data(fout, same_timestamp, same_timestamp_rows, same_timestamp_data_map)
