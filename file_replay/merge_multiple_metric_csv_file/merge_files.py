@@ -258,9 +258,9 @@ def main():
     if memory is None:
         memory = '1G'
     if in_file_path is None:
-        in_file_path = "/Users/zhangzinan/Downloads/dd-test/*.csv"
+        in_file_path = "./*.csv"
     if out_file_path is None:
-        out_file_path = "/Users/zhangzinan/Downloads/dd-test-out/all_metrics.csv"
+        out_file_path = "./output/all_metrics.csv"
 
     file_paths = glob.glob(in_file_path)
     if len(file_paths) == 0:
