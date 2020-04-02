@@ -166,11 +166,6 @@ def handle_diff_format_files(file_paths, out_file_path, step, memory):
         if os.path.exists(sorted_file_name):
             os.remove(sorted_file_name)
 
-        # use csv sort lib
-        # csvsort(merged_file_name, [0], output_filename=sorted_file_name, max_size=int(memory), has_header=True,
-        #         delimiter=',', show_progress=True)
-        # print "Sorted file {}".format(sorted_file_name)
-
         # use GNU sort
         command_sort = "sort -t , -k 1,1n -S {} -o {} {}".format(memory, sorted_file_name, merged_file_name)
         (status, output) = commands.getstatusoutput(command_sort)
