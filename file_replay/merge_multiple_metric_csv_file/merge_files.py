@@ -1,18 +1,22 @@
 # coding=utf-8
 import os
-import regex
 import glob
 import commands
 from optparse import OptionParser
-from csvsort import csvsort
 
-# global options
-UNDERSCORE = regex.compile(r"\_+")
-PERIOD = regex.compile(r"\.")
-FILE_READ_CHUNK_SIZE = 1024 * 1024 * 1024
+# read cache, set 500M if has 16G MEM
+FILE_READ_CHUNK_SIZE = 500 * 1024 * 1024
 
 
 def handle_same_format_files(file_paths, out_file_path):
+    try:
+        import regex
+    except ImportError:
+        print 'Error package import.'
+        return
+    regex_underscore = regex.compile(r"\_+")
+    regex_period = regex.compile(r"\.")
+
     # get file lines
     count = -1
     for count, line in enumerate(open(str(file_paths[0]), 'rU')):
@@ -35,10 +39,10 @@ def handle_same_format_files(file_paths, out_file_path):
         file_name = file_names[index]
         metric = os.path.splitext(file_name)[0]
         if '|' not in metric:
-            metric = PERIOD.sub('_', UNDERSCORE.sub('', metric))
+            metric = regex_period.sub('_', regex_underscore.sub('', metric))
         else:
             metric = metric.partition('|')
-            metric = PERIOD.sub('_', UNDERSCORE.sub('', '{}.{}'.format(
+            metric = regex_period.sub('_', regex_underscore.sub('', '{}.{}'.format(
                 '.'.join(metric[2].split('.')[1:]), metric[0])))
 
         header = item.readline().replace('\r', '').replace('\n', '')
@@ -71,6 +75,14 @@ def handle_same_format_files(file_paths, out_file_path):
 
 
 def handle_diff_format_files(file_paths, out_file_path, step, memory):
+    try:
+        import regex
+    except ImportError:
+        print 'Error package import.'
+        return
+    regex_underscore = regex.compile(r"\_+")
+    regex_period = regex.compile(r"\.")
+
     merged_file_name = os.path.dirname(out_file_path) + '/_merged_file.csv'
     sorted_file_name = os.path.dirname(out_file_path) + '/_sorted_file.csv'
 
@@ -93,10 +105,10 @@ def handle_diff_format_files(file_paths, out_file_path, step, memory):
             file_name = file_names[index]
             metric = os.path.splitext(file_name)[0]
             if '|' not in metric:
-                metric = PERIOD.sub('_', UNDERSCORE.sub('', metric))
+                metric = regex_period.sub('_', regex_underscore.sub('', metric))
             else:
                 metric = metric.partition('|')
-                metric = PERIOD.sub('_', UNDERSCORE.sub('', '{}.{}'.format(
+                metric = regex_period.sub('_', regex_underscore.sub('', '{}.{}'.format(
                     '.'.join(metric[2].split('.')[1:]), metric[0])))
 
             header = item.readline().replace('\r', '').replace('\n', '')
@@ -203,7 +215,7 @@ def handle_diff_format_files(file_paths, out_file_path, step, memory):
                                 # combine rows
                                 parse_combine_data(fout, same_timestamp, same_timestamp_rows, same_timestamp_data_map)
                                 row_num += 1
-                                if row_num % 10000 == 0:
+                                if row_num % 1000 == 0:
                                     fout.flush()
                                     print "Complete {} rows".format(row_num)
 
