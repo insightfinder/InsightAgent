@@ -2,6 +2,7 @@
 import os
 import regex
 import glob
+import commands
 from optparse import OptionParser
 from csvsort import csvsort
 
@@ -68,8 +69,8 @@ def handle_same_format_files(file_paths, out_file_path):
 
 
 def handle_diff_format_files(file_paths, out_file_path, step, memory):
-    merged_file_name = 'merged_file.csv'
-    sorted_file_name = 'sorted_file.csv'
+    merged_file_name = os.path.dirname(out_file_path) + '/_merged_file.csv'
+    sorted_file_name = os.path.dirname(out_file_path) + '/_sorted_file.csv'
 
     if not step or step == '1':
         print "Start to merge file {}".format(merged_file_name)
@@ -146,9 +147,19 @@ def handle_diff_format_files(file_paths, out_file_path, step, memory):
         print "Start to sort file {}".format(sorted_file_name)
         if os.path.exists(sorted_file_name):
             os.remove(sorted_file_name)
-        csvsort(merged_file_name, [0], output_filename=sorted_file_name, max_size=int(memory), has_header=True,
-                delimiter=',', show_progress=True)
-        print "Sorted file {}".format(sorted_file_name)
+
+        # use csv sort lib
+        # csvsort(merged_file_name, [0], output_filename=sorted_file_name, max_size=int(memory), has_header=True,
+        #         delimiter=',', show_progress=True)
+        # print "Sorted file {}".format(sorted_file_name)
+
+        # use GNU sort
+        command_sort = "sort -t , -k 1,1n -S {} -o {} {}".format(memory, sorted_file_name, merged_file_name)
+        (status, output) = commands.getstatusoutput(command_sort)
+        if status == 0:
+            print "Sorted file {}".format(sorted_file_name)
+        else:
+            print "Fail sorted file {}".format(sorted_file_name)
 
     if not step or step == '3':
         print "Start to combine file {}".format(out_file_path)
@@ -220,7 +231,7 @@ def parse_combine_data(fout, same_timestamp, same_timestamp_rows, same_timestamp
 
 def main():
     """
-    Example：python2 merge_csv_files.py -f same -m 100 -i "./*.csv" -o ./output.csv
+    Example：python2 merge_csv_files.py -f same -m 1G -i "./*.csv" -o ./output.csv
     """
     usage = "Usage: %prog [options]"
     parser = OptionParser(usage=usage)
@@ -229,7 +240,7 @@ def main():
     parser.add_option("-s", "--step",
                       action="store", dest="step")
     parser.add_option("-m", "--memory",
-                      action="store", dest="memory", help="Max memory used(MB).")
+                      action="store", dest="memory", help="Max memory used.")
     parser.add_option("-i", "--infiles",
                       action="store", dest="in_file_path", help="Files to process.")
     parser.add_option("-o", "--outfile",
@@ -245,7 +256,7 @@ def main():
     if flag is None:
         flag = 'diff'
     if memory is None:
-        memory = 100
+        memory = '1G'
     if in_file_path is None:
         in_file_path = "/Users/zhangzinan/Downloads/dd-test/*.csv"
     if out_file_path is None:
