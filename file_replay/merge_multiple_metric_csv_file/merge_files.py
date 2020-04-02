@@ -189,7 +189,7 @@ def handle_diff_format_files(file_paths, out_file_path, step, memory):
                         fout.write(line)
                     else:
                         # write data
-                        cols = line.replace('\r', '').replace('\n', '').split(',')
+                        cols = line[:-1].split(',')
                         timestamp = cols[0]
                         data_cols = cols[1:]
 
