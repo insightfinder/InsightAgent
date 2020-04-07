@@ -114,11 +114,19 @@ def read_xls(_file):
                 # build dict of <field name: value>
                 d = label_message(list(map(lambda x: x.value, row)))
                 # turn datetime into epoch
-                d[agent_config_vars['timestamp_field']] = get_timestamp_from_datetime(
-                    datetime(
+                timestamp = ''
+                while timestamp == '' and len(agent_config_vars['timestamp_field']) != 0:
+                    timestamp_field = agent_config_vars['timestamp_field'].pop(0)
+                    try:
+                        timestamp_xlrd = d[timestamp_field]
+                    except KeyError:
+                        continue
+                    timestamp = get_timestamp_from_datetime(datetime(
                         *xlrd.xldate_as_tuple(
-                            d[agent_config_vars['timestamp_field']],
+                            timestamp_xlrd,
                             sheet.book.datemode)))
+                d[timestamp_field] = timestamp
+                agent_config_vars['timestamp_field'] = [timestamp_field]
                 yield d
 
 
@@ -196,17 +204,18 @@ def tail_file(_file, data):
 def update_state(setting, value, append=False):
     # update in-mem
     if append:
-        current = agent_config_vars['state'][setting]
+        current = ','.join(agent_config_vars['state'][setting])
         value = '{},{}'.format(current, value) if current else value
         agent_config_vars['state'][setting] = value.split(',')
     else:
         agent_config_vars['state'][setting] = value
     logger.debug('setting {} to {}'.format(setting, value))
     # update config file
-    if os.path.exists(config_ini_path()):
-        config_parser = ConfigParser.SafeConfigParser()
-        # only write to config if tailing
-        if 'TAIL' in agent_config_vars['data_format']:
+    if 'TAIL' in agent_config_vars['data_format']:
+        config_ini = config_ini_path()
+        if os.path.exists(config_ini):
+            config_parser = ConfigParser.SafeConfigParser()
+            config_parser.read(config_ini)
             config_parser.set('state', setting, str(value))
             with open(config_ini, 'w') as config_file:
                 config_parser.write(config_file)
@@ -353,9 +362,9 @@ def get_agent_config_vars():
         # add parsed variables to a global
         config_vars = {
             'state': {
-                'current_file': current_file,
-                'current_file_offset': int(current_file_offset),
-                'completed_files_st_ino': completed_files_st_ino.split(',')
+                'current_file': current_file if 'TAIL' in data_format else '',
+                'current_file_offset': int(current_file_offset) if 'TAIL' in data_format else 0,
+                'completed_files_st_ino': completed_files_st_ino.split(',') if 'TAIL' in data_format else []
                 },
             'file_path': file_path,
             'file_name_regex': file_name_regex,
@@ -1026,7 +1035,7 @@ def parse_json_message_single(message):
             filter_vals = _filter.split(':')[1].split(',')
             filter_check = get_json_field(
                 message,
-                filter_field.split(JSON_LEVEL_DELIM),
+                filter_field,
                 allow_list=True)
             # check if a valid value
             for filter_val in filter_vals:
@@ -1049,7 +1058,7 @@ def parse_json_message_single(message):
             filter_vals = _filter.split(':')[1].split(',')
             filter_check = get_json_field(
                 message,
-                filter_field.split(JSON_LEVEL_DELIM),
+                filter_field,
                 allow_list=True)
             # check if a valid value
             for filter_val in filter_vals:
