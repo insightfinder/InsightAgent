@@ -42,7 +42,7 @@ rm -rf ./offline/pip/packages/*
 
 # check required pip packages
 echo "Modules used in this agent:"
-grep import *.py                                                            \
+cat *.py | grep import                                                      \
     | xargs -I {} ${PYTHON} -c 'exec("try: {}\nexcept: print(\"{}\")")'     \
     | sed -E -e 's/(from|import)\s+(\w+).*/\2/' | sort -u                   \
     | xargs -I {} grep -i {} pip-freeze                                     \
