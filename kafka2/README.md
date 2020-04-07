@@ -1,41 +1,80 @@
-# Kafka
+# kafka2
+This agent collects data from kafka2 and sends it to Insightfinder.
 ## Installing the Agent
-**Download the agent [tarball](https://github.com/insightfinder/InsightAgent/raw/master/kafka2/kafka2.tar.gz) and untar it:**
+
+### Short Version
+```bash
+bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) kafka2 && cd kafka2
+vi config.ini
+sudo ./setup/install.sh --create  # install on localhost
+                                  ## or on multiple nodes
+sudo ./offline/remote-cp-run.sh list_of_nodes
 ```
-wget https://github.com/insightfinder/InsightAgent/raw/master/kafka2/kafka2.tar.gz
+
+See the `offline` README for instructions on installing prerequisites.
+
+### Long Version
+###### Download the agent tarball and untar it:
+```bash
+curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/kafka2/kafka2.tar.gz
 tar xvf kafka2.tar.gz && cd kafka2
 ```
 
-**Copy `config.ini.template` to `config.ini` and edit it:**
-```
+###### Copy `config.ini.template` to `config.ini` and edit it:
+```bash
 cp config.ini.template config.ini
 vi config.ini
 ```
 See below for a further explanation of each variable.
 
-**Setup pip & required packages:**
-```
-sudo ./pip-setup.sh
-```
-
-**Test the agent:**
-```
-python getmessages_kafka.py -t
+#### Automated Install (local or remote)
+###### Review propsed changes from install:
+```bash
+sudo ./setup/install.sh
 ```
 
-**If satisfied with the output, configure the agent to run continuously:**
+###### Once satisfied, run:
+```bash
+sudo ./setup/install.sh --create
 ```
-sudo ./monit-config.sh
+
+###### To deploy on multiple hosts, instead call 
+```bash
+sudo ./offline/remote-cp-run.sh list_of_nodes -f <nodelist_file>
+```
+Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
+
+#### Manual Install (local only)
+###### Check Python version & upgrade if using Python 3
+```bash
+if [[ $(python -V 2>&1 | awk '{ print substr($NF, 1, 1) }') == "3" ]]; then \
+2to3 -w getmessages_kafka2.py; \
+else echo "No upgrade needed"; fi
+```
+
+###### Setup pip & required packages:
+```bash
+sudo ./setup/pip-config.sh
+```
+
+###### Test the agent:
+```bash
+python getmessages_kafka2.py -t
+```
+
+###### If satisfied with the output, configure the agent to run continuously:
+```bash
+sudo ./setup/cron-config.sh
 ```
 
 ### Config Variables
-* **`bootstrap_servers`**: Comma-delimited list of bootstrap servers as host:port
-* **`topics`**: Comma-delimited list of topics to subscribe to.
-* `group_id`: Group ID to join. Default is None.
-* `client_id`: Client ID used when subscribing to topics. Default is `kafka-python-{version}` (from KafkaConsumer API). 
+* **`bootstrap_servers`**: Comma-delimited list of `host[:port]` Kafka servers to connect to.
+* **`topics`**: Topics in Kafka for subscribe to.
+* `group_id`: Group ID to use in Kafka connection.
+* `client_id`: Client ID to use in Kafka connection.
 * `filters_include`: Used to filter messages based on allowed values.
 * `filters_exclude`: Used to filter messages based on unallowed values.
-* **`data_format`**: The format of the data to parse: CSV, JSON, or RAW
+* **`data_format`**: The format of the data to parse: CSV, JSON, or RAW 
 * **`csv_field_names`**: A list of field names for CSV input. Required, even if the CSV to parse has a header.
 * `json_top_level`: The top-level of fields to parse in JSON. For example, if all fields of interest are nested like 
 ```
@@ -44,43 +83,43 @@ sudo ./monit-config.sh
     "parsed": {
       "time": time, 
       "log": log message,
-      ...
-    }
-    ...
+      ... 
+    }   
+    ... 
   }
-  ...
+  ... 
 }
 ```
 then this should be set to `output.parsed`.
 * `timestamp_format`: Format of the timestamp, in python [strftime](http://strftime.org/). If the timestamp is in Unix epoch, this can be left blank or set to `epoch`.
 * `timestamp_field`: Field name for the timestamp. Default is `timestamp`.
-* `instance_field`: Field name for the instance name. If not set or the field is not found, the instance name is the hostname of the machine the agent is installed on.
+* `instance_field`: Field name for the instance name. If not set or the field is not found, the instance name is the hostname of the machine the agent is installed on. 
 * `device_field`: Field name for the device/container for containerized projects.
 * `data_fields`: Comma-delimited list of field names to use as data fields. If not set, all fields will be reported.
-
-For the following fields, please refer to the [KafkaConsumer API](https://kafka-python.readthedocs.io/en/master/apidoc/KafkaConsumer.html).
-* `security_protocol`: Set to `SSL` in order to use SSL.
-* `ssl_context`
-* `ssl_check_hostname`: `True` or `False`
-* `ssl_cafile`
-* `ssl_certfile`
-* `ssl_keyfile`
-* `ssl_password`
-* `ssl_crlfile`
-* `ssl_ciphers`
-* `sasl_mechanism`: One of PLAIN, GSSAPI, OAUTHBEARER
-* `sasl_plain_username`
-* `sasl_plain_password`
-* `sasl_kerberos_service_name`
-* `sasl_kerberos_domain_name`
-* `sasl_oauth_token_provider`
+* `metric_name_field`: If this is set, only the first value in `data_fields` will be used as the field containing the value for the metric who's name is contained here.
 * `agent_http_proxy`: HTTP proxy used to connect to the agent.
 * `agent_https_proxy`: As above, but HTTPS.
+The following settings control SSL and SASL. Please refer to the [documentation](https://kafka-python.readthedocs.io/en/master/apidoc/KafkaConsumer.html) for the Kafka consumer for further details on each.
+* `security_protocol`: Security protocol to use. Valid options are PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL.
+* `ssl_context`: Pre-configured SSLContext for wrapping socket connections.
+* `ssl_check_hostname`: True if hostname should be checked - whether ssl handshake should verify that the certificate matches the brokers hostname.
+* `ssl_cafile`: ca file to use in certificate verification.
+* `ssl_certfile`: pem file to use in certificate verification.
+* `ssl_keyfile`: Client private key file to use in certificate verification.
+* `ssl_password`: Password used when loading the certificate chain.
+* `ssl_crlfile`: CRL to check for certificate expiration.
+* `ssl_ciphers`: Set the available ciphers for ssl connections.
+* `sasl_mechanism`: Mechanism used when `security_protocol` is SASL_PLAINTEXT or SASL_SSL. Valid options are PLAIN, GSSAPI, or OAUTHBEARER.
+* `sasl_plain_username`: Username for sasl PLAIN authentication.
+* `sasl_plain_password`: Password for sasl PLAIN authentication.
+* `sasl_kerberos_service_name`: Service name to include in GSSAPI sasl mechanism handshake.
+* `sasl_kerberos_domain_name`: kerberos domain name to use in GSSAPI sasl mechanism handshake.
+* `sasl_oauth_token_provider`: OAuthBearer token provider instance.
 * **`user_name`**: User name in InsightFinder
-* **`license_key`**: License Key from your Account Profile in the InsightFinder UI.
-* **`project_name`**: Name of the project created in the InsightFinder UI.
+* **`license_key`**: License Key from your Account Profile in the InsightFinder UI. 
+* **`project_name`**: Name of the project created in the InsightFinder UI. 
 * **`project_type`**: Type of the project - one of `metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay`.
-* **`sampling_interval`**: How frequently data is collected. Should match the interval used in cron.
+* **`sampling_interval`**: How frequently data is collected. Should match the interval used in project settings.
 * `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
 * `if_url`: URL for InsightFinder. Default is `https://app.insightfinder.com`.
 * `if_http_proxy`: HTTP proxy used to connect to InsightFinder.
