@@ -3,7 +3,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # agent/../utils/update-boilerplate -> push changes in current folder to template
-PULL_FROM="${1:-$(find $(pwd) -type f -name *.py)}"
+PULL_FROM="${1:-$(find $(pwd) -type f -name get*.py)}"
 PUSH_TO=$(realpath -m "${PULL_FROM}/../../template/insightagent-boilerplate.py")
 if [[ "${PULL_FROM}" =~ boilerplate ]];
 then

@@ -12,12 +12,14 @@ from optparse import OptionParser
 from multiprocessing import Process
 from datetime import datetime
 import dateutil
+import tzlocal
 import urlparse
 import httplib
 import requests
 import statistics
 import subprocess
 import shlex
+import xml2dict
 import ifobfuscate
 
 '''
@@ -26,22 +28,85 @@ This script gathers data to send to Insightfinder
 
 
 def start_data_processing(thread_number):
-    """ TODO: replace with your code.
-    Most work regarding sending to IF is abstracted away for you.
-    This function will get the data to send and prepare it for the API.
-    The general outline should be:
-    0. Define the project type in config.ini
-    1. Parse config options
-    2. Gather data
-    3. Parse each entry
-    4. Call the appropriate handoff function
-        metric_handoff()
-        log_handoff()
-        alert_handoff()
-        incident_handoff()
-        deployment_handoff()
-    See zipkin for an example that uses os.fork to send both metric and log data.
-    """
+    # set sysparm limi/offset
+    passthru = {'sysparm_limit': 100,
+                'sysparm_offset': agent_config_vars['state']['sysparm_offset'],
+                'sysparm_query': ''}
+
+    ## add timestamp query
+    # get utc earliest datetime
+    utc_earliest_epoch = time.time() - if_config_vars['run_interval']
+    # get localized earliest datetime
+    local_earliest_datetime = tzlocal.get_localzone().localize(
+            datetime.fromtimestamp(utc_earliest_epoch))
+    # convert earliest datetime to the data timezone
+    data_earliest_datetime = local_earliest_datetime.astimezone(
+            agent_config_vars['timezone'])
+    # do not apply timezone conversion later
+    agent_config_vars['timezone'] = pytz.utc
+    # convert to string for Glide
+    earliest_date_and_time = data_earliest_datetime.strftime(
+        agent_config_vars['timestamp_format'][0]).split(' ')
+    # add timestamp filter
+    for timestamp_field in agent_config_vars['timestamp_field']:
+        if not is_formatted(timestamp_field):
+            statement = '{}>=javascript:gs.dateGenerate(\'{}\',\'{}\')'.format(
+                    timestamp_field,
+                    earliest_date_and_time[0],
+                    earliest_date_and_time[1])
+            # OR between fields
+            passthru['sysparm_query'] = '{}^OR{}'.format(passthru['sysparm_query'], statement) if len(passthru['sysparm_query']) != 0 else statement
+    
+    # add applicable keyword filtering
+    for in_filter in agent_config_vars['filters_include']:
+        filter_keyword, filter_values = in_filter.split(':')
+        filter_statement = ''
+        for filter_value in filter_values.split(','):
+            statement = '{keyword}*{value}^{keyword}ISNOTEMPTY'.format(keyword=filter_keyword, value=filter_value)
+            # OR between values
+            filter_statement = '{}^OR{}'.format(filter_statement, statement) if len(filter_statement) != 0 else statement
+        # AND between keywords
+        passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], filter_statement) if len(passthru['sysparm_query']) != 0 else '{}'.format(filter_statement)
+    # clear since it's handled already
+    agent_config_vars['filters_include'] = ''
+    for ex_filter in agent_config_vars['filters_exclude']:
+        filter_keyword, filter_values = ex_filter.split(':')
+        filter_statement = ''
+        for filter_value in filter_values.split(','):
+            statement = '{keyword}!*{value}^{keyword}ISNOTEMPTY'.format(keyword=filter_keyword, value=filter_value)
+            # OR between values
+            filter_statement = '{}^OR{}'.format(filter_statement, statement) if len(filter_statement) != 0 else statement
+        # AND between keywords
+        passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], filter_statement) if len(passthru['sysparm_query']) != 0 else '{}'.format(filter_statement)
+    # clear since it's handled already
+    agent_config_vars['filters_exclude'] = ''
+    passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], agent_config_vars['addl_query']) if len(agent_config_vars['addl_query']) != 0 else passthru['sysparm_query']
+    # build auth
+    auth = (agent_config_vars['username'], ifobfuscate.decode(agent_config_vars['password']))
+    # call API
+    logger.info('Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
+    logger.debug(passthru)
+    api_response = send_request(agent_config_vars['api_url'], auth=auth, params=passthru)
+    count = int(api_response.headers['X-Total-Count'])
+    logger.debug('Processing {} records'.format(count))
+    while api_response != -1 and passthru['sysparm_offset'] < count:
+        # parse messages
+        try:
+            api_json = json.loads(api_response.content)
+            parse_json_message(api_json)
+        except Exception as e:
+            logger.warning(e)
+            pass
+        # set limit and offset
+        passthru['sysparm_offset'] = passthru['sysparm_offset'] + passthru['sysparm_limit']
+        passthru['sysparm_limit'] = min(100, count - passthru['sysparm_offset'])
+        if passthru['sysparm_offset'] >= count or passthru['sysparm_limit'] <= 0:
+            break
+        update_state('sysparm_offset', passthru['sysparm_offset'], write=True)
+        # call API for next cycle
+        logger.info('Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
+        api_response = send_request(agent_config_vars['api_url'], auth=auth, params=passthru)
+    update_state('sysparm_offset', count, write=True)
 
 
 def get_agent_config_vars():
@@ -51,8 +116,16 @@ def get_agent_config_vars():
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(config_ini)
         try:
-            ## TODO: fill out the fields to grab. examples given below
-            ## replace 'agent' with the appropriate section header.
+            # state
+            sysparm_offset = config_parser.get('state', 'sysparm_offset')
+
+            # api
+            base_url = config_parser.get('agent', 'base_url')
+            api_endpoint = config_parser.get('agent', 'api_endpoint')
+            username = config_parser.get('agent', 'username')
+            password = config_parser.get('agent', 'password_encrypted')
+            addl_query = config_parser.get('agent', 'sysparm_query')
+
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
@@ -62,11 +135,6 @@ def get_agent_config_vars():
             filters_exclude = config_parser.get('agent', 'filters_exclude')
 
             # message parsing
-            data_format = config_parser.get('agent', 'data_format').upper()
-            raw_regex = config_parser.get('agent', 'raw_regex', raw=True)
-            raw_start_regex = config_parser.get('agent', 'raw_start_regex', raw=True)
-            csv_field_names = config_parser.get('agent', 'csv_field_names')
-            csv_field_delimiter = config_parser.get('agent', 'csv_field_delimiter', raw=True) or CSV_DELIM
             json_top_level = config_parser.get('agent', 'json_top_level')
             # project_field = config_parser.get('agent', 'project_field', raw=True)
             instance_field = config_parser.get('agent', 'instance_field', raw=True)
@@ -80,42 +148,14 @@ def get_agent_config_vars():
             logger.error(cp_noe)
             config_error()
 
-        # data format
-        if data_format in {'CSV',
-                           'CSVTAIL',
-                           'XLS',
-                           'XLSX'}:
-            # field names
-            if len(csv_field_names) == 0:
-                config_error('csv_field_names')
-            else:
-                csv_field_names = csv_field_names.split(',')
-
-            # field delim
-            try:
-                csv_field_delimiter = regex.compile(csv_field_delimiter)
-            except Exception as e:
-                config_error('csv_field_delimiter')
-        elif data_format in {'JSON',
-                             'JSONTAIL',
-                             'AVRO',
-                             'XML'}:
-            pass
-        elif data_format in {'RAW',
-                             'RAWTAIL'}:
-            try:
-                raw_regex = regex.compile(raw_regex)
-            except Exception as e:
-                config_error('raw_regex')
-            if len(raw_start_regex) != 0:
-                if raw_start_regex[0] != '^':
-                    config_error('raw_start_regex')
-                try:
-                    raw_start_regex = regex.compile(raw_start_regex)
-                except Exception as e:
-                    config_error('raw_start_regex')
-        else:
-            config_error('data_format')
+        # API
+        api_url = urlparse.urljoin(base_url, api_endpoint)
+        if len(api_url) == 0:
+            config_error('base_url or api_endpoint')
+        if len(username) == 0:
+            config_error('username')
+        if len(password) == 0:
+            config_error('password')
 
         # proxies
         agent_proxies = dict()
@@ -167,17 +207,23 @@ def get_agent_config_vars():
         else:
             timezone = pytz.timezone(timezone)
 
+        try:
+            sysparm_offset = int(sysparm_offset)
+        except Exception:
+            sysparm_offset = 0
+
         # add parsed variables to a global
         config_vars = {
+            'state': { 'sysparm_offset': sysparm_offset },
+            'api_url': api_url,
+            'username': username,
+            'password': password,
+            'addl_query': addl_query,
             'proxies': agent_proxies,
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
-            'data_format': data_format,
-            'raw_regex': raw_regex,
-            'raw_start_regex': raw_start_regex,
+            'data_format': 'JSON',
             'json_top_level': json_top_level,
-            'csv_field_names': csv_field_names,
-	    'csv_field_delimiter': csv_field_delimiter,
             # 'project_field': project_fields,
             'instance_field': instance_fields,
             'device_field': device_fields,
