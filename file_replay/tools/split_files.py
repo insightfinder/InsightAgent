@@ -17,14 +17,22 @@ def mkdir(path):
 def handle_csv_filter(in_file_path, time_range):
     in_dir = os.path.dirname(in_file_path)
 
-    range_list = time_range.split(',')
-    time_start = arrow.get(range_list[0], 'YYYY-MM-DD HH:mm:ss').timestamp
-    time_end = arrow.get(range_list[1], 'YYYY-MM-DD HH:mm:ss').timestamp
+    range_list = time_range.split(';')
+    timestamp_range = []
+    last_time = 0
+    for time_range_str in range_list:
+        range_list = time_range_str.split(',')
+        time_start = arrow.get(range_list[0], 'YYYY-MM-DD HH:mm:ss').timestamp
+        time_end = arrow.get(range_list[1], 'YYYY-MM-DD HH:mm:ss').timestamp
+        timestamp_range.append([time_start, time_end])
+        last_time = time_end
+    timestamp_range.reverse()
 
     out_path = os.path.join(in_dir, 'time_filter.csv')
     output_file = open(str(out_path), "a")
     num = 0
     filter_num = 0
+    [time_start, time_end] = timestamp_range.pop()
     with open(str(in_file_path), "rb") as _file:
         output_header = _file.readline()
         output_file.write(output_header)
@@ -43,9 +51,12 @@ def handle_csv_filter(in_file_path, time_range):
                         output_file.flush()
                         print "Complete {} rows".format(filter_num)
 
-                elif timestamp > time_end:
+                elif timestamp > last_time:
                     print "Complete {} rows".format(filter_num)
                     return
+
+                elif timestamp > time_end and len(timestamp_range) > 0:
+                    [time_start, time_end] = timestamp_range.pop()
 
                 num += 1
                 if num % 1000 == 0:
