@@ -99,6 +99,22 @@ def get_agent_config_vars():
             # only keep settings with values
             kafka_kwargs = { k:v for (k, v) in kafka_config.items() if v }
 
+            # check SASL
+            if 'sasl_mechanism' in kafka_kwargs:
+                if kafka_kwargs['sasl_mechanism'] not in { 'PLAIN', 'GSSAPI', 'OAUTHBEARER' }:
+                    logger.warn('sasl_mechanism not one of PLAIN, GSSAPI, or OAUTHBEARER')
+                    kafka_kwargs.pop('sasl_mechanism')
+                elif kafka_kwargs['sasl_mechanism'] == 'PLAIN':
+                    # set required vars for plain sasl if not present
+                    if 'sasl_plain_username' not in kafka_kwargs:
+                        kafka_kwargs['sasl_plain_username'] = ''
+                    if 'sasl_plain_password' not in kafka_kwargs:
+                        kafka_kwargs['sasl_plain_password'] = ''
+
+            # handle boolean setting
+            if config_parser.get('kafka', 'ssl_check_hostname').upper() == 'FALSE':
+                kafka_kwargs['ssl_check_hostname'] = False
+
             # handle required arrays
             # bootstrap serverss
             if len(config_parser.get('kafka', 'bootstrap_servers')) != 0:

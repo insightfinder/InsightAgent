@@ -18,7 +18,6 @@ import requests
 import statistics
 import subprocess
 import shlex
-import numexpr
 import xlrd
 import xml2dict
 import avro.datafile
@@ -71,17 +70,23 @@ def start_data_processing(thread_number):
             if line:
                 logger.debug(line)
                 try:
-                    if 'RAW' in data_format:
+                    if 'IFEXPORT' in data_format:
+                        track['current_row'].append(line)
+                        send_metric()
+                    elif 'RAW' in data_format:
                         message = parse_raw_line(message, line)
                     else:  # everything else gets converted to a dict
                         parse_json_message(line)
                 except Exception as e:
                     logger.debug('Error when processing line {}'.format(line))
+                    logger.debug(e)
         # get last message
-        try:
-            parse_raw_message(message)
-        except Exception as e:
-            logger.debug('Error when processing line {}'.format(message))
+        if 'RAW' in data_format:
+            try:
+                parse_raw_message(message)
+            except Exception as e:
+                logger.debug('Error when processing line {}'.format(message))
+                logger.debug(e)
         # mark as done
         completed_files_st_ino.append(st_ino_orig)
         # update file_list
@@ -109,11 +114,19 @@ def read_xls(_file):
                 # build dict of <field name: value>
                 d = label_message(list(map(lambda x: x.value, row)))
                 # turn datetime into epoch
-                d[agent_config_vars['timestamp_field']] = get_timestamp_from_datetime(
-                    datetime(
+                timestamp = ''
+                while timestamp == '' and len(agent_config_vars['timestamp_field']) != 0:
+                    timestamp_field = agent_config_vars['timestamp_field'].pop(0)
+                    try:
+                        timestamp_xlrd = d[timestamp_field]
+                    except KeyError:
+                        continue
+                    timestamp = get_timestamp_from_datetime(datetime(
                         *xlrd.xldate_as_tuple(
-                            d[agent_config_vars['timestamp_field']],
+                            timestamp_xlrd,
                             sheet.book.datemode)))
+                d[timestamp_field] = timestamp
+                agent_config_vars['timestamp_field'] = [timestamp_field]
                 yield d
 
 
@@ -124,7 +137,7 @@ def reader_next_line(_format, data, line):
             line = line.strip('\r\n')
         except Exception as e:
             pass
-    if 'CSV' in _format:
+    if 'CSV' in _format or 'IFEXPORT' in _format:
         line = label_message(agent_config_vars['csv_field_delimiter'].split(line))
     elif 'JSON' in _format:
         line = json.loads(line)
@@ -142,16 +155,20 @@ def reader(_format, _file, st_ino):
     else:
         mode = 'r' if _format != 'AVRO' else 'rb'
         with open(_file, mode) as data:
+            # get field names from header
+            if 'IFEXPORT' in _format:
+                agent_config_vars['csv_field_names'] = data.readline().strip().split(',')
             # preformatting on all data
             if 'TAIL' in _format:
                 update_state('current_file', json.dumps({st_ino: _file}))
                 data.seek(int(agent_config_vars['state']['current_file_offset'])) # read from state
+            elif _format == 'AVRO':
+                data = avro.datafile.DataFileReader(data, avro.io.DatumReader())
+            # read data
             if _format == 'XML':
                 data = xml2dict.parse(data)
                 yield data
             else:
-                if _format == 'AVRO':
-                    data = avro.datafile.DataFileReader(data, avro.io.DatumReader())
                 # read each line
                 logger.debug('reading each line')
                 for line in data:
@@ -187,17 +204,18 @@ def tail_file(_file, data):
 def update_state(setting, value, append=False):
     # update in-mem
     if append:
-        current = agent_config_vars['state'][setting]
+        current = ','.join(agent_config_vars['state'][setting])
         value = '{},{}'.format(current, value) if current else value
         agent_config_vars['state'][setting] = value.split(',')
     else:
         agent_config_vars['state'][setting] = value
     logger.debug('setting {} to {}'.format(setting, value))
     # update config file
-    if os.path.exists(config_ini_path()):
-        config_parser = ConfigParser.SafeConfigParser()
-        # only write to config if tailing
-        if 'TAIL' in agent_config_vars['data_format']:
+    if 'TAIL' in agent_config_vars['data_format']:
+        config_ini = config_ini_path()
+        if os.path.exists(config_ini):
+            config_parser = ConfigParser.SafeConfigParser()
+            config_parser.read(config_ini)
             config_parser.set('state', setting, str(value))
             with open(config_ini, 'w') as config_file:
                 config_parser.write(config_file)
@@ -231,7 +249,7 @@ def get_agent_config_vars():
             raw_regex = config_parser.get('agent', 'raw_regex', raw=True)
             raw_start_regex = config_parser.get('agent', 'raw_start_regex', raw=True)
             csv_field_names = config_parser.get('agent', 'csv_field_names')
-            csv_field_delimiter = config_parser.get('agent', 'csv_field_delimiter', raw=True) or ',|\t'
+            csv_field_delimiter = config_parser.get('agent', 'csv_field_delimiter', raw=True) or CSV_DELIM
             json_top_level = config_parser.get('agent', 'json_top_level')
             # project_field = config_parser.get('agent', 'project_field', raw=True)
             instance_field = config_parser.get('agent', 'instance_field', raw=True)
@@ -244,55 +262,6 @@ def get_agent_config_vars():
         except ConfigParser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
-
-        # files
-        try:
-            file_name_regex = regex.compile(file_name_regex)
-        except Exception as e:
-            config_error('file_name_regex')
-        if len(file_path) != 0:
-            file_path = file_path.split(',')
-        else:
-            config_error('file_path')
-
-        # filters
-        if len(filters_include) != 0:
-            filters_include = filters_include.split('|')
-        if len(filters_exclude) != 0:
-            filters_exclude = filters_exclude.split('|')
-
-        # fields
-        # project_field = project_field.split(',')
-        instance_field = instance_field.split(',')
-        device_field = device_field.split(',')
-        timestamp_field = timestamp_field.split(',')
-        if len(data_fields) != 0:
-            data_fields = data_fields.split(',')
-            # if project_field in data_fields:
-            #    data_fields.pop(data_fields.index(project_field))
-            if instance_field in data_fields:
-                data_fields.pop(data_fields.index(instance_field))
-            if device_field in data_fields:
-                data_fields.pop(data_fields.index(device_field))
-            if timestamp_field in data_fields:
-                data_fields.pop(data_fields.index(timestamp_field))
-
-        # timestamp
-        timestamp_format = timestamp_format.partition('.')[0]
-        if '%z' in timestamp_format or '%Z' in timestamp_format:
-            ts_format_info = strip_tz_info(timestamp_format)
-        elif timestamp_format:
-            ts_format_info = {'strip_tz': False,
-                              'strip_tz_fmt': '',
-                              'timestamp_format': [timestamp_format]}
-        else: # ISO8601?
-            ts_format_info = {'strip_tz': True,
-                              'strip_tz_fmt': PCT_z_FMT,
-                              'timestamp_format': ISO8601}
-        if timezone not in pytz.all_timezones:
-            config_error('timezone')
-        else:
-            timezone = pytz.timezone(timezone)
 
         # data format
         if data_format in {'CSV',
@@ -315,9 +284,14 @@ def get_agent_config_vars():
                              'AVRO',
                              'XML'}:
             pass
+        elif data_format in {'IFEXPORT'}:
+            csv_field_delimiter = regex.compile(CSV_DELIM)
+            timestamp_field = 'timestamp'
+            timestamp_format = 'epoch'
+            instance_field = ''
+            device_field = ''
         elif data_format in {'RAW',
-                             'RAWTAIL',
-                             }:
+                             'RAWTAIL'}:
             try:
                 raw_regex = regex.compile(raw_regex)
             except Exception as e:
@@ -332,12 +306,65 @@ def get_agent_config_vars():
         else:
             config_error('data_format')
 
+        # files
+        try:
+            file_name_regex = regex.compile(file_name_regex)
+        except Exception as e:
+            config_error('file_name_regex')
+        if len(file_path) != 0:
+            file_path = file_path.split(',')
+        else:
+            config_error('file_path')
+
+        # filters
+        if len(filters_include) != 0:
+            filters_include = filters_include.split('|')
+        if len(filters_exclude) != 0:
+            filters_exclude = filters_exclude.split('|')
+
+        # fields
+        # project_fields = project_field.split(',')
+        instance_fields = instance_field.split(',')
+        device_fields = device_field.split(',')
+        timestamp_fields = timestamp_field.split(',')
+        if len(data_fields) != 0:
+            data_fields = data_fields.split(',')
+            # for project_field in project_fields:
+            #   if project_field in data_fields:
+            #       data_fields.pop(data_fields.index(project_field))
+            for instance_field in instance_fields:
+                if instance_field in data_fields:
+                    data_fields.pop(data_fields.index(instance_field))
+            for device_field in device_fields:
+                if device_field in data_fields:
+                    data_fields.pop(data_fields.index(device_field))
+            for timestamp_field in timestamp_fields:
+                if timestamp_field in data_fields:
+                    data_fields.pop(data_fields.index(timestamp_field))
+
+        # timestamp
+        timestamp_format = timestamp_format.partition('.')[0]
+        if '%z' in timestamp_format or '%Z' in timestamp_format:
+            ts_format_info = strip_tz_info(timestamp_format)
+        elif timestamp_format:
+            ts_format_info = {'strip_tz': False,
+                              'strip_tz_fmt': '',
+                              'timestamp_format': [timestamp_format]}
+        else: # ISO8601?
+            ts_format_info = {'strip_tz': True,
+                              'strip_tz_fmt': PCT_z_FMT,
+                              'timestamp_format': ISO8601}
+        if timezone not in pytz.all_timezones:
+            config_error('timezone')
+        else:
+            timezone = pytz.timezone(timezone)
+
         # add parsed variables to a global
         config_vars = {
             'state': {
-                'current_file': current_file,
-                'current_file_offset': int(current_file_offset),
-                'completed_files_st_ino': completed_files_st_ino.split(',')
+                'current_file': current_file if 'TAIL' in data_format else '',
+                'current_file_offset': int(current_file_offset) if 'TAIL' in data_format else 0,
+                'completed_files_st_ino': completed_files_st_ino.split(',') if 'TAIL' in data_format else []
                 },
             'file_path': file_path,
             'file_name_regex': file_name_regex,
@@ -349,11 +376,11 @@ def get_agent_config_vars():
             'json_top_level': json_top_level,
             'csv_field_names': csv_field_names,
             'csv_field_delimiter': csv_field_delimiter,
-            # 'project_field': project_field,
-            'instance_field': instance_field,
-            'device_field': device_field,
+            # 'project_field': project_fields,
+            'instance_field': instance_fields,
+            'device_field': device_fields,
             'data_fields': data_fields,
-            'timestamp_field': timestamp_field,
+            'timestamp_field': timestamp_fields,
             'timezone': timezone,
             'timestamp_format': ts_format_info['timestamp_format'],
             'strip_tz': ts_format_info['strip_tz'],
@@ -820,7 +847,7 @@ def get_data_value(message, setting_value):
                                     default=value,
                                     allow_list=True)
         if evaluate:
-            value = numexpr.evaluate(value).item()
+            value = eval(value)
     else:
         name = setting_value
         value = get_json_field(message,
@@ -1008,7 +1035,7 @@ def parse_json_message_single(message):
             filter_vals = _filter.split(':')[1].split(',')
             filter_check = get_json_field(
                 message,
-                filter_field.split(JSON_LEVEL_DELIM),
+                filter_field,
                 allow_list=True)
             # check if a valid value
             for filter_val in filter_vals:
@@ -1031,7 +1058,7 @@ def parse_json_message_single(message):
             filter_vals = _filter.split(':')[1].split(',')
             filter_check = get_json_field(
                 message,
-                filter_field.split(JSON_LEVEL_DELIM),
+                filter_field,
                 allow_list=True)
             # check if a valid value
             for filter_val in filter_vals:
@@ -1090,7 +1117,7 @@ def parse_json_message_single(message):
 
 def label_message(message, fields=[]):
     """ turns unlabeled, split data into labeled data """
-    if agent_config_vars['data_format'] == 'CSV':
+    if agent_config_vars['data_format'] in {'CSV', 'CSVTAIL', 'IFEXPORT'}:
         fields = agent_config_vars['csv_field_names']
     json = dict()
     for i in range(minlen(fields, message)):
@@ -1432,10 +1459,10 @@ def prepare_log_entry(timestamp, data, instance, device=''):
 # Functions to handle Metric data #
 ###################################
 def metric_handoff(timestamp, field_name, data, instance, device=''):
-    send_metric(timestamp, field_name, data, instance or HOSTNAME, device)
+    add_and_send_metric(timestamp, field_name, data, instance or HOSTNAME, device)
 
 
-def send_metric(timestamp, field_name, data, instance, device=''):
+def add_and_send_metric(timestamp, field_name, data, instance, device=''):
     # validate data
     try:
         data = float(data)
@@ -1446,12 +1473,16 @@ def send_metric(timestamp, field_name, data, instance, device=''):
                 timestamp, field_name, instance, device, data))
     else:
         append_metric_data_to_entry(timestamp, field_name, data, instance, device)
-        track['entry_count'] += 1
-        if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
-            send_data_wrapper()
-        elif track['entry_count'] % 500 == 0:
-            logger.debug('Current data object size: {} bytes'.format(
-                get_json_size_bytes(track['current_dict'])))
+        send_metric()
+
+
+def send_metric():
+    track['entry_count'] += 1
+    if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
+        send_data_wrapper()
+    elif track['entry_count'] % 500 == 0:
+        logger.debug('Current data object size: {} bytes'.format(
+            get_json_size_bytes(track['current_dict'])))
 
 
 def append_metric_data_to_entry(timestamp, field_name, data, instance, device=''):
@@ -1767,7 +1798,7 @@ if __name__ == "__main__":
     HOSTNAME = socket.gethostname().partition('.')[0]
     ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
     JSON_LEVEL_DELIM = '.'
-    CSV_DELIM = ','
+    CSV_DELIM = r",|\t"
     ATTEMPTS = 3
     track = dict()
 
