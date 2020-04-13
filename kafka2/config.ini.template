@@ -1,48 +1,11 @@
 [kafka]
+## kafka info
 # required
 bootstrap_servers = localhost:9092
 # required
 topics = test
 group_id = 
 client_id =
-
-## filters
-# define a list of filters to use as field:allowed values|field:allowed values
-# for example:
-#   message.env:stg,prd|message.status:complete
-filters_include = 
-# as above, but instead include values that are not allowed
-# for example:
-#   message.env:dev,cde|message.status:draft
-filters_exclude = 
-
-## message parsing
-# raw, csv, or json
-# if raw, see the code to define a custom message parser
-# we can work with you on an open source solution, or provide guidance for a private solution
-data_format = 
-# if csv, must give the field names. specify timestamp_field, instance_field, etc as the column number (starting at index zero).
-# define the field names as timestamp,field1,field2...
-csv_field_names =
-# for multi-entry messages, define the top-level
-# if messages are [{message1}, {message2}], set top_level = []
-# it's expected that the top level will be a list
-json_top_level = 
-# give format as per python strptime
-timestamp_format = 
-# fields in json can be defined as level0.level.timestamp
-timestamp_field = 
-# if no instance given, the local hostname will be used
-instance_field = 
-device_field = 
-# multiple fields are separated by commas.
-data_fields =
-# if this is set, only the first value in `data_fields` will be used as the field containing the value for the metric who's name is contained here
-metric_name_field = 
-
-## proxy
-agent_http_proxy =
-agent_https_proxy =
 
 ## SSL
 # set to SSL to use SSL
@@ -66,10 +29,58 @@ sasl_kerberos_service_name =
 sasl_kerberos_domain_name = 
 sasl_oauth_token_provider =
 
+## filters
+# define a list of filters to use as field:allowed values|field:allowed values
+# for example:
+#   message.env:stg,prd|message.status:complete
+filters_include = 
+# as above, but instead define values that are not allowed
+# for example:
+#   message.env:dev,cde|message.status:draft
+filters_exclude = 
+
+# raw, csv, json
+data_format = 
+
+## RAW
+# if raw data, the regex used to parse the log. It must use named capture groups `(?<name>.*)` that correspond to the *_field config variables below (ie  `(?<timestamp>.*)`,  `(?<host>.*)`,  `(?<device>.*)`,  `(?<etc>.*)`. The raw message will be treated as a field named `_raw`
+raw_regex = 
+# if the log is multiline, the regex that indicates that the line is the start of a new message. this MUST start with ^ (unless blank)
+raw_start_regex = 
+
+## CSV
+# Required - field names, in order as timestamp,field1,field2...
+csv_field_names =
+# a regex string used to delimit "csv" fields (ie the default ,|\t matches a comma or tab character)
+csv_field_delimiter = ,|\t
+
+## JSON
+# for multi-entry messages, define the top-level
+#   if messages are [{message1}, {message2}], set top_level = []
+#   it's expected that the top level will be a list
+# fields in json can be defined as level0.level1.levelN
+json_top_level = 
+
+## message parsing
+# timestamp format, as per python strptime. multiple fields can be formatted together to create the timestamp a la `{date} {time}`, where `date` and `time` are fields that each contain part of the timestamp. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
+timestamp_format = timestamp
+# timezone, as per pytz
+timezone = 
+timestamp_field = epoch
+# if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
+instance_field = host
+device_field = 
+# multiple fields are separated by commas. a field can be named with the syntax `<name>:<value>` or `<name>:=<value>`, where `<name>` and `<value>` can each be either a literal value (`name:value`) or formatted (`total time [{step}]:={timing.end}-{timing.start}`). Use `:=` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `numexpr.evaluate()`.
+data_fields =
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
 [insightfinder]
 user_name = 
 license_key = 
-token = 
+token =
 project_name = 
 # metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
 project_type = 
@@ -80,4 +91,3 @@ chunk_size_kb = 2048
 if_url = https://app.insightfinder.com
 if_http_proxy =
 if_https_proxy =
-

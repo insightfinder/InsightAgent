@@ -38,7 +38,7 @@ then
     PY_MIRROR="https://www.python.org/ftp/python/"
     PY_VERSION_NUM=$(${CURL} ${PY_MIRROR} | grep -oE [0-9]+\.[0-9]+\.[0-9]+\/ | tail -n1)
     PY_MIRROR="${PY_MIRROR}/${PY_VERSION_NUM}"
-    PY_VERSION=$(${CURL} ${PY_MIRROR} | grep -oE '>Python\-.*\.tgz<' | tr -d '><')
+    PY_VERSION=$(${CURL} ${PY_MIRROR} | grep -oE '>Python\-.*\.tgz<' | tr -d '><' | tail -n1)
     PY_FILE="${PY_DIR}/${PY_VERSION}"
     PY_DOWNLOAD="${CURL} ${PY_MIRROR}/${PY_VERSION} -o ${PY_FILE}"
     ${PY_DOWNLOAD}
