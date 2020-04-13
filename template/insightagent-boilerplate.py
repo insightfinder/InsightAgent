@@ -80,6 +80,52 @@ def get_agent_config_vars():
             logger.error(cp_noe)
             config_error()
 
+        # proxies
+        agent_proxies = dict()
+        if len(agent_http_proxy) > 0:
+            agent_proxies['http'] = agent_http_proxy
+        if len(agent_https_proxy) > 0:
+            agent_proxies['https'] = agent_https_proxy
+
+        # filters
+        if len(filters_include) != 0:
+            filters_include = filters_include.split('|')
+        if len(filters_exclude) != 0:
+            filters_exclude = filters_exclude.split('|')
+
+        # fields
+        # project_field = project_field.split(',')
+        instance_field = instance_field.split(',')
+        device_field = device_field.split(',')
+        timestamp_field = timestamp_field.split(',')
+        if len(data_fields) != 0:
+            data_fields = data_fields.split(',')
+            # if project_field in data_fields:
+            #    data_fields.pop(data_fields.index(project_field))
+            if instance_field in data_fields:
+                data_fields.pop(data_fields.index(instance_field))
+            if device_field in data_fields:
+                data_fields.pop(data_fields.index(device_field))
+            if timestamp_field in data_fields:
+                data_fields.pop(data_fields.index(timestamp_field))
+
+        # timestamp format
+        timestamp_format = timestamp_format.partition('.')[0]
+        if '%z' in timestamp_format or '%Z' in timestamp_format:
+            ts_format_info = strip_tz_info(timestamp_format)
+        elif timestamp_format:
+            ts_format_info = {'strip_tz': False,
+                              'strip_tz_fmt': '',
+                              'timestamp_format': [timestamp_format]}
+        else: # ISO8601?
+            ts_format_info = {'strip_tz': True,
+                              'strip_tz_fmt': PCT_z_FMT,
+                              'timestamp_format': ISO8601}
+        if timezone not in pytz.all_timezones:
+            config_error('timezone')
+        else:
+            timezone = pytz.timezone(timezone)
+
         # data format
         if data_format in {'CSV',
                            'CSVTAIL',
