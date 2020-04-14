@@ -1,17 +1,15 @@
 #!/usr/bin/env python
 import ConfigParser
-import collections
 import json
 import logging
 import os
-import re
+import regex
 import socket
 import sys
 import time
 import pytz
 from optparse import OptionParser
 from multiprocessing import Process
-from itertools import islice
 from datetime import datetime
 import dateutil
 import urlparse
@@ -57,25 +55,6 @@ def parse_messages_kafka(consumer):
             continue
 
 
-def raw_parse_log(message):
-    # call as log_handoff(*raw_parse(message))
-    timestamp = get_timestamp_from_date_string(time.time())
-    data = 'data'
-    instance = 'instance'
-    device = 'device'
-    return timestamp, data, instance, device
-
-
-def raw_parse_metric(message):
-    # call as metric_handoff(*raw_parse(message))
-    timestamp = get_timestamp_from_date_string(time.time())
-    metric = 'metric'
-    data = 'data'
-    instance = 'instance'
-    device = 'device'
-    return timestamp, metric, data, instance, device
-
-
 def get_agent_config_vars():
     """ Read and parse config.ini """
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))):
@@ -106,6 +85,7 @@ def get_agent_config_vars():
                 'ssl_password': config_parser.get('kafka', 'ssl_password'),
                 'ssl_crlfile': config_parser.get('kafka', 'ssl_crlfile'),
                 'ssl_ciphers': config_parser.get('kafka', 'ssl_ciphers'),
+                'ssl_check_hostname': ternary_tfd(config_parser.get('kafka', 'ssl_check_hostname')),
 
                 # SASL
                 'sasl_mechanism': config_parser.get('kafka', 'sasl_mechanism'),
@@ -150,43 +130,70 @@ def get_agent_config_vars():
 
             # filters
             filters_include = config_parser.get('kafka', 'filters_include')
-            if len(filters_include) != 0:
-                filters_include = filters_include.split('|')
             filters_exclude = config_parser.get('kafka', 'filters_exclude')
-            if len(filters_exclude) != 0:
-                filters_exclude = filters_exclude.split('|')
 
             # message parsing
-            timestamp_format = config_parser.get('kafka', 'timestamp_format', raw=True) or 'epoch'
-            timestamp_field = config_parser.get('kafka', 'timestamp_field') or 'timestamp'
-            instance_field = config_parser.get('kafka', 'instance_field')
-            device_field = config_parser.get('kafka', 'device_field')
-            csv_field_names = config_parser.get('kafka', 'csv_field_names')
-            json_top_level = config_parser.get('kafka', 'json_top_level')
-            data_fields = config_parser.get('kafka', 'data_fields')
-            if len(data_fields) != 0:
-                data_fields = data_fields.split(',')
-            metric_name_field = config_parser.get('kafka', 'metric_name_field')
+            timestamp_format = config_parser.get('kafka', 'timestamp_format', raw=True)
+            timestamp_field = config_parser.get('kafka', 'timestamp_field', raw=True) or 'timestamp'
+            timezone = config_parser.get('kafka', 'timezone') or 'UTC'
+            instance_field = config_parser.get('kafka', 'instance_field', raw=True)
+            device_field = config_parser.get('kafka', 'device_field', raw=True)
+            data_fields = config_parser.get('kafka', 'data_fields', raw=True)
 
+            # definitions
             data_format = config_parser.get('kafka', 'data_format').upper()
-            if data_format not in { 'CSV', 'JSON' }:
-                data_format = 'RAW'
+            csv_field_names = config_parser.get('kafka', 'csv_field_names')
+            csv_field_delimiter = config_parser.get('kafka', 'csv_field_delimiter', raw=True) or ',|\t'
+            json_top_level = config_parser.get('kafka', 'json_top_level')
+            raw_regex = config_parser.get('kafka', 'raw_regex', raw=True)
+            raw_start_regex = config_parser.get('kafka', 'raw_start_regex', raw=True)
 
-            # CSV-specific
-            if data_format == 'CSV':
-                if len(csv_field_names) == 0:
-                    config_error('csv_field_names')
-                csv_field_names = csv_field_names.split(',')
         except ConfigParser.NoOptionError:
             config_error()
 
         # any post-processing
+        # check SASL
+        if 'sasl_mechanism' in kafka_kwargs:
+            if kafka_kwargs['sasl_mechanism'] not in { 'PLAIN', 'GSSAPI', 'OAUTHBEARER' }:
+                logger.warn('sasl_mechanism not one of PLAIN, GSSAPI, or OAUTHBEARER')
+                kafka_kwargs.pop('sasl_mechanism')
+            elif kafka_kwargs['sasl_mechanism'] == 'PLAIN':
+                # set required vars for plain sasl if not present
+                if 'sasl_plain_username' not in kafka_kwargs:
+                    kafka_kwargs['sasl_plain_username'] = ''
+                if 'sasl_plain_password' not in kafka_kwargs:
+                    kafka_kwargs['sasl_plain_password'] = ''
+
+        # proxies
         agent_proxies = dict()
         if len(agent_http_proxy) > 0:
             agent_proxies['http'] = agent_http_proxy
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
 
+        # filters
+        if len(filters_include) != 0:
+            filters_include = filters_include.split('|')
+        if len(filters_exclude) != 0:
+            filters_exclude = filters_exclude.split('|')
+
+        # fields
+        # project_field = project_field.split(',')
+        instance_field = instance_field.split(',')
+        device_field = device_field.split(',')
+        timestamp_field = timestamp_field.split(',')
+        if len(data_fields) != 0:
+            data_fields = data_fields.split(',')
+            # if project_field in data_fields:
+            #    data_fields.pop(data_fields.index(project_field))
+            if instance_field in data_fields:
+                data_fields.pop(data_fields.index(instance_field))
+            if device_field in data_fields:
+                data_fields.pop(data_fields.index(device_field))
+            if timestamp_field in data_fields:
+                data_fields.pop(data_fields.index(timestamp_field))
+
+        # timestamp
         timestamp_format = timestamp_format.partition('.')[0]
         if '%z' in timestamp_format or '%Z' in timestamp_format:
             ts_format_info = strip_tz_info(timestamp_format)
@@ -198,6 +205,37 @@ def get_agent_config_vars():
             ts_format_info = {'strip_tz': True,
                               'strip_tz_fmt': PCT_z_FMT,
                               'timestamp_format': ISO8601}
+        if timezone not in pytz.all_timezones:
+            config_error('timezone')
+        else:
+            timezone = pytz.timezone(timezone)
+
+        # data format
+        if data_format == 'CSV':
+            if len(csv_field_names) == 0:
+                config_error('csv_field_names')
+            csv_field_names = csv_field_names.split(',')
+            try:
+                csv_field_delimiter = regex.compile(csv_field_delimiter)
+            except Exception as e:
+                config_error('csv_field_delimiter')
+        elif data_format == 'RAW':
+            try:
+                raw_regex = regex.compile(raw_regex)
+            except Exception as e:
+                config_error('raw_regex')
+            # multiline
+            if len(raw_start_regex) != 0:
+                if raw_start_regex[0] != '^':
+                    config_error('raw_start_regex')
+                try:
+                    raw_start_regex = regex.compile(raw_start_regex)
+                except Exception as e:
+                    config_error('raw_start_regex')
+        elif data_format == 'JSON':
+            pass
+        else:
+            config_error('data_format')
 
         # add parsed variables to a global
         config_vars = {
@@ -206,16 +244,19 @@ def get_agent_config_vars():
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
             'data_format': data_format,
+            'raw_regex': raw_regex,
+            'raw_start_regex': raw_start_regex,
             'csv_field_names': csv_field_names,
+            'csv_field_delimiter': csv_field_delimiter,
             'json_top_level': json_top_level,
             'timestamp_format': ts_format_info['timestamp_format'],
             'strip_tz': ts_format_info['strip_tz'],
             'strip_tz_fmt': ts_format_info['strip_tz_fmt'],
+            'timezone': timezone,
             'timestamp_field': timestamp_field,
             'instance_field': instance_field,
             'device_field': device_field,
             'data_fields': data_fields,
-            'metric_name_field': metric_name_field,
             'proxies': agent_proxies
         }
 
@@ -332,8 +373,6 @@ def get_cli_config_vars():
     parser.add_option('--threads', default=1, action='store', dest='threads',
                       help='Number of threads to run')
     """
-    parser.add_option('--tz', default='UTC', action='store', dest='time_zone',
-                      help='Timezone of the data. See pytz.all_timezones')
     parser.add_option('-q', '--quiet', action='store_true', dest='quiet',
                       help='Only display warning and error log messages')
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose',
@@ -354,8 +393,7 @@ def get_cli_config_vars():
     config_vars = {
         'threads': 1,
         'testing': False,
-        'log_level': logging.INFO,
-        'time_zone': pytz.utc
+        'log_level': logging.INFO
         }
 
     if options.testing:
@@ -365,9 +403,6 @@ def get_cli_config_vars():
         config_vars['log_level'] = logging.DEBUG
     elif options.quiet:
         config_vars['log_level'] = logging.WARNING
-
-    if len(options.time_zone) != 0 and options.time_zone in pytz.all_timezones:
-        config_vars['time_zone'] = pytz.timezone(options.time_zone)
 
     return config_vars
 
@@ -397,7 +432,7 @@ def strip_tz_info(timestamp_format):
         timestamp_format = timestamp_format[:position] + timestamp_format[position+2:]
     else:
         timestamp_format = timestamp_format[:position]
-    if cli_config_vars['time_zone'] == pytz.timezone('UTC'):
+    if agent_config_vars['timezone'] == pytz.timezone('UTC'):
         logger.warning('Time zone info will be stripped from timestamps, but no time zone info was supplied in the config. Assuming UTC')
 
     return {'strip_tz': True,
@@ -569,6 +604,29 @@ def get_file_list_for_directory(root_path='/', file_name_regex_c=''):
     return []
 
 
+def parse_raw_line(message, line):
+    # if multiline
+    if agent_config_vars['raw_start_regex']:
+        # if new message, parse old and start new
+        if agent_config_vars['raw_start_regex'].match(line):
+            parse_raw_message(message)
+            message = line
+        else:  # add to current message
+            logger.debug('continue building message')
+            message += line
+    else:
+        parse_raw_message(line)
+    return message
+
+
+def parse_raw_message(message):
+    matches = agent_config_vars['raw_regex'].match(message)
+    if matches:
+        message_json = matches.groupdict()
+        message_json['_raw'] = message
+        parse_json_message(message_json)
+
+
 def check_regex(pattern_c, check):
     return not pattern_c or pattern_c.match(check)
 
@@ -576,6 +634,29 @@ def check_regex(pattern_c, check):
 def is_formatted(setting_value):
     """ returns True if the setting is a format string """
     return check_regex(FORMAT_STR, setting_value)
+
+
+def is_math_expr(setting_value):
+    return '=' in setting_value
+
+
+def get_math_expr(setting_value):
+    return setting_value.strip('=')
+
+
+def is_named_data_field(setting_value):
+    return ':' in setting_value
+
+
+def merge_data(field, value, data={}):
+    fields = field.split(JSON_LEVEL_DELIM)
+    for i in range(len(fields) - 1):
+        field = fields[i]
+        if field not in data:
+            data[field] = dict()
+        data = data[field]
+    data[fields[-1]] = value
+    return data
 
 
 def parse_formatted(message, setting_value, default='', allow_list=False, remove=False):
@@ -591,25 +672,50 @@ def parse_formatted(message, setting_value, default='', allow_list=False, remove
     return setting_value.format(**fields)
 
 
-def label_message(message, fields=[]):
-    """ turns unlabeled, split data into labeled data """
-    if agent_config_vars['data_type'] == 'CSV':
-        fields = agent_config_vars['csv_field_names']
-    json = dict()
-    for i in minlen(fields, message):
-        json[fields[i]] = message[i]
-    return json
+def get_data_values(timestamp, message):
+    setting_values = agent_config_vars['data_fields'] or message.keys()
+    # reverse list so it's in priority order, as shared fields names will get overwritten
+    setting_values.reverse()
+    data = { x: dict() for x in timestamp }
+    for setting_value in setting_values:
+        name, value = get_data_value(message, setting_value)
+        if isinstance(value, (set, tuple, list)):
+            for i in range(minlen(timestamp, value)):
+                merge_data(name, value[i], data[timestamp[i]])
+        else:
+            merge_data(name, value, data[timestamp[0]])
+    return data
 
 
-def minlen(one, two):
-    return min(len(one), len(two))
-
-
-def parse_raw_message(message):
-    if 'METRIC' in if_config_vars['project_type']:
-        metric_handoff(*raw_parse_metric(message))
+def get_data_value(message, setting_value):
+    if is_named_data_field(setting_value):
+        setting_value = setting_value.split(':')
+        # get name
+        name = setting_value[0]
+        if is_formatted(name):
+            name = parse_formatted(message,
+                                   name,
+                                   default=name)
+        # get value
+        value = setting_value[1]
+        # check if math
+        evaluate = False
+        if is_math_expr(value):
+            evaluate = True
+            value = get_math_expr(value)
+        if is_formatted(value):
+            value = parse_formatted(message,
+                                    value,
+                                    default=value,
+                                    allow_list=True)
+        if evaluate:
+            value = eval(value)
     else:
-        log_handoff(*raw_parse_log(message))
+        name = setting_value
+        value = get_json_field(message,
+                               setting_value,
+                               allow_list=True)
+    return (name, value)
 
 
 def get_single_value(message, config_setting, default='', allow_list=False, remove=False):
@@ -617,18 +723,33 @@ def get_single_value(message, config_setting, default='', allow_list=False, remo
         return default
     setting_value = agent_config_vars[config_setting]
     if isinstance(setting_value, (set, list, tuple)):
-        setting_value = setting_value[0]
-    if is_formatted(setting_value):
+        setting_value_single = setting_value[0]
+    else:
+        setting_value_single = setting_value
+    if is_formatted(setting_value_single):
         return parse_formatted(message,
-                               setting_value,
+                               setting_value_single,
                                default=default,
                                allow_list=False,
                                remove=remove)
-    return get_json_field(message,
-                          setting_value,
-                          default=default,
-                          allow_list=allow_list,
-                          remove=remove)
+    else:
+        return get_json_field_by_pri(message,
+                                    [i for i in setting_value],
+                                    default=default,
+                                    allow_list=allow_list,
+                                    remove=remove)
+
+
+def get_json_field_by_pri(message, pri_list, default='', allow_list=False, remove=False):
+    value = ''
+    while value == '' and len(pri_list) != 0:
+        field = pri_list.pop(0)
+        if field:
+            value = get_json_field(message,
+                                   field,
+                                   allow_list=allow_list,
+                                   remove=remove)
+    return value or default
 
 
 def get_json_field(message, setting_value, default='', allow_list=False, remove=False):
@@ -641,6 +762,10 @@ def get_json_field(message, setting_value, default='', allow_list=False, remove=
     if len(field_val) == 0:
         field_val = default
     return field_val
+
+
+class ListNotAllowedError():
+    pass
 
 
 def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=False):
@@ -696,7 +821,7 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
                 next_fields,
                 remove=remove)
         else:
-            raise ListNotAllowedError
+            raise ListNotAllowedError('encountered list or set in json when not allowed')
     elif isinstance(next_value, dict):
         # there's more tree to walk down
         return _get_json_field_helper(
@@ -707,11 +832,6 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     else:
         # catch-all
         return ''
-
-
-class ListNotAllowedError():
-    print('encountered list or set in json when not allowed')
-    pass
 
 
 def json_gather_list_values(l, fields, remove=False):
@@ -775,10 +895,10 @@ def parse_json_message_single(message):
         for _filter in agent_config_vars['filters_include']:
             filter_field = _filter.split(':')[0]
             filter_vals = _filter.split(':')[1].split(',')
-            filter_check = str(_get_json_field_helper(
+            filter_check = get_json_field(
                 message,
                 filter_field.split(JSON_LEVEL_DELIM),
-                allow_list=True))
+                allow_list=True)
             # check if a valid value
             for filter_val in filter_vals:
                 if filter_val.upper() in filter_check.upper():
@@ -798,10 +918,10 @@ def parse_json_message_single(message):
         for _filter in agent_config_vars['filters_exclude']:
             filter_field = _filter.split(':')[0]
             filter_vals = _filter.split(':')[1].split(',')
-            filter_check = str(_get_json_field_helper(
+            filter_check = get_json_field(
                 message,
                 filter_field.split(JSON_LEVEL_DELIM),
-                allow_list=True))
+                allow_list=True)
             # check if a valid value
             for filter_val in filter_vals:
                 if filter_val.upper() in filter_check.upper():
@@ -822,56 +942,23 @@ def parse_json_message_single(message):
     device = get_single_value(message,
                               'device_field',
                               remove=True)
-
     # get timestamp
     try:
         timestamp = get_single_value(message,
                                      'timestamp_field',
                                      remove=True)
+        timestamp = [timestamp]
     except ListNotAllowedError as lnae:
         timestamp = get_single_value(message,
                                      'timestamp_field',
                                      remove=True,
                                      allow_list=True)
-    finally:
-        ts_val_list = isinstance(timestamp, (set, tuple, list))
+    except Exception as e:
+        logger.warn(e)
+        sys.exit(1)
 
-    logger.debug(timestamp)
     # get data
-    data = dict()
-    if len(agent_config_vars['data_fields']) != 0:
-        if len(agent_config_vars['metric_name_field']) != 0 and 'METRIC' in if_config_vars['project_type']:
-            # this object is one message
-            name = get_single_value(message, 'metric_name_field')
-            data_value = json_format_field_value(
-                            _get_json_field_helper(
-                                message,
-                                agent_config_vars['data_fields'][0].split(JSON_LEVEL_DELIM),
-                                allow_list=True))
-            if ts_val_list and isinstance(data_value, (set, tuple, list)):
-                for i in list(range(minlen(data_value, timestamp))):
-                    data[timestamp[i]] = {name: data_value[i]}
-            else:
-                data[timestamp] = {name: data_value}
-        else:
-            for data_field in agent_config_vars['data_fields']:
-                data_value = json_format_field_value(
-                                _get_json_field_helper(
-                                    message,
-                                    data_field.split(JSON_LEVEL_DELIM),
-                                    allow_list=True))
-                if len(data_value) != 0:
-                    if ts_val_list and isinstance(data_value, (set, tuple, list)):
-                        for i in list(range(minlen(data_value, timestamp))):
-                            data[timestamp[i]] = merge_data(data_field, data_value[i])
-                    else:
-                        data[timestamp] = merge_data(data_field, data_value)
-    else:
-        if ts_val_list and isinstance(message, (set, tuple, list)):
-            for i in list(range(minlen(message, timestamp))):
-                data[timestamp[i]] = message[i]
-        else:
-            data[timestamp] = json.loads(json.dumps(message))
+    data = get_data_values(timestamp, message)
 
     # hand off
     for timestamp, report_data in data.items():
@@ -890,15 +977,18 @@ def parse_json_message_single(message):
             log_handoff(ts, report_data, instance, device)
 
 
-def merge_data(field, value, data={}):
-    fields = field.split(JSON_LEVEL_DELIM)
-    for i in range(len(fields) - 1):
-        field = fields[i]
-        if field not in data:
-            data[field] = dict()
-        data = data[field]
-    data[fields[-1]] = value
-    return data
+def label_message(message, fields=[]):
+    """ turns unlabeled, split data into labeled data """
+    if agent_config_vars['data_format'] == 'CSV':
+        fields = agent_config_vars['csv_field_names']
+    json = dict()
+    for i in range(minlen(fields, message)):
+        json[fields[i]] = message[i]
+    return json
+
+
+def minlen(one, two):
+    return min(len(one), len(two))
 
 
 def parse_csv_message(message):
@@ -1022,7 +1112,7 @@ def get_datetime_from_date_string(date_string):
 
 
 def get_timestamp_from_datetime(timestamp_datetime):
-    timestamp_localize = cli_config_vars['time_zone'].localize(timestamp_datetime)
+    timestamp_localize = agent_config_vars['timezone'].localize(timestamp_datetime)
 
     epoch = long((timestamp_localize - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
     return epoch
@@ -1549,20 +1639,20 @@ def initialize_api_post_data():
 
 if __name__ == "__main__":
     # declare a few vars
-    TRUE = re.compile(r"T(RUE)?", re.IGNORECASE)
-    FALSE = re.compile(r"F(ALSE)?", re.IGNORECASE)
-    SPACES = re.compile(r"\s+")
-    SLASHES = re.compile(r"\/+")
-    UNDERSCORE = re.compile(r"\_+")
-    COLONS = re.compile(r"\:+")
-    LEFT_BRACE = re.compile(r"\[")
-    RIGHT_BRACE = re.compile(r"\]")
-    PERIOD = re.compile(r"\.")
-    COMMA = re.compile(r"\,")
-    NON_ALNUM = re.compile(r"[^a-zA-Z0-9]")
-    PCT_z_FMT = re.compile(r"[\+\-][0-9]{2}[\:]?[0-9]{2}")
-    PCT_Z_FMT = re.compile(r"[A-Z]{3,4}")
-    FORMAT_STR = re.compile(r"{(.*?)}")
+    TRUE = regex.compile(r"T(RUE)?", regex.IGNORECASE)
+    FALSE = regex.compile(r"F(ALSE)?", regex.IGNORECASE)
+    SPACES = regex.compile(r"\s+")
+    SLASHES = regex.compile(r"\/+")
+    UNDERSCORE = regex.compile(r"\_+")
+    COLONS = regex.compile(r"\:+")
+    LEFT_BRACE = regex.compile(r"\[")
+    RIGHT_BRACE = regex.compile(r"\]")
+    PERIOD = regex.compile(r"\.")
+    COMMA = regex.compile(r"\,")
+    NON_ALNUM = regex.compile(r"[^a-zA-Z0-9]")
+    PCT_z_FMT = regex.compile(r"[\+\-][0-9]{2}[\:]?[0-9]{2}")
+    PCT_Z_FMT = regex.compile(r"[A-Z]{3,4}")
+    FORMAT_STR = regex.compile(r"{(.*?)}")
     HOSTNAME = socket.gethostname().partition('.')[0]
     ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
     JSON_LEVEL_DELIM = '.'
