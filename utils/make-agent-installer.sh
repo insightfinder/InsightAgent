@@ -159,6 +159,7 @@ then
 fi
 mkdir -p ${AGENT_DIR}/setup
 #mkdir -p ${AGENT_DIR}/source
+${COPY} ${SHARED_DIR}/* ${AGENT_DIR}/
 ${COPY} ${SETUP_DIR}/install.sh ${AGENT_DIR}/setup/
 ${COPY} ${SETUP_DIR}/pip-config.sh ${AGENT_DIR}/setup/
 ${COPY} ${SETUP_DIR}/${CRONIT_SCRIPT} ${AGENT_DIR}/setup/
@@ -182,7 +183,7 @@ echo "  Removing old tarball"
 rm ${TARBALL_PATH}
 
 echo "  Creating tarball ${TARBALL_NAME}"
-EXCLUDE_LIST="'@*' '*.out' '*.pyc' '*.bck' '*.old' '.*' 'config.ini'"
+EXCLUDE_LIST="'@*' '*.out' '*.pyc' '*.bck' '*.old' '.*' 'config*.ini' '__pycache__'"
 EXCLUDE_STMT=""
 for EXCLUDE in ${EXCLUDE_LIST};
 do

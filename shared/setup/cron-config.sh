@@ -10,23 +10,27 @@ fi
 function echo_params() {
     echo "Usage:"
     echo "-c --create   Set to run this in commit mode."
+    echo "-m --monitor  Set to create a monitor crontab, which will first check to see if the process is already running."
     echo "-h --help     Display this help text and exit."
     exit 1
 }
 
 DRY_RUN=1
+MONITOR=0
+PARAMS=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -c|--create)
             DRY_RUN=0
             ;;  
+        -m|--monitor)
+            MONITOR=1
+            ;;
         -h|--help)
             echo_params
             ;;
         *)
-            echo "Improper flag or parameter passed to script."
-            echo_params
-            ;;
+            PARAMS="${PARAMS} $1"
     esac
     shift
 done
@@ -103,13 +107,17 @@ fi
 AGENT_FULL_PATH="$(pwd)/${AGENT_SCRIPT}"
 AGENT_FULL_PATH_CONFIG="$(pwd)/config.ini"
 AGENT_FULL_PATH_LOG="$(pwd)/log.out"
+AGENT_PY_COMMAND="${AGENT_FULL_PATH}${PARAMS}"
 
 # crontab
 CRON_FILE="/etc/cron.d/${AGENT}"
 CRON_USER="root"
-CRON_COMMAND="command -p python ${AGENT_FULL_PATH} >${AGENT_FULL_PATH_LOG}"
-RUN_INTERVAL_VAL=${RUN_INTERVAL}
-RUN_INTERVAL_UNIT="${RUN_INTERVAL: -1}"
+CRON_COND=""
+if [[ ${MONITOR} -eq 1 ]];
+then
+    CRON_COND="[[ \$(ps aux | grep \"${AGENT_PY_COMMAND}\" | grep -v grep | wc -l) -eq 0 ]] &&"
+fi
+CRON_COMMAND="${CRON_COND} command -p python ${AGENT_PY_COMMAND} >${AGENT_FULL_PATH_LOG}"
 
 # create files
 if ! is_dry_run;
@@ -120,6 +128,8 @@ then
 fi
 
 # strip unit
+RUN_INTERVAL_VAL=${RUN_INTERVAL}
+RUN_INTERVAL_UNIT="${RUN_INTERVAL: -1}"
 if [[ ${RUN_INTERVAL_UNIT} =~ [^0-9] ]];
 then
     RUN_INTERVAL_VAL="${RUN_INTERVAL:0:${#RUN_INTERVAL}-1}"
@@ -131,7 +141,7 @@ then
     echo_usage
 fi
 
-# make scron file
+# make cron file
 case "${RUN_INTERVAL_UNIT}" in
     s)      # seconds
         echo "* * * * * ${CRON_USER} ${CRON_COMMAND}" 2>&1 | if is_dry_run; then awk '{print}'; else tee ${CRON_FILE}; fi
@@ -160,7 +170,12 @@ echo "" 2>&1 | if is_dry_run; then awk '{print}'; else tee -a ${CRON_FILE}; fi
 if is_dry_run;
 then
     echo "To create a cron config at ${CRON_FILE}, run this again as"
-    echo "  ./setup/cron-config --create"
+    if [[ ${MONITOR} -eq 1 ]];
+    then
+        echo "  ./setup/cron-config --create --monitor"
+    else
+        echo "  ./setup/cron-config --create"
+    fi
 else
     echo "Cron config created at ${CRON_FILE}"
 fi

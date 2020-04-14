@@ -42,7 +42,6 @@
      when: ansible_pkg_mgr == 'zypper'
    - name: Check for mpapis gpg key as root
      shell: gpg --list-keys mpapis
-     sudo: true
      register: mpapis_gpg_key_exists
      ignore_errors: true
      when: ansible_pkg_mgr == 'zypper'
@@ -51,7 +50,6 @@
      shell: "echo insecure >> ~/.curlrc"
    - name: receiving key as root
      shell: "https_proxy={{ http_proxy }} curl -sSL -k https://rvm.io/mpapis.asc | gpg --import -"
-     sudo: true
      when: ansible_pkg_mgr == 'zypper' and mpapis_gpg_key_exists is defined and mpapis_gpg_key_exists.rc is defined and mpapis_gpg_key_exists.rc != 0 and rvm_install_result.stat.exists != true
    - name: Get rvm Installer
      become: yes
@@ -75,11 +73,9 @@
      when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists != true
    - name: setting RVM autolibs on as root
      command: "/usr/local/rvm/bin/rvm autolibs 3"
-     sudo: true
      when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists != true
    - name: updating RVM as root
      shell: "source /etc/profile.d/rvm.sh && rvm get stable executable=/bin/bash"
-     sudo: true
      when: ansible_pkg_mgr == 'zypper' and rvm_install_result.stat.exists == true
    - name: setting default Ruby version as root
      shell: "source /etc/profile.d/rvm.sh && rvm use ruby-2.2.2"
@@ -89,7 +85,6 @@
      when: ansible_pkg_mgr == 'zypper'
    - name: installing Ruby as root
      command: "/usr/local/rvm/bin/rvm install ruby-2.2.2"
-     sudo: true
      when: ansible_pkg_mgr == 'zypper' and rvm_select_ruby_version_root|failed
    - name: setting default Ruby version as root
      shell: "source /etc/profile.d/rvm.sh && rvm use ruby-2.2.2"

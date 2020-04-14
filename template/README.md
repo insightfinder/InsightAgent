@@ -55,12 +55,11 @@ curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/{{NEWAGENT}
 tar xvf {{NEWAGENT}}.tar.gz && cd {{NEWAGENT}}
 ```
 
-###### Copy `config.ini.template` to `config.ini` and edit it:
+###### Set up `config.ini`
 ```bash
-cp config.ini.template config.ini
-vi config.ini
+python configure.py
 ```
-See below for a further explanation of each variable.
+See below for a further explanation of each variable. 
 
 #### Automated Install (local or remote)
 ###### Review propsed changes from install:
