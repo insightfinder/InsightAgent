@@ -1343,7 +1343,7 @@ def send_log(timestamp, data, instance, device=''):
     track['line_count'] += 1
     track['entry_count'] += 1
     if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (
-                time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
+            time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
         send_data_wrapper()
     elif track['entry_count'] % 100 == 0:
         logger.debug('Current data object size: {} bytes'.format(
@@ -1385,7 +1385,7 @@ def send_metric(timestamp, field_name, data, instance, device=''):
 
             # move last metric dict from buffer_dict to current_dict
             if get_json_size_bytes(metric_buffer['buffer_dict']) >= agent_config_vars['metric_buffer_size'] or (
-                        time.time() - metric_buffer['start_time']) >= agent_config_vars['metric_buffer_keep_last_time']:
+                    time.time() - metric_buffer['start_time']) >= agent_config_vars['metric_buffer_keep_last_time']:
                 # if the earliest metric data is exceed the butter start_time, the move those data to track
                 while metric_buffer['buffer_ts_list'] \
                         and metric_buffer['buffer_ts_list'][-1] < metric_buffer['start_time'] * 1000:
@@ -1399,7 +1399,7 @@ def send_metric(timestamp, field_name, data, instance, device=''):
 
         # send data
         if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size'] or (
-                    time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
+                time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
             send_data_wrapper()
         elif track['entry_count'] % 500 == 0:
             logger.debug('Current data object size: {} bytes'.format(
