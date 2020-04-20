@@ -116,9 +116,8 @@ then this should be set to `output.parsed`.
 * `device_field`: Field name for the device/container for containerized projects. This can also use curly formatting or a priority list.
 * `data_fields`: Comma-delimited list of field names to use as data fields. If not set, all fields will be reported. Each data field can either be a field name (`name`) or a labeled field (`<name>:<value>` or `<name>:=<value>`), where `<name>` and `<value>` can be raw strings (`fieldname:fieldvalue`) or curly-formatted (`{na} [{me}]:={val} - {ue}`). If `:=` is used as the separator, `<value>` is treated as a mathematical expression that can be evaluated with `numexpr.evaluate()`.
 * `metric_name_field`: If this is set, only the first value in `data_fields` will be used as the field containing the value for the metric who's name is contained here. For example, if `data_fields = count` and `metric_name_field = status`, and the data is `{"count": 20, "status": "success"}`, then the data reported will be `success: 20`.
-* `enable_metric_buffer`: If this is set with "true", agent will use buffer in memory to fuse metrics. Default is `false`.
+* `all_metrics`: Agent will send data at once when all metrics of instance is collected.
 * `metric_buffer_size_mb`: Size of buffer (in MB) to fuse metrics. Default is `10`.
-* `metric_buffer_keep_last_time`: Keep the metric data for the last time in buffer to fused. Default is `5`.
 * `agent_http_proxy`: HTTP proxy used to connect to the agent.
 * `agent_https_proxy`: As above, but HTTPS.
 * **`user_name`**: User name in InsightFinder

@@ -74,10 +74,9 @@ device_field =
 data_fields =
 
 ## metric buffer
-# if enable the metric buffer, agent will fuse metrics in memory
-enable_metric_buffer = false
+# if set this field, agent will send data at once when all metrics of instance is collected. example: metric1,metric2,...
+all_metrics =
 metric_buffer_size_mb = 10
-metric_buffer_keep_last_time = 5
 
 ## proxy
 agent_http_proxy =
