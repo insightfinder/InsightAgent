@@ -152,9 +152,8 @@ def get_agent_config_vars():
             raw_start_regex = config_parser.get('kafka', 'raw_start_regex', raw=True)
 
             # metric buffer
-            enable_metric_buffer = config_parser.get('kafka', 'enable_metric_buffer') or 'false'
+            all_metrics = config_parser.get('kafka', 'all_metrics')
             metric_buffer_size_mb = config_parser.get('kafka', 'metric_buffer_size_mb') or '10'
-            metric_buffer_keep_last_time = config_parser.get('kafka', 'metric_buffer_keep_last_time') or '5'
 
         except ConfigParser.NoOptionError:
             config_error()
@@ -246,10 +245,8 @@ def get_agent_config_vars():
             config_error('data_format')
 
         # defaults
-        if metric_buffer_keep_last_time.endswith('s'):
-            metric_buffer_keep_last_time = int(metric_buffer_keep_last_time[:-1])
-        else:
-            metric_buffer_keep_last_time = int(metric_buffer_keep_last_time) * 60
+        if all_metrics:
+            all_metrics = all_metrics.split(',')
 
         # add parsed variables to a global
         config_vars = {
@@ -272,9 +269,8 @@ def get_agent_config_vars():
             'device_field': device_field,
             'data_fields': data_fields,
             'proxies': agent_proxies,
-            'enable_metric_buffer': enable_metric_buffer == 'true',
+            'all_metrics': all_metrics,
             'metric_buffer_size': int(metric_buffer_size_mb) * 1024 * 1024,  # as bytes
-            'metric_buffer_keep_last_time': metric_buffer_keep_last_time  # as seconds
         }
 
         return config_vars
@@ -1284,18 +1280,16 @@ def initialize_data_gathering(thread_number):
 
     start_data_processing(thread_number)
 
-    # buffer in memory
-    if agent_config_vars['enable_metric_buffer']:
-        # move all buffer data to current data, and send
-        while metric_buffer['buffer_ts_list']:
-            ts_str = str(metric_buffer['buffer_ts_list'].pop())
-            track['current_dict'][ts_str] = metric_buffer['buffer_dict'].pop(ts_str)
-            if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size']:
-                logger.debug('Sending buffer chunk')
-                send_data_wrapper()
+    # move all buffer data to current data, and send
+    while metric_buffer['buffer_ts_list']:
+        (ts, key) = metric_buffer['buffer_ts_list'].pop()
+        transpose_metrics(ts, key)
+        if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+            logger.debug('Sending buffer chunk')
+            send_data_wrapper()
 
     # last chunk
-    if len(track['current_row']) > 0 or len(track['current_dict']) > 0:
+    if len(track['current_row']) > 0:
         logger.debug('Sending last chunk')
         send_data_wrapper()
 
@@ -1305,9 +1299,12 @@ def initialize_data_gathering(thread_number):
 
 
 def reset_metric_buffer():
-    metric_buffer['start_time'] = time.time()
+    metric_buffer['buffer_key_list'] = []
     metric_buffer['buffer_ts_list'] = []
     metric_buffer['buffer_dict'] = {}
+
+    metric_buffer['buffer_collected_list'] = []
+    metric_buffer['buffer_collected_dict'] = {}
 
 
 def reset_track():
@@ -1315,7 +1312,6 @@ def reset_track():
     track['start_time'] = time.time()
     track['line_count'] = 0
     track['current_row'] = []
-    track['current_dict'] = dict()
 
 
 #########################################
@@ -1380,88 +1376,66 @@ def send_metric(timestamp, field_name, data, instance, device=''):
             'timestamp: {}\nfield_name: {}\ninstance: {}\ndevice: {}\ndata: {}'.format(
                 timestamp, field_name, instance, device, data))
     else:
-        if agent_config_vars['enable_metric_buffer']:
-            append_metric_data_to_buffer(timestamp, field_name, data, instance, device)
-
-            # move last metric dict from buffer_dict to current_dict
-            if get_json_size_bytes(metric_buffer['buffer_dict']) >= agent_config_vars['metric_buffer_size'] or (
-                    time.time() - metric_buffer['start_time']) >= agent_config_vars['metric_buffer_keep_last_time']:
-                # if the earliest metric data is exceed the butter start_time, the move those data to track
-                while metric_buffer['buffer_ts_list'] \
-                        and metric_buffer['buffer_ts_list'][-1] < metric_buffer['start_time'] * 1000:
-                    ts_str = str(metric_buffer['buffer_ts_list'].pop())
-                    track['current_dict'][ts_str] = metric_buffer['buffer_dict'].pop(ts_str)
-                # update the buffer start_time
-                metric_buffer['start_time'] += if_config_vars['sampling_interval']
-        else:
-            append_metric_data_to_entry(timestamp, field_name, data, instance, device)
+        append_metric_data_to_buffer(timestamp, field_name, data, instance, device)
         track['entry_count'] += 1
 
+        # send data if all metrics of instance is collected
+        while metric_buffer['buffer_collected_list']:
+            (ts, key, index) = metric_buffer['buffer_collected_list'].pop()
+            del metric_buffer['buffer_ts_list'][index]
+            metric_buffer['buffer_collected_dict'].pop(key)
+            transpose_metrics(ts, key)
+            if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+                logger.debug('Sending buffer chunk')
+                send_data_wrapper()
+
+        # send data if buffer size is bigger than threshold
+        if get_json_size_bytes(metric_buffer['buffer_dict']) >= agent_config_vars['metric_buffer_size']:
+            while metric_buffer['buffer_ts_list']:
+                (ts, key) = metric_buffer['buffer_ts_list'].pop()
+                transpose_metrics(ts, key)
+                if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+                    logger.debug('Sending buffer chunk')
+                    send_data_wrapper()
+
         # send data
-        if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size'] or (
-                time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
+        if track['current_row']:
             send_data_wrapper()
         elif track['entry_count'] % 500 == 0:
-            logger.debug('Current data object size: {} bytes'.format(
-                get_json_size_bytes(track['current_dict'])))
-            if agent_config_vars['enable_metric_buffer']:
-                logger.debug('Buffer data object size: {} bytes'.format(
-                    get_json_size_bytes(metric_buffer['buffer_dict'])))
+            logger.debug('Buffer data object size: {} bytes'.format(
+                get_json_size_bytes(metric_buffer['buffer_dict'])))
 
 
 def append_metric_data_to_buffer(timestamp, field_name, data, instance, device=''):
     """ creates the metric entry """
-    key = '{}[{}]'.format(make_safe_metric_key(field_name),
-                          make_safe_instance_string(instance, device))
     ts_str = str(timestamp)
-    if timestamp not in metric_buffer['buffer_ts_list']:
+    instance_str = make_safe_instance_string(instance, device)
+    key = '{}-{}'.format(ts_str, instance_str)
+    metric_str = make_safe_metric_key(field_name)
+    metric_key = '{}[{}]'.format(metric_str, instance_str)
+
+    if key not in metric_buffer['buffer_key_list']:
         # add timestamp in buffer_ts_list and buffer_dict
-        metric_buffer['buffer_ts_list'].append(timestamp)
-        metric_buffer['buffer_ts_list'].sort(reverse=True)
-        metric_buffer['buffer_dict'][ts_str] = dict()
-    current_obj = metric_buffer['buffer_dict'][ts_str]
+        metric_buffer['buffer_key_list'].append(key)
+        metric_buffer['buffer_ts_list'].append((timestamp, key))
+        metric_buffer['buffer_ts_list'].sort(key=lambda elem: elem[0], reverse=True)
+        metric_buffer['buffer_dict'][key] = dict()
+        metric_buffer['buffer_collected_dict'][key] = []
+    metric_buffer['buffer_dict'][key][metric_key] = str(data)
+    metric_buffer['buffer_collected_dict'][key].append(metric_str)
 
-    # use the next non-null value to overwrite the prev value
-    # for the same metric in the same timestamp
-    if key in current_obj.keys():
-        if data is not None and len(str(data)) > 0:
-            current_obj[key] += '|' + str(data)
-    else:
-        current_obj[key] = str(data)
-    metric_buffer['buffer_dict'][ts_str] = current_obj
-
-
-def append_metric_data_to_entry(timestamp, field_name, data, instance, device=''):
-    """ creates the metric entry """
-    key = '{}[{}]'.format(make_safe_metric_key(field_name),
-                          make_safe_instance_string(instance, device))
-    ts_str = str(timestamp)
-    if ts_str not in track['current_dict']:
-        track['current_dict'][ts_str] = dict()
-    current_obj = track['current_dict'][ts_str]
-
-    # use the next non-null value to overwrite the prev value
-    # for the same metric in the same timestamp
-    if key in current_obj.keys():
-        if data is not None and len(str(data)) > 0:
-            current_obj[key] += '|' + str(data)
-    else:
-        current_obj[key] = str(data)
-    track['current_dict'][ts_str] = current_obj
+    # if all metrics of ts_instance is collected, then send these data
+    if agent_config_vars['all_metrics'] and set(agent_config_vars['all_metrics']) <= set(
+            metric_buffer['buffer_collected_dict'][key]):
+        metric_buffer['buffer_collected_list'].append(
+            (timestamp, key, metric_buffer['buffer_ts_list'].index((timestamp, key))))
 
 
-def transpose_metrics():
-    """ flatten data up to the timestamp"""
-    for timestamp, kvs in track['current_dict'].items():
-        track['line_count'] += 1
-        new_row = dict()
-        new_row['timestamp'] = timestamp
-        for key, value in kvs.items():
-            if '|' in value:
-                value = statistics.median(
-                    map(lambda v: float(v), value.split('|')))
-            new_row[key] = str(value)
-        track['current_row'].append(new_row)
+def transpose_metrics(ts, key):
+    metric_buffer['buffer_key_list'].remove(key)
+    track['current_row'].append(
+        dict({'timestamp': ts}, **metric_buffer['buffer_dict'].pop(key))
+    )
 
 
 def build_metric_name_map():
@@ -1572,8 +1546,6 @@ def fold_up_helper(current_path, node_name, node, sentence_tree=False, value_tre
 ################################
 def send_data_wrapper():
     """ wrapper to send data """
-    if 'METRIC' in if_config_vars['project_type']:
-        transpose_metrics()
     logger.debug('--- Chunk creation time: {} seconds ---'.format(
         round(time.time() - track['start_time'], 2)))
     send_data_to_if(track['current_row'])
