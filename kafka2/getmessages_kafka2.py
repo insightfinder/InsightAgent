@@ -1390,13 +1390,13 @@ def send_metric(timestamp, field_name, data, instance, device=''):
                 send_data_wrapper()
 
         # send data if buffer size is bigger than threshold
-        if get_json_size_bytes(metric_buffer['buffer_dict']) >= agent_config_vars['metric_buffer_size']:
-            while metric_buffer['buffer_ts_list']:
-                (ts, key) = metric_buffer['buffer_ts_list'].pop()
-                transpose_metrics(ts, key)
-                if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
-                    logger.debug('Sending buffer chunk')
-                    send_data_wrapper()
+        while get_json_size_bytes(metric_buffer['buffer_dict']) >= agent_config_vars['metric_buffer_size'] and \
+                metric_buffer['buffer_ts_list']:
+            (ts, key) = metric_buffer['buffer_ts_list'].pop()
+            transpose_metrics(ts, key)
+            if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+                logger.debug('Sending buffer chunk')
+                send_data_wrapper()
 
         # send data
         if track['current_row']:
