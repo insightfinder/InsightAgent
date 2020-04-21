@@ -201,18 +201,15 @@ def get_agent_config_vars():
                 data_fields.pop(data_fields.index(timestamp_field))
 
         # timestamp
+        ts_format_info = {}
         if len(timestamp_format) != 0:
-            timestamp_format = timestamp_format.partition('.')[0]
-            if '%z' in timestamp_format or '%Z' in timestamp_format:
-                ts_format_info = strip_tz_info(timestamp_format)
-            elif timestamp_format:
-                ts_format_info = {'strip_tz': False,
-                                  'strip_tz_fmt': '',
-                                  'timestamp_format': [timestamp_format]}
-            else:  # ISO8601?
-                ts_format_info = {'strip_tz': True,
-                                  'strip_tz_fmt': PCT_z_FMT,
-                                  'timestamp_format': ISO8601}
+            timestamp_format = filter(lambda x: x, timestamp_format.split(','))
+            for ts_format in timestamp_format:
+                if '%z' in ts_format or '%Z' in ts_format:
+                    ts_format, strip_info = strip_tz_info(ts_format)
+                    ts_format_info[ts_format] = strip_info
+                elif timestamp_format:
+                    ts_format_info[ts_format] = {'strip_tz': False, 'strip_tz_fmt': ''}
         else:
             config_error('timestamp_format')
 
@@ -264,9 +261,8 @@ def get_agent_config_vars():
             'csv_field_names': csv_field_names,
             'csv_field_delimiter': csv_field_delimiter,
             'json_top_level': json_top_level,
-            'timestamp_format': ts_format_info['timestamp_format'],
-            'strip_tz': ts_format_info['strip_tz'],
-            'strip_tz_fmt': ts_format_info['strip_tz_fmt'],
+            'timestamp_format': timestamp_format,
+            'ts_format_info': ts_format_info,
             'timezone': timezone,
             'timestamp_field': timestamp_field,
             'instance_field': instance_field,
@@ -453,9 +449,7 @@ def strip_tz_info(timestamp_format):
         logger.warning(
             'Time zone info will be stripped from timestamps, but no time zone info was supplied in the config. Assuming UTC')
 
-    return {'strip_tz': True,
-            'strip_tz_fmt': strip_tz_fmt,
-            'timestamp_format': [timestamp_format]}
+    return timestamp_format, {'strip_tz': True, 'strip_tz_fmt': strip_tz_fmt}
 
 
 def check_csv_fieldnames(csv_field_names, all_fields):
@@ -1113,15 +1107,16 @@ def get_timestamp_from_date_string(date_string):
 
 def get_datetime_from_date_string(date_string):
     epoch = None
-    timestamp_datetime = date_string.partition('.')[0]
-    if 'strip_tz' in agent_config_vars and agent_config_vars['strip_tz']:
-        date_string = ''.join(agent_config_vars['strip_tz_fmt'].split(date_string))
+    timestamp_datetime = date_string
     if 'timestamp_format' in agent_config_vars:
         for timestamp_format in agent_config_vars['timestamp_format']:
             try:
                 if timestamp_format == 'epoch':
                     epoch = get_datetime_from_unix_epoch(date_string)
                 else:
+                    strip_info = agent_config_vars['ts_format_info'][timestamp_format]
+                    if strip_info['strip_tz']:
+                        date_string = ''.join(strip_info['strip_tz_fmt'].split(date_string))
                     timestamp_datetime = datetime.strptime(date_string,
                                                            timestamp_format)
                 break
