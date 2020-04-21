@@ -63,7 +63,7 @@ def get_agent_config_vars():
             sys.exit(1)
             
         if len(file_path) != 0:
-            file_regex = r"\.evtx$|\.evt$"
+            file_regex = r".*\.evtx$|.*\.evt$"
             files = file_path.split(',')
             if len(files) > 1:
                 # get evtx files and files within directories
