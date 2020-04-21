@@ -1403,7 +1403,8 @@ def send_metric(timestamp, field_name, data, instance, device=''):
                 send_data_wrapper()
 
         # send data
-        if track['current_row']:
+        if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (
+                time.time() - track['start_time']) >= if_config_vars['run_interval']:
             send_data_wrapper()
         elif track['entry_count'] % 500 == 0:
             logger.debug('Buffer data object size: {} bytes'.format(
