@@ -1434,7 +1434,7 @@ def append_metric_data_to_buffer(timestamp, field_name, data, instance, device='
 def transpose_metrics(ts, key):
     metric_buffer['buffer_key_list'].remove(key)
     track['current_row'].append(
-        dict({'timestamp': ts}, **metric_buffer['buffer_dict'].pop(key))
+        dict({'timestamp': str(ts)}, **metric_buffer['buffer_dict'].pop(key))
     )
 
 
