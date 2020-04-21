@@ -201,17 +201,21 @@ def get_agent_config_vars():
                 data_fields.pop(data_fields.index(timestamp_field))
 
         # timestamp
-        timestamp_format = timestamp_format.partition('.')[0]
-        if '%z' in timestamp_format or '%Z' in timestamp_format:
-            ts_format_info = strip_tz_info(timestamp_format)
-        elif timestamp_format:
-            ts_format_info = {'strip_tz': False,
-                              'strip_tz_fmt': '',
-                              'timestamp_format': [timestamp_format]}
-        else:  # ISO8601?
-            ts_format_info = {'strip_tz': True,
-                              'strip_tz_fmt': PCT_z_FMT,
-                              'timestamp_format': ISO8601}
+        if len(timestamp_format) != 0:
+            timestamp_format = timestamp_format.partition('.')[0]
+            if '%z' in timestamp_format or '%Z' in timestamp_format:
+                ts_format_info = strip_tz_info(timestamp_format)
+            elif timestamp_format:
+                ts_format_info = {'strip_tz': False,
+                                  'strip_tz_fmt': '',
+                                  'timestamp_format': [timestamp_format]}
+            else:  # ISO8601?
+                ts_format_info = {'strip_tz': True,
+                                  'strip_tz_fmt': PCT_z_FMT,
+                                  'timestamp_format': ISO8601}
+        else:
+            config_error('timestamp_format')
+
         if timezone not in pytz.all_timezones:
             config_error('timezone')
         else:
