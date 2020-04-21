@@ -43,7 +43,7 @@ def parse_messages_kafka(consumer):
     logger.info('Reading messages')
     for message in consumer:
         try:
-            logger.info('Message received')
+            logger.debug('Message received')
             logger.debug(message.value)
             if 'JSON' in agent_config_vars['data_format']:
                 parse_json_message(json.loads(str(message.value)))
@@ -1103,11 +1103,12 @@ def parse_csv_row(row, field_names, instance, device=''):
 
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
-    timestamp_datetime = get_datetime_from_date_string(date_string.partition('.')[0])
-    return get_timestamp_from_datetime(timestamp_datetime)
+    epoch, timestamp_datetime = get_datetime_from_date_string(date_string)
+    return get_timestamp_from_datetime(epoch, timestamp_datetime)
 
 
 def get_datetime_from_date_string(date_string):
+    epoch = None
     timestamp_datetime = date_string.partition('.')[0]
     if 'strip_tz' in agent_config_vars and agent_config_vars['strip_tz']:
         date_string = ''.join(agent_config_vars['strip_tz_fmt'].split(date_string))
@@ -1115,7 +1116,7 @@ def get_datetime_from_date_string(date_string):
         for timestamp_format in agent_config_vars['timestamp_format']:
             try:
                 if timestamp_format == 'epoch':
-                    timestamp_datetime = get_datetime_from_unix_epoch(date_string)
+                    epoch = get_datetime_from_unix_epoch(date_string)
                 else:
                     timestamp_datetime = datetime.strptime(date_string,
                                                            timestamp_format)
@@ -1129,13 +1130,16 @@ def get_datetime_from_date_string(date_string):
         try:
             timestamp_datetime = dateutil.parse.parse(date_string)
         except:
-            timestamp_datetime = get_datetime_from_unix_epoch(date_string)
+            epoch = get_datetime_from_unix_epoch(date_string)
             agent_config_vars['timestamp_format'] = ['epoch']
 
-    return timestamp_datetime
+    return epoch, timestamp_datetime
 
 
-def get_timestamp_from_datetime(timestamp_datetime):
+def get_timestamp_from_datetime(epoch, timestamp_datetime):
+    if agent_config_vars['timezone'].zone == 'UTC' and epoch:
+        return epoch * 1000
+
     timestamp_localize = agent_config_vars['timezone'].localize(timestamp_datetime)
 
     epoch = long((timestamp_localize - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
@@ -1152,7 +1156,7 @@ def get_datetime_from_unix_epoch(date_string):
         elif len(epoch) in range(9, 13):
             epoch = int(epoch)
 
-        return datetime.utcfromtimestamp(epoch)
+        return epoch
     except ValueError:
         # if the date cannot be converted into a number by built-in long()
         logger.warn('Date format not defined & data does not look like unix epoch: {}'.format(date_string))
