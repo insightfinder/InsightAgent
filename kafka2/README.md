@@ -64,7 +64,7 @@ python getmessages_kafka2.py -t
 
 ###### If satisfied with the output, configure the agent to run continuously:
 ```bash
-sudo ./setup/monit-config.sh
+sudo ./setup/cron-config.sh
 ```
 
 ### Config Variables
