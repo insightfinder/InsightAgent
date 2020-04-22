@@ -76,7 +76,7 @@ data_fields =
 ## metric buffer
 # if set this field, agent will send data at once when all metrics of instance is collected. example: metric1,metric2,...
 all_metrics =
-# required. must greater than 0
+# required. size of buffer (in MB) memory used to fuse metrics. must greater than 0
 metric_buffer_size_mb = 10
 
 ## proxy
