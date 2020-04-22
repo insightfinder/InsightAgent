@@ -137,7 +137,7 @@ fi
 echo "== Setting up ${CRONIT} =="
 if ! is_dry_run;
 then
-    CRONIT_SCRIPT="${CRONIT_SCRIPT} --create"
+    CRONIT_SCRIPT="${CRONIT_SCRIPT} --monitor --create"
 fi
 echo "Setup script: \"${CRONIT_SCRIPT}\""
 sudo ./${CRONIT_SCRIPT}
