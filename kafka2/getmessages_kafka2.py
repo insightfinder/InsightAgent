@@ -72,7 +72,7 @@ def get_agent_config_vars():
                 # hardcoded
                 'api_version': (0, 9),
                 'auto_offset_reset': 'latest',
-                'consumer_timeout_ms': if_config_vars['sampling_interval'] * 1000 if 'METRIC' in if_config_vars[
+                'consumer_timeout_ms': 30 * if_config_vars['sampling_interval'] * 1000 if 'METRIC' in if_config_vars[
                     'project_type'] or 'LOG' in if_config_vars['project_type'] else None,
 
                 # consumer settings
