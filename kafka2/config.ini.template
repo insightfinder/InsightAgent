@@ -62,8 +62,8 @@ csv_field_delimiter = ,|\t
 json_top_level = 
 
 ## message parsing
-# timestamp format, as per python strptime. multiple fields can be formatted together to create the timestamp a la `{date} {time}`, where `date` and `time` are fields that each contain part of the timestamp. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
-timestamp_format = timestamp
+# required. timestamp format, as per python strptime. multiple fields can be formatted together to create the timestamp a la `{date} {time}`, where `date` and `time` are fields that each contain part of the timestamp. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
+timestamp_format = epoch
 # timezone, as per pytz
 timezone = 
 timestamp_field = epoch
@@ -72,6 +72,12 @@ instance_field = host
 device_field = 
 # multiple fields are separated by commas. a field can be named with the syntax `<name>:<value>` or `<name>:=<value>`, where `<name>` and `<value>` can each be either a literal value (`name:value`) or formatted (`total time [{step}]:={timing.end}-{timing.start}`). Use `:=` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `numexpr.evaluate()`.
 data_fields =
+
+## metric buffer
+# if set this field, agent will send data at once when all metrics of instance is collected. example: metric1,metric2,...
+all_metrics =
+# required. size of buffer (in MB) memory used to fuse metrics. must greater than 0
+metric_buffer_size_mb = 10
 
 ## proxy
 agent_http_proxy =
