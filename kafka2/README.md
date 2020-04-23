@@ -6,7 +6,7 @@ This agent collects data from kafka2 and sends it to Insightfinder.
 ```bash
 bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) kafka2 && cd kafka2
 vi config.ini
-sudo ./setup/install.sh --create  # install on localhost
+sudo ./setup/install.sh --create --monitor  # install on localhost
                                   ## or on multiple nodes
 sudo ./offline/remote-cp-run.sh list_of_nodes
 ```
@@ -35,7 +35,7 @@ sudo ./setup/install.sh
 
 ###### Once satisfied, run:
 ```bash
-sudo ./setup/install.sh --create
+sudo ./setup/install.sh --create --monitor
 ```
 
 ###### To deploy on multiple hosts, instead call 
