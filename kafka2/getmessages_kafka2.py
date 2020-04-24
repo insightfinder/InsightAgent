@@ -20,9 +20,11 @@ import subprocess
 import shlex
 
 from kafka import KafkaConsumer
+
 '''
 This script gathers data to send to Insightfinder
 '''
+
 
 def start_data_processing(thread_number):
     # open consumer
@@ -41,7 +43,7 @@ def parse_messages_kafka(consumer):
     logger.info('Reading messages')
     for message in consumer:
         try:
-            logger.info('Message received')
+            logger.debug('Message received')
             logger.debug(message.value)
             if 'JSON' in agent_config_vars['data_format']:
                 parse_json_message(json.loads(str(message.value)))
@@ -70,7 +72,8 @@ def get_agent_config_vars():
                 # hardcoded
                 'api_version': (0, 9),
                 'auto_offset_reset': 'latest',
-                'consumer_timeout_ms': if_config_vars['sampling_interval'] * 1000 if 'METRIC' in if_config_vars['project_type'] or 'LOG' in if_config_vars['project_type'] else None,
+                'consumer_timeout_ms': 30 * if_config_vars['sampling_interval'] * 1000 if 'METRIC' in if_config_vars[
+                    'project_type'] or 'LOG' in if_config_vars['project_type'] else None,
 
                 # consumer settings
                 'group_id': config_parser.get('kafka', 'group_id'),
@@ -97,11 +100,11 @@ def get_agent_config_vars():
             }
 
             # only keep settings with values
-            kafka_kwargs = { k:v for (k, v) in kafka_config.items() if v }
+            kafka_kwargs = {k: v for (k, v) in kafka_config.items() if v}
 
             # check SASL
             if 'sasl_mechanism' in kafka_kwargs:
-                if kafka_kwargs['sasl_mechanism'] not in { 'PLAIN', 'GSSAPI', 'OAUTHBEARER' }:
+                if kafka_kwargs['sasl_mechanism'] not in {'PLAIN', 'GSSAPI', 'OAUTHBEARER'}:
                     logger.warn('sasl_mechanism not one of PLAIN, GSSAPI, or OAUTHBEARER')
                     kafka_kwargs.pop('sasl_mechanism')
                 elif kafka_kwargs['sasl_mechanism'] == 'PLAIN':
@@ -148,13 +151,17 @@ def get_agent_config_vars():
             raw_regex = config_parser.get('kafka', 'raw_regex', raw=True)
             raw_start_regex = config_parser.get('kafka', 'raw_start_regex', raw=True)
 
+            # metric buffer
+            all_metrics = config_parser.get('kafka', 'all_metrics')
+            metric_buffer_size_mb = config_parser.get('kafka', 'metric_buffer_size_mb') or '10'
+
         except ConfigParser.NoOptionError:
             config_error()
 
         # any post-processing
         # check SASL
         if 'sasl_mechanism' in kafka_kwargs:
-            if kafka_kwargs['sasl_mechanism'] not in { 'PLAIN', 'GSSAPI', 'OAUTHBEARER' }:
+            if kafka_kwargs['sasl_mechanism'] not in {'PLAIN', 'GSSAPI', 'OAUTHBEARER'}:
                 logger.warn('sasl_mechanism not one of PLAIN, GSSAPI, or OAUTHBEARER')
                 kafka_kwargs.pop('sasl_mechanism')
             elif kafka_kwargs['sasl_mechanism'] == 'PLAIN':
@@ -194,17 +201,18 @@ def get_agent_config_vars():
                 data_fields.pop(data_fields.index(timestamp_field))
 
         # timestamp
-        timestamp_format = timestamp_format.partition('.')[0]
-        if '%z' in timestamp_format or '%Z' in timestamp_format:
-            ts_format_info = strip_tz_info(timestamp_format)
-        elif timestamp_format:
-            ts_format_info = {'strip_tz': False,
-                              'strip_tz_fmt': '',
-                              'timestamp_format': [timestamp_format]}
-        else: # ISO8601?
-            ts_format_info = {'strip_tz': True,
-                              'strip_tz_fmt': PCT_z_FMT,
-                              'timestamp_format': ISO8601}
+        ts_format_info = {}
+        if len(timestamp_format) != 0:
+            timestamp_format = filter(lambda x: x, timestamp_format.split(','))
+            for ts_format in timestamp_format:
+                if '%z' in ts_format or '%Z' in ts_format:
+                    ts_format, strip_info = strip_tz_info(ts_format)
+                    ts_format_info[ts_format] = strip_info
+                elif timestamp_format:
+                    ts_format_info[ts_format] = {'strip_tz': False, 'strip_tz_fmt': ''}
+        else:
+            config_error('timestamp_format')
+
         if timezone not in pytz.all_timezones:
             config_error('timezone')
         else:
@@ -237,6 +245,10 @@ def get_agent_config_vars():
         else:
             config_error('data_format')
 
+        # defaults
+        if all_metrics:
+            all_metrics = all_metrics.split(',')
+
         # add parsed variables to a global
         config_vars = {
             'kafka_kwargs': kafka_kwargs,
@@ -249,15 +261,16 @@ def get_agent_config_vars():
             'csv_field_names': csv_field_names,
             'csv_field_delimiter': csv_field_delimiter,
             'json_top_level': json_top_level,
-            'timestamp_format': ts_format_info['timestamp_format'],
-            'strip_tz': ts_format_info['strip_tz'],
-            'strip_tz_fmt': ts_format_info['strip_tz_fmt'],
+            'timestamp_format': timestamp_format,
+            'ts_format_info': ts_format_info,
             'timezone': timezone,
             'timestamp_field': timestamp_field,
             'instance_field': instance_field,
             'device_field': device_field,
             'data_fields': data_fields,
-            'proxies': agent_proxies
+            'proxies': agent_proxies,
+            'all_metrics': all_metrics,
+            'metric_buffer_size': int(metric_buffer_size_mb) * 1024 * 1024,  # as bytes
         }
 
         return config_vars
@@ -300,17 +313,17 @@ def get_if_config_vars():
             config_error('project_type')
 
         if project_type not in {
-                'METRIC',
-                'METRICREPLAY',
-                'LOG',
-                'LOGREPLAY',
-                'INCIDENT',
-                'INCIDENTREPLAY',
-                'ALERT',
-                'ALERTREPLAY',
-                'DEPLOYMENT',
-                'DEPLOYMENTREPLAY'
-                }:
+            'METRIC',
+            'METRICREPLAY',
+            'LOG',
+            'LOGREPLAY',
+            'INCIDENT',
+            'INCIDENTREPLAY',
+            'ALERT',
+            'ALERTREPLAY',
+            'DEPLOYMENT',
+            'DEPLOYMENTREPLAY'
+        }:
             config_error('project_type')
 
         if len(sampling_interval) == 0:
@@ -352,9 +365,9 @@ def get_if_config_vars():
             'token': token,
             'project_name': project_name,
             'project_type': project_type,
-            'sampling_interval': int(sampling_interval),    # as seconds
-            'run_interval': int(run_interval),              # as seconds
-            'chunk_size': int(chunk_size_kb) * 1024,        # as bytes
+            'sampling_interval': int(sampling_interval),  # as seconds
+            'run_interval': int(run_interval),  # as seconds
+            'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
             'if_url': if_url,
             'if_proxies': if_proxies
         }
@@ -394,7 +407,7 @@ def get_cli_config_vars():
         'threads': 1,
         'testing': False,
         'log_level': logging.INFO
-        }
+    }
 
     if options.testing:
         config_vars['testing'] = True
@@ -429,25 +442,24 @@ def strip_tz_info(timestamp_format):
         strip_tz_fmt = PCT_z_FMT
 
     if len(timestamp_format) > (position + 2):
-        timestamp_format = timestamp_format[:position] + timestamp_format[position+2:]
+        timestamp_format = timestamp_format[:position] + timestamp_format[position + 2:]
     else:
         timestamp_format = timestamp_format[:position]
     if agent_config_vars['timezone'] == pytz.timezone('UTC'):
-        logger.warning('Time zone info will be stripped from timestamps, but no time zone info was supplied in the config. Assuming UTC')
+        logger.warning(
+            'Time zone info will be stripped from timestamps, but no time zone info was supplied in the config. Assuming UTC')
 
-    return {'strip_tz': True,
-            'strip_tz_fmt': strip_tz_fmt,
-            'timestamp_format': [timestamp_format]}
+    return timestamp_format, {'strip_tz': True, 'strip_tz_fmt': strip_tz_fmt}
 
 
 def check_csv_fieldnames(csv_field_names, all_fields):
     # required
     for field, _map in all_fields['required_fields']:
         _map['index'] = get_field_index(
-                csv_field_names,
-                _map['name'],
-                field,
-                True)
+            csv_field_names,
+            _map['name'],
+            field,
+            True)
 
     # optional
     for field, _map in all_fields['optional_fields']:
@@ -523,20 +535,35 @@ def check_project(project_name):
         try:
             # check for existing project
             check_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/getprojectstatus')
-            output_check_project = subprocess.check_output('curl "' + check_url + '?userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars['token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + project_name + '%22%2C%22customerName%22%3A%22' + if_config_vars['user_name'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"', shell=True)
+            output_check_project = subprocess.check_output(
+                'curl "' + check_url + '?userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars[
+                    'token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + project_name + '%22%2C%22customerName%22%3A%22' +
+                if_config_vars['user_name'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"',
+                shell=True)
             # create project if no existing project
             if project_name not in output_check_project:
                 logger.debug('creating project')
                 create_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/add-custom-project')
-                output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars['token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=' + get_data_type_from_project_type() + '&samplingInterval=' + str(if_config_vars['sampling_interval'] / 60) +  '&samplingIntervalInSeconds=' + str(if_config_vars['sampling_interval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_insight_agent_type_from_project_type() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + create_url + '?tzOffset=-18000000', shell=True)
+                output_create_project = subprocess.check_output(
+                    'no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars[
+                        'token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=' + get_data_type_from_project_type() + '&samplingInterval=' + str(
+                        if_config_vars['sampling_interval'] / 60) + '&samplingIntervalInSeconds=' + str(if_config_vars[
+                                                                                                            'sampling_interval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_insight_agent_type_from_project_type() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + create_url + '?tzOffset=-18000000',
+                    shell=True)
             # set project name to proposed name
             if_config_vars['project_name'] = project_name
             # try to add new project to system
             if 'system_name' in if_config_vars and len(if_config_vars['system_name']) != 0:
                 system_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/projects/update')
-                output_update_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars['token'] + '&operation=updateprojsettings&projectName=' + project_name + '&systemName=' + if_config_vars['system_name'] + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + system_url + '?tzOffset=-18000000', shell=True)
+                output_update_project = subprocess.check_output(
+                    'no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars[
+                        'token'] + '&operation=updateprojsettings&projectName=' + project_name + '&systemName=' +
+                    if_config_vars[
+                        'system_name'] + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + system_url + '?tzOffset=-18000000',
+                    shell=True)
         except subprocess.CalledProcessError as e:
-            logger.error('Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars['project_name'])
+            logger.error('Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars[
+                'project_name'])
 
 
 def get_field_index(field_names, field, label, is_required=False):
@@ -582,11 +609,11 @@ def get_json_size_bytes(json_data):
 
 
 def get_all_files(files, file_regex_c):
-    return [ i for j in
-                map(lambda k:
-                    get_file_list_for_directory(k, file_regex_c),
+    return [i for j in
+            map(lambda k:
+                get_file_list_for_directory(k, file_regex_c),
                 files)
-            for i in j if i ]
+            for i in j if i]
 
 
 def get_file_list_for_directory(root_path='/', file_name_regex_c=''):
@@ -661,12 +688,12 @@ def merge_data(field, value, data={}):
 
 def parse_formatted(message, setting_value, default='', allow_list=False, remove=False):
     """ fill a format string with values """
-    fields = { field: get_json_field(message,
-                                     field,
-                                     default='',
-                                     allow_list=allow_list,
-                                     remove=remove)
-              for field in FORMAT_STR.findall(setting_value) }
+    fields = {field: get_json_field(message,
+                                    field,
+                                    default='',
+                                    allow_list=allow_list,
+                                    remove=remove)
+              for field in FORMAT_STR.findall(setting_value)}
     if len(fields) == 0:
         return default
     return setting_value.format(**fields)
@@ -676,7 +703,7 @@ def get_data_values(timestamp, message):
     setting_values = agent_config_vars['data_fields'] or message.keys()
     # reverse list so it's in priority order, as shared fields names will get overwritten
     setting_values.reverse()
-    data = { x: dict() for x in timestamp }
+    data = {x: dict() for x in timestamp}
     for setting_value in setting_values:
         name, value = get_data_value(message, setting_value)
         if isinstance(value, (set, tuple, list)):
@@ -734,10 +761,10 @@ def get_single_value(message, config_setting, default='', allow_list=False, remo
                                remove=remove)
     else:
         return get_json_field_by_pri(message,
-                                    [i for i in setting_value],
-                                    default=default,
-                                    allow_list=allow_list,
-                                    remove=remove)
+                                     [i for i in setting_value],
+                                     default=default,
+                                     allow_list=allow_list,
+                                     remove=remove)
 
 
 def get_json_field_by_pri(message, pri_list, default='', allow_list=False, remove=False):
@@ -754,11 +781,11 @@ def get_json_field_by_pri(message, pri_list, default='', allow_list=False, remov
 
 def get_json_field(message, setting_value, default='', allow_list=False, remove=False):
     field_val = json_format_field_value(
-                    _get_json_field_helper(
-                        message,
-                        setting_value.split(JSON_LEVEL_DELIM),
-                        allow_list=allow_list,
-                        remove=remove))
+        _get_json_field_helper(
+            message,
+            setting_value.split(JSON_LEVEL_DELIM),
+            allow_list=allow_list,
+            remove=remove))
     if len(field_val) == 0:
         field_val = default
     return field_val
@@ -825,10 +852,10 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     elif isinstance(next_value, dict):
         # there's more tree to walk down
         return _get_json_field_helper(
-                json.loads(json.dumps(next_value)),
-                next_fields,
-                allow_list=allow_list,
-                remove=remove)
+            json.loads(json.dumps(next_value)),
+            next_fields,
+            allow_list=allow_list,
+            remove=remove)
     else:
         # catch-all
         return ''
@@ -840,11 +867,11 @@ def json_gather_list_values(l, fields, remove=False):
     for sub_value in l:
         fields_copy = list(fields[i] for i in range(len(fields)))
         json_value = json_format_field_value(
-                _get_json_field_helper(
-                    sub_value,
-                    fields_copy,
-                    allow_list=True,
-                    remove=remove))
+            _get_json_field_helper(
+                sub_value,
+                fields_copy,
+                allow_list=True,
+                remove=remove))
         if len(json_value) != 0:
             sub_field_value.append(json_value)
     # return the full list of field values
@@ -871,9 +898,9 @@ def parse_json_message(messages):
                 parse_json_message_single(message)
         else:
             top_level = _get_json_field_helper(
-                    messages,
-                    agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM),
-                    allow_list=True)
+                messages,
+                agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM),
+                allow_list=True)
             if isinstance(top_level, (list, set, tuple)):
                 for message in top_level:
                     parse_json_message_single(message)
@@ -887,7 +914,7 @@ def parse_json_message(messages):
 
 
 def parse_json_message_single(message):
-    message = json.loads(json.dumps(message))
+    # message = json.loads(json.dumps(message))
     # filter
     if len(agent_config_vars['filters_include']) != 0:
         # for each provided filter
@@ -930,11 +957,6 @@ def parse_json_message_single(message):
                     return
         logger.debug('passed filter (exclusion)')
 
-    # get project, instance, & device
-    # check_project(get_single_value(message,
-    #                                'project_field',
-    #                                default=if_config_vars['project_name']),
-    #                                remove=True)
     instance = get_single_value(message,
                                 'instance_field',
                                 default=HOSTNAME,
@@ -968,11 +990,11 @@ def parse_json_message_single(message):
             for data_field, data_value in data_folded.items():
                 if data_value is not None:
                     metric_handoff(
-                            ts,
-                            data_field,
-                            data_value,
-                            instance,
-                            device)
+                        ts,
+                        data_field,
+                        data_value,
+                        instance,
+                        device)
         else:
             log_handoff(ts, report_data, instance, device)
 
@@ -1079,20 +1101,22 @@ def parse_csv_row(row, field_names, instance, device=''):
 
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
-    timestamp_datetime = get_datetime_from_date_string(date_string.partition('.')[0])
-    return get_timestamp_from_datetime(timestamp_datetime)
+    epoch, timestamp_datetime = get_datetime_from_date_string(date_string)
+    return get_timestamp_from_datetime(epoch, timestamp_datetime)
 
 
 def get_datetime_from_date_string(date_string):
-    timestamp_datetime = date_string.partition('.')[0]
-    if 'strip_tz' in agent_config_vars and agent_config_vars['strip_tz']:
-        date_string = ''.join(agent_config_vars['strip_tz_fmt'].split(date_string))
+    epoch = None
+    timestamp_datetime = date_string
     if 'timestamp_format' in agent_config_vars:
         for timestamp_format in agent_config_vars['timestamp_format']:
             try:
                 if timestamp_format == 'epoch':
-                    timestamp_datetime = get_datetime_from_unix_epoch(date_string)
+                    epoch = get_datetime_from_unix_epoch(date_string)
                 else:
+                    strip_info = agent_config_vars['ts_format_info'][timestamp_format]
+                    if strip_info['strip_tz']:
+                        date_string = ''.join(strip_info['strip_tz_fmt'].split(date_string))
                     timestamp_datetime = datetime.strptime(date_string,
                                                            timestamp_format)
                 break
@@ -1105,13 +1129,16 @@ def get_datetime_from_date_string(date_string):
         try:
             timestamp_datetime = dateutil.parse.parse(date_string)
         except:
-            timestamp_datetime = get_datetime_from_unix_epoch(date_string)
+            epoch = get_datetime_from_unix_epoch(date_string)
             agent_config_vars['timestamp_format'] = ['epoch']
 
-    return timestamp_datetime
+    return epoch, timestamp_datetime
 
 
-def get_timestamp_from_datetime(timestamp_datetime):
+def get_timestamp_from_datetime(epoch, timestamp_datetime):
+    if agent_config_vars['timezone'].zone == 'UTC' and epoch:
+        return epoch * 1000
+
     timestamp_localize = agent_config_vars['timezone'].localize(timestamp_datetime)
 
     epoch = long((timestamp_localize - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
@@ -1128,7 +1155,7 @@ def get_datetime_from_unix_epoch(date_string):
         elif len(epoch) in range(9, 13):
             epoch = int(epoch)
 
-        return datetime.utcfromtimestamp(epoch)
+        return epoch
     except ValueError:
         # if the date cannot be converted into a number by built-in long()
         logger.warn('Date format not defined & data does not look like unix epoch: {}'.format(date_string))
@@ -1194,7 +1221,7 @@ def run_subproc_background(command, **passthrough):
 
 
 def format_command(cmd):
-    if not isinstance(cmd, (list, tuple)): # no sets, as order matters
+    if not isinstance(cmd, (list, tuple)):  # no sets, as order matters
         cmd = shlex.split(cmd)
     return list(cmd)
 
@@ -1210,15 +1237,15 @@ def set_logger_config(level):
     logging_handler_out.setLevel(logging.DEBUG)
     # create a logging format
     formatter = logging.Formatter(
-            '{ts} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
-                ts='%(asctime)s',
-                pid='%(process)d',
-                lvl='%(levelname)-8s',
-                mod='%(module)s',
-                func='%(funcName)s',
-                line='%(lineno)d',
-                msg='%(message)s'),
-            ISO8601[0])
+        '{ts} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
+            ts='%(asctime)s',
+            pid='%(process)d',
+            lvl='%(levelname)-8s',
+            mod='%(module)s',
+            func='%(funcName)s',
+            line='%(lineno)d',
+            msg='%(message)s'),
+        ISO8601[0])
     logging_handler_out.setFormatter(formatter)
     logger_obj.addHandler(logging_handler_out)
 
@@ -1249,14 +1276,23 @@ def print_summary_info():
 
 
 def initialize_data_gathering(thread_number):
+    reset_metric_buffer()
     reset_track()
     track['chunk_count'] = 0
     track['entry_count'] = 0
 
     start_data_processing(thread_number)
 
+    # move all buffer data to current data, and send
+    while metric_buffer['buffer_ts_list']:
+        (ts, key) = metric_buffer['buffer_ts_list'].pop()
+        transpose_metrics(ts, key)
+        if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+            logger.debug('Sending buffer chunk')
+            send_data_wrapper()
+
     # last chunk
-    if len(track['current_row']) > 0 or len(track['current_dict']) > 0:
+    if len(track['current_row']) > 0:
         logger.debug('Sending last chunk')
         send_data_wrapper()
 
@@ -1265,12 +1301,20 @@ def initialize_data_gathering(thread_number):
         if_config_vars['project_type'].lower(), track['entry_count']))
 
 
+def reset_metric_buffer():
+    metric_buffer['buffer_key_list'] = []
+    metric_buffer['buffer_ts_list'] = []
+    metric_buffer['buffer_dict'] = {}
+
+    metric_buffer['buffer_collected_list'] = []
+    metric_buffer['buffer_collected_dict'] = {}
+
+
 def reset_track():
     """ reset the track global for the next chunk """
     track['start_time'] = time.time()
     track['line_count'] = 0
     track['current_row'] = []
-    track['current_dict'] = dict()
 
 
 #########################################
@@ -1297,7 +1341,8 @@ def send_log(timestamp, data, instance, device=''):
     track['current_row'].append(entry)
     track['line_count'] += 1
     track['entry_count'] += 1
-    if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
+    if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (
+            time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
         send_data_wrapper()
     elif track['entry_count'] % 100 == 0:
         logger.debug('Current data object size: {} bytes'.format(
@@ -1311,7 +1356,7 @@ def prepare_log_entry(timestamp, data, instance, device=''):
     if 'INCIDENT' in if_config_vars['project_type'] or 'DEPLOYMENT' in if_config_vars['project_type']:
         entry['timestamp'] = timestamp
         entry['instanceName'] = make_safe_instance_string(instance, device)
-    else: # LOG or ALERT
+    else:  # LOG or ALERT
         entry['eventId'] = timestamp
         entry['tag'] = make_safe_instance_string(instance, device)
     return entry
@@ -1331,49 +1376,70 @@ def send_metric(timestamp, field_name, data, instance, device=''):
     except Exception as e:
         logger.warning(e)
         logger.warning(
-                'timestamp: {}\nfield_name: {}\ninstance: {}\ndevice: {}\ndata: {}'.format(
+            'timestamp: {}\nfield_name: {}\ninstance: {}\ndevice: {}\ndata: {}'.format(
                 timestamp, field_name, instance, device, data))
     else:
-        append_metric_data_to_entry(timestamp, field_name, data, instance, device)
+        append_metric_data_to_buffer(timestamp, field_name, data, instance, device)
         track['entry_count'] += 1
-        if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
+
+        # send data if all metrics of instance is collected
+        while metric_buffer['buffer_collected_list']:
+            (ts, key, index) = metric_buffer['buffer_collected_list'].pop()
+            del metric_buffer['buffer_ts_list'][index]
+            metric_buffer['buffer_collected_dict'].pop(key)
+            transpose_metrics(ts, key)
+            if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+                logger.debug('Sending buffer chunk')
+                send_data_wrapper()
+
+        # send data if buffer size is bigger than threshold
+        while get_json_size_bytes(metric_buffer['buffer_dict']) >= agent_config_vars['metric_buffer_size'] and \
+                metric_buffer['buffer_ts_list']:
+            (ts, key) = metric_buffer['buffer_ts_list'].pop()
+            transpose_metrics(ts, key)
+            if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+                logger.debug('Sending buffer chunk')
+                send_data_wrapper()
+
+        # send data
+        if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (
+                time.time() - track['start_time']) >= if_config_vars['run_interval']:
             send_data_wrapper()
         elif track['entry_count'] % 500 == 0:
-            logger.debug('Current data object size: {} bytes'.format(
-                get_json_size_bytes(track['current_dict'])))
+            logger.debug('Buffer data object size: {} bytes'.format(
+                get_json_size_bytes(metric_buffer['buffer_dict'])))
 
 
-def append_metric_data_to_entry(timestamp, field_name, data, instance, device=''):
+def append_metric_data_to_buffer(timestamp, field_name, data, instance, device=''):
     """ creates the metric entry """
-    key = '{}[{}]'.format(make_safe_metric_key(field_name),
-                          make_safe_instance_string(instance, device))
     ts_str = str(timestamp)
-    if ts_str not in track['current_dict']:
-        track['current_dict'][ts_str] = dict()
-    current_obj = track['current_dict'][ts_str]
+    instance_str = make_safe_instance_string(instance, device)
+    key = '{}-{}'.format(ts_str, instance_str)
+    metric_str = make_safe_metric_key(field_name)
+    metric_key = '{}[{}]'.format(metric_str, instance_str)
 
-    # use the next non-null value to overwrite the prev value
-    # for the same metric in the same timestamp
-    if key in current_obj.keys():
-        if data is not None and len(str(data)) > 0:
-            current_obj[key] += '|' + str(data)
-    else:
-        current_obj[key] = str(data)
-    track['current_dict'][ts_str] = current_obj
+    if key not in metric_buffer['buffer_key_list']:
+        # add timestamp in buffer_ts_list and buffer_dict
+        metric_buffer['buffer_key_list'].append(key)
+        metric_buffer['buffer_ts_list'].append((timestamp, key))
+        metric_buffer['buffer_ts_list'].sort(key=lambda elem: elem[0], reverse=True)
+        metric_buffer['buffer_dict'][key] = dict()
+        metric_buffer['buffer_collected_dict'][key] = []
+    metric_buffer['buffer_dict'][key][metric_key] = str(data)
+    metric_buffer['buffer_collected_dict'][key].append(metric_str)
+
+    # if all metrics of ts_instance is collected, then send these data
+    if agent_config_vars['all_metrics'] and set(agent_config_vars['all_metrics']) <= set(
+            metric_buffer['buffer_collected_dict'][key]):
+        metric_buffer['buffer_collected_list'].append(
+            (timestamp, key, metric_buffer['buffer_ts_list'].index((timestamp, key))))
 
 
-def transpose_metrics():
-    """ flatten data up to the timestamp"""
-    for timestamp, kvs in track['current_dict'].items():
-        track['line_count'] += 1
-        new_row = dict()
-        new_row['timestamp'] = timestamp
-        for key, value in kvs.items():
-            if '|' in value:
-                value = statistics.median(
-                    map(lambda v: float(v), value.split('|')))
-            new_row[key] = str(value)
-        track['current_row'].append(new_row)
+def transpose_metrics(ts, key):
+    metric_buffer['buffer_key_list'].remove(key)
+    track['current_row'].append(
+        dict({'timestamp': str(ts)}, **metric_buffer['buffer_dict'].pop(key))
+    )
 
 
 def build_metric_name_map():
@@ -1484,8 +1550,6 @@ def fold_up_helper(current_path, node_name, node, sentence_tree=False, value_tre
 ################################
 def send_data_wrapper():
     """ wrapper to send data """
-    if 'METRIC' in if_config_vars['project_type']:
-        transpose_metrics()
     logger.debug('--- Chunk creation time: {} seconds ---'.format(
         round(time.time() - track['start_time'], 2)))
     send_data_to_if(track['current_row'])
@@ -1594,7 +1658,7 @@ def get_agent_type_from_project_type():
         return 'LogFileReplay'
     else:
         return 'LogStreaming'
-    # INCIDENT and DEPLOYMENT don't use this
+        # INCIDENT and DEPLOYMENT don't use this
 
 
 def get_data_field_from_project_type():
@@ -1604,7 +1668,7 @@ def get_data_field_from_project_type():
         return 'incidentData'
     elif 'DEPLOYMENT' in if_config_vars['project_type']:
         return 'deploymentData'
-    else: # MERTIC, LOG, ALERT
+    else:  # MERTIC, LOG, ALERT
         return 'metricData'
 
 
@@ -1615,7 +1679,7 @@ def get_api_from_project_type():
         return 'incidentdatareceive'
     elif 'DEPLOYMENT' in if_config_vars['project_type']:
         return 'deploymentEventReceive'
-    else: # MERTIC, LOG, ALERT
+    else:  # MERTIC, LOG, ALERT
         return 'customprojectrawdata'
 
 
@@ -1659,6 +1723,7 @@ if __name__ == "__main__":
     CSV_DELIM = ','
     ATTEMPTS = 3
     track = dict()
+    metric_buffer = dict()
 
     # get config
     cli_config_vars = get_cli_config_vars()
@@ -1668,7 +1733,15 @@ if __name__ == "__main__":
     print_summary_info()
 
     # start data processing
+    process_list = []
     for i in range(0, cli_config_vars['threads']):
-        Process(target=initialize_data_gathering,
-                args=(i,)
-                ).start()
+        p = Process(target=initialize_data_gathering,
+                    args=(i,)
+                    )
+        process_list.append(p)
+
+    for p in process_list:
+        p.start()
+
+    for p in process_list:
+        p.join()
