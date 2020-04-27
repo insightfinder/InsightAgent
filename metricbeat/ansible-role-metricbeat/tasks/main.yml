@@ -1,0 +1,20 @@
+---
+# tasks file for metricbeat
+
+- import_tasks: install.yml
+  tags:
+    - metricbeat
+    - install
+    - metricbeat_install
+
+- import_tasks: config.yml
+  tags:
+    - metricbeat
+    - config
+    - metricbeat_config
+
+- import_tasks: service.yml
+  tags:
+    - metricbeat
+    - service
+    - metricbeat_service
