@@ -1,0 +1,47 @@
+{{ ansible_managed | comment }}
+
+########################## Metricbeat Configuration ###########################
+
+#==========================  Modules configuration =============================
+metricbeat.modules:
+
+#-------------------------------- System Module --------------------------------
+- module: system
+  metricsets:
+    - cpu             # CPU usage
+    - memory          # Memory usage
+    - fsstat          # File system summary metrics
+    - diskio          # Disk IO
+    - network         # Network IO
+    - load            # CPU load averages
+    - process_summary # Process summary
+  enabled: true
+  period: {{ metricbeat_modules_system_period }}
+
+
+#================================ General ======================================
+{% if metricbeat_general_conf %}
+{{ metricbeat_general_conf | to_nice_yaml(indent=2) }}
+{% endif %}
+
+#================================ Outputs ======================================
+{% if metricbeat_outputs_conf %}
+{{ metricbeat_outputs_conf | to_nice_yaml(indent=2) }}
+{% else %}
+#------------------------------- File output -----------------------------------
+output.file:
+  enabled: true
+  codec.json:
+    pretty: false
+  path: /tmp/metricbeat
+  filename: metricbeat
+  permissions: 0644
+{% endif %}
+
+#================================ Logging ======================================
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/metricbeat
+  name: metricbeat
+  permissions: 0644

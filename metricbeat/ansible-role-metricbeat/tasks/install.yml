@@ -1,0 +1,10 @@
+---
+- name: Copy package to target machine
+  copy:
+    src: "{{ metricbeat_package }}"
+    dest: "/tmp/{{ metricbeat_package }}"
+
+- name: Install package
+  package:
+    name: "/tmp/{{ metricbeat_package }}"
+    state: present

@@ -1,0 +1,10 @@
+---
+# defaults file for metricbeat
+
+metricbeat_version: 7.6.2
+metricbeat_package: "metricbeat-{{ metricbeat_version }}-x86_64.rpm"
+metricbeat_conf_file: /etc/metricbeat/metricbeat.yml
+metricbeat_modules_system_period: 60s
+metricbeat_inputs_conf:
+metricbeat_general_conf:
+metricbeat_outputs_conf:
