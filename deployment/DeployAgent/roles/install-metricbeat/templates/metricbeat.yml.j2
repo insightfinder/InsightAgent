@@ -16,8 +16,11 @@ metricbeat.modules:
     - load            # CPU load averages
     - process_summary # Process summary
   enabled: true
+{% if samplingInterval %}
+  period: {{ samplingInterval }}
+{% else %}
   period: {{ metricbeat_modules_system_period }}
-
+{% endif %}
 
 #================================ General ======================================
 {% if metricbeat_general_conf %}
@@ -25,18 +28,16 @@ metricbeat.modules:
 {% endif %}
 
 #================================ Outputs ======================================
-{% if metricbeat_outputs_conf %}
-{{ metricbeat_outputs_conf | to_nice_yaml(indent=2) }}
+#----------------------------- Logstash output ---------------------------------
+output.logstash:
+  enabled: {{ metricbeat_output_logstash_enabled }}
+{% if logstashHosts %}
+  hosts: ["{{ logstashHosts }}"]
 {% else %}
-#------------------------------- File output -----------------------------------
-output.file:
-  enabled: true
-  codec.json:
-    pretty: false
-  path: /tmp/metricbeat
-  filename: metricbeat
-  permissions: 0644
+  hosts: ["{{ metricbeat_output_logstash_hosts }}"]
 {% endif %}
+  loadbalance: true
+
 
 #================================ Logging ======================================
 logging.level: info
