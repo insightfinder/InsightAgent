@@ -48,8 +48,8 @@
      - { role: install-kafka-incident, when: (agentType=="kafka-incident") and action=="install"}
      - { role: install-kafka-metrics, when: agentType=="kafka" and action=="install"}
      - { role: install-filebeat, when: (agentType=="logstash" or agentType=="metric-log") and action=="install"}
+     - { role: install-metricbeat, when: (agentType=="logstash" or agentType=="metricbeat") and action=="install"}
      - { role: install-logstash, when: (agentType=="logstash" or agentType=="metric-log" or agentType=="awsCloudtrail" or agentType=="googlePubSub") and action=="install"}
-     - { role: install-metricbeat, when: agentType=="metricbeat" and action=="install"}
      - { role: uninstall, when: action=="uninstall" }
    environment:
      http_proxy: "{{ http_proxy }}"

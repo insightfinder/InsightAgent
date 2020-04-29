@@ -7,4 +7,5 @@ metricbeat_conf_file: /etc/metricbeat/metricbeat.yml
 metricbeat_modules_system_period: 60s
 metricbeat_inputs_conf:
 metricbeat_general_conf:
-metricbeat_outputs_conf:
+metricbeat_output_logstash_enabled: true
+metricbeat_output_logstash_hosts: "localhost:5044"

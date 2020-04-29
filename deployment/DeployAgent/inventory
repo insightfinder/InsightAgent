@@ -58,7 +58,7 @@ logProjectName=
 ifLicenseKey=
 
 ##Sampling interval could be an integer indicating the number of minutes or "10s" indicating 10 seconds.
-ifSamplingInterval=1
+ifSamplingInterval=60s
 
 ##Valid Agents are listed below
 #ifAgent=script_runner
@@ -142,3 +142,11 @@ manualStart=no
 # If set to yes will disable the system proxy settings for the insightfinder td-agent output plugin
 # By default the output plugin uses the the http proxy settings defined in the environment
 disableTdProxy=no
+
+
+##Vars for Beats
+
+# Hosts list for beats' logstash output, such as metricbeat,
+# seperated by comma, e.g. "10.10.10.11:10001","10.10.10.12:10001".
+# If empty, role's default value.
+logstashHosts =
