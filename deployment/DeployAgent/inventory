@@ -74,6 +74,7 @@ ifSamplingInterval=1
 #ifAgent=prometheus
 #ifAgent=awsCloudtrail
 #ifAgent=googlePubSub
+#ifAgent=metricbeat
 
 ##When yes, we will run the equivalent of 'apt-get update' before installing any packages.
 ##Valid entries are yes or no. Not used with yum-based installation (e.g., CentOS).
@@ -84,19 +85,19 @@ ifReportingUrl=https://app.insightfinder.com
 
 ##Vars for AWS Cloudtrail
 # S3 bucket the trail is logging to
-aws_bucket = 
+aws_bucket =
 # AWS credentials; either both the access key and secret key or the credentials file must be given
-aws_access_key_id = 
+aws_access_key_id =
 aws_secret_access_key =
-#aws_credentials_file = 
+#aws_credentials_file =
 
 ##Vars for Google Pub/Sub
-pubsub_project_id = 
-pubsub_topic_name = 
+pubsub_project_id =
+pubsub_topic_name =
 # the subscription need not be created
-pubsub_subscription = 
-# provide the key file (as json) if installing this agent on a non-GCE machine 
-#gcp_json_key_file = 
+pubsub_subscription =
+# provide the key file (as json) if installing this agent on a non-GCE machine
+#gcp_json_key_file =
 
 ##Vars for Kafka
 
