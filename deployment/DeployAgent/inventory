@@ -32,7 +32,7 @@ localhost ansible_connection=local
 [nodes:vars]
 #ansible_user=vagrant
 #ansible_ssh_pass=ssh_password
-#ansible_ssh_private_key_file=/home/private_key
+#ansible_ssh_private_key_file=/home/{{ansible_user}}/.ssh/id_rsa
 
 [all:vars]
 #If a proxy is needed to connect to the internet, enter it here
@@ -46,7 +46,7 @@ no_proxy=
 ifAction=install
 
 ##Login User In Insightfinder Application
-ifUserName=
+ifUserName=user
 
 ##Project Name In Insightfinder Application(for individial agent install)
 # When agent type is log-metric, this signifies metric project name(collectd)
@@ -55,7 +55,7 @@ ifProjectName=
 logProjectName=
 
 ##User's License Key in Application
-ifLicenseKey=
+ifLicenseKey=a333bd39662ad1edf64e99e97e4b776109827234
 
 ##Sampling interval could be an integer indicating the number of minutes or "10s" indicating 10 seconds.
 ifSamplingInterval=60s
@@ -149,4 +149,4 @@ disableTdProxy=no
 # Hosts list for beats' logstash output, such as metricbeat,
 # seperated by comma, e.g. "10.10.10.11:10001","10.10.10.12:10001".
 # If empty, role's default value.
-logstashHosts =
+beatsLogstashHosts=
