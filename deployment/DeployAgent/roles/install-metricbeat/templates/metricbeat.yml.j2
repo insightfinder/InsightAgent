@@ -31,8 +31,8 @@ metricbeat.modules:
 #----------------------------- Logstash output ---------------------------------
 output.logstash:
   enabled: {{ metricbeat_output_logstash_enabled }}
-{% if logstashHosts %}
-  hosts: ["{{ logstashHosts }}"]
+{% if beatsLogstashHosts %}
+  hosts: ["{{ beatsLogstashHosts }}"]
 {% else %}
   hosts: ["{{ metricbeat_output_logstash_hosts }}"]
 {% endif %}

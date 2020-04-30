@@ -7,7 +7,7 @@ input {
     ssl_key => "{{ logstash_ssl_dir }}/{{ logstash_ssl_key_file | basename }}"
     ssl_verify_mode => "force_peer"
 {% endif %}
-    
+
     add_field => {
     {% if agentType == "metric-log" %}
         "project" => "{{ ifLogProjectName }}"
@@ -15,5 +15,7 @@ input {
         "project" => "{{ ifProjectName }}"
     {% endif %}
     }
+
+    add_field => { "agent_type" => "LogStreaming" }
   }
 }
