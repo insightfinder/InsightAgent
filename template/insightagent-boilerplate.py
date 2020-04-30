@@ -8,21 +8,21 @@ import socket
 import sys
 import time
 import pytz
-from optparse import OptionParser
-from multiprocessing import Process
-from datetime import datetime
-import dateutil
+import arrow
 import urlparse
 import httplib
 import requests
 import statistics
 import subprocess
 import shlex
-import ifobfuscate
 
-'''
+from datetime import datetime
+from optparse import OptionParser
+from multiprocessing import Process
+
+"""
 This script gathers data to send to Insightfinder
-'''
+"""
 
 
 def start_data_processing(thread_number):
@@ -51,11 +51,15 @@ def get_agent_config_vars():
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(config_ini)
         try:
-            ## TODO: fill out the fields to grab. examples given below
-            ## replace 'agent' with the appropriate section header.
+            # TODO: fill out the fields to grab. examples given below
+            # replace 'agent' with the appropriate section header.
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
+
+            # metric buffer
+            all_metrics = config_parser.get('agent', 'all_metrics')
+            metric_buffer_size_mb = config_parser.get('agent', 'metric_buffer_size_mb') or '10'
 
             # filters
             filters_include = config_parser.get('agent', 'filters_include')
@@ -72,7 +76,7 @@ def get_agent_config_vars():
             instance_field = config_parser.get('agent', 'instance_field', raw=True)
             device_field = config_parser.get('agent', 'device_field', raw=True)
             timestamp_field = config_parser.get('agent', 'timestamp_field', raw=True) or 'timestamp'
-            timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
+            timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True)
             timezone = config_parser.get('agent', 'timezone') or 'UTC'
             data_fields = config_parser.get('agent', 'data_fields', raw=True)
 
@@ -110,17 +114,11 @@ def get_agent_config_vars():
                 data_fields.pop(data_fields.index(timestamp_field))
 
         # timestamp format
-        timestamp_format = timestamp_format.partition('.')[0]
-        if '%z' in timestamp_format or '%Z' in timestamp_format:
-            ts_format_info = strip_tz_info(timestamp_format)
-        elif timestamp_format:
-            ts_format_info = {'strip_tz': False,
-                              'strip_tz_fmt': '',
-                              'timestamp_format': [timestamp_format]}
-        else: # ISO8601?
-            ts_format_info = {'strip_tz': True,
-                              'strip_tz_fmt': PCT_z_FMT,
-                              'timestamp_format': ISO8601}
+        if len(timestamp_format) != 0:
+            timestamp_format = filter(lambda x: x.strip(), timestamp_format.split(','))
+        else:
+            config_error('timestamp_format')
+
         if timezone not in pytz.all_timezones:
             config_error('timezone')
         else:
@@ -141,6 +139,7 @@ def get_agent_config_vars():
             try:
                 csv_field_delimiter = regex.compile(csv_field_delimiter)
             except Exception as e:
+                logger.debug(e)
                 config_error('csv_field_delimiter')
         elif data_format in {'JSON',
                              'JSONTAIL',
@@ -152,6 +151,7 @@ def get_agent_config_vars():
             try:
                 raw_regex = regex.compile(raw_regex)
             except Exception as e:
+                logger.debug(e)
                 config_error('raw_regex')
             if len(raw_start_regex) != 0:
                 if raw_start_regex[0] != '^':
@@ -159,6 +159,7 @@ def get_agent_config_vars():
                 try:
                     raw_start_regex = regex.compile(raw_start_regex)
                 except Exception as e:
+                    logger.debug(e)
                     config_error('raw_start_regex')
         else:
             config_error('data_format')
@@ -196,26 +197,15 @@ def get_agent_config_vars():
                 if timestamp_field in data_fields:
                     data_fields.pop(data_fields.index(timestamp_field))
 
-        # timestamp format
-        timestamp_format = timestamp_format.partition('.')[0]
-        if '%z' in timestamp_format or '%Z' in timestamp_format:
-            ts_format_info = strip_tz_info(timestamp_format)
-        elif timestamp_format:
-            ts_format_info = {'strip_tz': False,
-                              'strip_tz_fmt': '',
-                              'timestamp_format': [timestamp_format]}
-        else: # ISO8601?
-            ts_format_info = {'strip_tz': True,
-                              'strip_tz_fmt': PCT_z_FMT,
-                              'timestamp_format': ISO8601}
-        if timezone not in pytz.all_timezones:
-            config_error('timezone')
-        else:
-            timezone = pytz.timezone(timezone)
+        # defaults
+        if all_metrics:
+            all_metrics = all_metrics.split(',')
 
         # add parsed variables to a global
         config_vars = {
             'proxies': agent_proxies,
+            'all_metrics': all_metrics,
+            'metric_buffer_size': int(metric_buffer_size_mb) * 1024 * 1024,  # as bytes
             'filters_include': filters_include,
             'filters_exclude': filters_exclude,
             'data_format': data_format,
@@ -223,16 +213,14 @@ def get_agent_config_vars():
             'raw_start_regex': raw_start_regex,
             'json_top_level': json_top_level,
             'csv_field_names': csv_field_names,
-	    'csv_field_delimiter': csv_field_delimiter,
+            'csv_field_delimiter': csv_field_delimiter,
             # 'project_field': project_fields,
             'instance_field': instance_fields,
             'device_field': device_fields,
             'data_fields': data_fields,
             'timestamp_field': timestamp_fields,
             'timezone': timezone,
-            'timestamp_format': ts_format_info['timestamp_format'],
-            'strip_tz': ts_format_info['strip_tz'],
-            'strip_tz_fmt': ts_format_info['strip_tz_fmt']
+            'timestamp_format': timestamp_format,
         }
 
         return config_vars
@@ -241,7 +229,7 @@ def get_agent_config_vars():
 
 
 #########################
-### START_BOILERPLATE ###
+#   START_BOILERPLATE   #
 #########################
 def get_if_config_vars():
     """ get config.ini vars """
@@ -276,17 +264,17 @@ def get_if_config_vars():
             config_error('project_type')
 
         if project_type not in {
-                'METRIC',
-                'METRICREPLAY',
-                'LOG',
-                'LOGREPLAY',
-                'INCIDENT',
-                'INCIDENTREPLAY',
-                'ALERT',
-                'ALERTREPLAY',
-                'DEPLOYMENT',
-                'DEPLOYMENTREPLAY'
-                }:
+            'METRIC',
+            'METRICREPLAY',
+            'LOG',
+            'LOGREPLAY',
+            'INCIDENT',
+            'INCIDENTREPLAY',
+            'ALERT',
+            'ALERTREPLAY',
+            'DEPLOYMENT',
+            'DEPLOYMENTREPLAY'
+        }:
             config_error('project_type')
 
         if len(sampling_interval) == 0:
@@ -328,9 +316,9 @@ def get_if_config_vars():
             'token': token,
             'project_name': project_name,
             'project_type': project_type,
-            'sampling_interval': int(sampling_interval),    # as seconds
-            'run_interval': int(run_interval),              # as seconds
-            'chunk_size': int(chunk_size_kb) * 1024,        # as bytes
+            'sampling_interval': int(sampling_interval),  # as seconds
+            'run_interval': int(run_interval),  # as seconds
+            'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
             'if_url': if_url,
             'if_proxies': if_proxies
         }
@@ -403,7 +391,7 @@ def get_cli_config_vars():
         'threads': 1,
         'testing': False,
         'log_level': logging.INFO
-        }
+    }
 
     if options.testing:
         config_vars['testing'] = True
@@ -426,25 +414,6 @@ def config_error(setting=''):
 def config_error_no_config():
     logger.error('No config file found. Exiting...')
     sys.exit(1)
-
-
-def strip_tz_info(timestamp_format):
-    # strptime() doesn't allow timezone info
-    if '%Z' in timestamp_format:
-        position = timestamp_format.index('%Z')
-        strip_tz_fmt = PCT_Z_FMT
-    if '%z' in timestamp_format:
-        position = timestamp_format.index('%z')
-        strip_tz_fmt = PCT_z_FMT
-
-    if len(timestamp_format) > (position + 2):
-        timestamp_format = timestamp_format[:position] + timestamp_format[position+2:]
-    else:
-        timestamp_format = timestamp_format[:position]
-
-    return {'strip_tz': True,
-            'strip_tz_fmt': strip_tz_fmt,
-            'timestamp_format': [timestamp_format]}
 
 
 def ternary_tfd(b, default=''):
@@ -478,20 +447,35 @@ def check_project(project_name):
         try:
             # check for existing project
             check_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/getprojectstatus')
-            output_check_project = subprocess.check_output('curl "' + check_url + '?userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars['token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + project_name + '%22%2C%22customerName%22%3A%22' + if_config_vars['user_name'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"', shell=True)
+            output_check_project = subprocess.check_output(
+                'curl "' + check_url + '?userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars[
+                    'token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + project_name + '%22%2C%22customerName%22%3A%22' +
+                if_config_vars['user_name'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"',
+                shell=True)
             # create project if no existing project
             if project_name not in output_check_project:
                 logger.debug('creating project')
                 create_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/add-custom-project')
-                output_create_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars['token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=' + get_data_type_from_project_type() + '&samplingInterval=' + str(if_config_vars['sampling_interval'] / 60) +  '&samplingIntervalInSeconds=' + str(if_config_vars['sampling_interval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_insight_agent_type_from_project_type() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + create_url + '?tzOffset=-18000000', shell=True)
+                output_create_project = subprocess.check_output(
+                    'no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars[
+                        'token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=' + get_data_type_from_project_type() + '&samplingInterval=' + str(
+                        if_config_vars['sampling_interval'] / 60) + '&samplingIntervalInSeconds=' + str(if_config_vars[
+                                                                                                            'sampling_interval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_insight_agent_type_from_project_type() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + create_url + '?tzOffset=-18000000',
+                    shell=True)
             # set project name to proposed name
             if_config_vars['project_name'] = project_name
             # try to add new project to system
             if 'system_name' in if_config_vars and len(if_config_vars['system_name']) != 0:
                 system_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/projects/update')
-                output_update_project = subprocess.check_output('no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars['token'] + '&operation=updateprojsettings&projectName=' + project_name + '&systemName=' + if_config_vars['system_name'] + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + system_url + '?tzOffset=-18000000', shell=True)
+                output_update_project = subprocess.check_output(
+                    'no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars[
+                        'token'] + '&operation=updateprojsettings&projectName=' + project_name + '&systemName=' +
+                    if_config_vars[
+                        'system_name'] + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + system_url + '?tzOffset=-18000000',
+                    shell=True)
         except subprocess.CalledProcessError as e:
-            logger.error('Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars['project_name'])
+            logger.error('Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars[
+                'project_name'])
 
 
 def get_field_index(field_names, field, label, is_required=False):
@@ -537,11 +521,11 @@ def get_json_size_bytes(json_data):
 
 
 def get_all_files(files, file_regex_c):
-    return [ i for j in
-                map(lambda k:
-                    get_file_list_for_directory(k, file_regex_c),
+    return [i for j in
+            map(lambda k:
+                get_file_list_for_directory(k, file_regex_c),
                 files)
-            for i in j if i ]
+            for i in j if i]
 
 
 def get_file_list_for_directory(root_path='/', file_name_regex_c=''):
@@ -609,7 +593,9 @@ def is_named_data_field(setting_value):
     return '::' in setting_value
 
 
-def merge_data(field, value, data={}):
+def merge_data(field, value, data=None):
+    if data is None:
+        data = {}
     fields = field.split(JSON_LEVEL_DELIM)
     for i in range(len(fields) - 1):
         field = fields[i]
@@ -622,12 +608,12 @@ def merge_data(field, value, data={}):
 
 def parse_formatted(message, setting_value, default='', allow_list=False, remove=False):
     """ fill a format string with values """
-    fields = { field: get_json_field(message,
-                                     field,
-                                     default=0 if default == 0 else '', # special case for evaluate func
-                                     allow_list=allow_list,
-                                     remove=remove)
-              for field in FORMAT_STR.findall(setting_value) }
+    fields = {field: get_json_field(message,
+                                    field,
+                                    default=0 if default == 0 else '',  # special case for evaluate func
+                                    allow_list=allow_list,
+                                    remove=remove)
+              for field in FORMAT_STR.findall(setting_value)}
     if len(fields) == 0:
         return default
     return setting_value.format(**fields)
@@ -637,7 +623,7 @@ def get_data_values(timestamp, message):
     setting_values = agent_config_vars['data_fields'] or message.keys()
     # reverse list so it's in priority order, as shared fields names will get overwritten
     setting_values.reverse()
-    data = { x: dict() for x in timestamp }
+    data = {x: dict() for x in timestamp}
     for setting_value in setting_values:
         name, value = get_data_value(message, setting_value)
         if isinstance(value, (set, tuple, list)):
@@ -686,7 +672,7 @@ def get_data_value(message, setting_value):
                                  default='',
                                  allow_list=True,
                                  remove=False)
-    return (name, value)
+    return name, value
 
 
 def get_complex_value(message, this_field, metadata, that_field, default='', allow_list=False, remove=False):
@@ -706,7 +692,8 @@ def get_complex_value(message, this_field, metadata, that_field, default='', all
                 key, value = param.split('=')
                 try:
                     value = json.loads(value)
-                except Exception:
+                except Exception as e:
+                    logger.debug(e)
                     value = value
             else:
                 key = param
@@ -768,10 +755,10 @@ def get_single_value(message, setting_value, default='', allow_list=False, remov
                                remove=remove)
     else:
         return get_json_field_by_pri(message,
-                                    [i for i in setting_value],
-                                    default=default,
-                                    allow_list=allow_list,
-                                    remove=remove)
+                                     [i for i in setting_value],
+                                     default=default,
+                                     allow_list=allow_list,
+                                     remove=remove)
 
 
 def get_json_field_by_pri(message, pri_list, default='', allow_list=False, remove=False):
@@ -788,11 +775,11 @@ def get_json_field_by_pri(message, pri_list, default='', allow_list=False, remov
 
 def get_json_field(message, setting_value, default='', allow_list=False, remove=False):
     field_val = json_format_field_value(
-                    _get_json_field_helper(
-                        message,
-                        setting_value.split(JSON_LEVEL_DELIM),
-                        allow_list=allow_list,
-                        remove=remove))
+        _get_json_field_helper(
+            message,
+            setting_value.split(JSON_LEVEL_DELIM),
+            allow_list=allow_list,
+            remove=remove))
     if len(field_val) == 0:
         field_val = default
     return field_val
@@ -822,8 +809,8 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
         if len(next_fields) == 0 and remove:
             # last field to grab, so remove it
             nested_value.pop(next_field)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(e)
 
     # check the next value
     if next_value is None:
@@ -836,7 +823,8 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     # sometimes payloads come in formatted
     try:
         next_value = json.loads(next_value)
-    except Exception as ex:
+    except Exception as e:
+        logger.debug(e)
         next_value = json.loads(json.dumps(next_value))
 
     # handle simple lists
@@ -862,26 +850,26 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     elif isinstance(next_value, dict):
         # there's more tree to walk down
         return _get_json_field_helper(
-                json.loads(json.dumps(next_value)),
-                next_fields,
-                allow_list=allow_list,
-                remove=remove)
+            json.loads(json.dumps(next_value)),
+            next_fields,
+            allow_list=allow_list,
+            remove=remove)
     else:
         # catch-all
         return ''
 
 
-def json_gather_list_values(l, fields, remove=False):
+def json_gather_list_values(values, fields, remove=False):
     sub_field_value = []
     # treat each item in the list as a potential tree to walk down
-    for sub_value in l:
+    for sub_value in values:
         fields_copy = list(fields[i] for i in range(len(fields)))
         json_value = json_format_field_value(
-                _get_json_field_helper(
-                    sub_value,
-                    fields_copy,
-                    allow_list=True,
-                    remove=remove))
+            _get_json_field_helper(
+                sub_value,
+                fields_copy,
+                allow_list=True,
+                remove=remove))
         if len(json_value) != 0:
             sub_field_value.append(json_value)
     # return the full list of field values
@@ -901,6 +889,7 @@ def json_format_field_value(value):
     try:
         return str(value)
     except Exception as e:
+        logger.debug(e)
         return str(value.encode('utf-8'))
 
 
@@ -913,9 +902,9 @@ def parse_json_message(messages):
             parse_json_message_single(messages)
         else:
             top_level = _get_json_field_helper(
-                    messages,
-                    agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM),
-                    allow_list=True)
+                messages,
+                agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM),
+                allow_list=True)
             if isinstance(top_level, (list, set, tuple)):
                 for message in top_level:
                     parse_json_message_single(message)
@@ -924,7 +913,7 @@ def parse_json_message(messages):
 
 
 def parse_json_message_single(message):
-    message = json.loads(json.dumps(message))
+    # message = json.loads(json.dumps(message))
     # filter
     if len(agent_config_vars['filters_include']) != 0:
         # for each provided filter
@@ -986,7 +975,8 @@ def parse_json_message_single(message):
                                       'timestamp_field',
                                       remove=True)
         timestamp = [timestamp]
-    except ListNotAllowedError as lnae:
+    except ListNotAllowedError as e:
+        logger.debug(e)
         timestamp = get_setting_value(message,
                                       'timestamp_field',
                                       remove=True,
@@ -1003,6 +993,8 @@ def parse_json_message_single(message):
     for timestamp, report_data in data.items():
         # check if this is within the time range
         ts = get_timestamp_from_date_string(timestamp)
+        if not ts:
+            continue
         if long((time.time() - if_config_vars['run_interval']) * 1000) > ts:
             logger.debug('skipping message with timestamp {}'.format(ts))
             continue
@@ -1011,23 +1003,25 @@ def parse_json_message_single(message):
             for data_field, data_value in data_folded.items():
                 if data_value is not None:
                     metric_handoff(
-                            ts,
-                            data_field,
-                            data_value,
-                            instance,
-                            device)
+                        ts,
+                        data_field,
+                        data_value,
+                        instance,
+                        device)
         else:
             log_handoff(ts, report_data, instance, device)
 
 
-def label_message(message, fields=[]):
+def label_message(message, fields=None):
     """ turns unlabeled, split data into labeled data """
+    if fields is None:
+        fields = []
     if agent_config_vars['data_format'] in {'CSV', 'CSVTAIL', 'IFEXPORT'}:
         fields = agent_config_vars['csv_field_names']
-    json = dict()
+    data = dict()
     for i in range(minlen(fields, message)):
-        json[fields[i]] = message[i]
-    return json
+        data[fields[i]] = message[i]
+    return data
 
 
 def minlen(one, two):
@@ -1039,6 +1033,8 @@ def parse_csv_message(message):
     if len(agent_config_vars['filters_include']) != 0:
         # for each provided filter, check if there are any allowed valued
         is_valid = False
+        filter_check = None
+        filter_vals = None
         for _filter in agent_config_vars['filters_include']:
             filter_field = _filter.split(':')[0]
             filter_vals = _filter.split(':')[1].split(',')
@@ -1110,6 +1106,8 @@ def parse_csv_data(csv_data, instance, device=''):
 
 def parse_csv_row(row, field_names, instance, device=''):
     timestamp = get_timestamp_from_date_string(row.pop(0))
+    if not timestamp:
+        return
     if 'METRIC' in if_config_vars['project_type']:
         for i in range(len(row)):
             metric_handoff(timestamp, field_names[i], row[i], instance, device)
@@ -1122,62 +1120,39 @@ def parse_csv_row(row, field_names, instance, device=''):
 
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
-    timestamp_datetime = get_datetime_from_date_string(date_string)
-    return get_timestamp_from_datetime(timestamp_datetime)
-
-
-def get_datetime_from_date_string(date_string):
-    timestamp_datetime = date_string.partition('.')[0]
-    if 'strip_tz' in agent_config_vars and agent_config_vars['strip_tz']:
-        date_string = ''.join(agent_config_vars['strip_tz_fmt'].split(date_string))
+    datetime_obj = None
+    epoch = None
     if 'timestamp_format' in agent_config_vars:
         for timestamp_format in agent_config_vars['timestamp_format']:
             try:
                 if timestamp_format == 'epoch':
-                    timestamp_datetime = get_datetime_from_unix_epoch(date_string)
+                    if 13 <= len(date_string) < 15:
+                        timestamp = int(date_string) / 1000
+                        datetime_obj = arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone)
+                    elif 9 <= len(date_string) < 13:
+                        timestamp = int(date_string)
+                        datetime_obj = arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone)
+                    else:
+                        raise
                 else:
-                    timestamp_datetime = datetime.strptime(date_string,
-                                                           timestamp_format)
+                    datetime_obj = arrow.get(date_string, timestamp_format, tzinfo=agent_config_vars['timezone'].zone)
                 break
             except Exception as e:
-                logger.info('timestamp {} does not match {}'.format(
-                    date_string,
-                    timestamp_format))
+                logger.debug(e)
+                logger.debug('timestamp {} does not match {}'.format(date_string, timestamp_format))
                 continue
     else:
         try:
-            timestamp_datetime = dateutil.parse.parse(date_string)
-        except:
-            timestamp_datetime = get_datetime_from_unix_epoch(date_string)
-            agent_config_vars['timestamp_format'] = ['epoch']
+            datetime_obj = arrow.get(date_string, tzinfo=agent_config_vars['timezone'].zone)
+        except Exception as e:
+            logger.debug(e)
+            logger.error('timestamp {} can not parse'.format(date_string))
 
-    return timestamp_datetime
+    # get epoch (misc)
+    if datetime_obj:
+        epoch = int(datetime_obj.float_timestamp * 1000)
 
-
-def get_timestamp_from_datetime(timestamp_datetime):
-    # add tzinfo
-    timestamp_localize = agent_config_vars['timezone'].localize(timestamp_datetime)
-
-    # calc seconds since Unix Epoch 0
-    epoch = long((timestamp_localize - datetime(1970, 1, 1, tzinfo=agent_config_vars['timezone'])).total_seconds()) * 1000
     return epoch
-
-
-def get_datetime_from_unix_epoch(date_string):
-    try:
-        # strip leading whitespace and zeros
-        epoch = date_string.lstrip(' 0')
-        # roughly check for a timestamp between ~1973 - ~2286
-        if len(epoch) in range(13, 15):
-            epoch = int(epoch) / 1000
-        elif len(epoch) in range(9, 13):
-            epoch = int(epoch)
-
-        return datetime.fromtimestamp(epoch)
-    except ValueError:
-        # if the date cannot be converted into a number by built-in long()
-        logger.warn('Date format not defined & data does not look like unix epoch: {}'.format(date_string))
-        sys.exit(1)
 
 
 def make_safe_instance_string(instance, device=''):
@@ -1221,6 +1196,7 @@ def run_subproc_once(command, **passthrough):
 
 
 def run_subproc_background(command, **passthrough):
+    proc = None
     command = format_command(command)
     try:
         proc = subprocess.Popen(command,
@@ -1233,13 +1209,13 @@ def run_subproc_background(command, **passthrough):
         logger.warn(e)
     finally:
         # make sure process exits
-        proc.terminate()
-        proc.wait()
-        pass
+        if proc:
+            proc.terminate()
+            proc.wait()
 
 
 def format_command(cmd):
-    if not isinstance(cmd, (list, tuple)): # no sets, as order matters
+    if not isinstance(cmd, (list, tuple)):  # no sets, as order matters
         cmd = shlex.split(cmd)
     return list(cmd)
 
@@ -1255,15 +1231,15 @@ def set_logger_config(level):
     logging_handler_out.setLevel(logging.DEBUG)
     # create a logging format
     formatter = logging.Formatter(
-            '{ts} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
-                ts='%(asctime)s',
-                pid='%(process)d',
-                lvl='%(levelname)-8s',
-                mod='%(module)s',
-                func='%(funcName)s',
-                line='%(lineno)d',
-                msg='%(message)s'),
-            ISO8601[0])
+        '{ts} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
+            ts='%(asctime)s',
+            pid='%(process)d',
+            lvl='%(levelname)-8s',
+            mod='%(module)s',
+            func='%(funcName)s',
+            line='%(lineno)d',
+            msg='%(message)s'),
+        ISO8601[0])
     logging_handler_out.setFormatter(formatter)
     logger_obj.addHandler(logging_handler_out)
 
@@ -1294,14 +1270,23 @@ def print_summary_info():
 
 
 def initialize_data_gathering(thread_number):
+    reset_metric_buffer()
     reset_track()
     track['chunk_count'] = 0
     track['entry_count'] = 0
 
     start_data_processing(thread_number)
 
+    # move all buffer data to current data, and send
+    while metric_buffer['buffer_ts_list']:
+        (ts, key) = metric_buffer['buffer_ts_list'].pop()
+        transpose_metrics(ts, key)
+        if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+            logger.debug('Sending buffer chunk')
+            send_data_wrapper()
+
     # last chunk
-    if len(track['current_row']) > 0 or len(track['current_dict']) > 0:
+    if len(track['current_row']) > 0:
         logger.debug('Sending last chunk')
         send_data_wrapper()
 
@@ -1310,12 +1295,20 @@ def initialize_data_gathering(thread_number):
         if_config_vars['project_type'].lower(), track['entry_count']))
 
 
+def reset_metric_buffer():
+    metric_buffer['buffer_key_list'] = []
+    metric_buffer['buffer_ts_list'] = []
+    metric_buffer['buffer_dict'] = {}
+
+    metric_buffer['buffer_collected_list'] = []
+    metric_buffer['buffer_collected_dict'] = {}
+
+
 def reset_track():
     """ reset the track global for the next chunk """
     track['start_time'] = time.time()
     track['line_count'] = 0
     track['current_row'] = []
-    track['current_dict'] = dict()
 
 
 #########################################
@@ -1342,7 +1335,8 @@ def send_log(timestamp, data, instance, device=''):
     track['current_row'].append(entry)
     track['line_count'] += 1
     track['entry_count'] += 1
-    if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
+    if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (
+            time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
         send_data_wrapper()
     elif track['entry_count'] % 100 == 0:
         logger.debug('Current data object size: {} bytes'.format(
@@ -1356,7 +1350,7 @@ def prepare_log_entry(timestamp, data, instance, device=''):
     if 'INCIDENT' in if_config_vars['project_type'] or 'DEPLOYMENT' in if_config_vars['project_type']:
         entry['timestamp'] = timestamp
         entry['instanceName'] = make_safe_instance_string(instance, device)
-    else: # LOG or ALERT
+    else:  # LOG or ALERT
         entry['eventId'] = timestamp
         entry['tag'] = make_safe_instance_string(instance, device)
     return entry
@@ -1366,84 +1360,101 @@ def prepare_log_entry(timestamp, data, instance, device=''):
 # Functions to handle Metric data #
 ###################################
 def metric_handoff(timestamp, field_name, data, instance, device=''):
-    add_and_send_metric(timestamp, field_name, data, instance or HOSTNAME, device)
+    send_metric(timestamp, field_name, data, instance or HOSTNAME, device)
 
 
-def add_and_send_metric(timestamp, field_name, data, instance, device=''):
+def send_metric(timestamp, field_name, data, instance, device=''):
     # validate data
     try:
         data = float(data)
     except Exception as e:
         logger.warning(e)
         logger.warning(
-                'timestamp: {}\nfield_name: {}\ninstance: {}\ndevice: {}\ndata: {}'.format(
+            'timestamp: {}\nfield_name: {}\ninstance: {}\ndevice: {}\ndata: {}'.format(
                 timestamp, field_name, instance, device, data))
     else:
-        append_metric_data_to_entry(timestamp, field_name, data, instance, device)
-        send_metric()
+        append_metric_data_to_buffer(timestamp, field_name, data, instance, device)
+        track['entry_count'] += 1
+
+        # send data if all metrics of instance is collected
+        while metric_buffer['buffer_collected_list']:
+            (ts, key, index) = metric_buffer['buffer_collected_list'].pop()
+            del metric_buffer['buffer_ts_list'][index]
+            metric_buffer['buffer_collected_dict'].pop(key)
+            transpose_metrics(ts, key)
+            if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+                logger.debug('Sending buffer chunk')
+                send_data_wrapper()
+
+        # send data if buffer size is bigger than threshold
+        while get_json_size_bytes(metric_buffer['buffer_dict']) >= agent_config_vars['metric_buffer_size'] and \
+                metric_buffer['buffer_ts_list']:
+            (ts, key) = metric_buffer['buffer_ts_list'].pop()
+            transpose_metrics(ts, key)
+            if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+                logger.debug('Sending buffer chunk')
+                send_data_wrapper()
+
+        # send data
+        if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (
+                time.time() - track['start_time']) >= if_config_vars['run_interval']:
+            send_data_wrapper()
+        elif track['entry_count'] % 500 == 0:
+            logger.debug('Buffer data object size: {} bytes'.format(
+                get_json_size_bytes(metric_buffer['buffer_dict'])))
 
 
-def send_metric():
-    track['entry_count'] += 1
-    if get_json_size_bytes(track['current_dict']) >= if_config_vars['chunk_size'] or (time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
-        send_data_wrapper()
-    elif track['entry_count'] % 500 == 0:
-        logger.debug('Current data object size: {} bytes'.format(
-            get_json_size_bytes(track['current_dict'])))
-
-
-def append_metric_data_to_entry(timestamp, field_name, data, instance, device=''):
+def append_metric_data_to_buffer(timestamp, field_name, data, instance, device=''):
     """ creates the metric entry """
-    key = '{}[{}]'.format(make_safe_metric_key(field_name),
-                          make_safe_instance_string(instance, device))
     ts_str = str(timestamp)
-    if ts_str not in track['current_dict']:
-        track['current_dict'][ts_str] = dict()
-    current_obj = track['current_dict'][ts_str]
+    instance_str = make_safe_instance_string(instance, device)
+    key = '{}-{}'.format(ts_str, instance_str)
+    metric_str = make_safe_metric_key(field_name)
+    metric_key = '{}[{}]'.format(metric_str, instance_str)
 
-    # use the next non-null value to overwrite the prev value
-    # for the same metric in the same timestamp
-    if key in current_obj.keys():
-        if data is not None and len(str(data)) > 0:
-            current_obj[key] += '|' + str(data)
-    else:
-        current_obj[key] = str(data)
-    track['current_dict'][ts_str] = current_obj
+    if key not in metric_buffer['buffer_key_list']:
+        # add timestamp in buffer_ts_list and buffer_dict
+        metric_buffer['buffer_key_list'].append(key)
+        metric_buffer['buffer_ts_list'].append((timestamp, key))
+        metric_buffer['buffer_ts_list'].sort(key=lambda elem: elem[0], reverse=True)
+        metric_buffer['buffer_dict'][key] = dict()
+        metric_buffer['buffer_collected_dict'][key] = []
+    metric_buffer['buffer_dict'][key][metric_key] = str(data)
+    metric_buffer['buffer_collected_dict'][key].append(metric_str)
+
+    # if all metrics of ts_instance is collected, then send these data
+    if agent_config_vars['all_metrics'] and set(agent_config_vars['all_metrics']) <= set(
+            metric_buffer['buffer_collected_dict'][key]):
+        metric_buffer['buffer_collected_list'].append(
+            (timestamp, key, metric_buffer['buffer_ts_list'].index((timestamp, key))))
 
 
-def transpose_metrics():
-    """ flatten data up to the timestamp"""
-    for timestamp, kvs in track['current_dict'].items():
-        track['line_count'] += 1
-        new_row = dict()
-        new_row['timestamp'] = timestamp
-        for key, value in kvs.items():
-            if '|' in value:
-                value = statistics.median(
-                    map(lambda v: float(v), value.split('|')))
-            new_row[key] = str(value)
-        track['current_row'].append(new_row)
+def transpose_metrics(ts, key):
+    metric_buffer['buffer_key_list'].remove(key)
+    track['current_row'].append(
+        dict({'timestamp': str(ts)}, **metric_buffer['buffer_dict'].pop(key))
+    )
 
 
 def build_metric_name_map():
-    '''
-    Contstructs a hash of <raw_metric_name>: <formatted_metric_name>
-    '''
-    # get metrics from the global
-    metrics = agent_config_vars['metrics_copy']
+    """
+    Constructs a hash of <raw_metric_name>: <formatted_metric_name>
+    """
     # initialize the hash of formatted names
     agent_config_vars['metrics_names'] = dict()
-    tree = build_sentence_tree(metrics)
-    min_tree = fold_up(tree, sentence_tree=True)
+    # get metrics from the global
+    # metrics = agent_config_vars['metrics_copy']
+    # tree = build_sentence_tree(metrics)
+    # min_tree = fold_up(tree, sentence_tree=True)
 
 
 def build_sentence_tree(sentences):
-    '''
+    """
     Takes a list of sentences and builds a tree from the words
-        I ate two red apples ----\                     /---> "red" ----> "apples" -> "_name" -> "I ate two red apples"
-        I ate two green pears ----> "I" -> "ate" -> "two" -> "green" --> "pears" --> "_name" -> "I ate two green pears"
-        I ate one yellow banana -/             \--> "one" -> "yellow" -> "banana" -> "_name" -> "I ate one yellow banana"
-    '''
+        I ate two red apples ---> "red" ----> "apples" -> "_name" -> "I ate two red apples"
+        I ate two green pears ---> "I" -> "ate" -> "two" -> "green" --> "pears" --> "_name" -> "I ate two green pears"
+        I ate one yellow banana ---> "one" -> "yellow" -> "banana" -> "_name" -> "I ate one yellow banana"
+    """
     tree = dict()
     for sentence in sentences:
         words = format_sentence(sentence)
@@ -1458,10 +1469,10 @@ def build_sentence_tree(sentences):
 
 
 def format_sentence(sentence):
-    '''
+    """
     Takes a sentence and chops it into an array by word
     Implementation-specifc
-    '''
+    """
     words = sentence.strip(':')
     words = COLONS.sub('/', words)
     words = UNDERSCORE.sub('/', words)
@@ -1470,9 +1481,9 @@ def format_sentence(sentence):
 
 
 def fold_up(tree, sentence_tree=False, value_tree=False):
-    '''
+    """
     Entry point for fold_up. See fold_up_helper for details
-    '''
+    """
     folded = dict()
     for node_name, node in tree.items():
         fold_up_helper(
@@ -1485,21 +1496,21 @@ def fold_up(tree, sentence_tree=False, value_tree=False):
 
 
 def fold_up_helper(current_path, node_name, node, sentence_tree=False, value_tree=False):
-    '''
+    """
     Recursively build a new sentence tree, where,
         for each node that has only one child,
         that child is "folded up" into its parent.
     The tree therefore treats unique phrases as words s.t.
                       /---> "red apples"
         "I ate" -> "two" -> "green pears"
-             \---> "one" -> "yellow banana"
+             /---> "one" -> "yellow banana"
     If sentence_tree=True and there are terminal '_name' nodes,
         this also returns a hash of
             <raw_name : formatted name>
     If value_tree=True and branches terminate in values,
         this also returns a hash of
             <formatted path : value>
-    '''
+    """
     while isinstance(node, dict) and (len(node.keys()) == 1 or '_name' in node.keys()):
         keys = node.keys()
         # if we've reached a terminal end
@@ -1533,8 +1544,6 @@ def fold_up_helper(current_path, node_name, node, sentence_tree=False, value_tre
 ################################
 def send_data_wrapper():
     """ wrapper to send data """
-    if 'METRIC' in if_config_vars['project_type']:
-        transpose_metrics()
     logger.debug('--- Chunk creation time: {} seconds ---'.format(
         round(time.time() - track['start_time'], 2)))
     send_data_to_if(track['current_row'])
@@ -1578,9 +1587,10 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
 
     global REQUESTS
     REQUESTS.update(request_passthrough)
-    #logger.debug(REQUESTS)
+    # logger.debug(REQUESTS)
 
-    for i in range(ATTEMPTS):
+    req_num = 0
+    for req_num in range(ATTEMPTS):
         try:
             response = req(url, **request_passthrough)
             if response.status_code == httplib.OK:
@@ -1601,7 +1611,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
             logger.exception('Exception ' + str(e))
             break
 
-    logger.error('Failed! Gave up after {} attempts.'.format(i + 1))
+    logger.error('Failed! Gave up after {} attempts.'.format(req_num + 1))
     return -1
 
 
@@ -1657,7 +1667,7 @@ def get_data_field_from_project_type():
         return 'incidentData'
     elif 'DEPLOYMENT' in if_config_vars['project_type']:
         return 'deploymentData'
-    else: # MERTIC, LOG, ALERT
+    else:  # MERTIC, LOG, ALERT
         return 'metricData'
 
 
@@ -1668,7 +1678,7 @@ def get_api_from_project_type():
         return 'incidentdatareceive'
     elif 'DEPLOYMENT' in if_config_vars['project_type']:
         return 'deploymentEventReceive'
-    else: # MERTIC, LOG, ALERT
+    else:  # MERTIC, LOG, ALERT
         return 'customprojectrawdata'
 
 
@@ -1703,8 +1713,6 @@ if __name__ == "__main__":
     PERIOD = regex.compile(r"\.")
     COMMA = regex.compile(r"\,")
     NON_ALNUM = regex.compile(r"[^a-zA-Z0-9]")
-    PCT_z_FMT = regex.compile(r"[\+\-][0-9]{2}[\:]?[0-9]{2}|\w+\s+\w+\s+\w+")
-    PCT_Z_FMT = regex.compile(r"[A-Z]{3,4}")
     FORMAT_STR = regex.compile(r"{(.*?)}")
     HOSTNAME = socket.gethostname().partition('.')[0]
     ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
@@ -1713,6 +1721,7 @@ if __name__ == "__main__":
     ATTEMPTS = 3
     REQUESTS = dict()
     track = dict()
+    metric_buffer = dict()
 
     # get config
     cli_config_vars = get_cli_config_vars()
@@ -1723,7 +1732,15 @@ if __name__ == "__main__":
     print_summary_info()
 
     # start data processing
-    for i in range(0, cli_config_vars['threads']):
-        Process(target=initialize_data_gathering,
-                args=(i,)
-                ).start()
+    process_list = []
+    for process_num in range(0, cli_config_vars['threads']):
+        p = Process(target=initialize_data_gathering,
+                    args=(process_num,)
+                    )
+        process_list.append(p)
+
+    for p in process_list:
+        p.start()
+
+    for p in process_list:
+        p.join()
