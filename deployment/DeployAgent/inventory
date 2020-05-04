@@ -148,5 +148,5 @@ disableTdProxy=no
 
 # Hosts list for beats' logstash output, such as metricbeat,
 # seperated by comma, e.g. "10.10.10.11:5044","10.10.10.12:5044"
-# If empty, role's default value.
+# If empty, use default "localhost:5044".
 beatsLogstashHosts=
