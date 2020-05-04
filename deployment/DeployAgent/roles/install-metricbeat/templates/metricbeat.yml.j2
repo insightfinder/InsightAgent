@@ -27,6 +27,12 @@ metricbeat.modules:
 {{ metricbeat_general_conf | to_nice_yaml(indent=2) }}
 {% endif %}
 
+#================================ Processors ===================================
+processors:
+- add_host_metadata:
+    netinfo.enabled: true
+
+
 #================================ Outputs ======================================
 #----------------------------- Logstash output ---------------------------------
 output.logstash:
