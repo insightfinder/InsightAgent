@@ -36,7 +36,7 @@ processors:
 #================================ Outputs ======================================
 #----------------------------- Logstash output ---------------------------------
 output.logstash:
-  enabled: {{ metricbeat_output_logstash_enabled }}
+  enabled: true
 {% if beatsLogstashHosts %}
   hosts: {{ beatsLogstashHosts }}
 {% else %}

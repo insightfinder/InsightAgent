@@ -33,11 +33,9 @@ Below are available variables with default value:
 
   General section of metricbeat configuration, must be dict variable. (Optional)
 
-* metricbeat_outputs_conf:
+* metricbeat_output_logstash_hosts: "localhost:5044"
 
-  Outputs section of metricbeat configuration, must be dict variable. (Optional)
-
-  If it's empty, file output will be used by default and the output file is under /tmp/metricbeat/. 
+  Hosts list of logstash output. (Mandatory)
 
 Dependencies
 ------------
