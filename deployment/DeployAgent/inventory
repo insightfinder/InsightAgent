@@ -46,7 +46,7 @@ no_proxy=
 ifAction=install
 
 ##Login User In Insightfinder Application
-ifUserName=user
+ifUserName=
 
 ##Project Name In Insightfinder Application(for individial agent install)
 # When agent type is log-metric, this signifies metric project name(collectd)
@@ -55,7 +55,7 @@ ifProjectName=
 logProjectName=
 
 ##User's License Key in Application
-ifLicenseKey=a333bd39662ad1edf64e99e97e4b776109827234
+ifLicenseKey=
 
 ##Sampling interval could be an integer indicating the number of minutes or "10s" indicating 10 seconds.
 ifSamplingInterval=60s
