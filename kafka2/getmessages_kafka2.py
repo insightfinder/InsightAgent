@@ -138,7 +138,7 @@ def get_agent_config_vars():
             # message parsing
             timestamp_format = config_parser.get('kafka', 'timestamp_format', raw=True)
             timestamp_field = config_parser.get('kafka', 'timestamp_field', raw=True) or 'timestamp'
-            timezone = config_parser.get('kafka', 'timezone') or 'UTC'
+            timezone = config_parser.get('kafka', 'timezone')
             instance_field = config_parser.get('kafka', 'instance_field', raw=True)
             device_field = config_parser.get('kafka', 'device_field', raw=True)
             data_fields = config_parser.get('kafka', 'data_fields', raw=True)
@@ -206,10 +206,11 @@ def get_agent_config_vars():
         else:
             config_error('timestamp_format')
 
-        if timezone not in pytz.all_timezones:
-            config_error('timezone')
-        else:
-            timezone = pytz.timezone(timezone)
+        if timezone:
+            if timezone not in pytz.all_timezones:
+                config_error('timezone')
+            else:
+                timezone = pytz.timezone(timezone)
 
         # data format
         if data_format == 'CSV':
@@ -1085,14 +1086,18 @@ def get_timestamp_from_date_string(date_string):
                 if timestamp_format == 'epoch':
                     if 13 <= len(date_string) < 15:
                         timestamp = int(date_string) / 1000
-                        datetime_obj = arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone)
+                        datetime_obj = arrow.get(timestamp)
                     elif 9 <= len(date_string) < 13:
                         timestamp = int(date_string)
-                        datetime_obj = arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone)
+                        datetime_obj = arrow.get(timestamp)
                     else:
                         raise
                 else:
-                    datetime_obj = arrow.get(date_string, timestamp_format, tzinfo=agent_config_vars['timezone'].zone)
+                    if agent_config_vars['timezone']:
+                        datetime_obj = arrow.get(date_string, timestamp_format,
+                                                 tzinfo=agent_config_vars['timezone'].zone)
+                    else:
+                        datetime_obj = arrow.get(date_string, timestamp_format)
                 break
             except Exception as e:
                 logger.debug(e)
@@ -1100,7 +1105,10 @@ def get_timestamp_from_date_string(date_string):
                 continue
     else:
         try:
-            datetime_obj = arrow.get(date_string, tzinfo=agent_config_vars['timezone'].zone)
+            if agent_config_vars['timezone']:
+                datetime_obj = arrow.get(date_string, tzinfo=agent_config_vars['timezone'].zone)
+            else:
+                datetime_obj = arrow.get(date_string)
         except Exception as e:
             logger.debug(e)
             logger.error('timestamp {} can not parse'.format(date_string))
