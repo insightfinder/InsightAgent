@@ -6,7 +6,7 @@ This agent collects data from kafka2 and sends it to Insightfinder.
 ```bash
 bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) kafka2 && cd kafka2
 vi config.ini
-sudo ./setup/install.sh --create --monitor  # install on localhost
+sudo ./setup/install.sh --create  # install on localhost
                                   ## or on multiple nodes
 sudo ./offline/remote-cp-run.sh list_of_nodes
 ```
@@ -20,12 +20,11 @@ curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/kafka2/kafk
 tar xvf kafka2.tar.gz && cd kafka2
 ```
 
-###### Copy `config.ini.template` to `config.ini` and edit it:
+###### Set up `config.ini`
 ```bash
-cp config.ini.template config.ini
-vi config.ini
+python configure.py
 ```
-See below for a further explanation of each variable.
+See below for a further explanation of each variable. 
 
 #### Automated Install (local or remote)
 ###### Review propsed changes from install:
@@ -35,7 +34,7 @@ sudo ./setup/install.sh
 
 ###### Once satisfied, run:
 ```bash
-sudo ./setup/install.sh --create --monitor
+sudo ./setup/install.sh --create
 ```
 
 ###### To deploy on multiple hosts, instead call 
@@ -73,6 +72,7 @@ sudo ./setup/cron-config.sh
 * `group_id`: Group ID to use in Kafka connection.
 * `client_id`: Client ID to use in Kafka connection.
 * `security_protocol`: Security protocol to use. Valid options are `PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL`.
+* `sasl_mechanism`: Mechanism used when `security_protocol` is `SASL_PLAINTEXT or SASL_SSL`. Valid options are `PLAIN, GSSAPI, or OAUTHBEARER`.
 * `ssl_context`: Pre-configured SSLContext for wrapping socket connections.
 * `ssl_check_hostname`: True if hostname should be checked - whether ssl handshake should verify that the certificate matches the brokers hostname.
 * `ssl_cafile`: ca file to use in certificate verification.
@@ -109,7 +109,7 @@ sudo ./setup/cron-config.sh
 }
 ```
 then this should be set to `output.parsed`.
-* **`timestamp_format`**: Format of the timestamp, in python [strftime](http://strftime.org/). If the timestamp is in Unix epoch, this can be left blank or set to `epoch`. If the timestamp is split over multiple fields, curlies can be used to indicate formatting, ie: `{YEAR} {MO} {DAY} {TIME}`; alternatively, if the timestamp can be in one of multiple fields, a priority list of field names can be given: `timestamp1,timestamp2`.
+* **`timestamp_format`**: Format of the timestamp, in python [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). If the timestamp is in Unix epoch, this can be set to `epoch`. If the timestamp is split over multiple fields, curlies can be used to indicate formatting, ie: `YYYY-MM-DD HH:mm:ss ZZ`; alternatively, if the timestamp can be in one of multiple fields, a priority list of field names can be given: `timestamp1,timestamp2`.
 * `timezone`: Timezone for the data. Note that it cannot be parsed from the timestamp, and will be discarded if only present there.
 * `timestamp_field`: Field name for the timestamp. Default is `timestamp`.
 * `instance_field`: Field name for the instance name. If not set or the field is not found, the instance name is the hostname of the machine the agent is installed on. This can also use curly formatting or a priority list.
@@ -117,7 +117,7 @@ then this should be set to `output.parsed`.
 * `data_fields`: Comma-delimited list of field names to use as data fields. If not set, all fields will be reported. Each data field can either be a field name (`name`) or a labeled field (`<name>:<value>` or `<name>:=<value>`), where `<name>` and `<value>` can be raw strings (`fieldname:fieldvalue`) or curly-formatted (`{na} [{me}]:={val} - {ue}`). If `:=` is used as the separator, `<value>` is treated as a mathematical expression that can be evaluated with `numexpr.evaluate()`.
 * `metric_name_field`: If this is set, only the first value in `data_fields` will be used as the field containing the value for the metric who's name is contained here. For example, if `data_fields = count` and `metric_name_field = status`, and the data is `{"count": 20, "status": "success"}`, then the data reported will be `success: 20`.
 * `all_metrics`: Agent will send data at once when all metrics in `all_metrics` of instance is collected.
-* **`metric_buffer_size_mb`**: Size of buffer (in MB) memory used to fuse metrics. Default is `10`.
+* **`metric_buffer_size_mb`**: Size of buffer (in MB) to fuse metrics. Default is `10`.
 * `agent_http_proxy`: HTTP proxy used to connect to the agent.
 * `agent_https_proxy`: As above, but HTTPS.
 * **`user_name`**: User name in InsightFinder
