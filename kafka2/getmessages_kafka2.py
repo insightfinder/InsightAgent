@@ -8,10 +8,10 @@ import socket
 import sys
 import time
 import pytz
+import arrow
 from optparse import OptionParser
 from multiprocessing import Process
 from datetime import datetime
-import dateutil
 import urlparse
 import httplib
 import requests
@@ -200,16 +200,9 @@ def get_agent_config_vars():
             if timestamp_field in data_fields:
                 data_fields.pop(data_fields.index(timestamp_field))
 
-        # timestamp
-        ts_format_info = {}
+        # timestamp format
         if len(timestamp_format) != 0:
-            timestamp_format = filter(lambda x: x, timestamp_format.split(','))
-            for ts_format in timestamp_format:
-                if '%z' in ts_format or '%Z' in ts_format:
-                    ts_format, strip_info = strip_tz_info(ts_format)
-                    ts_format_info[ts_format] = strip_info
-                elif timestamp_format:
-                    ts_format_info[ts_format] = {'strip_tz': False, 'strip_tz_fmt': ''}
+            timestamp_format = filter(lambda x: x.strip(), timestamp_format.split(','))
         else:
             config_error('timestamp_format')
 
@@ -262,7 +255,6 @@ def get_agent_config_vars():
             'csv_field_delimiter': csv_field_delimiter,
             'json_top_level': json_top_level,
             'timestamp_format': timestamp_format,
-            'ts_format_info': ts_format_info,
             'timezone': timezone,
             'timestamp_field': timestamp_field,
             'instance_field': instance_field,
@@ -430,26 +422,6 @@ def config_error(setting=''):
 def config_error_no_config():
     logger.error('No config file found. Exiting...')
     sys.exit(1)
-
-
-def strip_tz_info(timestamp_format):
-    # strptime() doesn't allow timezone info
-    if '%Z' in timestamp_format:
-        position = timestamp_format.index('%Z')
-        strip_tz_fmt = PCT_Z_FMT
-    if '%z' in timestamp_format:
-        position = timestamp_format.index('%z')
-        strip_tz_fmt = PCT_z_FMT
-
-    if len(timestamp_format) > (position + 2):
-        timestamp_format = timestamp_format[:position] + timestamp_format[position + 2:]
-    else:
-        timestamp_format = timestamp_format[:position]
-    if agent_config_vars['timezone'] == pytz.timezone('UTC'):
-        logger.warning(
-            'Time zone info will be stripped from timestamps, but no time zone info was supplied in the config. Assuming UTC')
-
-    return timestamp_format, {'strip_tz': True, 'strip_tz_fmt': strip_tz_fmt}
 
 
 def check_csv_fieldnames(csv_field_names, all_fields):
@@ -985,6 +957,8 @@ def parse_json_message_single(message):
     # hand off
     for timestamp, report_data in data.items():
         ts = get_timestamp_from_date_string(timestamp)
+        if not ts:
+            continue
         if 'METRIC' in if_config_vars['project_type']:
             data_folded = fold_up(report_data, value_tree=True)  # put metric data in top level
             for data_field, data_value in data_folded.items():
@@ -1089,6 +1063,8 @@ def parse_csv_data(csv_data, instance, device=''):
 
 def parse_csv_row(row, field_names, instance, device=''):
     timestamp = get_timestamp_from_date_string(row.pop(0))
+    if not timestamp:
+        return
     if 'METRIC' in if_config_vars['project_type']:
         for i in range(len(row)):
             metric_handoff(timestamp, field_names[i], row[i], instance, device)
@@ -1101,65 +1077,39 @@ def parse_csv_row(row, field_names, instance, device=''):
 
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
-    epoch, timestamp_datetime = get_datetime_from_date_string(date_string)
-    return get_timestamp_from_datetime(epoch, timestamp_datetime)
-
-
-def get_datetime_from_date_string(date_string):
+    datetime_obj = None
     epoch = None
-    timestamp_datetime = date_string
     if 'timestamp_format' in agent_config_vars:
         for timestamp_format in agent_config_vars['timestamp_format']:
             try:
                 if timestamp_format == 'epoch':
-                    epoch = get_datetime_from_unix_epoch(date_string)
+                    if 13 <= len(date_string) < 15:
+                        timestamp = int(date_string) / 1000
+                        datetime_obj = arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone)
+                    elif 9 <= len(date_string) < 13:
+                        timestamp = int(date_string)
+                        datetime_obj = arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone)
+                    else:
+                        raise
                 else:
-                    strip_info = agent_config_vars['ts_format_info'][timestamp_format]
-                    if strip_info['strip_tz']:
-                        date_string = ''.join(strip_info['strip_tz_fmt'].split(date_string))
-                    timestamp_datetime = datetime.strptime(date_string,
-                                                           timestamp_format)
+                    datetime_obj = arrow.get(date_string, timestamp_format, tzinfo=agent_config_vars['timezone'].zone)
                 break
             except Exception as e:
-                logger.info('timestamp {} does not match {}'.format(
-                    date_string,
-                    timestamp_format))
+                logger.debug(e)
+                logger.debug('timestamp {} does not match {}'.format(date_string, timestamp_format))
                 continue
     else:
         try:
-            timestamp_datetime = dateutil.parse.parse(date_string)
-        except:
-            epoch = get_datetime_from_unix_epoch(date_string)
-            agent_config_vars['timestamp_format'] = ['epoch']
+            datetime_obj = arrow.get(date_string, tzinfo=agent_config_vars['timezone'].zone)
+        except Exception as e:
+            logger.debug(e)
+            logger.error('timestamp {} can not parse'.format(date_string))
 
-    return epoch, timestamp_datetime
+    # get epoch (misc)
+    if datetime_obj:
+        epoch = int(datetime_obj.float_timestamp * 1000)
 
-
-def get_timestamp_from_datetime(epoch, timestamp_datetime):
-    if agent_config_vars['timezone'].zone == 'UTC' and epoch:
-        return epoch * 1000
-
-    timestamp_localize = agent_config_vars['timezone'].localize(timestamp_datetime)
-
-    epoch = long((timestamp_localize - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
     return epoch
-
-
-def get_datetime_from_unix_epoch(date_string):
-    try:
-        # strip leading whitespace and zeros
-        epoch = date_string.lstrip(' 0')
-        # roughly check for a timestamp between ~1973 - ~2286
-        if len(epoch) in range(13, 15):
-            epoch = int(epoch) / 1000
-        elif len(epoch) in range(9, 13):
-            epoch = int(epoch)
-
-        return epoch
-    except ValueError:
-        # if the date cannot be converted into a number by built-in long()
-        logger.warn('Date format not defined & data does not look like unix epoch: {}'.format(date_string))
-        sys.exit(1)
 
 
 def make_safe_instance_string(instance, device=''):
@@ -1714,8 +1664,6 @@ if __name__ == "__main__":
     PERIOD = regex.compile(r"\.")
     COMMA = regex.compile(r"\,")
     NON_ALNUM = regex.compile(r"[^a-zA-Z0-9]")
-    PCT_z_FMT = regex.compile(r"[\+\-][0-9]{2}[\:]?[0-9]{2}")
-    PCT_Z_FMT = regex.compile(r"[A-Z]{3,4}")
     FORMAT_STR = regex.compile(r"{(.*?)}")
     HOSTNAME = socket.gethostname().partition('.')[0]
     ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
