@@ -84,35 +84,6 @@ def get_agent_config_vars():
             logger.error(cp_noe)
             config_error()
 
-        # proxies
-        agent_proxies = dict()
-        if len(agent_http_proxy) > 0:
-            agent_proxies['http'] = agent_http_proxy
-        if len(agent_https_proxy) > 0:
-            agent_proxies['https'] = agent_https_proxy
-
-        # filters
-        if len(filters_include) != 0:
-            filters_include = filters_include.split('|')
-        if len(filters_exclude) != 0:
-            filters_exclude = filters_exclude.split('|')
-
-        # fields
-        # project_field = project_field.split(',')
-        instance_field = instance_field.split(',')
-        device_field = device_field.split(',')
-        timestamp_field = timestamp_field.split(',')
-        if len(data_fields) != 0:
-            data_fields = data_fields.split(',')
-            # if project_field in data_fields:
-            #    data_fields.pop(data_fields.index(project_field))
-            if instance_field in data_fields:
-                data_fields.pop(data_fields.index(instance_field))
-            if device_field in data_fields:
-                data_fields.pop(data_fields.index(device_field))
-            if timestamp_field in data_fields:
-                data_fields.pop(data_fields.index(timestamp_field))
-
         # timestamp format
         if len(timestamp_format) != 0:
             timestamp_format = filter(lambda x: x.strip(), timestamp_format.split(','))
@@ -200,7 +171,7 @@ def get_agent_config_vars():
 
         # defaults
         if all_metrics:
-            all_metrics = all_metrics.split(',')
+            all_metrics = filter(lambda x: x.strip(), all_metrics.split(','))
 
         # add parsed variables to a global
         config_vars = {
@@ -277,6 +248,7 @@ def get_if_config_vars():
             'DEPLOYMENTREPLAY'
         }:
             config_error('project_type')
+        is_replay = 'REPLAY' in project_type
 
         if len(sampling_interval) == 0:
             if 'METRIC' in project_type:
@@ -321,7 +293,8 @@ def get_if_config_vars():
             'run_interval': int(run_interval),  # as seconds
             'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
             'if_url': if_url,
-            'if_proxies': if_proxies
+            'if_proxies': if_proxies,
+            'is_replay': is_replay
         }
 
         return config_vars
@@ -996,7 +969,7 @@ def parse_json_message_single(message):
         ts = get_timestamp_from_date_string(timestamp)
         if not ts:
             continue
-        if long((time.time() - if_config_vars['run_interval']) * 1000) > ts:
+        if not if_config_vars['is_replay'] and long((time.time() - if_config_vars['run_interval']) * 1000) > ts:
             logger.debug('skipping message with timestamp {}'.format(ts))
             continue
         if 'METRIC' in if_config_vars['project_type']:
@@ -1641,11 +1614,11 @@ def get_data_type_from_project_type():
 
 def get_insight_agent_type_from_project_type():
     if 'containerize' in agent_config_vars and agent_config_vars['containerize']:
-        if is_replay():
+        if if_config_vars['is_replay']:
             return 'containerReplay'
         else:
             return 'containerStreaming'
-    elif is_replay():
+    elif if_config_vars['is_replay']:
         if 'METRIC' in if_config_vars['project_type']:
             return 'MetricFile'
         else:
@@ -1657,11 +1630,11 @@ def get_insight_agent_type_from_project_type():
 def get_agent_type_from_project_type():
     """ use project type to determine agent type """
     if 'METRIC' in if_config_vars['project_type']:
-        if is_replay():
+        if if_config_vars['is_replay']:
             return 'MetricFileReplay'
         else:
             return 'CUSTOM'
-    elif is_replay():
+    elif if_config_vars['is_replay']:
         return 'LogFileReplay'
     else:
         return 'LogStreaming'
@@ -1688,10 +1661,6 @@ def get_api_from_project_type():
         return 'deploymentEventReceive'
     else:  # MERTIC, LOG, ALERT
         return 'customprojectrawdata'
-
-
-def is_replay():
-    return 'REPLAY' in if_config_vars['project_type']
 
 
 def initialize_api_post_data():
