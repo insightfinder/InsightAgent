@@ -1,7 +1,7 @@
 [mssql]
 ## mssql info
 # required
-server = localhost
+host = localhost
 # required
 user =
 # required
@@ -18,15 +18,25 @@ conn_properties =
 autocommit =
 tds_version =
 
-# query SQL. Use {{start_time}} or {{end_time}} to replace the query start/end time
-sql =
-# the time format in the sql, as library [arrow]. Example: YYYYMMDD
-sql_time_format =
+# query SQL. Use template filed {{start_time}} or {{end_time}} or {{extract_time}} to replace the time in sql.
+sql = """
+      SELECT
+      *
+      FROM
+      Table{{extract_time}}
+      WHERE Table{{extract_time}}.Time >= {{start_time}} and Table1.Time < {{end_time}};
+      """
+# the {{start_time}} and {{end_time}} format in sql, as library [arrow]. Example: YYYYMMDD
+sql_time_format = YYYYMMDD
+# this options will create template field {{extract_time}}, and with offset of {{end_time}}, unit is second. Example: 86400|-86400|0
+sql_extract_time_offset = 0
+# the {{extract_time}} format in sql, as library [arrow]. Example: YYYYMMDD
+sql_extract_time_format = YYYYMMDD
 
 # history data time config. If these options is set, the agent will execute sql by time range and time interval
-# time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
+# time range, Example: 2020-04-13 00:00:00,2020-04-14 00:00:00
 sql_time_range =
-# range interval, unit is misc. Example: 86400000
+# range interval, unit is second. Example: 86400
 sql_time_interval =
 
 ## filters
@@ -90,7 +100,7 @@ license_key =
 token =
 project_name = 
 # metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
-project_type = 
+project_type = metric
 sampling_interval = 1
 run_interval = 10
 # what size to limit chunks sent to IF to, as kb

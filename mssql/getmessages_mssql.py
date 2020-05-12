@@ -37,14 +37,21 @@ def start_data_processing(thread_number):
 
     # get sql string
     sql = agent_config_vars['sql']
+    sql = sql.replace('\n', ' ').replace('"""', '')
 
     # parse sql string by params
     if agent_config_vars['sql_config']:
-        for timestamp in agent_config_vars['sql_config']['sql_time_range']:
+        for timestamp in range(agent_config_vars['sql_config']['sql_time_range'][0],
+                               agent_config_vars['sql_config']['sql_time_range'][1],
+                               agent_config_vars['sql_config']['sql_time_interval']):
             sql_str = sql
             start_time = arrow.get(timestamp).format(agent_config_vars['sql_time_format'])
             end_time = arrow.get(timestamp + agent_config_vars['sql_config']['sql_time_interval']).format(
                 agent_config_vars['sql_time_format'])
+            extract_time = arrow.get(
+                timestamp + agent_config_vars['sql_config']['sql_time_interval'] + agent_config_vars[
+                    'sql_extract_time_offset']).format(agent_config_vars['sql_extract_time_format'])
+            sql_str = sql_str.replace('{{extract_time}}', extract_time)
             sql_str = sql_str.replace('{{start_time}}', start_time)
             sql_str = sql_str.replace('{{end_time}}', end_time)
 
@@ -54,6 +61,9 @@ def start_data_processing(thread_number):
         start_time = arrow.get((arrow.utcnow().float_timestamp - if_config_vars['sampling_interval'])).format(
             agent_config_vars['sql_time_format'])
         end_time = arrow.utcnow().format(agent_config_vars['sql_time_format'])
+        extract_time = arrow.get(arrow.utcnow().float_timestamp + agent_config_vars['sql_extract_time_offset']).format(
+            agent_config_vars['sql_extract_time_format'])
+        sql_str = sql_str.replace('{{extract_time}}', extract_time)
         sql_str = sql_str.replace('{{start_time}}', start_time)
         sql_str = sql_str.replace('{{end_time}}', end_time)
 
@@ -110,8 +120,8 @@ def get_agent_config_vars():
                 'charset': 'utf8',
                 'as_dict': True,
                 # connection settings
-                'timeout': config_parser.get('mssql', 'timeout'),
-                'login_timeout': config_parser.get('mssql', 'login_timeout'),
+                'timeout': int(config_parser.get('mssql', 'timeout') or '0'),
+                'login_timeout': int(config_parser.get('mssql', 'login_timeout') or '60'),
                 'appname': config_parser.get('mssql', 'appname'),
                 'port': config_parser.get('mssql', 'port'),
                 'conn_properties': config_parser.get('mssql', 'conn_properties'),
@@ -121,12 +131,16 @@ def get_agent_config_vars():
             # only keep settings with values
             mssql_kwargs = {k: v for (k, v) in mssql_config.items() if v}
 
+            # handle boolean setting
+            if config_parser.get('mssql', 'autocommit').upper() == 'FALSE':
+                mssql_kwargs['autocommit'] = False
+
             # handle required arrays
-            # server
-            if len(config_parser.get('mssql', 'server')) != 0:
-                mssql_kwargs['server'] = config_parser.get('mssql', 'server')
+            # host
+            if len(config_parser.get('mssql', 'host')) != 0:
+                mssql_kwargs['host'] = config_parser.get('mssql', 'host')
             else:
-                config_error('server')
+                config_error('host')
             if len(config_parser.get('mssql', 'user')) != 0:
                 mssql_kwargs['user'] = config_parser.get('mssql', 'user')
             else:
@@ -151,6 +165,16 @@ def get_agent_config_vars():
                 sql_time_format = config_parser.get('mssql', 'sql_time_format')
             else:
                 config_error('sql_time_format')
+            sql_extract_time_offset = 0
+            if len(config_parser.get('mssql', 'sql_extract_time_offset')) != 0:
+                sql_extract_time_offset = int(config_parser.get('mssql', 'sql_extract_time_offset'))
+            else:
+                config_error('sql_extract_time_offset')
+            sql_extract_time_format = None
+            if len(config_parser.get('mssql', 'sql_extract_time_format')) != 0:
+                sql_extract_time_format = config_parser.get('mssql', 'sql_extract_time_format')
+            else:
+                config_error('sql_extract_time_format')
 
             # sql config
             sql_config = None
@@ -294,6 +318,8 @@ def get_agent_config_vars():
             'mssql_kwargs': mssql_kwargs,
             'sql': sql,
             'sql_time_format': sql_time_format,
+            'sql_extract_time_offset': sql_extract_time_offset,
+            'sql_extract_time_format': sql_extract_time_format,
             'sql_config': sql_config,
             'proxies': agent_proxies,
             'all_metrics': all_metrics,
@@ -898,7 +924,10 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
 
     # get the next value
     next_field = next_fields.pop(0)
-    next_value = json.loads(json.dumps(nested_value.get(next_field)))
+    next_value = nested_value.get(next_field)
+    if isinstance(next_value, datetime):
+        next_value = int(arrow.get(next_value).float_timestamp * 1000)
+
     try:
         if len(next_fields) == 0 and remove:
             # last field to grab, so remove it
@@ -907,11 +936,8 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
         logger.debug(e)
 
     # check the next value
-    if next_value is None:
+    if next_value is None or not str(next_value):
         # no next value defined
-        return ''
-    elif len(next_value) == 0:
-        # no next value set
         return ''
 
     # sometimes payloads come in formatted
