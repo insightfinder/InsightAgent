@@ -939,7 +939,7 @@ def parse_json_message_single(message):
                                  'instance_field',
                                  default=HOSTNAME,
                                  remove=True)
-    logger.warn(instance)
+    logger.debug(instance)
     device = get_setting_value(message,
                                'device_field',
                                remove=True)
@@ -958,7 +958,7 @@ def parse_json_message_single(message):
     except Exception as e:
         logger.warn(e)
         sys.exit(1)
-    logger.warn(timestamp)
+    logger.debug(timestamp)
 
     # get data
     data = get_data_values(timestamp, message)
