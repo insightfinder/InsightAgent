@@ -778,7 +778,10 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
 
     # get the next value
     next_field = next_fields.pop(0)
-    next_value = json.loads(json.dumps(nested_value.get(next_field)))
+    next_value = nested_value.get(next_field)
+    if isinstance(next_value, datetime):
+        next_value = int(arrow.get(next_value).float_timestamp * 1000)
+
     try:
         if len(next_fields) == 0 and remove:
             # last field to grab, so remove it
@@ -787,11 +790,8 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
         logger.debug(e)
 
     # check the next value
-    if next_value is None:
+    if next_value is None or not str(next_value):
         # no next value defined
-        return ''
-    elif len(next_value) == 0:
-        # no next value set
         return ''
 
     # sometimes payloads come in formatted

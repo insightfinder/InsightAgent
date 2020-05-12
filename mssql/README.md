@@ -67,7 +67,7 @@ sudo ./setup/cron-config.sh
 ```
 
 ### Config Variables
-* **`server`**: Database host. Default value: localhost.
+* **`host`**: Database host. Default value: localhost.
 * **`user`**: Database user to connect as. Default value: None.
 * **`password`**: User's password. Default value: None.
 * **`database`**: The database to initially connect to.
@@ -78,10 +78,12 @@ sudo ./setup/cron-config.sh
 * `conn_properties`: SQL queries to send to the server upon connection establishment. Can be a string or another kind of iterable of strings.
 * `autocommit`: Whether to use default autocommiting mode or not.
 * `tds_version`: TDS protocol version to use.
-* **`sql`**: The query string for mssql. Use {{start_time}} or {{end_time}} to replace the query start/end time.
-* **`sql_time_format`**: The time format in the sql, in python [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). Example: YYYYMMDD.
+* **`sql`**: The query string for mssql. Use template filed {{start_time}} or {{end_time}} or {{extract_time}} to replace the time in sql. Example: """SELECT * FROM Table{{extract_time}} WHERE Table{{extract_time}}.Time >= {{start_time}} and Table{{extract_time}}.Time < {{end_time}};"""
+* **`sql_time_format`**: The {{start_time}} and {{end_time}} format in sql, as library [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). Example: YYYYMMDD
+* **`sql_extract_time_offset`**: This options will create template field {{extract_time}}, and with offset of {{end_time}}, unit is second. Example: 86400|-86400|0
+* **`sql_extract_time_format`**: The {{extract_time}} format in sql, as library [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). Example: YYYYMMDD 
 * `sql_time_range`: History data time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00. If this option is set, the agent will execute sql by time range and time interval, and `sql_time_interval` is required. 
-* `sql_time_interval`: Time range interval, unit is misc. Example: 86400000.
+* `sql_time_interval`: Time range interval, unit is second. Example: 86400.
 * `filters_include`: Used to filter messages based on allowed values.
 * `filters_exclude`: Used to filter messages based on unallowed values.
 * **`data_format`**: The format of the data to parse: RAW, RAWTAIL, CSV, CSVTAIL, XLS, XLSX, JSON, JSONTAIL, AVRO, or XML. \*TAIL formats keep track of the current file being read & the position in the file.
