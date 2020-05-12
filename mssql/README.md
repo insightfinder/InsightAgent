@@ -2,6 +2,13 @@
 This agent collects data from mssql and sends it to Insightfinder.
 ## Installing the Agent
 
+### Before install agent
+###### Install freetds for linux/osx
+```bash
+osx: brew install freetds
+linux: yum install freetds
+```
+
 ### Short Version
 ```bash
 bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) mssql && cd mssql
