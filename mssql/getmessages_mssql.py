@@ -20,7 +20,6 @@ import pymssql
 from pymssql import ProgrammingError
 from datetime import datetime
 from optparse import OptionParser
-from multiprocessing import Process
 
 """
 This script gathers data to send to Insightfinder
@@ -1248,10 +1247,10 @@ def get_timestamp_from_date_string(date_string):
                 if timestamp_format == 'epoch':
                     if 13 <= len(date_string) < 15:
                         timestamp = int(date_string) / 1000
-                        datetime_obj = arrow.get(timestamp)
+                        datetime_obj = arrow.get(time.gmtime(timestamp))
                     elif 9 <= len(date_string) < 13:
                         timestamp = int(date_string)
-                        datetime_obj = arrow.get(timestamp)
+                        datetime_obj = arrow.get(time.gmtime(timestamp))
                     else:
                         raise
                 else:
@@ -1854,16 +1853,4 @@ if __name__ == "__main__":
     agent_config_vars = get_agent_config_vars()
     print_summary_info()
 
-    # start data processing
-    process_list = []
-    for process_num in range(0, cli_config_vars['threads']):
-        p = Process(target=initialize_data_gathering,
-                    args=(process_num,)
-                    )
-        process_list.append(p)
-
-    for p in process_list:
-        p.start()
-
-    for p in process_list:
-        p.join()
+    initialize_data_gathering(1)
