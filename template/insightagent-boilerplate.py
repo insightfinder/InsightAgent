@@ -1102,10 +1102,10 @@ def get_timestamp_from_date_string(date_string):
                 if timestamp_format == 'epoch':
                     if 13 <= len(date_string) < 15:
                         timestamp = int(date_string) / 1000
-                        datetime_obj = arrow.get(timestamp)
+                        datetime_obj = arrow.get(time.gmtime(timestamp))
                     elif 9 <= len(date_string) < 13:
                         timestamp = int(date_string)
-                        datetime_obj = arrow.get(timestamp)
+                        datetime_obj = arrow.get(time.gmtime(timestamp))
                     else:
                         raise
                 else:

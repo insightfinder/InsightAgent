@@ -73,6 +73,52 @@ python getmessages_mssql.py -t
 sudo ./setup/cron-config.sh
 ```
 
+### Manual Setup Agent on windows 
+###### Download the agent tarball and untar it:
+```bash
+Download https://github.com/insightfinder/InsightAgent/raw/master/mssql/mssql.tar.gz
+cd mssql
+```
+
+###### Install PyInstaller:
+```bash
+pip install pyinstaller
+```
+
+###### create exe file with PyInstaller:
+```bash
+PyInstaller -D getmessages_mssql.py --add-data=config.ini.template;.\ --add-data=config.ini.template-replay;.\
+```
+
+###### Build package:
+Create zip package `getmessages_mssql-win.zip` from folder `dist/getmessages_mssql`
+
+### Install Agent on windows
+###### Download the agent tarball and untar it:
+```bash
+Download https://github.com/insightfinder/InsightAgent/raw/master/mssql/mssql.tar.gz
+move mssql\getmessages_mssql-win.zip\getmessages_mssql {{AGENT_PATH}}
+```
+The {{AGENT_PATH}} is new windows path for mssql agent.
+
+###### Set up `config.ini`
+```bash
+cd {{AGENT_PATH}}
+copy config.ini.template config.ini
+```
+See below for a further explanation of each variable. 
+
+###### Test the agent:
+```bash
+.\getmessages_mssql.exe -c config.ini -t
+```
+
+###### If satisfied with the output, configure the agent to run continuously:
+```bash
+schtasks /create /tn "InsightAgent Cron Job" /tr "{{AGENT_PATH}}\getmessages_mssql.exe -c {{AGENT_PATH}}\config.ini" /sc hourly
+```
+Please see [schtasks](https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/schtasks) for more details.
+
 ### Config Variables
 * **`host`**: Database host. Default value: localhost.
 * **`user`**: Database user to connect as. Default value: None.
