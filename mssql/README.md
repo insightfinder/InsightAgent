@@ -76,7 +76,7 @@ sudo ./setup/cron-config.sh
 ### Manual Setup Agent on windows 
 ###### Download the agent tarball and untar it:
 ```bash
-Download https://github.com/insightfinder/InsightAgent/raw/master/mssql/mssql.tar.gz
+[Download] https://github.com/insightfinder/InsightAgent/raw/master/mssql/mssql.tar.gz
 cd mssql
 ```
 
@@ -96,7 +96,7 @@ Create zip package `getmessages_mssql-win.zip` from folder `dist/getmessages_mss
 ### Install Agent on windows
 ###### Download the agent tarball and untar it:
 ```bash
-Download https://github.com/insightfinder/InsightAgent/raw/master/mssql/mssql.tar.gz
+[Download] https://github.com/insightfinder/InsightAgent/raw/master/mssql/getmessages_mssql-win.zip
 move mssql\getmessages_mssql-win.zip\getmessages_mssql {{AGENT_PATH}}
 ```
 The {{AGENT_PATH}} is new windows path for mssql agent.
