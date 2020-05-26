@@ -28,30 +28,86 @@ This script gathers data to send to Insightfinder
 
 
 def start_data_processing(thread_number):
-    # TODO: get instance and metric mapping info
-
-    # TODO: get database list and filter by whitelist
-    database_list = ['dynamic_app_data_111']
-    db_regex = regex.compile(r"dynamic_app_data_\d+")
-    database_list = list(filter(db_regex.match, database_list))
-
-    # TODO: query data from database list
-
     # open conn
     conn = pymysql.connect(**agent_config_vars['mariadb_kwargs'])
-    conn = pymysql.connect(host='localhost',
-                           user='root',
-                           password='root',
-                           charset='utf8mb4',
-                           cursorclass=pymysql.cursors.DictCursor)
     cursor = conn.cursor()
-    cursor.execute("show databases")
-    cursor.execute("select * from dynamic_app_data_111.normalized_hourly")
     logger.info('Started connection number ' + str(thread_number))
 
-    # execute sql
-    cursor = conn.cursor()
+    sql_str = None
 
+    # get instance and metric mapping info
+    if agent_config_vars['instance_map_conn']:
+        try:
+            logger.info('Starting execute SQL to getting instance mapping info.')
+            sql_str = "select * from {}.{}".format(agent_config_vars['instance_map_conn']['instance_map_database'],
+                                                   agent_config_vars['instance_map_conn']['instance_map_table'])
+            logger.debug(sql_str)
+
+            # execute sql string
+            cursor.execute(sql_str)
+
+            instance_map = {}
+            for message in cursor:
+                id_str = str(message[agent_config_vars['instance_map_conn']['instance_map_id_field']])
+                name_str = str(message[agent_config_vars['instance_map_conn']['instance_map_name_field']])
+                instance_map[id_str] = name_str
+            agent_config_vars['instance_map'] = instance_map
+        except ProgrammingError as e:
+            logger.error(e)
+            logger.error('SQL execute error: '.format(sql_str))
+
+    if agent_config_vars['metric_map_conn']:
+        try:
+            logger.info('Starting execute SQL to getting metric mapping info.')
+            sql_str = "select * from {}.{}".format(agent_config_vars['metric_map_conn']['metric_map_database'],
+                                                   agent_config_vars['metric_map_conn']['metric_map_table'])
+            logger.debug(sql_str)
+
+            # execute sql string
+            cursor.execute(sql_str)
+
+            metric_map = {}
+            for message in cursor:
+                id_str = str(message[agent_config_vars['metric_map_conn']['metric_map_id_field']])
+                name_str = str(message[agent_config_vars['metric_map_conn']['metric_map_name_field']])
+                metric_map[id_str] = name_str
+            agent_config_vars['metric_map'] = metric_map
+        except ProgrammingError as e:
+            logger.error(e)
+            logger.error('SQL execute error: '.format(sql_str))
+
+    # get database list and filter by whitelist
+    database_list = []
+    if agent_config_vars['database_list'].startswith('sql:'):
+        try:
+            logger.info('Starting execute SQL to getting database info.')
+            sql_str = agent_config_vars['database_list'].split('sql:')[1]
+            logger.debug(sql_str)
+
+            # execute sql string
+            cursor.execute(sql_str)
+
+            for message in cursor:
+                database = str(message['Database'])
+                database_list.append(database)
+
+        except ProgrammingError as e:
+            logger.error(e)
+            logger.error('SQL execute error: '.format(sql_str))
+    else:
+        database_list = filter(lambda x: x.strip(), agent_config_vars['database_list'].split(','))
+
+    if agent_config_vars['database_whitelist']:
+        try:
+            db_regex = regex.compile(agent_config_vars['database_whitelist'])
+            database_list = list(filter(db_regex.match, database_list))
+        except Exception as e:
+            logger.error(e)
+    if len(database_list) == 0:
+        logger.error('Database list is empty')
+        sys.exit(1)
+
+    # query data from database list
     # get sql string
     sql = agent_config_vars['sql']
     sql = sql.replace('\n', ' ').replace('"""', '')
@@ -61,31 +117,29 @@ def start_data_processing(thread_number):
         for timestamp in range(agent_config_vars['sql_config']['sql_time_range'][0],
                                agent_config_vars['sql_config']['sql_time_range'][1],
                                agent_config_vars['sql_config']['sql_time_interval']):
+            for database in database_list:
+                sql_str = sql
+                start_time = arrow.get(timestamp).format(agent_config_vars['sql_time_format'])
+                end_time = arrow.get(timestamp + agent_config_vars['sql_config']['sql_time_interval']).format(
+                    agent_config_vars['sql_time_format'])
+                sql_str = sql_str.replace('{{database}}', database)
+                sql_str = sql_str.replace('{{start_time}}', start_time)
+                sql_str = sql_str.replace('{{end_time}}', end_time)
+
+                query_messages_mariadb(cursor, sql_str)
+    else:
+        for database in database_list:
             sql_str = sql
-            start_time = arrow.get(timestamp).format(agent_config_vars['sql_time_format'])
-            end_time = arrow.get(timestamp + agent_config_vars['sql_config']['sql_time_interval']).format(
+            start_time = arrow.get((arrow.utcnow().float_timestamp - if_config_vars['sampling_interval'])).format(
                 agent_config_vars['sql_time_format'])
-            extract_time = arrow.get(
-                timestamp + agent_config_vars['sql_config']['sql_time_interval'] + agent_config_vars[
-                    'sql_extract_time_offset']).format(agent_config_vars['sql_extract_time_format'])
-            sql_str = sql_str.replace('{{extract_time}}', extract_time)
+            end_time = arrow.utcnow().format(agent_config_vars['sql_time_format'])
+            sql_str = sql_str.replace('{{database}}', database)
             sql_str = sql_str.replace('{{start_time}}', start_time)
             sql_str = sql_str.replace('{{end_time}}', end_time)
 
             query_messages_mariadb(cursor, sql_str)
-    else:
-        sql_str = sql
-        start_time = arrow.get((arrow.utcnow().float_timestamp - if_config_vars['sampling_interval'])).format(
-            agent_config_vars['sql_time_format'])
-        end_time = arrow.utcnow().format(agent_config_vars['sql_time_format'])
-        extract_time = arrow.get(arrow.utcnow().float_timestamp + agent_config_vars['sql_extract_time_offset']).format(
-            agent_config_vars['sql_extract_time_format'])
-        sql_str = sql_str.replace('{{extract_time}}', extract_time)
-        sql_str = sql_str.replace('{{start_time}}', start_time)
-        sql_str = sql_str.replace('{{end_time}}', end_time)
 
-        query_messages_mariadb(cursor, sql_str)
-
+    cursor.close()
     conn.close()
     logger.info('Closed connection number ' + str(thread_number))
 
@@ -102,7 +156,6 @@ def query_messages_mariadb(cursor, sql_str):
     except ProgrammingError as e:
         logger.error(e)
         logger.error('SQL execute error: '.format(sql_str))
-        sys.exit(1)
 
 
 def parse_messages_mariadb(cursor):
@@ -134,8 +187,8 @@ def get_agent_config_vars():
         mariadb_kwargs = {}
         database_list = ''
         database_whitelist = ''
-        instance_map = None
-        metric_map = None
+        instance_map_conn = None
+        metric_map_conn = None
         sql = None
         sql_time_format = None
         sql_config = None
@@ -147,7 +200,7 @@ def get_agent_config_vars():
                 'charset': 'utf8mb4',
                 'cursorclass': pymysql.cursors.DictCursor,
                 # connection settings
-                'autocommit': config_parser.get('mssql', 'autocommit'),
+                'autocommit': config_parser.get('mariadb', 'autocommit'),
                 'port': config_parser.get('mariadb', 'port'),
                 'bind_address': config_parser.get('mariadb', 'bind_address'),
                 'unix_socket': config_parser.get('mariadb', 'unix_socket'),
@@ -197,7 +250,7 @@ def get_agent_config_vars():
                 instance_map_table = config_parser.get('mariadb', 'instance_map_table')
                 instance_map_id_field = config_parser.get('mariadb', 'instance_map_id_field')
                 instance_map_name_field = config_parser.get('mariadb', 'instance_map_name_field')
-                instance_map = {
+                instance_map_conn = {
                     'instance_map_database': instance_map_database,
                     'instance_map_table': instance_map_table,
                     'instance_map_id_field': instance_map_id_field,
@@ -211,7 +264,7 @@ def get_agent_config_vars():
                 metric_map_table = config_parser.get('mariadb', 'metric_map_table')
                 metric_map_id_field = config_parser.get('mariadb', 'metric_map_id_field')
                 metric_map_name_field = config_parser.get('mariadb', 'metric_map_name_field')
-                metric_map = {
+                metric_map_conn = {
                     'metric_map_database': metric_map_database,
                     'metric_map_table': metric_map_table,
                     'metric_map_id_field': metric_map_id_field,
@@ -266,6 +319,8 @@ def get_agent_config_vars():
             # project_field = config_parser.get('mariadb', 'project_field', raw=True)
             instance_field = config_parser.get('mariadb', 'instance_field', raw=True)
             device_field = config_parser.get('mariadb', 'device_field', raw=True)
+            extension_metric_field = config_parser.get('mariadb', 'extension_metric_field', raw=True)
+            metric_format = config_parser.get('mariadb', 'metric_format', raw=True)
             timestamp_field = config_parser.get('mariadb', 'timestamp_field', raw=True) or 'timestamp'
             timestamp_format = config_parser.get('mariadb', 'timestamp_format', raw=True)
             timezone = config_parser.get('mariadb', 'timezone')
@@ -369,8 +424,8 @@ def get_agent_config_vars():
             'mariadb_kwargs': mariadb_kwargs,
             'database_list': database_list,
             'database_whitelist': database_whitelist,
-            'instance_map': instance_map,
-            'metric_map': metric_map,
+            'instance_map_conn': instance_map_conn,
+            'metric_map_conn': metric_map_conn,
             'sql': sql,
             'sql_time_format': sql_time_format,
             'sql_config': sql_config,
@@ -389,6 +444,8 @@ def get_agent_config_vars():
             # 'project_field': project_fields,
             'instance_field': instance_fields,
             'device_field': device_fields,
+            'extension_metric_field': extension_metric_field,
+            'metric_format': metric_format,
             'data_fields': data_fields,
             'timestamp_field': timestamp_fields,
             'timezone': timezone,
@@ -1139,6 +1196,8 @@ def parse_json_message_single(message):
                                  'instance_field',
                                  default=HOSTNAME,
                                  remove=True)
+    if agent_config_vars['instance_map']:
+        instance = agent_config_vars['instance_map'].get(instance, instance)
     logger.debug(instance)
     device = get_setting_value(message,
                                'device_field',
@@ -1160,6 +1219,14 @@ def parse_json_message_single(message):
         sys.exit(1)
     logger.debug(timestamp)
 
+    # DEL: get extension metric name
+    extension_metric = get_setting_value(message,
+                                         'extension_metric_field',
+                                         default=HOSTNAME,
+                                         remove=True)
+    if agent_config_vars['metric_map']:
+        extension_metric = agent_config_vars['metric_map'].get(extension_metric, extension_metric)
+
     # get data
     data = get_data_values(timestamp, message)
 
@@ -1176,6 +1243,13 @@ def parse_json_message_single(message):
             data_folded = fold_up(report_data, value_tree=True)  # put metric data in top level
             for data_field, data_value in data_folded.items():
                 if data_value is not None:
+                    # DEL: reformat metric name
+                    if agent_config_vars['metric_format']:
+                        metric_format = agent_config_vars['metric_format'].replace('{{extension_metric}}',
+                                                                                   extension_metric)
+                        metric_format = metric_format.replace('{{metric}}', data_field)
+                        data_field = metric_format
+
                     metric_handoff(
                         ts,
                         data_field,

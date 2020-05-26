@@ -39,7 +39,7 @@ sql = """
       *
       FROM
       {{database}}.normalized_hourly
-      WHERE {{database}}.normalized_hourly.Time >= {{start_time}} and {{database}}.normalized_hourly.Time < {{end_time}};
+      WHERE {{database}}.normalized_hourly.Time >= '{{start_time}}' and {{database}}.normalized_hourly.Time < '{{end_time}}';
       """
 # the {{start_time}} and {{end_time}} format in sql, as library [arrow]. Example: YYYYMMDD
 sql_time_format = YYYY-MM-DD HH:mm:ss
@@ -92,7 +92,10 @@ timezone =
 timestamp_field = timestamp
 # if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
 instance_field = host
-device_field = 
+device_field =
+extension_metric_field =
+# metric_format is used to reformat the metric name, example: `{{extension_metric}}_{{metric}}`, `{{extension_metric}}` is get from `extension_metric_field`, `{{metric}}` is the original metric name.
+metric_format =
 # multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>` or `<name>::==<value>`, where `<name>` and `<value>` can each be either a literal value (`name::value`) or formatted (`total time [{step}]::=={timing.end}-{timing.start}`). Use `::==` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `eval()`.
 data_fields =
 

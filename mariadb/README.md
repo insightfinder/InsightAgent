@@ -88,7 +88,7 @@ sudo ./setup/cron-config.sh
 * `metric_map_table`: Table to get metric mapping info, Define this field if metric field need mapping.
 * `metric_map_id_field`: Id field to get metric mapping info, Define this field if metric field need mapping.
 * `metric_map_name_field`: Name field to get metric mapping info, Define this field if metric field need mapping.
-* **`sql`**: The query string for mssql. Use template filed {{start_time}} or {{end_time}} to replace the time in sql. Example: """SELECT * FROM {{database}}.normalized_hourly WHERE {{database}}.normalized_hourly.collection_time >= {{start_time}} and {{database}}.normalized_hourly.collection_time < {{end_time}}"""
+* **`sql`**: The query string for mssql. Use template filed {{start_time}} or {{end_time}} to replace the time in sql. Example: """SELECT * FROM {{database}}.normalized_hourly WHERE {{database}}.normalized_hourly.collection_time >= '{{start_time}}' and {{database}}.normalized_hourly.collection_time < '{{end_time}}' """
 * **`sql_time_format`**: The {{start_time}} and {{end_time}} format in sql, as library [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). Example: YYYYMMDD
 * `sql_time_range`: History data time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00. If this option is set, the agent will execute sql by time range and time interval, and `sql_time_interval` is required. 
 * `sql_time_interval`: Time range interval, unit is second. Example: 86400.
