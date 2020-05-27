@@ -44,6 +44,12 @@ sql = """
 # required. the {{start_time}} and {{end_time}} format in sql, as library [arrow]. Example: YYYYMMDD
 sql_time_format = YYYY-MM-DD HH:mm:ss
 
+# replay data time config. If these options is set, the agent will execute sql by time range and time interval
+# time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
+sql_time_range = 2020-03-22 00:00:00,2020-04-29 00:00:00
+# range interval, unit is second. Example: 86400
+sql_time_interval = 86400
+
 
 ## filters
 # define a list of filters to use as field:allowed values|field:allowed values
@@ -109,9 +115,9 @@ license_key =
 token =
 project_name = 
 # metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
-project_type = metric
+project_type = metricreplay
 sampling_interval = 60
-run_interval = 60
+run_interval = 1
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
 if_url = https://app.insightfinder.com
