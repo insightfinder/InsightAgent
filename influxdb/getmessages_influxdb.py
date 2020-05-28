@@ -32,6 +32,8 @@ def start_data_processing(thread_number):
     client = InfluxDBClient(**agent_config_vars['influxdb_kwargs'])
     logger.info('Started connection number ' + str(thread_number))
 
+    # TODO: need data structure details
+
     client.close()
     logger.info('Closed connection number ' + str(thread_number))
 
