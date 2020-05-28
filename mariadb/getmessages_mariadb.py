@@ -201,7 +201,7 @@ def get_agent_config_vars():
                 'cursorclass': pymysql.cursors.DictCursor,
                 # connection settings
                 'autocommit': config_parser.get('mariadb', 'autocommit'),
-                'port': config_parser.get('mariadb', 'port'),
+                'port': int(config_parser.get('mariadb', 'port')) if config_parser.get('mariadb', 'port') else None,
                 'bind_address': config_parser.get('mariadb', 'bind_address'),
                 'unix_socket': config_parser.get('mariadb', 'unix_socket'),
                 'read_timeout': config_parser.get('mariadb', 'read_timeout'),
