@@ -8,6 +8,7 @@ user =
 password =
 
 ## connection options
+charset =
 autocommit =
 port =
 bind_address =

@@ -197,9 +197,9 @@ def get_agent_config_vars():
             # mariadb settings
             mariadb_config = {
                 # hard code
-                'charset': 'utf8mb4',
                 'cursorclass': pymysql.cursors.DictCursor,
                 # connection settings
+                'charset': config_parser.get('mariadb', 'charset'),
                 'autocommit': config_parser.get('mariadb', 'autocommit'),
                 'port': int(config_parser.get('mariadb', 'port')) if config_parser.get('mariadb', 'port') else None,
                 'bind_address': config_parser.get('mariadb', 'bind_address'),
