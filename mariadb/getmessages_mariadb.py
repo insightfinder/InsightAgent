@@ -15,6 +15,7 @@ import requests
 import statistics
 import subprocess
 import shlex
+import traceback
 import pymysql
 
 from pymysql import ProgrammingError
@@ -174,6 +175,7 @@ def parse_messages_mariadb(cursor):
         except Exception as e:
             logger.warn('Error when parsing message')
             logger.warn(e)
+            logger.debug(traceback.format_exc())
             continue
 
 
