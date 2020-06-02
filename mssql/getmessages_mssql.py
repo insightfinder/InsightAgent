@@ -15,6 +15,7 @@ import requests
 import statistics
 import subprocess
 import shlex
+import traceback
 import pymssql
 
 from pymssql import ProgrammingError
@@ -39,7 +40,9 @@ def start_data_processing(thread_number):
     sql = sql.replace('\n', ' ').replace('"""', '')
 
     # parse sql string by params
+    logger.debug('sql config: {}'.format(agent_config_vars['sql_config']))
     if agent_config_vars['sql_config']:
+        logger.debug('Using time range for replay data')
         for timestamp in range(agent_config_vars['sql_config']['sql_time_range'][0],
                                agent_config_vars['sql_config']['sql_time_range'][1],
                                agent_config_vars['sql_config']['sql_time_interval']):
@@ -56,6 +59,7 @@ def start_data_processing(thread_number):
 
             query_messages_mssql(cursor, sql_str)
     else:
+        logger.debug('Using current time for streaming data')
         sql_str = sql
         start_time = arrow.get((arrow.utcnow().float_timestamp - if_config_vars['sampling_interval'])).format(
             agent_config_vars['sql_time_format'])
@@ -84,7 +88,6 @@ def query_messages_mssql(cursor, sql_str):
     except ProgrammingError as e:
         logger.error(e)
         logger.error('SQL execute error: '.format(sql_str))
-        sys.exit(1)
 
 
 def parse_messages_mssql(cursor):
@@ -103,6 +106,7 @@ def parse_messages_mssql(cursor):
         except Exception as e:
             logger.warn('Error when parsing message')
             logger.warn(e)
+            logger.debug(traceback.format_exc())
             continue
 
 
