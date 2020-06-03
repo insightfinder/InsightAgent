@@ -17,6 +17,7 @@ import subprocess
 import shlex
 
 from datetime import datetime
+from decimal import Decimal
 from optparse import OptionParser
 from multiprocessing import Process
 
@@ -781,13 +782,15 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     next_value = nested_value.get(next_field)
     if isinstance(next_value, datetime):
         next_value = int(arrow.get(next_value).float_timestamp * 1000)
+    if isinstance(next_value, Decimal):
+        next_value = str(next_value)
 
     try:
         if len(next_fields) == 0 and remove:
             # last field to grab, so remove it
             nested_value.pop(next_field)
-    except Exception as e:
-        logger.debug(e)
+    except:
+        pass
 
     # check the next value
     if next_value is None or not str(next_value):
@@ -797,9 +800,8 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     # sometimes payloads come in formatted
     try:
         next_value = json.loads(next_value)
-    except Exception as e:
-        logger.debug(e)
-        next_value = json.loads(json.dumps(next_value))
+    except:
+        pass
 
     # handle simple lists
     while isinstance(next_value, (list, set, tuple)) and len(next_value) == 1:
