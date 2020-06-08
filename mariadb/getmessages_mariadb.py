@@ -1820,13 +1820,14 @@ def send_data_to_if(chunk_metric_data):
             chunk['data'] = json.dumps(chunk['data'])
     data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
 
-    logger.debug('First:\n' + str(chunk_metric_data[0]))
-    logger.debug('Last:\n' + str(chunk_metric_data[-1]))
+    logger.debug('First:\n' + str(chunk_metric_data[0] if len(chunk_metric_data) > 0 else ''))
+    logger.debug('Last:\n' + str(chunk_metric_data[-1] if len(chunk_metric_data) > 0 else ''))
     logger.debug('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
     logger.debug('Total Lines: ' + str(track['line_count']))
 
-    # do not send if only testing
-    if cli_config_vars['testing']:
+    # do not send if only testing or empty chunk
+    if cli_config_vars['testing'] or len(chunk_metric_data) == 0:
+        logger.debug('Skipping data ingestion...')
         return
 
     # send the data
