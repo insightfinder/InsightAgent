@@ -371,7 +371,7 @@ def get_cli_config_vars():
     if options.testing:
         config_vars['testing'] = True
 
-    if options.verbose or options.testing:
+    if options.verbose:
         config_vars['log_level'] = logging.DEBUG
     elif options.quiet:
         config_vars['log_level'] = logging.WARNING
