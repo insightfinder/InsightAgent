@@ -176,6 +176,8 @@ def parse_messages_mariadb(cursor):
             timestamp = message[agent_config_vars['timestamp_field'][0]]
             if isinstance(timestamp, datetime):
                 timestamp = str(int(arrow.get(timestamp).float_timestamp * 1000))
+            else:
+                timestamp = str(int(arrow.get(timestamp).float_timestamp * 1000))
 
             instance = str(message[agent_config_vars['instance_field'][0]])
             instance = agent_config_vars['instance_map'].get(instance, instance)
@@ -336,21 +338,8 @@ def get_agent_config_vars():
             agent_http_proxy = config_parser.get('mariadb', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('mariadb', 'agent_https_proxy')
 
-            # metric buffer
-            all_metrics = config_parser.get('mariadb', 'all_metrics')
-            metric_buffer_size_mb = config_parser.get('mariadb', 'metric_buffer_size_mb') or '10'
-
-            # filters
-            filters_include = config_parser.get('mariadb', 'filters_include')
-            filters_exclude = config_parser.get('mariadb', 'filters_exclude')
-
             # message parsing
             data_format = config_parser.get('mariadb', 'data_format').upper()
-            raw_regex = config_parser.get('mariadb', 'raw_regex', raw=True)
-            raw_start_regex = config_parser.get('mariadb', 'raw_start_regex', raw=True)
-            csv_field_names = config_parser.get('mariadb', 'csv_field_names')
-            csv_field_delimiter = config_parser.get('mariadb', 'csv_field_delimiter', raw=True) or CSV_DELIM
-            json_top_level = config_parser.get('mariadb', 'json_top_level')
             # project_field = config_parser.get('mariadb', 'project_field', raw=True)
             instance_field = config_parser.get('mariadb', 'instance_field', raw=True)
             device_field = config_parser.get('mariadb', 'device_field', raw=True)
@@ -378,42 +367,11 @@ def get_agent_config_vars():
                 timezone = pytz.timezone(timezone)
 
         # data format
-        if data_format in {'CSV',
-                           'CSVTAIL',
-                           'XLS',
-                           'XLSX'}:
-            # field names
-            if len(csv_field_names) == 0:
-                config_error('csv_field_names')
-            else:
-                csv_field_names = csv_field_names.split(',')
-
-            # field delim
-            try:
-                csv_field_delimiter = regex.compile(csv_field_delimiter)
-            except Exception as e:
-                logger.debug(e)
-                config_error('csv_field_delimiter')
-        elif data_format in {'JSON',
+        if data_format in {'JSON',
                              'JSONTAIL',
                              'AVRO',
                              'XML'}:
             pass
-        elif data_format in {'RAW',
-                             'RAWTAIL'}:
-            try:
-                raw_regex = regex.compile(raw_regex)
-            except Exception as e:
-                logger.debug(e)
-                config_error('raw_regex')
-            if len(raw_start_regex) != 0:
-                if raw_start_regex[0] != '^':
-                    config_error('raw_start_regex')
-                try:
-                    raw_start_regex = regex.compile(raw_start_regex)
-                except Exception as e:
-                    logger.debug(e)
-                    config_error('raw_start_regex')
         else:
             config_error('data_format')
 
@@ -423,12 +381,6 @@ def get_agent_config_vars():
             agent_proxies['http'] = agent_http_proxy
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
-
-        # filters
-        if len(filters_include) != 0:
-            filters_include = filters_include.split('|')
-        if len(filters_exclude) != 0:
-            filters_exclude = filters_exclude.split('|')
 
         # fields
         # project_fields = project_field.split(',')
@@ -450,10 +402,6 @@ def get_agent_config_vars():
                 if timestamp_field in data_fields:
                     data_fields.pop(data_fields.index(timestamp_field))
 
-        # defaults
-        if all_metrics:
-            all_metrics = filter(lambda x: x.strip(), all_metrics.split(','))
-
         # add parsed variables to a global
         config_vars = {
             'mariadb_kwargs': mariadb_kwargs,
@@ -466,16 +414,7 @@ def get_agent_config_vars():
             'sql_config': sql_config,
 
             'proxies': agent_proxies,
-            'all_metrics': all_metrics,
-            'metric_buffer_size': int(metric_buffer_size_mb) * 1024 * 1024,  # as bytes
-            'filters_include': filters_include,
-            'filters_exclude': filters_exclude,
             'data_format': data_format,
-            'raw_regex': raw_regex,
-            'raw_start_regex': raw_start_regex,
-            'json_top_level': json_top_level,
-            'csv_field_names': csv_field_names,
-            'csv_field_delimiter': csv_field_delimiter,
             # 'project_field': project_fields,
             'instance_field': instance_fields,
             'device_field': device_fields,
@@ -1571,8 +1510,8 @@ def initialize_data_gathering(thread_number):
     # clear metric buffer when data processing end
     clear_metric_buffer()
 
-    logger.debug('Total chunks created: ' + str(track['chunk_count']))
-    logger.debug('Total {} entries: {}'.format(
+    logger.info('Total chunks created: ' + str(track['chunk_count']))
+    logger.info('Total {} entries: {}'.format(
         if_config_vars['project_type'].lower(), track['entry_count']))
 
 

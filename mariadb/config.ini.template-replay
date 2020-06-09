@@ -52,6 +52,10 @@ sql_time_range = 2020-03-22 00:00:00,2020-04-29 00:00:00
 sql_time_interval = 86400
 
 
+# raw, rawtail, csv, csvtail, xls, xlsx, json, jsontail, avro, or xml
+# *tail formats keep track of the current file & position + completed files in [state] below
+data_format = json
+
 ## message parsing
 # timestamp format, as library [arrow]. multiple fields can be formatted together to create the timestamp a la `YYYY-MM-DD HH:mm:ss ZZ`. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
 timestamp_format = epoch
