@@ -129,6 +129,9 @@ def start_data_processing(thread_number):
                 sql_str = sql_str.replace('{{end_time}}', end_time)
 
                 query_messages_mariadb(cursor, sql_str)
+
+            # clear metric buffer when piece of time range end
+            clear_metric_buffer()
     else:
         for database in database_list:
             sql_str = sql
@@ -149,7 +152,7 @@ def start_data_processing(thread_number):
 def query_messages_mariadb(cursor, sql_str):
     try:
         logger.info('Starting execute SQL')
-        logger.debug(sql_str)
+        logger.info(sql_str)
 
         # execute sql string
         cursor.execute(sql_str)
@@ -161,23 +164,52 @@ def query_messages_mariadb(cursor, sql_str):
 
 
 def parse_messages_mariadb(cursor):
-    logger.info('Reading messages')
+    count = 0
+    message_list = cursor.fetchall()
+    logger.info('Reading {} messages'.format(len(message_list)))
 
-    for message in cursor:
+    for message in message_list:
         try:
             logger.debug('Message received')
             logger.debug(message)
-            if 'JSON' in agent_config_vars['data_format']:
-                parse_json_message(message)
-            elif 'CSV' in agent_config_vars['data_format']:
-                parse_json_message(label_message(message.split(',')))
-            else:
-                parse_raw_message(message)
+
+            timestamp = message[agent_config_vars['timestamp_field'][0]]
+            if isinstance(timestamp, datetime):
+                timestamp = str(int(arrow.get(timestamp).float_timestamp * 1000))
+
+            instance = str(message[agent_config_vars['instance_field'][0]])
+            instance = agent_config_vars['instance_map'].get(instance, instance)
+
+            key = '{}-{}'.format(timestamp, instance)
+            if key not in metric_buffer['buffer_dict']:
+                metric_buffer['buffer_dict'][key] = {"timestamp": timestamp}
+
+            extension_metric = str(message[agent_config_vars['extension_metric_field']])
+            extension_metric = agent_config_vars['metric_map'].get(extension_metric, extension_metric)
+
+            setting_values = agent_config_vars['data_fields'] or message.keys()
+            for data_field in setting_values:
+                data_value = message[data_field]
+                if isinstance(data_value, Decimal):
+                    data_value = str(data_value)
+                if agent_config_vars['metric_format']:
+                    metric_format = agent_config_vars['metric_format'].replace('{{extension_metric}}',
+                                                                               extension_metric)
+                    metric_format = metric_format.replace('{{metric}}', data_field)
+                    data_field = metric_format
+                metric_key = '{}[{}]'.format(data_field, instance)
+                metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
+
         except Exception as e:
             logger.warn('Error when parsing message')
             logger.warn(e)
             logger.debug(traceback.format_exc())
             continue
+        track['entry_count'] += 1
+        count += 1
+        if count % 1000 == 0:
+            logger.info('Parse {0} messages'.format(count))
+    logger.info('Parse {0} messages'.format(count))
 
 
 def get_agent_config_vars():
@@ -1536,10 +1568,18 @@ def initialize_data_gathering(thread_number):
 
     start_data_processing(thread_number)
 
+    # clear metric buffer when data processing end
+    clear_metric_buffer()
+
+    logger.debug('Total chunks created: ' + str(track['chunk_count']))
+    logger.debug('Total {} entries: {}'.format(
+        if_config_vars['project_type'].lower(), track['entry_count']))
+
+
+def clear_metric_buffer():
     # move all buffer data to current data, and send
-    while metric_buffer['buffer_ts_list']:
-        (ts, key) = metric_buffer['buffer_ts_list'].pop()
-        transpose_metrics(ts, key)
+    for row in metric_buffer['buffer_dict'].values():
+        track['current_row'].append(row)
         if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
             logger.debug('Sending buffer chunk')
             send_data_wrapper()
@@ -1549,9 +1589,7 @@ def initialize_data_gathering(thread_number):
         logger.debug('Sending last chunk')
         send_data_wrapper()
 
-    logger.debug('Total chunks created: ' + str(track['chunk_count']))
-    logger.debug('Total {} entries: {}'.format(
-        if_config_vars['project_type'].lower(), track['entry_count']))
+    reset_metric_buffer()
 
 
 def reset_metric_buffer():
@@ -1822,8 +1860,8 @@ def send_data_to_if(chunk_metric_data):
 
     logger.debug('First:\n' + str(chunk_metric_data[0] if len(chunk_metric_data) > 0 else ''))
     logger.debug('Last:\n' + str(chunk_metric_data[-1] if len(chunk_metric_data) > 0 else ''))
-    logger.debug('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
-    logger.debug('Total Lines: ' + str(track['line_count']))
+    logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
+    logger.info('Total Lines: ' + str(track['line_count']))
 
     # do not send if only testing or empty chunk
     if cli_config_vars['testing'] or len(chunk_metric_data) == 0:
@@ -1835,7 +1873,7 @@ def send_data_to_if(chunk_metric_data):
     send_request(post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
                  data=data_to_post, proxies=if_config_vars['if_proxies'])
-    logger.debug('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
+    logger.info('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
 
 
 def send_request(url, mode='GET', failure_message='Failure!', success_message='Success!', **request_passthrough):
