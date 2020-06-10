@@ -1,0 +1,14 @@
+winlogbeat.event_logs:
+  - name: C:\log.evtx
+    no_more_events: stop 
+    fields: 
+        log_type: evtx
+
+winlogbeat.shutdown_timeout: 30s 
+winlogbeat.registry_file: evtx-registry.yml 
+
+
+#================================ Outputs ======================================
+output.logstash:
+  enabled: true
+  hosts: ["localhost:5044"]

@@ -1,4 +1,4 @@
-output {        
+output {
     # Send to IF
     if "InsightFinder" in [output_type]  {
         http {
@@ -10,18 +10,20 @@ output {
                 "userName" => "{{ ifUserName }}"
                 "licenseKey" => "{{ ifLicenseKey }}"
                 "projectName" => "%{project}"
-                "agentType" => "LogStreaming"
+                "agentType" => "%{agent_type}"
                 "metricData" => "[%{groupdata}]"
+                "instanceName" => "%{instance_name}"
+                "samplingInterval" => "%{sampling_interval}"
             }
         }
     }
-    
-    # handle parse errors    
+
+    # handle parse errors
     if "true" in [LogStashErrorPool] {
-        
+
     } else {
-        stdout { 
-            codec => line { 
+        stdout {
+            codec => line {
                 format => "[%{@timestamp}] InsightFinder|Info: Posting %{count} event[s] with size: %{size} to project %{project}"
             }
         }
