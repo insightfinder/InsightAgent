@@ -140,21 +140,23 @@ def start_data_processing(thread_number):
             clear_metric_buffer()
     else:
         logger.debug('Using current time for streaming data')
-        sql_str = sql
-        start_time_multiple = agent_config_vars['start_time_multiple'] or 1
-        start_time = arrow.get(
-            (arrow.utcnow().float_timestamp - start_time_multiple * if_config_vars['sampling_interval'])).format(
-            agent_config_vars['sql_time_format'])
-        end_time = arrow.utcnow().format(agent_config_vars['sql_time_format'])
-        extract_time = arrow.get(arrow.utcnow().float_timestamp + agent_config_vars['sql_extract_time_offset']).format(
-            agent_config_vars['sql_extract_time_format'])
+        for table in table_list:
+            sql_str = sql
+            start_time_multiple = agent_config_vars['start_time_multiple'] or 1
+            start_time = arrow.get(
+                (arrow.utcnow().float_timestamp - start_time_multiple * if_config_vars['sampling_interval'])).format(
+                agent_config_vars['sql_time_format'])
+            end_time = arrow.utcnow().format(agent_config_vars['sql_time_format'])
+            extract_time = arrow.get(
+                arrow.utcnow().float_timestamp + agent_config_vars['sql_extract_time_offset']).format(
+                agent_config_vars['sql_extract_time_format'])
 
-        sql_str = sql_str.replace('{{table}}', table)
-        sql_str = sql_str.replace('{{extract_time}}', extract_time)
-        sql_str = sql_str.replace('{{start_time}}', start_time)
-        sql_str = sql_str.replace('{{end_time}}', end_time)
+            sql_str = sql_str.replace('{{table}}', table)
+            sql_str = sql_str.replace('{{extract_time}}', extract_time)
+            sql_str = sql_str.replace('{{start_time}}', start_time)
+            sql_str = sql_str.replace('{{end_time}}', end_time)
 
-        query_messages_mssql(cursor, sql_str)
+            query_messages_mssql(cursor, sql_str)
 
     cursor.close()
     conn.close()
