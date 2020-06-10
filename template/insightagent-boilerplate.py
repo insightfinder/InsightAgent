@@ -17,6 +17,7 @@ import subprocess
 import shlex
 
 from datetime import datetime
+from decimal import Decimal
 from optparse import OptionParser
 from multiprocessing import Process
 
@@ -83,35 +84,6 @@ def get_agent_config_vars():
         except ConfigParser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
-
-        # proxies
-        agent_proxies = dict()
-        if len(agent_http_proxy) > 0:
-            agent_proxies['http'] = agent_http_proxy
-        if len(agent_https_proxy) > 0:
-            agent_proxies['https'] = agent_https_proxy
-
-        # filters
-        if len(filters_include) != 0:
-            filters_include = filters_include.split('|')
-        if len(filters_exclude) != 0:
-            filters_exclude = filters_exclude.split('|')
-
-        # fields
-        # project_field = project_field.split(',')
-        instance_field = instance_field.split(',')
-        device_field = device_field.split(',')
-        timestamp_field = timestamp_field.split(',')
-        if len(data_fields) != 0:
-            data_fields = data_fields.split(',')
-            # if project_field in data_fields:
-            #    data_fields.pop(data_fields.index(project_field))
-            if instance_field in data_fields:
-                data_fields.pop(data_fields.index(instance_field))
-            if device_field in data_fields:
-                data_fields.pop(data_fields.index(device_field))
-            if timestamp_field in data_fields:
-                data_fields.pop(data_fields.index(timestamp_field))
 
         # timestamp format
         if len(timestamp_format) != 0:
@@ -200,7 +172,7 @@ def get_agent_config_vars():
 
         # defaults
         if all_metrics:
-            all_metrics = all_metrics.split(',')
+            all_metrics = filter(lambda x: x.strip(), all_metrics.split(','))
 
         # add parsed variables to a global
         config_vars = {
@@ -277,6 +249,7 @@ def get_if_config_vars():
             'DEPLOYMENTREPLAY'
         }:
             config_error('project_type')
+        is_replay = 'REPLAY' in project_type
 
         if len(sampling_interval) == 0:
             if 'METRIC' in project_type:
@@ -321,7 +294,8 @@ def get_if_config_vars():
             'run_interval': int(run_interval),  # as seconds
             'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
             'if_url': if_url,
-            'if_proxies': if_proxies
+            'if_proxies': if_proxies,
+            'is_replay': is_replay
         }
 
         return config_vars
@@ -397,7 +371,7 @@ def get_cli_config_vars():
     if options.testing:
         config_vars['testing'] = True
 
-    if options.verbose or options.testing:
+    if options.verbose:
         config_vars['log_level'] = logging.DEBUG
     elif options.quiet:
         config_vars['log_level'] = logging.WARNING
@@ -805,28 +779,29 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
 
     # get the next value
     next_field = next_fields.pop(0)
-    next_value = json.loads(json.dumps(nested_value.get(next_field)))
+    next_value = nested_value.get(next_field)
+    if isinstance(next_value, datetime):
+        next_value = int(arrow.get(next_value).float_timestamp * 1000)
+    if isinstance(next_value, Decimal):
+        next_value = str(next_value)
+
     try:
         if len(next_fields) == 0 and remove:
             # last field to grab, so remove it
             nested_value.pop(next_field)
-    except Exception as e:
-        logger.debug(e)
+    except:
+        pass
 
     # check the next value
-    if next_value is None:
+    if next_value is None or not str(next_value):
         # no next value defined
-        return ''
-    elif len(next_value) == 0:
-        # no next value set
         return ''
 
     # sometimes payloads come in formatted
     try:
         next_value = json.loads(next_value)
-    except Exception as e:
-        logger.debug(e)
-        next_value = json.loads(json.dumps(next_value))
+    except:
+        pass
 
     # handle simple lists
     while isinstance(next_value, (list, set, tuple)) and len(next_value) == 1:
@@ -966,7 +941,7 @@ def parse_json_message_single(message):
                                  'instance_field',
                                  default=HOSTNAME,
                                  remove=True)
-    logger.warn(instance)
+    logger.debug(instance)
     device = get_setting_value(message,
                                'device_field',
                                remove=True)
@@ -985,7 +960,7 @@ def parse_json_message_single(message):
     except Exception as e:
         logger.warn(e)
         sys.exit(1)
-    logger.warn(timestamp)
+    logger.debug(timestamp)
 
     # get data
     data = get_data_values(timestamp, message)
@@ -996,7 +971,7 @@ def parse_json_message_single(message):
         ts = get_timestamp_from_date_string(timestamp)
         if not ts:
             continue
-        if long((time.time() - if_config_vars['run_interval']) * 1000) > ts:
+        if not if_config_vars['is_replay'] and long((time.time() - if_config_vars['run_interval']) * 1000) > ts:
             logger.debug('skipping message with timestamp {}'.format(ts))
             continue
         if 'METRIC' in if_config_vars['project_type']:
@@ -1129,10 +1104,10 @@ def get_timestamp_from_date_string(date_string):
                 if timestamp_format == 'epoch':
                     if 13 <= len(date_string) < 15:
                         timestamp = int(date_string) / 1000
-                        datetime_obj = arrow.get(timestamp)
+                        datetime_obj = arrow.get(time.gmtime(timestamp))
                     elif 9 <= len(date_string) < 13:
                         timestamp = int(date_string)
-                        datetime_obj = arrow.get(timestamp)
+                        datetime_obj = arrow.get(time.gmtime(timestamp))
                     else:
                         raise
                 else:
@@ -1569,13 +1544,14 @@ def send_data_to_if(chunk_metric_data):
             chunk['data'] = json.dumps(chunk['data'])
     data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
 
-    logger.debug('First:\n' + str(chunk_metric_data[0]))
-    logger.debug('Last:\n' + str(chunk_metric_data[-1]))
+    logger.debug('First:\n' + str(chunk_metric_data[0] if len(chunk_metric_data) > 0 else ''))
+    logger.debug('Last:\n' + str(chunk_metric_data[-1] if len(chunk_metric_data) > 0 else ''))
     logger.debug('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
     logger.debug('Total Lines: ' + str(track['line_count']))
 
-    # do not send if only testing
-    if cli_config_vars['testing']:
+    # do not send if only testing or empty chunk
+    if cli_config_vars['testing'] or len(chunk_metric_data) == 0:
+        logger.debug('Skipping data ingestion...')
         return
 
     # send the data
@@ -1641,11 +1617,11 @@ def get_data_type_from_project_type():
 
 def get_insight_agent_type_from_project_type():
     if 'containerize' in agent_config_vars and agent_config_vars['containerize']:
-        if is_replay():
+        if if_config_vars['is_replay']:
             return 'containerReplay'
         else:
             return 'containerStreaming'
-    elif is_replay():
+    elif if_config_vars['is_replay']:
         if 'METRIC' in if_config_vars['project_type']:
             return 'MetricFile'
         else:
@@ -1657,11 +1633,11 @@ def get_insight_agent_type_from_project_type():
 def get_agent_type_from_project_type():
     """ use project type to determine agent type """
     if 'METRIC' in if_config_vars['project_type']:
-        if is_replay():
+        if if_config_vars['is_replay']:
             return 'MetricFileReplay'
         else:
             return 'CUSTOM'
-    elif is_replay():
+    elif if_config_vars['is_replay']:
         return 'LogFileReplay'
     else:
         return 'LogStreaming'
@@ -1688,10 +1664,6 @@ def get_api_from_project_type():
         return 'deploymentEventReceive'
     else:  # MERTIC, LOG, ALERT
         return 'customprojectrawdata'
-
-
-def is_replay():
-    return 'REPLAY' in if_config_vars['project_type']
 
 
 def initialize_api_post_data():
