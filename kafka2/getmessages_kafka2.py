@@ -50,7 +50,7 @@ def parse_messages_kafka(consumer):
             elif 'CSV' in agent_config_vars['data_format']:
                 parse_json_message(label_message(message.value.split(',')))
             else:
-                parse_raw_message(message)
+                parse_raw_message(message.value)
         except Exception as e:
             logger.warn('Error when parsing message')
             logger.warn(e)
