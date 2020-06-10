@@ -141,7 +141,9 @@ def start_data_processing(thread_number):
     else:
         logger.debug('Using current time for streaming data')
         sql_str = sql
-        start_time = arrow.get((arrow.utcnow().float_timestamp - if_config_vars['sampling_interval'])).format(
+        start_time_multiple = agent_config_vars['start_time_multiple'] or 1
+        start_time = arrow.get(
+            (arrow.utcnow().float_timestamp - start_time_multiple * if_config_vars['sampling_interval'])).format(
             agent_config_vars['sql_time_format'])
         end_time = arrow.utcnow().format(agent_config_vars['sql_time_format'])
         extract_time = arrow.get(arrow.utcnow().float_timestamp + agent_config_vars['sql_extract_time_offset']).format(
@@ -373,10 +375,14 @@ def get_agent_config_vars():
             timestamp_format = config_parser.get('mssql', 'timestamp_format', raw=True)
             timezone = config_parser.get('mssql', 'timezone')
             data_fields = config_parser.get('mssql', 'data_fields', raw=True)
+            start_time_multiple = config_parser.get('mssql', 'start_time_multiple', raw=True)
 
         except ConfigParser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
+
+        if len(start_time_multiple) != 0:
+            start_time_multiple = int(start_time_multiple)
 
         # timestamp format
         if len(timestamp_format) != 0:
@@ -444,6 +450,7 @@ def get_agent_config_vars():
             'instance_field': instance_fields,
             'device_field': device_fields,
             'data_fields': data_fields,
+            'start_time_multiple': start_time_multiple,
             'timestamp_field': timestamp_fields,
             'timezone': timezone,
             'timestamp_format': timestamp_format,
