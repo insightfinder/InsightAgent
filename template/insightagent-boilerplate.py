@@ -17,6 +17,7 @@ import subprocess
 import shlex
 
 from datetime import datetime
+from decimal import Decimal
 from optparse import OptionParser
 from multiprocessing import Process
 
@@ -370,7 +371,7 @@ def get_cli_config_vars():
     if options.testing:
         config_vars['testing'] = True
 
-    if options.verbose or options.testing:
+    if options.verbose:
         config_vars['log_level'] = logging.DEBUG
     elif options.quiet:
         config_vars['log_level'] = logging.WARNING
@@ -781,13 +782,15 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     next_value = nested_value.get(next_field)
     if isinstance(next_value, datetime):
         next_value = int(arrow.get(next_value).float_timestamp * 1000)
+    if isinstance(next_value, Decimal):
+        next_value = str(next_value)
 
     try:
         if len(next_fields) == 0 and remove:
             # last field to grab, so remove it
             nested_value.pop(next_field)
-    except Exception as e:
-        logger.debug(e)
+    except:
+        pass
 
     # check the next value
     if next_value is None or not str(next_value):
@@ -797,9 +800,8 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     # sometimes payloads come in formatted
     try:
         next_value = json.loads(next_value)
-    except Exception as e:
-        logger.debug(e)
-        next_value = json.loads(json.dumps(next_value))
+    except:
+        pass
 
     # handle simple lists
     while isinstance(next_value, (list, set, tuple)) and len(next_value) == 1:
@@ -1542,13 +1544,14 @@ def send_data_to_if(chunk_metric_data):
             chunk['data'] = json.dumps(chunk['data'])
     data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
 
-    logger.debug('First:\n' + str(chunk_metric_data[0]))
-    logger.debug('Last:\n' + str(chunk_metric_data[-1]))
+    logger.debug('First:\n' + str(chunk_metric_data[0] if len(chunk_metric_data) > 0 else ''))
+    logger.debug('Last:\n' + str(chunk_metric_data[-1] if len(chunk_metric_data) > 0 else ''))
     logger.debug('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
     logger.debug('Total Lines: ' + str(track['line_count']))
 
-    # do not send if only testing
-    if cli_config_vars['testing']:
+    # do not send if only testing or empty chunk
+    if cli_config_vars['testing'] or len(chunk_metric_data) == 0:
+        logger.debug('Skipping data ingestion...')
         return
 
     # send the data

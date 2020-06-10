@@ -1,0 +1,8 @@
+---
+- name: Create config file
+  template:
+    src: metricbeat.yml.j2
+    dest: "{{ metricbeat_conf_file }}"
+    mode: 0600
+    backup: yes
+  notify: restart service
