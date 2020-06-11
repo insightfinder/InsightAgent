@@ -144,11 +144,14 @@ def start_data_processing(thread_number):
             sql_str = sql
             start_time_multiple = agent_config_vars['start_time_multiple'] or 1
             start_time = arrow.get(
-                (arrow.utcnow().float_timestamp - start_time_multiple * if_config_vars['sampling_interval'])).format(
+                arrow.utcnow().float_timestamp - start_time_multiple * if_config_vars['sampling_interval'],
+                tzinfo=agent_config_vars['timezone'].zone).format(
                 agent_config_vars['sql_time_format'])
-            end_time = arrow.utcnow().format(agent_config_vars['sql_time_format'])
+            end_time = arrow.get(arrow.utcnow().float_timestamp, tzinfo=agent_config_vars['timezone'].zone).format(
+                agent_config_vars['sql_time_format'])
             extract_time = arrow.get(
-                arrow.utcnow().float_timestamp + agent_config_vars['sql_extract_time_offset']).format(
+                arrow.utcnow().float_timestamp + agent_config_vars['sql_extract_time_offset'],
+                tzinfo=agent_config_vars['timezone'].zone).format(
                 agent_config_vars['sql_extract_time_format'])
 
             sql_str = sql_str.replace('{{table}}', table)
@@ -189,9 +192,11 @@ def parse_messages_mssql(cursor):
 
             timestamp = message[agent_config_vars['timestamp_field'][0]]
             if isinstance(timestamp, datetime):
-                timestamp = str(int(arrow.get(timestamp).float_timestamp * 1000))
+                timestamp = str(
+                    int(arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone).float_timestamp * 1000))
             else:
-                timestamp = str(int(arrow.get(timestamp).float_timestamp * 1000))
+                timestamp = str(
+                    int(arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone).float_timestamp * 1000))
 
             instance = str(message[agent_config_vars['instance_field'][0]])
             instance = agent_config_vars['instance_map'].get(instance, instance)
@@ -375,7 +380,7 @@ def get_agent_config_vars():
             device_field = config_parser.get('mssql', 'device_field', raw=True)
             timestamp_field = config_parser.get('mssql', 'timestamp_field', raw=True) or 'timestamp'
             timestamp_format = config_parser.get('mssql', 'timestamp_format', raw=True)
-            timezone = config_parser.get('mssql', 'timezone')
+            timezone = config_parser.get('mssql', 'timezone') or 'UTC'
             data_fields = config_parser.get('mssql', 'data_fields', raw=True)
             start_time_multiple = config_parser.get('mssql', 'start_time_multiple', raw=True)
 
