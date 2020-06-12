@@ -58,6 +58,10 @@ timezone =
 timestamp_field = timestamp
 # if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
 instance_field = host
+# Allow instance list, multiple fields are separated by commas.
+instance_allow_list =
+# Block instance list, multiple fields are separated by commas.
+instance_block_list =
 device_field =
 extension_metric_field =
 # metric_format is used to reformat the metric name, example: `{{extension_metric}}_{{metric}}`, `{{extension_metric}}` is get from `extension_metric_field`, `{{metric}}` is the original metric name.
