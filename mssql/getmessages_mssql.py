@@ -15,10 +15,12 @@ import requests
 import statistics
 import subprocess
 import shlex
+import traceback
 import pymssql
 
 from pymssql import ProgrammingError
 from datetime import datetime
+from decimal import Decimal
 from optparse import OptionParser
 
 """
@@ -29,45 +31,137 @@ This script gathers data to send to Insightfinder
 def start_data_processing(thread_number):
     # open conn
     conn = pymssql.connect(**agent_config_vars['mssql_kwargs'])
+    cursor = conn.cursor()
     logger.info('Started connection number ' + str(thread_number))
 
-    # execute sql
-    cursor = conn.cursor()
+    sql_str = None
+
+    # get instance and metric mapping info
+    if agent_config_vars['instance_map_conn']:
+        try:
+            logger.info('Starting execute SQL to getting instance mapping info.')
+            sql_str = "select * from {}".format(agent_config_vars['instance_map_conn']['instance_map_table'])
+            logger.debug(sql_str)
+
+            # execute sql string
+            cursor.execute(sql_str)
+
+            instance_map = {}
+            for message in cursor:
+                id_str = str(message[agent_config_vars['instance_map_conn']['instance_map_id_field']])
+                name_str = str(message[agent_config_vars['instance_map_conn']['instance_map_name_field']])
+                instance_map[id_str] = name_str
+            agent_config_vars['instance_map'] = instance_map
+        except ProgrammingError as e:
+            logger.error(e)
+            logger.error('SQL execute error: '.format(sql_str))
+
+    # get table list and filter by whitelist
+    table_list = []
+    if agent_config_vars['table_list'].startswith('sql:'):
+        try:
+            logger.info('Starting execute SQL to getting table info.')
+            sql_str = agent_config_vars['table_list'].split('sql:')[1]
+            logger.debug(sql_str)
+
+            # execute sql string
+            cursor.execute(sql_str)
+
+            for message in cursor:
+                table = str(message['name'])
+                table_list.append(table)
+
+        except ProgrammingError as e:
+            logger.error(e)
+            logger.error('SQL execute error: '.format(sql_str))
+    else:
+        table_list = filter(lambda x: x.strip(), agent_config_vars['table_list'].split(','))
+
+    if agent_config_vars['table_whitelist']:
+        try:
+            db_regex = regex.compile(agent_config_vars['table_whitelist'])
+            table_list = list(filter(db_regex.match, table_list))
+        except Exception as e:
+            logger.error(e)
+    if len(table_list) == 0:
+        logger.error('Table list is empty')
+        sys.exit(1)
+
+    # get device mapping info for different device field
+    if agent_config_vars['device_map_conn']:
+        agent_config_vars['device_map'] = {}
+        for field, map_info in agent_config_vars['device_map_conn'].items():
+            try:
+                logger.info('Starting execute SQL to getting device mapping info: {}.'.format(field))
+                sql_str = "select * from {}".format(map_info['device_map_table'])
+                logger.debug(sql_str)
+
+                # execute sql string
+                cursor.execute(sql_str)
+
+                device_map = {}
+                for message in cursor:
+                    id_str = str(message[map_info['device_map_id_field']])
+                    name_str = str(message[map_info['device_map_name_field']])
+                    device_map[id_str] = name_str
+                agent_config_vars['device_map'][field] = device_map
+            except ProgrammingError as e:
+                logger.error(e)
+                logger.error('SQL execute error: '.format(sql_str))
 
     # get sql string
     sql = agent_config_vars['sql']
     sql = sql.replace('\n', ' ').replace('"""', '')
 
     # parse sql string by params
+    logger.debug('sql config: {}'.format(agent_config_vars['sql_config']))
     if agent_config_vars['sql_config']:
+        logger.debug('Using time range for replay data')
         for timestamp in range(agent_config_vars['sql_config']['sql_time_range'][0],
                                agent_config_vars['sql_config']['sql_time_range'][1],
                                agent_config_vars['sql_config']['sql_time_interval']):
+            for table in table_list:
+                sql_str = sql
+                start_time = arrow.get(timestamp).format(agent_config_vars['sql_time_format'])
+                end_time = arrow.get(timestamp + agent_config_vars['sql_config']['sql_time_interval']).format(
+                    agent_config_vars['sql_time_format'])
+                extract_time = arrow.get(
+                    timestamp + agent_config_vars['sql_config']['sql_time_interval'] + agent_config_vars[
+                        'sql_extract_time_offset']).format(agent_config_vars['sql_extract_time_format'])
+
+                sql_str = sql_str.replace('{{table}}', table)
+                sql_str = sql_str.replace('{{extract_time}}', extract_time)
+                sql_str = sql_str.replace('{{start_time}}', start_time)
+                sql_str = sql_str.replace('{{end_time}}', end_time)
+
+                query_messages_mssql(cursor, sql_str)
+
+            # clear metric buffer when piece of time range end
+            clear_metric_buffer()
+    else:
+        logger.debug('Using current time for streaming data')
+        for table in table_list:
             sql_str = sql
-            start_time = arrow.get(timestamp).format(agent_config_vars['sql_time_format'])
-            end_time = arrow.get(timestamp + agent_config_vars['sql_config']['sql_time_interval']).format(
+            start_time_multiple = agent_config_vars['start_time_multiple'] or 1
+            start_time = arrow.get(
+                arrow.utcnow().float_timestamp - start_time_multiple * if_config_vars['sampling_interval'],
+                tzinfo=agent_config_vars['timezone'].zone).format(
+                agent_config_vars['sql_time_format'])
+            end_time = arrow.get(arrow.utcnow().float_timestamp, tzinfo=agent_config_vars['timezone'].zone).format(
                 agent_config_vars['sql_time_format'])
             extract_time = arrow.get(
-                timestamp + agent_config_vars['sql_config']['sql_time_interval'] + agent_config_vars[
-                    'sql_extract_time_offset']).format(agent_config_vars['sql_extract_time_format'])
+                arrow.utcnow().float_timestamp + agent_config_vars['sql_extract_time_offset'],
+                tzinfo=agent_config_vars['timezone'].zone).format(
+                agent_config_vars['sql_extract_time_format'])
+
+            sql_str = sql_str.replace('{{table}}', table)
             sql_str = sql_str.replace('{{extract_time}}', extract_time)
             sql_str = sql_str.replace('{{start_time}}', start_time)
             sql_str = sql_str.replace('{{end_time}}', end_time)
 
             query_messages_mssql(cursor, sql_str)
-    else:
-        sql_str = sql
-        start_time = arrow.get((arrow.utcnow().float_timestamp - if_config_vars['sampling_interval'])).format(
-            agent_config_vars['sql_time_format'])
-        end_time = arrow.utcnow().format(agent_config_vars['sql_time_format'])
-        extract_time = arrow.get(arrow.utcnow().float_timestamp + agent_config_vars['sql_extract_time_offset']).format(
-            agent_config_vars['sql_extract_time_format'])
-        sql_str = sql_str.replace('{{extract_time}}', extract_time)
-        sql_str = sql_str.replace('{{start_time}}', start_time)
-        sql_str = sql_str.replace('{{end_time}}', end_time)
 
-        query_messages_mssql(cursor, sql_str)
-
+    cursor.close()
     conn.close()
     logger.info('Closed connection number ' + str(thread_number))
 
@@ -75,7 +169,7 @@ def start_data_processing(thread_number):
 def query_messages_mssql(cursor, sql_str):
     try:
         logger.info('Starting execute SQL')
-        logger.debug(sql_str)
+        logger.info(sql_str)
 
         # execute sql string
         cursor.execute(sql_str)
@@ -84,26 +178,63 @@ def query_messages_mssql(cursor, sql_str):
     except ProgrammingError as e:
         logger.error(e)
         logger.error('SQL execute error: '.format(sql_str))
-        sys.exit(1)
 
 
 def parse_messages_mssql(cursor):
-    logger.info('Reading messages')
+    count = 0
+    message_list = cursor.fetchall()
+    logger.info('Reading {} messages'.format(len(message_list)))
 
-    for message in cursor:
+    for message in message_list:
         try:
             logger.debug('Message received')
             logger.debug(message)
-            if 'JSON' in agent_config_vars['data_format']:
-                parse_json_message(message)
-            elif 'CSV' in agent_config_vars['data_format']:
-                parse_json_message(label_message(message.split(',')))
+
+            timestamp = message[agent_config_vars['timestamp_field'][0]]
+            if isinstance(timestamp, datetime):
+                timestamp = str(
+                    int(arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone).float_timestamp * 1000))
             else:
-                parse_raw_message(message)
+                timestamp = str(
+                    int(arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone).float_timestamp * 1000))
+
+            instance = str(message[agent_config_vars['instance_field'][0]])
+            instance = agent_config_vars['instance_map'].get(instance, instance)
+
+            # add device info if has
+            full_instance = instance
+            device_field = agent_config_vars['device_field']
+            device_field = list(set(device_field) & set(message.keys()))
+            if device_field:
+                device = str(message[device_field[0]])
+                device = agent_config_vars['device_map'].get(device_field[0], {}).get(device, device)
+                device = device.replace('_', '-').replace('.', '-')
+                full_instance = '{}_{}'.format(device, instance)
+
+            key = '{}-{}'.format(timestamp, full_instance)
+            if key not in metric_buffer['buffer_dict']:
+                metric_buffer['buffer_dict'][key] = {"timestamp": timestamp}
+
+            setting_values = agent_config_vars['data_fields'] or message.keys()
+            setting_values = list(set(setting_values) & set(message.keys()))
+            for data_field in setting_values:
+                data_value = message[data_field]
+                if isinstance(data_value, Decimal):
+                    data_value = str(data_value)
+                metric_key = '{}[{}]'.format(data_field, full_instance)
+                metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
+
         except Exception as e:
             logger.warn('Error when parsing message')
             logger.warn(e)
+            logger.debug(traceback.format_exc())
             continue
+
+        track['entry_count'] += 1
+        count += 1
+        if count % 1000 == 0:
+            logger.info('Parse {0} messages'.format(count))
+    logger.info('Parse {0} messages'.format(count))
 
 
 def get_agent_config_vars():
@@ -112,6 +243,16 @@ def get_agent_config_vars():
     if os.path.exists(config_ini):
         config_parser = ConfigParser.SafeConfigParser()
         config_parser.read(config_ini)
+
+        mssql_kwargs = {}
+        table_list = ''
+        table_whitelist = ''
+        instance_map_conn = None
+        device_map_conn = None
+        sql = None
+        sql_time_format = None
+        sql_config = None
+
         try:
             # mssql settings
             mssql_config = {
@@ -152,6 +293,42 @@ def get_agent_config_vars():
                 mssql_kwargs['database'] = config_parser.get('mssql', 'database')
             else:
                 config_error('database')
+
+            # handle table info
+            if len(config_parser.get('mssql', 'table_list')) != 0:
+                table_list = config_parser.get('mssql', 'table_list')
+            else:
+                config_error('table_list')
+            if len(config_parser.get('mssql', 'table_whitelist')) != 0:
+                table_whitelist = config_parser.get('mssql', 'table_whitelist')
+            elif table_list.startswith('sql:'):
+                config_error('table_whitelist')
+
+            # handle instance and metric mapping info
+            if len(config_parser.get('mssql', 'instance_map_table')) != 0 \
+                    and len(config_parser.get('mssql', 'instance_map_id_field')) != 0 \
+                    and len(config_parser.get('mssql', 'instance_map_name_field')) != 0:
+                instance_map_table = config_parser.get('mssql', 'instance_map_table')
+                instance_map_id_field = config_parser.get('mssql', 'instance_map_id_field')
+                instance_map_name_field = config_parser.get('mssql', 'instance_map_name_field')
+                instance_map_conn = {
+                    'instance_map_table': instance_map_table,
+                    'instance_map_id_field': instance_map_id_field,
+                    'instance_map_name_field': instance_map_name_field
+                }
+
+            # handle device mapping info for different device field
+            if len(config_parser.get('mssql', 'device_map_table_info')) != 0:
+                device_map_conn = {}
+                device_map_table_info = config_parser.get('mssql', 'device_map_table_info')
+                device_map_table_list = filter(lambda x: x.strip(), device_map_table_info.split(','))
+                for item in device_map_table_list:
+                    field_list = filter(lambda x: x.strip(), item.split('#'))
+                    device_map_conn[field_list[0]] = {
+                        'device_map_table': field_list[1],
+                        'device_map_id_field': field_list[2],
+                        'device_map_name_field': field_list[3]
+                    }
 
             # sql
             sql = None
@@ -196,32 +373,23 @@ def get_agent_config_vars():
             agent_http_proxy = config_parser.get('mssql', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('mssql', 'agent_https_proxy')
 
-            # metric buffer
-            all_metrics = config_parser.get('mssql', 'all_metrics')
-            metric_buffer_size_mb = config_parser.get('mssql', 'metric_buffer_size_mb') or '10'
-
-            # filters
-            filters_include = config_parser.get('mssql', 'filters_include')
-            filters_exclude = config_parser.get('mssql', 'filters_exclude')
-
             # message parsing
             data_format = config_parser.get('mssql', 'data_format').upper()
-            raw_regex = config_parser.get('mssql', 'raw_regex', raw=True)
-            raw_start_regex = config_parser.get('mssql', 'raw_start_regex', raw=True)
-            csv_field_names = config_parser.get('mssql', 'csv_field_names')
-            csv_field_delimiter = config_parser.get('mssql', 'csv_field_delimiter', raw=True) or CSV_DELIM
-            json_top_level = config_parser.get('mssql', 'json_top_level')
             # project_field = config_parser.get('agent', 'project_field', raw=True)
             instance_field = config_parser.get('mssql', 'instance_field', raw=True)
             device_field = config_parser.get('mssql', 'device_field', raw=True)
             timestamp_field = config_parser.get('mssql', 'timestamp_field', raw=True) or 'timestamp'
             timestamp_format = config_parser.get('mssql', 'timestamp_format', raw=True)
-            timezone = config_parser.get('mssql', 'timezone')
+            timezone = config_parser.get('mssql', 'timezone') or 'UTC'
             data_fields = config_parser.get('mssql', 'data_fields', raw=True)
+            start_time_multiple = config_parser.get('mssql', 'start_time_multiple', raw=True)
 
         except ConfigParser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
+
+        if len(start_time_multiple) != 0:
+            start_time_multiple = int(start_time_multiple)
 
         # timestamp format
         if len(timestamp_format) != 0:
@@ -236,42 +404,11 @@ def get_agent_config_vars():
                 timezone = pytz.timezone(timezone)
 
         # data format
-        if data_format in {'CSV',
-                           'CSVTAIL',
-                           'XLS',
-                           'XLSX'}:
-            # field names
-            if len(csv_field_names) == 0:
-                config_error('csv_field_names')
-            else:
-                csv_field_names = csv_field_names.split(',')
-
-            # field delim
-            try:
-                csv_field_delimiter = regex.compile(csv_field_delimiter)
-            except Exception as e:
-                logger.debug(e)
-                config_error('csv_field_delimiter')
-        elif data_format in {'JSON',
-                             'JSONTAIL',
-                             'AVRO',
-                             'XML'}:
+        if data_format in {'JSON',
+                           'JSONTAIL',
+                           'AVRO',
+                           'XML'}:
             pass
-        elif data_format in {'RAW',
-                             'RAWTAIL'}:
-            try:
-                raw_regex = regex.compile(raw_regex)
-            except Exception as e:
-                logger.debug(e)
-                config_error('raw_regex')
-            if len(raw_start_regex) != 0:
-                if raw_start_regex[0] != '^':
-                    config_error('raw_start_regex')
-                try:
-                    raw_start_regex = regex.compile(raw_start_regex)
-                except Exception as e:
-                    logger.debug(e)
-                    config_error('raw_start_regex')
         else:
             config_error('data_format')
 
@@ -281,12 +418,6 @@ def get_agent_config_vars():
             agent_proxies['http'] = agent_http_proxy
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
-
-        # filters
-        if len(filters_include) != 0:
-            filters_include = filters_include.split('|')
-        if len(filters_exclude) != 0:
-            filters_exclude = filters_exclude.split('|')
 
         # fields
         # project_fields = project_field.split(',')
@@ -308,33 +439,25 @@ def get_agent_config_vars():
                 if timestamp_field in data_fields:
                     data_fields.pop(data_fields.index(timestamp_field))
 
-        # defaults
-        if all_metrics:
-            all_metrics = filter(lambda x: x.strip(), all_metrics.split(','))
-
         # add parsed variables to a global
         config_vars = {
             'mssql_kwargs': mssql_kwargs,
+            'table_list': table_list,
+            'table_whitelist': table_whitelist,
+            'instance_map_conn': instance_map_conn,
+            'device_map_conn': device_map_conn,
             'sql': sql,
             'sql_time_format': sql_time_format,
             'sql_extract_time_offset': sql_extract_time_offset,
             'sql_extract_time_format': sql_extract_time_format,
             'sql_config': sql_config,
             'proxies': agent_proxies,
-            'all_metrics': all_metrics,
-            'metric_buffer_size': int(metric_buffer_size_mb) * 1024 * 1024,  # as bytes
-            'filters_include': filters_include,
-            'filters_exclude': filters_exclude,
             'data_format': data_format,
-            'raw_regex': raw_regex,
-            'raw_start_regex': raw_start_regex,
-            'json_top_level': json_top_level,
-            'csv_field_names': csv_field_names,
-            'csv_field_delimiter': csv_field_delimiter,
             # 'project_field': project_fields,
             'instance_field': instance_fields,
             'device_field': device_fields,
             'data_fields': data_fields,
+            'start_time_multiple': start_time_multiple,
             'timestamp_field': timestamp_fields,
             'timezone': timezone,
             'timestamp_format': timestamp_format,
@@ -515,7 +638,7 @@ def get_cli_config_vars():
     if options.testing:
         config_vars['testing'] = True
 
-    if options.verbose or options.testing:
+    if options.verbose:
         config_vars['log_level'] = logging.DEBUG
     elif options.quiet:
         config_vars['log_level'] = logging.WARNING
@@ -1403,11 +1526,23 @@ def initialize_data_gathering(thread_number):
 
     start_data_processing(thread_number)
 
+    # clear metric buffer when data processing end
+    clear_metric_buffer()
+
+    logger.info('Total chunks created: ' + str(track['chunk_count']))
+    logger.info('Total {} entries: {}'.format(
+        if_config_vars['project_type'].lower(), track['entry_count']))
+
+
+def clear_metric_buffer():
     # move all buffer data to current data, and send
-    while metric_buffer['buffer_ts_list']:
-        (ts, key) = metric_buffer['buffer_ts_list'].pop()
-        transpose_metrics(ts, key)
-        if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+    buffer_values = metric_buffer['buffer_dict'].values()
+
+    count = 0
+    for row in buffer_values:
+        track['current_row'].append(row)
+        count += 1
+        if count % 100 == 0 and get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
             logger.debug('Sending buffer chunk')
             send_data_wrapper()
 
@@ -1416,9 +1551,7 @@ def initialize_data_gathering(thread_number):
         logger.debug('Sending last chunk')
         send_data_wrapper()
 
-    logger.debug('Total chunks created: ' + str(track['chunk_count']))
-    logger.debug('Total {} entries: {}'.format(
-        if_config_vars['project_type'].lower(), track['entry_count']))
+    reset_metric_buffer()
 
 
 def reset_metric_buffer():
@@ -1689,8 +1822,8 @@ def send_data_to_if(chunk_metric_data):
 
     logger.debug('First:\n' + str(chunk_metric_data[0]))
     logger.debug('Last:\n' + str(chunk_metric_data[-1]))
-    logger.debug('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
-    logger.debug('Total Lines: ' + str(track['line_count']))
+    logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
+    logger.info('Total Lines: ' + str(track['line_count']))
 
     # do not send if only testing
     if cli_config_vars['testing']:
@@ -1700,13 +1833,14 @@ def send_data_to_if(chunk_metric_data):
     post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
     send_request(post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
-                 data=data_to_post, proxies=if_config_vars['if_proxies'])
-    logger.debug('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
+                 data=data_to_post, verify=False, proxies=if_config_vars['if_proxies'])
+    logger.info('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
 
 
 def send_request(url, mode='GET', failure_message='Failure!', success_message='Success!', **request_passthrough):
     """ sends a request to the given url """
     # determine if post or get (default)
+    requests.packages.urllib3.disable_warnings()
     req = requests.get
     if mode.upper() == 'POST':
         req = requests.post
@@ -1724,7 +1858,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
                 return response
             else:
                 logger.warn(failure_message)
-                logger.debug('Response Code: {}\nTEXT: {}'.format(
+                logger.info('Response Code: {}\nTEXT: {}'.format(
                     response.status_code, response.text))
         # handle various exceptions
         except requests.exceptions.Timeout:

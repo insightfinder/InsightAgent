@@ -661,7 +661,7 @@ def get_complex_value(message, this_field, metadata, that_field, default='', all
                                remove=remove)
         if not ref:
             return default
-        passthrough = {'mode': 'GET'}
+        passthrough = {'mode': 'GET', 'verify': False, }
         for param in metadata[1:]:
             if '=' in param:
                 key, value = param.split('=')
@@ -1558,7 +1558,7 @@ def send_data_to_if(chunk_metric_data):
     post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
     send_request(post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
-                 data=data_to_post, proxies=if_config_vars['if_proxies'])
+                 data=data_to_post, verify=False, proxies=if_config_vars['if_proxies'])
     logger.debug('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
 
 
@@ -1582,7 +1582,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
                 return response
             else:
                 logger.warn(failure_message)
-                logger.debug('Response Code: {}\nTEXT: {}'.format(
+                logger.info('Response Code: {}\nTEXT: {}'.format(
                     response.status_code, response.text))
         # handle various exceptions
         except requests.exceptions.Timeout:
