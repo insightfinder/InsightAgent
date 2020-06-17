@@ -182,6 +182,22 @@ def parse_messages_mariadb(cursor):
             instance = str(message[agent_config_vars['instance_field'][0]])
             instance = agent_config_vars['instance_map'].get(instance, instance)
 
+            # check instance allow_list and block_list
+            allow_instance = True
+            if agent_config_vars['instance_allow_list']:
+                allow_instance = False
+                for allow_itme in agent_config_vars['instance_allow_list']:
+                    if allow_itme in instance:
+                        allow_instance = True
+                        break
+            if agent_config_vars['instance_block_list']:
+                for block_itme in agent_config_vars['instance_block_list']:
+                    if block_itme in instance:
+                        allow_instance = False
+                        break
+            if not allow_instance:
+                continue
+
             key = '{}-{}'.format(timestamp, instance)
             if key not in metric_buffer['buffer_dict']:
                 metric_buffer['buffer_dict'][key] = {"timestamp": timestamp}
@@ -342,6 +358,8 @@ def get_agent_config_vars():
             data_format = config_parser.get('mariadb', 'data_format').upper()
             # project_field = config_parser.get('mariadb', 'project_field', raw=True)
             instance_field = config_parser.get('mariadb', 'instance_field', raw=True)
+            instance_allow_list = config_parser.get('mariadb', 'instance_allow_list', raw=True)
+            instance_block_list = config_parser.get('mariadb', 'instance_block_list', raw=True)
             device_field = config_parser.get('mariadb', 'device_field', raw=True)
             extension_metric_field = config_parser.get('mariadb', 'extension_metric_field', raw=True)
             metric_format = config_parser.get('mariadb', 'metric_format', raw=True)
@@ -368,9 +386,9 @@ def get_agent_config_vars():
 
         # data format
         if data_format in {'JSON',
-                             'JSONTAIL',
-                             'AVRO',
-                             'XML'}:
+                           'JSONTAIL',
+                           'AVRO',
+                           'XML'}:
             pass
         else:
             config_error('data_format')
@@ -385,6 +403,8 @@ def get_agent_config_vars():
         # fields
         # project_fields = project_field.split(',')
         instance_fields = instance_field.split(',')
+        instance_allow_list = filter(lambda x: x.strip(), instance_allow_list.split(','))
+        instance_block_list = filter(lambda x: x.strip(), instance_block_list.split(','))
         device_fields = device_field.split(',')
         timestamp_fields = timestamp_field.split(',')
         if len(data_fields) != 0:
@@ -417,6 +437,8 @@ def get_agent_config_vars():
             'data_format': data_format,
             # 'project_field': project_fields,
             'instance_field': instance_fields,
+            'instance_allow_list': instance_allow_list,
+            'instance_block_list': instance_block_list,
             'device_field': device_fields,
             'extension_metric_field': extension_metric_field,
             'metric_format': metric_format,
