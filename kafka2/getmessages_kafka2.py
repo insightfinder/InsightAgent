@@ -950,7 +950,7 @@ def parse_json_message_single(message):
                                      allow_list=True)
     except Exception as e:
         logger.warn(e)
-        sys.exit(1)
+        return
 
     # get data
     data = get_data_values(timestamp, message)
