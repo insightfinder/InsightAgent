@@ -115,7 +115,7 @@ Work with InsightFinder technical support to specify field in the [Insightfinder
 ###### 3.Add cron job if it is for streating
 
 a. run as a command
-schtasks /create /tn "InsightAgent Cron Job" /tr "{{AGENT_PATH}}\getmessages_mssql.exe -c {{AGENT_PATH}}\config.ini" /sc hourly
+schtasks /create /tn "InsightAgent Cron Job" /tr "cmd /c {{AGENT_PATH}}\getmessages_mssql.exe -c {{AGENT_PATH}}\config.ini >> {{AGENT_PATH}}\output.log 2>&1" /sc hourly
 * {AGENT_PATH} is the actual agent path
 * change "hourly" to the desired sampling window
 
