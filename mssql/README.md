@@ -87,7 +87,7 @@ pip install pyinstaller
 
 ###### create exe file with PyInstaller:
 ```bash
-PyInstaller -D getmessages_mssql.py --add-data=config.ini.template;.\ --add-data=config.ini.template-replay;.\
+PyInstaller -D getmessages_mssql.py -w --add-data=config.ini.template;.\ --add-data=config.ini.template-replay;.\
 ```
 
 ###### Build package:
