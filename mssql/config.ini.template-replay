@@ -63,6 +63,8 @@ timestamp_format = epoch
 # timezone, as per pytz
 timezone = 
 timestamp_field = timestamp
+# timestamp offset, unit is second.
+timestamp_offset = 0
 # if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
 instance_field = host
 device_field = 
