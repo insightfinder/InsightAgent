@@ -19,13 +19,38 @@ import requests
 import statistics
 import subprocess
 import shlex
-import xml2dict
+import xmltodict
 import ifobfuscate
+from requests.auth import HTTPBasicAuth
 
 '''
 This script gathers data to send to Insightfinder
 '''
 
+location_map = {}
+RESULT_KEY = "result"
+LOCATION_KEY = "location"
+LINK_KEY = "link"
+VALUE_KEY = "value"
+NAME_KEY = "name"
+
+def get_instance_from_location(message):
+    if LOCATION_KEY in message:
+        location_info = message[LOCATION_KEY]
+        if not location_info:
+            return 'unknownApplication'
+    # Get the location name from the cache map
+    id = location_info[VALUE_KEY]
+    if id in location_map:
+        return location_map[id]
+    # Get the location name from the API request
+    response = requests.get(location_info[LINK_KEY], auth = HTTPBasicAuth(agent_config_vars['username'], ifobfuscate.decode(agent_config_vars['password'])))
+    if not response.ok:
+        logger.info('Fail to get the location namt.')
+        return 'unknownApplication'
+    location_name = response.json()[RESULT_KEY][NAME_KEY]
+    location_map[id] = location_name
+    return location_name
 
 def start_data_processing(thread_number):
     # set sysparm limi/offset
@@ -56,7 +81,6 @@ def start_data_processing(thread_number):
                     earliest_date_and_time[1])
             # OR between fields
             passthru['sysparm_query'] = '{}^OR{}'.format(passthru['sysparm_query'], statement) if len(passthru['sysparm_query']) != 0 else statement
-    
     # add applicable keyword filtering
     for in_filter in agent_config_vars['filters_include']:
         filter_keyword, filter_values = in_filter.split(':')
@@ -80,7 +104,13 @@ def start_data_processing(thread_number):
         passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], filter_statement) if len(passthru['sysparm_query']) != 0 else '{}'.format(filter_statement)
     # clear since it's handled already
     agent_config_vars['filters_exclude'] = ''
-    passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], agent_config_vars['addl_query']) if len(agent_config_vars['addl_query']) != 0 else passthru['sysparm_query']
+    if agent_config_vars['start_time'] and agent_config_vars['end_time']:
+        start_time = agent_config_vars['start_time']
+        end_time = agent_config_vars['end_time']
+        query = 'sysparm_query=' + agent_config_vars['timestamp_field'][0] + 'BETWEENjavascript:gs.dateGenerate(\'<START_DATE>\',\'00:00:00\')@javascript:gs.dateGenerate(\'<END_DATE>\',\'23:59:59\')'
+        passthru['sysparm_query'] = query.replace('<START_DATE>', start_time).replace('<END_DATE>', end_time)
+    else:
+        passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], agent_config_vars['addl_query']) if len(agent_config_vars['addl_query']) != 0 else passthru['sysparm_query']
     # build auth
     auth = (agent_config_vars['username'], ifobfuscate.decode(agent_config_vars['password']))
     # call API
@@ -143,6 +173,8 @@ def get_agent_config_vars():
             timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
             timezone = config_parser.get('agent', 'timezone') or 'UTC'
             data_fields = config_parser.get('agent', 'data_fields', raw=True)
+            start_time = config_parser.get('agent', 'start_time', raw=True)
+            end_time = config_parser.get('agent', 'end_time', raw=True)
 
         except ConfigParser.NoOptionError as cp_noe:
             logger.error(cp_noe)
@@ -232,7 +264,9 @@ def get_agent_config_vars():
             'timezone': timezone,
             'timestamp_format': ts_format_info['timestamp_format'],
             'strip_tz': ts_format_info['strip_tz'],
-            'strip_tz_fmt': ts_format_info['strip_tz_fmt']
+            'strip_tz_fmt': ts_format_info['strip_tz_fmt'],
+            'start_time': start_time,
+            'end_time': end_time
         }
 
         return config_vars
@@ -972,10 +1006,12 @@ def parse_json_message_single(message):
     #                                'project_field',
     #                                default=if_config_vars['project_name']),
     #                                remove=True)
-    instance = get_setting_value(message,
-                                 'instance_field',
-                                 default=HOSTNAME,
-                                 remove=True)
+    #instance = get_setting_value(message,
+    #                             'instance_field',
+    #                             default=HOSTNAME,
+    #                             remove=True)
+    instance = get_instance_from_location(message)
+
     logger.warn(instance)
     device = get_setting_value(message,
                                'device_field',
@@ -1003,7 +1039,7 @@ def parse_json_message_single(message):
     for timestamp, report_data in data.items():
         # check if this is within the time range
         ts = get_timestamp_from_date_string(timestamp)
-        if long((time.time() - if_config_vars['run_interval']) * 1000) > ts:
+        if long((time.time() - if_config_vars['run_interval']) * 1000) > ts and not agent_config_vars['start_time'] and not agent_config_vars['end_time']:
             logger.debug('skipping message with timestamp {}'.format(ts))
             continue
         if 'METRIC' in if_config_vars['project_type']:
