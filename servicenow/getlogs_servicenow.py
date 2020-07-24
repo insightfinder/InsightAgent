@@ -73,14 +73,21 @@ def start_data_processing(thread_number):
     earliest_date_and_time = data_earliest_datetime.strftime(
         agent_config_vars['timestamp_format'][0]).split(' ')
     # add timestamp filter
-    for timestamp_field in agent_config_vars['timestamp_field']:
-        if not is_formatted(timestamp_field):
-            statement = '{}>=javascript:gs.dateGenerate(\'{}\',\'{}\')'.format(
-                    timestamp_field,
-                    earliest_date_and_time[0],
-                    earliest_date_and_time[1])
-            # OR between fields
-            passthru['sysparm_query'] = '{}^OR{}'.format(passthru['sysparm_query'], statement) if len(passthru['sysparm_query']) != 0 else statement
+    if agent_config_vars['start_time'] and agent_config_vars['end_time']:
+        start_time = agent_config_vars['start_time']
+        end_time = agent_config_vars['end_time']
+        statement = agent_config_vars['timestamp_field'][0] + 'BETWEENjavascript:gs.dateGenerate(\'<START_DATE>\',\'00:00:00\')@javascript:gs.dateGenerate(\'<END_DATE>\',\'23:59:59\')'
+        statement = statement.replace('<START_DATE>', start_time).replace('<END_DATE>', end_time)
+        passthru['sysparm_query'] = '{}^OR{}'.format(passthru['sysparm_query'], statement) if len(passthru['sysparm_query']) != 0 else statement
+    else:
+        for timestamp_field in agent_config_vars['timestamp_field']:
+            if not is_formatted(timestamp_field):
+                statement = '{}>=javascript:gs.dateGenerate(\'{}\',\'{}\')'.format(
+                        timestamp_field,
+                        earliest_date_and_time[0],
+                        earliest_date_and_time[1])
+                # OR between fields
+                passthru['sysparm_query'] = '{}^OR{}'.format(passthru['sysparm_query'], statement) if len(passthru['sysparm_query']) != 0 else statement
     # add applicable keyword filtering
     for in_filter in agent_config_vars['filters_include']:
         filter_keyword, filter_values = in_filter.split(':')
@@ -104,13 +111,7 @@ def start_data_processing(thread_number):
         passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], filter_statement) if len(passthru['sysparm_query']) != 0 else '{}'.format(filter_statement)
     # clear since it's handled already
     agent_config_vars['filters_exclude'] = ''
-    if agent_config_vars['start_time'] and agent_config_vars['end_time']:
-        start_time = agent_config_vars['start_time']
-        end_time = agent_config_vars['end_time']
-        query = 'sysparm_query=' + agent_config_vars['timestamp_field'][0] + 'BETWEENjavascript:gs.dateGenerate(\'<START_DATE>\',\'00:00:00\')@javascript:gs.dateGenerate(\'<END_DATE>\',\'23:59:59\')'
-        passthru['sysparm_query'] = query.replace('<START_DATE>', start_time).replace('<END_DATE>', end_time)
-    else:
-        passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], agent_config_vars['addl_query']) if len(agent_config_vars['addl_query']) != 0 else passthru['sysparm_query']
+    passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], agent_config_vars['addl_query']) if len(agent_config_vars['addl_query']) != 0 else passthru['sysparm_query']
     # build auth
     auth = (agent_config_vars['username'], ifobfuscate.decode(agent_config_vars['password']))
     # call API
@@ -1042,6 +1043,9 @@ def parse_json_message_single(message):
         if long((time.time() - if_config_vars['run_interval']) * 1000) > ts and not agent_config_vars['start_time'] and not agent_config_vars['end_time']:
             logger.debug('skipping message with timestamp {}'.format(ts))
             continue
+        if ts < agent_config_vars['start_time'] and ts > agent_config_vars['end_time']:
+            logger.debug('skipping message with timestamp {}'.format(ts))
+            continue
         if 'METRIC' in if_config_vars['project_type']:
             data_folded = fold_up(report_data, value_tree=True)  # put metric data in top level
             for data_field, data_value in data_folded.items():
@@ -1763,3 +1767,5 @@ if __name__ == "__main__":
         Process(target=initialize_data_gathering,
                 args=(i,)
                 ).start()
+
+
