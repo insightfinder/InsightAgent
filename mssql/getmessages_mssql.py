@@ -382,7 +382,7 @@ def get_agent_config_vars():
             instance_field = config_parser.get('mssql', 'instance_field', raw=True)
             device_field = config_parser.get('mssql', 'device_field', raw=True)
             timestamp_field = config_parser.get('mssql', 'timestamp_field', raw=True) or 'timestamp'
-            timestamp_offset = config_parser.get('mssql', 'timestamp_offset', raw=True) or '0'
+            timestamp_offset = config_parser.get('mssql', 'timestamp_offset', raw=True) or 'UTC'
             timestamp_format = config_parser.get('mssql', 'timestamp_format', raw=True)
             timezone = config_parser.get('mssql', 'timezone') or 'UTC'
             data_fields = config_parser.get('mssql', 'data_fields', raw=True)
@@ -402,7 +402,7 @@ def get_agent_config_vars():
             config_error('timestamp_format')
 
         if len(timestamp_offset) != 0:
-            timestamp_offset = int(timestamp_offset)
+            timestamp_offset = arrow.now(timestamp_offset).utcoffset().total_seconds()
         else:
             config_error('timestamp_offset')
 
