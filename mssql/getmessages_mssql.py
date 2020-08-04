@@ -197,7 +197,7 @@ def parse_messages_mssql(cursor):
                 timestamp = int(arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone).float_timestamp * 1000)
 
             # set offset for timestamp
-            timestamp += agent_config_vars['timestamp_offset'] * 1000
+            timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
 
             timestamp = str(timestamp)
 
@@ -382,7 +382,7 @@ def get_agent_config_vars():
             instance_field = config_parser.get('mssql', 'instance_field', raw=True)
             device_field = config_parser.get('mssql', 'device_field', raw=True)
             timestamp_field = config_parser.get('mssql', 'timestamp_field', raw=True) or 'timestamp'
-            timestamp_offset = config_parser.get('mssql', 'timestamp_offset', raw=True) or '0'
+            target_timestamp_timezone = config_parser.get('mssql', 'target_timestamp_timezone', raw=True) or 'UTC'
             timestamp_format = config_parser.get('mssql', 'timestamp_format', raw=True)
             timezone = config_parser.get('mssql', 'timezone') or 'UTC'
             data_fields = config_parser.get('mssql', 'data_fields', raw=True)
@@ -401,10 +401,10 @@ def get_agent_config_vars():
         else:
             config_error('timestamp_format')
 
-        if len(timestamp_offset) != 0:
-            timestamp_offset = int(timestamp_offset)
+        if len(target_timestamp_timezone) != 0:
+            target_timestamp_timezone = arrow.now(target_timestamp_timezone).utcoffset().total_seconds()
         else:
-            config_error('timestamp_offset')
+            config_error('target_timestamp_timezone')
 
         if timezone:
             if timezone not in pytz.all_timezones:
@@ -468,7 +468,7 @@ def get_agent_config_vars():
             'data_fields': data_fields,
             'start_time_multiple': start_time_multiple,
             'timestamp_field': timestamp_fields,
-            'timestamp_offset': timestamp_offset,
+            'target_timestamp_timezone': target_timestamp_timezone,
             'timezone': timezone,
             'timestamp_format': timestamp_format,
         }
