@@ -63,8 +63,8 @@ timestamp_format = epoch
 # timezone, as per pytz
 timezone = 
 timestamp_field = timestamp
-# timestamp offset, unit is second.
-timestamp_offset = 0
+# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+target_timestamp_timezone = UTC
 # if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
 instance_field = host
 device_field = 
