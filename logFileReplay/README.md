@@ -13,4 +13,4 @@ InsightAgent supports replay mode of json log files in which the data from the j
 [{"eventId": 1481846430437, "tag": "100.34.56.137", "data": "INFO org.apache.hadoop.hdfs.server.namenode.FSNamesystem: Roll Edit Log from 127.0.0.1"}, {"eventId": 1481846430437, "tag": "100.34.56.137", "data": "INFO org.apache.hadoop.hdfs.server.namenode.FSEditLog: Rolling edit logs."}]
 ```
 
-
+You can try the agent code with the demo data demo.json, which is a IF-format data to replay on IF system.
