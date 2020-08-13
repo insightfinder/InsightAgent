@@ -78,16 +78,17 @@ if __name__ == "__main__":
     config_vars = get_agent_config_vars()
     # chunk size is 2Mb
     CHUNK_SIZE = 2 * 1024 * 1024
-    file = config_vars["file_name"]
-    with open(file) as json_data:
+    with open(config_vars["file_name"]) as json_data:
         data = []
         count = 0
+        header_str = json_data.readline()
+        header = map(lambda x: x.strip(), header_str.split(','))
         for line in json_data:
-            entry = json.loads(line)
-            new_entry = {k: str(v) for k, v in entry.items()}
+            entry = map(lambda x: x.strip(), line.split(','))
+            new_entry = dict(zip(header, entry))
             data.append(new_entry)
             count += 1
-            if getsizeof(data) >= CHUNK_SIZE:
+            if count % 50 == 0 and getsizeof(data) >= CHUNK_SIZE:
                 send_data(data)
                 data = []
         if len(data) != 0:
