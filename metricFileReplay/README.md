@@ -2,13 +2,9 @@
 Agent Type: MetricFileReplay
 Platform: Linux
 
-InsightAgent supports replay mode of metric csv files in which the data from the file is read and sent to insightfinder server. A sample metric csv file is as follows:
-- The first line of file contains `timestamp` and `metric columns`.
-- timestamp column: the timestamp of each line
-- metric columns: the metric's key format is `metricName[instanceName]` or `metricName[container_instanceName]`
+InsightFinder accepts metric data in a csv file with the following format: There must be a timestamp field (specified in Unix epoch (ms)); the other columns are metric values for that timestamp. The column name in the csv file follows the format of "timestamp" or metricName[instanceName] or metricName[containerName_instanceName]. The metric name should not include special characters such as "[]", " ", ":". A sample metric data snippet is provided as follows,
 
 
-Example file:
 ```csv
 timestamp, cpu[node1],memory[node1],disk_read[node1],disk_write[node1],network_receive[node1],network_send[node1], cpu[node2],memory[node2],disk_read[node2],disk_write[node2],network_receive[node2],network_send[node2], cpu[node3],memory[node3],disk_read[node3],disk_write[node3],network_receive[node3],network_send[node3], cpu[node4],memory[node4],disk_read[node4],disk_write[node4],network_receive[node4],network_send[node4], cpu[node5],memory[node5],disk_read[node5],disk_write[node5],network_receive[node5],network_send[node5]
 1442853541000,0.3085915,1609.3184,0.0,0.0,0.837,0.874,0.2850924,1484.668928,0.0,0.0,1.086,1.032,0.3057226,1433.305088,0.0,0.0,0.852,0.825,0.196377,1511.743488,0.0,0.0,0.792,0.85,0.2577666,1405.263872,0.0,0.0,1.087,1.073
