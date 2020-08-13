@@ -5,8 +5,8 @@ Platform: Linux
 InsightAgent supports replay mode of metric files in which the data from the file is read and sent to insightfinder server. A sample metric file is as follows:
 - The file contains a json object each line, each json object contains all metric data of a instance by a timestamp.
 - Each json object contains at least 1 required fields: timestamp
-- timestamp: the timestamp of all metrics collect time by each instance
-- {MetricData}: the metrics data, the key format is `metricName[instanceName]`
+- timestamp: the timestamp of all metrics by each instance
+- {MetricData}: the metrics data, the key format is `metricName[instanceName]` or `metricName[container_instanceName]`
 
 
 Example file:
