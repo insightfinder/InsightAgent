@@ -13,6 +13,4 @@ InsightAgent supports replay mode of json log files in which the data from the j
 [{"eventId": 1480750759682, "data": " INFO org.apache.hadoop.hdfs.server.namenode.TransferFsImage: Downloaded file fsimage.ckpt_0000000000000000020 size 120 bytes.\n", "tag": "hadoop"}, {"eventId": 1480750759725, "data": " INFO org.apache.hadoop.hdfs.server.namenode.NNStorageRetentionManager: Going to retain 2 images with txid >= 18\n", "tag": "hadoop"}, {"eventId": 1480754359850, "data": " INFO org.apache.hadoop.hdfs.server.namenode.FSNamesystem: Roll Edit Log from 127.0.0.1\n", "tag": "hadoop"}]
 ```
 
-##### Instructions to replay data to a project in Insightfinder.com
-- Following the tutorial link to register a project and replay data https://docs.google.com/document/d/1D-g4w9zZtrNo-8Y1GYMbl-RDBZymmz9PG9UovYq5f6c/edit
 
