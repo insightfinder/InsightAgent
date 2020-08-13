@@ -1,181 +1,21 @@
-## Use this script to deploy metricFileReplay Agent on multiple Hosts
 # InsightAgent: MetricFileReplay
 Agent Type: MetricFileReplay
-
 Platform: Linux
 
-InsightAgent support replay mode of metric sar, rds, or csv files in which the data from the csv file is read and sent to insightfinder server. The user can send multiple files to the same project.
+InsightAgent supports replay mode of metric csv files in which the data from the file is read and sent to insightfinder server. A sample metric csv file is as follows:
+- The first line of file contains `timestamp` and `metric columns`.
+- timestamp column: the timestamp of each line
+- metric columns: the metric's key format is `metricName[instanceName]` or `metricName[container_instanceName]`
 
-A sample csv file looks like the following. There must be a timestamp field (specified in Unix epoch (ms)); the other columns are metric values for that timestamp. The column name in the csv file follows the format of "timestamp" or  metricName[instanceName]. The metric name should not include special characters such as "[]", " ", ":".
+
+Example file:
 ```csv
-timestamp,cpu[node1],memory[node1],disk_read[node1],disk_write[node1],network_receive[node1],network_send[node1], cpu[node2],memory[node2],disk_read[node2],disk_write[node2],network_receive[node2],network_send[node2], cpu[node3],memory[node3],disk_read[node3],disk_write[node3],network_receive[node3],network_send[node3], cpu[node4],memory[node4],disk_read[node4],disk_write[node4],network_receive[node4],network_send[node4], cpu[node5],memory[node5],disk_read[node5],disk_write[node5],network_receive[node5],network_send[node5]
-1442555275000,8.7380231,1050.804224,2.732032,0.0,46.175,43.11,3.4068913,1138.601984,0.262144,0.0,5.853,4.709,3.5621096,1628.110848,1.800192,0.0,7.458,6.303,2.8296526,1264.095232,0.004096,0.0,5.119,4.932,3.8720168,1713.414144,0.004096,0.0,7.772,7.607
-1442555336000,5.5654848,1072.873472,2.660352,0.0,30.342,27.591,1.7036675,1134.46912,0.032768,0.0,4.211,4.197,2.0013945,1621.93408,0.575488,0.0,4.033,3.53,1.7999406,1264.930816,0.0,0.0,5.399,4.72,1.6588607,1711.345664,0.0,0.0,3.266,3.376
-1442555397000,7.0453733,1078.009856,2.482176,0.0,44.761,42.019,2.5252425,1133.842432,0.065536,0.0,6.401,5.038,2.2465352,1628.061696,2.117632,0.0,7.609,6.333,2.7270371,1241.595904,0.0,0.0,6.045,5.455,2.6808957,1714.76992,0.0,0.0,6.111,5.851
-1442555457000,7.3391743,1097.367552,2.711552,0.0,37.253,35.301,3.3210812,1139.24096,0.098304,0.0,6.902,6.544,2.5287536,1627.447296,1.683456,0.0,5.328,4.66,3.1230276,1213.743104,0.090112,0.0,5.626,4.671,2.6102019,1719.7056,0.0,0.0,5.153,3.885
-1442555517000,6.488525,1098.46528,3.731456,0.0,49.01,46.438,2.3300133,1142.796288,0.065536,0.0,6.015,5.283,2.4738245,1637.482496,2.019328,0.0,5.822,5.963,2.687311,1200.386048,0.0,0.0,7.274,6.256,2.1199127,1721.102336,0.0,0.0,8.319,7.255
+timestamp, cpu[node1],memory[node1],disk_read[node1],disk_write[node1],network_receive[node1],network_send[node1], cpu[node2],memory[node2],disk_read[node2],disk_write[node2],network_receive[node2],network_send[node2], cpu[node3],memory[node3],disk_read[node3],disk_write[node3],network_receive[node3],network_send[node3], cpu[node4],memory[node4],disk_read[node4],disk_write[node4],network_receive[node4],network_send[node4], cpu[node5],memory[node5],disk_read[node5],disk_write[node5],network_receive[node5],network_send[node5]
+1442853541000,0.3085915,1609.3184,0.0,0.0,0.837,0.874,0.2850924,1484.668928,0.0,0.0,1.086,1.032,0.3057226,1433.305088,0.0,0.0,0.852,0.825,0.196377,1511.743488,0.0,0.0,0.792,0.85,0.2577666,1405.263872,0.0,0.0,1.087,1.073
+1442853603000,9.2856282,1575.559168,1.871872,0.0,57.345,53.9,4.241061,1518.252032,1.701888,0.0,9.415,8.858,3.7213078,1453.44512,1.486848,0.0,8.539,6.583,2.5453482,1533.444096,1.314816,0.0,5.816,5.044,3.8383389,1424.785408,2.246656,0.008192,7.054,6.543
+1442853664000,10.6987477,1569.644544,2.234368,0.0,69.533,65.395,4.5311237,1544.613888,1.261568,0.0,12.139,9.662,3.9747478,1454.215168,2.279424,0.0,8.685,8.116,3.0986336,1532.424192,1.509376,0.0,6.627,5.518,3.9514771,1424.150528,3.037184,0.0,11.097,9.077
+1442853726000,7.9018865,1574.473728,1.705984,0.0,68.801,63.758,3.1633041,1547.845632,2.51904,0.0,10.923,9.507,3.0656052,1451.302912,2.159957,0.0,10.292,8.462,2.3085119,1532.678144,2.050048,0.0,6.945,5.792,3.4080159,1418.747904,2.674688,0.0,8.052,7.899
+1442853789000,10.6617469,1571.045376,1.338026,0.0,46.969,44.163,4.0055244,1550.823424,0.789162,0.0,7.843,6.431,4.6800373,1446.866944,2.65216,0.0,10.984,9.6,3.6261394,1533.988864,1.630208,0.0,5.226,4.695,4.2490901,1420.849152,1.878698,0.0,5.79,5.783
 ```
 
-##### Instructions to register a project in Insightfinder.com
-- Go to the link https://insightfinder.com/
-- Sign in with the user credentials or sign up for a new account.
-- Go to Settings and Register for a project under "Insight Agent" tab.
-- Give a project name, select Project Type as "Metric" with a type of "Custom".
-- Note down the project name and license key which will be used for agent installation. The license key is also available in "User Account Information". To go to "User Account Information", click the userid on the top right corner.
 
-### Prerequisites:
-Python 2.7
-SSH accesses to all hosts where agents will be installed are required. SSH key can be generated by following this link:
-https://www.ssh.com/ssh/keygen/
-
-Tested with ansible version 2.2.3.0
-
-### Install wget to download the required files :
-#### For Debian and Ubuntu
-```
-sudo -E apt-get update
-sudo -E apt-get install wget
-```
-#### For Fedora and RHEL-derivatives
-```
-sudo -E yum update
-sudo -E yum install wget
-```
-Note: If you are using proxy, the proxy needs to be set for both the current user and root
-#### Installation:
-1) Use the following command to download the insightfinder agent code. You can skip this step if you have the offline installer package.
-```
-wget --no-check-certificate https://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
-or
-wget --no-check-certificate http://github.com/insightfinder/InsightAgent/archive/master.tar.gz -O insightagent.tar.gz
-```
-
-Untar using this command.
-```
-tar -xvf insightagent.tar.gz
-cd InsightAgent-master/
-```
-
-If you do not need to distribute the replay script, you can skip to **Sending Data** below.
-
-2) Download the agent Code which will be distributed to other machines(not required if you have the offline installation package)
-```
-cd deployment/DeployAgent/files/
-sudo -E ./downloadAgentSSL.sh
-# or
-sudo -E ./downloadAgentNoSSL.sh
-```
-
-3) Install Ansible, if this the first agent you are installing from this machine.
-```
-cd ..
-sudo -E ./installAnsible.sh
-```
-
-4) Open and modify the inventory file
-```
-# vi inventory
-[nodes]
-HOST ansible_user=USER ansible_ssh_private_key_file=SOMETHING
-###We can specify the host name with ssh details like this for each host
-##If you have the ssh key
-#192.168.33.10 ansible_user=vagrant ansible_ssh_private_key_file=/home/private_key
-
-##If you have the password
-#192.168.33.20 ansible_user=vagrant ansible_ssh_pass=ssh_password
-
-
-##We can also specify the host names here and the ssh details under [nodes:vars] if they have have the same ssh credentials
-##(Only one of ansible_ssh_pass OR ansible_ssh_private_key_file is required)
-#192.168.33.10
-#192.168.33.15
-
-[nodes:vars]
-#ansible_user=vagrant
-#ansible_ssh_pass=ssh_password
-#ansible_ssh_private_key_file=/home/private_key
-
-[all:vars]
-##install or uninstall
-ifAction=install
-
-##Login User In Insightfinder Application
-ifUserName=
-
-##Project Name In Insightfinder Application
-ifProjectName=
-
-##User's License Key in Application
-ifLicenseKey=
-
-##Sampling interval could be an integer indicating the number of minutes or "10s" indicating 10 seconds.
-ifSamplingInterval=1
-
-##Agent type
-#
-ifAgent=metricFileReplay
-#
-
-##The server reporting Url(Do not change unless you have on-prem deployment)
-ifReportingUrl=https://app.insightfinder.com
-```
-
-5) Run the playbook
-```
-ansible-playbook insightagent.yaml
-```
-
-### Sending Data
-0) If you skipped to this step, set up `common/config.ini` in the InsightAgent folder.
-
-1) Make sure each file is .csv formatted, starts with a row of headers and the headers should have "timestamp" field in it.
-
-2) Run the following command for each data file.
-```
-sudo python common/reportMetrics.py -w https://app.insightfinder.com -m metricFileReplay -f PATH/TO/CSV_FILE
-```
-Note: If replaying to an on-prem installation, add the server ip and port after the -w option.
-
-If you want to send a list of logs within a directory, you can use:
-```
-find /PATH/TO/DIRECTORY -maxdepth 1 -type f -exec python common/reportMetrics.py... -f {} \;
-```
-
-This agent also supports replaying sar and RDS files via the `-t` option:
-```
-sudo python common/reportMetrics.py -w https://app.insightfinder.com -m metricFileReplay -t sar -f PATH/TO/SAR_FILE
-# or
-sudo python common/reportMetrics.py -w https://app.insightfinder.com -m metricFileReplay -t rds -f PATH/TO/RDS_FILE
-```
-These can also be ran over a directory, as above.
-
-Replaying only sar metrics for the following is also available:
-* `sar-cpu`: CPU metrics (`sar -f`)
-* `sar-mem`: Memory metrics (`sar -r -f`)
-* `sar-network`: Network metrics (`sar -n DEV -f`)
-* `sar-storage`: Disk device metrics (`sar -p -d -f`)
-
-`sar-network` and `sar-storage` both support the `exclude_tags` setting in `config.ini`. Setting this to a comma-delimited list of specific device ids, or ids that start with a given string, to exclude. For example, `exclude_tags = eth0,sda*` will not include data for devices `eth0` nor data for devices that start with `sda`.
-
-
-### Uninstallation:
-Note: Uninstallation is required before you can install any other Metric agent(e.g. cgroup) or you want to reinstall the current collectd agent.
-
-1) Open and modify the inventory file
-```
-[all:vars]
-##install or uninstall
-ifAction=uninstall
-
-...
-
-##Agent type
-#
-ifAgent=metricFileReplay
-#
-```
-
-2) Run the playbook
-```
-ansible-playbook insightagent.yaml
-```
