@@ -7,6 +7,7 @@ import urllib3
 import importlib
 from sys import getsizeof
 from configparser import ConfigParser
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
 import requests
 
@@ -72,7 +73,7 @@ def send_data(metric_data):
 
 
 if __name__ == "__main__":
-    urllib3.disable_warnings()
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     importlib.reload(sys)
     config_vars = get_agent_config_vars()
     # chunk size is 2Mb
