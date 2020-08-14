@@ -1,6 +1,6 @@
 # InsightAgent: LogFileReplay
 Agent Type: LogFileReplay
-Platform: Linux, Python 2.7 or Python 3.5+
+Platform: Linux, Python 2.7 or Python 3.7
 
 InsightAgent supports replay mode of json log files in which the data from the json file is read and sent to insightfinder server. A sample log file is as follows:
 - The json file contains a json array, each json obejct is a log data of the original log.
