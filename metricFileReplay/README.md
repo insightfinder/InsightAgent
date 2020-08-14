@@ -1,6 +1,6 @@
 # InsightAgent: MetricFileReplay
 Agent Type: MetricFileReplay
-Platform: Linux, Python 2.7
+Platform: Linux, Python 2.7 or Python 3.5+
 
 InsightFinder accepts metric data in a csv file with the following format: There must be a timestamp field (specified in Unix epoch (ms)); the other columns are metric values for that timestamp. The column name in the csv file follows the format of "timestamp" or metricName[instanceName] or metricName[containerName_instanceName]. The metric name should not include special characters such as "[]", " ", ":". A sample metric data snippet is provided as follows,
 
