@@ -18,6 +18,7 @@ set +e
 # MIN_SOCK_AGE - delete socks accessed more than this # days ago (rounded up)
 # DISK_USED_PCT_THRESHOLD - Threshold for cleaning all tmp dirs & stopping monit
 JETTY_LOG_DIR="/opt/jetty/logs"
+JETTY_TMP_DIR="/opt/jetty/temp"
 TO_DELETE_LOG_DIRS=(
     "${JETTY_LOG_DIR}"
     "/var/log/rabbitmq"
@@ -25,7 +26,6 @@ TO_DELETE_LOG_DIRS=(
 )
 TO_DELETE_TMP_DIRS=(
     "/tmp"
-    "/opt/jetty/temp"
 )
 TO_DELETE_ALL_DIRS=(
     "${TO_DELETE_LOG_DIRS[*]}"
@@ -36,10 +36,6 @@ MIN_LINK_AGE=+0
 MIN_SOCK_AGE=+0
 MAX_LOG_FILE_SIZE="10M"
 DISK_USED_PCT_THRESHOLD=85
-
-# Set EMPTYFILES=1 to delete zero-length files
-EMPTYFILES=0
-#EMPTYFILES=1
 
 # check disk usage
 :get_disk_used_pct() {
@@ -65,13 +61,9 @@ START_DISK_USED_PCT=$(:get_disk_used_pct)
 START_EPOCH=$(date +'%s')
 :log "BEGIN cleaning tmp and log directories."
 
-# jetty/temp & tmp
-:log "delete any old temporary files."
-find "${TO_DELETE_TMP_DIRS[@]}"                                     \
-    -depth                                                          \
-    -type f -a -mtime "${MIN_FILE_AGE}"                             \
-    -print -delete                                                  \
-    2>/dev/null | :log
+# jetty/temp
+:log "delete any old unpacked files/directories in jetty/temp."
+ls -t "${JETTY_TMP_DIR}" | tail -n +3 | xargs rm -rf --
 
 # rotated log files
 :log "delete any old tarred/rotated log files"
@@ -114,15 +106,12 @@ find "${TO_DELETE_ALL_DIRS[@]}"                                     \
     2>/dev/null | :log
 
 # empty files
-if [[ "${EMPTYFILES}" -gt 1 ]];
-then
-    :log "delete any empty files"
-    find "${TO_DELETE_ALL_DIRS[@]}"                                 \
-        -depth                                                      \
-        -type f -a -empty                                           \
-        -print -delete                                              \
-        2>/dev/null | :log
-fi
+:log "delete any empty files"
+find "${TO_DELETE_ALL_DIRS[@]}"                                     \
+    -depth                                                          \
+    -type f -a -empty                                               \
+    -print -delete                                                  \
+    2>/dev/null | :log
 
 # truncate log files
 DISK_USED_PCT=$(:get_disk_used_pct)
