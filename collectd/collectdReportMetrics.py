@@ -234,7 +234,7 @@ def send_data(metric_data_l, reporting_interval_l, hostname_l):
     start_time = time.time()
     custom_project_url = "/customprojectrawdata"
     url = server_url + custom_project_url
-    response = requests.post(url, data=json.loads(json_data), timeout=(12, 60))
+    response = requests.post(url, data=json.loads(json_data), timeout=(12, 60), verify=False)
 
     if response.status_code != 200:
         logger.error("post request to " + url + " failed.")
