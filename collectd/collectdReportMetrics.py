@@ -231,14 +231,19 @@ def send_data(metric_data_l, reporting_interval_l, hostname_l):
     logger.info("Json date to send is : " + json_data + "\n" + "Number of bytes reported are: " + str(
         len(bytearray(json_data))))
 
+    start_time = time.time()
     custom_project_url = "/customprojectrawdata"
     url = server_url + custom_project_url
-    response = requests.post(url, data=json.loads(json_data))
+    response = requests.post(url, data=json.loads(json_data), timeout=(12, 60), verify=False)
 
     if response.status_code != 200:
         logger.error("post request to " + url + " failed.")
+        logger.error("error code: " + str(response.status_code))
+        logger.error("error info: " + response.text)
+        logger.error("request used time: " + str(time.time() - start_time) + " second")
     else:
         logger.info("Post request to  " + url + " successful!")
+        logger.info("request used time: " + str(time.time() - start_time) + " second")
 
     return
 
