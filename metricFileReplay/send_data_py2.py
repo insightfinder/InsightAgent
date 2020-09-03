@@ -5,7 +5,6 @@ import socket
 import sys
 import time
 import requests
-from sys import getsizeof
 import urllib3
 from ConfigParser import SafeConfigParser
 
@@ -87,7 +86,7 @@ if __name__ == "__main__":
             new_entry = dict(zip(header, entry))
             data.append(new_entry)
             count += 1
-            if count % 50 == 0 and getsizeof(data) >= CHUNK_SIZE:
+            if count % 10 == 0 and len(bytearray(json.dumps(data))) >= CHUNK_SIZE:
                 send_data(data)
                 data = []
         if len(data) != 0:
