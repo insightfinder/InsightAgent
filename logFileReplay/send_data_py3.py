@@ -6,7 +6,6 @@ import time
 import copy
 import urllib3
 import importlib
-from sys import getsizeof
 from configparser import ConfigParser
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
@@ -67,7 +66,7 @@ def send_data(metric_data):
     post_url = config_vars['server_url'] + "/customprojectrawdata"
     response = requests.post(post_url, data=json.loads(to_send_data_json), verify=False)
     if response.status_code == 200:
-        print(str(getsizeof(to_send_data_json)) + " bytes of data are reported.")
+        print(str(len(bytearray(to_send_data_json, 'utf8'))) + " bytes of data are reported.")
     else:
         print("Failed to send data.")
     print("--- Send data time: %s seconds ---" + str(time.time() - send_data_time))
