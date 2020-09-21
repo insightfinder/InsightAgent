@@ -43,8 +43,6 @@ def verifyUser(username, licenseKey, projectName):
     alldata = {"userName": username, "operation": "verify", "licenseKey": licenseKey, "projectName": projectName}
     toSendDataJSON = json.dumps(alldata)
     url = parameters['serverUrl'] + "/api/v1/agentdatahelper"
-    print alldata
-    print url
     try:
         response = requests.post(url, data=json.loads(toSendDataJSON), verify=False)
     except requests.ConnectionError, e:
@@ -91,7 +89,6 @@ def sendFile(clientSocket, parameters):
 
 
 def runCommand(command, clientSocket):
-    print command
     logger.debug(command)
     proc = subprocess.Popen(command, cwd=parameters['homepath'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             shell=True)
