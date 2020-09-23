@@ -277,7 +277,7 @@ def get_time_delta(cur_time):
         is_abnormal = True
         start_time = configs[constant.ABNORMAL_TIME]
     time_delta = cur_time - start_time
-    if time_delta.seconds // constant.ONE_MINUTE_SEC > 120:
+    if time_delta.seconds // constant.ONE_MINUTE_SEC > 180:
         config_file_name = utility.get_config_file_name(user_name)
         config = SafeConfigParser()
         config.read(config_file_name)
