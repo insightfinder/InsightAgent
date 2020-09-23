@@ -282,19 +282,19 @@ def get_time_delta(cur_time):
     config.read(config_file_name)
     time = get_current_date_minute()
     if time_delta.seconds // constant.ONE_MINUTE_SEC > 180 and not is_abnormal:
-            config[constant.IF][constant.DATA_TYPE] = 'abnormal'
-            config[constant.IF][constant.ABNORMAL_TIME] = time
-            is_abnormal = True
-            utility.save_config_file(config_file_name, config)
-            start_time = datetime.datetime.strptime(time, '%Y-%m-%dT%H:%M:%S')
-            time_delta = cur_time - start_time
+        config[constant.IF][constant.DATA_TYPE] = 'abnormal'
+        config[constant.IF][constant.ABNORMAL_TIME] = time
+        is_abnormal = True
+        utility.save_config_file(config_file_name, config)
+        start_time = datetime.datetime.strptime(time, '%Y-%m-%dT%H:%M:%S')
+        time_delta = cur_time - start_time
     elif time_delta.seconds // constant.ONE_MINUTE_SEC > 60 and is_abnormal:
-            config[constant.IF][constant.DATA_TYPE] = 'normal'
-            config[constant.IF][constant.NORMAL_TIME] = time
-            is_abnormal = False
-            utility.save_config_file(config_file_name, config)
-            start_time = datetime.datetime.strptime(time, '%Y-%m-%dT%H:%M:%S')
-            time_delta = cur_time - start_time
+        config[constant.IF][constant.DATA_TYPE] = 'normal'
+        config[constant.IF][constant.NORMAL_TIME] = time
+        is_abnormal = False
+        utility.save_config_file(config_file_name, config)
+        start_time = datetime.datetime.strptime(time, '%Y-%m-%dT%H:%M:%S')
+        time_delta = cur_time - start_time
     return time_delta, is_abnormal
 
 
