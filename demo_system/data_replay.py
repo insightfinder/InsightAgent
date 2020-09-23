@@ -105,7 +105,7 @@ def get_time_delta_minute(time_delta):
 
 
 def get_time_delta_hour(time_delta):
-    return (time_delta.seconds // constant.ONE_HOUR_SEC) % 2
+    return (time_delta.seconds // constant.ONE_HOUR_SEC) % 4
 
 
 def change_reverse_status():
@@ -140,7 +140,7 @@ def send_web_data(time, time_delta, is_abnormal):
     minute = get_time_delta_minute(time_delta)
     hour = get_time_delta_hour(time_delta)
     if is_abnormal:
-        if minute == 59 and hour == 1:
+        if minute == 59 and hour == 0:
             data = get_log_data(timestamp, constant.WEB_INSTANCE, constant.WEB_INCIDENT_DATA)
             replay_log_data(configs[constant.WEB], [data], "Web incident data")
     else:
@@ -160,7 +160,7 @@ def send_log_data(time, time_delta, is_abnormal):
     minute = get_time_delta_minute(time_delta)
     hour = get_time_delta_hour(time_delta)
     if is_abnormal:
-        if minute % 15 == 0 and hour == 1:
+        if minute % 15 == 0 and hour == 0:
             num_message = 1
             data_array = []
             for i in range(0, num_message):
@@ -201,9 +201,9 @@ def send_metric_data(time, time_delta, is_abnormal):
         if hour == 0:
             index = minute
             read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data")
-        else:
-            index = 59
-            read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data")
+        #else:
+        #    index = 59
+        #    read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data")
     else:
         index = minute + hour * 60
         read_metric_data(timestamp, index, constant.NORMAL_DATA_FILENAME, "Metric normal data")
@@ -277,22 +277,24 @@ def get_time_delta(cur_time):
         is_abnormal = True
         start_time = configs[constant.ABNORMAL_TIME]
     time_delta = cur_time - start_time
-    if time_delta.seconds // constant.ONE_MINUTE_SEC > 180:
-        config_file_name = utility.get_config_file_name(user_name)
-        config = SafeConfigParser()
-        config.read(config_file_name)
-        time = get_current_date_minute()
-        if configs[constant.DATA_TYPE] == 'normal':
+    config_file_name = utility.get_config_file_name(user_name)
+    config = SafeConfigParser()
+    config.read(config_file_name)
+    time = get_current_date_minute()
+    if time_delta.seconds // constant.ONE_MINUTE_SEC > 180 and not is_abnormal:
             config[constant.IF][constant.DATA_TYPE] = 'abnormal'
             config[constant.IF][constant.ABNORMAL_TIME] = time
             is_abnormal = True
-        elif configs[constant.DATA_TYPE] == 'abnormal':
+            utility.save_config_file(config_file_name, config)
+            start_time = datetime.datetime.strptime(time, '%Y-%m-%dT%H:%M:%S')
+            time_delta = cur_time - start_time
+    elif time_delta.seconds // constant.ONE_MINUTE_SEC > 60 and is_abnormal:
             config[constant.IF][constant.DATA_TYPE] = 'normal'
             config[constant.IF][constant.NORMAL_TIME] = time
             is_abnormal = False
-        utility.save_config_file(config_file_name, config)
-        start_time = datetime.datetime.strptime(time, '%Y-%m-%dT%H:%M:%S')
-        time_delta = cur_time - start_time
+            utility.save_config_file(config_file_name, config)
+            start_time = datetime.datetime.strptime(time, '%Y-%m-%dT%H:%M:%S')
+            time_delta = cur_time - start_time
     return time_delta, is_abnormal
 
 
