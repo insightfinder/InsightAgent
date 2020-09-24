@@ -3,7 +3,6 @@ import socket
 import threading
 import sys
 import os
-import shlex
 import subprocess
 import time
 from optparse import OptionParser
@@ -41,17 +40,11 @@ def getParameters():
 
 
 def verifyUser(username, licenseKey, projectName):
-    alldata = {}
-    alldata["userName"] = username
-    alldata["operation"] = "verify"
-    alldata["licenseKey"] = licenseKey
-    alldata["projectName"] = projectName
+    alldata = {"userName": username, "operation": "verify", "licenseKey": licenseKey, "projectName": projectName}
     toSendDataJSON = json.dumps(alldata)
-
     url = parameters['serverUrl'] + "/api/v1/agentdatahelper"
-
     try:
-        response = requests.post(url, data=json.loads(toSendDataJSON))
+        response = requests.post(url, data=json.loads(toSendDataJSON), verify=False)
     except requests.ConnectionError, e:
         logger.error("Connection failure : " + str(e))
         logger.error("Verification with InsightFinder credentials Failed")
@@ -79,25 +72,17 @@ def checkPrivilege():
 def sendFile(clientSocket, parameters):
     request = clientSocket.recv(1024)
     logger.debug("Request: " + str(request))
-    requestParts = shlex.split(request)
-    if len(requestParts) >= 4:
-        if requestParts[0] == 'CUSTOM':
-            action = " ".join(requestParts[1:-3])
-            userName = requestParts[len(requestParts) - 3]
-            licenseKey = requestParts[len(requestParts) - 2]
-            projectName = requestParts[len(requestParts) - 1]
-        else:
-            action = requestParts[0]
-            userName = requestParts[1]
-            licenseKey = requestParts[2]
-            projectName = requestParts[3]
-            if str(action).lower() == "cleandisk":
-                action = "clean_disk.sh"
-        command = os.path.join(parameters['homepath'], "script_runner", action)
-        if verifyUser(userName, licenseKey, projectName):
-            runCommand(command, clientSocket)
-        else:
-            clientSocket.send("Status: 500")
+    request_parameters = json.loads(request.decode('utf-8'))
+    project_name = request_parameters['p']
+    user_name = request_parameters['u']
+    license_key = request_parameters['lk']
+    script_file = request_parameters['sf']
+    script_command = request_parameters['sc']
+    script_parameters = request_parameters['sp']
+    action = script_file + " " + script_parameters
+    command = script_command + os.path.join(parameters['homepath'], action)
+    if verifyUser(user_name, license_key, project_name):
+        runCommand(command, clientSocket)
     else:
         clientSocket.send("Status: 500")
     clientSocket.close()
@@ -121,7 +106,6 @@ def acceptThread(parameters):
     acceptor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     acceptor.bind(('', int(parameters['listenPort'])))
     acceptor.listen(5)
-    cur_thread = threading.current_thread()
     logger.info("Listening to connections on port " + str(parameters['listenPort']) + '\n')
 
     while True:
