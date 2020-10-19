@@ -71,10 +71,10 @@ local.properties
 .worksheet
 
 ### Eclipse Patch ###
-# Eclipse Core		
+# Eclipse Core
 .project
 
-# JDT-specific (Eclipse Java Development Tools)		
+# JDT-specific (Eclipse Java Development Tools)
 .classpath
 
 ### Intellij ###
@@ -280,7 +280,6 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
-*.csv
 
 
 # End of https://www.gitignore.io/api/macos
