@@ -24,7 +24,7 @@ Installation:
 
 * Download this jolokia-cassandra-stream folder, create config.ini from config.ini.template and fill it.
 
-* Create a csv file "instancelist.csv" in which each line contains a hostname/ip and its jolokia agent address, it's corresponding to above JVM_OPTS setting , for example:
+* Create a csv file "instancelist.csv", in each line the first field is the instance name, the second field is jolokia agent address which corresponds to above JVM_OPTS setting , for example:
 
   10.10.10.31,http://10.10.10.31:7777
 
