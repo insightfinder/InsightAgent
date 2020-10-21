@@ -15,10 +15,10 @@ os_metrics = {'Memory': {'NonHeapMemoryUsage': ['max', 'committed', 'init', 'use
               'OperatingSystem': ['ProcessCpuLoad', 'SystemCpuLoad', 'MaxFileDescriptorCount',
                                   'OpenFileDescriptorCount'], 'Threading': ['ThreadCount']}
 cassandra_metrics = {
-    'org.apache.cassandra.metrics:name=TotalLatency,scope=Read,type=ClientRequest': ['Count'],
-    'org.apache.cassandra.metrics:name=TotalLatency,scope=Write,type=ClientRequest': ['Count'],
-    'org.apache.cassandra.metrics:name=Latency,scope=Read,type=ClientRequest': ['Count'],
-    'org.apache.cassandra.metrics:name=Latency,scope=Write,type=ClientRequest': ['Count'],
+#    'org.apache.cassandra.metrics:name=TotalLatency,scope=Read,type=ClientRequest': ['Count'],
+#    'org.apache.cassandra.metrics:name=TotalLatency,scope=Write,type=ClientRequest': ['Count'],
+    'org.apache.cassandra.metrics:name=Latency,scope=Read,type=ClientRequest': ['OneMinuteRate'],
+    'org.apache.cassandra.metrics:name=Latency,scope=Write,type=ClientRequest': ['OneMinuteRate'],
     'org.apache.cassandra.metrics:name=Timeouts,scope=Read,type=ClientRequest': ['Count'],
     'org.apache.cassandra.metrics:name=Timeouts,scope=Write,type=ClientRequest': ['Count'],
     'org.apache.cassandra.metrics:name=Unavailables,scope=Read,type=ClientRequest': ['Count'],
