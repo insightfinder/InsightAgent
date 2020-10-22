@@ -15,8 +15,6 @@ os_metrics = {'Memory': {'NonHeapMemoryUsage': ['max', 'committed', 'init', 'use
               'OperatingSystem': ['ProcessCpuLoad', 'SystemCpuLoad', 'MaxFileDescriptorCount',
                                   'OpenFileDescriptorCount'], 'Threading': ['ThreadCount']}
 cassandra_metrics = {
-#    'org.apache.cassandra.metrics:name=TotalLatency,scope=Read,type=ClientRequest': ['Count'],
-#    'org.apache.cassandra.metrics:name=TotalLatency,scope=Write,type=ClientRequest': ['Count'],
     'org.apache.cassandra.metrics:name=Latency,scope=Read,type=ClientRequest': ['OneMinuteRate'],
     'org.apache.cassandra.metrics:name=Latency,scope=Write,type=ClientRequest': ['OneMinuteRate'],
     'org.apache.cassandra.metrics:name=Timeouts,scope=Read,type=ClientRequest': ['Count'],
@@ -70,14 +68,10 @@ def get_agent_config_vars():
         if os.path.exists(os.path.join(homepath, "config.ini")):
             parser = SafeConfigParser()
             parser.read(os.path.join(homepath, "config.ini"))
-            #file_name = parser.get('InsightFinder', 'file_name')
             license_key = parser.get('InsightFinder', 'insightFinder_license_key')
             project_name = parser.get('InsightFinder', 'insightFinder_project_name')
             user_name = parser.get('InsightFinder', 'insightFinder_user_name')
             server_url = parser.get('InsightFinder', 'insightFinder_server_url')
-            #if len(file_name) == 0:
-            #    print "Agent not correctly configured(file name). Check config file."
-            #    sys.exit(1)
             if len(license_key) == 0:
                 print "Agent not correctly configured(license key). Check config file."
                 sys.exit(1)
@@ -90,7 +84,6 @@ def get_agent_config_vars():
             if len(server_url) == 0:
                 print "Agent not correctly configured(server url). Check config file."
                 sys.exit(1)
-            #config_vars['file_name'] = file_name
             config_vars['license_key'] = license_key
             config_vars['project_name'] = project_name
             config_vars['user_name'] = user_name
