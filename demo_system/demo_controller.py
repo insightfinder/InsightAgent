@@ -1,6 +1,8 @@
 import constant
 import utility
 import datetime
+import random
+import logging
 from configparser import SafeConfigParser
 from optparse import OptionParser
 
@@ -46,14 +48,18 @@ def modified_config_file():
     config = SafeConfigParser()
     config.read(config_file_name)
     current_data_type = config[constant.IF][constant.DATA_TYPE]
-    if current_data_type == 'abnormal' and parameters[constant.DATA_TYPE] == 'normal':
+    is_reverse = random.randint(0, 4) > 0
+    logging.info("Modification triggered: is_reverse is " + str(is_reverse))
+    if current_data_type == 'abnormal' and parameters[constant.DATA_TYPE] == 'normal' and is_reverse:
         #Switch to normal data and trigger the reverse development
         config[constant.IF][constant.REVERSE_DEPLOYMENT] = 'True'
         config[constant.IF][constant.NORMAL_TIME] = get_current_date_minute()
+        config[constant.IF][constant.DATA_TYPE] = parameters[constant.DATA_TYPE]
+        logging.info("Reverse buggy deployment action triggered.")
     if current_data_type == 'normal':
         #Swtich to abnormal data
         config[constant.IF][constant.ABNORMAL_TIME] = get_current_date_minute()
-    config[constant.IF][constant.DATA_TYPE] = parameters[constant.DATA_TYPE]
+        config[constant.IF][constant.DATA_TYPE] = parameters[constant.DATA_TYPE]
     utility.save_config_file(config_file_name, config)
 
 
@@ -81,9 +87,18 @@ def is_initialized():
     return parameters[constant.DATA_TYPE] is None
 
 
+def logging_setting():
+    logging.basicConfig(
+        format='%(asctime)s %(levelname)-8s %(message)s',
+        filename='demo_controller.out',
+        level=logging.INFO,
+        datefmt='%Y-%m-%d %H:%M:%S')
+
 if __name__ == "__main__":
+    logging_setting()
     parameters = get_parameters()
     if is_initialized():
         generate_config_file()
     else:
         modified_config_file()
+
