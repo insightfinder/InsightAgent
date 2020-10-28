@@ -10,7 +10,7 @@ import requests
 
 COMMA_DELIMITER = ","
 NEWLINE_DELIMITER = "\n"
-os_metrics = {'Memory': {'NonHeapMemoryUsage': ['max', 'committed', 'init', 'used'],
+os_metrics = {'Memory': {'NonHeapMemoryUsage': ['committed', 'init', 'used'],
                          'HeapMemoryUsage': ['max', 'committed', 'init', 'used']},
               'OperatingSystem': ['ProcessCpuLoad', 'SystemCpuLoad', 'MaxFileDescriptorCount',
                                   'OpenFileDescriptorCount'], 'Threading': ['ThreadCount']}
