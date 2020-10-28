@@ -78,8 +78,10 @@ HEADER = "timestamp,system.net.bytes_sent[core server],system.cpu.idle[core serv
 CONFIG_FILE = "config.ini"
 IF_CAT = 'InsightFinder'
 LOG_INSTANCE = "core server"
-DEP_INSTANCE = 'ip-172-31-52-141.ec2.internal'
-WEB_INSTANCE = 'ip-172-31-52-141.ec2.internal'
+DEP_INSTANCE = 'Jenkins'
+# Put the ip address of the machine where the demo scripts exist, e.g. on stg the demo scripts are in the app-server node
+# WEB_INSTANCE = 'ip-172-31-52-141.ec2.internal'
+WEB_INSTANCE = ''
 # Log data constant
 EVENT_ID = 'eventId'
 TAG = 'tag'
