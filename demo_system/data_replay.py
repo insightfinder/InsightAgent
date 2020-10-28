@@ -123,8 +123,8 @@ def send_deployment_demo_data(time, time_delta, is_abnormal):
     minute = get_time_delta_minute(time_delta)
     hour = get_time_delta_hour(time_delta)
     if configs[constant.REVERSE_DEPLOYMENT]:
-        data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_REVERSE)
-        replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment reverse data")
+        #data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_REVERSE)
+        #replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment reverse data")
         change_reverse_status()
         return
     if is_abnormal and minute == 1 and hour == 0:
