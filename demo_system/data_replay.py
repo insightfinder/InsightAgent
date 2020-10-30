@@ -116,7 +116,7 @@ def change_reverse_status():
     utility.save_config_file(config_file_name, config)
 
 '''
-Send deployemt data at 10 minutes in 4th hour, send reverse deployment data in 1 minute in even hour
+Send deployemt data at 1 minutes in 4th hour, send reverse deployment data in 1 minute in even hour
 '''
 def send_deployment_demo_data(time, time_delta, is_abnormal):
     timestamp = to_epochtime_minute(time)
@@ -127,7 +127,7 @@ def send_deployment_demo_data(time, time_delta, is_abnormal):
         #replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment reverse data")
         change_reverse_status()
         return
-    if is_abnormal and minute == 10 and hour == 0:
+    if is_abnormal and minute == 1 and hour == 0:
         data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA)
         replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment data")
 
@@ -153,14 +153,14 @@ def send_web_data(time, time_delta, is_abnormal):
 
 
 '''
-Send exception data start at 0,15,30,45 minutes in 4th hour.
+Send exception data start at 35,45,55 minutes in 4th hour.
 '''
 def send_log_data(time, time_delta, is_abnormal):
     timestamp = to_epochtime_minute(time)
     minute = get_time_delta_minute(time_delta)
     hour = get_time_delta_hour(time_delta)
     if is_abnormal:
-        if minute % 15 == 0 and hour == 0:
+        if minute in [35,45,55] and hour == 0:
             num_message = 1
             data_array = []
             for i in range(0, num_message):
@@ -282,19 +282,19 @@ def get_time_delta(cur_time):
     config.read(config_file_name)
     time = get_current_date_minute()
     if time_delta.seconds // constant.ONE_MINUTE_SEC > 180 and not is_abnormal:
-        config[constant.IF][constant.DATA_TYPE] = 'abnormal'
-        config[constant.IF][constant.ABNORMAL_TIME] = time
-        is_abnormal = True
-        utility.save_config_file(config_file_name, config)
-        start_time = datetime.datetime.strptime(time, '%Y-%m-%dT%H:%M:%S')
-        time_delta = cur_time - start_time
+            config[constant.IF][constant.DATA_TYPE] = 'abnormal'
+            config[constant.IF][constant.ABNORMAL_TIME] = time
+            is_abnormal = True
+            utility.save_config_file(config_file_name, config)
+            start_time = datetime.datetime.strptime(time, '%Y-%m-%dT%H:%M:%S')
+            time_delta = cur_time - start_time
     elif time_delta.seconds // constant.ONE_MINUTE_SEC > 60 and is_abnormal:
-        config[constant.IF][constant.DATA_TYPE] = 'normal'
-        config[constant.IF][constant.NORMAL_TIME] = time
-        is_abnormal = False
-        utility.save_config_file(config_file_name, config)
-        start_time = datetime.datetime.strptime(time, '%Y-%m-%dT%H:%M:%S')
-        time_delta = cur_time - start_time
+            config[constant.IF][constant.DATA_TYPE] = 'normal'
+            config[constant.IF][constant.NORMAL_TIME] = time
+            is_abnormal = False
+            utility.save_config_file(config_file_name, config)
+            start_time = datetime.datetime.strptime(time, '%Y-%m-%dT%H:%M:%S')
+            time_delta = cur_time - start_time
     return time_delta, is_abnormal
 
 

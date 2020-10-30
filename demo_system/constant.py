@@ -12,10 +12,10 @@ LOG = "Log"
 DEPLOYMENT = "Deployment"
 WEB = "Web"
 METRIC = "Metric"
-LOG_PROJECT_NAME = "demo_log"
-DEPLOYMENT_PROJECT_NAME = "demo_deployment"
-WEB_PROJECT_NAME = "demo_web"
-METRIC_PROJECT_NAME = "demo_metric"
+LOG_PROJECT_NAME = "TD_infrastructure_core"
+DEPLOYMENT_PROJECT_NAME = "TD_deployment"
+WEB_PROJECT_NAME = "TD_web"
+METRIC_PROJECT_NAME = "TD_metric"
 DATA_TYPE_NORMAL = "normal"
 DATA_TYPE_ABNORMAL = "abnormal"
 DATE_TIME_FORMAT_MINUTE = "%Y-%m-%dT%H:%M:00"
@@ -78,8 +78,10 @@ HEADER = "timestamp,system.net.bytes_sent[core server],system.cpu.idle[core serv
 CONFIG_FILE = "config.ini"
 IF_CAT = 'InsightFinder'
 LOG_INSTANCE = "core server"
-DEP_INSTANCE = 'ip-172-31-52-141.ec2.internal'
-WEB_INSTANCE = 'ip-172-31-52-141.ec2.internal'
+DEP_INSTANCE = 'Jenkins'
+# Put the ip address of the machine where the demo scripts exist, e.g. on stg the demo scripts are in the app-server node
+# WEB_INSTANCE = 'ip-172-31-52-141.ec2.internal'
+WEB_INSTANCE = ''
 # Log data constant
 EVENT_ID = 'eventId'
 TAG = 'tag'
