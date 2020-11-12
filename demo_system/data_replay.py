@@ -123,8 +123,8 @@ def send_deployment_demo_data(time, time_delta, is_abnormal):
     minute = get_time_delta_minute(time_delta)
     hour = get_time_delta_hour(time_delta)
     if configs[constant.REVERSE_DEPLOYMENT]:
-        #data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_REVERSE)
-        #replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment reverse data")
+        data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_REVERSE)
+        replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment reverse data")
         change_reverse_status()
         return
     if is_abnormal and minute == 1 and hour == 0:
@@ -168,13 +168,23 @@ def send_log_data(time, time_delta, is_abnormal):
                 data_array.append(data)
             replay_log_data(configs[constant.LOG], data_array, "Log exception data")
     else:
-        num_message = random.randint(1, 3)
+        num_message = random.randint(2, 5)
         data_array = []
         for i in range(0, num_message):
             data_write = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_LOG_DATA[0])
             data_finished = get_log_data(timestamp + i + 50, constant.LOG_INSTANCE, constant.NORMAL_LOG_DATA[1])
             data_array.append(data_write)
             data_array.append(data_finished)
+        # stream some exception data
+        for i in range(0, random.randint(0,2)):
+            exception_data = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_EXCEPTION_DATA[0])
+            data_array.append(exception_data)
+        for i in range(0, random.randint(0,2)):
+            exception_data = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_EXCEPTION_DATA[1])
+            data_array.append(exception_data)
+        for i in range(0, random.randint(0,2)):
+            exception_data = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_EXCEPTION_DATA[2])
+            data_array.append(exception_data)
         replay_log_data(configs[constant.LOG], data_array, "Log normal data")
 
 
@@ -306,6 +316,6 @@ if __name__ == "__main__":
     cur_time = get_current_time()
     time_delta, is_abnormal = get_time_delta(cur_time)
     send_log_data(cur_time, time_delta, is_abnormal)
-    send_web_data(cur_time, time_delta, is_abnormal)
-    send_deployment_demo_data(cur_time, time_delta, is_abnormal)
+    #send_web_data(cur_time, time_delta, is_abnormal)
+    #send_deployment_demo_data(cur_time, time_delta, is_abnormal)
     send_metric_data(cur_time, time_delta, is_abnormal)
