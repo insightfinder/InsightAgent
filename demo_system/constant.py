@@ -45,6 +45,42 @@ WEB_NORMAL_DATA = ["User checked the dash board page", "User changed the profile
 
 # Log data
 NORMAL_LOG_DATA = ["Start writing to file.", "File writing finished"]
+NORMAL_EXCEPTION_DATA = ['''java.lang.ClassCastException: com.insightfinder.datastore.ActiveAWSProject cannot be cast to com.insightfinder.datastore.ActiveCustomProject
+	at com.insightfinder.datastore.ActiveProject.getProjectFromCassandra(ActiveProject.java:329)
+	at com.insightfinder.models.payload.DetectedIncidentAlertPayload.getDetectedIncidentAnomalyTimeLine(DetectedIncidentAlertPayload.java:109)
+	at com.insightfinder.models.payload.DetectedIncidentAlertPayload.runTask(DetectedIncidentAlertPayload.java:94)
+	at com.insightfinder.RabbitMQ.ConsumerDetectedIncidentAlert.processTask(ConsumerDetectedIncidentAlert.java:31)
+	at com.insightfinder.RabbitMQ.IFARabbitmqConsumer.handleDelivery(IFARabbitmqConsumer.java:66)
+	at com.rabbitmq.client.impl.ConsumerDispatcher$5.run(ConsumerDispatcher.java:149)
+	at com.rabbitmq.client.impl.ConsumerWorkService$WorkPoolRunnable.run(ConsumerWorkService.java:104)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+	at java.lang.Thread.run(Thread.java:748)''',
+    '''com.insightfinder.exception.DataCorruptionException: Data Corruption
+	at com.insightfinder.datastore.metric_data.InstanceMetricData$MetricMap.getMetricMap(InstanceMetricData.java:286)
+	at com.insightfinder.datastore.metric_data.InstanceMetricData$TimestampMetricMap.getTimestampMetricMap(InstanceMetricData.java:261)
+	at com.insightfinder.datastore.metric_data.aggregatedmetricdata.InstanceMetricDataAggregatedUtils.aggregateInstanceMetricDataByTimestamp(InstanceMetricDataAggregatedUtils.java:67)
+	at com.insightfinder.RabbitMQ.ConsumerCronAggregateMetricData.handleDelivery(ConsumerCronAggregateMetricData.java:59)
+	at com.rabbitmq.client.impl.ConsumerDispatcher$5.run(ConsumerDispatcher.java:149)
+	at com.rabbitmq.client.impl.ConsumerWorkService$WorkPoolRunnable.run(ConsumerWorkService.java:104)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+	at java.lang.Thread.run(Thread.java:748)''',
+    '''com.datastax.driver.core.exceptions.InvalidQueryException: Some partition key parts are missing: instancename
+	at com.datastax.driver.core.exceptions.InvalidQueryException.copy(InvalidQueryException.java:50)
+	at com.datastax.driver.core.DriverThrowables.propagateCause(DriverThrowables.java:35)
+	at com.datastax.driver.core.DefaultResultSetFuture.getUninterruptibly(DefaultResultSetFuture.java:293)
+	at com.datastax.driver.core.AbstractSession.execute(AbstractSession.java:58)
+	at com.datastax.driver.mapping.MappingSession.deleteByQuery(MappingSession.java:143)
+	at com.insightfinder.datastore.CassandraStore.deleteByQuery(CassandraStore.java:496)
+	at com.insightfinder.RabbitMQ.ConsumerCleanCron.cleanUpData(ConsumerCleanCron.java:67)
+	at com.insightfinder.RabbitMQ.ConsumerCleanCron.processTask(ConsumerCleanCron.java:49)
+	at com.insightfinder.RabbitMQ.IFARabbitmqConsumer.handleDelivery(IFARabbitmqConsumer.java:66)
+	at com.rabbitmq.client.impl.ConsumerDispatcher$5.run(ConsumerDispatcher.java:149)
+	at com.rabbitmq.client.impl.ConsumerWorkService$WorkPoolRunnable.run(ConsumerWorkService.java:104)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+	at java.lang.Thread.run(Thread.java:748)''']
 EXCEPTION_LOG_DATA = '''Checkout service exception\n
 java.io.IOException: File uploading failed, retrying...\n
     at java.io.FileOutputStream.writeBytes(Native Method)\n
