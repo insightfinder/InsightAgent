@@ -168,7 +168,7 @@ def send_log_data(time, time_delta, is_abnormal):
                 data_array.append(data)
             replay_log_data(configs[constant.LOG], data_array, "Log exception data")
     else:
-        num_message = random.randint(2, 5)
+        num_message = random.randint(3, 6)
         data_array = []
         for i in range(0, num_message):
             data_write = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_LOG_DATA[0])
@@ -176,13 +176,13 @@ def send_log_data(time, time_delta, is_abnormal):
             data_array.append(data_write)
             data_array.append(data_finished)
         # stream some exception data
-        for i in range(0, random.randint(0,2)):
+        for i in range(0, random.randint(1,3)):
             exception_data = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_EXCEPTION_DATA[0])
             data_array.append(exception_data)
-        for i in range(0, random.randint(0,2)):
+        for i in range(0, random.randint(1,3)):
             exception_data = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_EXCEPTION_DATA[1])
             data_array.append(exception_data)
-        for i in range(0, random.randint(0,2)):
+        for i in range(0, random.randint(1,3)):
             exception_data = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_EXCEPTION_DATA[2])
             data_array.append(exception_data)
         replay_log_data(configs[constant.LOG], data_array, "Log normal data")
