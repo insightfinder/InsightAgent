@@ -44,7 +44,16 @@ WEB_NORMAL_DATA = ["User checked the dash board page", "User changed the profile
                    "User logged in"]
 
 # Log data
-NORMAL_LOG_DATA = ["Start writing to file.", "File writing finished"]
+NORMAL_LOG_DATA = ['''com.insightfinder.RabbitMQ.ConsumerTDLogStreaming processTask\nINFO: Start processing log data saving''',
+'''com.insightfinder.RabbitMQ.ConsumerTDLogStreaming getPreprocessedRawDataMap\nINFO: Finish preprocessing for raw data''',
+'''com.insightfinder.utility.ChunkingUtility getFinalRawEventArrayToSave\nINFO: Save events to buffer''',
+'''com.insightfinder.logic.causal_relation_process.MultiHopDataProcessor findBestCausalGroup\nINFO: Get the best causal group candidate''',
+'''com.insightfinder.logic.causal_relation_process.CausalMultiHopResultProcessor createLogResultList\nINFO: generating the src nodes and candidate log relation list'''
+'''com.insightfinder.logic.MetricPredictionAnomalyProcessor doPredictionDetection\nWARNING: rawDataInfo.csvData is empty''',
+'''com.insightfinder.RabbitMQ.ConsumerDetection processTask\nINFO: metric detection finished''',
+'''com.insightfinder.models.payload.log.LogUpdateCalendarInfoPayload runTask\nINFO: Successfully to store the log calendar info''',
+'''com.insightfinder.utility.LogCollectResultUtility updateNidMetadata\nINFO: Finish updating log nid time interval''',
+'''com.insightfinder.utility.LogCollectResultUtility clusteringEvents\nINFO: Starting clustering events''']
 NORMAL_EXCEPTION_DATA = ['''java.lang.ClassCastException: com.insightfinder.datastore.ActiveAWSProject cannot be cast to com.insightfinder.datastore.ActiveCustomProject
 	at com.insightfinder.datastore.ActiveProject.getProjectFromCassandra(ActiveProject.java:329)
 	at com.insightfinder.models.payload.DetectedIncidentAlertPayload.getDetectedIncidentAnomalyTimeLine(DetectedIncidentAlertPayload.java:109)
