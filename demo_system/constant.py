@@ -48,7 +48,7 @@ NORMAL_LOG_DATA = ['''com.insightfinder.RabbitMQ.ConsumerTDLogStreaming processT
 '''com.insightfinder.RabbitMQ.ConsumerTDLogStreaming getPreprocessedRawDataMap\nINFO: Finish preprocessing for raw data''',
 '''com.insightfinder.utility.ChunkingUtility getFinalRawEventArrayToSave\nINFO: Save events to buffer''',
 '''com.insightfinder.logic.causal_relation_process.MultiHopDataProcessor findBestCausalGroup\nINFO: Get the best causal group candidate''',
-'''com.insightfinder.logic.causal_relation_process.CausalMultiHopResultProcessor createLogResultList\nINFO: generating the src nodes and candidate log relation list'''
+'''com.insightfinder.logic.causal_relation_process.CausalMultiHopResultProcessor createLogResultList\nINFO: generating the src nodes and candidate log relation list''',
 '''com.insightfinder.logic.MetricPredictionAnomalyProcessor doPredictionDetection\nWARNING: rawDataInfo.csvData is empty''',
 '''com.insightfinder.RabbitMQ.ConsumerDetection processTask\nINFO: metric detection finished''',
 '''com.insightfinder.models.payload.log.LogUpdateCalendarInfoPayload runTask\nINFO: Successfully to store the log calendar info''',
