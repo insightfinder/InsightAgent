@@ -1,5 +1,5 @@
-# elasticsearch2
-This agent collects data from elasticsearch2 and sends it to Insightfinder.
+# elasticsearchquery
+This agent query log data from elastic search server and sends it to Insightfinder.
 ## Installing the Agent
 
 ### Short Version
