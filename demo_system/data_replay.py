@@ -91,6 +91,11 @@ def to_epochtime_second(time):
     epoch = datetime.datetime.utcfromtimestamp(0)
     return int((time - epoch).total_seconds()) * 1000
 
+def get_log_data_with_instance(timestamp, tag, data):
+    data = "[" + constant.LOG_INSTANCE_LIST[random.randint(0, 9)] + "]\n" + data
+    log_data = {constant.EVENT_ID: timestamp, constant.TAG: tag, constant.DATA: data}
+    return log_data
+
 def get_log_data(timestamp, tag, data):
     log_data = {constant.EVENT_ID: timestamp, constant.TAG: tag, constant.DATA: data}
     return log_data
@@ -171,7 +176,7 @@ def send_log_data(time, time_delta, is_abnormal):
     data_array = []
     for i in range(0, num_message):
         for data in constant.NORMAL_LOG_DATA:
-            log_data = get_log_data(timestamp + i, constant.LOG_INSTANCE, data)
+            log_data = get_log_data_with_instance(timestamp + i, constant.LOG_INSTANCE, data)
             data_array.append(log_data)
     # stream some exception data
     for i in range(0, random.randint(1,3)):

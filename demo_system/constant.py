@@ -7,6 +7,7 @@ NORMAL_TIME = "normal_time"
 ABNORMAL_TIME = "abnormal_time"
 PROJECT_NAME = "project_name"
 DATA_TYPE = "data_type"
+ACTION_TRIGGERED_MAP = "action_triggered_map"
 REVERSE_DEPLOYMENT = "reverse_deployment"
 LOG = "Log"
 DEPLOYMENT = "Deployment"
@@ -20,6 +21,7 @@ DATA_TYPE_NORMAL = "normal"
 DATA_TYPE_ABNORMAL = "abnormal"
 DATE_TIME_FORMAT_MINUTE = "%Y-%m-%dT%H:%M:00"
 DATE_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
+DATE_TIME_FORMAT_DAY = "%Y-%m-%d"
 
 # Deployment data
 DEPLOYMENT_DATA = '''jobType: DEPLOY\n
@@ -43,8 +45,11 @@ WEB_INCIDENT_DATA = "Production 911: Checkout server returns 500 error"
 WEB_NORMAL_DATA = ["User checked the dash board page", "User changed the profile setting", "User logged out",
                    "User logged in"]
 
+# Instance name for log
+LOG_INSTANCE_LIST = ["84.206.252.176", "203.133.162.186", "248.23.23.69", "9.111.192.107", "249.148.28.81", "39.237.183.95",
+                "102.38.146.196", "79.226.203.156", "141.87.7.150", "33.133.144.70"]
 # Log data
-NORMAL_LOG_DATA = ['''com.insightfinder.RabbitMQ.ConsumerTDLogStreaming processTask\nINFO: Start processing log data saving''',
+NORMAL_LOG_DATA = ['''com.insightfinder.RabbitMQ.ConsumerTDLogStreaming processTask\nINFO: Start to process log data saving, ''',
 '''com.insightfinder.RabbitMQ.ConsumerTDLogStreaming getPreprocessedRawDataMap\nINFO: Finish preprocessing for raw data''',
 '''com.insightfinder.utility.ChunkingUtility getFinalRawEventArrayToSave\nINFO: Save events to buffer''',
 '''com.insightfinder.logic.causal_relation_process.MultiHopDataProcessor findBestCausalGroup\nINFO: Get the best causal group candidate''',
