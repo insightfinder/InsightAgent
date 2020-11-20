@@ -91,6 +91,11 @@ def to_epochtime_second(time):
     epoch = datetime.datetime.utcfromtimestamp(0)
     return int((time - epoch).total_seconds()) * 1000
 
+def get_log_data_with_instance(timestamp, tag, data):
+    data = "[" + constant.LOG_INSTANCE_LIST[random.randint(0, 9)] + "]\n" + data
+    log_data = {constant.EVENT_ID: timestamp, constant.TAG: tag, constant.DATA: data}
+    return log_data
+
 def get_log_data(timestamp, tag, data):
     log_data = {constant.EVENT_ID: timestamp, constant.TAG: tag, constant.DATA: data}
     return log_data
@@ -167,15 +172,23 @@ def send_log_data(time, time_delta, is_abnormal):
                 data = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.EXCEPTION_LOG_DATA)
                 data_array.append(data)
             replay_log_data(configs[constant.LOG], data_array, "Log exception data")
-    else:
-        num_message = random.randint(1, 3)
-        data_array = []
-        for i in range(0, num_message):
-            data_write = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_LOG_DATA[0])
-            data_finished = get_log_data(timestamp + i + 50, constant.LOG_INSTANCE, constant.NORMAL_LOG_DATA[1])
-            data_array.append(data_write)
-            data_array.append(data_finished)
-        replay_log_data(configs[constant.LOG], data_array, "Log normal data")
+    num_message = random.randint(1, 3)
+    data_array = []
+    for i in range(0, num_message):
+        for data in constant.NORMAL_LOG_DATA:
+            log_data = get_log_data_with_instance(timestamp + i, constant.LOG_INSTANCE, data)
+            data_array.append(log_data)
+    # stream some exception data
+    for i in range(0, random.randint(1,3)):
+        exception_data = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_EXCEPTION_DATA[0])
+        data_array.append(exception_data)
+    for i in range(0, random.randint(1,3)):
+        exception_data = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_EXCEPTION_DATA[1])
+        data_array.append(exception_data)
+    for i in range(0, random.randint(1,3)):
+        exception_data = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_EXCEPTION_DATA[2])
+        data_array.append(exception_data)
+    replay_log_data(configs[constant.LOG], data_array, "Log normal data")
 
 
 def read_metric_data(timestamp, index, metric_file_name, msg):

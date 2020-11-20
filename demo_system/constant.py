@@ -7,6 +7,7 @@ NORMAL_TIME = "normal_time"
 ABNORMAL_TIME = "abnormal_time"
 PROJECT_NAME = "project_name"
 DATA_TYPE = "data_type"
+ACTION_TRIGGERED_MAP = "action_triggered_map"
 REVERSE_DEPLOYMENT = "reverse_deployment"
 LOG = "Log"
 DEPLOYMENT = "Deployment"
@@ -20,6 +21,7 @@ DATA_TYPE_NORMAL = "normal"
 DATA_TYPE_ABNORMAL = "abnormal"
 DATE_TIME_FORMAT_MINUTE = "%Y-%m-%dT%H:%M:00"
 DATE_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
+DATE_TIME_FORMAT_DAY = "%Y-%m-%d"
 
 # Deployment data
 DEPLOYMENT_DATA = '''jobType: DEPLOY\n
@@ -43,8 +45,56 @@ WEB_INCIDENT_DATA = "Production 911: Checkout server returns 500 error"
 WEB_NORMAL_DATA = ["User checked the dash board page", "User changed the profile setting", "User logged out",
                    "User logged in"]
 
+# Instance name for log
+LOG_INSTANCE_LIST = ["84.206.252.176", "203.133.162.186", "248.23.23.69", "9.111.192.107", "249.148.28.81", "39.237.183.95",
+                "102.38.146.196", "79.226.203.156", "141.87.7.150", "33.133.144.70"]
 # Log data
-NORMAL_LOG_DATA = ["Start writing to file.", "File writing finished"]
+NORMAL_LOG_DATA = ['''com.insightfinder.RabbitMQ.ConsumerTDLogStreaming processTask\nINFO: Start to process log data saving, ''',
+'''com.insightfinder.RabbitMQ.ConsumerTDLogStreaming getPreprocessedRawDataMap\nINFO: Finish preprocessing for raw data''',
+'''com.insightfinder.utility.ChunkingUtility getFinalRawEventArrayToSave\nINFO: Save events to buffer''',
+'''com.insightfinder.logic.causal_relation_process.MultiHopDataProcessor findBestCausalGroup\nINFO: Get the best causal group candidate''',
+'''com.insightfinder.logic.causal_relation_process.CausalMultiHopResultProcessor createLogResultList\nINFO: generating the src nodes and candidate log relation list''',
+'''com.insightfinder.logic.MetricPredictionAnomalyProcessor doPredictionDetection\nWARNING: rawDataInfo.csvData is empty''',
+'''com.insightfinder.RabbitMQ.ConsumerDetection processTask\nINFO: metric detection finished''',
+'''com.insightfinder.models.payload.log.LogUpdateCalendarInfoPayload runTask\nINFO: Successfully to store the log calendar info''',
+'''com.insightfinder.utility.LogCollectResultUtility updateNidMetadata\nINFO: Finish updating log nid time interval''',
+'''com.insightfinder.utility.LogCollectResultUtility clusteringEvents\nINFO: Starting clustering events''']
+NORMAL_EXCEPTION_DATA = ['''java.lang.ClassCastException: com.insightfinder.datastore.ActiveAWSProject cannot be cast to com.insightfinder.datastore.ActiveCustomProject
+	at com.insightfinder.datastore.ActiveProject.getProjectFromCassandra(ActiveProject.java:329)
+	at com.insightfinder.models.payload.DetectedIncidentAlertPayload.getDetectedIncidentAnomalyTimeLine(DetectedIncidentAlertPayload.java:109)
+	at com.insightfinder.models.payload.DetectedIncidentAlertPayload.runTask(DetectedIncidentAlertPayload.java:94)
+	at com.insightfinder.RabbitMQ.ConsumerDetectedIncidentAlert.processTask(ConsumerDetectedIncidentAlert.java:31)
+	at com.insightfinder.RabbitMQ.IFARabbitmqConsumer.handleDelivery(IFARabbitmqConsumer.java:66)
+	at com.rabbitmq.client.impl.ConsumerDispatcher$5.run(ConsumerDispatcher.java:149)
+	at com.rabbitmq.client.impl.ConsumerWorkService$WorkPoolRunnable.run(ConsumerWorkService.java:104)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+	at java.lang.Thread.run(Thread.java:748)''',
+    '''com.insightfinder.exception.DataCorruptionException: Data Corruption
+	at com.insightfinder.datastore.metric_data.InstanceMetricData$MetricMap.getMetricMap(InstanceMetricData.java:286)
+	at com.insightfinder.datastore.metric_data.InstanceMetricData$TimestampMetricMap.getTimestampMetricMap(InstanceMetricData.java:261)
+	at com.insightfinder.datastore.metric_data.aggregatedmetricdata.InstanceMetricDataAggregatedUtils.aggregateInstanceMetricDataByTimestamp(InstanceMetricDataAggregatedUtils.java:67)
+	at com.insightfinder.RabbitMQ.ConsumerCronAggregateMetricData.handleDelivery(ConsumerCronAggregateMetricData.java:59)
+	at com.rabbitmq.client.impl.ConsumerDispatcher$5.run(ConsumerDispatcher.java:149)
+	at com.rabbitmq.client.impl.ConsumerWorkService$WorkPoolRunnable.run(ConsumerWorkService.java:104)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+	at java.lang.Thread.run(Thread.java:748)''',
+    '''com.datastax.driver.core.exceptions.InvalidQueryException: Some partition key parts are missing: instancename
+	at com.datastax.driver.core.exceptions.InvalidQueryException.copy(InvalidQueryException.java:50)
+	at com.datastax.driver.core.DriverThrowables.propagateCause(DriverThrowables.java:35)
+	at com.datastax.driver.core.DefaultResultSetFuture.getUninterruptibly(DefaultResultSetFuture.java:293)
+	at com.datastax.driver.core.AbstractSession.execute(AbstractSession.java:58)
+	at com.datastax.driver.mapping.MappingSession.deleteByQuery(MappingSession.java:143)
+	at com.insightfinder.datastore.CassandraStore.deleteByQuery(CassandraStore.java:496)
+	at com.insightfinder.RabbitMQ.ConsumerCleanCron.cleanUpData(ConsumerCleanCron.java:67)
+	at com.insightfinder.RabbitMQ.ConsumerCleanCron.processTask(ConsumerCleanCron.java:49)
+	at com.insightfinder.RabbitMQ.IFARabbitmqConsumer.handleDelivery(IFARabbitmqConsumer.java:66)
+	at com.rabbitmq.client.impl.ConsumerDispatcher$5.run(ConsumerDispatcher.java:149)
+	at com.rabbitmq.client.impl.ConsumerWorkService$WorkPoolRunnable.run(ConsumerWorkService.java:104)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+	at java.lang.Thread.run(Thread.java:748)''']
 EXCEPTION_LOG_DATA = '''Checkout service exception\n
 java.io.IOException: File uploading failed, retrying...\n
     at java.io.FileOutputStream.writeBytes(Native Method)\n
