@@ -16,11 +16,7 @@ import statistics
 import subprocess
 import shlex
 import traceback
-import pyprometheus
 
-from pyprometheus import ProgrammingError
-from datetime import datetime
-from decimal import Decimal
 from optparse import OptionParser
 
 """
@@ -28,204 +24,120 @@ This script gathers data to send to Insightfinder
 """
 
 
-def start_data_processing(thread_number):
-    # open conn
-    conn = pyprometheus.connect(**agent_config_vars['prometheus_kwargs'])
-    cursor = conn.cursor()
-    logger.info('Started connection number ' + str(thread_number))
+def start_data_processing():
+    logger.info('Started......')
 
-    sql_str = None
-
-    # get instance and metric mapping info
-    if agent_config_vars['instance_map_conn']:
-        try:
-            logger.info('Starting execute SQL to getting instance mapping info.')
-            sql_str = "select * from {}".format(agent_config_vars['instance_map_conn']['instance_map_table'])
-            logger.debug(sql_str)
-
-            # execute sql string
-            cursor.execute(sql_str)
-
-            instance_map = {}
-            for message in cursor:
-                id_str = str(message[agent_config_vars['instance_map_conn']['instance_map_id_field']])
-                name_str = str(message[agent_config_vars['instance_map_conn']['instance_map_name_field']])
-                instance_map[id_str] = name_str
-            agent_config_vars['instance_map'] = instance_map
-        except ProgrammingError as e:
-            logger.error(e)
-            logger.error('SQL execute error: '.format(sql_str))
-
-    # get table list and filter by whitelist
-    table_list = []
-    if agent_config_vars['table_list'].startswith('sql:'):
-        try:
-            logger.info('Starting execute SQL to getting table info.')
-            sql_str = agent_config_vars['table_list'].split('sql:')[1]
-            logger.debug(sql_str)
-
-            # execute sql string
-            cursor.execute(sql_str)
-
-            for message in cursor:
-                table = str(message['name'])
-                table_list.append(table)
-
-        except ProgrammingError as e:
-            logger.error(e)
-            logger.error('SQL execute error: '.format(sql_str))
+    # get metrics
+    metrics = []
+    if len(agent_config_vars['metrics']) == 0:
+        url = urlparse.urljoin(agent_config_vars['api_url'], 'label/__name__/values')
+        response = send_request(url, params={}, proxies=agent_config_vars['proxies'])
+        if response != -1:
+            result = response.json()
+            if result['status'] == 'success':
+                metrics = result['data']
     else:
-        table_list = filter(lambda x: x.strip(), agent_config_vars['table_list'].split(','))
+        metrics = agent_config_vars['metrics']
 
-    if agent_config_vars['table_whitelist']:
-        try:
-            db_regex = regex.compile(agent_config_vars['table_whitelist'])
-            table_list = list(filter(db_regex.match, table_list))
-        except Exception as e:
-            logger.error(e)
-    if len(table_list) == 0:
-        logger.error('Table list is empty')
+    # filter metrics
+    if agent_config_vars['metrics_to_ignore'] and len(agent_config_vars['metrics_to_ignore']) > 0:
+        metrics = filter(lambda x: x not in agent_config_vars['metrics_to_ignore'], metrics)
+
+    if len(metrics) == 0:
+        logger.error('Metric list is empty')
         sys.exit(1)
 
-    # get device mapping info for different device field
-    if agent_config_vars['device_map_conn']:
-        agent_config_vars['device_map'] = {}
-        for field, map_info in agent_config_vars['device_map_conn'].items():
-            try:
-                logger.info('Starting execute SQL to getting device mapping info: {}.'.format(field))
-                sql_str = "select * from {}".format(map_info['device_map_table'])
-                logger.debug(sql_str)
-
-                # execute sql string
-                cursor.execute(sql_str)
-
-                device_map = {}
-                for message in cursor:
-                    id_str = str(message[map_info['device_map_id_field']])
-                    name_str = str(message[map_info['device_map_name_field']])
-                    device_map[id_str] = name_str
-                agent_config_vars['device_map'][field] = device_map
-            except ProgrammingError as e:
-                logger.error(e)
-                logger.error('SQL execute error: '.format(sql_str))
-
-    # get sql string
-    sql = agent_config_vars['sql']
-    sql = sql.replace('\n', ' ').replace('"""', '')
-
     # parse sql string by params
-    logger.debug('sql config: {}'.format(agent_config_vars['sql_config']))
-    if agent_config_vars['sql_config']:
+    logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
+    if agent_config_vars['his_time_range']:
         logger.debug('Using time range for replay data')
-        for timestamp in range(agent_config_vars['sql_config']['sql_time_range'][0],
-                               agent_config_vars['sql_config']['sql_time_range'][1],
-                               agent_config_vars['sql_config']['sql_time_interval']):
-            for table in table_list:
-                sql_str = sql
-                start_time = arrow.get(timestamp).format(agent_config_vars['sql_time_format'])
-                end_time = arrow.get(timestamp + agent_config_vars['sql_config']['sql_time_interval']).format(
-                    agent_config_vars['sql_time_format'])
-                extract_time = arrow.get(
-                    timestamp + agent_config_vars['sql_config']['sql_time_interval'] + agent_config_vars[
-                        'sql_extract_time_offset']).format(agent_config_vars['sql_extract_time_format'])
-
-                sql_str = sql_str.replace('{{table}}', table)
-                sql_str = sql_str.replace('{{extract_time}}', extract_time)
-                sql_str = sql_str.replace('{{start_time}}', start_time)
-                sql_str = sql_str.replace('{{end_time}}', end_time)
-
-                query_messages_prometheus(cursor, sql_str)
+        for timestamp in range(agent_config_vars['his_time_range'][0],
+                               agent_config_vars['his_time_range'][1],
+                               if_config_vars['sampling_interval']):
+            for metric in metrics:
+                pass
 
             # clear metric buffer when piece of time range end
             clear_metric_buffer()
     else:
         logger.debug('Using current time for streaming data')
-        for table in table_list:
-            sql_str = sql
-            start_time_multiple = agent_config_vars['start_time_multiple'] or 1
-            start_time = arrow.get(
-                arrow.utcnow().float_timestamp - start_time_multiple * if_config_vars['sampling_interval'],
-                tzinfo=agent_config_vars['timezone'].zone).format(
-                agent_config_vars['sql_time_format'])
-            end_time = arrow.get(arrow.utcnow().float_timestamp, tzinfo=agent_config_vars['timezone'].zone).format(
-                agent_config_vars['sql_time_format'])
-            extract_time = arrow.get(
-                arrow.utcnow().float_timestamp + agent_config_vars['sql_extract_time_offset'],
-                tzinfo=agent_config_vars['timezone'].zone).format(
-                agent_config_vars['sql_extract_time_format'])
+        time_now = int(arrow.utcnow().float_timestamp)
+        # start_time = time_now - if_config_vars['sampling_interval']
+        # end_time = time_now
 
-            sql_str = sql_str.replace('{{table}}', table)
-            sql_str = sql_str.replace('{{extract_time}}', extract_time)
-            sql_str = sql_str.replace('{{start_time}}', start_time)
-            sql_str = sql_str.replace('{{end_time}}', end_time)
+        for metric in metrics:
+            # use resultType: "vector"
+            params = {
+                'query': metric + agent_config_vars['query_label_selector'],
+                'time': time_now,
+                # 'start': start_time,
+                # 'end': end_time,
+                # 'step': if_config_vars['sampling_interval']
+            }
+            query_messages_prometheus(metric, params)
 
-            query_messages_prometheus(cursor, sql_str)
+        # clear metric buffer when piece of time range end
+        clear_metric_buffer()
 
-    cursor.close()
-    conn.close()
-    logger.info('Closed connection number ' + str(thread_number))
+    logger.info('Closed......')
 
 
-def query_messages_prometheus(cursor, sql_str):
-    try:
-        logger.info('Starting execute SQL')
-        logger.info(sql_str)
+def query_messages_prometheus(metric, params):
+    logger.info('Starting query metric: ' + metric)
 
-        # execute sql string
-        cursor.execute(sql_str)
+    # execute sql string
+    url = urlparse.urljoin(agent_config_vars['api_url'], 'query')
+    response = send_request(url, params=params, proxies=agent_config_vars['proxies'])
+    if response == -1:
+        logger.error('Query metric error: ' + metric)
+    else:
+        result = response.json()
+        if result['status'] != 'success':
+            logger.error('Query metric error: ' + metric)
+        else:
+            parse_messages_prometheus(result.get('data').get('result'))
 
-        parse_messages_prometheus(cursor)
-    except ProgrammingError as e:
-        logger.error(e)
-        logger.error('SQL execute error: '.format(sql_str))
 
-
-def parse_messages_prometheus(cursor):
+def parse_messages_prometheus(result):
     count = 0
-    message_list = cursor.fetchall()
-    logger.info('Reading {} messages'.format(len(message_list)))
+    logger.info('Reading {} messages'.format(len(result)))
 
-    for message in message_list:
+    for message in result:
         try:
             logger.debug('Message received')
             logger.debug(message)
 
-            timestamp = message[agent_config_vars['timestamp_field'][0]]
-            if isinstance(timestamp, datetime):
-                timestamp = int(arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone).float_timestamp * 1000)
-            else:
-                timestamp = int(arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone).float_timestamp * 1000)
+            # filter if quantile != 1
+            quantile = message.get('metric').get('quantile')
+            if quantile and quantile != '1':
+                continue
+
+            date_field = message.get('metric').get('__name__')
+            instance = message.get('metric').get(
+                agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
+                    agent_config_vars['instance_field']) > 0 else 'instance')
+
+            # add device info if has
+            device = None
+            device_field = agent_config_vars['device_field']
+            if device_field and len(device_field) > 0:
+                device = message.get('metric').get(agent_config_vars['device_field'][0])
+            full_instance = make_safe_instance_string(instance, device)
+
+            vector_value = message.get('value')
+            timestamp = int(vector_value[0]) * 1000
+            data_value = vector_value[1]
 
             # set offset for timestamp
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
-
             timestamp = str(timestamp)
-
-            instance = str(message[agent_config_vars['instance_field'][0]])
-            instance = agent_config_vars['instance_map'].get(instance, instance)
-
-            # add device info if has
-            full_instance = instance
-            device_field = agent_config_vars['device_field']
-            device_field = list(set(device_field) & set(message.keys()))
-            if device_field:
-                device = str(message[device_field[0]])
-                device = agent_config_vars['device_map'].get(device_field[0], {}).get(device, device)
-                device = device.replace('_', '-').replace('.', '-')
-                full_instance = '{}_{}'.format(device, instance)
 
             key = '{}-{}'.format(timestamp, full_instance)
             if key not in metric_buffer['buffer_dict']:
                 metric_buffer['buffer_dict'][key] = {"timestamp": timestamp}
 
-            setting_values = agent_config_vars['data_fields'] or message.keys()
-            setting_values = list(set(setting_values) & set(message.keys()))
-            for data_field in setting_values:
-                data_value = message[data_field]
-                if isinstance(data_value, Decimal):
-                    data_value = str(data_value)
-                metric_key = '{}[{}]'.format(data_field, full_instance)
-                metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
+            metric_key = '{}[{}]'.format(date_field, full_instance)
+            metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
 
         except Exception as e:
             logger.warn('Error when parsing message')
@@ -252,7 +164,7 @@ def get_agent_config_vars():
         metrics = None
         metrics_to_ignore = None
         query_label_selector = ''
-
+        his_time_range = None
         try:
             # prometheus settings
             prometheus_config = {}
@@ -272,6 +184,9 @@ def get_agent_config_vars():
             metrics = config_parser.get('prometheus', 'metrics')
             metrics_to_ignore = config_parser.get('prometheus', 'metrics_to_ignore')
             query_label_selector = config_parser.get('prometheus', 'query_label_selector') or ''
+
+            # time range
+            his_time_range = config_parser.get('prometheus', 'his_time_range')
 
             # proxies
             agent_http_proxy = config_parser.get('prometheus', 'agent_http_proxy')
@@ -295,15 +210,16 @@ def get_agent_config_vars():
         # metrics
         if len(metrics) != 0:
             metrics = filter(lambda x: x.strip(), metrics.split(','))
-        else:
-            config_error('metrics')
         if len(metrics_to_ignore) != 0:
             metrics_to_ignore = filter(lambda x: x.strip(), metrics_to_ignore.split(','))
-        else:
-            config_error('metrics_to_ignore')
+
+        if len(his_time_range) != 0:
+            his_time_range = filter(lambda x: x.strip(),
+                                    his_time_range.split(','))
+            his_time_range = map(lambda x: int(arrow.get(x).float_timestamp), his_time_range)
 
         if len(target_timestamp_timezone) != 0:
-            target_timestamp_timezone = arrow.now(target_timestamp_timezone).utcoffset().total_seconds()
+            target_timestamp_timezone = int(arrow.now(target_timestamp_timezone).utcoffset().total_seconds())
         else:
             config_error('target_timestamp_timezone')
 
@@ -331,8 +247,8 @@ def get_agent_config_vars():
 
         # fields
         # project_fields = project_field.split(',')
-        instance_fields = instance_field.split(',')
-        device_fields = device_field.split(',')
+        instance_fields = filter(lambda x: x.strip(), instance_field.split(','))
+        device_fields = filter(lambda x: x.strip(), device_field.split(','))
         timestamp_fields = timestamp_field.split(',')
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
@@ -356,6 +272,7 @@ def get_agent_config_vars():
             'metrics': metrics,
             'metrics_to_ignore': metrics_to_ignore,
             'query_label_selector': query_label_selector,
+            'his_time_range': his_time_range,
 
             'proxies': agent_proxies,
             'data_format': data_format,
@@ -553,7 +470,7 @@ def make_safe_instance_string(instance, device=''):
     instance = UNDERSCORE.sub('.', instance)
     instance = COLONS.sub('-', instance)
     # if there's a device, concatenate it to the instance with an underscore
-    if len(device) != 0:
+    if device:
         instance = '{}_{}'.format(make_safe_instance_string(device), instance)
     return instance
 
@@ -633,13 +550,13 @@ def print_summary_info():
     logger.debug(cli_data_block)
 
 
-def initialize_data_gathering(thread_number):
+def initialize_data_gathering():
     reset_metric_buffer()
     reset_track()
     track['chunk_count'] = 0
     track['entry_count'] = 0
 
-    start_data_processing(thread_number)
+    start_data_processing()
 
     # clear metric buffer when data processing end
     clear_metric_buffer()
@@ -874,4 +791,4 @@ if __name__ == "__main__":
     agent_config_vars = get_agent_config_vars()
     print_summary_info()
 
-    initialize_data_gathering(1)
+    initialize_data_gathering()
