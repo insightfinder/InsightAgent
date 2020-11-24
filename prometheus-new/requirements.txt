@@ -1,0 +1,6 @@
+arrow==0.15.5
+pytz==2019.3
+regex==2020.2.18
+requests==2.23.0
+statistics==1.0.3.5
+Cython==0.29.17
