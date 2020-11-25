@@ -17,6 +17,7 @@ import subprocess
 import shlex
 import traceback
 
+from sys import getsizeof
 from optparse import OptionParser
 
 """
@@ -55,7 +56,12 @@ def start_data_processing():
                                agent_config_vars['his_time_range'][1],
                                if_config_vars['sampling_interval']):
             for metric in metrics:
-                pass
+                # use resultType: "vector"
+                params = {
+                    'query': metric + agent_config_vars['query_label_selector'],
+                    'time': timestamp,
+                }
+                query_messages_prometheus(metric, params)
 
             # clear metric buffer when piece of time range end
             clear_metric_buffer()
@@ -461,7 +467,8 @@ def config_error_no_config():
 
 def get_json_size_bytes(json_data):
     """ get size of json object in bytes """
-    return len(bytearray(json.dumps(json_data)))
+    # return len(bytearray(json.dumps(json_data)))
+    return getsizeof(json.dumps(json_data))
 
 
 def make_safe_instance_string(instance, device=''):
@@ -574,7 +581,7 @@ def clear_metric_buffer():
     for row in buffer_values:
         track['current_row'].append(row)
         count += 1
-        if count % 100 == 0 and get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+        if count % 100 == 0 or get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
             logger.debug('Sending buffer chunk')
             send_data_wrapper()
 
