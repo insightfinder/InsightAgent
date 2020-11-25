@@ -1,4 +1,4 @@
-# prometheus
+# prometheus-new
 This agent collects data from prometheus and sends it to Insightfinder.
 ## Installing the Agent
 
@@ -11,7 +11,7 @@ linux: yum install freetds
 
 ### Short Version
 ```bash
-bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) prometheus && cd prometheus
+bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) prometheus-new && cd prometheus-new
 vi config.ini
 sudo ./setup/install.sh --create  # install on localhost
                                   ## or on multiple nodes
@@ -23,8 +23,8 @@ See the `offline` README for instructions on installing prerequisites.
 ### Long Version
 ###### Download the agent tarball and untar it:
 ```bash
-curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/prometheus/prometheus.tar.gz
-tar xvf prometheus.tar.gz && cd prometheus
+curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/prometheus-new/prometheus-new.tar.gz
+tar xvf prometheus-new.tar.gz && cd prometheus-new
 ```
 
 ###### Set up `config.ini`
