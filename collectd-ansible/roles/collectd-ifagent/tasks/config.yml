@@ -1,0 +1,13 @@
+---
+- name: Create config.ini
+  template:
+    src: config.ini.j2
+    dest: "{{ agent_path }}/config.ini"
+
+- name: Create cron job
+  cron:
+    name: "{{ project_name }}"
+    minute: "*/{{ sampling_interval }}"
+    user: root
+    cron_file: "{{ project_name }}"
+    job: "/usr/bin/python {{ agent_path }}/collectdReportMetrics.py -d {{ install_path }} -w {{ report_url }} 2>{{ log_path }}/reporting.err 1>{{ log_path }}/reporting.out"
