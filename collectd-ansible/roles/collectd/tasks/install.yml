@@ -1,0 +1,30 @@
+---
+- name: Online install
+  package:
+    name: collectd
+    state: present
+  register: online_install
+  ignore_errors: yes
+
+- name: Local install
+  block:
+    - name: Copy local packages to remote
+      copy:
+        src: "{{ item }}"
+        dest: /tmp/
+      with_items: "{{ local_packages }}"
+
+    - name: Find all rpm files on remote
+      find:
+        paths: "/tmp"
+        patterns: "*.rpm"
+      register: rpm_files
+
+    - set_fact:
+        rpm_list: "{{ rpm_files.files | map(attribute='path') | list }}"
+
+    - name: installing the rpm files
+      package:
+        name: "{{ rpm_list }}"
+        state: present
+  when: online_install is failed

@@ -1,0 +1,15 @@
+---
+# defaults file for collectd-ifagent
+
+local_packages: "{{ lookup('fileglob', 'CentOS-7/*.rpm').split(',') }}"
+
+required_packages:
+  - python-requests
+  - python-pytz
+
+base_path: /opt
+install_path: "{{ base_path }}/collectd-ifagent"
+log_path: "{{ install_path }}/log"
+data_path: "{{ install_path }}/data"
+agent_path: "{{ install_path }}/collectd"
+agent_file: collectdReportMetrics.py
