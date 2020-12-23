@@ -1,4 +1,4 @@
-# InsightAgent: ElasticSearchMetrics
+# InsightAgent: ELKMetrics
 Agent Type: Getting metrics about ElasticSearch server
 
 Platform: Linux
