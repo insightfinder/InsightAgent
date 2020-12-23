@@ -1,0 +1,12 @@
+# List all target machines here.
+
+[all:vars]
+#ansible_user=
+#ansible_ssh_private_key_file=/home/{{ansible_user}}/.ssh/id_rsa
+
+# ifagent settings
+report_url=
+project_name=
+user_name=
+license_key=
+sampling_interval=
