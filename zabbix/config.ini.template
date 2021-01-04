@@ -1,0 +1,54 @@
+[zabbix]
+## zabbix info
+# required
+url = http://127.0.0.1:80
+user = Admin
+password = zabbix
+
+# host groups to query for. If none specified, all host groups will be used
+host_groups =
+# hosts to query for. If none specified, all hosts will be used
+hosts =
+# applications to query for. If none specified, all applications will be used
+applications =
+
+# history data time config. If these options is set, the agent will query results by time range
+# time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
+his_time_range =
+
+# raw, rawtail, csv, csvtail, xls, xlsx, json, jsontail, avro, or xml
+# *tail formats keep track of the current file & position + completed files in [state] below
+data_format = json
+
+## message parsing
+# timestamp format, as library [arrow]. multiple fields can be formatted together to create the timestamp a la `YYYY-MM-DD HH:mm:ss ZZ`. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
+timestamp_format =
+# timezone, as per pytz
+timezone =
+timestamp_field =
+# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+target_timestamp_timezone = UTC
+# if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
+instance_field = instance
+device_field =
+# multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>` or `<name>::==<value>`, where `<name>` and `<value>` can each be either a literal value (`name::value`) or formatted (`total time [{step}]::=={timing.end}-{timing.start}`). Use `::==` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `eval()`.
+data_fields =
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
+[insightfinder]
+user_name =
+license_key =
+token =
+project_name =
+# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
+project_type = metric
+sampling_interval = 1
+run_interval = 1
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
