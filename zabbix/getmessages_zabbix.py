@@ -161,7 +161,7 @@ def parse_messages_zabbix(result, all_field_map, items_map, data_type):
             logger.debug(message)
 
             item_id = message['itemid']
-            if not items_map[item_id]:
+            if not items_map.get(item_id):
                 continue
 
             # set instance and device
