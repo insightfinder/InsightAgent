@@ -186,6 +186,7 @@ def parse_messages_zabbix(result, all_field_map, items_map, data_type):
 
             # set metric field and value
             data_field = items_map[item_id]['name']
+            data_field = make_safe_metric_key(data_field)
             data_value = message['lastvalue'] if data_type == 'live' else message['value']
 
             # set offset for timestamp
