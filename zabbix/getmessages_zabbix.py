@@ -90,18 +90,18 @@ def start_data_processing():
     # get metrics by hosts/applications
     items_map = {}
     items_ids = []
-    items_current_values = {}
     items_res = zapi.do_request('item.get', {
         'output': 'extend',
+        'groupids': host_groups_ids,
         "hostids": hosts_ids,
         "applicationids": application_ids,
 
     })
     for item in items_res['result']:
-        host_id = item['hostid']
         item_id = item['itemid']
-        value = item['lastvalue']
-        name = item['name']
+        value_type = item['value_type']
+        if value_type not in ['0', '3']:
+            continue
 
         # key = item['key_']
         # if '[' in key:
@@ -111,41 +111,39 @@ def start_data_processing():
         #             name = name.replace('$' + str(i + 1), keys[i])
 
         items_ids.append(item_id)
-        items_map[item_id] = {
-            "host": hosts_map.get(host_id),
-            "name": name,
-        }
-        items_current_values[item_id] = value
+        items_map[item_id] = item
     if len(items_ids) == 0:
         logger.error('Metric list is empty')
         sys.exit(1)
+    logger.info("Zabbix metrics length: %s" % len(items_ids))
+
+    # build map by item field
+    all_field_map = {
+        'hostid': hosts_map,
+    }
 
     # parse sql string by params
     logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
     if agent_config_vars['his_time_range']:
         logger.debug('Using time range for replay data')
-        history_res = zapi.do_request('history.get', {
-            'output': 'extend',
-            "history": 0,
-            "hostids": hosts_ids,
-            "itemids": items_ids,
-            'time_from': agent_config_vars['his_time_range'][0],
-            'time_till': agent_config_vars['his_time_range'][1],
-        })
+        for timestamp in range(agent_config_vars['his_time_range'][0],
+                               agent_config_vars['his_time_range'][1],
+                               if_config_vars['sampling_interval']):
+            history_res = zapi.do_request('history.get', {
+                'output': 'extend',
+                "history": 0,
+                "hostids": hosts_ids,
+                "itemids": items_ids,
+                'time_from': timestamp,
+                'time_till': timestamp + if_config_vars['sampling_interval'],
+            })
+            parse_messages_zabbix(history_res['result'], all_field_map, items_map, 'history')
 
-        # TODO: parse history value
-        parse_messages_zabbix(history_res['result'], items_map)
-
-        # clear metric buffer when piece of time range end
-        clear_metric_buffer()
+            # clear metric buffer when piece of time range end
+            clear_metric_buffer()
     else:
         logger.debug('Using current time for streaming data')
-        time_now = int(arrow.utcnow().float_timestamp)
-        # start_time = time_now - if_config_vars['sampling_interval']
-        # end_time = time_now
-
-        # TODO: parse current value
-        parse_messages_zabbix(items_res['result'], items_map)
+        parse_messages_zabbix(items_res['result'], all_field_map, items_map, 'live')
 
         # clear metric buffer when piece of time range end
         clear_metric_buffer()
@@ -153,7 +151,7 @@ def start_data_processing():
     logger.info('Closed......')
 
 
-def parse_messages_zabbix(result):
+def parse_messages_zabbix(result, all_field_map, items_map, data_type):
     count = 0
     logger.info('Reading {} messages'.format(len(result)))
 
@@ -162,26 +160,33 @@ def parse_messages_zabbix(result):
             logger.debug('Message received')
             logger.debug(message)
 
-            # filter if quantile != 1
-            quantile = message.get('metric').get('quantile')
-            if quantile and quantile != '1':
+            item_id = message['itemid']
+            if not items_map[item_id]:
                 continue
 
-            date_field = message.get('metric').get('__name__')
-            instance = message.get('metric').get(
-                agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
-                    agent_config_vars['instance_field']) > 0 else 'instance')
-
+            # set instance and device
+            instance_field = agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
+                agent_config_vars['instance_field']) > 0 else 'hostid'
+            instance_id = items_map.get(item_id).get(instance_field)
+            instance = all_field_map.get(instance_field).get(instance_id)
             # add device info if has
             device = None
             device_field = agent_config_vars['device_field']
             if device_field and len(device_field) > 0:
-                device = message.get('metric').get(agent_config_vars['device_field'][0])
+                device_field = agent_config_vars['device_field'][0]
+                device_id = items_map.get(item_id).get(device_field)
+                device = all_field_map.get(device_field).get(device_id)
             full_instance = make_safe_instance_string(instance, device)
 
-            vector_value = message.get('value')
-            timestamp = int(vector_value[0]) * 1000
-            data_value = vector_value[1]
+            # set timestamp
+            clock = message['lastclock'] if data_type == 'live' else message['clock']
+            timestamp = int(clock) * 1000
+            if timestamp == 0:
+                continue
+
+            # set metric field and value
+            data_field = items_map[item_id]['name']
+            data_value = message['lastvalue'] if data_type == 'live' else message['value']
 
             # set offset for timestamp
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
@@ -191,7 +196,7 @@ def parse_messages_zabbix(result):
             if key not in metric_buffer['buffer_dict']:
                 metric_buffer['buffer_dict'][key] = {"timestamp": timestamp}
 
-            metric_key = '{}[{}]'.format(date_field, full_instance)
+            metric_key = '{}[{}]'.format(data_field, full_instance)
             metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
 
         except Exception as e:
@@ -230,15 +235,15 @@ def get_agent_config_vars():
 
             # handle required arrays
             if len(config_parser.get('zabbix', 'url')) != 0:
-                zabbix_config['url'] = config_parser.get('zabbix', 'url')
+                zabbix_kwargs['url'] = config_parser.get('zabbix', 'url')
             else:
                 config_error('url')
             if len(config_parser.get('zabbix', 'user')) != 0:
-                zabbix_config['user'] = config_parser.get('zabbix', 'user')
+                zabbix_kwargs['user'] = config_parser.get('zabbix', 'user')
             else:
                 config_error('user')
             if len(config_parser.get('zabbix', 'password')) != 0:
-                zabbix_config['password'] = config_parser.get('zabbix', 'password')
+                zabbix_kwargs['password'] = config_parser.get('zabbix', 'password')
             else:
                 config_error('password')
 
@@ -638,7 +643,7 @@ def clear_metric_buffer():
     for row in buffer_values:
         track['current_row'].append(row)
         count += 1
-        if count % 100 == 0 or get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+        if count % 1000 == 0 or get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
             logger.debug('Sending buffer chunk')
             send_data_wrapper()
 
