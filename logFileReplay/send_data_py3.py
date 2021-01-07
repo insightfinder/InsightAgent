@@ -6,11 +6,12 @@ import time
 import copy
 import urllib3
 import importlib
+import requests
 from configparser import ConfigParser
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
-import requests
-
+MAX_RETRY_NUM = 10
+RETRY_WAIT_TIME_IN_SEC = 30
 
 def get_agent_config_vars():
     config_vars = {}
@@ -48,29 +49,44 @@ def get_agent_config_vars():
     return config_vars
 
 
-def send_data(metric_data):
+def send_data(log_data):
     """ Sends parsed metric data to InsightFinder """
     send_data_time = time.time()
     # prepare data for metric streaming agent
-    to_send_data_dict = dict()
-    # for backend so this is the camel case in to_send_data_dict
-    to_send_data_dict["metricData"] = json.dumps(metric_data)
-    to_send_data_dict["licenseKey"] = config_vars['license_key']
-    to_send_data_dict["projectName"] = config_vars['project_name']
-    to_send_data_dict["userName"] = config_vars['user_name']
-    to_send_data_dict["agentType"] = "LogFileReplay"
-
+    to_send_data_dict = {"metricData": json.dumps(log_data),
+                         "licenseKey": config_vars['license_key'],
+                         "projectName": config_vars['project_name'],
+                         "userName": config_vars['user_name'],
+                         "agentType": "LogFileReplay"}
     to_send_data_json = json.dumps(to_send_data_dict)
 
     # send the data
     post_url = config_vars['server_url'] + "/customprojectrawdata"
-    response = requests.post(post_url, data=json.loads(to_send_data_json), verify=False)
-    if response.status_code == 200:
-        print(str(len(bytearray(to_send_data_json, 'utf8'))) + " bytes of data are reported.")
-    else:
-        print("Failed to send data.")
+    send_data_to_receiver(post_url, to_send_data_json, len(log_data))
     print("--- Send data time: %s seconds ---" + str(time.time() - send_data_time))
 
+def send_data_to_receiver(post_url, to_send_data, num_of_message):
+    attempts = 0
+    while attempts < MAX_RETRY_NUM:
+        response_code = -1
+        attempts += 1
+        try:
+            response = requests.post(post_url, data=json.loads(to_send_data), verify=False)
+            response_code = response.status_code
+        except:
+            print("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
+                attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
+            time.sleep(RETRY_WAIT_TIME_IN_SEC)
+            continue
+        if response_code == 200:
+            print("Data send successfully. Number of events: %d" % num_of_message)
+            break
+        else:
+            print("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
+                attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
+            time.sleep(RETRY_WAIT_TIME_IN_SEC)
+    if attempts == MAX_RETRY_NUM:
+        sys.exit(1)
 
 if __name__ == "__main__":
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
