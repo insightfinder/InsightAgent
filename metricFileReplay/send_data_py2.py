@@ -9,6 +9,9 @@ import urllib3
 from ConfigParser import SafeConfigParser
 
 
+MAX_RETRY_NUM = 10
+RETRY_WAIT_TIME_IN_SEC = 30
+
 def get_agent_config_vars():
     config_vars = {}
     try:
@@ -61,13 +64,31 @@ def send_data(metric_data):
 
     # send the data
     post_url = config_vars['server_url'] + "/customprojectrawdata"
-    response = requests.post(post_url, data=json.loads(to_send_data_json), verify=False)
-    if response.status_code == 200:
-        print str(len(bytearray(to_send_data_json))) + " bytes of data are reported."
-    else:
-        print "Failed to send data."
+    send_data_to_receiver(post_url, to_send_data_json, len(metric_data))
     print "--- Send data time: %s seconds ---" + str(time.time() - send_data_time)
 
+def send_data_to_receiver(post_url, to_send_data, num_of_message):
+    attempts = 0
+    while attempts < MAX_RETRY_NUM:
+        response_code = -1
+        attempts += 1
+        try:
+            response = requests.post(post_url, data=json.loads(to_send_data), verify=False)
+            response_code = response.status_code
+        except:
+            print "Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
+                attempts, response_code, RETRY_WAIT_TIME_IN_SEC)
+            time.sleep(RETRY_WAIT_TIME_IN_SEC)
+            continue
+        if response_code == 200:
+            print "Data send successfully. Number of events: %d" % num_of_message
+            break
+        else:
+            print "Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
+                attempts, response_code, RETRY_WAIT_TIME_IN_SEC)
+            time.sleep(RETRY_WAIT_TIME_IN_SEC)
+    if attempts == MAX_RETRY_NUM:
+        sys.exit(1)
 
 if __name__ == "__main__":
     urllib3.disable_warnings()
