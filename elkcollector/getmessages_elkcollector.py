@@ -48,7 +48,7 @@ def query_es_data(es_conn):
             # page the total mesagges
             start_index = 0
             while start_index < total:
-                page_query = dict({'from': start_index, "size": agent_config_vars['query_page_size']}, **query)
+                page_query = dict({'from': start_index, "size": agent_config_vars['query_chunk_size']}, **query)
                 response = es_conn.search(
                     body=page_query,
                     index=agent_config_vars['indeces'],
@@ -56,7 +56,7 @@ def query_es_data(es_conn):
                     ignore_unavailable=False
                     if 'REPLAY' in if_config_vars['project_type']
                     else True)
-                start_index += agent_config_vars['query_page_size']
+                start_index += agent_config_vars['query_chunk_size']
 
                 # validate successs
                 if 'error' not in response:
@@ -145,7 +145,7 @@ def get_agent_config_vars():
             # es
             query_json = config_parser.get('agent', 'query_json')
             indeces = config_parser.get('agent', 'indeces')
-            query_page_size = config_parser.get('agent', 'query_page_size')
+            query_chunk_size = config_parser.get('agent', 'query_chunk_size')
 
             es_uris = config_parser.get('agent', 'es_uris')
             es_conn_info = {
@@ -201,12 +201,12 @@ def get_agent_config_vars():
             except Exception as e:
                 logger.error('Agent not correctly configured (query_json). Dropping.')
                 query_json = ''
-        if len(query_page_size) != 0:
+        if len(query_chunk_size) != 0:
             try:
-                query_page_size = int(query_page_size)
+                query_chunk_size = int(query_chunk_size)
             except Exception as e:
-                logger.error('Agent not correctly configured (query_page_size). Use 1000 by default.')
-                query_page_size = 1000
+                logger.error('Agent not correctly configured (query_chunk_size). Use 1000 by default.')
+                query_chunk_size = 1000
 
         # proxies
         agent_proxies = dict()
@@ -241,7 +241,7 @@ def get_agent_config_vars():
             'es_uris': es_uris,
             'es_conn_info': es_conn_info,
             'indeces': indeces,
-            'query_page_size': query_page_size,
+            'query_chunk_size': query_chunk_size,
             'query_json': query_json,
             'from': _from,
             'to': _to,
