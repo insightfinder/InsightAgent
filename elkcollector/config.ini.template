@@ -5,7 +5,7 @@ es_uris =
 # json to add to the query body
 query_json =
 # The maximum messages number of each query, default is 1000
-query_page_size = 1000
+query_chunk_size = 1000
 # indexes to search over 
 indeces = .monitoring-beat*
 
