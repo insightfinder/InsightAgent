@@ -9,7 +9,7 @@ password = root
 
 # connection options
 database =
-port =
+port = 8086
 pool_size =
 ssl =
 verify_ssl =
@@ -29,64 +29,34 @@ sql = """
       """
 # required. the {{start_time}} and {{end_time}} format in sql, as library [arrow]. Example: YYYYMMDD
 sql_time_format = YYYY-MM-DD HH:mm:ss
+# this options will create template field {{extract_time}}, and with offset of {{end_time}}. Example: 86400|-86400|0
+sql_extract_time_offset = 0
+# the {{extract_time}} format in sql, as library [arrow]. Example: YYYYMMDD
+sql_extract_time_format = YYYYMMDD
 
-# replay data time config. If these options is set, the agent will execute sql by time range and time interval
+# history data time config. If these options is set, the agent will execute sql by time range and time interval
 # time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
 sql_time_range = 2020-03-22 00:00:00,2020-04-29 00:00:00
 # range interval, unit is second. Example: 86400
 sql_time_interval = 86400
 
-
-## filters
-# define a list of filters to use as field:allowed values|field:allowed values
-# for example:
-#   message.env:stg,prd|message.status:complete
-filters_include = 
-# as above, but instead define values that are not allowed
-# for example:
-#   message.env:dev,cde|message.status:draft
-filters_exclude = 
-
 # raw, rawtail, csv, csvtail, xls, xlsx, json, jsontail, avro, or xml
 # *tail formats keep track of the current file & position + completed files in [state] below
 data_format = json
 
-## RAW
-# if raw data, the regex used to parse the log. It must use named capture groups `(?<name>.*)` that correspond to the *_field config variables below (ie  `(?<timestamp>.*)`,  `(?<host>.*)`,  `(?<device>.*)`,  `(?<etc>.*)`. The raw message will be treated as a field named `_raw`
-raw_regex = 
-# if the log is multiline, the regex that indicates that the line is the start of a new message. this MUST start with ^ (unless blank)
-raw_start_regex = 
-
-## CSV, XLS, XLSX
-# Required - field names, in order as timestamp,field1,field2...
-csv_field_names =
-# a regex string used to delimit "csv" fields (ie the default ,|\t matches a comma or tab character)
-csv_field_delimiter = ,|\t
-
-## JSON, AVRO, XML
-# for multi-entry messages, define the top-level
-#   if messages are [{message1}, {message2}], set top_level = []
-#   it's expected that the top level will be a list
-# fields in json can be defined as level0.level1.levelN
-json_top_level = 
-
 ## message parsing
 # timestamp format, as library [arrow]. multiple fields can be formatted together to create the timestamp a la `YYYY-MM-DD HH:mm:ss ZZ`. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
-timestamp_format = epoch
+timestamp_format =
 # timezone, as per pytz
 timezone = 
 timestamp_field = timestamp
+# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+target_timestamp_timezone = UTC
 # if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
 instance_field = host
 device_field = 
 # multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>` or `<name>::==<value>`, where `<name>` and `<value>` can each be either a literal value (`name::value`) or formatted (`total time [{step}]::=={timing.end}-{timing.start}`). Use `::==` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `eval()`.
 data_fields =
-
-## metric buffer
-# if set this field, agent will send data at once when all metrics of instance is collected. example: metric1,metric2,...
-all_metrics =
-# required. must greater than 0
-metric_buffer_size_mb = 10
 
 ## proxy
 agent_http_proxy =
