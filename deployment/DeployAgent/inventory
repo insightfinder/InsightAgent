@@ -31,8 +31,8 @@ localhost ansible_connection=local
 
 [nodes:vars]
 #ansible_user=vagrant
+#ansible_ssh_private_key_file=/home/{{ansible_user}}/.ssh/id_rsa
 #ansible_ssh_pass=ssh_password
-#ansible_ssh_private_key_file=/home/private_key
 
 [all:vars]
 #If a proxy is needed to connect to the internet, enter it here
@@ -58,7 +58,7 @@ logProjectName=
 ifLicenseKey=
 
 ##Sampling interval could be an integer indicating the number of minutes or "10s" indicating 10 seconds.
-ifSamplingInterval=1
+ifSamplingInterval=60s
 
 ##Valid Agents are listed below
 #ifAgent=script_runner
@@ -74,6 +74,7 @@ ifSamplingInterval=1
 #ifAgent=prometheus
 #ifAgent=awsCloudtrail
 #ifAgent=googlePubSub
+#ifAgent=metricbeat
 
 ##When yes, we will run the equivalent of 'apt-get update' before installing any packages.
 ##Valid entries are yes or no. Not used with yum-based installation (e.g., CentOS).
@@ -84,19 +85,19 @@ ifReportingUrl=https://app.insightfinder.com
 
 ##Vars for AWS Cloudtrail
 # S3 bucket the trail is logging to
-aws_bucket = 
+aws_bucket =
 # AWS credentials; either both the access key and secret key or the credentials file must be given
-aws_access_key_id = 
+aws_access_key_id =
 aws_secret_access_key =
-#aws_credentials_file = 
+#aws_credentials_file =
 
 ##Vars for Google Pub/Sub
-pubsub_project_id = 
-pubsub_topic_name = 
+pubsub_project_id =
+pubsub_topic_name =
 # the subscription need not be created
-pubsub_subscription = 
-# provide the key file (as json) if installing this agent on a non-GCE machine 
-#gcp_json_key_file = 
+pubsub_subscription =
+# provide the key file (as json) if installing this agent on a non-GCE machine
+#gcp_json_key_file =
 
 ##Vars for Kafka
 
@@ -141,3 +142,11 @@ manualStart=no
 # If set to yes will disable the system proxy settings for the insightfinder td-agent output plugin
 # By default the output plugin uses the the http proxy settings defined in the environment
 disableTdProxy=no
+
+
+##Vars for Beats
+
+# Hosts list for beats' logstash output, such as metricbeat,
+# seperated by comma, e.g. "10.10.10.11:5044","10.10.10.12:5044"
+# If empty, use default "localhost:5044".
+beatsLogstashHosts=

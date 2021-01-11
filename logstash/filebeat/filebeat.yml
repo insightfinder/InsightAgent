@@ -1,0 +1,15 @@
+#=========================== Filebeat inputs =============================
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - c:\*.log
+  exclude_lines: ['^#']
+  fields:
+      log_type: iis
+    
+
+#================================ Outputs ======================================
+output.logstash:
+  enabled: true
+  hosts: ["localhost:5044"]

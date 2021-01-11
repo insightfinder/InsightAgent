@@ -1,0 +1,95 @@
+[mariadb]
+## mariadb info
+# required
+host = localhost
+# required
+user =
+# required
+password =
+
+## connection options
+charset =
+autocommit =
+port =
+bind_address =
+unix_socket =
+read_timeout =
+write_timeout =
+connect_timeout =
+max_allowed_packet =
+
+## get database list info.
+# required. database_list can be from sql, example: `sql:show databases`. database_list also can be a list, example: `db1,db2,db3`.
+database_list =
+# database_whitelist is a regex string used to define which database will be filtered.
+database_whitelist =
+
+## get instance and metric id mapping info
+instance_map_database =
+instance_map_table =
+instance_map_id_field =
+instance_map_name_field =
+metric_map_database =
+metric_map_table =
+metric_map_id_field =
+metric_map_name_field =
+
+# required. query SQL. Use template filed {{start_time}} or {{end_time}} or {{extract_time}} to replace the time in sql.
+sql = """
+      SELECT
+      *
+      FROM
+      {{database}}.normalized_hourly
+      WHERE {{database}}.normalized_hourly.Time >= '{{start_time}}' and {{database}}.normalized_hourly.Time < '{{end_time}}';
+      """
+# required. the {{start_time}} and {{end_time}} format in sql, as library [arrow]. Example: YYYYMMDD
+sql_time_format = YYYY-MM-DD HH:mm:ss
+
+# replay data time config. If these options is set, the agent will execute sql by time range and time interval
+# time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
+sql_time_range = 2020-03-22 00:00:00,2020-04-29 00:00:00
+# range interval, unit is second. Example: 86400
+sql_time_interval = 86400
+
+
+# raw, rawtail, csv, csvtail, xls, xlsx, json, jsontail, avro, or xml
+# *tail formats keep track of the current file & position + completed files in [state] below
+data_format = json
+
+## message parsing
+# timestamp format, as library [arrow]. multiple fields can be formatted together to create the timestamp a la `YYYY-MM-DD HH:mm:ss ZZ`. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
+timestamp_format = epoch
+# timezone, as per pytz
+timezone = 
+timestamp_field = timestamp
+# if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
+instance_field = host
+# Allow instance list, multiple fields are separated by commas.
+instance_allow_list =
+# Block instance list, multiple fields are separated by commas.
+instance_block_list =
+device_field =
+extension_metric_field =
+# metric_format is used to reformat the metric name, example: `{{extension_metric}}_{{metric}}`, `{{extension_metric}}` is get from `extension_metric_field`, `{{metric}}` is the original metric name.
+metric_format =
+# multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>` or `<name>::==<value>`, where `<name>` and `<value>` can each be either a literal value (`name::value`) or formatted (`total time [{step}]::=={timing.end}-{timing.start}`). Use `::==` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `eval()`.
+data_fields =
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
+[insightfinder]
+user_name = 
+license_key = 
+token =
+project_name = 
+# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
+project_type = metricreplay
+sampling_interval = 60
+run_interval = 1
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =

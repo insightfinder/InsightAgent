@@ -37,7 +37,7 @@ def sendData():
     url = serverUrl + "/api/v1/agentdatahelper"
     print serverUrl
     try:
-        response = requests.post(url, data = json.loads(json_data))
+        response = requests.post(url, data = json.loads(json_data), verify=False)
     except requests.ConnectionError, e:
         print "Connection failure : " + str(e)
         print "Verification with InsightFinder credentials Failed"

@@ -1,5 +1,5 @@
-# elasticsearch2
-This agent collects data from elasticsearch2 and sends it to Insightfinder.
+# ELKCollector
+This agent queries log data from ELK server and sends it to Insightfinder.
 ## Installing the Agent
 
 ### Short Version

@@ -40,6 +40,7 @@
     - 10-syslog.conf
     - 16-jetty.conf
     - 15-cassandra.conf
+    - 20-system-metric.conf
   notify: restart logstash
 
 - name: Create Logstash configuration file for local syslog.
@@ -58,4 +59,4 @@
     state: absent
   when: not logstash_monitor_local_syslog
   notify: restart logstash
- 
+
