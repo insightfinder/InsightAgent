@@ -12,8 +12,6 @@ import arrow
 import urlparse
 import httplib
 import requests
-import statistics
-import subprocess
 import shlex
 import traceback
 
@@ -32,6 +30,40 @@ def start_data_processing():
 
     # open conn
     client = InfluxDBClient(**agent_config_vars['influxdb_kwargs'])
+    logger.info('Connected to influxdb with version: ' + str(client.ping()))
+
+    sql_str = None
+
+    # get table list and filter by whitelist
+    table_list = []
+    if agent_config_vars['table_list'].startswith('sql:'):
+        try:
+            logger.info('Starting execute SQL to getting table info.')
+            sql_str = agent_config_vars['table_list'].split('sql:')[1]
+            logger.debug(sql_str)
+
+            # execute sql string
+            result = client.query(sql_str)
+
+            for message in list(result.get_points()):
+                table = str(message['name'])
+                table_list.append(table)
+
+        except InfluxDBClientError as e:
+            logger.error(e)
+            logger.error('SQL execute error: '.format(sql_str))
+    else:
+        table_list = filter(lambda x: x.strip(), agent_config_vars['table_list'].split(','))
+
+    if agent_config_vars['table_whitelist']:
+        try:
+            db_regex = regex.compile(agent_config_vars['table_whitelist'])
+            table_list = list(filter(db_regex.match, table_list))
+        except Exception as e:
+            logger.error(e)
+    if len(table_list) == 0:
+        logger.error('Table list is empty')
+        sys.exit(1)
 
     # get sql string
     sql = agent_config_vars['sql']
@@ -44,44 +76,49 @@ def start_data_processing():
         for timestamp in range(agent_config_vars['sql_config']['sql_time_range'][0],
                                agent_config_vars['sql_config']['sql_time_range'][1],
                                agent_config_vars['sql_config']['sql_time_interval']):
-            sql_str = sql
-            start_time = arrow.get(timestamp).format(agent_config_vars['sql_time_format'])
-            end_time = arrow.get(timestamp + agent_config_vars['sql_config']['sql_time_interval']).format(
-                agent_config_vars['sql_time_format'])
-            extract_time = arrow.get(
-                timestamp + agent_config_vars['sql_config']['sql_time_interval'] + agent_config_vars[
-                    'sql_extract_time_offset']).format(agent_config_vars['sql_extract_time_format'])
+            for table in table_list:
+                sql_str = sql
+                start_time = arrow.get(timestamp).format(agent_config_vars['sql_time_format'])
+                end_time = arrow.get(timestamp + agent_config_vars['sql_config']['sql_time_interval']).format(
+                    agent_config_vars['sql_time_format'])
+                sql_str = sql_str.replace('{{table}}', table)
+                sql_str = sql_str.replace('{{start_time}}', start_time)
+                sql_str = sql_str.replace('{{end_time}}', end_time)
 
-            sql_str = sql_str.replace('{{extract_time}}', extract_time)
-            sql_str = sql_str.replace('{{start_time}}', start_time)
-            sql_str = sql_str.replace('{{end_time}}', end_time)
+                if agent_config_vars['sql_extract_time_format']:
+                    extract_time = arrow.get(
+                        timestamp + agent_config_vars['sql_config']['sql_time_interval'] + agent_config_vars[
+                            'sql_extract_time_offset']).format(agent_config_vars['sql_extract_time_format'])
+                    sql_str = sql_str.replace('{{extract_time}}', extract_time)
 
-            # TODO: get data, and parse data
-            query_messages_influxdb(client, sql_str)
+                # get data, and parse data
+                query_messages_influxdb(client, sql_str)
 
             # clear metric buffer when piece of time range end
             clear_metric_buffer()
     else:
         logger.debug('Using current time for streaming data')
+        for table in table_list:
+            sql_str = sql
+            start_time = arrow.get(
+                arrow.utcnow().float_timestamp - if_config_vars['sampling_interval'],
+                tzinfo=agent_config_vars['timezone'].zone).format(
+                agent_config_vars['sql_time_format'])
+            end_time = arrow.get(arrow.utcnow().float_timestamp, tzinfo=agent_config_vars['timezone'].zone).format(
+                agent_config_vars['sql_time_format'])
+            sql_str = sql_str.replace('{{table}}', table)
+            sql_str = sql_str.replace('{{start_time}}', start_time)
+            sql_str = sql_str.replace('{{end_time}}', end_time)
 
-        sql_str = sql
-        start_time = arrow.get(
-            arrow.utcnow().float_timestamp - if_config_vars['sampling_interval'],
-            tzinfo=agent_config_vars['timezone'].zone).format(
-            agent_config_vars['sql_time_format'])
-        end_time = arrow.get(arrow.utcnow().float_timestamp, tzinfo=agent_config_vars['timezone'].zone).format(
-            agent_config_vars['sql_time_format'])
-        extract_time = arrow.get(
-            arrow.utcnow().float_timestamp + agent_config_vars['sql_extract_time_offset'],
-            tzinfo=agent_config_vars['timezone'].zone).format(
-            agent_config_vars['sql_extract_time_format'])
+            if agent_config_vars['sql_extract_time_format']:
+                extract_time = arrow.get(
+                    arrow.utcnow().float_timestamp + agent_config_vars['sql_config']['sql_time_interval'] +
+                    agent_config_vars[
+                        'sql_extract_time_offset']).format(agent_config_vars['sql_extract_time_format'])
+                sql_str = sql_str.replace('{{extract_time}}', extract_time)
 
-        sql_str = sql_str.replace('{{extract_time}}', extract_time)
-        sql_str = sql_str.replace('{{start_time}}', start_time)
-        sql_str = sql_str.replace('{{end_time}}', end_time)
-
-        # TODO: get data, and parse data
-        query_messages_influxdb(client, sql_str)
+            # get data, and parse data
+            query_messages_influxdb(client, sql_str)
 
         # clear metric buffer when piece of time range end
         clear_metric_buffer()
@@ -95,9 +132,12 @@ def query_messages_influxdb(client, sql_str):
         logger.info('Starting execute SQL')
         logger.info(sql_str)
 
-        # TODO: execute sql string
+        # execute sql string
+        result = client.query(sql_str)
 
-        parse_messages_influxdb([])
+        # parse data
+        parse_messages_influxdb(result)
+
     except InfluxDBClientError as e:
         logger.error(e)
         logger.error('SQL execute error: '.format(sql_str))
@@ -105,44 +145,44 @@ def query_messages_influxdb(client, sql_str):
 
 def parse_messages_influxdb(result):
     count = 0
-    logger.info('Reading {} messages'.format(len(result)))
+    messages = list(result.get_points())
+    logger.info('Reading {} messages'.format(len(messages)))
 
-    for message in result:
+    for message in messages:
         try:
             logger.debug('Message received')
             logger.debug(message)
 
-            # filter if quantile != 1
-            quantile = message.get('metric').get('quantile')
-            if quantile and quantile != '1':
-                continue
-
-            date_field = message.get('metric').get('__name__')
-            instance = message.get('metric').get(
-                agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
-                    agent_config_vars['instance_field']) > 0 else 'instance')
-
-            # add device info if has
-            device = None
-            device_field = agent_config_vars['device_field']
-            if device_field and len(device_field) > 0:
-                device = message.get('metric').get(agent_config_vars['device_field'][0])
-            full_instance = make_safe_instance_string(instance, device)
-
-            vector_value = message.get('value')
-            timestamp = int(vector_value[0]) * 1000
-            data_value = vector_value[1]
+            timestamp = message[agent_config_vars['timestamp_field'][0]]
+            timestamp = int(arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone).float_timestamp * 1000)
 
             # set offset for timestamp
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
             timestamp = str(timestamp)
 
+            # get instance info
+            instance = str(message[agent_config_vars['instance_field'][0] or 'location'])
+
+            # add device info if has
+            full_instance = instance
+            device_field = agent_config_vars['device_field']
+            device_field = list(set(device_field) & set(message.keys()))
+            if device_field:
+                device = str(message[device_field[0]])
+                device = agent_config_vars['device_map'].get(device_field[0], {}).get(device, device)
+                device = device.replace('_', '-').replace('.', '-')
+                full_instance = '{}_{}'.format(device, instance)
+
             key = '{}-{}'.format(timestamp, full_instance)
             if key not in metric_buffer['buffer_dict']:
                 metric_buffer['buffer_dict'][key] = {"timestamp": timestamp}
 
-            metric_key = '{}[{}]'.format(date_field, full_instance)
-            metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
+            setting_values = agent_config_vars['data_fields'] or message.keys()
+            setting_values = list(set(setting_values) & set(message.keys()))
+            for data_field in setting_values:
+                data_value = message[data_field]
+                metric_key = '{}[{}]'.format(data_field, full_instance)
+                metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
 
         except Exception as e:
             logger.warn('Error when parsing message')
@@ -165,6 +205,8 @@ def get_agent_config_vars():
         config_parser.read(config_ini)
 
         influxdb_kwargs = {}
+        table_list = ''
+        table_whitelist = ''
         sql = ''
         sql_time_format = None
         sql_extract_time_offset = 0
@@ -210,6 +252,14 @@ def get_agent_config_vars():
             else:
                 config_error('password')
 
+            # handle table info
+            if len(config_parser.get('influxdb', 'table_list')) != 0:
+                table_list = config_parser.get('influxdb', 'table_list')
+            else:
+                config_error('table_list')
+            if len(config_parser.get('influxdb', 'table_whitelist')) != 0:
+                table_whitelist = config_parser.get('influxdb', 'table_whitelist')
+
             # sql
             if len(config_parser.get('influxdb', 'sql')) != 0:
                 sql = config_parser.get('influxdb', 'sql')
@@ -219,14 +269,10 @@ def get_agent_config_vars():
                 sql_time_format = config_parser.get('influxdb', 'sql_time_format')
             else:
                 config_error('sql_time_format')
-            if len(config_parser.get('mssql', 'sql_extract_time_offset')) != 0:
-                sql_extract_time_offset = int(config_parser.get('mssql', 'sql_extract_time_offset'))
-            else:
-                config_error('sql_extract_time_offset')
-            if len(config_parser.get('mssql', 'sql_extract_time_format')) != 0:
-                sql_extract_time_format = config_parser.get('mssql', 'sql_extract_time_format')
-            else:
-                config_error('sql_extract_time_format')
+            if len(config_parser.get('influxdb', 'sql_extract_time_offset')) != 0:
+                sql_extract_time_offset = int(config_parser.get('influxdb', 'sql_extract_time_offset'))
+            if len(config_parser.get('influxdb', 'sql_extract_time_format')) != 0:
+                sql_extract_time_format = config_parser.get('influxdb', 'sql_extract_time_format')
 
             # sql config
             if len(config_parser.get('influxdb', 'sql_time_range')) != 0 and len(
@@ -313,6 +359,8 @@ def get_agent_config_vars():
         # add parsed variables to a global
         config_vars = {
             'influxdb_kwargs': influxdb_kwargs,
+            'table_list': table_list,
+            'table_whitelist': table_whitelist,
             'sql': sql,
             'sql_time_format': sql_time_format,
             'sql_extract_time_offset': sql_extract_time_offset,

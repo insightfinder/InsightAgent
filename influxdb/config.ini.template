@@ -8,7 +8,7 @@ username = root
 password = root
 
 # connection options
-database =
+database = NOAA_water_database
 port = 8086
 pool_size =
 ssl =
@@ -23,20 +23,26 @@ cert =
 gzip =
 session =
 
+## get table list info.
+# table_list can be from sql, example: `sql:show measurements`. table_list also can be a list, example: `table1,table2,table3`.
+table_list =
+# table_whitelist is a regex string used to define which table will be filtered.
+table_whitelist =
+
 # required. query SQL. Use template filed {{start_time}} or {{end_time}} to replace the time in sql.
 sql = """
-      select * from cpu where time >= '{{start_time}}' and time < '{{end_time}}';
+      select * from {{table}}_{{extract_time}} where time >= '{{start_time}}' and time < '{{end_time}}';
       """
 # required. the {{start_time}} and {{end_time}} format in sql, as library [arrow]. Example: YYYYMMDD
 sql_time_format = YYYY-MM-DD HH:mm:ss
 # this options will create template field {{extract_time}}, and with offset of {{end_time}}. Example: 86400|-86400|0
-sql_extract_time_offset = 0
+sql_extract_time_offset =
 # the {{extract_time}} format in sql, as library [arrow]. Example: YYYYMMDD
-sql_extract_time_format = YYYYMMDD
+sql_extract_time_format =
 
 # history data time config. If these options is set, the agent will execute sql by time range and time interval
 # time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
-sql_time_range = 2020-03-22 00:00:00,2020-04-29 00:00:00
+sql_time_range = 2019-08-17 00:00:00,2019-08-18 00:00:00
 # range interval, unit is second. Example: 86400
 sql_time_interval = 86400
 
@@ -49,11 +55,11 @@ data_format = json
 timestamp_format =
 # timezone, as per pytz
 timezone = 
-timestamp_field = timestamp
+timestamp_field = time
 # Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
 target_timestamp_timezone = UTC
 # if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
-instance_field = host
+instance_field = location
 device_field = 
 # multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>` or `<name>::==<value>`, where `<name>` and `<value>` can each be either a literal value (`name::value`) or formatted (`total time [{step}]::=={timing.end}-{timing.start}`). Use `::==` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `eval()`.
 data_fields =
@@ -70,7 +76,7 @@ project_name =
 # metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
 project_type = 
 sampling_interval = 1
-run_interval = 10
+run_interval = 1
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
 if_url = https://app.insightfinder.com

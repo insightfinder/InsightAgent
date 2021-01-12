@@ -84,6 +84,8 @@ sudo ./setup/cron-config.sh
 * `cert`: Path to client certificate information to use for mutual TLS authentication. You can specify a local cert to use as a single file containing the private key and the certificate, or as a tuple of both files’ paths, defaults to None
 * `gzip`: use gzip content encoding to compress requests
 * `session`: allow for the new client request to use an existing requests Session, defaults to None
+* **`table_list`**: table_list can be from sql, example: `sql:select name from sys.tables`. table_list also can be a list, example: `table1,table2,table3`.
+* `table_whitelist`: table_whitelist is a regex string used to define which table will be filtered.
 * **`sql`**: The query string for mssql. Use template filed {{start_time}} or {{end_time}} or {{extract_time}} to replace the time in sql. Example: """SELECT * FROM Table{{extract_time}} WHERE Table{{extract_time}}.Time >= {{start_time}} and Table{{extract_time}}.Time < {{end_time}};"""
 * **`sql_time_format`**: The {{start_time}} and {{end_time}} format in sql, as library [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). Example: YYYYMMDD
 * `sql_extract_time_offset`: This options will create template field {{extract_time}}, and with offset of {{end_time}}, unit is second. Example: 86400|-86400|0
