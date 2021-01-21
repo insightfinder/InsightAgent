@@ -22,7 +22,7 @@ from pymysql import ProgrammingError
 from datetime import datetime
 from decimal import Decimal
 from optparse import OptionParser
-from multiprocessing import Pool
+from multiprocessing.pool import ThreadPool
 
 """
 This script gathers data to send to Insightfinder
@@ -32,8 +32,8 @@ This script gathers data to send to Insightfinder
 def start_data_processing():
     # open conn
     conn = pymysql.connect(**agent_config_vars['mariadb_kwargs'])
-    cursor = conn.cursor()
     logger.info('Started connection.')
+    cursor = conn.cursor()
 
     sql_str = None
     metrics = agent_config_vars['metrics'] or []
@@ -115,13 +115,17 @@ def start_data_processing():
         logger.error('Database list is empty')
         sys.exit(1)
 
+    # close cursor
+    cursor.close()
+    conn.close()
+
     # query data from database list
     # get sql string
     sql = agent_config_vars['sql']
     sql = sql.replace('\n', ' ').replace('"""', '')
 
     # parse sql string by params
-    pool_map = Pool(agent_config_vars['processes_pool'])
+    pool_map = ThreadPool(agent_config_vars['thread_pool'])
     if agent_config_vars['sql_config']:
         logger.debug('Using time range for replay data')
 
@@ -132,7 +136,7 @@ def start_data_processing():
             end_time = arrow.get(timestamp + agent_config_vars['sql_config']['sql_time_interval']).format(
                 agent_config_vars['sql_time_format'])
 
-            params = map(lambda d: (cursor, sql, d, start_time, end_time), database_list)
+            params = map(lambda d: (sql, d, start_time, end_time), database_list)
             results = pool_map.map(query_messages_mariadb, params)
             for result in results:
                 parse_messages_mariadb(result)
@@ -146,17 +150,16 @@ def start_data_processing():
             agent_config_vars['sql_time_format'])
         end_time = time_now.format(agent_config_vars['sql_time_format'])
 
-        params = map(lambda d: (cursor, sql, d, start_time, end_time), database_list)
+        params = map(lambda d: (sql, d, start_time, end_time), database_list)
         results = pool_map.map(query_messages_mariadb, params)
         for result in results:
             parse_messages_mariadb(result)
 
-    cursor.close()
-    conn.close()
     logger.info('Closed connection.')
 
 
-def query_messages_mariadb(cursor, sql, database, start_time, end_time):
+def query_messages_mariadb(args):
+    sql, database, start_time, end_time = args
     sql_str = sql
     sql_str = sql_str.replace('{{database}}', database)
     sql_str = sql_str.replace('{{start_time}}', start_time)
@@ -168,9 +171,15 @@ def query_messages_mariadb(cursor, sql, database, start_time, end_time):
         logger.info(sql_str)
 
         # execute sql string
+        conn = pymysql.connect(**agent_config_vars['mariadb_kwargs'])
+        cursor = conn.cursor()
         cursor.execute(sql_str)
 
+        # fetch all messages
         message_list = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
 
     except ProgrammingError as e:
         logger.error(e)
@@ -303,7 +312,7 @@ def get_agent_config_vars():
                 config_error('password')
 
             # metrics
-            metrics = config_parser.get('prometheus', 'metrics')
+            metrics = config_parser.get('mariadb', 'metrics')
             if len(metrics) != 0:
                 metrics = filter(lambda x: x.strip(), metrics.split(','))
 
@@ -390,7 +399,7 @@ def get_agent_config_vars():
             timestamp_format = config_parser.get('mariadb', 'timestamp_format', raw=True)
             timezone = config_parser.get('mariadb', 'timezone')
             data_fields = config_parser.get('mariadb', 'data_fields', raw=True)
-            processes_pool = config_parser.get('mariadb', 'processes_pool', raw=True)
+            thread_pool = config_parser.get('mariadb', 'thread_pool', raw=True)
 
         except ConfigParser.NoOptionError as cp_noe:
             logger.error(cp_noe)
@@ -446,10 +455,10 @@ def get_agent_config_vars():
                 if timestamp_field in data_fields:
                     data_fields.pop(data_fields.index(timestamp_field))
 
-        if len(processes_pool) != 0:
-            processes_pool = int(processes_pool)
+        if len(thread_pool) != 0:
+            thread_pool = int(thread_pool)
         else:
-            processes_pool = 5
+            thread_pool = 5
 
         # add parsed variables to a global
         config_vars = {
@@ -473,7 +482,7 @@ def get_agent_config_vars():
             'extension_metric_field': extension_metric_field,
             'metric_format': metric_format,
             'data_fields': data_fields,
-            'processes_pool': processes_pool,
+            'thread_pool': thread_pool,
             'timestamp_field': timestamp_fields,
             'timezone': timezone,
             'timestamp_format': timestamp_format,
