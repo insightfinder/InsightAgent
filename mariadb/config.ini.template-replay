@@ -18,6 +18,10 @@ write_timeout =
 connect_timeout =
 max_allowed_packet =
 
+## metrics
+# metrics to query for. If none specified, all metrics from database will be used
+metrics =
+
 ## get database list info.
 # required. database_list can be from sql, example: `sql:show databases`. database_list also can be a list, example: `db1,db2,db3`.
 database_list =
@@ -74,6 +78,9 @@ extension_metric_field =
 metric_format =
 # multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>` or `<name>::==<value>`, where `<name>` and `<value>` can each be either a literal value (`name::value`) or formatted (`total time [{step}]::=={timing.end}-{timing.start}`). Use `::==` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `eval()`.
 data_fields =
+
+## number of processes to used in the pool, default is 5
+processes_pool =
 
 ## proxy
 agent_http_proxy =

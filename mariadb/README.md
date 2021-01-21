@@ -79,6 +79,7 @@ sudo ./setup/cron-config.sh
 * `write_timeout`: The timeout for writing to the connection in seconds (default: None - no timeout).
 * `connect_timeout`: Timeout before throwing an exception when connecting. (default: 10, min: 1, max: 31536000).
 * `max_allowed_packet`: Max size of packet sent to server in bytes. (default: 16MB) Only used to limit size of "LOAD LOCAL INFILE" data packet smaller than default (16KB).
+* `metrics`: Metrics to query for. If none specified, all metrics from database will be used.
 * **`database_list`**: database_list can be from sql, example: `sql:show databases`. database_list also can be a list, example: `db1,db2,db3`.
 * `database_whitelist`: database_whitelist is a regex string used to define which database will be filtered. example: `dynamic_app_data_\d+`.
 * `instance_map_database`: Database to get instance mapping info, Define this field if instance field need mapping.
@@ -104,6 +105,7 @@ sudo ./setup/cron-config.sh
 * `extension_metric_field`: Field name for the extension metric name.
 * `metric_format`: metric_format is used to reformat the metric name, example: `{{extension_metric}}_{{metric}}`, `{{extension_metric}}` is get from `extension_metric_field`, `{{metric}}` is the original metric name.
 * `data_fields`: Comma-delimited list of field names to use as data fields. If not set, all fields will be reported. Each data field can either be a field name (`name`) or a labeled field (`<name>::<value>` or `<name>::==<value>`), where `<name>` and `<value>` can be raw strings (`fieldname::fieldvalue`), curly or complex formatted (`link!!ref=json&auth!!name::=={val} - {ue}`), or a combination. If `::==` is used as the separator, `<value>` is treated as a mathematical expression that can be evaluated with `eval()`.
+* `processes_pool`: Number of processes to used in the pool, default is 5.
 * `agent_http_proxy`: HTTP proxy used to connect to the agent.
 * `agent_https_proxy`: As above, but HTTPS.
 * **`user_name`**: User name in InsightFinder
