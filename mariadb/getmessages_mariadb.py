@@ -37,6 +37,13 @@ def start_data_processing():
 
     sql_str = None
     metrics = agent_config_vars['metrics'] or []
+    metric_regex = None
+
+    if agent_config_vars['metrics_whitelist']:
+        try:
+            metric_regex = regex.compile(agent_config_vars['metrics_whitelist'])
+        except Exception as e:
+            logger.error(e)
 
     # get instance and metric mapping info
     if agent_config_vars['instance_map_conn']:
@@ -76,6 +83,8 @@ def start_data_processing():
 
                 # filter metrics if need
                 if len(metrics) > 0 and name_str not in metrics:
+                    continue
+                if metric_regex and not metric_regex.match(name_str):
                     continue
 
                 metric_map[id_str] = name_str
@@ -198,9 +207,13 @@ def parse_messages_mariadb(message_list):
 
             timestamp = message[agent_config_vars['timestamp_field'][0]]
             if isinstance(timestamp, datetime):
-                timestamp = str(int(arrow.get(timestamp).float_timestamp * 1000))
+                timestamp = int(arrow.get(timestamp).float_timestamp * 1000)
             else:
-                timestamp = str(int(arrow.get(timestamp).float_timestamp * 1000))
+                timestamp = int(arrow.get(timestamp).float_timestamp * 1000)
+
+            # set offset for timestamp
+            timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
+            timestamp = str(timestamp)
 
             instance = str(message[agent_config_vars['instance_field'][0]])
             instance = agent_config_vars['instance_map'].get(instance, instance)
@@ -265,6 +278,7 @@ def get_agent_config_vars():
 
         mariadb_kwargs = {}
         metrics = None
+        metrics_whitelist = None
         database_list = ''
         database_whitelist = ''
         instance_map_conn = None
@@ -315,6 +329,7 @@ def get_agent_config_vars():
             metrics = config_parser.get('mariadb', 'metrics')
             if len(metrics) != 0:
                 metrics = filter(lambda x: x.strip(), metrics.split(','))
+            metrics_whitelist = config_parser.get('mariadb', 'metrics_whitelist')
 
             # handle database info
             if len(config_parser.get('mariadb', 'database_list')) != 0:
@@ -396,6 +411,7 @@ def get_agent_config_vars():
             extension_metric_field = config_parser.get('mariadb', 'extension_metric_field', raw=True)
             metric_format = config_parser.get('mariadb', 'metric_format', raw=True)
             timestamp_field = config_parser.get('mariadb', 'timestamp_field', raw=True) or 'timestamp'
+            target_timestamp_timezone = config_parser.get('mariadb', 'target_timestamp_timezone', raw=True) or 'UTC'
             timestamp_format = config_parser.get('mariadb', 'timestamp_format', raw=True)
             timezone = config_parser.get('mariadb', 'timezone')
             data_fields = config_parser.get('mariadb', 'data_fields', raw=True)
@@ -410,6 +426,11 @@ def get_agent_config_vars():
             timestamp_format = filter(lambda x: x.strip(), timestamp_format.split(','))
         else:
             config_error('timestamp_format')
+
+        if len(target_timestamp_timezone) != 0:
+            target_timestamp_timezone = int(arrow.now(target_timestamp_timezone).utcoffset().total_seconds())
+        else:
+            config_error('target_timestamp_timezone')
 
         if timezone:
             if timezone not in pytz.all_timezones:
@@ -464,6 +485,7 @@ def get_agent_config_vars():
         config_vars = {
             'mariadb_kwargs': mariadb_kwargs,
             'metrics': metrics,
+            'metrics_whitelist': metrics_whitelist,
             'database_list': database_list,
             'database_whitelist': database_whitelist,
             'instance_map_conn': instance_map_conn,
@@ -484,6 +506,7 @@ def get_agent_config_vars():
             'data_fields': data_fields,
             'thread_pool': thread_pool,
             'timestamp_field': timestamp_fields,
+            'target_timestamp_timezone': target_timestamp_timezone,
             'timezone': timezone,
             'timestamp_format': timestamp_format,
         }
