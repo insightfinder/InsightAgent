@@ -76,6 +76,7 @@ sudo ./setup/cron-config.sh
 ### Config Variables
 * **`prometheus_uri`**: URI for Prometheus API as `scheme://host:port`. Defaults to `http://localhost:9090`
 * `metrics`: Metrics to query for. If none specified, all metrics returned from `/api/v1/label/__names__/values` will be used.
+* `metrics_whitelist`: metrics_whitelist is a regex string used to define which metrics will be filtered.
 * `metrics_to_ignore`: Comma-delimited metrics to not report. Defaults to `ALERTS,ALERTS_FOR_STATE`.
 * `query_label_selector`: Label selector to use when querying for metrics, ie `{namespace="monitoring"}`.
 * `his_time_range`: History data time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00. If this option is set, the agent will query metric values by time range.

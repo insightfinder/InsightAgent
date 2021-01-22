@@ -6,6 +6,8 @@ prometheus_uri = http://localhost:9090
 ## metrics
 # metrics to query for. If none specified, all metrics returned from /api/v1/label/__names__/values will be used
 metrics =
+# metrics_whitelist is a regex string used to define which metrics will be filtered.
+metrics_whitelist =
 # metrics to not report
 metrics_to_ignore = ALERTS,ALERTS_FOR_STATE
 # label selector to use when querying for metrics, ie {namespace="monitoring"}
