@@ -22,20 +22,28 @@ from pymysql import ProgrammingError
 from datetime import datetime
 from decimal import Decimal
 from optparse import OptionParser
-from multiprocessing import Process
+from multiprocessing.pool import ThreadPool
 
 """
 This script gathers data to send to Insightfinder
 """
 
 
-def start_data_processing(thread_number):
+def start_data_processing():
     # open conn
     conn = pymysql.connect(**agent_config_vars['mariadb_kwargs'])
+    logger.info('Started connection.')
     cursor = conn.cursor()
-    logger.info('Started connection number ' + str(thread_number))
 
     sql_str = None
+    metrics = agent_config_vars['metrics'] or []
+    metric_regex = None
+
+    if agent_config_vars['metrics_whitelist']:
+        try:
+            metric_regex = regex.compile(agent_config_vars['metrics_whitelist'])
+        except Exception as e:
+            logger.error(e)
 
     # get instance and metric mapping info
     if agent_config_vars['instance_map_conn']:
@@ -71,7 +79,14 @@ def start_data_processing(thread_number):
             metric_map = {}
             for message in cursor:
                 id_str = str(message[agent_config_vars['metric_map_conn']['metric_map_id_field']])
-                name_str = str(message[agent_config_vars['metric_map_conn']['metric_map_name_field']])
+                name_str = str(message[agent_config_vars['metric_map_conn']['metric_map_name_field']].encode('utf8'))
+
+                # filter metrics if need
+                if len(metrics) > 0 and name_str not in metrics:
+                    continue
+                if metric_regex and not metric_regex.match(name_str):
+                    continue
+
                 metric_map[id_str] = name_str
             agent_config_vars['metric_map'] = metric_map
         except ProgrammingError as e:
@@ -109,63 +124,80 @@ def start_data_processing(thread_number):
         logger.error('Database list is empty')
         sys.exit(1)
 
+    # close cursor
+    cursor.close()
+    conn.close()
+
     # query data from database list
     # get sql string
     sql = agent_config_vars['sql']
     sql = sql.replace('\n', ' ').replace('"""', '')
 
     # parse sql string by params
+    pool_map = ThreadPool(agent_config_vars['thread_pool'])
     if agent_config_vars['sql_config']:
+        logger.debug('Using time range for replay data')
+
         for timestamp in range(agent_config_vars['sql_config']['sql_time_range'][0],
                                agent_config_vars['sql_config']['sql_time_range'][1],
                                agent_config_vars['sql_config']['sql_time_interval']):
-            for database in database_list:
-                sql_str = sql
-                start_time = arrow.get(timestamp).format(agent_config_vars['sql_time_format'])
-                end_time = arrow.get(timestamp + agent_config_vars['sql_config']['sql_time_interval']).format(
-                    agent_config_vars['sql_time_format'])
-                sql_str = sql_str.replace('{{database}}', database)
-                sql_str = sql_str.replace('{{start_time}}', start_time)
-                sql_str = sql_str.replace('{{end_time}}', end_time)
+            start_time = arrow.get(timestamp).format(agent_config_vars['sql_time_format'])
+            end_time = arrow.get(timestamp + agent_config_vars['sql_config']['sql_time_interval']).format(
+                agent_config_vars['sql_time_format'])
 
-                query_messages_mariadb(cursor, sql_str)
+            params = map(lambda d: (sql, d, start_time, end_time), database_list)
+            results = pool_map.map(query_messages_mariadb, params)
+            for result in results:
+                parse_messages_mariadb(result)
 
             # clear metric buffer when piece of time range end
             clear_metric_buffer()
     else:
-        for database in database_list:
-            sql_str = sql
-            start_time = arrow.get((arrow.utcnow().float_timestamp - if_config_vars['sampling_interval'])).format(
-                agent_config_vars['sql_time_format'])
-            end_time = arrow.utcnow().format(agent_config_vars['sql_time_format'])
-            sql_str = sql_str.replace('{{database}}', database)
-            sql_str = sql_str.replace('{{start_time}}', start_time)
-            sql_str = sql_str.replace('{{end_time}}', end_time)
+        logger.debug('Using current time for streaming data')
+        time_now = arrow.utcnow()
+        start_time = arrow.get((time_now.float_timestamp - if_config_vars['sampling_interval'])).format(
+            agent_config_vars['sql_time_format'])
+        end_time = time_now.format(agent_config_vars['sql_time_format'])
 
-            query_messages_mariadb(cursor, sql_str)
+        params = map(lambda d: (sql, d, start_time, end_time), database_list)
+        results = pool_map.map(query_messages_mariadb, params)
+        for result in results:
+            parse_messages_mariadb(result)
 
-    cursor.close()
-    conn.close()
-    logger.info('Closed connection number ' + str(thread_number))
+    logger.info('Closed connection.')
 
 
-def query_messages_mariadb(cursor, sql_str):
+def query_messages_mariadb(args):
+    sql, database, start_time, end_time = args
+    sql_str = sql
+    sql_str = sql_str.replace('{{database}}', database)
+    sql_str = sql_str.replace('{{start_time}}', start_time)
+    sql_str = sql_str.replace('{{end_time}}', end_time)
+
+    message_list = []
     try:
         logger.info('Starting execute SQL')
         logger.info(sql_str)
 
         # execute sql string
+        conn = pymysql.connect(**agent_config_vars['mariadb_kwargs'])
+        cursor = conn.cursor()
         cursor.execute(sql_str)
 
-        parse_messages_mariadb(cursor)
+        # fetch all messages
+        message_list = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
     except ProgrammingError as e:
         logger.error(e)
         logger.error('SQL execute error: '.format(sql_str))
+    return message_list
 
 
-def parse_messages_mariadb(cursor):
+def parse_messages_mariadb(message_list):
     count = 0
-    message_list = cursor.fetchall()
     logger.info('Reading {} messages'.format(len(message_list)))
 
     for message in message_list:
@@ -175,9 +207,13 @@ def parse_messages_mariadb(cursor):
 
             timestamp = message[agent_config_vars['timestamp_field'][0]]
             if isinstance(timestamp, datetime):
-                timestamp = str(int(arrow.get(timestamp).float_timestamp * 1000))
+                timestamp = int(arrow.get(timestamp).float_timestamp * 1000)
             else:
-                timestamp = str(int(arrow.get(timestamp).float_timestamp * 1000))
+                timestamp = int(arrow.get(timestamp).float_timestamp * 1000)
+
+            # set offset for timestamp
+            timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
+            timestamp = str(timestamp)
 
             instance = str(message[agent_config_vars['instance_field'][0]])
             instance = agent_config_vars['instance_map'].get(instance, instance)
@@ -203,7 +239,10 @@ def parse_messages_mariadb(cursor):
                 metric_buffer['buffer_dict'][key] = {"timestamp": timestamp}
 
             extension_metric = str(message[agent_config_vars['extension_metric_field']])
-            extension_metric = agent_config_vars['metric_map'].get(extension_metric, extension_metric)
+            extension_metric = agent_config_vars['metric_map'].get(extension_metric)
+            # if metric not in metric_map, then pass this message
+            if not extension_metric:
+                continue
 
             setting_values = agent_config_vars['data_fields'] or message.keys()
             for data_field in setting_values:
@@ -238,6 +277,8 @@ def get_agent_config_vars():
         config_parser.read(config_ini)
 
         mariadb_kwargs = {}
+        metrics = None
+        metrics_whitelist = None
         database_list = ''
         database_whitelist = ''
         instance_map_conn = None
@@ -283,6 +324,12 @@ def get_agent_config_vars():
                 mariadb_kwargs['password'] = config_parser.get('mariadb', 'password')
             else:
                 config_error('password')
+
+            # metrics
+            metrics = config_parser.get('mariadb', 'metrics')
+            if len(metrics) != 0:
+                metrics = filter(lambda x: x.strip(), metrics.split(','))
+            metrics_whitelist = config_parser.get('mariadb', 'metrics_whitelist')
 
             # handle database info
             if len(config_parser.get('mariadb', 'database_list')) != 0:
@@ -364,9 +411,11 @@ def get_agent_config_vars():
             extension_metric_field = config_parser.get('mariadb', 'extension_metric_field', raw=True)
             metric_format = config_parser.get('mariadb', 'metric_format', raw=True)
             timestamp_field = config_parser.get('mariadb', 'timestamp_field', raw=True) or 'timestamp'
+            target_timestamp_timezone = config_parser.get('mariadb', 'target_timestamp_timezone', raw=True) or 'UTC'
             timestamp_format = config_parser.get('mariadb', 'timestamp_format', raw=True)
             timezone = config_parser.get('mariadb', 'timezone')
             data_fields = config_parser.get('mariadb', 'data_fields', raw=True)
+            thread_pool = config_parser.get('mariadb', 'thread_pool', raw=True)
 
         except ConfigParser.NoOptionError as cp_noe:
             logger.error(cp_noe)
@@ -377,6 +426,11 @@ def get_agent_config_vars():
             timestamp_format = filter(lambda x: x.strip(), timestamp_format.split(','))
         else:
             config_error('timestamp_format')
+
+        if len(target_timestamp_timezone) != 0:
+            target_timestamp_timezone = int(arrow.now(target_timestamp_timezone).utcoffset().total_seconds())
+        else:
+            config_error('target_timestamp_timezone')
 
         if timezone:
             if timezone not in pytz.all_timezones:
@@ -422,9 +476,16 @@ def get_agent_config_vars():
                 if timestamp_field in data_fields:
                     data_fields.pop(data_fields.index(timestamp_field))
 
+        if len(thread_pool) != 0:
+            thread_pool = int(thread_pool)
+        else:
+            thread_pool = 5
+
         # add parsed variables to a global
         config_vars = {
             'mariadb_kwargs': mariadb_kwargs,
+            'metrics': metrics,
+            'metrics_whitelist': metrics_whitelist,
             'database_list': database_list,
             'database_whitelist': database_whitelist,
             'instance_map_conn': instance_map_conn,
@@ -443,7 +504,9 @@ def get_agent_config_vars():
             'extension_metric_field': extension_metric_field,
             'metric_format': metric_format,
             'data_fields': data_fields,
+            'thread_pool': thread_pool,
             'timestamp_field': timestamp_fields,
+            'target_timestamp_timezone': target_timestamp_timezone,
             'timezone': timezone,
             'timestamp_format': timestamp_format,
         }
@@ -555,28 +618,6 @@ def get_if_config_vars():
         config_error_no_config()
 
 
-def update_state(setting, value, append=False, write=False):
-    # update in-mem
-    if append:
-        current = ','.join(agent_config_vars['state'][setting])
-        value = '{},{}'.format(current, value) if current else value
-        agent_config_vars['state'][setting] = value.split(',')
-    else:
-        agent_config_vars['state'][setting] = value
-    logger.debug('setting {} to {}'.format(setting, value))
-    # update config file
-    if write and not cli_config_vars['testing']:
-        config_ini = config_ini_path()
-        if os.path.exists(config_ini):
-            config_parser = ConfigParser.SafeConfigParser()
-            config_parser.read(config_ini)
-            config_parser.set('state', setting, str(value))
-            with open(config_ini, 'w') as config_file:
-                config_parser.write(config_file)
-    # return new value (if append)
-    return value
-
-
 def config_ini_path():
     return abs_path_from_cur(cli_config_vars['config'])
 
@@ -643,768 +684,9 @@ def config_error_no_config():
     sys.exit(1)
 
 
-def ternary_tfd(b, default=''):
-    if TRUE.match(b):
-        return True
-    elif FALSE.match(b):
-        return False
-    else:
-        return default
-
-
-def is_in(find, find_in):
-    if isinstance(find, (set, list, tuple)):
-        for f in find:
-            if f in find_in:
-                return True
-    else:
-        if find in find_in:
-            return True
-    return False
-
-
-def get_sentence_segment(sentence, start, end=None):
-    segment = sentence.split(' ')[start:end]
-    return ' '.join(segment)
-
-
-def check_project(project_name):
-    if 'token' in if_config_vars and len(if_config_vars['token']) != 0:
-        logger.debug(project_name)
-        try:
-            # check for existing project
-            check_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/getprojectstatus')
-            output_check_project = subprocess.check_output(
-                'curl "' + check_url + '?userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars[
-                    'token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + project_name + '%22%2C%22customerName%22%3A%22' +
-                if_config_vars['user_name'] + '%22%2C%22projectType%22%3A%22CUSTOM%22%7D%5D&tzOffset=-14400000"',
-                shell=True)
-            # create project if no existing project
-            if project_name not in output_check_project:
-                logger.debug('creating project')
-                create_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/add-custom-project')
-                output_create_project = subprocess.check_output(
-                    'no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars[
-                        'token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=' + get_data_type_from_project_type() + '&samplingInterval=' + str(
-                        if_config_vars['sampling_interval'] / 60) + '&samplingIntervalInSeconds=' + str(if_config_vars[
-                                                                                                            'sampling_interval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_insight_agent_type_from_project_type() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + create_url + '?tzOffset=-18000000',
-                    shell=True)
-            # set project name to proposed name
-            if_config_vars['project_name'] = project_name
-            # try to add new project to system
-            if 'system_name' in if_config_vars and len(if_config_vars['system_name']) != 0:
-                system_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/projects/update')
-                output_update_project = subprocess.check_output(
-                    'no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars[
-                        'token'] + '&operation=updateprojsettings&projectName=' + project_name + '&systemName=' +
-                    if_config_vars[
-                        'system_name'] + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + system_url + '?tzOffset=-18000000',
-                    shell=True)
-        except subprocess.CalledProcessError as e:
-            logger.error('Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars[
-                'project_name'])
-
-
-def get_field_index(field_names, field, label, is_required=False):
-    err_code = ''
-    try:
-        temp = int(field)
-        if temp > len(field_names):
-            err_msg = 'field {} is not a valid array index given field names {}'.format(field, field_names)
-            field = err_code
-        else:
-            field = temp
-    # not an integer
-    except ValueError:
-        try:
-            field = field_names.index(field)
-        # not in the field names
-        except ValueError:
-            err_msg = 'field {} is not a valid field in field names {}'.format(field, field_names)
-            field = err_code
-    finally:
-        if field == err_code:
-            logger.warn('Agent not configured correctly ({})\n{}'.format(label, err_msg))
-            if is_required:
-                sys.exit(1)
-            return
-        else:
-            return field
-
-
-def should_include_per_config(setting, value):
-    """ determine if an agent config filter setting would exclude a given value """
-    return len(agent_config_vars[setting]) != 0 and value not in agent_config_vars[setting]
-
-
-def should_exclude_per_config(setting, value):
-    """ determine if an agent config exclude setting would exclude a given value """
-    return len(agent_config_vars[setting]) != 0 and value in agent_config_vars[setting]
-
-
 def get_json_size_bytes(json_data):
     """ get size of json object in bytes """
-    return len(bytearray(json.dumps(json_data)))
-
-
-def get_all_files(files, file_regex_c):
-    return [i for j in
-            map(lambda k:
-                get_file_list_for_directory(k, file_regex_c),
-                files)
-            for i in j if i]
-
-
-def get_file_list_for_directory(root_path='/', file_name_regex_c=''):
-    root_path = os.path.expanduser(root_path)
-    if os.path.isdir(root_path):
-        file_list = []
-        for path, subdirs, files in os.walk(root_path):
-            for name in files:
-                if check_regex(file_name_regex_c, name):
-                    file_list.append(os.path.join(path, name))
-        return file_list
-    elif os.path.isfile(root_path):
-        if check_regex(file_name_regex_c, root_path):
-            return [root_path]
-    return []
-
-
-def parse_raw_line(message, line):
-    # if multiline
-    if agent_config_vars['raw_start_regex']:
-        # if new message, parse old and start new
-        if agent_config_vars['raw_start_regex'].match(line):
-            parse_raw_message(message)
-            message = line
-        else:  # add to current message
-            logger.debug('continue building message')
-            message += line
-    else:
-        parse_raw_message(line)
-    return message
-
-
-def parse_raw_message(message):
-    logger.debug(message)
-    matches = agent_config_vars['raw_regex'].match(message)
-    if matches:
-        message_json = matches.groupdict()
-        message_json['_raw'] = message
-        parse_json_message(message_json)
-
-
-def check_regex(pattern_c, check):
-    return not pattern_c or pattern_c.match(check)
-
-
-def is_formatted(setting_value):
-    """ returns True if the setting is a format string """
-    return len(FORMAT_STR.findall(setting_value)) != 0
-
-
-def is_complex(setting_value):
-    """ returns True if the setting is 'complex' """
-    return '!!' in setting_value
-
-
-def is_math_expr(setting_value):
-    return '==' in setting_value
-
-
-def get_math_expr(setting_value):
-    return setting_value.strip('=')
-
-
-def is_named_data_field(setting_value):
-    return '::' in setting_value
-
-
-def merge_data(field, value, data=None):
-    if data is None:
-        data = {}
-    fields = field.split(JSON_LEVEL_DELIM)
-    for i in range(len(fields) - 1):
-        field = fields[i]
-        if field not in data:
-            data[field] = dict()
-        data = data[field]
-    data[fields[-1]] = value
-    return data
-
-
-def parse_formatted(message, setting_value, default='', allow_list=False, remove=False):
-    """ fill a format string with values """
-    fields = {field: get_json_field(message,
-                                    field,
-                                    default=0 if default == 0 else '',  # special case for evaluate func
-                                    allow_list=allow_list,
-                                    remove=remove)
-              for field in FORMAT_STR.findall(setting_value)}
-    if len(fields) == 0:
-        return default
-    return setting_value.format(**fields)
-
-
-def get_data_values(timestamp, message):
-    setting_values = agent_config_vars['data_fields'] or message.keys()
-    # reverse list so it's in priority order, as shared fields names will get overwritten
-    setting_values.reverse()
-    data = {x: dict() for x in timestamp}
-    for setting_value in setting_values:
-        name, value = get_data_value(message, setting_value)
-        if isinstance(value, (set, tuple, list)):
-            for i in range(minlen(timestamp, value)):
-                merge_data(name, value[i], data[timestamp[i]])
-        else:
-            merge_data(name, value, data[timestamp[0]])
-    return data
-
-
-def get_data_value(message, setting_value):
-    if is_named_data_field(setting_value):
-        name, value = setting_value.split('::')
-        # get name
-        name = get_single_value(message,
-                                name,
-                                default=name,
-                                allow_list=False,
-                                remove=False)
-        # check if math
-        evaluate = False
-        if is_math_expr(value):
-            evaluate = True
-            value = get_math_expr(value)
-        value = get_single_value(message,
-                                 value,
-                                 default=0 if evaluate else '',
-                                 allow_list=not evaluate,
-                                 remove=False)
-        if value and evaluate:
-            value = eval(value)
-    elif is_complex(setting_value):
-        this_field, metadata, that_field = setting_value.split('!!')
-        name = this_field
-        value = get_complex_value(message,
-                                  this_field,
-                                  metadata,
-                                  that_field,
-                                  default=that_field,
-                                  allow_list=True,
-                                  remove=False)
-    else:
-        name = setting_value
-        value = get_single_value(message,
-                                 setting_value,
-                                 default='',
-                                 allow_list=True,
-                                 remove=False)
-    return name, value
-
-
-def get_complex_value(message, this_field, metadata, that_field, default='', allow_list=False, remove=False):
-    metadata = metadata.split('&')
-    data_type, data_return = metadata[0].upper().split('=')
-    if data_type == 'REF':
-        ref = get_single_value(message,
-                               this_field,
-                               default='',
-                               allow_list=False,
-                               remove=remove)
-        if not ref:
-            return default
-        passthrough = {'mode': 'GET'}
-        for param in metadata[1:]:
-            if '=' in param:
-                key, value = param.split('=')
-                try:
-                    value = json.loads(value)
-                except Exception as e:
-                    logger.debug(e)
-                    value = value
-            else:
-                key = param
-                value = REQUESTS[key]
-            passthrough[key] = value
-        response = send_request(ref, **passthrough)
-        if response == -1:
-            return default
-        data = response.content
-        if data_return == 'RAW':
-            return data
-        elif data_return == 'CSV':
-            data = label_message(agent_config_vars['csv_field_delimiter'].split(data))
-        elif data_return == 'XML':
-            data = xml2dict.parse(data)
-        elif data_return == 'JSON':
-            data = json.loads(data)
-        return get_single_value(data,
-                                that_field,
-                                default=default,
-                                allow_list=True,
-                                remove=False)
-    else:
-        logger.warning('Unsupported complex setting {}!!{}!!{}'.format(this_field, metadata, that_field))
-        return default
-
-
-def get_setting_value(message, config_setting, default='', allow_list=False, remove=False):
-    if config_setting not in agent_config_vars or len(agent_config_vars[config_setting]) == 0:
-        return default
-    setting_value = agent_config_vars[config_setting]
-    return get_single_value(message,
-                            setting_value,
-                            default=default,
-                            allow_list=allow_list,
-                            remove=remove)
-
-
-def get_single_value(message, setting_value, default='', allow_list=False, remove=False):
-    if isinstance(setting_value, (set, list, tuple)):
-        setting_value_single = setting_value[0]
-    else:
-        setting_value_single = setting_value
-        setting_value = [setting_value]
-    if is_complex(setting_value_single):
-        this_field, metadata, that_field = setting_value_single.split('!!')
-        return get_complex_value(message,
-                                 this_field,
-                                 metadata,
-                                 that_field,
-                                 default=default,
-                                 allow_list=allow_list,
-                                 remove=remove)
-    elif is_formatted(setting_value_single):
-        return parse_formatted(message,
-                               setting_value_single,
-                               default=default,
-                               allow_list=False,
-                               remove=remove)
-    else:
-        return get_json_field_by_pri(message,
-                                     [i for i in setting_value],
-                                     default=default,
-                                     allow_list=allow_list,
-                                     remove=remove)
-
-
-def get_json_field_by_pri(message, pri_list, default='', allow_list=False, remove=False):
-    value = ''
-    while value == '' and len(pri_list) != 0:
-        field = pri_list.pop(0)
-        if field:
-            value = get_json_field(message,
-                                   field,
-                                   allow_list=allow_list,
-                                   remove=remove)
-    return value or default
-
-
-def get_json_field(message, setting_value, default='', allow_list=False, remove=False):
-    field_val = json_format_field_value(
-        _get_json_field_helper(
-            message,
-            setting_value.split(JSON_LEVEL_DELIM),
-            allow_list=allow_list,
-            remove=remove))
-    if len(field_val) == 0:
-        field_val = default
-    return field_val
-
-
-class ListNotAllowedError():
-    pass
-
-
-def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=False):
-    # check inputs; need a dict that is a subtree, an _array_ of fields to traverse down
-    if len(next_fields) == 0:
-        # nothing to look for
-        return ''
-    elif isinstance(nested_value, (list, set, tuple)):
-        # for each elem in the list
-        # already checked in the recursive call that this is OK
-        return json_gather_list_values(nested_value, next_fields)
-    elif not isinstance(nested_value, dict):
-        # nothing to walk down
-        return ''
-
-    # get the next value
-    next_field = next_fields.pop(0)
-    next_value = nested_value.get(next_field)
-    if isinstance(next_value, datetime):
-        next_value = int(arrow.get(next_value).float_timestamp * 1000)
-    if isinstance(next_value, Decimal):
-        next_value = str(next_value)
-
-    try:
-        if len(next_fields) == 0 and remove:
-            # last field to grab, so remove it
-            nested_value.pop(next_field)
-    except:
-        pass
-
-    # check the next value
-    if next_value is None or not str(next_value):
-        # no next value defined
-        return ''
-
-    # sometimes payloads come in formatted
-    try:
-        next_value = json.loads(next_value)
-    except:
-        pass
-
-    # handle simple lists
-    while isinstance(next_value, (list, set, tuple)) and len(next_value) == 1:
-        next_value = next_value.pop()
-
-    # continue traversing?
-    if next_fields is None:
-        # some error, but return the value
-        return next_value
-    elif len(next_fields) == 0:
-        # final value in the list to walk down
-        return next_value
-    elif isinstance(next_value, (list, set, tuple)):
-        # we've reached an early terminal point, which may or may not be ok
-        if allow_list:
-            return json_gather_list_values(
-                next_value,
-                next_fields,
-                remove=remove)
-        else:
-            raise ListNotAllowedError('encountered list or set in json when not allowed')
-    elif isinstance(next_value, dict):
-        # there's more tree to walk down
-        return _get_json_field_helper(
-            json.loads(json.dumps(next_value)),
-            next_fields,
-            allow_list=allow_list,
-            remove=remove)
-    else:
-        # catch-all
-        return ''
-
-
-def json_gather_list_values(values, fields, remove=False):
-    sub_field_value = []
-    # treat each item in the list as a potential tree to walk down
-    for sub_value in values:
-        fields_copy = list(fields[i] for i in range(len(fields)))
-        json_value = json_format_field_value(
-            _get_json_field_helper(
-                sub_value,
-                fields_copy,
-                allow_list=True,
-                remove=remove))
-        if len(json_value) != 0:
-            sub_field_value.append(json_value)
-    # return the full list of field values
-    return sub_field_value
-
-
-def json_format_field_value(value):
-    # flatten 1-item set/list
-    if isinstance(value, (list, set, tuple)):
-        if len(value) == 1:
-            return value.pop()
-        return list(value)
-    # keep dicts intact
-    elif isinstance(value, dict):
-        return value
-    # stringify everything else
-    try:
-        return str(value)
-    except Exception as e:
-        logger.debug(e)
-        return str(value.encode('utf-8'))
-
-
-def parse_json_message(messages):
-    if isinstance(messages, (list, set, tuple)):
-        for message in messages:
-            parse_json_message(message)
-    else:
-        if len(agent_config_vars['json_top_level']) == 0:
-            parse_json_message_single(messages)
-        else:
-            top_level = _get_json_field_helper(
-                messages,
-                agent_config_vars['json_top_level'].split(JSON_LEVEL_DELIM),
-                allow_list=True)
-            if isinstance(top_level, (list, set, tuple)):
-                for message in top_level:
-                    parse_json_message_single(message)
-            else:
-                parse_json_message_single(top_level)
-
-
-def parse_json_message_single(message):
-    # message = json.loads(json.dumps(message))
-    # filter
-    if len(agent_config_vars['filters_include']) != 0:
-        # for each provided filter
-        is_valid = False
-        for _filter in agent_config_vars['filters_include']:
-            filter_field = _filter.split(':')[0]
-            filter_vals = _filter.split(':')[1].split(',')
-            filter_check = get_json_field(
-                message,
-                filter_field,
-                allow_list=True)
-            # check if a valid value
-            for filter_val in filter_vals:
-                if filter_val.upper() in filter_check.upper():
-                    is_valid = True
-                    break
-            if is_valid:
-                break
-        if not is_valid:
-            logger.debug('filtered message (inclusion): {} not in {}'.format(
-                filter_check, filter_vals))
-            return
-        else:
-            logger.debug('passed filter (inclusion)')
-
-    if len(agent_config_vars['filters_exclude']) != 0:
-        # for each provided filter
-        for _filter in agent_config_vars['filters_exclude']:
-            filter_field = _filter.split(':')[0]
-            filter_vals = _filter.split(':')[1].split(',')
-            filter_check = get_json_field(
-                message,
-                filter_field,
-                allow_list=True)
-            # check if a valid value
-            for filter_val in filter_vals:
-                if filter_val.upper() in filter_check.upper():
-                    logger.debug('filtered message (exclusion): {} in {}'.format(
-                        filter_val, filter_check))
-                    return
-        logger.debug('passed filter (exclusion)')
-
-    # get project, instance, & device
-    # check_project(get_setting_value(message,
-    #                                'project_field',
-    #                                default=if_config_vars['project_name']),
-    #                                remove=True)
-    instance = get_setting_value(message,
-                                 'instance_field',
-                                 default=HOSTNAME,
-                                 remove=True)
-    if agent_config_vars['instance_map']:
-        instance = agent_config_vars['instance_map'].get(instance, instance)
-    logger.debug(instance)
-    device = get_setting_value(message,
-                               'device_field',
-                               remove=True)
-    # get timestamp
-    try:
-        timestamp = get_setting_value(message,
-                                      'timestamp_field',
-                                      remove=True)
-        timestamp = [timestamp]
-    except ListNotAllowedError as e:
-        logger.debug(e)
-        timestamp = get_setting_value(message,
-                                      'timestamp_field',
-                                      remove=True,
-                                      allow_list=True)
-    except Exception as e:
-        logger.warn(e)
-        sys.exit(1)
-    logger.debug(timestamp)
-
-    # DEL: get extension metric name
-    extension_metric = get_setting_value(message,
-                                         'extension_metric_field',
-                                         default=HOSTNAME,
-                                         remove=True)
-    if agent_config_vars['metric_map']:
-        extension_metric = agent_config_vars['metric_map'].get(extension_metric, extension_metric)
-
-    # get data
-    data = get_data_values(timestamp, message)
-
-    # hand off
-    for timestamp, report_data in data.items():
-        # check if this is within the time range
-        ts = get_timestamp_from_date_string(timestamp)
-        if not ts:
-            continue
-        if not if_config_vars['is_replay'] and long((time.time() - if_config_vars['run_interval']) * 1000) > ts:
-            logger.debug('skipping message with timestamp {}'.format(ts))
-            continue
-        if 'METRIC' in if_config_vars['project_type']:
-            data_folded = fold_up(report_data, value_tree=True)  # put metric data in top level
-            for data_field, data_value in data_folded.items():
-                if data_value is not None:
-                    # DEL: reformat metric name
-                    if agent_config_vars['metric_format']:
-                        metric_format = agent_config_vars['metric_format'].replace('{{extension_metric}}',
-                                                                                   extension_metric)
-                        metric_format = metric_format.replace('{{metric}}', data_field)
-                        data_field = metric_format
-
-                    metric_handoff(
-                        ts,
-                        data_field,
-                        data_value,
-                        instance,
-                        device)
-        else:
-            log_handoff(ts, report_data, instance, device)
-
-
-def label_message(message, fields=None):
-    """ turns unlabeled, split data into labeled data """
-    if fields is None:
-        fields = []
-    if agent_config_vars['data_format'] in {'CSV', 'CSVTAIL', 'IFEXPORT'}:
-        fields = agent_config_vars['csv_field_names']
-    data = dict()
-    for i in range(minlen(fields, message)):
-        data[fields[i]] = message[i]
-    return data
-
-
-def minlen(one, two):
-    return min(len(one), len(two))
-
-
-def parse_csv_message(message):
-    # filter
-    if len(agent_config_vars['filters_include']) != 0:
-        # for each provided filter, check if there are any allowed valued
-        is_valid = False
-        filter_check = None
-        filter_vals = None
-        for _filter in agent_config_vars['filters_include']:
-            filter_field = _filter.split(':')[0]
-            filter_vals = _filter.split(':')[1].split(',')
-            filter_check = message[int(filter_field)]
-            # check if a valid value
-            for filter_val in filter_vals:
-                if filter_val.upper() in filter_check.upper():
-                    is_valid = True
-                    break
-            if is_valid:
-                break
-        if not is_valid:
-            logger.debug('filtered message (inclusion): {} not in {}'.format(
-                filter_check, filter_vals))
-            return
-        else:
-            logger.debug('passed filter (inclusion)')
-
-    if len(agent_config_vars['filters_exclude']) != 0:
-        # for each provided filter, check if there are any disallowed values
-        for _filter in agent_config_vars['filters_exclude']:
-            filter_field = _filter.split(':')[0]
-            filter_vals = _filter.split(':')[1].split(',')
-            filter_check = message[int(filter_field)]
-            # check if a valid value
-            for filter_val in filter_vals:
-                if filter_val.upper() in filter_check.upper():
-                    logger.debug('filtered message (exclusion): {} in {}'.format(
-                        filter_check, filter_val))
-                    return
-        logger.debug('passed filter (exclusion)')
-
-    # project
-    # if isinstance(agent_config_vars['project_field'], int):
-    #    check_project(message[agent_config_vars['project_field']])
-
-    # instance
-    instance = HOSTNAME
-    if isinstance(agent_config_vars['instance_field'], int):
-        instance = message[agent_config_vars['instance_field']]
-
-    # device
-    device = ''
-    if isinstance(agent_config_vars['device_field'], int):
-        device = message[agent_config_vars['device_field']]
-
-    # data & timestamp
-    columns = [agent_config_vars['timestamp_field']] + agent_config_vars['data_fields']
-    row = list(message[i] for i in columns)
-    fields = list(agent_config_vars['csv_field_names'][j] for j in agent_config_vars['data_fields'])
-    parse_csv_row(row, fields, instance, device)
-
-
-def parse_csv_data(csv_data, instance, device=''):
-    """
-    parses CSV data, assuming the format is given as:
-        header row:  timestamp,field_1,field_2,...,field_n
-        n data rows: TIMESTAMP,value_1,value_2,...,value_n
-    """
-
-    # get field names from header row
-    field_names = csv_data.pop(0).split(CSV_DELIM)[1:]
-
-    # go through each row
-    for row in csv_data:
-        if len(row) > 0:
-            parse_csv_row(row.split(CSV_DELIM), field_names, instance, device)
-
-
-def parse_csv_row(row, field_names, instance, device=''):
-    timestamp = get_timestamp_from_date_string(row.pop(0))
-    if not timestamp:
-        return
-    if 'METRIC' in if_config_vars['project_type']:
-        for i in range(len(row)):
-            metric_handoff(timestamp, field_names[i], row[i], instance, device)
-    else:
-        json_message = dict()
-        for i in range(len(row)):
-            json_message[field_names[i]] = row[i]
-        log_handoff(timestamp, json_message, instance, device)
-
-
-def get_timestamp_from_date_string(date_string):
-    """ parse a date string into unix epoch (ms) """
-    datetime_obj = None
-    epoch = None
-    if 'timestamp_format' in agent_config_vars:
-        for timestamp_format in agent_config_vars['timestamp_format']:
-            try:
-                if timestamp_format == 'epoch':
-                    if 13 <= len(date_string) < 15:
-                        timestamp = int(date_string) / 1000
-                        datetime_obj = arrow.get(time.gmtime(timestamp))
-                    elif 9 <= len(date_string) < 13:
-                        timestamp = int(date_string)
-                        datetime_obj = arrow.get(time.gmtime(timestamp))
-                    else:
-                        raise
-                else:
-                    if agent_config_vars['timezone']:
-                        datetime_obj = arrow.get(date_string, timestamp_format,
-                                                 tzinfo=agent_config_vars['timezone'].zone)
-                    else:
-                        datetime_obj = arrow.get(date_string, timestamp_format)
-                break
-            except Exception as e:
-                logger.debug(e)
-                logger.debug('timestamp {} does not match {}'.format(date_string, timestamp_format))
-                continue
-    else:
-        try:
-            if agent_config_vars['timezone']:
-                datetime_obj = arrow.get(date_string, tzinfo=agent_config_vars['timezone'].zone)
-            else:
-                datetime_obj = arrow.get(date_string)
-        except Exception as e:
-            logger.debug(e)
-            logger.error('timestamp {} can not parse'.format(date_string))
-
-    # get epoch (misc)
-    if datetime_obj:
-        epoch = int(datetime_obj.float_timestamp * 1000)
-
-    return epoch
+    return sys.getsizeof(json.dumps(json_data))
 
 
 def make_safe_instance_string(instance, device=''):
@@ -1436,40 +718,6 @@ def make_safe_string(string):
     string = UNDERSCORE.sub('.', string)
     string = NON_ALNUM.sub('', string)
     return string
-
-
-def run_subproc_once(command, **passthrough):
-    command = format_command(command)
-    output = subprocess.check_output(command,
-                                     universal_newlines=True,
-                                     **passthrough).split('\n')
-    for line in output:
-        yield line
-
-
-def run_subproc_background(command, **passthrough):
-    proc = None
-    command = format_command(command)
-    try:
-        proc = subprocess.Popen(command,
-                                universal_newlines=True,
-                                stdout=subprocess.PIPE,
-                                **passthrough)
-        while True:
-            yield proc.stdout.readline()
-    except Exception as e:
-        logger.warn(e)
-    finally:
-        # make sure process exits
-        if proc:
-            proc.terminate()
-            proc.wait()
-
-
-def format_command(cmd):
-    if not isinstance(cmd, (list, tuple)):  # no sets, as order matters
-        cmd = shlex.split(cmd)
-    return list(cmd)
 
 
 def set_logger_config(level):
@@ -1521,13 +769,13 @@ def print_summary_info():
     logger.debug(cli_data_block)
 
 
-def initialize_data_gathering(thread_number):
+def initialize_data_gathering():
     reset_metric_buffer()
     reset_track()
     track['chunk_count'] = 0
     track['entry_count'] = 0
 
-    start_data_processing(thread_number)
+    start_data_processing()
 
     # clear metric buffer when data processing end
     clear_metric_buffer()
@@ -1567,234 +815,6 @@ def reset_track():
     track['start_time'] = time.time()
     track['line_count'] = 0
     track['current_row'] = []
-
-
-#########################################
-# Functions to handle Log/Incident data #
-#########################################
-def incident_handoff(timestamp, data, instance, device=''):
-    send_log(timestamp, data, instance or HOSTNAME, device)
-
-
-def deployment_handoff(timestamp, data, instance, device=''):
-    send_log(timestamp, data, instance or HOSTNAME, device)
-
-
-def alert_handoff(timestamp, data, instance, device=''):
-    send_log(timestamp, data, instance or HOSTNAME, device)
-
-
-def log_handoff(timestamp, data, instance, device=''):
-    send_log(timestamp, data, instance or HOSTNAME, device)
-
-
-def send_log(timestamp, data, instance, device=''):
-    entry = prepare_log_entry(str(int(timestamp)), data, instance, device)
-    track['current_row'].append(entry)
-    track['line_count'] += 1
-    track['entry_count'] += 1
-    if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (
-            time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
-        send_data_wrapper()
-    elif track['entry_count'] % 100 == 0:
-        logger.debug('Current data object size: {} bytes'.format(
-            get_json_size_bytes(track['current_row'])))
-
-
-def prepare_log_entry(timestamp, data, instance, device=''):
-    """ creates the log entry """
-    entry = dict()
-    entry['data'] = data
-    if 'INCIDENT' in if_config_vars['project_type'] or 'DEPLOYMENT' in if_config_vars['project_type']:
-        entry['timestamp'] = timestamp
-        entry['instanceName'] = make_safe_instance_string(instance, device)
-    else:  # LOG or ALERT
-        entry['eventId'] = timestamp
-        entry['tag'] = make_safe_instance_string(instance, device)
-    return entry
-
-
-###################################
-# Functions to handle Metric data #
-###################################
-def metric_handoff(timestamp, field_name, data, instance, device=''):
-    send_metric(timestamp, field_name, data, instance or HOSTNAME, device)
-
-
-def send_metric(timestamp, field_name, data, instance, device=''):
-    # validate data
-    try:
-        data = float(data)
-    except Exception as e:
-        logger.warning(e)
-        logger.warning(
-            'timestamp: {}\nfield_name: {}\ninstance: {}\ndevice: {}\ndata: {}'.format(
-                timestamp, field_name, instance, device, data))
-    else:
-        append_metric_data_to_buffer(timestamp, field_name, data, instance, device)
-        track['entry_count'] += 1
-
-        # send data if all metrics of instance is collected
-        while metric_buffer['buffer_collected_list']:
-            (ts, key, index) = metric_buffer['buffer_collected_list'].pop()
-            del metric_buffer['buffer_ts_list'][index]
-            metric_buffer['buffer_collected_dict'].pop(key)
-            transpose_metrics(ts, key)
-            if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
-                logger.debug('Sending buffer chunk')
-                send_data_wrapper()
-
-        # send data if buffer size is bigger than threshold
-        while get_json_size_bytes(metric_buffer['buffer_dict']) >= agent_config_vars['metric_buffer_size'] and \
-                metric_buffer['buffer_ts_list']:
-            (ts, key) = metric_buffer['buffer_ts_list'].pop()
-            transpose_metrics(ts, key)
-            if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
-                logger.debug('Sending buffer chunk')
-                send_data_wrapper()
-
-        # send data
-        if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (
-                time.time() - track['start_time']) >= if_config_vars['run_interval']:
-            send_data_wrapper()
-        elif track['entry_count'] % 500 == 0:
-            logger.debug('Buffer data object size: {} bytes'.format(
-                get_json_size_bytes(metric_buffer['buffer_dict'])))
-
-
-def append_metric_data_to_buffer(timestamp, field_name, data, instance, device=''):
-    """ creates the metric entry """
-    ts_str = str(timestamp)
-    instance_str = make_safe_instance_string(instance, device)
-    key = '{}-{}'.format(ts_str, instance_str)
-    metric_str = make_safe_metric_key(field_name)
-    metric_key = '{}[{}]'.format(metric_str, instance_str)
-
-    if key not in metric_buffer['buffer_key_list']:
-        # add timestamp in buffer_ts_list and buffer_dict
-        metric_buffer['buffer_key_list'].append(key)
-        metric_buffer['buffer_ts_list'].append((timestamp, key))
-        metric_buffer['buffer_ts_list'].sort(key=lambda elem: elem[0], reverse=True)
-        metric_buffer['buffer_dict'][key] = dict()
-        metric_buffer['buffer_collected_dict'][key] = []
-    metric_buffer['buffer_dict'][key][metric_key] = str(data)
-    metric_buffer['buffer_collected_dict'][key].append(metric_str)
-
-    # if all metrics of ts_instance is collected, then send these data
-    if agent_config_vars['all_metrics'] and set(agent_config_vars['all_metrics']) <= set(
-            metric_buffer['buffer_collected_dict'][key]):
-        metric_buffer['buffer_collected_list'].append(
-            (timestamp, key, metric_buffer['buffer_ts_list'].index((timestamp, key))))
-
-
-def transpose_metrics(ts, key):
-    metric_buffer['buffer_key_list'].remove(key)
-    track['current_row'].append(
-        dict({'timestamp': str(ts)}, **metric_buffer['buffer_dict'].pop(key))
-    )
-
-
-def build_metric_name_map():
-    """
-    Constructs a hash of <raw_metric_name>: <formatted_metric_name>
-    """
-    # initialize the hash of formatted names
-    agent_config_vars['metrics_names'] = dict()
-    # get metrics from the global
-    # metrics = agent_config_vars['metrics_copy']
-    # tree = build_sentence_tree(metrics)
-    # min_tree = fold_up(tree, sentence_tree=True)
-
-
-def build_sentence_tree(sentences):
-    """
-    Takes a list of sentences and builds a tree from the words
-        I ate two red apples ---> "red" ----> "apples" -> "_name" -> "I ate two red apples"
-        I ate two green pears ---> "I" -> "ate" -> "two" -> "green" --> "pears" --> "_name" -> "I ate two green pears"
-        I ate one yellow banana ---> "one" -> "yellow" -> "banana" -> "_name" -> "I ate one yellow banana"
-    """
-    tree = dict()
-    for sentence in sentences:
-        words = format_sentence(sentence)
-        current_path = tree
-        for word in words:
-            if word not in current_path:
-                current_path[word] = dict()
-            current_path = current_path[word]
-        # add a terminal _name node with the raw sentence as the value
-        current_path['_name'] = sentence
-    return tree
-
-
-def format_sentence(sentence):
-    """
-    Takes a sentence and chops it into an array by word
-    Implementation-specifc
-    """
-    words = sentence.strip(':')
-    words = COLONS.sub('/', words)
-    words = UNDERSCORE.sub('/', words)
-    words = words.split('/')
-    return words
-
-
-def fold_up(tree, sentence_tree=False, value_tree=False):
-    """
-    Entry point for fold_up. See fold_up_helper for details
-    """
-    folded = dict()
-    for node_name, node in tree.items():
-        fold_up_helper(
-            folded,
-            node_name,
-            node,
-            sentence_tree=sentence_tree,
-            value_tree=value_tree)
-    return folded
-
-
-def fold_up_helper(current_path, node_name, node, sentence_tree=False, value_tree=False):
-    """
-    Recursively build a new sentence tree, where,
-        for each node that has only one child,
-        that child is "folded up" into its parent.
-    The tree therefore treats unique phrases as words s.t.
-                      /---> "red apples"
-        "I ate" -> "two" -> "green pears"
-             /---> "one" -> "yellow banana"
-    If sentence_tree=True and there are terminal '_name' nodes,
-        this also returns a hash of
-            <raw_name : formatted name>
-    If value_tree=True and branches terminate in values,
-        this also returns a hash of
-            <formatted path : value>
-    """
-    while isinstance(node, dict) and (len(node.keys()) == 1 or '_name' in node.keys()):
-        keys = node.keys()
-        # if we've reached a terminal end
-        if '_name' in keys:
-            if sentence_tree:
-                current_path[node['_name']] = node_name
-            keys.remove('_name')
-            node.pop('_name')
-        # if there's still a single key path to follow
-        if len(keys) == 1:
-            next_key = keys[0]
-            node_name += '_' + next_key
-            node = node[next_key]
-
-    if not isinstance(node, dict):
-        if value_tree:
-            # node is the value of the metric node_name
-            current_path[node_name] = node
-    else:
-        for node_nested, node_next in node.items():
-            fold_up_helper(
-                current_path,
-                '{}/{}'.format(node_name, node_nested),
-                node_next,
-                sentence_tree=sentence_tree,
-                value_tree=value_tree)
 
 
 ################################
@@ -1986,16 +1006,4 @@ if __name__ == "__main__":
     agent_config_vars = get_agent_config_vars()
     print_summary_info()
 
-    # start data processing
-    process_list = []
-    for process_num in range(0, cli_config_vars['threads']):
-        p = Process(target=initialize_data_gathering,
-                    args=(process_num,)
-                    )
-        process_list.append(p)
-
-    for p in process_list:
-        p.start()
-
-    for p in process_list:
-        p.join()
+    initialize_data_gathering()
