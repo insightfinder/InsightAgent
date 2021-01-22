@@ -21,6 +21,8 @@ max_allowed_packet =
 ## metrics
 # metrics to query for. If none specified, all metrics from database will be used
 metrics =
+# metrics_whitelist is a regex string used to define which metrics will be filtered.
+metrics_whitelist =
 
 ## get database list info.
 # required. database_list can be from sql, example: `sql:show databases`. database_list also can be a list, example: `db1,db2,db3`.
@@ -60,6 +62,8 @@ timestamp_format = epoch
 # timezone, as per pytz
 timezone = 
 timestamp_field = timestamp
+# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+target_timestamp_timezone = UTC
 # if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
 instance_field = host
 # Allow instance list, multiple fields are separated by commas.
