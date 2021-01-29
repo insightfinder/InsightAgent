@@ -12,6 +12,9 @@ from ConfigParser import SafeConfigParser
 
 MAX_RETRY_NUM = 10
 RETRY_WAIT_TIME_IN_SEC = 30
+MAX_MESSAGE_LENGTH = 10000
+MAX_DATA_SIZE = 4000000
+MAX_PACKET_SIZE = 5000000
 
 def get_agent_config_vars():
     config_vars = {}
@@ -65,9 +68,13 @@ def send_data(log_data):
     send_data_to_receiver(post_url, to_send_data_json, len(log_data))
     print "--- Send data time: %s seconds ---" + str(time.time() - send_data_time)
 
+
 def send_data_to_receiver(post_url, to_send_data, num_of_message):
     attempts = 0
     while attempts < MAX_RETRY_NUM:
+        if sys.getsizeof(to_send_data) > MAX_PACKET_SIZE:
+            print("Packet size too large.  Dropping packet.")
+            break
         response_code = -1
         attempts += 1
         try:
@@ -88,6 +95,7 @@ def send_data_to_receiver(post_url, to_send_data, num_of_message):
     if attempts == MAX_RETRY_NUM:
         sys.exit(1)
 
+
 if __name__ == "__main__":
     urllib3.disable_warnings()
     reload(sys)
@@ -98,13 +106,32 @@ if __name__ == "__main__":
         d = json.load(json_data)
         data = []
         count = 0
+        size = 0
         for entry in d:
             new_entry = copy.deepcopy(entry)
+
+            # Check length of log message and truncate if too long
+            if len(new_entry['data']) > MAX_MESSAGE_LENGTH:
+                new_entry['data'] = new_entry['data'][0:MAX_MESSAGE_LENGTH - 1]
+
+            # Check size of entry and overall packet size
+            entry_size = sys.getsizeof(json.dumps(new_entry))
+            if size + entry_size >= MAX_DATA_SIZE:
+                send_data(data)
+                size = 0
+                count = 0
+                data = []
+
+            # Add the log entry to send
             data.append(new_entry)
             count += 1
+
+            # Chunk number of log entries
             if count >= CHUNK_SIZE:
                 send_data(data)
+                size = 0
                 count = 0
                 data = []
         if count != 0:
             send_data(data)
+
