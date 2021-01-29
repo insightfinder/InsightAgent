@@ -78,9 +78,8 @@ def send_data_to_receiver(post_url, to_send_data, num_of_message):
         response_code = -1
         attempts += 1
         try:
-            # response = requests.post(post_url, data=json.loads(to_send_data), verify=False)
-            # response_code = response.status_code
-            response_code = 200
+            response = requests.post(post_url, data=json.loads(to_send_data), verify=False)
+            response_code = response.status_code
         except:
             print "Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
                 attempts, response_code, RETRY_WAIT_TIME_IN_SEC)
