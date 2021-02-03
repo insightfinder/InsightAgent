@@ -154,8 +154,10 @@ def start_data_processing():
             clear_metric_buffer()
     else:
         logger.debug('Using current time for streaming data')
+        start_time_with_multiple_sampling = agent_config_vars['start_time_with_multiple_sampling'] or 1
         time_now = arrow.utcnow()
-        start_time = arrow.get((time_now.float_timestamp - if_config_vars['sampling_interval'])).format(
+        start_time = arrow.get((time_now.float_timestamp - start_time_with_multiple_sampling * if_config_vars[
+            'sampling_interval'])).format(
             agent_config_vars['sql_time_format'])
         end_time = time_now.format(agent_config_vars['sql_time_format'])
 
@@ -415,6 +417,8 @@ def get_agent_config_vars():
             timestamp_format = config_parser.get('mariadb', 'timestamp_format', raw=True)
             timezone = config_parser.get('mariadb', 'timezone')
             data_fields = config_parser.get('mariadb', 'data_fields', raw=True)
+            start_time_with_multiple_sampling = config_parser.get('mariadb', 'start_time_with_multiple_sampling',
+                                                                  raw=True)
             thread_pool = config_parser.get('mariadb', 'thread_pool', raw=True)
 
         except ConfigParser.NoOptionError as cp_noe:
@@ -476,6 +480,9 @@ def get_agent_config_vars():
                 if timestamp_field in data_fields:
                     data_fields.pop(data_fields.index(timestamp_field))
 
+        if len(start_time_with_multiple_sampling) != 0:
+            start_time_with_multiple_sampling = int(start_time_with_multiple_sampling)
+
         if len(thread_pool) != 0:
             thread_pool = int(thread_pool)
         else:
@@ -504,6 +511,7 @@ def get_agent_config_vars():
             'extension_metric_field': extension_metric_field,
             'metric_format': metric_format,
             'data_fields': data_fields,
+            'start_time_with_multiple_sampling': start_time_with_multiple_sampling,
             'thread_pool': thread_pool,
             'timestamp_field': timestamp_fields,
             'target_timestamp_timezone': target_timestamp_timezone,
