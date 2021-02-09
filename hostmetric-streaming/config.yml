@@ -21,30 +21,17 @@ metricset:
       timestamp: 'TIME'
       instance: 'IP_ADDRESS'
       metrics: ['MEM_USAGE', 'SWAP_USAGE']
+  filesystem:
+    sampling_interval: 5
+    fields:
+      timestamp: 'TIME'
+      instance: 'IP_ADDRESS'
+      metrics: ['FS_USAGE']
+      device: 'MOUNT'
+    devices: ['/', '/var', '/home']
 
 # Instance list for which to query metric
 instances:
-  - 10.222.55.153
-  - 10.222.55.58
-  - 10.222.55.59
-  - 10.222.55.60
-  - 10.222.55.61
-  - 10.222.55.62
-  - 10.222.55.63
-  - 10.222.55.64
-  - 10.222.55.65
-  - 10.222.55.66
-  - 10.222.55.67
-  - 10.222.55.68
-  - 10.222.55.69
-  - 10.222.55.54
-  - 10.222.55.55
-  - 10.222.55.70
-  - 10.222.55.71
-  - 10.222.55.72
-  - 10.222.55.73
-  - 10.222.55.74
-  - 10.222.55.75
 
 # Insightfinder data ingestion API
 insightfinder:
