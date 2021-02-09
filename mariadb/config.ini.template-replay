@@ -35,6 +35,16 @@ instance_map_database =
 instance_map_table =
 instance_map_id_field =
 instance_map_name_field =
+
+# instance_filter_by_company_field is the company field in instance table
+instance_filter_by_company_field = roa_id
+# company_whitelist is a regex string used to define which company's instances will be used.
+company_whitelist = IF*
+company_map_database = master_biz
+company_map_table = organization
+company_map_id_field = id
+company_map_name_field = name
+
 metric_map_database =
 metric_map_table =
 metric_map_id_field =

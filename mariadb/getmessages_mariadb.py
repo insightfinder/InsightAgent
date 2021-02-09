@@ -36,16 +36,52 @@ def start_data_processing():
     cursor = conn.cursor()
 
     sql_str = None
+
     metrics = agent_config_vars['metrics'] or []
     metric_regex = None
-
     if agent_config_vars['metrics_whitelist']:
         try:
             metric_regex = regex.compile(agent_config_vars['metrics_whitelist'])
         except Exception as e:
             logger.error(e)
 
-    # get instance and metric mapping info
+    instance_filter_by_company_field = None
+    company_regex = None
+    company_list = []
+    if agent_config_vars['company_whitelist']:
+        try:
+            company_regex = regex.compile(agent_config_vars['company_whitelist'])
+        except Exception as e:
+            logger.error(e)
+
+    # get company mapping info
+    if agent_config_vars['company_map_conn']:
+        instance_filter_by_company_field = agent_config_vars['company_map_conn']['instance_filter_by_company_field']
+        try:
+            logger.info('Starting execute SQL to getting instance mapping info.')
+            sql_str = "select * from {}.{}".format(agent_config_vars['company_map_conn']['company_map_database'],
+                                                   agent_config_vars['company_map_conn']['company_map_table'])
+            logger.debug(sql_str)
+
+            # execute sql string
+            cursor.execute(sql_str)
+
+            company_map = {}
+            for message in cursor:
+                id_str = str(message[agent_config_vars['company_map_conn']['company_map_id_field']])
+                name_str = str(message[agent_config_vars['company_map_conn']['company_map_name_field']])
+
+                if company_regex and not company_regex.match(name_str):
+                    continue
+
+                company_list.append(id_str)
+                company_map[id_str] = name_str
+            agent_config_vars['company_map'] = company_map
+        except ProgrammingError as e:
+            logger.error(e)
+            logger.error('SQL execute error: '.format(sql_str))
+
+    # get instance mapping info
     if agent_config_vars['instance_map_conn']:
         try:
             logger.info('Starting execute SQL to getting instance mapping info.')
@@ -60,12 +96,20 @@ def start_data_processing():
             for message in cursor:
                 id_str = str(message[agent_config_vars['instance_map_conn']['instance_map_id_field']])
                 name_str = str(message[agent_config_vars['instance_map_conn']['instance_map_name_field']])
+
+                # filter instance by company
+                if instance_filter_by_company_field:
+                    company_id = str(message[instance_filter_by_company_field])
+                    if company_regex and company_id not in company_list:
+                        continue
+
                 instance_map[id_str] = name_str
             agent_config_vars['instance_map'] = instance_map
         except ProgrammingError as e:
             logger.error(e)
             logger.error('SQL execute error: '.format(sql_str))
 
+    # get metric mapping info
     if agent_config_vars['metric_map_conn']:
         try:
             logger.info('Starting execute SQL to getting metric mapping info.')
@@ -218,7 +262,10 @@ def parse_messages_mariadb(message_list):
             timestamp = str(timestamp)
 
             instance = str(message[agent_config_vars['instance_field'][0]])
-            instance = agent_config_vars['instance_map'].get(instance, instance)
+            if agent_config_vars['instance_map']:
+                instance = agent_config_vars['instance_map'].get(instance)
+                if not instance:
+                    continue
 
             # check instance allow_list and block_list
             allow_instance = True
@@ -284,6 +331,8 @@ def get_agent_config_vars():
         database_list = ''
         database_whitelist = ''
         instance_map_conn = None
+        company_map_conn = None
+        company_whitelist = None
         metric_map_conn = None
         sql = None
         sql_time_format = None
@@ -343,7 +392,7 @@ def get_agent_config_vars():
             elif database_list.startswith('sql:'):
                 config_error('database_whitelist')
 
-            # handle instance and metric mapping info
+            # handle instance mapping info
             if len(config_parser.get('mariadb', 'instance_map_database')) != 0 \
                     and len(config_parser.get('mariadb', 'instance_map_table')) != 0 \
                     and len(config_parser.get('mariadb', 'instance_map_id_field')) != 0 \
@@ -358,6 +407,28 @@ def get_agent_config_vars():
                     'instance_map_id_field': instance_map_id_field,
                     'instance_map_name_field': instance_map_name_field
                 }
+            # handle instance filter company mapping info
+            if len(config_parser.get('mariadb', 'instance_filter_by_company_field')) != 0 \
+                    and len(config_parser.get('mariadb', 'company_map_database')) != 0 \
+                    and len(config_parser.get('mariadb', 'company_map_table')) != 0 \
+                    and len(config_parser.get('mariadb', 'company_map_id_field')) != 0 \
+                    and len(config_parser.get('mariadb', 'company_map_name_field')) != 0:
+                instance_filter_by_company_field = config_parser.get('mariadb', 'instance_filter_by_company_field')
+                company_map_database = config_parser.get('mariadb', 'company_map_database')
+                company_map_table = config_parser.get('mariadb', 'company_map_table')
+                company_map_id_field = config_parser.get('mariadb', 'company_map_id_field')
+                company_map_name_field = config_parser.get('mariadb', 'company_map_name_field')
+
+                company_map_conn = {
+                    'instance_filter_by_company_field': instance_filter_by_company_field,
+                    'company_map_database': company_map_database,
+                    'company_map_table': company_map_table,
+                    'company_map_id_field': company_map_id_field,
+                    'company_map_name_field': company_map_name_field,
+                }
+            company_whitelist = config_parser.get('mariadb', 'company_whitelist')
+
+            # handle metric mapping info
             if len(config_parser.get('mariadb', 'metric_map_database')) != 0 \
                     and len(config_parser.get('mariadb', 'metric_map_table')) != 0 \
                     and len(config_parser.get('mariadb', 'metric_map_id_field')) != 0 \
@@ -496,6 +567,8 @@ def get_agent_config_vars():
             'database_list': database_list,
             'database_whitelist': database_whitelist,
             'instance_map_conn': instance_map_conn,
+            'company_map_conn': company_map_conn,
+            'company_whitelist': company_whitelist,
             'metric_map_conn': metric_map_conn,
             'sql': sql,
             'sql_time_format': sql_time_format,
