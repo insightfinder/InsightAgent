@@ -40,6 +40,13 @@ def start_data_processing():
     else:
         metrics = agent_config_vars['metrics']
 
+    if agent_config_vars['metrics_whitelist']:
+        try:
+            db_regex = regex.compile(agent_config_vars['metrics_whitelist'])
+            metrics = list(filter(db_regex.match, metrics))
+        except Exception as e:
+            logger.error(e)
+
     # filter metrics
     if agent_config_vars['metrics_to_ignore'] and len(agent_config_vars['metrics_to_ignore']) > 0:
         metrics = filter(lambda x: x not in agent_config_vars['metrics_to_ignore'], metrics)
@@ -168,6 +175,7 @@ def get_agent_config_vars():
         prometheus_kwargs = {}
         api_url = ''
         metrics = None
+        metrics_whitelist = None
         metrics_to_ignore = None
         query_label_selector = ''
         his_time_range = None
@@ -188,6 +196,7 @@ def get_agent_config_vars():
 
             # metrics
             metrics = config_parser.get('prometheus', 'metrics')
+            metrics_whitelist = config_parser.get('prometheus', 'metrics_whitelist')
             metrics_to_ignore = config_parser.get('prometheus', 'metrics_to_ignore')
             query_label_selector = config_parser.get('prometheus', 'query_label_selector') or ''
 
@@ -276,6 +285,7 @@ def get_agent_config_vars():
             'prometheus_kwargs': prometheus_kwargs,
             'api_url': api_url,
             'metrics': metrics,
+            'metrics_whitelist': metrics_whitelist,
             'metrics_to_ignore': metrics_to_ignore,
             'query_label_selector': query_label_selector,
             'his_time_range': his_time_range,
