@@ -124,29 +124,70 @@ def start_data_processing():
 
     # parse sql string by params
     logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
-    if agent_config_vars['his_time_range']:
-        logger.debug('Using time range for replay data')
-        for timestamp in range(agent_config_vars['his_time_range'][0],
-                               agent_config_vars['his_time_range'][1],
-                               if_config_vars['sampling_interval']):
-            history_res = zapi.do_request('history.get', {
-                'output': 'extend',
-                "history": 0,
-                "hostids": hosts_ids,
-                "itemids": items_ids,
-                'time_from': timestamp,
-                'time_till': timestamp + if_config_vars['sampling_interval'],
-            })
-            parse_messages_zabbix(history_res['result'], all_field_map, items_map, 'history')
+    # handle metric parser
+    if 'METRIC' in if_config_vars['project_type']:
+        if agent_config_vars['his_time_range']:
+            logger.debug('Using time range for replay data')
+            for timestamp in range(agent_config_vars['his_time_range'][0],
+                                   agent_config_vars['his_time_range'][1],
+                                   if_config_vars['sampling_interval']):
+                history_res = zapi.do_request('history.get', {
+                    'output': 'extend',
+                    "history": 0,
+                    "hostids": hosts_ids,
+                    "itemids": items_ids,
+                    'time_from': timestamp,
+                    'time_till': timestamp + if_config_vars['sampling_interval'],
+                })
+                parse_messages_zabbix(history_res['result'], all_field_map, items_map, 'history')
+
+                # clear metric buffer when piece of time range end
+                clear_metric_buffer()
+        else:
+            logger.debug('Using current time for streaming data')
+            parse_messages_zabbix(items_res['result'], all_field_map, items_map, 'live')
 
             # clear metric buffer when piece of time range end
             clear_metric_buffer()
-    else:
-        logger.debug('Using current time for streaming data')
-        parse_messages_zabbix(items_res['result'], all_field_map, items_map, 'live')
 
-        # clear metric buffer when piece of time range end
-        clear_metric_buffer()
+    # handle alert parser
+    else:
+        if agent_config_vars['his_time_range']:
+            logger.debug('Using time range for replay data')
+            for timestamp in range(agent_config_vars['his_time_range'][0],
+                                   agent_config_vars['his_time_range'][1],
+                                   if_config_vars['sampling_interval']):
+                history_res = zapi.do_request('alert.get', {
+                    'output': 'extend',
+                    'groupids': host_groups_ids,
+                    "hostids": hosts_ids,
+                    # "alertids": [],
+                    'time_from': timestamp,
+                    'time_till': timestamp + if_config_vars['sampling_interval'],
+                })
+                parse_logs_zabbix(history_res['result'])
+
+                # clear log buffer when piece of time range end
+                clear_log_buffer()
+        else:
+            logger.debug('Using current time for streaming data')
+            start_time_with_multiple_sampling = agent_config_vars.get('start_time_with_multiple_sampling') or 1
+            time_now = arrow.utcnow()
+            start_time = time_now.float_timestamp - start_time_with_multiple_sampling * if_config_vars[
+                'sampling_interval']
+            end_time = time_now.float_timestamp
+            history_res = zapi.do_request('alert.get', {
+                'output': 'extend',
+                'groupids': host_groups_ids,
+                "hostids": hosts_ids,
+                # "alertids": [],
+                'time_from': start_time,
+                'time_till': end_time,
+            })
+            parse_logs_zabbix(history_res['result'])
+
+            # clear log buffer when piece of time range end
+            clear_log_buffer()
 
     logger.info('Closed......')
 
@@ -199,6 +240,48 @@ def parse_messages_zabbix(result, all_field_map, items_map, data_type):
 
             metric_key = '{}[{}]'.format(data_field, full_instance)
             metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
+
+        except Exception as e:
+            logger.warn('Error when parsing message')
+            logger.warn(e)
+            logger.debug(traceback.format_exc())
+            continue
+
+        track['entry_count'] += 1
+        count += 1
+        if count % 1000 == 0:
+            logger.info('Parse {0} messages'.format(count))
+    logger.info('Parse {0} messages'.format(count))
+
+
+def parse_logs_zabbix(result):
+    count = 0
+    logger.info('Reading {} messages'.format(len(result)))
+    for message in result:
+        try:
+            logger.debug('Message received')
+            logger.debug(message)
+
+            # set instance and device
+            instance_field = agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
+                agent_config_vars['instance_field']) > 0 else 'sendto'
+            instance = message.get(instance_field)
+
+            # set timestamp
+            clock = message['clock']
+            timestamp = int(clock) * 1000
+            if timestamp == 0:
+                continue
+
+            # set offset for timestamp
+            timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
+            timestamp = str(timestamp)
+
+            message = message['message']
+
+            entry = {'eventId': timestamp, 'tag': instance, 'data': message}
+            log_buffer['log_entries'].append(entry)
+            track['line_count'] += 1
 
         except Exception as e:
             logger.warn('Error when parsing message')
@@ -622,14 +705,12 @@ def print_summary_info():
 
 def initialize_data_gathering():
     reset_metric_buffer()
+    reset_log_buffer()
     reset_track()
     track['chunk_count'] = 0
     track['entry_count'] = 0
 
     start_data_processing()
-
-    # clear metric buffer when data processing end
-    clear_metric_buffer()
 
     logger.info('Total chunks created: ' + str(track['chunk_count']))
     logger.info('Total {} entries: {}'.format(
@@ -656,6 +737,26 @@ def clear_metric_buffer():
     reset_metric_buffer()
 
 
+def clear_log_buffer():
+    # move all buffer data to current data, and send
+    buffer_values = log_buffer['log_entries']
+
+    count = 0
+    for row in buffer_values:
+        track['current_row'].append(row)
+        count += 1
+        if count % 1000 == 0 or get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+            logger.debug('Sending buffer chunk')
+            send_data_wrapper()
+
+    # last chunk
+    if len(track['current_row']) > 0:
+        logger.debug('Sending last chunk')
+        send_data_wrapper()
+
+    reset_log_buffer()
+
+
 def reset_metric_buffer():
     metric_buffer['buffer_key_list'] = []
     metric_buffer['buffer_ts_list'] = []
@@ -663,6 +764,10 @@ def reset_metric_buffer():
 
     metric_buffer['buffer_collected_list'] = []
     metric_buffer['buffer_collected_dict'] = {}
+
+
+def reset_log_buffer():
+    log_buffer['log_entries'] = []
 
 
 def reset_track():
@@ -852,6 +957,7 @@ if __name__ == "__main__":
     REQUESTS = dict()
     track = dict()
     metric_buffer = dict()
+    log_buffer = dict()
 
     # get config
     cli_config_vars = get_cli_config_vars()
