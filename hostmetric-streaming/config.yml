@@ -1,0 +1,42 @@
+# Query interval, in minute
+query_interval: 5
+
+# Metricset to query.
+# Each metricset must specify:
+# 1. sampling_interval: the sampling interval of queried data, in minute.
+# 2. fields: specify the fields for timestamp, instance, and all needed metric, it has below key:
+#    timestamp: the field name for timestamp
+#    instance: the field name for instance
+#    metrics: a list of field name for all metrics
+metricset:
+  cpu:
+    sample_interval: 2
+    fields:
+      timestamp: 'TIME'
+      instance: 'IP_ADDRESS'
+      metrics: ['CPU_USAGE']
+  memery:
+    sample_interval: 5
+    fields:
+      timestamp: 'TIME'
+      instance: 'IP_ADDRESS'
+      metrics: ['MEM_USAGE', 'SWAP_USAGE']
+  filesystem:
+    sampling_interval: 5
+    fields:
+      timestamp: 'TIME'
+      instance: 'IP_ADDRESS'
+      metrics: ['FS_USAGE']
+      device: 'MOUNT'
+    devices: ['/', '/var', '/home']
+
+# Instance list for which to query metric
+instances:
+
+# Insightfinder data ingestion API
+insightfinder:
+  appserver:
+  project_name:
+  user_name:
+  license_key:
+  agent_type:
