@@ -48,7 +48,7 @@ def parse_messages_kafka(consumer):
             if 'JSON' in agent_config_vars['data_format']:
                 parse_json_message(json.loads(str(message.value)))
             elif 'CSV' in agent_config_vars['data_format']:
-                parse_csv_message(label_message(message.value.split(',')))
+                parse_json_message(label_message(message.value.split(',')))
             else:
                 parse_raw_message(message.value)
         except Exception as e:
