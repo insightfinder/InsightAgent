@@ -29,10 +29,14 @@ This script gathers data to send to Insightfinder
 def start_data_processing(thread_number):
     # open consumer
     consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
+    logger.info("consumer kafka_kwargs {}".format(agent_config_vars['kafka_kwargs']))
     logger.info('Started consumer number ' + str(thread_number))
     # subscribe to given topics
     consumer.subscribe(agent_config_vars['topics'])
     logger.info('Successfully subscribed to topics' + str(agent_config_vars['topics']))
+    # partitions = consumer.partitions_for_topic("test")
+    # logger.info("partitions", str(partitions))
+    logger.info(consumer.topics())
     # start consuming messages
     parse_messages_kafka(consumer)
     consumer.close()
@@ -70,8 +74,8 @@ def get_agent_config_vars():
             # kafka settings
             kafka_config = {
                 # hardcoded
-                'api_version': (0, 9),
-                'auto_offset_reset': 'latest',
+                'api_version': (0, 10),
+                'auto_offset_reset': 'earliest',
                 'consumer_timeout_ms': 30 * if_config_vars['sampling_interval'] * 1000 if 'METRIC' in if_config_vars[
                     'project_type'] or 'LOG' in if_config_vars['project_type'] else None,
 
