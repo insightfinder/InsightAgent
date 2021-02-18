@@ -75,7 +75,7 @@ def get_agent_config_vars():
             kafka_config = {
                 # hardcoded
                 'api_version': (0, 10),
-                'auto_offset_reset': 'earliest',
+                'auto_offset_reset': '',
                 'consumer_timeout_ms': 30 * if_config_vars['sampling_interval'] * 1000 if 'METRIC' in if_config_vars[
                     'project_type'] or 'LOG' in if_config_vars['project_type'] else None,
 
@@ -387,6 +387,8 @@ def get_cli_config_vars():
                       help='Only display warning and error log messages')
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose',
                       help='Enable verbose logging')
+    parser.add_option('-l', '--log_level', action='store_true', dest='verbose',
+                    help='logging level')
     parser.add_option('-t', '--testing', action='store_true', dest='testing',
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
