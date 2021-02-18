@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import ConfigParser
-import base64
 import json
 import logging
 import os
@@ -19,11 +18,8 @@ import requests
 import statistics
 import subprocess
 import shlex
-import traceback
-import pdb
 
 from kafka import KafkaConsumer
-
 
 '''
 This script gathers data to send to Insightfinder
@@ -31,70 +27,39 @@ This script gathers data to send to Insightfinder
 
 
 def start_data_processing(thread_number):
-    consumer_args = agent_config_vars['kafka_kwargs']
-    consumer_args['consumer_timeout_ms'] = 10000
-    consumer_args['max_poll_records'] = 250
     # open consumer
-    #consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
-    consumer = KafkaConsumer(**consumer_args)
+    consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
+    logger.info("consumer kafka_kwargs {}".format(agent_config_vars['kafka_kwargs']))
     logger.info('Started consumer number ' + str(thread_number))
     # subscribe to given topics
     consumer.subscribe(agent_config_vars['topics'])
     logger.info('Successfully subscribed to topics' + str(agent_config_vars['topics']))
-    
+    # partitions = consumer.partitions_for_topic("test")
+    # logger.info("partitions", str(partitions))
+    logger.info(consumer.topics())
     # start consuming messages
-    parse_messages_kafka(consumer, consumer_args)
+    parse_messages_kafka(consumer)
     consumer.close()
     logger.info('Closed consumer number ' + str(thread_number))
 
 
-def parse_messages_kafka(consumer, consumer_args):
+def parse_messages_kafka(consumer):
     logger.info('Reading messages')
-    try:
-        count = 0
-        for message in consumer:
-            try:
-                logger.debug('Message received')
-                if 'JSON' in agent_config_vars['data_format']:
-                    parse_json_message(json.loads(str(message.value)))
-                elif 'CSV' in agent_config_vars['data_format']:
-                    parse_json_message(label_message(message.value.split(',')))
-                else:
-                    parse_raw_message(message.value)
-#                logger.info('Message Processed: %d' % count)
-                count += 1
-                #if count > 100:
-                #    break
-            except Exception as e:
-                logger.warn('Error when parsing message')
-                logger.warn(e)
-                logger.warn(traceback.print_exc())
-                continue
-    except Exception as ex:
-        logger.warn('Exception when getting or committing the messages in Kafka,' + \
-                're-establishing the connection: {ex}'.format(ex=str(ex)), exc_info=True)
-        consumer = KafkaConsumer(**consumer_args)
-        consumer.subscribe(agent_config_vars['topics'])
-    logger.info('Total Messages: %d' % count)
-
-def get_intuit_config_vars():
-    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))):
-        config_parser = ConfigParser.SafeConfigParser()
-        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
+    for message in consumer:
         try:
-            intuit_config = {
-                'endpoint': config_parser.get('intuit', 'endpoint'),
-                'policy_id': config_parser.get('intuit', 'policy_id'),
-                'temporary_credentials_expiry_requested_mins': config_parser.get('intuit',
-                                                                                 'temporary_credentials_expiry_requested_mins'),
-                'key_cache_ttl_seconds': config_parser.get('intuit', 'key_cache_ttl_seconds'),
-                'key_cache_max_elements': config_parser.get('intuit', 'key_cache_max_elements')
-            }
-        except ConfigParser.NoOptionError:
-            config_error()
-        return intuit_config
-    else:
-        config_error_no_config()
+            logger.debug('Message received')
+            logger.debug(message.value)
+            if 'JSON' in agent_config_vars['data_format']:
+                parse_json_message(json.loads(str(message.value)))
+            elif 'CSV' in agent_config_vars['data_format']:
+                parse_json_message(label_message(message.value.split(',')))
+            else:
+                parse_raw_message(message.value)
+        except Exception as e:
+            logger.warn('Error when parsing message')
+            logger.warn(e)
+            continue
+
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
@@ -109,21 +74,17 @@ def get_agent_config_vars():
             # kafka settings
             kafka_config = {
                 # hardcoded
-                #'api_version': (0, 9),
+                'api_version': (0, 10),
                 'auto_offset_reset': '',
-                'consumer_timeout_ms': 30 * if_config_vars['sampling_interval'] * 1000 if 'METRIC' in
-                                                                                          if_config_vars[
-                                                                                              'project_type'] or 'LOG' in
-                                                                                          if_config_vars[
-                                                                                              'project_type'] else None,
+                'consumer_timeout_ms': 30 * if_config_vars['sampling_interval'] * 1000 if 'METRIC' in if_config_vars[
+                    'project_type'] or 'LOG' in if_config_vars['project_type'] else None,
 
                 # consumer settings
                 'group_id': config_parser.get('kafka', 'group_id'),
                 'client_id': config_parser.get('kafka', 'client_id'),
 
                 # SSL
-                'security_protocol': 'SSL' if config_parser.get('kafka',
-                                                                'security_protocol') == 'SSL' else 'PLAINTEXT',
+                'security_protocol': 'SSL' if config_parser.get('kafka', 'security_protocol') == 'SSL' else 'PLAINTEXT',
                 'ssl_context': config_parser.get('kafka', 'ssl_context'),
                 'ssl_cafile': config_parser.get('kafka', 'ssl_cafile'),
                 'ssl_certfile': config_parser.get('kafka', 'ssl_certfile'),
@@ -164,8 +125,7 @@ def get_agent_config_vars():
             # handle required arrays
             # bootstrap serverss
             if len(config_parser.get('kafka', 'bootstrap_servers')) != 0:
-                kafka_kwargs['bootstrap_servers'] = config_parser.get('kafka', 'bootstrap_servers').strip().split(
-                    ',')
+                kafka_kwargs['bootstrap_servers'] = config_parser.get('kafka', 'bootstrap_servers').strip().split(',')
             else:
                 config_error('bootstrap_servers')
 
@@ -314,6 +274,7 @@ def get_agent_config_vars():
     else:
         config_error_no_config()
 
+
 #########################
 ### START_BOILERPLATE ###
 #########################
@@ -412,6 +373,7 @@ def get_if_config_vars():
     else:
         config_error_no_config()
 
+
 def get_cli_config_vars():
     """ get CLI options. use of these options should be rare """
     usage = 'Usage: %prog [options]'
@@ -456,15 +418,18 @@ def get_cli_config_vars():
 
     return config_vars
 
+
 def config_error(setting=''):
     info = ' ({})'.format(setting) if setting else ''
     logger.error('Agent not correctly configured{}. Check config file.'.format(
         info))
     sys.exit(1)
 
+
 def config_error_no_config():
     logger.error('No config file found. Exiting...')
     sys.exit(1)
+
 
 def check_csv_fieldnames(csv_field_names, all_fields):
     # required
@@ -517,6 +482,7 @@ def check_csv_fieldnames(csv_field_names, all_fields):
 
     return all_fields
 
+
 def ternary_tfd(b, default=''):
     if TRUE.match(b):
         return True
@@ -524,6 +490,7 @@ def ternary_tfd(b, default=''):
         return False
     else:
         return default
+
 
 def is_in(find, find_in):
     if isinstance(find, (set, list, tuple)):
@@ -535,9 +502,11 @@ def is_in(find, find_in):
             return True
     return False
 
+
 def get_sentence_segment(sentence, start, end=None):
     segment = sentence.split(' ')[start:end]
     return ' '.join(segment)
+
 
 def check_project(project_name):
     if 'token' in if_config_vars and len(if_config_vars['token']) != 0:
@@ -557,9 +526,8 @@ def check_project(project_name):
                 output_create_project = subprocess.check_output(
                     'no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars[
                         'token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=' + get_data_type_from_project_type() + '&samplingInterval=' + str(
-                        if_config_vars['sampling_interval'] / 60) + '&samplingIntervalInSeconds=' + str(
-                        if_config_vars[
-                            'sampling_interval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_insight_agent_type_from_project_type() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + create_url + '?tzOffset=-18000000',
+                        if_config_vars['sampling_interval'] / 60) + '&samplingIntervalInSeconds=' + str(if_config_vars[
+                                                                                                            'sampling_interval']) + '&zone=&email=&access-key=&secrete-key=&insightAgentType=' + get_insight_agent_type_from_project_type() + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + create_url + '?tzOffset=-18000000',
                     shell=True)
             # set project name to proposed name
             if_config_vars['project_name'] = project_name
@@ -573,9 +541,9 @@ def check_project(project_name):
                         'system_name'] + '" -H "Content-Type: application/x-www-form-urlencoded" -X POST ' + system_url + '?tzOffset=-18000000',
                     shell=True)
         except subprocess.CalledProcessError as e:
-            logger.error(
-                'Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars[
-                    'project_name'])
+            logger.error('Unable to create project for ' + project_name + '. Data will be sent to ' + if_config_vars[
+                'project_name'])
+
 
 def get_field_index(field_names, field, label, is_required=False):
     err_code = ''
@@ -603,17 +571,21 @@ def get_field_index(field_names, field, label, is_required=False):
         else:
             return field
 
+
 def should_include_per_config(setting, value):
     """ determine if an agent config filter setting would exclude a given value """
     return len(agent_config_vars[setting]) != 0 and value not in agent_config_vars[setting]
+
 
 def should_exclude_per_config(setting, value):
     """ determine if an agent config exclude setting would exclude a given value """
     return len(agent_config_vars[setting]) != 0 and value in agent_config_vars[setting]
 
+
 def get_json_size_bytes(json_data):
     """ get size of json object in bytes """
     return len(bytearray(json.dumps(json_data)))
+
 
 def get_all_files(files, file_regex_c):
     return [i for j in
@@ -621,6 +593,7 @@ def get_all_files(files, file_regex_c):
                 get_file_list_for_directory(k, file_regex_c),
                 files)
             for i in j if i]
+
 
 def get_file_list_for_directory(root_path='/', file_name_regex_c=''):
     root_path = os.path.expanduser(root_path)
@@ -636,6 +609,7 @@ def get_file_list_for_directory(root_path='/', file_name_regex_c=''):
             return [root_path]
     return []
 
+
 def parse_raw_line(message, line):
     # if multiline
     if agent_config_vars['raw_start_regex']:
@@ -650,6 +624,7 @@ def parse_raw_line(message, line):
         parse_raw_message(line)
     return message
 
+
 def parse_raw_message(message):
     matches = agent_config_vars['raw_regex'].match(message)
     if matches:
@@ -657,21 +632,27 @@ def parse_raw_message(message):
         message_json['_raw'] = message
         parse_json_message(message_json)
 
+
 def check_regex(pattern_c, check):
     return not pattern_c or pattern_c.match(check)
+
 
 def is_formatted(setting_value):
     """ returns True if the setting is a format string """
     return check_regex(FORMAT_STR, setting_value)
 
+
 def is_math_expr(setting_value):
     return '=' in setting_value
+
 
 def get_math_expr(setting_value):
     return setting_value.strip('=')
 
+
 def is_named_data_field(setting_value):
     return ':' in setting_value
+
 
 def merge_data(field, value, data={}):
     fields = field.split(JSON_LEVEL_DELIM)
@@ -682,6 +663,7 @@ def merge_data(field, value, data={}):
         data = data[field]
     data[fields[-1]] = value
     return data
+
 
 def parse_formatted(message, setting_value, default='', allow_list=False, remove=False):
     """ fill a format string with values """
@@ -694,6 +676,7 @@ def parse_formatted(message, setting_value, default='', allow_list=False, remove
     if len(fields) == 0:
         return default
     return setting_value.format(**fields)
+
 
 def get_data_values(timestamp, message):
     setting_values = agent_config_vars['data_fields'] or message.keys()
@@ -708,6 +691,7 @@ def get_data_values(timestamp, message):
         else:
             merge_data(name, value, data[timestamp[0]])
     return data
+
 
 def get_data_value(message, setting_value):
     if is_named_data_field(setting_value):
@@ -739,6 +723,7 @@ def get_data_value(message, setting_value):
                                allow_list=True)
     return (name, value)
 
+
 def get_single_value(message, config_setting, default='', allow_list=False, remove=False):
     if config_setting not in agent_config_vars or len(agent_config_vars[config_setting]) == 0:
         return default
@@ -760,6 +745,7 @@ def get_single_value(message, config_setting, default='', allow_list=False, remo
                                      allow_list=allow_list,
                                      remove=remove)
 
+
 def get_json_field_by_pri(message, pri_list, default='', allow_list=False, remove=False):
     value = ''
     while value == '' and len(pri_list) != 0:
@@ -770,6 +756,7 @@ def get_json_field_by_pri(message, pri_list, default='', allow_list=False, remov
                                    allow_list=allow_list,
                                    remove=remove)
     return value or default
+
 
 def get_json_field(message, setting_value, default='', allow_list=False, remove=False):
     field_val = json_format_field_value(
@@ -782,8 +769,10 @@ def get_json_field(message, setting_value, default='', allow_list=False, remove=
         field_val = default
     return field_val
 
+
 class ListNotAllowedError():
     pass
+
 
 def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=False):
     # check inputs; need a dict that is a subtree, an _array_ of fields to traverse down
@@ -803,8 +792,6 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     next_value = json.loads(json.dumps(nested_value.get(next_field)))
     if len(next_fields) == 0 and remove:
         # last field to grab, so remove it
-        #if next_field not in nested_value: 
-        #   pdb.set_trace()
         nested_value.pop(next_field)
 
     # check the next value
@@ -852,6 +839,7 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
         # catch-all
         return ''
 
+
 def json_gather_list_values(l, fields, remove=False):
     sub_field_value = []
     # treat each item in the list as a potential tree to walk down
@@ -868,6 +856,7 @@ def json_gather_list_values(l, fields, remove=False):
     # return the full list of field values
     return sub_field_value
 
+
 def json_format_field_value(value):
     # flatten 1-item set/list
     if isinstance(value, (list, set, tuple)):
@@ -879,6 +868,7 @@ def json_format_field_value(value):
         return value
     # stringify everything else
     return str(value)
+
 
 def parse_json_message(messages):
     if len(agent_config_vars['json_top_level']) != 0:
@@ -900,6 +890,7 @@ def parse_json_message(messages):
             parse_json_message_single(message_single)
     else:
         parse_json_message_single(messages)
+
 
 def parse_json_message_single(message):
     # message = json.loads(json.dumps(message))
@@ -969,8 +960,7 @@ def parse_json_message_single(message):
 
     # get data
     data = get_data_values(timestamp, message)
-    #logger.info(data)
-    #pdb.set_trace()
+
     # hand off
     for timestamp, report_data in data.items():
         ts = get_timestamp_from_date_string(timestamp)
@@ -979,7 +969,7 @@ def parse_json_message_single(message):
         if 'METRIC' in if_config_vars['project_type']:
             data_folded = fold_up(report_data, value_tree=True)  # put metric data in top level
             for data_field, data_value in data_folded.items():
-                if data_value is not None and data_value != '':
+                if data_value is not None:
                     metric_handoff(
                         ts,
                         data_field,
@@ -988,6 +978,7 @@ def parse_json_message_single(message):
                         device)
         else:
             log_handoff(ts, report_data, instance, device)
+
 
 def label_message(message, fields=[]):
     """ turns unlabeled, split data into labeled data """
@@ -998,8 +989,10 @@ def label_message(message, fields=[]):
         json[fields[i]] = message[i]
     return json
 
+
 def minlen(one, two):
     return min(len(one), len(two))
+
 
 def parse_csv_message(message):
     # filter
@@ -1058,6 +1051,7 @@ def parse_csv_message(message):
     fields = list(agent_config_vars['csv_field_names'][j] for j in agent_config_vars['data_fields'])
     parse_csv_row(row, fields, instance, device)
 
+
 def parse_csv_data(csv_data, instance, device=''):
     """
     parses CSV data, assuming the format is given as:
@@ -1073,6 +1067,7 @@ def parse_csv_data(csv_data, instance, device=''):
         if len(row) > 0:
             parse_csv_row(row.split(CSV_DELIM), field_names, instance, device)
 
+
 def parse_csv_row(row, field_names, instance, device=''):
     timestamp = get_timestamp_from_date_string(row.pop(0))
     if not timestamp:
@@ -1085,6 +1080,7 @@ def parse_csv_row(row, field_names, instance, device=''):
         for i in range(len(row)):
             json_message[field_names[i]] = row[i]
         log_handoff(timestamp, json_message, instance, device)
+
 
 def get_timestamp_from_date_string(date_string):
     """ parse a date string into unix epoch (ms) """
@@ -1129,6 +1125,7 @@ def get_timestamp_from_date_string(date_string):
 
     return epoch
 
+
 def make_safe_instance_string(instance, device=''):
     """ make a safe instance name string, concatenated with device if appropriate """
     # strip underscores
@@ -1139,12 +1136,14 @@ def make_safe_instance_string(instance, device=''):
         instance = '{}_{}'.format(make_safe_instance_string(device), instance)
     return instance
 
+
 def make_safe_metric_key(metric):
     """ make safe string already handles this """
     metric = LEFT_BRACE.sub('(', metric)
     metric = RIGHT_BRACE.sub(')', metric)
     metric = PERIOD.sub('/', metric)
     return metric
+
 
 def make_safe_string(string):
     """
@@ -1157,6 +1156,7 @@ def make_safe_string(string):
     string = NON_ALNUM.sub('', string)
     return string
 
+
 def run_subproc_once(command, **passthrough):
     command = format_command(command)
     output = subprocess.check_output(command,
@@ -1164,6 +1164,7 @@ def run_subproc_once(command, **passthrough):
                                      **passthrough).split('\n')
     for line in output:
         yield line
+
 
 def run_subproc_background(command, **passthrough):
     command = format_command(command)
@@ -1182,10 +1183,12 @@ def run_subproc_background(command, **passthrough):
         proc.wait()
         pass
 
+
 def format_command(cmd):
     if not isinstance(cmd, (list, tuple)):  # no sets, as order matters
         cmd = shlex.split(cmd)
     return list(cmd)
+
 
 def set_logger_config(level):
     """ set up logging according to the defined log level """
@@ -1215,6 +1218,7 @@ def set_logger_config(level):
     logger_obj.addHandler(logging_handler_err)
     return logger_obj
 
+
 def print_summary_info():
     # info to be sent to IF
     post_data_block = '\nIF settings:'
@@ -1233,6 +1237,7 @@ def print_summary_info():
     for kk, kv in sorted(cli_config_vars.items()):
         cli_data_block += '\n\t{}: {}'.format(kk, kv)
     logger.debug(cli_data_block)
+
 
 def initialize_data_gathering(thread_number):
     reset_metric_buffer()
@@ -1259,6 +1264,7 @@ def initialize_data_gathering(thread_number):
     logger.debug('Total {} entries: {}'.format(
         if_config_vars['project_type'].lower(), track['entry_count']))
 
+
 def reset_metric_buffer():
     metric_buffer['buffer_key_list'] = []
     metric_buffer['buffer_ts_list'] = []
@@ -1267,11 +1273,13 @@ def reset_metric_buffer():
     metric_buffer['buffer_collected_list'] = []
     metric_buffer['buffer_collected_dict'] = {}
 
+
 def reset_track():
     """ reset the track global for the next chunk """
     track['start_time'] = time.time()
     track['line_count'] = 0
     track['current_row'] = []
+
 
 #########################################
 # Functions to handle Log/Incident data #
@@ -1279,14 +1287,18 @@ def reset_track():
 def incident_handoff(timestamp, data, instance, device=''):
     send_log(timestamp, data, instance or HOSTNAME, device)
 
+
 def deployment_handoff(timestamp, data, instance, device=''):
     send_log(timestamp, data, instance or HOSTNAME, device)
+
 
 def alert_handoff(timestamp, data, instance, device=''):
     send_log(timestamp, data, instance or HOSTNAME, device)
 
+
 def log_handoff(timestamp, data, instance, device=''):
     send_log(timestamp, data, instance or HOSTNAME, device)
+
 
 def send_log(timestamp, data, instance, device=''):
     entry = prepare_log_entry(str(int(timestamp)), data, instance, device)
@@ -1300,6 +1312,7 @@ def send_log(timestamp, data, instance, device=''):
         logger.debug('Current data object size: {} bytes'.format(
             get_json_size_bytes(track['current_row'])))
 
+
 def prepare_log_entry(timestamp, data, instance, device=''):
     """ creates the log entry """
     entry = dict()
@@ -1312,11 +1325,13 @@ def prepare_log_entry(timestamp, data, instance, device=''):
         entry['tag'] = make_safe_instance_string(instance, device)
     return entry
 
+
 ###################################
 # Functions to handle Metric data #
 ###################################
 def metric_handoff(timestamp, field_name, data, instance, device=''):
     send_metric(timestamp, field_name, data, instance or HOSTNAME, device)
+
 
 def send_metric(timestamp, field_name, data, instance, device=''):
     # validate data
@@ -1330,7 +1345,7 @@ def send_metric(timestamp, field_name, data, instance, device=''):
     else:
         append_metric_data_to_buffer(timestamp, field_name, data, instance, device)
         track['entry_count'] += 1
-        
+
         # send data if all metrics of instance is collected
         while metric_buffer['buffer_collected_list']:
             (ts, key, index) = metric_buffer['buffer_collected_list'].pop()
@@ -1351,20 +1366,16 @@ def send_metric(timestamp, field_name, data, instance, device=''):
                 send_data_wrapper()
 
         # send data
-        #pdb.set_trace()
-        if track['entry_count'] % 500 == 0:
-            logger.info('entry count: %d' % track['entry_count'])
-            while metric_buffer['buffer_ts_list']: 
-                (ts, key) = metric_buffer['buffer_ts_list'].pop()
-                transpose_metrics(ts, key)
+        if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (
+                time.time() - track['start_time']) >= if_config_vars['run_interval']:
             send_data_wrapper()
-        #elif track['entry_count'] % 500 == 0:
-        #    logger.debug('Buffer data object size: {} bytes'.format(
-        #        get_json_size_bytes(metric_buffer['buffer_dict'])))
+        elif track['entry_count'] % 500 == 0:
+            logger.debug('Buffer data object size: {} bytes'.format(
+                get_json_size_bytes(metric_buffer['buffer_dict'])))
+
 
 def append_metric_data_to_buffer(timestamp, field_name, data, instance, device=''):
     """ creates the metric entry """
-    #pdb.set_trace()
     ts_str = str(timestamp)
     instance_str = make_safe_instance_string(instance, device)
     key = '{}-{}'.format(ts_str, instance_str)
@@ -1387,12 +1398,13 @@ def append_metric_data_to_buffer(timestamp, field_name, data, instance, device='
         metric_buffer['buffer_collected_list'].append(
             (timestamp, key, metric_buffer['buffer_ts_list'].index((timestamp, key))))
 
+
 def transpose_metrics(ts, key):
-    #pdb.set_trace()
     metric_buffer['buffer_key_list'].remove(key)
     track['current_row'].append(
         dict({'timestamp': str(ts)}, **metric_buffer['buffer_dict'].pop(key))
     )
+
 
 def build_metric_name_map():
     '''
@@ -1404,6 +1416,7 @@ def build_metric_name_map():
     agent_config_vars['metrics_names'] = dict()
     tree = build_sentence_tree(metrics)
     min_tree = fold_up(tree, sentence_tree=True)
+
 
 def build_sentence_tree(sentences):
     '''
@@ -1424,6 +1437,7 @@ def build_sentence_tree(sentences):
         current_path['_name'] = sentence
     return tree
 
+
 def format_sentence(sentence):
     '''
     Takes a sentence and chops it into an array by word
@@ -1434,6 +1448,7 @@ def format_sentence(sentence):
     words = UNDERSCORE.sub('/', words)
     words = words.split('/')
     return words
+
 
 def fold_up(tree, sentence_tree=False, value_tree=False):
     '''
@@ -1448,6 +1463,7 @@ def fold_up(tree, sentence_tree=False, value_tree=False):
             sentence_tree=sentence_tree,
             value_tree=value_tree)
     return folded
+
 
 def fold_up_helper(current_path, node_name, node, sentence_tree=False, value_tree=False):
     '''
@@ -1492,6 +1508,7 @@ def fold_up_helper(current_path, node_name, node, sentence_tree=False, value_tre
                 sentence_tree=sentence_tree,
                 value_tree=value_tree)
 
+
 ################################
 # Functions to send data to IF #
 ################################
@@ -1503,6 +1520,7 @@ def send_data_wrapper():
     track['chunk_count'] += 1
     reset_track()
 
+
 def send_data_to_if(chunk_metric_data):
     send_data_time = time.time()
 
@@ -1512,7 +1530,7 @@ def send_data_to_if(chunk_metric_data):
         for chunk in chunk_metric_data:
             chunk['data'] = json.dumps(chunk['data'])
     data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
-    assert len(chunk_metric_data) > 0, 'Metric Data <=0'
+
     logger.debug('First:\n' + str(chunk_metric_data[0]))
     logger.debug('Last:\n' + str(chunk_metric_data[-1]))
     logger.debug('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
@@ -1524,11 +1542,11 @@ def send_data_to_if(chunk_metric_data):
 
     # send the data
     post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
-    #pdb.set_trace()
     send_request(post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
                  data=data_to_post, proxies=if_config_vars['if_proxies'])
     logger.debug('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
+
 
 def send_request(url, mode='GET', failure_message='Failure!', success_message='Success!', **request_passthrough):
     """ sends a request to the given url """
@@ -1539,7 +1557,6 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
 
     for i in range(ATTEMPTS):
         try:
-            logger.debug(url)
             response = req(url, **request_passthrough)
             if response.status_code == httplib.OK:
                 logger.info(success_message)
@@ -1562,6 +1579,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     logger.error('Failed! Gave up after {} attempts.'.format(i))
     return -1
 
+
 def get_data_type_from_project_type():
     if 'METRIC' in if_config_vars['project_type']:
         return 'Metric'
@@ -1577,6 +1595,7 @@ def get_data_type_from_project_type():
         logger.warning('Project Type not correctly configured')
         sys.exit(1)
 
+
 def get_insight_agent_type_from_project_type():
     if 'containerize' in agent_config_vars and agent_config_vars['containerize']:
         if is_replay():
@@ -1591,6 +1610,7 @@ def get_insight_agent_type_from_project_type():
     else:
         return 'Custom'
 
+
 def get_agent_type_from_project_type():
     """ use project type to determine agent type """
     if 'METRIC' in if_config_vars['project_type']:
@@ -1604,6 +1624,7 @@ def get_agent_type_from_project_type():
         return 'LogStreaming'
         # INCIDENT and DEPLOYMENT don't use this
 
+
 def get_data_field_from_project_type():
     """ use project type to determine which field to place data in """
     # incident uses a different API endpoint
@@ -1613,6 +1634,7 @@ def get_data_field_from_project_type():
         return 'deploymentData'
     else:  # MERTIC, LOG, ALERT
         return 'metricData'
+
 
 def get_api_from_project_type():
     """ use project type to determine which API to post to """
@@ -1624,8 +1646,10 @@ def get_api_from_project_type():
     else:  # MERTIC, LOG, ALERT
         return 'customprojectrawdata'
 
+
 def is_replay():
     return 'REPLAY' in if_config_vars['project_type']
+
 
 def initialize_api_post_data():
     """ set up the unchanging portion of this """
@@ -1639,6 +1663,7 @@ def initialize_api_post_data():
         to_send_data_dict['samplingInterval'] = str(if_config_vars['sampling_interval'])
     logger.debug(to_send_data_dict)
     return to_send_data_dict
+
 
 if __name__ == "__main__":
     # declare a few vars
@@ -1667,20 +1692,18 @@ if __name__ == "__main__":
     logger = set_logger_config(cli_config_vars['log_level'])
     if_config_vars = get_if_config_vars()
     agent_config_vars = get_agent_config_vars()
-    intuit_config_vars = get_intuit_config_vars()
     print_summary_info()
 
-    initialize_data_gathering(1)
     # start data processing
-    # process_list = []
-    # for i in range(0, cli_config_vars['threads']):
-    #     p = Process(target=initialize_data_gathering,
-    #                 args=(i,)
-    #                 )
-    #     process_list.append(p)
-    #
-    # for p in process_list:
-    #     p.start()
-    #
-    # for p in process_list:
-    #     p.join()
+    process_list = []
+    for i in range(0, cli_config_vars['threads']):
+        p = Process(target=initialize_data_gathering,
+                    args=(i,)
+                    )
+        process_list.append(p)
+
+    for p in process_list:
+        p.start()
+
+    for p in process_list:
+        p.join()
