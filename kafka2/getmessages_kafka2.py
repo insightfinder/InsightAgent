@@ -18,6 +18,7 @@ import requests
 import statistics
 import subprocess
 import shlex
+import csv
 
 from kafka import KafkaConsumer
 
@@ -31,34 +32,62 @@ def start_data_processing(thread_number):
     consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
     logger.info("consumer kafka_kwargs {}".format(agent_config_vars['kafka_kwargs']))
     logger.info('Started consumer number ' + str(thread_number))
-    # subscribe to given topics
+
     consumer.subscribe(agent_config_vars['topics'])
     logger.info('Successfully subscribed to topics' + str(agent_config_vars['topics']))
-    # partitions = consumer.partitions_for_topic("test")
-    # logger.info("partitions", str(partitions))
     logger.info(consumer.topics())
-    # start consuming messages
+
     parse_messages_kafka(consumer)
     consumer.close()
-    logger.info('Closed consumer number ' + str(thread_number))
 
 
+
+def load_dict_from_str(s):
+    """ load a str like {k1=v1, k2=v2, ...} to a dict """
+    l = []
+    for i in s.replace("{", "").replace("}","").split(","):
+        l.append(tuple(i.strip().split("=")))
+    return dict(l)
+
+
+def read_csv(s):
+    "read s with quote char"
+    csv_reader = csv.reader([s], skipinitialspace=True)
+    return next(csv_reader)
+
+
+# columns = ['name', 'timestamp', 'fields', 'tags', 'eb_time']
 def parse_messages_kafka(consumer):
-    logger.info('Reading messages')
+    logger.info('parse_messages_kafka')
     for message in consumer:
+        logger.debug('Message received')
+        logger.debug(message.value)
+
         try:
-            logger.debug('Message received')
-            logger.debug(message.value)
-            if 'JSON' in agent_config_vars['data_format']:
-                parse_json_message(json.loads(str(message.value)))
-            elif 'CSV' in agent_config_vars['data_format']:
-                parse_json_message(label_message(message.value.split(',')))
-            else:
-                parse_raw_message(message.value)
-        except Exception as e:
-            logger.warn('Error when parsing message')
+            
+            name, ts, fields, tags, _ = read_csv(message.value)
+            tags_dict = load_dict_from_str(tags)
+            service_alias = tags_dict.get('service_alias', '')
+
+            target_fields = ['svc_mean', 'tx_mean', 'value', 'req_count']
+
+            if service_alias:
+                client_alias = tags_dict.get('client_alias', '')
+                logger.info("instance id: {}-{}".format(service_alias, client_alias))
+                fields_dict = load_dict_from_str(fields)
+                data = {}
+                for field in target_fields:
+                    v = fields_dict.get(field, '')
+                    if v:
+                        data.update({field: v})
+
+                if len(data) == len(target_fields):
+                    logger.debug("collecting fields data complete: {}".format(data))
+                else:
+                    logger.debug("collecting fields ... wait more fields.")
+
+        except ValueError as e:
             logger.warn(e)
-            continue
 
 
 def get_agent_config_vars():
@@ -1240,29 +1269,8 @@ def print_summary_info():
 
 
 def initialize_data_gathering(thread_number):
-    reset_metric_buffer()
-    reset_track()
-    track['chunk_count'] = 0
-    track['entry_count'] = 0
-
+    logger
     start_data_processing(thread_number)
-
-    # move all buffer data to current data, and send
-    while metric_buffer['buffer_ts_list']:
-        (ts, key) = metric_buffer['buffer_ts_list'].pop()
-        transpose_metrics(ts, key)
-        if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
-            logger.debug('Sending buffer chunk')
-            send_data_wrapper()
-
-    # last chunk
-    if len(track['current_row']) > 0:
-        logger.debug('Sending last chunk')
-        send_data_wrapper()
-
-    logger.debug('Total chunks created: ' + str(track['chunk_count']))
-    logger.debug('Total {} entries: {}'.format(
-        if_config_vars['project_type'].lower(), track['entry_count']))
 
 
 def reset_metric_buffer():
@@ -1281,232 +1289,9 @@ def reset_track():
     track['current_row'] = []
 
 
-#########################################
-# Functions to handle Log/Incident data #
-#########################################
-def incident_handoff(timestamp, data, instance, device=''):
-    send_log(timestamp, data, instance or HOSTNAME, device)
 
 
-def deployment_handoff(timestamp, data, instance, device=''):
-    send_log(timestamp, data, instance or HOSTNAME, device)
 
-
-def alert_handoff(timestamp, data, instance, device=''):
-    send_log(timestamp, data, instance or HOSTNAME, device)
-
-
-def log_handoff(timestamp, data, instance, device=''):
-    send_log(timestamp, data, instance or HOSTNAME, device)
-
-
-def send_log(timestamp, data, instance, device=''):
-    entry = prepare_log_entry(str(int(timestamp)), data, instance, device)
-    track['current_row'].append(entry)
-    track['line_count'] += 1
-    track['entry_count'] += 1
-    if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (
-            time.time() - track['start_time']) >= if_config_vars['sampling_interval']:
-        send_data_wrapper()
-    elif track['entry_count'] % 100 == 0:
-        logger.debug('Current data object size: {} bytes'.format(
-            get_json_size_bytes(track['current_row'])))
-
-
-def prepare_log_entry(timestamp, data, instance, device=''):
-    """ creates the log entry """
-    entry = dict()
-    entry['data'] = data
-    if 'INCIDENT' in if_config_vars['project_type'] or 'DEPLOYMENT' in if_config_vars['project_type']:
-        entry['timestamp'] = timestamp
-        entry['instanceName'] = make_safe_instance_string(instance, device)
-    else:  # LOG or ALERT
-        entry['eventId'] = timestamp
-        entry['tag'] = make_safe_instance_string(instance, device)
-    return entry
-
-
-###################################
-# Functions to handle Metric data #
-###################################
-def metric_handoff(timestamp, field_name, data, instance, device=''):
-    send_metric(timestamp, field_name, data, instance or HOSTNAME, device)
-
-
-def send_metric(timestamp, field_name, data, instance, device=''):
-    # validate data
-    try:
-        data = float(data)
-    except Exception as e:
-        logger.warning(e)
-        logger.warning(
-            'timestamp: {}\nfield_name: {}\ninstance: {}\ndevice: {}\ndata: {}'.format(
-                timestamp, field_name, instance, device, data))
-    else:
-        append_metric_data_to_buffer(timestamp, field_name, data, instance, device)
-        track['entry_count'] += 1
-
-        # send data if all metrics of instance is collected
-        while metric_buffer['buffer_collected_list']:
-            (ts, key, index) = metric_buffer['buffer_collected_list'].pop()
-            del metric_buffer['buffer_ts_list'][index]
-            metric_buffer['buffer_collected_dict'].pop(key)
-            transpose_metrics(ts, key)
-            if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
-                logger.debug('Sending buffer chunk')
-                send_data_wrapper()
-
-        # send data if buffer size is bigger than threshold
-        while get_json_size_bytes(metric_buffer['buffer_dict']) >= agent_config_vars['metric_buffer_size'] and \
-                metric_buffer['buffer_ts_list']:
-            (ts, key) = metric_buffer['buffer_ts_list'].pop()
-            transpose_metrics(ts, key)
-            if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
-                logger.debug('Sending buffer chunk')
-                send_data_wrapper()
-
-        # send data
-        if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size'] or (
-                time.time() - track['start_time']) >= if_config_vars['run_interval']:
-            send_data_wrapper()
-        elif track['entry_count'] % 500 == 0:
-            logger.debug('Buffer data object size: {} bytes'.format(
-                get_json_size_bytes(metric_buffer['buffer_dict'])))
-
-
-def append_metric_data_to_buffer(timestamp, field_name, data, instance, device=''):
-    """ creates the metric entry """
-    ts_str = str(timestamp)
-    instance_str = make_safe_instance_string(instance, device)
-    key = '{}-{}'.format(ts_str, instance_str)
-    metric_str = make_safe_metric_key(field_name)
-    metric_key = '{}[{}]'.format(metric_str, instance_str)
-
-    if key not in metric_buffer['buffer_key_list']:
-        # add timestamp in buffer_ts_list and buffer_dict
-        metric_buffer['buffer_key_list'].append(key)
-        metric_buffer['buffer_ts_list'].append((timestamp, key))
-        metric_buffer['buffer_ts_list'].sort(key=lambda elem: elem[0], reverse=True)
-        metric_buffer['buffer_dict'][key] = dict()
-        metric_buffer['buffer_collected_dict'][key] = []
-    metric_buffer['buffer_dict'][key][metric_key] = str(data)
-    metric_buffer['buffer_collected_dict'][key].append(metric_str)
-
-    # if all metrics of ts_instance is collected, then send these data
-    if agent_config_vars['all_metrics'] and set(agent_config_vars['all_metrics']) <= set(
-            metric_buffer['buffer_collected_dict'][key]):
-        metric_buffer['buffer_collected_list'].append(
-            (timestamp, key, metric_buffer['buffer_ts_list'].index((timestamp, key))))
-
-
-def transpose_metrics(ts, key):
-    metric_buffer['buffer_key_list'].remove(key)
-    track['current_row'].append(
-        dict({'timestamp': str(ts)}, **metric_buffer['buffer_dict'].pop(key))
-    )
-
-
-def build_metric_name_map():
-    '''
-    Contstructs a hash of <raw_metric_name>: <formatted_metric_name>
-    '''
-    # get metrics from the global
-    metrics = agent_config_vars['metrics_copy']
-    # initialize the hash of formatted names
-    agent_config_vars['metrics_names'] = dict()
-    tree = build_sentence_tree(metrics)
-    min_tree = fold_up(tree, sentence_tree=True)
-
-
-def build_sentence_tree(sentences):
-    '''
-    Takes a list of sentences and builds a tree from the words
-        I ate two red apples ----\                     /---> "red" ----> "apples" -> "_name" -> "I ate two red apples"
-        I ate two green pears ----> "I" -> "ate" -> "two" -> "green" --> "pears" --> "_name" -> "I ate two green pears"
-        I ate one yellow banana -/             \--> "one" -> "yellow" -> "banana" -> "_name" -> "I ate one yellow banana"
-    '''
-    tree = dict()
-    for sentence in sentences:
-        words = format_sentence(sentence)
-        current_path = tree
-        for word in words:
-            if word not in current_path:
-                current_path[word] = dict()
-            current_path = current_path[word]
-        # add a terminal _name node with the raw sentence as the value
-        current_path['_name'] = sentence
-    return tree
-
-
-def format_sentence(sentence):
-    '''
-    Takes a sentence and chops it into an array by word
-    Implementation-specifc
-    '''
-    words = sentence.strip(':')
-    words = COLONS.sub('/', words)
-    words = UNDERSCORE.sub('/', words)
-    words = words.split('/')
-    return words
-
-
-def fold_up(tree, sentence_tree=False, value_tree=False):
-    '''
-    Entry point for fold_up. See fold_up_helper for details
-    '''
-    folded = dict()
-    for node_name, node in tree.items():
-        fold_up_helper(
-            folded,
-            node_name,
-            node,
-            sentence_tree=sentence_tree,
-            value_tree=value_tree)
-    return folded
-
-
-def fold_up_helper(current_path, node_name, node, sentence_tree=False, value_tree=False):
-    '''
-    Recursively build a new sentence tree, where,
-        for each node that has only one child,
-        that child is "folded up" into its parent.
-    The tree therefore treats unique phrases as words s.t.
-                      /---> "red apples"
-        "I ate" -> "two" -> "green pears"
-             \---> "one" -> "yellow banana"
-    If sentence_tree=True and there are terminal '_name' nodes,
-        this also returns a hash of
-            <raw_name : formatted name>
-    If value_tree=True and branches terminate in values,
-        this also returns a hash of
-            <formatted path : value>
-    '''
-    while isinstance(node, dict) and (len(node.keys()) == 1 or '_name' in node.keys()):
-        keys = node.keys()
-        # if we've reached a terminal end
-        if '_name' in keys:
-            if sentence_tree:
-                current_path[node['_name']] = node_name
-            keys.remove('_name')
-            node.pop('_name')
-        # if there's still a single key path to follow
-        if len(keys) == 1:
-            next_key = keys[0]
-            node_name += '_' + next_key
-            node = node[next_key]
-
-    if not isinstance(node, dict):
-        if value_tree:
-            # node is the value of the metric node_name
-            current_path[node_name] = node
-    else:
-        for node_nested, node_next in node.items():
-            fold_up_helper(
-                current_path,
-                '{}/{}'.format(node_name, node_nested),
-                node_next,
-                sentence_tree=sentence_tree,
-                value_tree=value_tree)
 
 
 ################################
