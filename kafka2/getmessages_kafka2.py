@@ -58,8 +58,11 @@ def read_csv(s):
 
 # columns = ['name', 'timestamp', 'fields', 'tags', 'eb_time']
 def parse_messages_kafka(consumer):
+    """ parse consumer messages. this function will not return """
     logger.info('parse_messages_kafka')
-    tx_buffer = []
+    tx_data = []
+    ts_max = 0
+    ts_min = 1e38
     for message in consumer:
         logger.debug('Message received')
         logger.debug(message.value)
@@ -75,26 +78,35 @@ def parse_messages_kafka(consumer):
 
             if service_alias:
                 client_alias = tags_dict.get('client_alias', '')
-                logger.info("instance id: {}-{}".format(service_alias, client_alias))
+                instance_id = "instance id: {}-{}".format(service_alias, client_alias)
                 fields_dict = load_dict_from_str(fields)
                 for field in target_fields:
                     v = fields_dict.get(field, '')
                     if v:
-                        data.update({field: v})
+                        data.update({"{0}[{1}]".format(field, instance_id): v})
 
                 if len(data) >= len(target_fields):
                     logger.debug("collecting fields data complete: {}".format(data))
                 else:
                     logger.debug("collecting fields ... wait more fields.")
 
-                data = [{
-                    "timestamp": "1614013929919",
-                    "cpu[instance001]": "1.0"
-                }]
-                send_data(data)
+                # timestamp the message
+                data.update({"timestamp": ts + "000"})
 
         except ValueError as e:
             logger.warn(e)
+
+        tx_data.append(data)
+        ts_max = max(float(ts), ts_max)
+        ts_min = min(float(ts), ts_min)
+        if len(tx_data) > 10:
+            send_data(tx_data)
+            logger.debug("timestamp min={} max={}".format(
+                datetime.fromtimestamp(ts_min),
+                datetime.fromtimestamp(ts_max)))
+            tx_data = []
+            ts_max = 0
+            ts_min = 1e38
 
 
 
