@@ -59,9 +59,11 @@ def read_csv(s):
 # columns = ['name', 'timestamp', 'fields', 'tags', 'eb_time']
 def parse_messages_kafka(consumer):
     logger.info('parse_messages_kafka')
+    tx_buffer = []
     for message in consumer:
         logger.debug('Message received')
         logger.debug(message.value)
+        data = {}
 
         try:
             
@@ -75,19 +77,25 @@ def parse_messages_kafka(consumer):
                 client_alias = tags_dict.get('client_alias', '')
                 logger.info("instance id: {}-{}".format(service_alias, client_alias))
                 fields_dict = load_dict_from_str(fields)
-                data = {}
                 for field in target_fields:
                     v = fields_dict.get(field, '')
                     if v:
                         data.update({field: v})
 
-                if len(data) == len(target_fields):
+                if len(data) >= len(target_fields):
                     logger.debug("collecting fields data complete: {}".format(data))
                 else:
                     logger.debug("collecting fields ... wait more fields.")
 
+                data = [{
+                    "timestamp": "1614013929919",
+                    "cpu[instance001]": "1.0"
+                }]
+                send_data(data)
+
         except ValueError as e:
             logger.warn(e)
+
 
 
 def get_agent_config_vars():
@@ -1297,72 +1305,123 @@ def reset_track():
 ################################
 # Functions to send data to IF #
 ################################
-def send_data_wrapper():
-    """ wrapper to send data """
-    logger.debug('--- Chunk creation time: {} seconds ---'.format(
-        round(time.time() - track['start_time'], 2)))
-    send_data_to_if(track['current_row'])
-    track['chunk_count'] += 1
-    reset_track()
-
-
-def send_data_to_if(chunk_metric_data):
+def send_data(metric_data):
+    """ Send metric data dict to InsightFinder """
     send_data_time = time.time()
-
     # prepare data for metric streaming agent
-    data_to_post = initialize_api_post_data()
-    if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
-        for chunk in chunk_metric_data:
-            chunk['data'] = json.dumps(chunk['data'])
-    data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
+    to_send_data_dict = dict()
+    # for backend so this is the camel case in to_send_data_dict
+    to_send_data_dict["metricData"] = json.dumps(metric_data)
+    to_send_data_dict["licenseKey"] = if_config_vars['license_key']
+    to_send_data_dict["projectName"] = if_config_vars['project_name']
+    to_send_data_dict["userName"] = if_config_vars['user_name']
+    to_send_data_dict["agentType"] = "MetricFileReplay"
 
-    logger.debug('First:\n' + str(chunk_metric_data[0]))
-    logger.debug('Last:\n' + str(chunk_metric_data[-1]))
-    logger.debug('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
-    logger.debug('Total Lines: ' + str(track['line_count']))
-
-    # do not send if only testing
-    if cli_config_vars['testing']:
-        return
+    to_send_data_json = json.dumps(to_send_data_dict)
 
     # send the data
-    post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
-    send_request(post_url, 'POST', 'Could not send request to IF',
-                 str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
-                 data=data_to_post, proxies=if_config_vars['if_proxies'])
-    logger.debug('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
+    post_url = if_config_vars['if_url'] + "/customprojectrawdata"
+    send_data_to_receiver(post_url, to_send_data_json, len(metric_data))
+    print "--- Send data time: %s seconds ---" + str(time.time() - send_data_time)
 
-
-def send_request(url, mode='GET', failure_message='Failure!', success_message='Success!', **request_passthrough):
-    """ sends a request to the given url """
-    # determine if post or get (default)
-    req = requests.get
-    if mode.upper() == 'POST':
-        req = requests.post
-
-    for i in range(ATTEMPTS):
+def send_data_to_receiver(post_url, to_send_data, num_of_message):
+    MAX_RETRY_NUM = 3
+    RETRY_WAIT_TIME_IN_SEC = 30
+    logger.debug("send_data_to_receiver: url={}, data={}".format(post_url, to_send_data))
+    attempts = 0
+    while attempts < MAX_RETRY_NUM:
+        response_code = -1
+        attempts += 1
         try:
-            response = req(url, **request_passthrough)
-            if response.status_code == httplib.OK:
-                logger.info(success_message)
-                return response
-            else:
-                logger.warn(failure_message)
-                logger.debug('Response Code: {}\nTEXT: {}'.format(
-                    response.status_code, response.text))
-        # handle various exceptions
-        except requests.exceptions.Timeout:
-            logger.exception('Timed out. Reattempting...')
+            response = requests.post(post_url, data=json.loads(to_send_data), verify=False)
+            response_code = response.status_code
+        except:
+            print "Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
+                attempts, response_code, RETRY_WAIT_TIME_IN_SEC)
+            time.sleep(RETRY_WAIT_TIME_IN_SEC)
             continue
-        except requests.exceptions.TooManyRedirects:
-            logger.exception('Too many redirects.')
+        if response_code == 200:
+            print "Data send successfully. Number of events: %d" % num_of_message
             break
-        except requests.exceptions.RequestException as e:
-            logger.exception('Exception ' + str(e))
-            break
+        else:
+            print "Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
+                attempts, response_code, RETRY_WAIT_TIME_IN_SEC)
+            time.sleep(RETRY_WAIT_TIME_IN_SEC)
+    if attempts == MAX_RETRY_NUM:
+        sys.exit(1)
 
-    logger.error('Failed! Gave up after {} attempts.'.format(i))
-    return -1
+
+
+# def send_data_wrapper():
+#     """ wrapper to send data """
+#     logger.debug('--- Chunk creation time: {} seconds ---'.format(
+#         round(time.time() - track['start_time'], 2)))
+#     send_data_to_if(track['current_row'])
+#     track['chunk_count'] += 1
+#     reset_track()
+
+
+# def send_data_to_if(chunk_metric_data):
+#     send_data_time = time.time()
+
+#     # prepare data for metric streaming agent
+#     data_to_post = initialize_api_post_data()
+#     if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
+#         for chunk in chunk_metric_data:
+#             chunk['data'] = json.dumps(chunk['data'])
+#     data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
+
+#     # logger.debug('First:\n' + str(chunk_metric_data[0]))
+#     # logger.debug('Last:\n' + str(chunk_metric_data[-1]))
+#     logger.debug('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
+#     # logger.debug('Total Lines: ' + str(track['line_count']))
+#     data_to_post = json.dumps(data_to_post)
+#     logger.debug('data type {}'.format(type(data_to_post)))
+
+#     # do not send if only testing
+#     if cli_config_vars['testing']:
+#         return
+
+#     # send the data
+#     post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
+#     logger.debug("send_data_to_if: url={} total bytes={} data={}".format(
+#         post_url, get_json_size_bytes(data_to_post), data_to_post))
+#     send_request(post_url, 'POST', 'Could not send request to IF',
+#                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
+#                  data=data_to_post, proxies=if_config_vars['if_proxies'])
+#     logger.debug('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
+
+
+# def send_request(url, mode='GET', failure_message='Failure!', success_message='Success!', **request_passthrough):
+#     """ sends a request to the given url """
+#     # determine if post or get (default)
+#     req = requests.get
+#     if mode.upper() == 'POST':
+#         req = requests.post
+
+#     for i in range(ATTEMPTS):
+#         try:
+#             response = req(url, **request_passthrough)
+#             if response.status_code == httplib.OK:
+#                 logger.info(success_message)
+#                 return response
+#             else:
+#                 logger.warn(failure_message)
+#                 logger.debug('Response Code: {}\nTEXT: {}'.format(
+#                     response.status_code, response.text))
+#         # handle various exceptions
+#         except requests.exceptions.Timeout:
+#             logger.exception('Timed out. Reattempting...')
+#             continue
+#         except requests.exceptions.TooManyRedirects:
+#             logger.exception('Too many redirects.')
+#             break
+#         except requests.exceptions.RequestException as e:
+#             logger.exception('Exception ' + str(e))
+#             break
+
+#     logger.error('Failed! Gave up after {} attempts.'.format(i))
+#     return -1
 
 
 def get_data_type_from_project_type():
