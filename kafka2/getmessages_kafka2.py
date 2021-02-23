@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import ConfigParser
+import configparser
 import json
 import logging
 import os
@@ -12,34 +12,24 @@ import arrow
 from optparse import OptionParser
 from multiprocessing import Process
 from datetime import datetime
-import urlparse
-import httplib
+import urllib.parse
+import http.client
 import requests
 import statistics
 import subprocess
 import shlex
 import csv
-
+from heapq import heappush, heappop
 from kafka import KafkaConsumer
+from multiprocessing import Process, Queue
 
 '''
 This script gathers data to send to Insightfinder
 '''
 
-
-def start_data_processing(thread_number):
-    # open consumer
-    consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
-    logger.info("consumer kafka_kwargs {}".format(agent_config_vars['kafka_kwargs']))
-    logger.info('Started consumer number ' + str(thread_number))
-
-    consumer.subscribe(agent_config_vars['topics'])
-    logger.info('Successfully subscribed to topics' + str(agent_config_vars['topics']))
-    logger.info(consumer.topics())
-
-    parse_messages_kafka(consumer)
-    consumer.close()
-
+# TODO: load target_fields from config
+target_fields = ['svc_mean', 'tx_mean', 'value', 'req_count']
+added_fields = ['timestamp', 'instance']
 
 
 def load_dict_from_str(s):
@@ -56,64 +46,144 @@ def read_csv(s):
     return next(csv_reader)
 
 
-# columns = ['name', 'timestamp', 'fields', 'tags', 'eb_time']
-def parse_messages_kafka(consumer):
-    """ parse consumer messages. this function will not return """
-    logger.info('parse_messages_kafka')
-    tx_data = []
-    ts_max = 0
-    ts_min = 1e38
-    for message in consumer:
-        logger.debug('Message received')
-        logger.debug(message.value)
-        data = {}
+def has_all_fields(msg_dict):
+    # simply check the size
+    return len(msg_dict) >= len(target_fields) + len(added_fields)
 
+def format_data(data, ts, key):
+    """ format data buffer per IF protocols """
+    logger.debug(f"format_data: {ts} {key} {data}")
+    return 
+
+def send_data_wrapper(data, ts_min, ts_max):
+    logger.info("send_data_wrapper: between {} and {}, size={}".format(
+        ts_min, ts_max, len(data)))
+    logger.info("date range:{} and {}".format(
+        datetime.fromtimestamp(ts_min),
+        datetime.fromtimestamp(ts_max)
+    ))
+    # send_data(data)
+
+def update_nested_dict(data, key, field, v):
+    tmp = data.get(key, {})
+    tmp.update({field: v})
+    data.update({key:tmp})
+
+# columns = ['name', 'timestamp', 'fields', 'tags', 'eb_time']
+def worker(q):
+    """ process message from q """
+    logger.debug(f"pid {os.getpid()} started")
+
+    # init data
+    h = []  # timestamp based priority queue
+    data = {}
+
+    while True:
         try:
-            
-            name, ts, fields, tags, _ = read_csv(message.value)
+            # TODO: do we need exit if timeout ???
+            message = q.get()
+            logger.debug(f"pid={os.getpid()}, message={message}")
+            name, ts_str, fields, tags, _ = read_csv(str(message.value))
             tags_dict = load_dict_from_str(tags)
             service_alias = tags_dict.get('service_alias', '')
 
-            target_fields = ['svc_mean', 'tx_mean', 'value', 'req_count']
-
             if service_alias:
+                ts = int(float(ts_str))
                 client_alias = tags_dict.get('client_alias', '')
-                instance_id = "instance id: {}-{}".format(service_alias, client_alias)
+                instance = "{}-{}".format(client_alias, service_alias)
                 fields_dict = load_dict_from_str(fields)
+                # data['timestamp'] = ts_str + '000'
+                # data['instance'] = instance
+                key = f'{instance}@{ts_str}'
+
                 for field in target_fields:
                     v = fields_dict.get(field, '')
-                    if v:
-                        data.update({"{0}[{1}]".format(field, instance_id): v})
+                    logger.debug(f"field={field}, v={v}")
+                    if v and v.lower() != 'null':
+                        update_nested_dict(data, key, field, v)
+                        logger.debug(f"key={key}, field={field}, v={v}")
 
-                if len(data) >= len(target_fields):
-                    logger.debug("collecting fields data complete: {}".format(data))
-                else:
-                    logger.debug("collecting fields ... wait more fields.")
-
-                # timestamp the message
-                data.update({"timestamp": ts + "000"})
+                heappush(h, [ts, key])
 
         except ValueError as e:
-            logger.warn(e)
+            logger.warning(e)
 
-        tx_data.append(data)
-        ts_max = max(float(ts), ts_max)
-        ts_min = min(float(ts), ts_min)
-        if len(tx_data) > 10:
-            send_data(tx_data)
-            logger.debug("timestamp min={} max={}".format(
-                datetime.fromtimestamp(ts_min),
-                datetime.fromtimestamp(ts_max)))
-            tx_data = []
-            ts_max = 0
-            ts_min = 1e38
+        except Exception as e: # TODO: add more types
+            logger.warning(e)
+            logger.warning(f"pid {os.getpid()} exit")
+            break
 
+        # load data to tx buffer
+        tx_buffer = []
+        ts_max = 0
+        ts_min = 1e38
+        WAIT_PERIOD = 300 # 5 mins
+        while h:
+            logger.debug(f"load data size {len(h)} to tx_buffer...")
+            ts, key = heappop(h)
+            ts_max = max(float(ts), ts_max)
+            ts_min = min(float(ts), ts_min)
+            if has_all_fields(data[key]):
+                logger.debug("collected all fields")
+                tx_buffer.append(format_data(data.pop(key), ts, key))
+
+            elif time.time() - ts > WAIT_PERIOD:
+                logger.debug("send delayed message")
+                tx_buffer.append(format_data(data.pop(key), ts, key))
+            
+            else:
+                heappush(h, [ts, key])
+                break
+
+        # send data to IF...
+        if tx_buffer:
+            send_data_wrapper(tx_buffer, ts_min, ts_max)
+
+
+def consumer_process(q):
+    logger.info(f"consumer_process {os.getpid()} started")
+    consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
+    logger.info("consumer kafka_kwargs {}".format(agent_config_vars['kafka_kwargs']))
+
+    consumer.subscribe(agent_config_vars['topics'])
+    logger.info('Successfully subscribed to topics' + str(agent_config_vars['topics']))
+    logger.info(consumer.topics())
+
+    for message in consumer:
+        q.put(message)
+
+    consumer.close()
+
+def start_data_processing():
+    logger.debug("start_data_processing")
+
+    # first, let consumer put messages in queue
+    q = Queue()
+ 
+    c = Process(target=consumer_process, args=(q,))
+    c.start()
+
+    # worker process messages in the queue
+    process_list = []
+    for i in range(0, cli_config_vars['processes']):
+        p = Process(target=worker,
+                    args=(q,)
+                    )
+        process_list.append(p)
+
+    for p in process_list:
+        p.start()
+
+    for p in process_list:
+        p.join()
+    
+    c.join()
 
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))):
-        config_parser = ConfigParser.SafeConfigParser()
+        config_parser = configparser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
         try:
             # proxy settings
@@ -153,7 +223,7 @@ def get_agent_config_vars():
             }
 
             # only keep settings with values
-            kafka_kwargs = {k: v for (k, v) in kafka_config.items() if v}
+            kafka_kwargs = {k: v for (k, v) in list(kafka_config.items()) if v}
 
             # check SASL
             if 'sasl_mechanism' in kafka_kwargs:
@@ -208,7 +278,7 @@ def get_agent_config_vars():
             all_metrics = config_parser.get('kafka', 'all_metrics')
             metric_buffer_size_mb = config_parser.get('kafka', 'metric_buffer_size_mb') or '10'
 
-        except ConfigParser.NoOptionError:
+        except configparser.NoOptionError:
             config_error()
 
         # any post-processing
@@ -255,7 +325,7 @@ def get_agent_config_vars():
 
         # timestamp format
         if len(timestamp_format) != 0:
-            timestamp_format = filter(lambda x: x.strip(), timestamp_format.split(','))
+            timestamp_format = [x for x in timestamp_format.split(',') if x.strip()]
         else:
             config_error('timestamp_format')
 
@@ -330,7 +400,7 @@ def get_agent_config_vars():
 def get_if_config_vars():
     """ get config.ini vars """
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))):
-        config_parser = ConfigParser.SafeConfigParser()
+        config_parser = configparser.SafeConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
         try:
             user_name = config_parser.get('insightfinder', 'user_name')
@@ -344,7 +414,7 @@ def get_if_config_vars():
             if_url = config_parser.get('insightfinder', 'if_url')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
-        except ConfigParser.NoOptionError as cp_noe:
+        except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
 
@@ -427,11 +497,8 @@ def get_cli_config_vars():
     """ get CLI options. use of these options should be rare """
     usage = 'Usage: %prog [options]'
     parser = OptionParser(usage=usage)
-    """
-    ## not ready.
-    parser.add_option('--threads', default=1, action='store', dest='threads',
-                      help='Number of threads to run')
-    """
+    parser.add_option('-p', '--processes', default=1, action='store', dest='processes',
+                      help='Number of processes to run')
     parser.add_option('-q', '--quiet', action='store_true', dest='quiet',
                       help='Only display warning and error log messages')
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose',
@@ -443,19 +510,15 @@ def get_cli_config_vars():
                            ' Automatically turns on verbose logging')
     (options, args) = parser.parse_args()
 
-    """
-    # not ready
-    try:
-        threads = int(options.threads)
-    except ValueError:
-        threads = 1
-    """
 
     config_vars = {
-        'threads': 1,
+        'processes': 1,
         'testing': False,
         'log_level': logging.INFO
     }
+
+    if options.processes:
+        config_vars['processes']=int(options.processes)
 
     if options.testing:
         config_vars['testing'] = True
@@ -527,7 +590,7 @@ def check_csv_fieldnames(csv_field_names, all_fields):
         all_fields['data_fields'] = data_fields_temp
     if len(all_fields['data_fields']) == 0:
         # use all non-timestamp fields
-        all_fields['data_fields'] = range(len(csv_field_names))
+        all_fields['data_fields'] = list(range(len(csv_field_names)))
 
     return all_fields
 
@@ -562,7 +625,7 @@ def check_project(project_name):
         logger.debug(project_name)
         try:
             # check for existing project
-            check_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/getprojectstatus')
+            check_url = urllib.parse.urljoin(if_config_vars['if_url'], '/api/v1/getprojectstatus')
             output_check_project = subprocess.check_output(
                 'curl "' + check_url + '?userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars[
                     'token'] + '&projectList=%5B%7B%22projectName%22%3A%22' + project_name + '%22%2C%22customerName%22%3A%22' +
@@ -571,7 +634,7 @@ def check_project(project_name):
             # create project if no existing project
             if project_name not in output_check_project:
                 logger.debug('creating project')
-                create_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/add-custom-project')
+                create_url = urllib.parse.urljoin(if_config_vars['if_url'], '/api/v1/add-custom-project')
                 output_create_project = subprocess.check_output(
                     'no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars[
                         'token'] + '&projectName=' + project_name + '&instanceType=PrivateCloud&projectCloudType=PrivateCloud&dataType=' + get_data_type_from_project_type() + '&samplingInterval=' + str(
@@ -582,7 +645,7 @@ def check_project(project_name):
             if_config_vars['project_name'] = project_name
             # try to add new project to system
             if 'system_name' in if_config_vars and len(if_config_vars['system_name']) != 0:
-                system_url = urlparse.urljoin(if_config_vars['if_url'], '/api/v1/projects/update')
+                system_url = urllib.parse.urljoin(if_config_vars['if_url'], '/api/v1/projects/update')
                 output_update_project = subprocess.check_output(
                     'no_proxy= curl -d "userName=' + if_config_vars['user_name'] + '&token=' + if_config_vars[
                         'token'] + '&operation=updateprojsettings&projectName=' + project_name + '&systemName=' +
@@ -638,9 +701,7 @@ def get_json_size_bytes(json_data):
 
 def get_all_files(files, file_regex_c):
     return [i for j in
-            map(lambda k:
-                get_file_list_for_directory(k, file_regex_c),
-                files)
+            [get_file_list_for_directory(k, file_regex_c) for k in files]
             for i in j if i]
 
 
@@ -728,7 +789,7 @@ def parse_formatted(message, setting_value, default='', allow_list=False, remove
 
 
 def get_data_values(timestamp, message):
-    setting_values = agent_config_vars['data_fields'] or message.keys()
+    setting_values = agent_config_vars['data_fields'] or list(message.keys())
     # reverse list so it's in priority order, as shared fields names will get overwritten
     setting_values.reverse()
     data = {x: dict() for x in timestamp}
@@ -1011,13 +1072,13 @@ def parse_json_message_single(message):
     data = get_data_values(timestamp, message)
 
     # hand off
-    for timestamp, report_data in data.items():
+    for timestamp, report_data in list(data.items()):
         ts = get_timestamp_from_date_string(timestamp)
         if not ts:
             continue
         if 'METRIC' in if_config_vars['project_type']:
             data_folded = fold_up(report_data, value_tree=True)  # put metric data in top level
-            for data_field, data_value in data_folded.items():
+            for data_field, data_value in list(data_folded.items()):
                 if data_value is not None:
                     metric_handoff(
                         ts,
@@ -1288,9 +1349,8 @@ def print_summary_info():
     logger.debug(cli_data_block)
 
 
-def initialize_data_gathering(thread_number):
-    logger
-    start_data_processing(thread_number)
+# def initialize_data_gathering(thread_number):
+#     start_data_processing(thread_number)
 
 
 def reset_metric_buffer():
@@ -1334,7 +1394,7 @@ def send_data(metric_data):
     # send the data
     post_url = if_config_vars['if_url'] + "/customprojectrawdata"
     send_data_to_receiver(post_url, to_send_data_json, len(metric_data))
-    print "--- Send data time: %s seconds ---" + str(time.time() - send_data_time)
+    print("--- Send data time: %s seconds ---" + str(time.time() - send_data_time))
 
 def send_data_to_receiver(post_url, to_send_data, num_of_message):
     MAX_RETRY_NUM = 3
@@ -1348,16 +1408,16 @@ def send_data_to_receiver(post_url, to_send_data, num_of_message):
             response = requests.post(post_url, data=json.loads(to_send_data), verify=False)
             response_code = response.status_code
         except:
-            print "Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
-                attempts, response_code, RETRY_WAIT_TIME_IN_SEC)
+            print("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
+                attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
             continue
         if response_code == 200:
-            print "Data send successfully. Number of events: %d" % num_of_message
+            print("Data send successfully. Number of events: %d" % num_of_message)
             break
         else:
-            print "Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
-                attempts, response_code, RETRY_WAIT_TIME_IN_SEC)
+            print("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
+                attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
     if attempts == MAX_RETRY_NUM:
         sys.exit(1)
@@ -1551,15 +1611,17 @@ if __name__ == "__main__":
     print_summary_info()
 
     # start data processing
-    process_list = []
-    for i in range(0, cli_config_vars['threads']):
-        p = Process(target=initialize_data_gathering,
-                    args=(i,)
-                    )
-        process_list.append(p)
+    start_data_processing()
 
-    for p in process_list:
-        p.start()
+    # process_list = []
+    # for i in range(0, cli_config_vars['threads']):
+    #     p = Process(target=initialize_data_gathering,
+    #                 args=(i,)
+    #                 )
+    #     process_list.append(p)
 
-    for p in process_list:
-        p.join()
+    # for p in process_list:
+    #     p.start()
+
+    # for p in process_list:
+    #     p.join()
