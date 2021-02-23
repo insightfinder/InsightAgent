@@ -96,6 +96,7 @@ def worker(q):
             # outfile.write(str(message.value))
             # outfile.write("\n")
             # name, ts_str, fields, tags, _ = read_csv(str(message.value))
+            # msg_dict = json.loads(str(message.value))
             msg_dict = json.loads(message.value.decode("ascii", errors='ignore'))
             # logger.debug(f"msg_dict: {msg_dict}")
             tags_dict = msg_dict.get("tags", {})
@@ -107,7 +108,7 @@ def worker(q):
                 ts = int(float(ts_.timestamp()))
                 ts_str = str(ts)
                 client_alias = tags_dict.get('client_alias', '')
-                instance = "{}-{}".format(client_alias, service_alias)
+                instance = "{}_{}".format(client_alias, service_alias)
                 fields_dict = msg_dict.get("fields", {})
                 # logger.debug(f"fields_dict: {fields_dict}")
                 key = f'{instance}@{ts_str}'
@@ -144,7 +145,7 @@ def worker(q):
             ts, key = heappop(h)
             ts_max = max(float(ts), ts_max)
             ts_min = min(float(ts), ts_min)
-            #  key may not in data ?
+
             if has_all_fields(data.get(key, {})):
                 logger.debug("collected all fields")
                 logger.debug(f"pop key {key}")
@@ -152,7 +153,6 @@ def worker(q):
 
             elif time.time() - ts > WAIT_PERIOD:
                 logger.debug("send delayed message")
-                #  key may not in data ?
                 tx_buffer.append(format_data(data.pop(key), ts, key))
             
             else:
