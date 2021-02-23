@@ -91,7 +91,7 @@ def worker(q):
             # TODO: do we need exit if timeout ???
             message = q.get()
             logger.debug(f"pid={os.getpid()}, message={message}")
-            logger.debug(str(message.value))
+            # logger.debug(str(message.value))
             # outfile.write(str(message.value))
             # outfile.write("\n")
             # name, ts_str, fields, tags, _ = read_csv(str(message.value))
