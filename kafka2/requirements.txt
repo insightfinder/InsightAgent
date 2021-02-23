@@ -1,6 +1,13 @@
-kafka_python==2.0.2
 arrow==0.15.5
+certifi==2020.12.5
+chardet==3.0.4
+docutils==0.16
+idna==2.10
+kafka-python==2.0.2
+python-dateutil==2.8.1
 pytz==2019.3
 regex==2020.2.18
 requests==2.23.0
+six==1.15.0
 statistics==1.0.3.5
+urllib3==1.25.11
