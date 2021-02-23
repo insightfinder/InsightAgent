@@ -30,7 +30,7 @@ This script gathers data to send to Insightfinder
 # TODO: load target_fields from config
 target_fields = ['svc_mean', 'tx_mean', 'value', 'req_count']
 added_fields = ['timestamp', 'instance']
-
+tx_q = Queue()
 
 def load_dict_from_str(s):
     """ load a str like {k1=v1, k2=v2, ...} to a dict """
@@ -76,7 +76,7 @@ def update_nested_dict(data, key, field, v):
     data.update({key:tmp})
 
 # columns = ['name', 'timestamp', 'fields', 'tags', 'eb_time']
-def worker(q):
+def worker(q, tx_q):
     """ process message from q """
     # TODO: do we need worry about stack size ??? data can be big.
     logger.debug(f"pid {os.getpid()} started")
@@ -92,7 +92,6 @@ def worker(q):
             message = q.get()
             t_start = time.time()
             logger.debug(f"pid={os.getpid()}, message={message}")
-            # logger.debug(str(message.value))
             # outfile.write(str(message.value))
             # outfile.write("\n")
             # name, ts_str, fields, tags, _ = read_csv(str(message.value))
@@ -165,8 +164,11 @@ def worker(q):
 
         # send data to IF...
         logger.debug(f"tx_buffer {len(tx_buffer)}")
-        if len(tx_buffer) > 0:
-            send_data_wrapper(tx_buffer, ts_min, ts_max)
+        for item in tx_buffer:
+            logger.debug(f"add item {item} to tx_q {tx_q}")
+            tx_q.put(item)
+        # if len(tx_buffer) > 0:
+            # send_data_wrapper(tx_buffer, ts_min, ts_max)
 
 
 def consumer_process(q):
@@ -183,20 +185,42 @@ def consumer_process(q):
 
     consumer.close()
 
+def sender_process(q):
+    logger.info(f"sender_process {os.getpid()} started")
+    tx_buffer=[]
+    BUFFER_SIZE = 100
+
+    while True:
+        try:
+            item = q.get()
+            logger.debug(f"get item {item}")
+            tx_buffer.append(item)
+
+            if len(tx_buffer) > BUFFER_SIZE:
+                send_data(tx_buffer)
+                tx_buffer = []
+
+        except Exception as e:
+            logger.warning(e)
+
 def start_data_processing():
     logger.debug("start_data_processing")
 
-    # first, let consumer put messages in queue
     q = Queue()
  
+    # start consumer process
     c = Process(target=consumer_process, args=(q,))
     c.start()
 
-    # worker process messages in the queue
+    # start sender_process
+    s = Process(target=sender_process, args=(tx_q,))
+    s.start()
+
+    # start worker processes
     process_list = []
     for i in range(0, cli_config_vars['processes']):
         p = Process(target=worker,
-                    args=(q,)
+                    args=(q, tx_q)
                     )
         process_list.append(p)
 
@@ -206,7 +230,9 @@ def start_data_processing():
     for p in process_list:
         p.join()
     
+    # below should never be reached.
     c.join()
+    s.join()
 
 
 def get_agent_config_vars():
@@ -1407,7 +1433,9 @@ def reset_track():
 # Functions to send data to IF #
 ################################
 def send_data(metric_data):
-    """ Send metric data dict to InsightFinder """
+    """ Send metric data dict to InsightFinder 
+    metric_data should be formatted as list of dicts
+    """
     send_data_time = time.time()
     # prepare data for metric streaming agent
     to_send_data_dict = dict()
