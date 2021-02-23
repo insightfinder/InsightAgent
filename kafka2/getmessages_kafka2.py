@@ -91,7 +91,7 @@ def worker(q):
             # TODO: do we need exit if timeout ???
             message = q.get()
             logger.debug(f"pid={os.getpid()}, message={message}")
-            logger.debug(str(message.value))
+            # logger.debug(str(message.value))
             # outfile.write(str(message.value))
             # outfile.write("\n")
             # name, ts_str, fields, tags, _ = read_csv(str(message.value))
@@ -113,7 +113,7 @@ def worker(q):
 
                 for field in target_fields:
                     v = fields_dict.get(field, '')
-                    logger.debug(f"field={field}, v={v}")
+                    # logger.debug(f"field={field}, v={v}")
                     if not v or ( isinstance(v, str) and v.lower() == 'null' ):
                         continue
                     update_nested_dict(data, key, field, v)
@@ -136,14 +136,15 @@ def worker(q):
         tx_buffer = []
         ts_max = 0
         ts_min = 1e38
-        WAIT_PERIOD = 300 # 5 mins
+        # TODO: make 5 mins configurable
+        WAIT_PERIOD = 300
         while h:
             logger.debug(f"heapq {len(h)} data {len(data)}")
             ts, key = heappop(h)
             ts_max = max(float(ts), ts_max)
             ts_min = min(float(ts), ts_min)
             #  key may not in data ?
-            if has_all_fields(data[key]):
+            if has_all_fields(data.get(key, {})):
                 logger.debug("collected all fields")
                 logger.debug(f"pop key {key}")
                 tx_buffer.append(format_data(data.pop(key), ts, key))
@@ -155,6 +156,8 @@ def worker(q):
             
             else:
                 heappush(h, [ts, key])
+                # we didn't pop key from data, so no need to put it back.
+                logger.debug("heapq process complete")
                 break
 
         # send data to IF...
