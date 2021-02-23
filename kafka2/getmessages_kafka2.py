@@ -21,6 +21,7 @@ import csv
 from heapq import heappush, heappop
 from kafka import KafkaConsumer
 from multiprocessing import Process, Queue
+from dateutil import parser
 
 '''
 This script gathers data to send to Insightfinder
@@ -85,31 +86,41 @@ def worker(q):
     data = {}
 
     while True:
+        # outfile = open("messages.txt","a")
         try:
             # TODO: do we need exit if timeout ???
             message = q.get()
             logger.debug(f"pid={os.getpid()}, message={message}")
-            name, ts_str, fields, tags, _ = read_csv(str(message.value))
-            tags_dict = load_dict_from_str(tags)
+            logger.debug(str(message.value))
+            # outfile.write(str(message.value))
+            # outfile.write("\n")
+            # name, ts_str, fields, tags, _ = read_csv(str(message.value))
+            msg_dict = json.loads(message.value.decode("ascii", errors='ignore'))
+            # logger.debug(f"msg_dict: {msg_dict}")
+            tags_dict = msg_dict.get("tags", {})
+            # logger.debug(f"tags_dict: {tags_dict}")
+            ts_ = parser.isoparse(tags_dict['time_bucket'])
             service_alias = tags_dict.get('service_alias', '')
 
             if service_alias:
-                ts = int(float(ts_str))
+                ts = int(float(ts_.timestamp()))
+                ts_str = str(ts)
                 client_alias = tags_dict.get('client_alias', '')
                 instance = "{}-{}".format(client_alias, service_alias)
-                fields_dict = load_dict_from_str(fields)
-                # data['timestamp'] = ts_str + '000'
-                # data['instance'] = instance
+                fields_dict = msg_dict.get("fields", {})
+                # logger.debug(f"fields_dict: {fields_dict}")
                 key = f'{instance}@{ts_str}'
 
                 for field in target_fields:
                     v = fields_dict.get(field, '')
                     logger.debug(f"field={field}, v={v}")
-                    if v and v.lower() != 'null':
-                        update_nested_dict(data, key, field, v)
-                        logger.debug(f"key={key}, field={field}, v={v}")
+                    if not v or ( isinstance(v, str) and v.lower() == 'null' ):
+                        continue
+                    update_nested_dict(data, key, field, v)
+                    logger.debug(f"key={key}, field={field}, v={v}")
 
-                heappush(h, [ts, key])
+                if key in data: # ensure data has key before we push to heapq
+                    heappush(h, [ts, key])
 
         except ValueError as e:
             logger.warning(e)
@@ -118,6 +129,8 @@ def worker(q):
             logger.warning(e)
             logger.warning(f"pid {os.getpid()} exit")
             break
+        # finally:
+        #     outfile.close()
 
         # load data to tx buffer
         tx_buffer = []
@@ -125,16 +138,19 @@ def worker(q):
         ts_min = 1e38
         WAIT_PERIOD = 300 # 5 mins
         while h:
-            logger.debug(f"load data size {len(h)} to tx_buffer...")
+            logger.debug(f"heapq {len(h)} data {len(data)}")
             ts, key = heappop(h)
             ts_max = max(float(ts), ts_max)
             ts_min = min(float(ts), ts_min)
+            #  key may not in data ?
             if has_all_fields(data[key]):
                 logger.debug("collected all fields")
+                logger.debug(f"pop key {key}")
                 tx_buffer.append(format_data(data.pop(key), ts, key))
 
             elif time.time() - ts > WAIT_PERIOD:
                 logger.debug("send delayed message")
+                #  key may not in data ?
                 tx_buffer.append(format_data(data.pop(key), ts, key))
             
             else:
@@ -142,7 +158,8 @@ def worker(q):
                 break
 
         # send data to IF...
-        if tx_buffer:
+        logger.debug(f"tx_buffer {len(tx_buffer)}")
+        if len(tx_buffer) > 0:
             send_data_wrapper(tx_buffer, ts_min, ts_max)
 
 
