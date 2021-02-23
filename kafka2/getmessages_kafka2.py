@@ -136,7 +136,8 @@ def worker(q):
         tx_buffer = []
         ts_max = 0
         ts_min = 1e38
-        WAIT_PERIOD = 300 # 5 mins
+        # TODO: make 5 mins configurable
+        WAIT_PERIOD = 300
         while h:
             logger.debug(f"heapq {len(h)} data {len(data)}")
             ts, key = heappop(h)
