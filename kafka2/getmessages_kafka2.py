@@ -78,6 +78,7 @@ def update_nested_dict(data, key, field, v):
 # columns = ['name', 'timestamp', 'fields', 'tags', 'eb_time']
 def worker(q):
     """ process message from q """
+    # TODO: do we need worry about stack size ??? data can be big.
     logger.debug(f"pid {os.getpid()} started")
 
     # init data
