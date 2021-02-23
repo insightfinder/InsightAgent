@@ -53,7 +53,13 @@ def has_all_fields(msg_dict):
 def format_data(data, ts, key):
     """ format data buffer per IF protocols """
     logger.debug(f"format_data: {ts} {key} {data}")
-    return 
+    out = {}
+    instance, ts_str = key.split('@')
+    # timestamp is a str with epoc time in msec.
+    out['timestamp'] = str(int(ts*1000))
+    for k, v in data.items():
+        out.update({f"{k}[{instance}]": v})
+    return out
 
 def send_data_wrapper(data, ts_min, ts_max):
     logger.info("send_data_wrapper: between {} and {}, size={}".format(
@@ -62,7 +68,7 @@ def send_data_wrapper(data, ts_min, ts_max):
         datetime.fromtimestamp(ts_min),
         datetime.fromtimestamp(ts_max)
     ))
-    # send_data(data)
+    send_data(data)
 
 def update_nested_dict(data, key, field, v):
     tmp = data.get(key, {})
