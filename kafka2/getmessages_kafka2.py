@@ -90,6 +90,7 @@ def worker(q):
         try:
             # TODO: do we need exit if timeout ???
             message = q.get()
+            t_start = time.time()
             logger.debug(f"pid={os.getpid()}, message={message}")
             # logger.debug(str(message.value))
             # outfile.write(str(message.value))
@@ -159,6 +160,8 @@ def worker(q):
                 # we didn't pop key from data, so no need to put it back.
                 logger.debug("heapq process complete")
                 break
+
+        logger.debug(f"process time: {time.time()-t_start} secs")
 
         # send data to IF...
         logger.debug(f"tx_buffer {len(tx_buffer)}")
