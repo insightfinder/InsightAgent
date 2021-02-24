@@ -55,14 +55,13 @@ def format_data(data, ts, key):
     logger.debug(f"format_data: {ts} {key} {data}")
     out = {}
     try:
-        for k in added_fields:
-            data.pop(k)
-
         instance, ts_str = key.split('@')
         # timestamp is a str with epoc time in msec.
         out['timestamp'] = str(int(ts*1000))
         for k, v in data.items():
-            out.update({f"{k}[{instance}]": str(v)})
+            # filter out the added fields
+            if k in target_fields:
+                out.update({f"{k}[{instance}]": str(v)})
     except Exception as e:
         logger.warning(e)
     return out
