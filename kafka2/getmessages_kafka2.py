@@ -239,7 +239,7 @@ def new_worker_process(q, tx_q):
             key = f'{instance}@{ts_str}'
 
             item['key'] = key
-            item['timestamp'] = key
+            item['timestamp'] = ts
             item['metric_vals']['timestamp'] = str(ts * 1000)
 
             for field in target_fields:
