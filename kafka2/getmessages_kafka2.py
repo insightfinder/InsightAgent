@@ -271,6 +271,7 @@ def func_check_buffer(lock, buffer_d, args_d):
         metric_data_list = []
 
         # check the buffer
+        logger.debug(f"buffer_d keys={buffer_d.keys()}")
         # too long no data
         if args_d['latest_received_time'] < time.time() - time_duration:
             if lock.acquire():
