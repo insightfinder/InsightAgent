@@ -136,7 +136,6 @@ def worker(q, tx_q):
 
         except Exception as e: # TODO: add more types
             logger.warning(e)
-            logger.warning(f"pid {os.getpid()} exit")
 
         # finally:
         #     outfile.close()
