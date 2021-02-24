@@ -54,11 +54,17 @@ def format_data(data, ts, key):
     """ format data buffer per IF protocols """
     logger.debug(f"format_data: {ts} {key} {data}")
     out = {}
-    instance, ts_str = key.split('@')
-    # timestamp is a str with epoc time in msec.
-    out['timestamp'] = str(int(ts*1000))
-    for k, v in data.items():
-        out.update({f"{k}[{instance}]": str(v)})
+    try:
+        for k in added_fields:
+            data.pop(k)
+
+        instance, ts_str = key.split('@')
+        # timestamp is a str with epoc time in msec.
+        out['timestamp'] = str(int(ts*1000))
+        for k, v in data.items():
+            out.update({f"{k}[{instance}]": str(v)})
+    except Exception as e:
+        logger.warning(e)
     return out
 
 def send_data_wrapper(data, ts_min, ts_max):
@@ -191,7 +197,7 @@ def consumer_process(q):
 def sender_process(q):
     logger.info(f"sender_process {os.getpid()} started")
     tx_buffer=[]
-    BUFFER_SIZE = 4
+    BUFFER_SIZE = 200
 
     while True:
         try:
