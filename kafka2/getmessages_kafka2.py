@@ -29,7 +29,7 @@ This script gathers data to send to Insightfinder
 
 # TODO: load target_fields from config
 target_fields = ['svc_mean', 'tx_mean', 'value', 'req_count']
-added_fields = ['timestamp', 'instance', 'ts_rcv']
+added_fields = ['timestamp', 'ts_rcv']
 tx_q = Queue()
 
 def load_dict_from_str(s):
