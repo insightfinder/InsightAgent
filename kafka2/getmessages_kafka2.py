@@ -58,7 +58,7 @@ def format_data(data, ts, key):
     # timestamp is a str with epoc time in msec.
     out['timestamp'] = str(int(ts*1000))
     for k, v in data.items():
-        out.update({f"{k}[{instance}]": v})
+        out.update({f"{k}[{instance}]": str(v)})
     return out
 
 def send_data_wrapper(data, ts_min, ts_max):
@@ -91,6 +91,7 @@ def worker(q, tx_q):
             # TODO: do we need exit if timeout ???
             message = q.get()
             t_start = time.time()
+            ts_rcv = int(t_start)
             logger.debug(f"pid={os.getpid()}, message={message}")
             # outfile.write(str(message.value))
             # outfile.write("\n")
@@ -121,7 +122,7 @@ def worker(q, tx_q):
                     logger.debug(f"key={key}, field={field}, v={v}")
 
                 if key in data: # ensure data has key before we push to heapq
-                    heappush(h, [ts, key])
+                    heappush(h, [ts_rcv, ts, key])
 
         except ValueError as e:
             logger.warning(e)
@@ -137,11 +138,12 @@ def worker(q, tx_q):
         tx_buffer = []
         ts_max = 0
         ts_min = 1e38
-        # TODO: make 5 mins configurable
-        WAIT_PERIOD = 300
+        # TODO: make 1 mins configurable
+        WAIT_PERIOD = 60
+        put_back = [] # items popped out of h, but need put back
         while h:
             logger.debug(f"heapq {len(h)} data {len(data)}")
-            ts, key = heappop(h)
+            ts_rcv, ts, key = heappop(h)
             ts_max = max(float(ts), ts_max)
             ts_min = min(float(ts), ts_min)
 
@@ -150,12 +152,12 @@ def worker(q, tx_q):
                 logger.debug(f"pop key {key}")
                 tx_buffer.append(format_data(data.pop(key), ts, key))
 
-            elif time.time() - ts > WAIT_PERIOD:
+            elif time.time() - ts_rcv > WAIT_PERIOD:
                 logger.debug("send delayed message")
                 tx_buffer.append(format_data(data.pop(key), ts, key))
             
             else:
-                heappush(h, [ts, key])
+                heappush(h, [ts_rcv, ts, key])
                 # we didn't pop key from data, so no need to put it back.
                 logger.debug("heapq process complete")
                 break
@@ -188,7 +190,7 @@ def consumer_process(q):
 def sender_process(q):
     logger.info(f"sender_process {os.getpid()} started")
     tx_buffer=[]
-    BUFFER_SIZE = 100
+    BUFFER_SIZE = 4
 
     while True:
         try:
@@ -1444,13 +1446,14 @@ def send_data(metric_data):
     to_send_data_dict["licenseKey"] = if_config_vars['license_key']
     to_send_data_dict["projectName"] = if_config_vars['project_name']
     to_send_data_dict["userName"] = if_config_vars['user_name']
-    to_send_data_dict["agentType"] = "MetricFileReplay"
+    to_send_data_dict["agentType"] = "CUSTOM"
 
     to_send_data_json = json.dumps(to_send_data_dict)
 
     # send the data
     post_url = if_config_vars['if_url'] + "/customprojectrawdata"
     send_data_to_receiver(post_url, to_send_data_json, len(metric_data))
+    logger.debug(f"send to {post_url}, data: {to_send_data_json}")
     print("--- Send data time: %s seconds ---" + str(time.time() - send_data_time))
 
 def send_data_to_receiver(post_url, to_send_data, num_of_message):
