@@ -271,7 +271,16 @@ def func_check_buffer(lock, buffer_d, args_d):
         metric_data_list = []
 
         # check the buffer
-        if args_d['latest_msg_time']:
+        # too long no data
+        if args_d['latest_received_time'] < time.time() - time_duration:
+            if lock.acquire():
+                for key_item in buffer_d.values():
+                    metric_data_list += key_item.values()
+                buffer_d = {}
+                lock.release()
+
+        # pop msg if too long for latest msg
+        elif args_d['latest_msg_time']:
             expire_time = args_d['latest_msg_time'] - time_duration
 
             if lock.acquire():
@@ -296,7 +305,7 @@ def new_sender_process(q):
 
     # share with threads
     buffer_dict = {}
-    args_dict = {'latest_msg_time': 0}
+    args_dict = {'latest_msg_time': 0, 'latest_received_time': 0}
 
     # start an thread to check the buffer
     thread_lock = threading.Lock()
@@ -312,6 +321,8 @@ def new_sender_process(q):
             timestamp = item['timestamp']
             # update latest messages time
             args_dict['latest_msg_time'] = max(args_dict['latest_msg_time'], timestamp)
+            # update latest msg received time
+            args_dict['latest_received_time'] = time.time()
 
             # drop this message if is too old
             if timestamp < args_dict['latest_msg_time'] - time_duration:
