@@ -292,6 +292,9 @@ def func_check_buffer(lock, buffer_d, args_d):
                 lock.release()
 
         # send data
+        logger.debug(f"latest_msg_time={args_d['latest_msg_time']}")
+        logger.debug(f"buffer_d keys={buffer_d.keys()}")
+        logger.debug(f"metric_data_list length={len(metric_data_list)}")
         if metric_data_list:
             send_data(metric_data_list)
 
