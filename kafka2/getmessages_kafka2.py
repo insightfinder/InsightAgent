@@ -329,6 +329,7 @@ def new_sender_process(q):
 
             # drop this message if is too old
             if timestamp < args_dict['latest_msg_time'] - time_duration:
+                logger.debug(f"continue msg with time={timestamp}")
                 continue
 
             if timestamp not in buffer_dict:
@@ -342,6 +343,7 @@ def new_sender_process(q):
             if thread_lock.acquire():
                 buffer_dict[timestamp][key].update(item['metric_vals'])
                 thread_lock.release()
+            logger.debug(f"new item dict={buffer_dict[timestamp][key]}")
 
         except Exception as e:
             logger.warning(e)
