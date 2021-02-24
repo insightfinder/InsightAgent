@@ -145,8 +145,7 @@ def worker(q, tx_q):
         # go through all items in data , check
         # - if the fields are complete, send and rm key
         # - if the msg is stale
-        # TODO: if q gets blocked, i.e. no msg coming, we still need flush
-        # so this for loop might need be a separate process.
+
         logger.debug(f"processing {len(data)} data items ...")
         for k, v in data.items():
             ts_rcv = v['ts_rcv']
