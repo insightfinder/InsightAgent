@@ -18,6 +18,7 @@ import statistics
 import subprocess
 import shlex
 import csv
+import threading
 from heapq import heappush, heappop
 from kafka import KafkaConsumer
 from multiprocessing import Process, Queue
@@ -32,10 +33,11 @@ target_fields = ['svc_mean', 'tx_mean', 'value', 'req_count']
 added_fields = ['timestamp', 'instance', 'ts_rcv']
 tx_q = Queue()
 
+
 def load_dict_from_str(s):
     """ load a str like {k1=v1, k2=v2, ...} to a dict """
     l = []
-    for i in s.replace("{", "").replace("}","").split(","):
+    for i in s.replace("{", "").replace("}", "").split(","):
         l.append(tuple(i.strip().split("=")))
     return dict(l)
 
@@ -50,16 +52,18 @@ def has_all_fields(msg_dict):
     # simply check the size
     return len(msg_dict) >= len(target_fields) + len(added_fields)
 
+
 def format_data(data, ts, key):
     """ format data buffer per IF protocols """
     logger.debug(f"format_data: {ts} {key} {data}")
     out = {}
     instance, ts_str = key.split('@')
     # timestamp is a str with epoc time in msec.
-    out['timestamp'] = str(int(ts*1000))
+    out['timestamp'] = str(int(ts * 1000))
     for k, v in data.items():
         out.update({f"{k}[{instance}]": str(v)})
     return out
+
 
 def send_data_wrapper(data, ts_min, ts_max):
     logger.info("send_data_wrapper: between {} and {}, size={}".format(
@@ -70,11 +74,13 @@ def send_data_wrapper(data, ts_min, ts_max):
     ))
     send_data(data)
 
+
 def update_nested_dict(data, key, field, v):
     logger.debug(f"update_nested_dict - key={key}")
     tmp = data.get(key, {})
     tmp.update({field: v})
-    data.update({key:tmp})
+    data.update({key: tmp})
+
 
 # columns = ['name', 'timestamp', 'fields', 'tags', 'eb_time']
 def worker(q, tx_q):
@@ -91,7 +97,7 @@ def worker(q, tx_q):
         try:
             message = q.get(timeout=WAIT_PERIOD)
             t_start = time.time()
-            ts_rcv = int(t_start) 
+            ts_rcv = int(t_start)
             logger.debug(f"pid={os.getpid()}, message={message}")
             # outfile.write(str(message.value))
             # outfile.write("\n")
@@ -116,7 +122,7 @@ def worker(q, tx_q):
                 for field in target_fields:
                     v = fields_dict.get(field, '')
                     # logger.debug(f"field={field}, v={v}")
-                    if not v or ( isinstance(v, str) and v.lower() == 'null' ):
+                    if not v or (isinstance(v, str) and v.lower() == 'null'):
                         continue
                     update_nested_dict(data, key, field, v)
                     logger.debug(f"key={key}, field={field}, v={v}")
@@ -128,7 +134,7 @@ def worker(q, tx_q):
         except ValueError as e:
             logger.warning(e)
 
-        except Exception as e: # TODO: add more types
+        except Exception as e:  # TODO: add more types
             logger.warning(e)
             logger.warning(f"pid {os.getpid()} exit")
 
@@ -165,7 +171,7 @@ def worker(q, tx_q):
         for k in keys_sent:
             data.pop(k)
             logger.debug(f"pop key {k}")
-        logger.debug(f"process time: {time.time()-t_start} secs")
+        logger.debug(f"process time: {time.time() - t_start} secs")
 
         # send data to IF...
         logger.debug(f"tx_buffer {len(tx_buffer)}")
@@ -188,9 +194,10 @@ def consumer_process(q):
 
     consumer.close()
 
+
 def sender_process(q):
     logger.info(f"sender_process {os.getpid()} started")
-    tx_buffer=[]
+    tx_buffer = []
     BUFFER_SIZE = 4
 
     while True:
@@ -206,23 +213,153 @@ def sender_process(q):
         except Exception as e:
             logger.warning(e)
 
+
+# columns = ['name', 'timestamp', 'fields', 'tags', 'eb_time']
+def new_worker_process(q, tx_q):
+    """ process message from q """
+    # TODO: do we need worry about stack size ??? data can be big.
+    logger.debug(f"pid {os.getpid()} started")
+
+    # init data
+    WAIT_PERIOD = 60
+    while True:
+        item = {'key': None, 'metric_vals': {}}
+        try:
+            message = q.get(timeout=WAIT_PERIOD)
+            t_start = time.time()
+            ts_rcv = int(t_start)
+            logger.debug(f"pid={os.getpid()}, message={message}")
+            # outfile.write(str(message.value))
+            # outfile.write("\n")
+            # name, ts_str, fields, tags, _ = read_csv(str(message.value))
+            # msg_dict = json.loads(str(message.value))
+            msg_dict = json.loads(message.value.decode("ascii", errors='ignore'))
+            # logger.debug(f"msg_dict: {msg_dict}")
+            tags_dict = msg_dict.get("tags", {})
+            # logger.debug(f"tags_dict: {tags_dict}")
+            ts_ = parser.isoparse(tags_dict['time_bucket'])
+            service_alias = tags_dict.get('service_alias', '')
+
+            if not service_alias:
+                continue
+
+            ts = int(float(ts_.timestamp()))
+            ts_str = str(ts)
+            client_alias = tags_dict.get('client_alias', '')
+            instance = "{}_{}".format(client_alias, service_alias)
+            fields_dict = msg_dict.get("fields", {})
+            # logger.debug(f"fields_dict: {fields_dict}")
+            key = f'{instance}@{ts_str}'
+
+            item['key'] = key
+            item['metric_vals']['timestamp'] = ts
+
+            for field in target_fields:
+                v = fields_dict.get(field, '')
+                # logger.debug(f"field={field}, v={v}")
+                if not v or (isinstance(v, str) and v.lower() == 'null'):
+                    continue
+                field_name = '{}[{}]'.format(field, instance)
+                item['metric_vals'][field_name] = v
+                logger.debug(f"key={key}, field={field}, v={v}")
+
+        except ValueError as e:
+            logger.warning(e)
+
+        except Exception as e:  # TODO: add more types
+            logger.warning(e)
+            logger.warning(f"pid {os.getpid()} exit")
+
+        tx_q.put(item)
+
+
+def new_sender_process(q):
+    logger.info(f"sender_process {os.getpid()} started")
+    # expire time range
+    time_duration = 10 * 60
+    # check buffer time range
+    check_buffer_duration = 60
+
+    # share with threads
+    buffer_dict = {}
+    latest_msg_time = 0
+
+    # start an thread to check the buffer
+    thread_lock = threading.Lock()
+
+    def func_check_buffer(lock, buffer_d, latest_ts):
+        while True:
+            metric_data_list = []
+
+            # check the buffer
+            if latest_ts:
+                expire_time = latest_ts - time_duration
+
+                if lock.acquire():
+                    times = buffer_d.keys()
+                    need_send_times = filter(lambda x: x < expire_time, times)
+                    for ts in need_send_times:
+                        key_map = buffer_d.pop(ts)
+                        metric_data_list += key_map.values()
+                lock.release()
+
+            # send data
+            if metric_data_list:
+                send_data(metric_data_list)
+
+            time.sleep(check_buffer_duration)
+
+    thread1 = threading.Thread(target=func_check_buffer, args=(thread_lock, buffer_dict, latest_msg_time))
+    thread1.start()
+
+    while True:
+        try:
+            item = q.get()
+            logger.debug(f"get item {item}")
+
+            timestamp = item['metric_vals']['timestamp']
+            # update latest messages time
+            latest_msg_time = max(latest_msg_time, timestamp)
+
+            # drop this message if is too old
+            if timestamp < latest_msg_time - time_duration:
+                continue
+
+            if timestamp not in buffer_dict:
+                buffer_dict[timestamp] = {}
+
+            key = item['key']
+            if key not in buffer_dict[timestamp]:
+                buffer_dict[timestamp][key] = {}
+
+            # combine metrics data
+            if thread_lock.acquire():
+                buffer_dict[timestamp][key].update(item['metric_vals'])
+                thread_lock.release()
+
+        except Exception as e:
+            logger.warning(e)
+
+    thread1.join()
+
+
 def start_data_processing():
     logger.debug("start_data_processing")
 
     q = Queue()
- 
+
     # start consumer process
     c = Process(target=consumer_process, args=(q,))
     c.start()
 
     # start sender_process
-    s = Process(target=sender_process, args=(tx_q,))
+    s = Process(target=new_sender_process, args=(tx_q,))
     s.start()
 
     # start worker processes
     process_list = []
     for i in range(0, cli_config_vars['processes']):
-        p = Process(target=worker,
+        p = Process(target=new_worker_process,
                     args=(q, tx_q)
                     )
         process_list.append(p)
@@ -232,7 +369,7 @@ def start_data_processing():
 
     for p in process_list:
         p.join()
-    
+
     # below should never be reached.
     c.join()
     s.join()
@@ -562,12 +699,11 @@ def get_cli_config_vars():
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose',
                       help='Enable verbose logging')
     parser.add_option('-l', '--log_level', action='store_true', dest='verbose',
-                    help='logging level')
+                      help='logging level')
     parser.add_option('-t', '--testing', action='store_true', dest='testing',
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
     (options, args) = parser.parse_args()
-
 
     config_vars = {
         'processes': 1,
@@ -576,7 +712,7 @@ def get_cli_config_vars():
     }
 
     if options.processes:
-        config_vars['processes']=int(options.processes)
+        config_vars['processes'] = int(options.processes)
 
     if options.testing:
         config_vars['testing'] = True
@@ -1427,11 +1563,6 @@ def reset_track():
     track['current_row'] = []
 
 
-
-
-
-
-
 ################################
 # Functions to send data to IF #
 ################################
@@ -1456,6 +1587,7 @@ def send_data(metric_data):
     send_data_to_receiver(post_url, to_send_data_json, len(metric_data))
     logger.debug(f"send to {post_url}, data: {to_send_data_json}")
     print("--- Send data time: %s seconds ---" + str(time.time() - send_data_time))
+
 
 def send_data_to_receiver(post_url, to_send_data, num_of_message):
     MAX_RETRY_NUM = 3
@@ -1482,7 +1614,6 @@ def send_data_to_receiver(post_url, to_send_data, num_of_message):
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
     if attempts == MAX_RETRY_NUM:
         sys.exit(1)
-
 
 
 # def send_data_wrapper():
