@@ -239,14 +239,15 @@ def new_worker_process(q, tx_q):
             key = f'{instance}@{ts_str}'
 
             item['key'] = key
-            item['metric_vals']['timestamp'] = ts
+            item['timestamp'] = key
+            item['metric_vals']['timestamp'] = str(ts * 1000)
 
             for field in target_fields:
                 v = fields_dict.get(field, '')
                 if not v or (isinstance(v, str) and v.lower() == 'null'):
                     continue
                 field_name = '{}[{}]'.format(field, instance)
-                item['metric_vals'][field_name] = v
+                item['metric_vals'][field_name] = str(v)
                 logger.debug(f"key={key}, field={field}, v={v}")
 
         except ValueError as e:
@@ -307,7 +308,7 @@ def new_sender_process(q):
             item = q.get()
             logger.debug(f"get item {item}")
 
-            timestamp = item['metric_vals']['timestamp']
+            timestamp = item['timestamp']
             # update latest messages time
             args_dict['latest_msg_time'] = max(args_dict['latest_msg_time'], timestamp)
 
