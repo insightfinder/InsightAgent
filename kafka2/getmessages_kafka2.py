@@ -83,15 +83,15 @@ def worker(q, tx_q):
     logger.debug(f"pid {os.getpid()} started")
 
     # init data
+    WAIT_PERIOD = 60
     data = {}
 
     while True:
         # outfile = open("messages.txt","a")
         try:
-            # TODO: do we need exit if timeout ???
-            message = q.get()
+            message = q.get(timeout=WAIT_PERIOD)
             t_start = time.time()
-            ts_rcv = int(t_start)
+            ts_rcv = int(t_start) 
             logger.debug(f"pid={os.getpid()}, message={message}")
             # outfile.write(str(message.value))
             # outfile.write("\n")
@@ -131,7 +131,7 @@ def worker(q, tx_q):
         except Exception as e: # TODO: add more types
             logger.warning(e)
             logger.warning(f"pid {os.getpid()} exit")
-            break
+
         # finally:
         #     outfile.close()
 
@@ -140,7 +140,6 @@ def worker(q, tx_q):
         ts_max = 0
         ts_min = 1e38
         # TODO: make 1 mins configurable
-        WAIT_PERIOD = 60
         keys_sent = []
 
         # go through all items in data , check
