@@ -257,7 +257,8 @@ def new_worker_process(q, tx_q):
             logger.warning(e)
             logger.warning(f"pid {os.getpid()} exit")
 
-        tx_q.put(item)
+        if item['key']:
+            tx_q.put(item)
 
 
 def func_check_buffer(lock, buffer_d, args_d):
