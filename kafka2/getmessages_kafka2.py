@@ -29,7 +29,7 @@ This script gathers data to send to Insightfinder
 
 # TODO: load target_fields from config
 target_fields = ['svc_mean', 'tx_mean', 'value', 'req_count']
-added_fields = ['timestamp', 'instance']
+added_fields = ['timestamp', 'instance', 'ts_rcv']
 tx_q = Queue()
 
 def load_dict_from_str(s):
@@ -71,6 +71,7 @@ def send_data_wrapper(data, ts_min, ts_max):
     send_data(data)
 
 def update_nested_dict(data, key, field, v):
+    logger.debug(f"update_nested_dict - key={key}")
     tmp = data.get(key, {})
     tmp.update({field: v})
     data.update({key:tmp})
@@ -82,7 +83,6 @@ def worker(q, tx_q):
     logger.debug(f"pid {os.getpid()} started")
 
     # init data
-    h = []  # timestamp based priority queue
     data = {}
 
     while True:
@@ -121,8 +121,9 @@ def worker(q, tx_q):
                     update_nested_dict(data, key, field, v)
                     logger.debug(f"key={key}, field={field}, v={v}")
 
-                if key in data: # ensure data has key before we push to heapq
-                    heappush(h, [ts_rcv, ts, key])
+                if key in data:
+                    update_nested_dict(data, key, 'timestamp', ts)
+                    update_nested_dict(data, key, 'ts_rcv', ts_rcv)
 
         except ValueError as e:
             logger.warning(e)
@@ -140,28 +141,32 @@ def worker(q, tx_q):
         ts_min = 1e38
         # TODO: make 1 mins configurable
         WAIT_PERIOD = 60
-        put_back = [] # items popped out of h, but need put back
-        while h:
-            logger.debug(f"heapq {len(h)} data {len(data)}")
-            ts_rcv, ts, key = heappop(h)
-            ts_max = max(float(ts), ts_max)
-            ts_min = min(float(ts), ts_min)
+        keys_sent = []
 
-            if has_all_fields(data.get(key, {})):
+        # go through all items in data , check
+        # - if the fields are complete, send and rm key
+        # - if the msg is stale
+        # TODO: if q gets blocked, i.e. no msg coming, we still need flush
+        # so this for loop might need be a separate process.
+        logger.debug(f"processing {len(data)} data items ...")
+        for k, v in data.items():
+            ts_rcv = v['ts_rcv']
+            ts = v['timestamp']
+
+            if has_all_fields(v):
                 logger.debug("collected all fields")
-                logger.debug(f"pop key {key}")
-                tx_buffer.append(format_data(data.pop(key), ts, key))
+                tx_buffer.append(format_data(data[k], ts, k))
+                keys_sent.append(k)
 
             elif time.time() - ts_rcv > WAIT_PERIOD:
                 logger.debug("send delayed message")
-                tx_buffer.append(format_data(data.pop(key), ts, key))
-            
-            else:
-                heappush(h, [ts_rcv, ts, key])
-                # we didn't pop key from data, so no need to put it back.
-                logger.debug("heapq process complete")
-                break
+                tx_buffer.append(format_data(data[k], ts, k))
+                keys_sent.append(k)
 
+        # now remove the sent items from data
+        for k in keys_sent:
+            data.pop(k)
+            logger.debug(f"pop key {k}")
         logger.debug(f"process time: {time.time()-t_start} secs")
 
         # send data to IF...
@@ -169,8 +174,6 @@ def worker(q, tx_q):
         for item in tx_buffer:
             logger.debug(f"add item {item} to tx_q {tx_q}")
             tx_q.put(item)
-        # if len(tx_buffer) > 0:
-            # send_data_wrapper(tx_buffer, ts_min, ts_max)
 
 
 def consumer_process(q):
