@@ -214,29 +214,17 @@ def sender_process(q):
             logger.warning(e)
 
 
-# columns = ['name', 'timestamp', 'fields', 'tags', 'eb_time']
 def new_worker_process(q, tx_q):
     """ process message from q """
-    # TODO: do we need worry about stack size ??? data can be big.
     logger.debug(f"pid {os.getpid()} started")
 
-    # init data
-    WAIT_PERIOD = 60
     while True:
         item = {'key': None, 'metric_vals': {}}
         try:
-            message = q.get(timeout=WAIT_PERIOD)
-            t_start = time.time()
-            ts_rcv = int(t_start)
+            message = q.get(timeout=60)
             logger.debug(f"pid={os.getpid()}, message={message}")
-            # outfile.write(str(message.value))
-            # outfile.write("\n")
-            # name, ts_str, fields, tags, _ = read_csv(str(message.value))
-            # msg_dict = json.loads(str(message.value))
             msg_dict = json.loads(message.value.decode("ascii", errors='ignore'))
-            # logger.debug(f"msg_dict: {msg_dict}")
             tags_dict = msg_dict.get("tags", {})
-            # logger.debug(f"tags_dict: {tags_dict}")
             ts_ = parser.isoparse(tags_dict['time_bucket'])
             service_alias = tags_dict.get('service_alias', '')
 
@@ -248,7 +236,6 @@ def new_worker_process(q, tx_q):
             client_alias = tags_dict.get('client_alias', '')
             instance = "{}_{}".format(client_alias, service_alias)
             fields_dict = msg_dict.get("fields", {})
-            # logger.debug(f"fields_dict: {fields_dict}")
             key = f'{instance}@{ts_str}'
 
             item['key'] = key
@@ -256,7 +243,6 @@ def new_worker_process(q, tx_q):
 
             for field in target_fields:
                 v = fields_dict.get(field, '')
-                # logger.debug(f"field={field}, v={v}")
                 if not v or (isinstance(v, str) and v.lower() == 'null'):
                     continue
                 field_name = '{}[{}]'.format(field, instance)
@@ -273,45 +259,49 @@ def new_worker_process(q, tx_q):
         tx_q.put(item)
 
 
-def new_sender_process(q):
-    logger.info(f"sender_process {os.getpid()} started")
+def func_check_buffer(lock, buffer_d, args_d):
     # expire time range
     time_duration = 10 * 60
     # check buffer time range
     check_buffer_duration = 60
 
+    while True:
+        metric_data_list = []
+
+        # check the buffer
+        if args_d['latest_msg_time']:
+            expire_time = args_d['latest_msg_time'] - time_duration
+
+            if lock.acquire():
+                times = buffer_d.keys()
+                need_send_times = filter(lambda x: x < expire_time, times)
+                for ts in need_send_times:
+                    key_map = buffer_d.pop(ts)
+                    metric_data_list += key_map.values()
+                lock.release()
+
+        # send data
+        if metric_data_list:
+            send_data(metric_data_list)
+
+        time.sleep(check_buffer_duration)
+
+
+def new_sender_process(q):
+    logger.info(f"sender_process {os.getpid()} started")
+    # expire time range
+    time_duration = 10 * 60
+
     # share with threads
     buffer_dict = {}
-    latest_msg_time = 0
+    args_dict = {'latest_msg_time': 0}
 
     # start an thread to check the buffer
     thread_lock = threading.Lock()
-
-    def func_check_buffer(lock, buffer_d, latest_ts):
-        while True:
-            metric_data_list = []
-
-            # check the buffer
-            if latest_ts:
-                expire_time = latest_ts - time_duration
-
-                if lock.acquire():
-                    times = buffer_d.keys()
-                    need_send_times = filter(lambda x: x < expire_time, times)
-                    for ts in need_send_times:
-                        key_map = buffer_d.pop(ts)
-                        metric_data_list += key_map.values()
-                lock.release()
-
-            # send data
-            if metric_data_list:
-                send_data(metric_data_list)
-
-            time.sleep(check_buffer_duration)
-
-    thread1 = threading.Thread(target=func_check_buffer, args=(thread_lock, buffer_dict, latest_msg_time))
+    thread1 = threading.Thread(target=func_check_buffer, args=(thread_lock, buffer_dict, args_dict))
     thread1.start()
 
+    # main thread
     while True:
         try:
             item = q.get()
@@ -319,10 +309,10 @@ def new_sender_process(q):
 
             timestamp = item['metric_vals']['timestamp']
             # update latest messages time
-            latest_msg_time = max(latest_msg_time, timestamp)
+            args_dict['latest_msg_time'] = max(args_dict['latest_msg_time'], timestamp)
 
             # drop this message if is too old
-            if timestamp < latest_msg_time - time_duration:
+            if timestamp < args_dict['latest_msg_time'] - time_duration:
                 continue
 
             if timestamp not in buffer_dict:
