@@ -136,7 +136,6 @@ def worker(q, tx_q):
 
         except Exception as e:  # TODO: add more types
             logger.warning(e)
-            logger.warning(f"pid {os.getpid()} exit")
 
         # finally:
         #     outfile.close()
@@ -180,7 +179,7 @@ def worker(q, tx_q):
             tx_q.put(item)
 
 
-def consumer_process(q):
+def consumer_process(q, logger, agent_config_vars):
     logger.info(f"consumer_process {os.getpid()} started")
     consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
     logger.info("consumer kafka_kwargs {}".format(agent_config_vars['kafka_kwargs']))
@@ -214,7 +213,7 @@ def sender_process(q):
             logger.warning(e)
 
 
-def new_worker_process(q, tx_q):
+def new_worker_process(q, tx_q, logger, agent_config_vars):
     """ process message from q """
     logger.debug(f"pid {os.getpid()} started")
 
@@ -261,13 +260,14 @@ def new_worker_process(q, tx_q):
             tx_q.put(item)
 
 
-def func_check_buffer(lock, buffer_d, args_d):
+def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
     # expire time range
     time_duration = 10 * 60
     # check buffer time range
     check_buffer_duration = 60
 
     while True:
+        time.sleep(check_buffer_duration)
         metric_data_list = []
 
         # check the buffer
@@ -278,7 +278,7 @@ def func_check_buffer(lock, buffer_d, args_d):
             if lock.acquire():
                 for key_item in buffer_d.values():
                     metric_data_list += key_item.values()
-                buffer_d = {}
+                buffer_d.clear()
                 lock.release()
 
         # pop msg if too long for latest msg
@@ -295,16 +295,12 @@ def func_check_buffer(lock, buffer_d, args_d):
                 lock.release()
 
         # send data
-        logger.debug(f"latest_msg_time={args_d['latest_msg_time']}")
-        logger.debug(f"buffer_d keys length={len(buffer_d.keys())}")
         logger.debug(f"metric_data_list length={len(metric_data_list)}")
         if metric_data_list:
             send_data(metric_data_list)
 
-        time.sleep(check_buffer_duration)
 
-
-def new_sender_process(q):
+def new_sender_process(q, logger, agent_config_vars):
     logger.info(f"sender_process {os.getpid()} started")
     # expire time range
     time_duration = 10 * 60
@@ -315,7 +311,8 @@ def new_sender_process(q):
 
     # start an thread to check the buffer
     thread_lock = threading.Lock()
-    thread1 = threading.Thread(target=func_check_buffer, args=(thread_lock, buffer_dict, args_dict))
+    thread1 = threading.Thread(target=func_check_buffer,
+                               args=(logger, agent_config_vars, thread_lock, buffer_dict, args_dict))
     thread1.start()
 
     # main thread
@@ -360,18 +357,18 @@ def start_data_processing():
     q = Queue()
 
     # start consumer process
-    c = Process(target=consumer_process, args=(q,))
+    c = Process(target=consumer_process, args=(q, logger, agent_config_vars))
     c.start()
 
     # start sender_process
-    s = Process(target=new_sender_process, args=(tx_q,))
+    s = Process(target=new_sender_process, args=(tx_q, logger, agent_config_vars))
     s.start()
 
     # start worker processes
     process_list = []
     for i in range(0, cli_config_vars['processes']):
         p = Process(target=new_worker_process,
-                    args=(q, tx_q)
+                    args=(q, tx_q, logger, agent_config_vars)
                     )
         process_list.append(p)
 
