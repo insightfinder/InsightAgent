@@ -30,8 +30,9 @@ This script gathers data to send to Insightfinder
 
 # TODO: load target_fields from config
 target_fields = ['svc_mean', 'tx_mean', 'value', 'req_count']
-added_fields = ['timestamp', 'instance', 'ts_rcv']
+added_fields = ['timestamp', 'ts_rcv']
 tx_q = Queue()
+WAIT_PERIOD = 10 * 60
 
 
 def load_dict_from_str(s):
@@ -262,7 +263,7 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
 
 def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
     # expire time range
-    time_duration = 60
+    time_duration = WAIT_PERIOD
     # check buffer time range
     check_buffer_duration = 60
 
@@ -303,7 +304,7 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
 def new_sender_process(q, logger, agent_config_vars):
     logger.info(f"sender_process {os.getpid()} started")
     # expire time range
-    time_duration = 1 * 60
+    time_duration = WAIT_PERIOD
 
     # share with threads
     buffer_dict = {}
