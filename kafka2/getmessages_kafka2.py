@@ -294,11 +294,11 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
             expire_time = args_d['latest_msg_time'] - BUFFER_WAIT_PERIOD
 
             if lock.acquire():
-                times = buffer_d.keys()
-                need_send_times = filter(lambda x: x < expire_time, times)
-                for ts in need_send_times:
-                    key_map = buffer_d.pop(ts)
-                    metric_data_list += key_map.values()
+                for ts in filter(lambda x: x < expire_time, buffer_d.keys()):
+                    metric_data_list += buffer_d[ts].values()
+                    keys_to_drop += ts
+                for ts in keys_to_drop:
+                    buffer_d.pop(ts)
                 lock.release()
 
         # send data
