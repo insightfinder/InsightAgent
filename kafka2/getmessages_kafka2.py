@@ -305,8 +305,7 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
 
 def new_sender_process(q, logger, agent_config_vars):
     logger.info(f"sender_process {os.getpid()} started")
-    # expire time range
-    BUFFER_WAIT_PERIOD = WAIT_PERIOD
+    BUFFER_WAIT_PERIOD = 10 * 60
 
     # share with threads
     buffer_dict = {}
@@ -332,7 +331,7 @@ def new_sender_process(q, logger, agent_config_vars):
 
             # drop this message if is too old, since that batch has been sent
             if timestamp < args_dict['latest_msg_time'] - BUFFER_WAIT_PERIOD:
-                logger.debug(f"dropped msg with time={timestamp}")
+                logger.debug(f"dropped old msg with time={timestamp}")
                 continue
 
             if timestamp not in buffer_dict:
