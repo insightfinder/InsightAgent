@@ -276,36 +276,42 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
         time.sleep(CHECK_BUFFER_FREQ)
         metric_data_list = []
 
-        # check the buffer
-        logger.debug(f"buffer_d keys={buffer_d.keys()}")
-  
-        # flush buffer if we haven't received any for longer than BUFFER_WAIT_PERIOD
-        time_elapsed = time.time() - args_d['latest_received_time']
-        if time_elapsed > BUFFER_WAIT_PERIOD:
-            logger.debug(f"time_elapsed:{time_elapsed} since latest_received_time={args_d['latest_received_time']}")
-            if lock.acquire():
-                for key_item in buffer_d.values():
-                    metric_data_list += key_item.values()
-                buffer_d.clear()
-                lock.release()
+        try:
+            # check the buffer
+            logger.debug(f"buffer_d keys={buffer_d.keys()}")
+    
+            # flush buffer if we haven't received any for longer than BUFFER_WAIT_PERIOD
+            time_elapsed = time.time() - args_d['latest_received_time']
+            if time_elapsed > BUFFER_WAIT_PERIOD:
+                logger.debug(f"time_elapsed:{time_elapsed} since latest_received_time={args_d['latest_received_time']}")
+                if lock.acquire():
+                    for key_item in buffer_d.values():
+                        metric_data_list += key_item.values()
+                    buffer_d.clear()
+                    lock.release()
 
-        # send messages are too old comparing to latest message timestamp
-        elif args_d['latest_msg_time'] > 0:
-            expire_time = args_d['latest_msg_time'] - BUFFER_WAIT_PERIOD
+            # send messages are too old comparing to latest message timestamp
+            elif args_d['latest_msg_time'] > 0:
+                expire_time = args_d['latest_msg_time'] - BUFFER_WAIT_PERIOD
 
-            keys_to_drop = []
-            if lock.acquire():
-                for ts in filter(lambda x: x < expire_time, buffer_d.keys()):
-                    metric_data_list += buffer_d[ts].values()
-                    keys_to_drop.append(ts)
-                for ts in keys_to_drop:
-                    buffer_d.pop(ts)
-                lock.release()
+                keys_to_drop = []
+                if lock.acquire():
+                    for ts in filter(lambda x: x < expire_time, buffer_d.keys()):
+                        metric_data_list += buffer_d[ts].values()
+                        keys_to_drop.append(ts)
+                    for ts in keys_to_drop:
+                        buffer_d.pop(ts)
+                    lock.release()
 
-        # send data
-        logger.debug(f"metric_data_list length={len(metric_data_list)}")
-        if metric_data_list:
-            send_data(metric_data_list)
+            # send data
+            logger.debug(f"metric_data_list length={len(metric_data_list)}")
+            if metric_data_list:
+                send_data(metric_data_list)
+
+        except Exception:
+            print("-"*60)
+            traceback.print_exc(file=sys.stdout)
+            print("-"*60)
 
 
 def new_sender_process(q, logger, agent_config_vars):
