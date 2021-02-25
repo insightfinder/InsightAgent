@@ -288,7 +288,7 @@ def func_check_buffer(lock, buffer_d, args_d):
             if lock.acquire():
                 times = buffer_d.keys()
                 need_send_times = filter(lambda x: x < expire_time, times)
-                logger.debug(f"timeout: need_send_times length={len(need_send_times)}")
+                logger.debug(f"timeout: need_send_times length={need_send_times}")
                 for ts in need_send_times:
                     key_map = buffer_d.pop(ts)
                     metric_data_list += key_map.values()
