@@ -22,6 +22,7 @@ import threading
 from heapq import heappush, heappop
 from kafka import KafkaConsumer
 from multiprocessing import Process, Queue
+import queue
 from dateutil import parser
 import traceback
 
@@ -253,6 +254,9 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
 
         except ValueError as e:
             logger.warning(e)
+
+        except queue.Empty:
+            pass
 
         except Exception:
             print("-"*60)
