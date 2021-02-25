@@ -293,10 +293,11 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
         elif args_d['latest_msg_time'] > 0:
             expire_time = args_d['latest_msg_time'] - BUFFER_WAIT_PERIOD
 
+            keys_to_drop = []
             if lock.acquire():
                 for ts in filter(lambda x: x < expire_time, buffer_d.keys()):
                     metric_data_list += buffer_d[ts].values()
-                    keys_to_drop += ts
+                    keys_to_drop.append(ts)
                 for ts in keys_to_drop:
                     buffer_d.pop(ts)
                 lock.release()
