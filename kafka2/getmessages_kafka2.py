@@ -274,6 +274,7 @@ def func_check_buffer(lock, buffer_d, args_d):
         logger.debug(f"buffer_d keys={buffer_d.keys()}")
         # too long no data
         if args_d['latest_received_time'] < time.time() - time_duration:
+            logger.debug(f"timeout: latest_received_time={args_d['latest_received_time']}")
             if lock.acquire():
                 for key_item in buffer_d.values():
                     metric_data_list += key_item.values()
@@ -287,6 +288,7 @@ def func_check_buffer(lock, buffer_d, args_d):
             if lock.acquire():
                 times = buffer_d.keys()
                 need_send_times = filter(lambda x: x < expire_time, times)
+                logger.debug(f"timeout: need_send_times length={len(need_send_times)}")
                 for ts in need_send_times:
                     key_map = buffer_d.pop(ts)
                     metric_data_list += key_map.values()
@@ -294,7 +296,7 @@ def func_check_buffer(lock, buffer_d, args_d):
 
         # send data
         logger.debug(f"latest_msg_time={args_d['latest_msg_time']}")
-        logger.debug(f"buffer_d keys={buffer_d.keys()}")
+        logger.debug(f"buffer_d keys length={len(buffer_d.keys())}")
         logger.debug(f"metric_data_list length={len(metric_data_list)}")
         if metric_data_list:
             send_data(metric_data_list)
