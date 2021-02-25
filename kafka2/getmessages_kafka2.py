@@ -1601,8 +1601,9 @@ def send_data(metric_data):
     # send the data
     post_url = if_config_vars['if_url'] + "/customprojectrawdata"
     send_data_to_receiver(post_url, to_send_data_json, len(metric_data))
-    logger.debug(f"send to {post_url}, data: {to_send_data_json}")
-    print("--- Send data time: %s seconds ---" + str(time.time() - send_data_time))
+    logger.info("-"*40)
+    logger.info(f"!!! packet of {len(metric_data)} items sent in {time.time() - send_data_time:8.1f} secs !!!")
+    logger.info("-"*40)
 
 
 def send_data_to_receiver(post_url, to_send_data, num_of_message):
