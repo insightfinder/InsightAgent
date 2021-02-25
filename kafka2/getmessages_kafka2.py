@@ -253,9 +253,8 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
         except ValueError as e:
             logger.warning(e)
 
-        except Exception as e:  # TODO: add more types
+        except Exception as e:
             logger.warning(e)
-            logger.warning(f"pid {os.getpid()} exit")
 
         if item['key']:
             tx_q.put(item)
