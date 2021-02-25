@@ -23,6 +23,7 @@ from heapq import heappush, heappop
 from kafka import KafkaConsumer
 from multiprocessing import Process, Queue
 from dateutil import parser
+import traceback
 
 '''
 This script gathers data to send to Insightfinder
@@ -253,10 +254,12 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
         except ValueError as e:
             logger.warning(e)
 
-        except Exception as e:
-            logger.warning(e)
+        except Exception:
+            print("-"*60)
+            traceback.print_exc(file=sys.stdout)
+            print("-"*60)
 
-        if item['key']:
+        if item['key'] is not None:
             tx_q.put(item)
 
 
@@ -327,7 +330,7 @@ def new_sender_process(q, logger, agent_config_vars):
             # update latest msg received time
             args_dict['latest_received_time'] = time.time()
 
-            # drop this message if is too old
+            # drop this message if is too old, since that batch has been sent
             if timestamp < args_dict['latest_msg_time'] - time_duration:
                 logger.debug(f"continue msg with time={timestamp}")
                 continue
@@ -345,8 +348,10 @@ def new_sender_process(q, logger, agent_config_vars):
                 thread_lock.release()
             logger.debug(f"new item dict={buffer_dict[timestamp][key]}")
 
-        except Exception as e:
-            logger.warning(e)
+        except Exception:
+            print("-"*60)
+            traceback.print_exc(file=sys.stdout)
+            print("-"*60)
 
     thread1.join()
 
