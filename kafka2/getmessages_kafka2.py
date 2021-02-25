@@ -234,11 +234,10 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
                 continue
 
             ts = int(float(ts_.timestamp()))
-            ts_str = str(ts)
             client_alias = tags_dict.get('client_alias', '')
             instance = "{}_{}".format(client_alias, service_alias)
             fields_dict = msg_dict.get("fields", {})
-            key = f'{instance}@{ts_str}'
+            key = f'{instance}@{ts}'
 
             item['key'] = key
             item['timestamp'] = ts
