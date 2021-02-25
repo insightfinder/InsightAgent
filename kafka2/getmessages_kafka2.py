@@ -276,7 +276,7 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
         # check the buffer
         logger.debug(f"buffer_d keys={buffer_d.keys()}")
   
-        # too long no data
+        # flush buffer if we haven't received any for longer than BUFFER_WAIT_PERIOD
         if time.time() - args_d['latest_received_time'] > BUFFER_WAIT_PERIOD:
             logger.debug(f"timeout: latest_received_time={args_d['latest_received_time']}")
             if lock.acquire():
@@ -285,7 +285,7 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
                 buffer_d.clear()
                 lock.release()
 
-        # pop msg if too long for latest msg
+        # send messages are too old comparing to latest message timestamp
         elif args_d['latest_msg_time'] > 0:
             expire_time = args_d['latest_msg_time'] - BUFFER_WAIT_PERIOD
 
