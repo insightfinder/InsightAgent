@@ -332,7 +332,7 @@ def new_sender_process(q, logger, agent_config_vars):
 
             # drop this message if is too old, since that batch has been sent
             if timestamp < args_dict['latest_msg_time'] - BUFFER_WAIT_PERIOD:
-                logger.debug(f"continue msg with time={timestamp}")
+                logger.debug(f"dropped msg with time={timestamp}")
                 continue
 
             if timestamp not in buffer_dict:
