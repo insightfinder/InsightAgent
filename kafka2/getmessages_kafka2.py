@@ -242,8 +242,8 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             item['metric_vals']['timestamp'] = str(ts * 1000)
 
             for field in target_fields:
-                v = fields_dict.get(field, '')
-                if not v or (isinstance(v, str) and v.lower() == 'null'):
+                v = fields_dict.get(field)
+                if v is None or (isinstance(v, str) and v.lower() == 'null'):
                     continue
                 field_name = '{}[{}]'.format(field, instance)
                 item['metric_vals'][field_name] = str(v)
@@ -262,7 +262,7 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
 
 def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
     # expire time range
-    time_duration = 10 * 60
+    time_duration = 60
     # check buffer time range
     check_buffer_duration = 60
 
@@ -303,7 +303,7 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
 def new_sender_process(q, logger, agent_config_vars):
     logger.info(f"sender_process {os.getpid()} started")
     # expire time range
-    time_duration = 10 * 60
+    time_duration = 1 * 60
 
     # share with threads
     buffer_dict = {}
