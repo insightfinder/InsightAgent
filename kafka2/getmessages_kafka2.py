@@ -266,8 +266,8 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
 def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
     # buffered data expires after this period and need be sent
     BUFFER_WAIT_PERIOD = 60
-    # check buffer every 60 secs
-    CHECK_BUFFER_FREQ = 60
+    # check buffer every ... secs
+    CHECK_BUFFER_FREQ = 10
 
     while True:
         time.sleep(CHECK_BUFFER_FREQ)
@@ -305,7 +305,7 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
 
 def new_sender_process(q, logger, agent_config_vars):
     logger.info(f"sender_process {os.getpid()} started")
-    BUFFER_WAIT_PERIOD = 10 * 60
+    BUFFER_WAIT_PERIOD = 60
 
     # share with threads
     buffer_dict = {}
