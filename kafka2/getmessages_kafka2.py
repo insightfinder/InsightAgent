@@ -264,19 +264,20 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
 
 
 def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
-    # expire time range
-    time_duration = WAIT_PERIOD
-    # check buffer time range
-    check_buffer_duration = 60
+    # buffered data expires after this period and need be sent
+    BUFFER_WAIT_PERIOD = 60
+    # check buffer every 60 secs
+    CHECK_BUFFER_FREQ = 60
 
     while True:
-        time.sleep(check_buffer_duration)
+        time.sleep(CHECK_BUFFER_FREQ)
         metric_data_list = []
 
         # check the buffer
         logger.debug(f"buffer_d keys={buffer_d.keys()}")
+  
         # too long no data
-        if args_d['latest_received_time'] < time.time() - time_duration:
+        if time.time() - args_d['latest_received_time'] > BUFFER_WAIT_PERIOD:
             logger.debug(f"timeout: latest_received_time={args_d['latest_received_time']}")
             if lock.acquire():
                 for key_item in buffer_d.values():
@@ -285,13 +286,12 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
                 lock.release()
 
         # pop msg if too long for latest msg
-        elif args_d['latest_msg_time']:
-            expire_time = args_d['latest_msg_time'] - time_duration
+        elif args_d['latest_msg_time'] > 0:
+            expire_time = args_d['latest_msg_time'] - BUFFER_WAIT_PERIOD
 
             if lock.acquire():
                 times = buffer_d.keys()
                 need_send_times = filter(lambda x: x < expire_time, times)
-                logger.debug(f"timeout: need_send_times length={need_send_times}")
                 for ts in need_send_times:
                     key_map = buffer_d.pop(ts)
                     metric_data_list += key_map.values()
@@ -306,7 +306,7 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
 def new_sender_process(q, logger, agent_config_vars):
     logger.info(f"sender_process {os.getpid()} started")
     # expire time range
-    time_duration = WAIT_PERIOD
+    BUFFER_WAIT_PERIOD = WAIT_PERIOD
 
     # share with threads
     buffer_dict = {}
@@ -331,7 +331,7 @@ def new_sender_process(q, logger, agent_config_vars):
             args_dict['latest_received_time'] = time.time()
 
             # drop this message if is too old, since that batch has been sent
-            if timestamp < args_dict['latest_msg_time'] - time_duration:
+            if timestamp < args_dict['latest_msg_time'] - BUFFER_WAIT_PERIOD:
                 logger.debug(f"continue msg with time={timestamp}")
                 continue
 
