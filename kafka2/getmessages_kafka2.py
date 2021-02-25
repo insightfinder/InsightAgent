@@ -281,8 +281,9 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
         logger.debug(f"buffer_d keys={buffer_d.keys()}")
   
         # flush buffer if we haven't received any for longer than BUFFER_WAIT_PERIOD
-        if time.time() - args_d['latest_received_time'] > BUFFER_WAIT_PERIOD:
-            logger.debug(f"timeout: latest_received_time={args_d['latest_received_time']}")
+        time_elapsed = time.time() - args_d['latest_received_time']
+        if time_elapsed > BUFFER_WAIT_PERIOD:
+            logger.debug(f"time_elapsed:{time_elapsed} since latest_received_time={args_d['latest_received_time']}")
             if lock.acquire():
                 for key_item in buffer_d.values():
                     metric_data_list += key_item.values()
