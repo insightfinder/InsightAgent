@@ -228,6 +228,7 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             msg_dict = json.loads(message.value.decode("ascii", errors='ignore'))
             tags_dict = msg_dict.get("tags", {})
             ts_ = parser.isoparse(tags_dict['time_bucket'])
+            status = tags_dict.get("status", "200")
             service_alias = tags_dict.get('service_alias', '')
 
             if not service_alias:
@@ -247,7 +248,7 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
                 v = fields_dict.get(field)
                 if v is None or (isinstance(v, str) and v.lower() == 'null'):
                     continue
-                field_name = '{}[{}]'.format(field, instance)
+                field_name = '{}-{}[{}]'.format(field, status, instance)
                 item['metric_vals'][field_name] = str(v)
                 logger.debug(f"key={key}, field={field}, v={v}")
 
