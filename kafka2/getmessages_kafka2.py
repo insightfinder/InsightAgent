@@ -267,7 +267,8 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             if not service_alias:
                 continue
 
-            if service_alias not in agent_config_vars['service_alias_filter']:
+            if agent_config_vars['service_alias_filter'] and \
+                service_alias not in agent_config_vars['service_alias_filter']:
                 logger.debug(f"service_alias:{service_alias} got filtered!")
                 continue
 
@@ -593,6 +594,8 @@ def get_agent_config_vars():
             filters_include = filters_include.split('|')
         if len(filters_exclude) != 0:
             filters_exclude = filters_exclude.split('|')
+        if len(service_alias_fliter) != 0:
+            service_alias_fliter = service_alias_fliter.split("|")
 
         # fields
         # project_field = project_field.split(',')
@@ -674,7 +677,7 @@ def get_agent_config_vars():
             'proxies': agent_proxies,
             'all_metrics': all_metrics,
             'metric_buffer_size': int(metric_buffer_size_mb) * 1024 * 1024,  # as bytes
-            'service_alias_filter': service_alias_fliter.split(",")
+            'service_alias_filter': service_alias_fliter
         }
 
         return config_vars
