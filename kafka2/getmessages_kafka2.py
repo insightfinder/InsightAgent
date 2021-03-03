@@ -267,6 +267,10 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             if not service_alias:
                 continue
 
+            if service_alias not in agent_config_vars['service_alias_filter']:
+                logger.debug(f"service_alias:{service_alias} got filtered!")
+                continue
+
             ts = int(float(ts_.timestamp()))
             client_alias = tags_dict.get('client_alias', '')
             instance = "{}_{}".format(client_alias, service_alias)
@@ -446,7 +450,7 @@ def start_data_processing():
     process_list = []
     for i in range(0, cli_config_vars['processes']):
         p = Process(target=new_worker_process,
-                    args=(rx_q[i], tx_q, logger, if_config_vars)
+                    args=(rx_q[i], tx_q, logger, agent_config_vars)
                     )
         process_list.append(p)
 
@@ -539,6 +543,7 @@ def get_agent_config_vars():
             # filters
             filters_include = config_parser.get('kafka', 'filters_include')
             filters_exclude = config_parser.get('kafka', 'filters_exclude')
+            service_alias_fliter = config_parser.get('kafka', 'service_alias_filter')
 
             # message parsing
             timestamp_format = config_parser.get('kafka', 'timestamp_format', raw=True)
@@ -669,6 +674,7 @@ def get_agent_config_vars():
             'proxies': agent_proxies,
             'all_metrics': all_metrics,
             'metric_buffer_size': int(metric_buffer_size_mb) * 1024 * 1024,  # as bytes
+            'service_alias_filter': service_alias_fliter.split(",")
         }
 
         return config_vars
