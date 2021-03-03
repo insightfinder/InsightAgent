@@ -319,22 +319,18 @@ def get_buffer_size(data):
 
 
 def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
-    # buffered data expires after this period and need be sent
-    BUFFER_WAIT_PERIOD = 60 * 5
-    # check buffer every ... secs
-    CHECK_BUFFER_FREQ = 60
     metric_data_list = []
 
     while True:
-        time.sleep(CHECK_BUFFER_FREQ)
+        time.sleep(agent_config_vars['sampling_interval'])
 
         try:
             # check the buffer
             logger.debug(f"buffer_d keys={buffer_d.keys()}")
 
-            # flush buffer if we haven't received any for longer than BUFFER_WAIT_PERIOD
+            # flush buffer if we haven't received any data for a long time
             time_elapsed = time.time() - args_d['latest_received_time']
-            if time_elapsed > BUFFER_WAIT_PERIOD:
+            if time_elapsed > agent_config_vars['run_interval']:
                 logger.debug(f"time_elapsed:{time_elapsed} since latest_received_time={args_d['latest_received_time']}")
                 if lock.acquire():
                     for key_item in buffer_d.values():
@@ -374,7 +370,6 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
 
 def new_sender_process(q, logger, agent_config_vars):
     logger.info(f"sender_process {os.getpid()} started")
-    BUFFER_WAIT_PERIOD = 60
 
     # share with threads
     buffer_dict = {}
@@ -399,7 +394,7 @@ def new_sender_process(q, logger, agent_config_vars):
             args_dict['latest_received_time'] = time.time()
 
             # drop this message if is too old, since that batch has been sent
-            if timestamp < args_dict['latest_msg_time'] - BUFFER_WAIT_PERIOD:
+            if timestamp < args_dict['latest_msg_time'] - agent_config_vars['run_interval']:
                 logger.debug(f"dropped old msg with time={timestamp}")
                 continue
 
