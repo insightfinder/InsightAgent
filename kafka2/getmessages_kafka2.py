@@ -318,11 +318,13 @@ def get_buffer_size(data):
     return len(json.dumps(data))
 
 
-def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
+def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
     metric_data_list = []
+    interval = if_config_vars['sampling_interval']
+    logger.debug(f"func_check_buffer: sleep every {interval} secs")
 
     while True:
-        time.sleep(agent_config_vars['sampling_interval'])
+        time.sleep(interval)
 
         try:
             # check the buffer
@@ -330,7 +332,7 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
 
             # flush buffer if we haven't received any data for a long time
             time_elapsed = time.time() - args_d['latest_received_time']
-            if time_elapsed > agent_config_vars['run_interval']:
+            if time_elapsed > if_config_vars['run_interval']:
                 logger.debug(f"time_elapsed:{time_elapsed} since latest_received_time={args_d['latest_received_time']}")
                 if lock.acquire():
                     for key_item in buffer_d.values():
@@ -340,7 +342,7 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
 
             # send messages are too old comparing to latest message timestamp
             elif args_d['latest_msg_time'] > 0:
-                expire_time = args_d['latest_msg_time'] - BUFFER_WAIT_PERIOD
+                expire_time = args_d['latest_msg_time'] - if_config_vars['run_interval']
 
                 keys_to_drop = []
                 if lock.acquire():
@@ -368,7 +370,7 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
             print("-" * 60)
 
 
-def new_sender_process(q, logger, agent_config_vars):
+def new_sender_process(q, logger, if_config_vars):
     logger.info(f"sender_process {os.getpid()} started")
 
     # share with threads
@@ -378,7 +380,7 @@ def new_sender_process(q, logger, agent_config_vars):
     # start an thread to check the buffer
     thread_lock = threading.Lock()
     thread1 = threading.Thread(target=func_check_buffer,
-                               args=(logger, agent_config_vars, thread_lock, buffer_dict, args_dict))
+                               args=(logger, if_config_vars, thread_lock, buffer_dict, args_dict))
     thread1.start()
 
     # main thread
@@ -394,7 +396,7 @@ def new_sender_process(q, logger, agent_config_vars):
             args_dict['latest_received_time'] = time.time()
 
             # drop this message if is too old, since that batch has been sent
-            if timestamp < args_dict['latest_msg_time'] - agent_config_vars['run_interval']:
+            if timestamp < args_dict['latest_msg_time'] - if_config_vars['run_interval']:
                 logger.debug(f"dropped old msg with time={timestamp}")
                 continue
 
@@ -429,21 +431,21 @@ def start_data_processing():
         rx_q.append(Queue()) 
 
         # start consumer processes
-        c = Process(target=consumer_process, args=(rx_q[i], logger, agent_config_vars))
+        c = Process(target=consumer_process, args=(rx_q[i], logger, if_config_vars))
         consumers.append(c)
 
     for c in consumers:
         c.start()
 
     # start sender_process
-    s = Process(target=new_sender_process, args=(tx_q, logger, agent_config_vars))
+    s = Process(target=new_sender_process, args=(tx_q, logger, if_config_vars))
     s.start()
 
     # start worker processes
     process_list = []
     for i in range(0, cli_config_vars['processes']):
         p = Process(target=new_worker_process,
-                    args=(rx_q[i], tx_q, logger, agent_config_vars)
+                    args=(rx_q[i], tx_q, logger, if_config_vars)
                     )
         process_list.append(p)
 
