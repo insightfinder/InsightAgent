@@ -361,7 +361,7 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
             if  metric_data_size > if_config_vars["chunk_size"]:
                 for chunk in data_chunks(metric_data_list,
                     metric_data_size,
-                    if_config_vars["chunk_size"])
+                    if_config_vars["chunk_size"]):
                     # TODO: process chunk of data
                     send_data(chunk)
                 metric_data_list.clear()
@@ -1658,7 +1658,7 @@ def data_chunks(metric_data, data_size, chunk_size):
     assert data_size >= chunk_size, "invalid metric data size!"
     chunks = data_size // chunk_size + 1
     num_msgs_per_chunk = len(metric_data) // chunks
-    for i in range(0, len(metric_data), num_msgs_per_chunk)
+    for i in range(0, len(metric_data), num_msgs_per_chunk):
         yield(metric_data[i:i + num_msgs_per_chunk])
 
 def send_data(metric_data):
