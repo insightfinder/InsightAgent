@@ -182,19 +182,51 @@ def worker(q, tx_q):
             tx_q.put(item)
 
 
-def consumer_process(q, logger, agent_config_vars):
-    logger.info(f"consumer_process {os.getpid()} started")
-    consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
+def get_kafka_consumer():
+    consumer_args = agent_config_vars['kafka_kwargs']
+
+    consumer = KafkaConsumer(**consumer_args)
+
     logger.info("consumer kafka_kwargs {}".format(agent_config_vars['kafka_kwargs']))
 
     consumer.subscribe(agent_config_vars['topics'])
     logger.info('Successfully subscribed to topics' + str(agent_config_vars['topics']))
     logger.info(consumer.topics())
+    return consumer
 
-    for message in consumer:
-        q.put(message)
 
-    consumer.close()
+def consumer_process(q, logger, agent_config_vars):
+    logger.info(f"consumer_process {os.getpid()} started")
+    consumer = get_kafka_consumer()
+
+    while True:
+        try:
+            try:
+                kafka_poll_items = consumer.poll(timeout_ms=100).items()
+            except Exception as ex:
+                logger.warn('Exception when getting the messages in Kafka,' + \
+                            're-establishing the connection: {ex}'.format(ex=str(ex), exc_info=True))
+                try:
+                    consumer.close()
+                    consumer = get_kafka_consumer()
+                except Exception as ex2:
+                    pass
+
+                continue
+
+            for tp, messages in kafka_poll_items:
+                for message in messages:
+                    q.put(message)
+
+        except Exception as ex:
+            logger.error("Exception in processing messages from kafka: {ex}".format(ex=str(ex)), exc_info=True)
+            # Let everything get reinitialized on the next call
+            try:
+                consumer.close()
+            except Exception as ex2:
+                pass
+
+            break
 
 
 def sender_process(q):
@@ -219,16 +251,17 @@ def sender_process(q):
 def new_worker_process(q, tx_q, logger, agent_config_vars):
     """ process message from q """
     logger.debug(f"pid {os.getpid()} started")
+    http_status_codes = set(["2xx", "3xx", "4xx", "5xx"])
 
     while True:
         item = {'key': None, 'metric_vals': {}}
         try:
             message = q.get(timeout=60)
-            logger.debug(f"pid={os.getpid()}, message={message}")
+            logger.debug(f"pid={os.getpid()}, got a message")
             msg_dict = json.loads(message.value.decode("ascii", errors='ignore'))
             tags_dict = msg_dict.get("tags", {})
             ts_ = parser.isoparse(tags_dict['time_bucket'])
-            status = tags_dict.get("status", "200")
+            http_status = tags_dict.get("http_status", "")
             service_alias = tags_dict.get('service_alias', '')
 
             if not service_alias:
@@ -248,9 +281,20 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
                 v = fields_dict.get(field)
                 if v is None or (isinstance(v, str) and v.lower() == 'null'):
                     continue
-                field_name = '{}-{}[{}]'.format(field, status, instance)
-                item['metric_vals'][field_name] = str(v)
-                logger.debug(f"key={key}, field={field}, v={v}")
+
+                if field == 'req_count':
+                    # collect req_count separately for different http status
+                    for code in http_status_codes:
+                        field_name = '{}-{}[{}]'.format(field, code, instance)
+                        item['metric_vals'][field_name] = \
+                            str(v) if code == http_status else "0"
+
+                else:
+                    # collect other fields only for http status 2xx
+                    if http_status == '2xx':
+                        field_name = '{}-{}[{}]'.format(field, http_status, instance)
+                        item['metric_vals'][field_name] = str(v)
+
 
         except ValueError as e:
             logger.warning(e)
@@ -259,12 +303,19 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             pass
 
         except Exception:
-            print("-"*60)
+            print("-" * 60)
             traceback.print_exc(file=sys.stdout)
-            print("-"*60)
+            print("-" * 60)
 
         if item['key'] is not None:
+            logger.debug("put item {item['key']} in the tx_q")
             tx_q.put(item)
+
+
+
+def get_buffer_size(data):
+    """ input : list of dicts, return size in bytes """
+    return len(json.dumps(data))
 
 
 def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
@@ -272,15 +323,15 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
     BUFFER_WAIT_PERIOD = 60 * 5
     # check buffer every ... secs
     CHECK_BUFFER_FREQ = 60
+    metric_data_list = []
 
     while True:
         time.sleep(CHECK_BUFFER_FREQ)
-        metric_data_list = []
 
         try:
             # check the buffer
             logger.debug(f"buffer_d keys={buffer_d.keys()}")
-    
+
             # flush buffer if we haven't received any for longer than BUFFER_WAIT_PERIOD
             time_elapsed = time.time() - args_d['latest_received_time']
             if time_elapsed > BUFFER_WAIT_PERIOD:
@@ -306,18 +357,24 @@ def func_check_buffer(logger, agent_config_vars, lock, buffer_d, args_d):
 
             # send data
             logger.debug(f"metric_data_list length={len(metric_data_list)}")
-            if metric_data_list:
-                send_data(metric_data_list)
+            metric_data_size = get_buffer_size(metric_data_list)
+            if  metric_data_size > if_config_vars["chunk_size"]:
+                for chunk in data_chunks(metric_data_list,
+                    metric_data_size,
+                    if_config_vars["chunk_size"])
+                    # TODO: process chunk of data
+                    send_data(chunk)
+                metric_data_list.clear()
 
         except Exception:
-            print("-"*60)
+            print("-" * 60)
             traceback.print_exc(file=sys.stdout)
-            print("-"*60)
+            print("-" * 60)
 
 
 def new_sender_process(q, logger, agent_config_vars):
     logger.info(f"sender_process {os.getpid()} started")
-    BUFFER_WAIT_PERIOD = 60 * 5
+    BUFFER_WAIT_PERIOD = 60
 
     # share with threads
     buffer_dict = {}
@@ -360,9 +417,9 @@ def new_sender_process(q, logger, agent_config_vars):
             logger.debug(f"new item dict={buffer_dict[timestamp][key]}")
 
         except Exception:
-            print("-"*60)
+            print("-" * 60)
             traceback.print_exc(file=sys.stdout)
-            print("-"*60)
+            print("-" * 60)
 
     thread1.join()
 
@@ -370,11 +427,18 @@ def new_sender_process(q, logger, agent_config_vars):
 def start_data_processing():
     logger.debug("start_data_processing")
 
-    q = Queue()
+    rx_q=[]
+    consumers = []
 
-    # start consumer process
-    c = Process(target=consumer_process, args=(q, logger, agent_config_vars))
-    c.start()
+    for i in range(cli_config_vars['processes']):
+        rx_q.append(Queue()) 
+
+        # start consumer processes
+        c = Process(target=consumer_process, args=(rx_q[i], logger, agent_config_vars))
+        consumers.append(c)
+
+    for c in consumers:
+        c.start()
 
     # start sender_process
     s = Process(target=new_sender_process, args=(tx_q, logger, agent_config_vars))
@@ -384,7 +448,7 @@ def start_data_processing():
     process_list = []
     for i in range(0, cli_config_vars['processes']):
         p = Process(target=new_worker_process,
-                    args=(q, tx_q, logger, agent_config_vars)
+                    args=(rx_q[i], tx_q, logger, agent_config_vars)
                     )
         process_list.append(p)
 
@@ -395,7 +459,8 @@ def start_data_processing():
         p.join()
 
     # below should never be reached.
-    c.join()
+    for c in consumers:
+        c.join()
     s.join()
 
 
@@ -722,8 +787,6 @@ def get_cli_config_vars():
                       help='Only display warning and error log messages')
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose',
                       help='Enable verbose logging')
-    parser.add_option('-l', '--log_level', action='store_true', dest='verbose',
-                      help='logging level')
     parser.add_option('-t', '--testing', action='store_true', dest='testing',
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
@@ -1590,8 +1653,16 @@ def reset_track():
 ################################
 # Functions to send data to IF #
 ################################
+def data_chunks(metric_data, data_size, chunk_size):
+    """ generate chunks of data from metric data """
+    assert data_size >= chunk_size, "invalid metric data size!"
+    chunks = data_size // chunk_size + 1
+    num_msgs_per_chunk = len(metric_data) // chunks
+    for i in range(0, len(metric_data), num_msgs_per_chunk)
+        yield(metric_data[i:i + num_msgs_per_chunk])
+
 def send_data(metric_data):
-    """ Send metric data dict to InsightFinder 
+    """ Send metric data dict to InsightFinder
     metric_data should be formatted as list of dicts
     """
     send_data_time = time.time()
@@ -1609,9 +1680,9 @@ def send_data(metric_data):
     # send the data
     post_url = if_config_vars['if_url'] + "/customprojectrawdata"
     send_data_to_receiver(post_url, to_send_data_json, len(metric_data))
-    logger.info("-"*40)
-    logger.info(f"!!! packet of {len(metric_data)} items sent in {time.time() - send_data_time:8.1f} secs !!!")
-    logger.info("-"*40)
+    logger.info("-" * 40)
+    logger.warning(f"!!! packet of {len(metric_data)} items, size of {len(to_send_data_json)} bytes sent in {time.time() - send_data_time:8.1f} secs !!!")
+    logger.info("-" * 40)
 
 
 def send_data_to_receiver(post_url, to_send_data, num_of_message):
