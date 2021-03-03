@@ -354,8 +354,9 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
                     lock.release()
 
             # send data
-            logger.debug(f"metric_data_list length={len(metric_data_list)}")
             metric_data_size = get_buffer_size(metric_data_list)
+            logger.debug(f"metric_data_list length={len(metric_data_list)} size={metric_data_size}")
+
             if  metric_data_size > if_config_vars["chunk_size"]:
                 for chunk in data_chunks(metric_data_list,
                     metric_data_size,
@@ -1652,9 +1653,10 @@ def reset_track():
 ################################
 def data_chunks(metric_data, data_size, chunk_size):
     """ generate chunks of data from metric data """
+    logger.debug(f"data_chunks data_size={data_size} chunk_size={chunk_size}")
     assert data_size >= chunk_size, "invalid metric data size!"
     chunks = data_size // chunk_size + 1
-    num_msgs_per_chunk = len(metric_data) // chunks
+    num_msgs_per_chunk = max(1, len(metric_data) // chunks )
     for i in range(0, len(metric_data), num_msgs_per_chunk):
         yield(metric_data[i:i + num_msgs_per_chunk])
 
