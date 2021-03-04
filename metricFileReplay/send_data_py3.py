@@ -13,6 +13,7 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 import requests
 import arrow
 from toolz import merge_with
+from csv import reader
 
 MAX_RETRY_NUM = 10
 RETRY_WAIT_TIME_IN_SEC = 30
@@ -210,8 +211,8 @@ if __name__ == "__main__":
 
     with open(config_vars["file_name"]) as json_data:
         count = 0
-        header_str = json_data.readline()
-        header = [x.strip() for x in header_str.split(',')]
+        csv_reader = reader(json_data)
+        next(csv_reader)  # skip header 
 
         # share with threads
         buffer_dict = {}
@@ -223,11 +224,10 @@ if __name__ == "__main__":
                                    args=(thread_lock, buffer_dict, args_dict))
         thread1.start()
 
-        for line in json_data:
-            entry = [x.strip() for x in line.split(',')]
-            item = dict(list(zip(header, entry)))
+        for line in csv_reader:
+            time_bucket, service_alias, client_alias, http_status, svc_mean, tx_mean, \
+                req_count, value = line
 
-            time_bucket = item['time_bucket']
             timestamp = arrow.get(time_bucket).timestamp
             # update latest messages time
             args_dict['latest_msg_time'] = max(args_dict['latest_msg_time'], timestamp)
@@ -236,14 +236,13 @@ if __name__ == "__main__":
             if timestamp not in buffer_dict:
                 buffer_dict[timestamp] = {}
 
-            instance = item['client_alias']
+            instance = client_alias
             key = f'{instance}@{timestamp}'
             if key not in buffer_dict[timestamp]:
                 buffer_dict[timestamp][key] = {}
 
             metric_vals = {}
-            http_status = item['http_status']
-            req_count = item['req_count']
+
             if http_status != '2xx':
                 metric_vals = {
                     'timestamp': str(timestamp * 1000),
@@ -252,9 +251,9 @@ if __name__ == "__main__":
             else:
                 metric_vals = {
                     'timestamp': str(timestamp * 1000),
-                    f'svc_mean[{instance}]': item['svc_mean'],
-                    f'tx_mean[{instance}]': item['tx_mean'],
-                    f'value[{instance}]': item['value'],
+                    f'svc_mean[{instance}]': svc_mean,
+                    f'tx_mean[{instance}]': tx_mean,
+                    f'value[{instance}]': value,
                     f'{http_status}_req_count[{instance}]': req_count or '0'
                 }
 
