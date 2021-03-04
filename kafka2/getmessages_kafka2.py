@@ -255,6 +255,7 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
 
     while True:
         item = {'key': None, 'metric_vals': {}}
+        start_time = time.time()
         try:
             message = q.get(timeout=60)
             logger.debug(f"pid={os.getpid()}, got a message")
@@ -305,6 +306,7 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             logger.warning(e)
 
         except queue.Empty:
+            logger.warning("queue timeout")
             pass
 
         except Exception:
@@ -315,6 +317,8 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
         if item['key'] is not None:
             logger.debug("put item {item['key']} in the tx_q")
             tx_q.put(item)
+
+        logger.warning(f"new_worker_process: processed in {time.time()-start_time} secs")
 
 
 
@@ -330,7 +334,7 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
 
     while True:
         time.sleep(interval)
-
+        start_time = time.time()
         try:
             # check the buffer
             logger.debug(f"buffer_d keys={buffer_d.keys()}")
@@ -362,6 +366,7 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
             metric_data_size = get_buffer_size(metric_data_list)
             logger.debug(f"metric_data_list length={len(metric_data_list)} size={metric_data_size}")
 
+            logger.warning(f"sender child thread: process takes {time.time()-start_time} secs")
             if  metric_data_size > if_config_vars["chunk_size"]:
                 for chunk in data_chunks(metric_data_list,
                     metric_data_size,
@@ -369,6 +374,8 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
                     # TODO: process chunk of data
                     send_data(chunk)
                 metric_data_list.clear()
+
+            logger.warning(f"sender child thread: total {time.time()-start_time} secs")
 
         except Exception:
             print("-" * 60)
@@ -391,6 +398,7 @@ def new_sender_process(q, logger, if_config_vars):
 
     # main thread
     while True:
+        start_time = time.time()
         try:
             item = q.get()
             logger.debug(f"get item {item}")
@@ -423,6 +431,8 @@ def new_sender_process(q, logger, if_config_vars):
             print("-" * 60)
             traceback.print_exc(file=sys.stdout)
             print("-" * 60)
+
+        logger.warning(f"sender main thread: {time.time()-start_time}")
 
     thread1.join()
 
