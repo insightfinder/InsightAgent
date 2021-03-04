@@ -14,7 +14,7 @@ import requests
 import arrow
 from toolz import merge_with
 
-MAX_RETRY_NUM = 30
+MAX_RETRY_NUM = 10
 RETRY_WAIT_TIME_IN_SEC = 30
 CHUNK_SIZE = 2 * 1024 * 1024  # chunk size is 2Mb
 
@@ -22,7 +22,7 @@ CHUNK_SIZE = 2 * 1024 * 1024  # chunk size is 2Mb
 def func_check_buffer(lock, buffer_d, args_d):
     STOP = False
     metric_data_list = []
-    interval = 5
+    interval = 30
     sample_interval = 5 * 60
     print(f"func_check_buffer: sleep every {interval} secs")
 
