@@ -14,12 +14,13 @@ import requests
 import arrow
 from toolz import merge_with
 
-MAX_RETRY_NUM = 10
+MAX_RETRY_NUM = 30
 RETRY_WAIT_TIME_IN_SEC = 30
 CHUNK_SIZE = 2 * 1024 * 1024  # chunk size is 2Mb
 
 
 def func_check_buffer(lock, buffer_d, args_d):
+    STOP = False
     metric_data_list = []
     interval = 5
     sample_interval = 5 * 60
@@ -36,16 +37,8 @@ def func_check_buffer(lock, buffer_d, args_d):
             # check the buffer
             print(f"buffer_d keys={buffer_d.keys()}")
 
-            # flush buffer if process is stop
-            if args_d['process_stop']:
-                if lock.acquire():
-                    for key_item in buffer_d.values():
-                        metric_data_list += key_item.values()
-                    buffer_d.clear()
-                    lock.release()
-
             # WITH MERGE: merge the messages with sample_interval
-            elif args_d['enable_merge'] and args_d['latest_msg_time'] - args_d['earliest_msg_time'] > sample_interval:
+            if args_d['enable_merge'] and args_d['latest_msg_time'] - args_d['earliest_msg_time'] > sample_interval:
                 expire_time = args_d['earliest_msg_time'] + sample_interval
 
                 need_merge_list = []
@@ -54,7 +47,7 @@ def func_check_buffer(lock, buffer_d, args_d):
                         ts_map = buffer_d.pop(ts)
                         need_merge_list.append(ts_map)
                     # reset earliest_msg_time
-                    args_d['earliest_msg_time'] = sys.maxsize
+                    args_d['earliest_msg_time'] = expire_time
                     lock.release()
 
                 # merge metrics values
@@ -87,11 +80,20 @@ def func_check_buffer(lock, buffer_d, args_d):
                         buffer_d.pop(ts)
                     lock.release()
 
+            # flush buffer if process is stop
+            elif args_d['process_stop']:
+                if lock.acquire():
+                    for key_item in buffer_d.values():
+                        metric_data_list += key_item.values()
+                    buffer_d.clear()
+                    lock.release()
+                STOP = True
+
             # send data with chunk
             metric_data_size = get_buffer_size(metric_data_list)
             print(f"metric_data_list length={len(metric_data_list)} size={metric_data_size}")
 
-            # if args_d['process_stop'] or metric_data_size > CHUNK_SIZE:
+            # if STOP or metric_data_size > CHUNK_SIZE:
             for chunk in data_chunks(metric_data_list,
                                      metric_data_size,
                                      CHUNK_SIZE):
@@ -104,7 +106,7 @@ def func_check_buffer(lock, buffer_d, args_d):
             print("-" * 60)
 
         # stop while if process stop
-        if args_d['process_stop']:
+        if STOP:
             break
 
 
