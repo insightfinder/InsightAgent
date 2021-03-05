@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 from csv import reader
+from pathlib import Path
 
 
 def split_file(file_name, output='out'):
@@ -29,8 +30,9 @@ def split_file(file_name, output='out'):
 
 
 def main():
+    Path("out").mkdir(parents=True, exist_ok=True)
     for file_name in sys.argv[1:]:
-        split_file(file_name)
+        split_file(file_name, "out")
     
 
 if __name__ == "__main__":
