@@ -253,7 +253,7 @@ if __name__ == "__main__":
                     'timestamp': str(timestamp * 1000),
                     f'svc_mean[{instance}]': svc_mean,
                     f'tx_mean[{instance}]': tx_mean,
-                    f'value[{instance}]': value,
+                    # f'value[{instance}]': value,
                     f'{http_status}_req_count[{instance}]': req_count or '0'
                 }
 
