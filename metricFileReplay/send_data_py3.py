@@ -236,7 +236,7 @@ if __name__ == "__main__":
             if timestamp not in buffer_dict:
                 buffer_dict[timestamp] = {}
 
-            instance = "{}_{}".format(client_alias, service_alias)
+            instance = client_alias
             key = f'{instance}@{timestamp}'
             if key not in buffer_dict[timestamp]:
                 buffer_dict[timestamp][key] = {}
