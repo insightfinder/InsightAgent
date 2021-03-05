@@ -257,7 +257,7 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
         item = {'key': None, 'metric_vals': {}}
         start_time = time.time()
         try:
-            logger.info(f"worker queue size {q.qsize()}")
+            logger.info(f"rx_q size {q.qsize()}")
             message = q.get(timeout=60)
             logger.debug(f"pid={os.getpid()}, got a message")
             msg_dict = json.loads(message.value.decode("ascii", errors='ignore'))
@@ -363,14 +363,11 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
                     lock.release()
 
             # send data
-            metric_data_size = get_buffer_size(metric_data_list)
-            logger.info(f"metric_data_list length={len(metric_data_list)} size={metric_data_size}")
+            logger.info(f"metric_data_list length={len(metric_data_list)}")
 
             logger.info(f"sender child thread: process takes {time.time()-start_time:8.4f} secs")
-            if  metric_data_size > if_config_vars["chunk_size"]:
-                for chunk in data_chunks(metric_data_list,
-                    metric_data_size,
-                    if_config_vars["chunk_size"]):
+            if  len(metric_data_list) > 0:
+                for chunk in data_chunks(metric_data_list, if_config_vars["chunk_size"]):
                     # TODO: process chunk of data
                     send_data(chunk)
                 metric_data_list.clear()
@@ -411,7 +408,7 @@ def new_sender_process(q, logger, if_config_vars):
 
             # drop this message if is too old, since that batch has been sent
             if timestamp < args_dict['latest_msg_time'] - if_config_vars['run_interval']:
-                logger.debug(f"dropped old msg with time={timestamp}")
+                logger.info(f"dropped old msg with time={timestamp}")
                 continue
 
             if timestamp not in buffer_dict:
@@ -1660,10 +1657,10 @@ def reset_track():
 ################################
 # Functions to send data to IF #
 ################################
-def data_chunks(metric_data, data_size, chunk_size):
+def data_chunks(metric_data, chunk_size):
     """ generate chunks of data from metric data """
-    logger.debug(f"data_chunks data_size={data_size} chunk_size={chunk_size}")
-    assert data_size >= chunk_size, "invalid metric data size!"
+    logger.debug(f"data_chunks chunk_size={chunk_size}")
+    data_size = get_buffer_size(metric_data)
     chunks = data_size // chunk_size + 1
     num_msgs_per_chunk = max(1, len(metric_data) // chunks )
     for i in range(0, len(metric_data), num_msgs_per_chunk):
