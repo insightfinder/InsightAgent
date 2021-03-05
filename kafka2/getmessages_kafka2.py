@@ -318,7 +318,7 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             logger.debug("put item {item['key']} in the tx_q")
             tx_q.put(item)
 
-        logger.warning(f"new_worker_process: processed in {time.time()-start_time} secs")
+        logger.warning(f"new_worker_process: processed in {time.time()-start_time:8.4f} secs")
 
 
 
@@ -366,7 +366,7 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
             metric_data_size = get_buffer_size(metric_data_list)
             logger.debug(f"metric_data_list length={len(metric_data_list)} size={metric_data_size}")
 
-            logger.warning(f"sender child thread: process takes {time.time()-start_time} secs")
+            logger.warning(f"sender child thread: process takes {time.time()-start_time:8.4f} secs")
             if  metric_data_size > if_config_vars["chunk_size"]:
                 for chunk in data_chunks(metric_data_list,
                     metric_data_size,
@@ -375,7 +375,7 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
                     send_data(chunk)
                 metric_data_list.clear()
 
-            logger.warning(f"sender child thread: total {time.time()-start_time} secs")
+            logger.warning(f"sender child thread: total {time.time()-start_time:8.4f} secs")
 
         except Exception:
             print("-" * 60)
@@ -432,7 +432,7 @@ def new_sender_process(q, logger, if_config_vars):
             traceback.print_exc(file=sys.stdout)
             print("-" * 60)
 
-        logger.warning(f"sender main thread: {time.time()-start_time}")
+        logger.warning(f"sender main thread: {time.time()-start_time:8.4f} secs")
 
     thread1.join()
 
@@ -800,31 +800,21 @@ def get_cli_config_vars():
     parser = OptionParser(usage=usage)
     parser.add_option('-p', '--processes', default=1, action='store', dest='processes',
                       help='Number of processes to run')
-    parser.add_option('-q', '--quiet', action='store_true', dest='quiet',
-                      help='Only display warning and error log messages')
-    parser.add_option('-v', '--verbose', action='store_true', dest='verbose',
-                      help='Enable verbose logging')
-    parser.add_option('-t', '--testing', action='store_true', dest='testing',
-                      help='Set to testing mode (do not send data).' +
-                           ' Automatically turns on verbose logging')
+    parser.add_option('-l', '--level', action='store', dest='log_level',
+                      help='logging level')
+
     (options, args) = parser.parse_args()
 
     config_vars = {
         'processes': 1,
         'testing': False,
-        'log_level': logging.INFO
+        'log_level': logging.WARNING
     }
 
     if options.processes:
         config_vars['processes'] = int(options.processes)
 
-    if options.testing:
-        config_vars['testing'] = True
-
-    if options.verbose or options.testing:
-        config_vars['log_level'] = logging.DEBUG
-    elif options.quiet:
-        config_vars['log_level'] = logging.WARNING
+    config_vars['log_level'] = eval(options.log_level)
 
     return config_vars
 
@@ -1699,7 +1689,7 @@ def send_data(metric_data):
     post_url = if_config_vars['if_url'] + "/customprojectrawdata"
     send_data_to_receiver(post_url, to_send_data_json, len(metric_data))
     logger.info("-" * 40)
-    logger.warning(f"!!! packet of {len(metric_data)} items, size of {len(to_send_data_json)} bytes sent in {time.time() - send_data_time:8.1f} secs !!!")
+    logger.warning(f"!!! packet of {len(metric_data)} items, size of {len(to_send_data_json)} bytes sent in {time.time() - send_data_time:8.4f} secs !!!")
     logger.info("-" * 40)
 
 
