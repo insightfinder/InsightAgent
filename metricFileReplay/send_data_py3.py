@@ -239,18 +239,24 @@ if __name__ == "__main__":
             instance = client_alias
             key = f'{instance}@{timestamp}'
             if key not in buffer_dict[timestamp]:
-                buffer_dict[timestamp][key] = {}
+                buffer_dict[timestamp][key] = {
+                    'timestamp':str(timestamp * 1000),
+                    f'svc_mean[{instance}]':0,
+                    f'tx_mean[{instance}]':0,
+                    f'2xx_req_count[{instance}]':0,
+                    f'3xx_req_count[{instance}]':0,
+                    f'4xx_req_count[{instance}]':0,
+                    f'5xx_req_count[{instance}]':0
+                    }
 
             metric_vals = {}
 
             if http_status != '2xx':
                 metric_vals = {
-                    'timestamp': str(timestamp * 1000),
                     f'{http_status}_req_count[{instance}]': req_count or '0'
                 }
             else:
                 metric_vals = {
-                    'timestamp': str(timestamp * 1000),
                     f'svc_mean[{instance}]': svc_mean,
                     f'tx_mean[{instance}]': tx_mean,
                     # f'value[{instance}]': value,
