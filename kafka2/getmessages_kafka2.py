@@ -187,11 +187,11 @@ def get_kafka_consumer():
 
     consumer = KafkaConsumer(**consumer_args)
 
-    logger.info("consumer kafka_kwargs {}".format(agent_config_vars['kafka_kwargs']))
+    logger.debug("consumer kafka_kwargs {}".format(agent_config_vars['kafka_kwargs']))
 
     consumer.subscribe(agent_config_vars['topics'])
     logger.info('Successfully subscribed to topics' + str(agent_config_vars['topics']))
-    logger.info(consumer.topics())
+    # logger.debug(consumer.topics())
     return consumer
 
 
@@ -257,6 +257,7 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
         item = {'key': None, 'metric_vals': {}}
         start_time = time.time()
         try:
+            logger.info(f"worker queue size {q.qsize()}")
             message = q.get(timeout=60)
             logger.debug(f"pid={os.getpid()}, got a message")
             msg_dict = json.loads(message.value.decode("ascii", errors='ignore'))
@@ -318,7 +319,7 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             logger.debug("put item {item['key']} in the tx_q")
             tx_q.put(item)
 
-        logger.warning(f"new_worker_process: processed in {time.time()-start_time:8.4f} secs")
+        logger.info(f"new_worker_process: processed in {time.time()-start_time:8.4f} secs")
 
 
 
@@ -330,7 +331,6 @@ def get_buffer_size(data):
 def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
     metric_data_list = []
     interval = if_config_vars['sampling_interval']
-    logger.debug(f"func_check_buffer: sleep every {interval} secs")
 
     while True:
         time.sleep(interval)
@@ -364,9 +364,9 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
 
             # send data
             metric_data_size = get_buffer_size(metric_data_list)
-            logger.debug(f"metric_data_list length={len(metric_data_list)} size={metric_data_size}")
+            logger.info(f"metric_data_list length={len(metric_data_list)} size={metric_data_size}")
 
-            logger.warning(f"sender child thread: process takes {time.time()-start_time:8.4f} secs")
+            logger.info(f"sender child thread: process takes {time.time()-start_time:8.4f} secs")
             if  metric_data_size > if_config_vars["chunk_size"]:
                 for chunk in data_chunks(metric_data_list,
                     metric_data_size,
@@ -375,7 +375,7 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
                     send_data(chunk)
                 metric_data_list.clear()
 
-            logger.warning(f"sender child thread: total {time.time()-start_time:8.4f} secs")
+            logger.info(f"sender child thread: total {time.time()-start_time:8.4f} secs")
 
         except Exception:
             print("-" * 60)
@@ -400,8 +400,8 @@ def new_sender_process(q, logger, if_config_vars):
     while True:
         start_time = time.time()
         try:
+            logger.info(f"tx_q size: {q.qsize()}")
             item = q.get()
-            logger.debug(f"get item {item}")
 
             timestamp = item['timestamp']
             # update latest messages time
@@ -432,13 +432,13 @@ def new_sender_process(q, logger, if_config_vars):
             traceback.print_exc(file=sys.stdout)
             print("-" * 60)
 
-        logger.warning(f"sender main thread: {time.time()-start_time:8.4f} secs")
+        logger.info(f"sender main thread: {time.time()-start_time:8.4f} secs")
 
     thread1.join()
 
 
 def start_data_processing():
-    logger.debug("start_data_processing")
+    logger.info("start_data_processing")
 
     rx_q=[]
     consumers = []
@@ -1689,7 +1689,7 @@ def send_data(metric_data):
     post_url = if_config_vars['if_url'] + "/customprojectrawdata"
     send_data_to_receiver(post_url, to_send_data_json, len(metric_data))
     logger.info("-" * 40)
-    logger.warning(f"!!! packet of {len(metric_data)} items, size of {len(to_send_data_json)} bytes sent in {time.time() - send_data_time:8.4f} secs !!!")
+    logger.info(f"!!! packet of {len(metric_data)} items, size of {len(to_send_data_json)} bytes sent in {time.time() - send_data_time:8.4f} secs !!!")
     logger.info("-" * 40)
 
 
