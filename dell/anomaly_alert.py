@@ -4,6 +4,7 @@ import json
 import pendulum
 import pickle
 import logging
+import configparser
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -89,10 +90,9 @@ than normal at {instance}"""
     return events
 
 
-def send_alert(instance, event):
-    logging.debug(f"send_alert: {event}")
+def send_alert(instance, event, url):
+    logging.debug(f"alert to {url}: {event}")
     try:
-        url = 'localhost'
         data = {
             "fqdn": instance,
             "severity": 2,
@@ -106,13 +106,18 @@ def send_alert(instance, event):
 
 
 def main():
+    import configparser
 
     today = pendulum.today()
     tomorrow = pendulum.tomorrow()
-    
     logging.info(f"started at {pendulum.now()}")
 
     events_sent = {today:set()}
+
+    config = configparser.ConfigParser()
+    config.read('cfg.ini')
+    report_url = config['DEFAULT']['report_url']
+
     try:
         f = open("events_records", "rb")
         events_sent = pickle.load(f)
@@ -123,7 +128,7 @@ def main():
     logging.debug(f"today total events: {len(events_sent[today])}")
 
     for instance, event in get_anomaly_events(today, tomorrow, events_sent):
-        send_alert(instance, event)
+        send_alert(instance, event, report_url)
 
     # clean up records
     if len(events_sent) > 1:
