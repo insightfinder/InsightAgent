@@ -55,16 +55,12 @@ def transfer_anomaly_data(host, headers, cookies, data):
         count += 1
     return resp.status_code
 
-def get_anomaly_events(start, end, events_sent):
+def get_anomaly_events(start, end, events_sent, host, user_name, password):
     startTime = int(start.timestamp()*1000)
     endTime = int(end.timestamp()*1000)
 
     data = {"projectName": "TD_metric@demoUser", "transferToProjectName": "dummy", "transferToCustomerName": "user",
             "startTime": startTime, "endTime": endTime}
-    #host = "http://localhost:8080"
-    host = "https://stg.insightfinder.com"
-    user_name = "demoUser"
-    passowrd = "DemoInsight2015!"
     user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36"
 
     (cookies, headers) = log_in(host, user_name, passowrd, user_agent)
@@ -116,6 +112,9 @@ def main():
     config = configparser.ConfigParser()
     config.read('cfg.ini')
     report_url = config['DEFAULT']['report_url']
+    host = config['DEFAULT']['host']
+    user_name = config['DEFAULT']['user_name']
+    password = config['DEFAULT']['password']
 
     try:
         f = open("events_records", "rb")
@@ -126,7 +125,7 @@ def main():
     
     logging.debug(f"today total events: {len(events_sent[today])}")
 
-    for instance, event in get_anomaly_events(today, tomorrow, events_sent):
+    for instance, event in get_anomaly_events(today, tomorrow, events_sent, host, user_name, password):
         send_alert(instance, event, report_url)
 
     # clean up records
