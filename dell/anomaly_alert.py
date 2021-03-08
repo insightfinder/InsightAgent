@@ -106,7 +106,6 @@ def send_alert(instance, event, url):
 
 
 def main():
-    import configparser
 
     today = pendulum.today()
     tomorrow = pendulum.tomorrow()
