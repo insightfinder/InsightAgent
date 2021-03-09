@@ -7,7 +7,7 @@ import logging
 import configparser
 
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.WARNING)
 
 
 def log_in(host, user_name, password, user_agent):
