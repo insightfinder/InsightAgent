@@ -67,7 +67,7 @@ def send_alert(instance, event, url):
     try:
         data = {
             "fqdn": instance,
-            "severity": 2,
+            "severity": 3,
             "message": event,
             "complete": "false"
         }
