@@ -12,14 +12,15 @@ TOKEN = "token"
 USER_AGENT = "User-Agent"
 X_CSRF_TOKEN = "X-CSRF-Token"
 
-def log_in(host, user_name, passowrd, user_agent):
+def log_in(host, user_name, password, user_agent):
     url = host + '/api/v1/login-check'
     headers = {"User-Agent": user_agent}
-    data = {"userName":user_name, "password":passowrd}
+    data = {"userName":user_name, "password":password}
     resp = requests.post(url, data=data, headers=headers, verify=False)
-    while resp.status_code != 200:
-        time.sleep(60)
-        requests.post(url, data=data, headers=headers, verify=False)
+    assert resp.status_code == 200, "failed to login!"
+    # while resp.status_code != 200:
+    #     time.sleep(60)
+    #     requests.post(url, data=data, headers=headers, verify=False)
     logging.debug("Successfully login and get the token")
     headers = {USER_AGENT: user_agent, X_CSRF_TOKEN: json.loads(resp.text)[TOKEN]}
     return resp.cookies, headers
@@ -63,7 +64,7 @@ def get_anomaly_events(start, end, events_sent, host, user_name, password):
             "startTime": startTime, "endTime": endTime}
     user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36"
 
-    (cookies, headers) = log_in(host, user_name, passowrd, user_agent)
+    (cookies, headers) = log_in(host, user_name, password, user_agent)
     anomaly_data = get_anomaly_data(host, headers, cookies, data)
 
     events = []
