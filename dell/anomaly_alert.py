@@ -6,55 +6,31 @@ import pickle
 import logging
 import configparser
 
+
 logging.basicConfig(level=logging.DEBUG)
 
-TOKEN = "token"
-USER_AGENT = "User-Agent"
-X_CSRF_TOKEN = "X-CSRF-Token"
 
 def log_in(host, user_name, password, user_agent):
+    TOKEN = "token"
+    USER_AGENT = "User-Agent"
+    X_CSRF_TOKEN = "X-CSRF-Token"
     url = host + '/api/v1/login-check'
     headers = {"User-Agent": user_agent}
     data = {"userName":user_name, "password":password}
     resp = requests.post(url, data=data, headers=headers, verify=False)
     assert resp.status_code == 200, "failed to login!"
-    # while resp.status_code != 200:
-    #     time.sleep(60)
-    #     requests.post(url, data=data, headers=headers, verify=False)
     logging.debug("Successfully login and get the token")
     headers = {USER_AGENT: user_agent, X_CSRF_TOKEN: json.loads(resp.text)[TOKEN]}
     return resp.cookies, headers
 
-def refresh_token(host, headers, cookies):
-    url = host + '/api/v1/refreshusertoken'
-    resp = requests.post(url, headers=headers, cookies=cookies, verify=False)
-    while resp.status_code != 200:
-        resp = requests.post(url, headers=headers, cookies=cookies, verify=False)
-    logging.debug("Successfully refresh tokens")
-    headers = {USER_AGENT: user_agent, X_CSRF_TOKEN: json.loads(resp.text)[TOKEN]}
-    return resp.cookies, headers
 
 def get_anomaly_data(host, headers, cookies, data):
     url = host + '/api/v2/projectanomalytransfer'
     resp = requests.get(url, params=data, headers=headers, cookies=cookies, verify=False)
-    count = 0
     logging.debug(resp.status_code)
-    while resp.status_code != 200 and count <= 12:
-        time.sleep(60)
-        resp = requests.post(url, data=data, headers=headers, cookies=cookies, verify=False)
-        count += 1
+    assert resp.status_code == 200, "failed to get anomaly data!"
     return json.loads(resp.text)
 
-def transfer_anomaly_data(host, headers, cookies, data):
-    url = host + '/api/v2/projectanomalyreceive'
-    resp = requests.post(url, json=data, headers=headers, cookies=cookies, verify=False)
-    count = 0
-    logging.debug(resp.status_code)
-    while resp.status_code != 200 and count <= 12:
-        time.sleep(60)
-        resp = requests.post(url, data=data, headers=headers, cookies=cookies, verify=False)
-        count += 1
-    return resp.status_code
 
 def get_anomaly_events(start, end, events_sent, host, user_name, password):
     startTime = int(start.timestamp()*1000)
@@ -82,7 +58,6 @@ def get_anomaly_events(start, end, events_sent, host, user_name, password):
 than normal at {instance}"""
                     logging.debug(event)
                     events.append((instance, event))
-    # status_code = transfer_anomaly_data(host, headers, cookies, anomaly_data)
 
     return events
 
