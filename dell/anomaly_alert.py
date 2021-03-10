@@ -7,7 +7,7 @@ import logging
 import configparser
 
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.WARNING)
 
 
 def log_in(host, user_name, password, user_agent):
@@ -24,27 +24,30 @@ def log_in(host, user_name, password, user_agent):
     return resp.cookies, headers
 
 
-def get_anomaly_data(host, data, headers, cookies):
+def get_anomaly_data(host, data):
     url = host + '/api/v2/projectanomalytransfer'
-    logging.debug(f"{url} {data} {headers} {cookies}")
-    resp = requests.get(url, params=data, headers=headers, cookies=cookies, verify=False)
+    logging.debug(f"{url} {data}")
+    resp = requests.get(url, params=data, verify=False)
     logging.debug(str(resp))
     assert resp.status_code == 200, "failed to get anomaly data!"
     return json.loads(resp.text)
 
 
-def get_anomaly_events(start, end, events_sent, host, user_name, licenseKey):
+def get_anomaly_events(start, end, events_sent, host, profile, licenseKey):
     startTime = int(start.timestamp()*1000)
     endTime = int(end.timestamp()*1000)
 
-    data = {"projectName": user_name, "transferToProjectName": "dummy", "transferToCustomerName": "user",
+    proj_name, user_name = profile.split('@')
+
+    data = {"projectName": proj_name, "transferToProjectName": "dummy", "transferToCustomerName": "user",
             "startTime": startTime, "endTime": endTime, "licenseKey": licenseKey}
     user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36"
 
     # (cookies, headers) = log_in(host, user_name, password, user_agent)
-    cookies = dict(userName=user_name)
-    headers = {"User-Agent": user_agent}
-    anomaly_data = get_anomaly_data(host, data, headers, cookies)
+    # cookies = dict(userName=user_name)
+    data.update({"userName": user_name})
+    # headers = {"User-Agent": user_agent}
+    anomaly_data = get_anomaly_data(host, data)
 
     events = []
     for d in anomaly_data['DATA']['anomalyEventsList']:
@@ -56,6 +59,7 @@ def get_anomaly_events(start, end, events_sent, host, user_name, licenseKey):
                 event_start = str(event_time.get('startTimestamp'))
                 key = f"{instance}-{metric}-{event_start}"
                 if key not in events_sent.get(start, ''):
+                    logging.debug(f"events:{events_sent} {start} {key}")
                     events_sent[start].add(key)
                     event = f"""{metric} ({e.get('metricValue')}) is {e.get('pct')}% {e.get('direction')} \
 than normal at {instance}"""
@@ -89,23 +93,26 @@ def main():
     events_sent = {today:set()}
 
     config = configparser.ConfigParser()
-    config.read('cfg.ini')
-    report_url = config['DEFAULT']['report_url']
-    host = config['DEFAULT']['host']
-    user_name = config['DEFAULT']['user_name']
-    # password = config['DEFAULT']['password']
-    licenseKey = config['DEFAULT']['licenseKey']
+    try:
+        config.read('cfg.ini')
+        report_url = config['DEFAULT']['report_url']
+        host = config['DEFAULT']['host']
+        profile = config['DEFAULT']['profile']
+        # password = config['DEFAULT']['password']
+        licenseKey = config['DEFAULT']['licenseKey']
+    except Exception as e:
+        logging.warning(e)
 
     try:
         f = open("events_records", "rb")
-        events_sent = pickle.load(f)
+        events_sent.update(pickle.load(f))
         f.close()
     except:
         pass
-    
+
     logging.debug(f"today total events: {len(events_sent.get(today, ''))}")
 
-    for instance, event in get_anomaly_events(today, tomorrow, events_sent, host, user_name, licenseKey):
+    for instance, event in get_anomaly_events(today, tomorrow, events_sent, host, profile, licenseKey):
         send_alert(instance, event, report_url)
 
     # clean up records
