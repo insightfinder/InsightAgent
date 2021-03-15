@@ -115,6 +115,7 @@ def generate_config_file():
     config[constant.DEPLOYMENT] = {constant.PROJECT_NAME: constant.DEPLOYMENT_PROJECT_NAME}
     config[constant.WEB] = {constant.PROJECT_NAME: constant.WEB_PROJECT_NAME}
     config[constant.METRIC] = {constant.PROJECT_NAME: constant.METRIC_PROJECT_NAME}
+    config[constant.ALERT] = {constant.PROJECT_NAME: constant.ALERT_PROJECT_NAME}
     utility.save_config_file(config_file_name, config)
 
 

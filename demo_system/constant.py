@@ -13,10 +13,12 @@ LOG = "Log"
 DEPLOYMENT = "Deployment"
 WEB = "Web"
 METRIC = "Metric"
+ALERT = "Alert"
 LOG_PROJECT_NAME = "TD_infrastructure_core"
 DEPLOYMENT_PROJECT_NAME = "TD_deployment"
 WEB_PROJECT_NAME = "TD_web"
 METRIC_PROJECT_NAME = "TD_metric"
+ALERT_PROJECT_NAME = "TD_alert"
 DATA_TYPE_NORMAL = "normal"
 DATA_TYPE_ABNORMAL = "abnormal"
 DATE_TIME_FORMAT_MINUTE = "%Y-%m-%dT%H:%M:00"
@@ -44,6 +46,11 @@ Author: Tom <Tom@insightfinder.com>\n
 WEB_INCIDENT_DATA = "Production 911: Checkout server returns 500 error"
 WEB_NORMAL_DATA = ["User checked the dash board page", "User changed the profile setting", "User logged out",
                    "User logged in"]
+
+# Alert data
+ALERT_INCIDENT_DATA = {"comments":"","assignment group":"Software","description":"","close notes":"","configuration item":"","priority":"1 - Critical","caller":"Admin","service":"","short description":"","ticket number":"","state":"In Progress","work notes":"","assigned to":"Don Goodliffe"}
+INCIDENTS = ["Production 911: Checkout server returns 500 error", "Production 911: Shopping list server returns 500 error", "Production 911: Cusomter login server returns 500 error"]
+TICKET_NUMBER_PREFIX = "INC000000"
 
 # Instance name for log
 LOG_INSTANCE_LIST = ["84.206.252.176", "203.133.162.186", "248.23.23.69", "9.111.192.107", "249.148.28.81", "39.237.183.95",
@@ -131,7 +138,7 @@ LOG_INSTANCE = "core server"
 DEP_INSTANCE = 'Jenkins'
 # Put the ip address of the machine where the demo scripts exist, e.g. on stg the demo scripts are in the app-server node
 # WEB_INSTANCE = 'ip-172-31-52-141.ec2.internal'
-WEB_INSTANCE = ''
+WEB_INSTANCE = 'ip-172-31-52-141.ec2.internal'
 # Log data constant
 EVENT_ID = 'eventId'
 TAG = 'tag'

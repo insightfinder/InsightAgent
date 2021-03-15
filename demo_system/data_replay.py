@@ -32,6 +32,7 @@ def get_agent_config_vars():
             deployment_project_name = parser.get(constant.DEPLOYMENT, constant.PROJECT_NAME)
             web_project_name = parser.get(constant.WEB, constant.PROJECT_NAME)
             metric_project_name = parser.get(constant.METRIC, constant.PROJECT_NAME)
+            alert_project_name = parser.get(constant.ALERT, constant.PROJECT_NAME)
             if len(license_key) == 0:
                 logging.warning("Demo agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
@@ -68,6 +69,7 @@ def get_agent_config_vars():
             configs[constant.DEPLOYMENT] = deployment_project_name
             configs[constant.WEB] = web_project_name
             configs[constant.METRIC] = metric_project_name
+            configs[constant.ALERT] = alert_project_name
     except IOError:
         logging.warning("config.ini file is missing")
     return configs
@@ -140,14 +142,29 @@ def send_deployment_demo_data(time, time_delta, is_abnormal):
 '''
 Send incident data at 59 minutes 4th hour, otherwise normal log
 '''
-def send_web_data(time, time_delta, is_abnormal):
+
+
+def generate_ticket_data(ticket, ticket_number):
+    data = constant.ALERT_INCIDENT_DATA
+    data["short description"] = ticket
+    data["ticket number"] = ticket_number
+    return data
+
+
+def send_web_or_incident_data(time, time_delta, is_abnormal):
     timestamp = to_epochtime_minute(time)
     minute = get_time_delta_minute(time_delta)
     hour = get_time_delta_hour(time_delta)
     if is_abnormal:
         if minute == 59 and hour == 0:
-            data = get_log_data(timestamp, constant.WEB_INSTANCE, constant.WEB_INCIDENT_DATA)
-            replay_log_data(configs[constant.WEB], [data], "Web incident data")
+            data_array = []
+            ticket_number = random.randint(1, 7)
+            for ticket in constant.INCIDENTS:
+                data = generate_ticket_data(ticket, ticket_number)
+                logging.info(data)
+                data_array.append(get_log_data(timestamp, constant.WEB_INSTANCE, data.copy()))
+                ticket_number += 1
+            replay_log_data(configs[constant.ALERT], data_array, "Alert incident data")
     else:
         num_message = random.randint(1, 3)
         data_array = []
@@ -319,6 +336,6 @@ if __name__ == "__main__":
     cur_time = get_current_time()
     time_delta, is_abnormal = get_time_delta(cur_time)
     send_log_data(cur_time, time_delta, is_abnormal)
-    send_web_data(cur_time, time_delta, is_abnormal)
+    send_web_or_incident_data(cur_time, time_delta, is_abnormal)
     send_deployment_demo_data(cur_time, time_delta, is_abnormal)
     send_metric_data(cur_time, time_delta, is_abnormal)
