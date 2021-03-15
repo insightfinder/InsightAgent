@@ -139,11 +139,6 @@ def send_deployment_demo_data(time, time_delta, is_abnormal):
         replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment data")
 
 
-'''
-Send incident data at 59 minutes 4th hour, otherwise normal log
-'''
-
-
 def generate_ticket_data(ticket, ticket_number):
     data = constant.ALERT_INCIDENT_DATA
     data["short description"] = ticket
@@ -151,6 +146,9 @@ def generate_ticket_data(ticket, ticket_number):
     return data
 
 
+'''
+Send incident data at 59 minutes 4th hour, otherwise normal log
+'''
 def send_web_or_incident_data(time, time_delta, is_abnormal):
     timestamp = to_epochtime_minute(time)
     minute = get_time_delta_minute(time_delta)
