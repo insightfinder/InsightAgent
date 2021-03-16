@@ -139,30 +139,17 @@ def send_deployment_demo_data(time, time_delta, is_abnormal):
         replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment data")
 
 
-def generate_ticket_data(ticket, ticket_number):
-    data = constant.ALERT_INCIDENT_DATA
-    data["short description"] = ticket
-    data["ticket number"] = ticket_number
-    return data
-
-
 '''
-Send incident data at 59 minutes 4th hour, otherwise normal log
+Send incident data after 55 minutes 4th hour, otherwise normal log
 '''
 def send_web_or_incident_data(time, time_delta, is_abnormal):
     timestamp = to_epochtime_minute(time)
     minute = get_time_delta_minute(time_delta)
     hour = get_time_delta_hour(time_delta)
     if is_abnormal:
-        if minute == 59 and hour == 0:
-            data_array = []
-            ticket_number = random.randint(1, 7)
-            for ticket in constant.INCIDENTS:
-                data = generate_ticket_data(ticket, ticket_number)
-                logging.info(data)
-                data_array.append(get_log_data(timestamp, constant.WEB_INSTANCE, data.copy()))
-                ticket_number += 1
-            replay_log_data(configs[constant.ALERT], data_array, "Alert incident data")
+        if minute >= 55 and hour == 0:
+            data = get_log_data(timestamp, constant.WEB_INSTANCE, constant.ALERT_INCIDENT_DATA)
+            replay_log_data(configs[constant.ALERT], [data], "Alert incident data")
     else:
         num_message = random.randint(1, 3)
         data_array = []
@@ -173,14 +160,14 @@ def send_web_or_incident_data(time, time_delta, is_abnormal):
 
 
 '''
-Send exception data start at 35,45,55 minutes in 4th hour.
+Send exception data start at 30,40,50 minutes in 4th hour.
 '''
 def send_log_data(time, time_delta, is_abnormal):
     timestamp = to_epochtime_minute(time)
     minute = get_time_delta_minute(time_delta)
     hour = get_time_delta_hour(time_delta)
     if is_abnormal:
-        if minute in [35,45,55] and hour == 0:
+        if minute in [30,40,50] and hour == 0:
             num_message = 1
             data_array = []
             for i in range(0, num_message):
@@ -333,7 +320,7 @@ if __name__ == "__main__":
     configs = get_agent_config_vars()
     cur_time = get_current_time()
     time_delta, is_abnormal = get_time_delta(cur_time)
-    send_log_data(cur_time, time_delta, is_abnormal)
     send_web_or_incident_data(cur_time, time_delta, is_abnormal)
+    send_log_data(cur_time, time_delta, is_abnormal)
     send_deployment_demo_data(cur_time, time_delta, is_abnormal)
     send_metric_data(cur_time, time_delta, is_abnormal)
