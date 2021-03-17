@@ -1,11 +1,12 @@
 import requests
+import time
 import json
 # import pendulum
 import pickle
 import logging
 import configparser
 from dateutil.tz import gettz
-from datetime import datetime, timedelta, date, time, timezone
+from datetime import datetime, timedelta
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -29,23 +30,15 @@ def get_anomaly_data(host, data):
     url = host + '/api/v2/projectanomalytransfer'
     logging.debug(f"{url} {data}")
     resp = requests.get(url, params=data, verify=False)
+    logging.debug(str(resp))
     assert resp.status_code == 200, "failed to get anomaly data!"
-    result = {}
-    try:
-        result = resp.json()
-    except Exception as e:
-        logging.WARNING(e)
-    # logging.info(f"resp={resp}")
-    # print("result", result)
-    return result
+    return json.loads(resp.text)
 
 
 def get_anomaly_events(start, end, events_sent, host, profile, licenseKey):
     startTime = int(start.timestamp()*1000)
     endTime = int(end.timestamp()*1000)
-    logging.debug(startTime)
-    logging.debug(endTime)
-    events = []
+
     proj_name, user_name = profile.split('@')
 
     data = {"projectName": proj_name, "transferToProjectName": "dummy", "transferToCustomerName": "user",
@@ -57,9 +50,8 @@ def get_anomaly_events(start, end, events_sent, host, profile, licenseKey):
     data.update({"userName": user_name})
     # headers = {"User-Agent": user_agent}
     anomaly_data = get_anomaly_data(host, data)
-    if len(anomaly_data) == 0:
-        return events
 
+    events = []
     for d in anomaly_data['DATA']['anomalyEventsList']:
         for e in json.loads(d['rootCauseJson'])['rootCauseDetailsArr']:
             # logging.debug(e)
@@ -81,7 +73,6 @@ than normal at {instance}"""
 
 def send_alert(instance, event, url):
     logging.debug(f"alert to {url}: {event}")
-
     try:
         data = {
             "fqdn": instance,
@@ -91,15 +82,18 @@ def send_alert(instance, event, url):
         }
 
         resp = requests.post(url, json=data)
-        logging.debug(f"resp code = {resp.status_code}")
-    except Exception as e:
-        logging.warning(e)
+    except Exception:
+        pass
 
 
 def main():
-    today = datetime.combine(date.today(), time(), tzinfo=timezone.utc)
+
+    # est = gettz("US/NewYork")
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     tomorrow = today + timedelta(days=1)
-    logging.info(f"today={today}")
+    # today = pendulum.today()
+    # tomorrow = pendulum.tomorrow()
+    # logging.info(f"started at {pendulum.now()}")
 
     events_sent = {today:set()}
 
