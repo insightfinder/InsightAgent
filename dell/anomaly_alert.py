@@ -1,6 +1,5 @@
 import requests
 import json
-# import pendulum
 import pickle
 import logging
 import configparser
@@ -8,21 +7,8 @@ from dateutil.tz import gettz
 from datetime import datetime, timedelta, date, time, timezone
 
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.WARNING)
 
-
-def log_in(host, user_name, password, user_agent):
-    TOKEN = "token"
-    USER_AGENT = "User-Agent"
-    X_CSRF_TOKEN = "X-CSRF-Token"
-    url = host + '/api/v1/login-check'
-    headers = {"User-Agent": user_agent}
-    data = {"userName":user_name, "password":password}
-    resp = requests.post(url, data=data, headers=headers, verify=False)
-    assert resp.status_code == 200, "failed to login!"
-    logging.debug("Successfully login and get the token")
-    headers = {USER_AGENT: user_agent, X_CSRF_TOKEN: json.loads(resp.text)[TOKEN]}
-    return resp.cookies, headers
 
 
 def get_anomaly_data(host, data):
@@ -52,17 +38,14 @@ def get_anomaly_events(start, end, events_sent, host, profile, licenseKey):
             "startTime": startTime, "endTime": endTime, "licenseKey": licenseKey}
     user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36"
 
-    # (cookies, headers) = log_in(host, user_name, password, user_agent)
-    # cookies = dict(userName=user_name)
     data.update({"userName": user_name})
-    # headers = {"User-Agent": user_agent}
+
     anomaly_data = get_anomaly_data(host, data)
     if len(anomaly_data) == 0:
         return events
 
     for d in anomaly_data['DATA']['anomalyEventsList']:
         for e in json.loads(d['rootCauseJson'])['rootCauseDetailsArr']:
-            # logging.debug(e)
             instance = e.get('instanceId')
             metric = e.get('rootCauseMetric')
             for event_time in e.get('timePairArr'):
@@ -109,7 +92,6 @@ def main():
         report_url = config['DEFAULT']['report_url']
         host = config['DEFAULT']['host']
         profile = config['DEFAULT']['profile']
-        # password = config['DEFAULT']['password']
         licenseKey = config['DEFAULT']['licenseKey']
     except Exception as e:
         logging.warning(e)
