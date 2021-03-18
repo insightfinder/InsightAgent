@@ -10,7 +10,6 @@ from datetime import datetime, timedelta, date, time, timezone
 logging.basicConfig(level=logging.WARNING)
 
 
-
 def get_anomaly_data(host, data):
     url = host + '/api/v2/projectanomalytransfer'
     logging.debug(f"{url} {data}")
@@ -21,8 +20,7 @@ def get_anomaly_data(host, data):
         result = resp.json()
     except Exception as e:
         logging.WARNING(e)
-    # logging.info(f"resp={resp}")
-    # print("result", result)
+
     return result
 
 
