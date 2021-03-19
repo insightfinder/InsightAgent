@@ -25,6 +25,7 @@ from multiprocessing import Process, Queue
 import queue
 from dateutil import parser
 import traceback
+from pprint import pprint
 
 '''
 This script gathers data to send to Insightfinder
@@ -143,7 +144,7 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             http_status = tags_dict.get("http_status")
             service_alias = tags_dict.get('service_alias', '')
 
-            if not service_alias:
+            if not service_alias or not http_status:
                 continue
 
             if agent_config_vars['service_alias_filter'] and \
@@ -253,7 +254,7 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
 
             logger.info(f"sender child thread: process takes {time.time()-start_time:8.4f} secs")
             if  len(metric_data_list) > 0:
-                print("metric data list:", metric_data_list)
+                pprint(metric_data_list)
                 for chunk in data_chunks(metric_data_list, if_config_vars["chunk_size"]):
                     # TODO: process chunk of data
                     send_data(chunk)
