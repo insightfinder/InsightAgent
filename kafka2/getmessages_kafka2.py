@@ -161,10 +161,11 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             item['timestamp'] = ts
             item['metric_vals']['timestamp'] = str(ts * 1000)
             item['metric_vals']['http_status'] = http_status
+            item['metric_vals']['instance'] = instance
 
             for field in target_fields:
                 v = fields_dict.get(field)
-                field_name = '{}-{}[{}]'.format(field, http_status, instance)
+                field_name = field #'{}-{}[{}]'.format(field, http_status, instance)
                 item['metric_vals'][field_name] = None if v == 'null' else v
                 # if v is None or (isinstance(v, str) and v.lower() == 'null'):
                 #     continue
@@ -697,7 +698,7 @@ def get_cli_config_vars():
     if options.processes:
         config_vars['processes'] = int(options.processes)
 
-    config_vars['log_level'] = eval(options.log_level)
+    config_vars['log_level'] = eval(options.log_level or 'logging.WARNING')
 
     return config_vars
 
