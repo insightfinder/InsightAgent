@@ -78,110 +78,6 @@ def send_data_wrapper(data, ts_min, ts_max):
     send_data(data)
 
 
-def update_nested_dict(data, key, field, v):
-    logger.debug(f"update_nested_dict - key={key}")
-    tmp = data.get(key, {})
-    tmp.update({field: v})
-    data.update({key: tmp})
-
-
-# columns = ['name', 'timestamp', 'fields', 'tags', 'eb_time']
-def worker(q, tx_q):
-    """ process message from q """
-    # TODO: do we need worry about stack size ??? data can be big.
-    logger.debug(f"pid {os.getpid()} started")
-
-    # init data
-    WAIT_PERIOD = 60
-    data = {}
-
-    while True:
-        # outfile = open("messages.txt","a")
-        try:
-            message = q.get(timeout=WAIT_PERIOD)
-            t_start = time.time()
-            ts_rcv = int(t_start)
-            logger.debug(f"pid={os.getpid()}, message={message}")
-            # outfile.write(str(message.value))
-            # outfile.write("\n")
-            # name, ts_str, fields, tags, _ = read_csv(str(message.value))
-            # msg_dict = json.loads(str(message.value))
-            msg_dict = json.loads(message.value.decode("ascii", errors='ignore'))
-            # logger.debug(f"msg_dict: {msg_dict}")
-            tags_dict = msg_dict.get("tags", {})
-            # logger.debug(f"tags_dict: {tags_dict}")
-            ts_ = parser.isoparse(tags_dict['time_bucket'])
-            service_alias = tags_dict.get('service_alias', '')
-
-            if service_alias:
-                ts = int(float(ts_.timestamp()))
-                ts_str = str(ts)
-                client_alias = tags_dict.get('client_alias', '')
-                instance = "{}_{}".format(client_alias, service_alias)
-                fields_dict = msg_dict.get("fields", {})
-                # logger.debug(f"fields_dict: {fields_dict}")
-                key = f'{instance}@{ts_str}'
-
-                for field in target_fields:
-                    v = fields_dict.get(field, '')
-                    # logger.debug(f"field={field}, v={v}")
-                    if not v or (isinstance(v, str) and v.lower() == 'null'):
-                        continue
-                    update_nested_dict(data, key, field, v)
-                    logger.debug(f"key={key}, field={field}, v={v}")
-
-                if key in data:
-                    update_nested_dict(data, key, 'timestamp', ts)
-                    update_nested_dict(data, key, 'ts_rcv', ts_rcv)
-
-        except ValueError as e:
-            logger.warning(e)
-
-        except Exception as e:  # TODO: add more types
-            logger.warning(e)
-
-        # finally:
-        #     outfile.close()
-
-        # load data to tx buffer
-        tx_buffer = []
-        ts_max = 0
-        ts_min = 1e38
-        # TODO: make 1 mins configurable
-        keys_sent = []
-
-        # go through all items in data , check
-        # - if the fields are complete, send and rm key
-        # - if the msg is stale
-
-        logger.debug(f"processing {len(data)} data items ...")
-        for k, v in data.items():
-            ts_rcv = v['ts_rcv']
-            ts = v['timestamp']
-
-            if has_all_fields(v):
-                logger.debug("collected all fields")
-                tx_buffer.append(format_data(data[k], ts, k))
-                keys_sent.append(k)
-
-            elif time.time() - ts_rcv > WAIT_PERIOD:
-                logger.debug("send delayed message")
-                tx_buffer.append(format_data(data[k], ts, k))
-                keys_sent.append(k)
-
-        # now remove the sent items from data
-        for k in keys_sent:
-            data.pop(k)
-            logger.debug(f"pop key {k}")
-        logger.debug(f"process time: {time.time() - t_start} secs")
-
-        # send data to IF...
-        logger.debug(f"tx_buffer {len(tx_buffer)}")
-        for item in tx_buffer:
-            logger.debug(f"add item {item} to tx_q {tx_q}")
-            tx_q.put(item)
-
-
 def get_kafka_consumer():
     consumer_args = agent_config_vars['kafka_kwargs']
 
@@ -229,25 +125,6 @@ def consumer_process(q, logger, agent_config_vars):
             break
 
 
-def sender_process(q):
-    logger.info(f"sender_process {os.getpid()} started")
-    tx_buffer = []
-    BUFFER_SIZE = 4
-
-    while True:
-        try:
-            item = q.get()
-            logger.debug(f"get item {item}")
-            tx_buffer.append(item)
-
-            if len(tx_buffer) > BUFFER_SIZE:
-                send_data(tx_buffer)
-                tx_buffer = []
-
-        except Exception as e:
-            logger.warning(e)
-
-
 def new_worker_process(q, tx_q, logger, agent_config_vars):
     """ process message from q """
     logger.debug(f"pid {os.getpid()} started")
@@ -263,7 +140,7 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             msg_dict = json.loads(message.value.decode("ascii", errors='ignore'))
             tags_dict = msg_dict.get("tags", {})
             ts_ = parser.isoparse(tags_dict['time_bucket'])
-            http_status = tags_dict.get("http_status", "")
+            http_status = tags_dict.get("http_status")
             service_alias = tags_dict.get('service_alias', '')
 
             if not service_alias:
@@ -283,24 +160,27 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             item['key'] = key
             item['timestamp'] = ts
             item['metric_vals']['timestamp'] = str(ts * 1000)
+            item['metric_vals']['http_status'] = http_status
 
             for field in target_fields:
                 v = fields_dict.get(field)
-                if v is None or (isinstance(v, str) and v.lower() == 'null'):
-                    continue
+                field_name = '{}-{}[{}]'.format(field, http_status, instance)
+                item['metric_vals'][field_name] = None if v == 'null' else v
+                # if v is None or (isinstance(v, str) and v.lower() == 'null'):
+                #     continue
 
-                if field == 'req_count':
-                    # collect req_count separately for different http status
-                    for code in http_status_codes:
-                        field_name = '{}-{}[{}]'.format(field, code, instance)
-                        item['metric_vals'][field_name] = \
-                            str(v) if code == http_status else "0"
+                # if field == 'req_count':
+                #     # collect req_count separately for different http status
+                #     for code in http_status_codes:
+                #         field_name = '{}-{}[{}]'.format(field, code, instance)
+                #         item['metric_vals'][field_name] = \
+                #             str(v) if code == http_status else "0"
 
-                else:
-                    # collect other fields only for http status 2xx
-                    if http_status == '2xx':
-                        field_name = '{}-{}[{}]'.format(field, http_status, instance)
-                        item['metric_vals'][field_name] = str(v)
+                # else:
+                #     # collect other fields only for http status 2xx
+                #     if http_status == '2xx':
+                #         field_name = '{}-{}[{}]'.format(field, http_status, instance)
+                #         item['metric_vals'][field_name] = str(v)
 
 
         except ValueError as e:
@@ -365,8 +245,14 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
             # send data
             logger.info(f"metric_data_list length={len(metric_data_list)}")
 
+            # process metric_data_list here
+            # each item has timestamp, http status, metric values
+            # create a pandas data frame and perform calculation
+
+
             logger.info(f"sender child thread: process takes {time.time()-start_time:8.4f} secs")
             if  len(metric_data_list) > 0:
+                print("metric data list:", metric_data_list)
                 for chunk in data_chunks(metric_data_list, if_config_vars["chunk_size"]):
                     # TODO: process chunk of data
                     send_data(chunk)
