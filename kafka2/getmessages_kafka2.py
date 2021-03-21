@@ -26,14 +26,24 @@ import queue
 from dateutil import parser
 import traceback
 from pprint import pprint
+import pandas as pd
 
 '''
 This script gathers data to send to Insightfinder
 '''
+logging.basicConfig(level=logging.WARNING,
+                    format=('%(asctime)-15s'
+                            '%(filename)s: '
+                            '%(levelname)s: '
+                            '%(funcName)s(): '
+                            '%(lineno)d:\t'
+                            '%(message)s')
+                        )
+
 
 # TODO: load target_fields from config
-target_fields = ['svc_mean', 'tx_mean', 'value', 'req_count']
-added_fields = ['timestamp', 'ts_rcv']
+target_fields = ['svc_mean', 'tx_mean', 'req_count'] # 'value',
+columns = ['timestamp','instance', 'http_status'] + target_fields
 tx_q = Queue()
 WAIT_PERIOD = 10 * 60
 
@@ -50,33 +60,6 @@ def read_csv(s):
     "read s with quote char"
     csv_reader = csv.reader([s], skipinitialspace=True)
     return next(csv_reader)
-
-
-def has_all_fields(msg_dict):
-    # simply check the size
-    return len(msg_dict) >= len(target_fields) + len(added_fields)
-
-
-def format_data(data, ts, key):
-    """ format data buffer per IF protocols """
-    logger.debug(f"format_data: {ts} {key} {data}")
-    out = {}
-    instance, ts_str = key.split('@')
-    # timestamp is a str with epoc time in msec.
-    out['timestamp'] = str(int(ts * 1000))
-    for k, v in data.items():
-        out.update({f"{k}[{instance}]": str(v)})
-    return out
-
-
-def send_data_wrapper(data, ts_min, ts_max):
-    logger.info("send_data_wrapper: between {} and {}, size={}".format(
-        ts_min, ts_max, len(data)))
-    logger.info("date range:{} and {}".format(
-        datetime.fromtimestamp(ts_min),
-        datetime.fromtimestamp(ts_max)
-    ))
-    send_data(data)
 
 
 def get_kafka_consumer():
@@ -160,7 +143,10 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
 
             item['key'] = key
             item['timestamp'] = ts
-            item['metric_vals']['timestamp'] = str(ts * 1000)
+
+            # change metric_vals to a list
+            # [timestamp, instance, http_status, svc_mean, tx_mean, req_count]
+            item['metric_vals']['timestamp'] = ts * 1000
             item['metric_vals']['http_status'] = http_status
             item['metric_vals']['instance'] = instance
 
@@ -210,6 +196,55 @@ def get_buffer_size(data):
     return len(json.dumps(data))
 
 
+def buffer_metric_data(metric_data_list, items):
+    for item in items:
+        metric_data_list.append((item['timestamp'], item['instance'], item['http_status'],
+            item['svc_mean'], item['tx_mean'], item['req_count']))
+
+
+def encode_fields(data):
+    """ encode a list of data fields into IF format """
+    instance, code, req_count, svc_mean, tx_mean, timestamp = data
+    result = { "timestamp": str(timestamp),
+               f"req_count_{code}[{instance}]": str(req_count),
+               f"svc_mean_{code}[{instance}]": str(svc_mean),
+               f"tx_mean_{code}[{instance}]": str(tx_mean)
+            }
+    return json.dumps(result)
+
+
+def proc_metric_data_list(metric_data_list):
+    """ aggregate by instance and http status code
+        backfill with 0 for missed categories
+        and proper encode each item
+    """
+    df = pd.DataFrame(data=metric_data_list, columns = columns)
+
+    df2 =df.groupby(['instance', 'http_status']).agg({
+        'req_count': ['sum'], 'svc_mean':['mean'], 'tx_mean':['mean'],
+        'timestamp':['min']})
+
+    http_status_codes = set(['2xx', '3xx', '4xx', '5xx'])
+    prev_instance = None
+    codes = set()
+    l = []
+    for group, val in df2.fillna(0).iterrows():
+        instance, code = group
+
+        if instance != prev_instance and prev_instance is not None:
+            # fill 0 for prev_instance
+            for code in http_status_codes - codes:
+                t = (prev_instance, code, *[0]*len(val))
+                l.append(encode_fields(t))
+            codes.clear()
+
+        # process instance
+        t = (instance, code, *[str(i) for i in val])
+        l.append(encode_fields(t))
+        prev_instance = instance
+        codes.add(code)
+    return l
+
 def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
     metric_data_list = []
     interval = if_config_vars['sampling_interval']
@@ -219,7 +254,7 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
         start_time = time.time()
         try:
             # check the buffer
-            logger.debug(f"buffer_d keys={buffer_d.keys()}")
+            # logger.debug(f"buffer_d keys={buffer_d.keys()}")
 
             # flush buffer if we haven't received any data for a long time
             time_elapsed = time.time() - args_d['latest_received_time']
@@ -227,7 +262,7 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
                 logger.debug(f"time_elapsed:{time_elapsed} since latest_received_time={args_d['latest_received_time']}")
                 if lock.acquire():
                     for key_item in buffer_d.values():
-                        metric_data_list += key_item.values()
+                        buffer_metric_data(metric_data_list, key_item.values())
                     buffer_d.clear()
                     lock.release()
 
@@ -238,7 +273,7 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
                 keys_to_drop = []
                 if lock.acquire():
                     for ts in filter(lambda x: x < expire_time, buffer_d.keys()):
-                        metric_data_list += buffer_d[ts].values()
+                        buffer_metric_data(metric_data_list, buffer_d[ts].values())
                         keys_to_drop.append(ts)
                     for ts in keys_to_drop:
                         buffer_d.pop(ts)
@@ -247,15 +282,12 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
             # send data
             logger.info(f"metric_data_list length={len(metric_data_list)}")
 
-            # process metric_data_list here
-            # each item has timestamp, http status, metric values
-            # create a pandas data frame and perform calculation
-
-
             logger.info(f"sender child thread: process takes {time.time()-start_time:8.4f} secs")
             if  len(metric_data_list) > 0:
-                pprint(metric_data_list)
-                for chunk in data_chunks(metric_data_list, if_config_vars["chunk_size"]):
+                metric_data_list_processed = proc_metric_data_list(metric_data_list)
+
+                # pprint(metric_data_list)
+                for chunk in data_chunks(metric_data_list_processed, if_config_vars["chunk_size"]):
                     # TODO: process chunk of data
                     send_data(chunk)
                 metric_data_list.clear()
@@ -1605,78 +1637,6 @@ def send_data_to_receiver(post_url, to_send_data, num_of_message):
         sys.exit(1)
 
 
-# def send_data_wrapper():
-#     """ wrapper to send data """
-#     logger.debug('--- Chunk creation time: {} seconds ---'.format(
-#         round(time.time() - track['start_time'], 2)))
-#     send_data_to_if(track['current_row'])
-#     track['chunk_count'] += 1
-#     reset_track()
-
-
-# def send_data_to_if(chunk_metric_data):
-#     send_data_time = time.time()
-
-#     # prepare data for metric streaming agent
-#     data_to_post = initialize_api_post_data()
-#     if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
-#         for chunk in chunk_metric_data:
-#             chunk['data'] = json.dumps(chunk['data'])
-#     data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
-
-#     # logger.debug('First:\n' + str(chunk_metric_data[0]))
-#     # logger.debug('Last:\n' + str(chunk_metric_data[-1]))
-#     logger.debug('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
-#     # logger.debug('Total Lines: ' + str(track['line_count']))
-#     data_to_post = json.dumps(data_to_post)
-#     logger.debug('data type {}'.format(type(data_to_post)))
-
-#     # do not send if only testing
-#     if cli_config_vars['testing']:
-#         return
-
-#     # send the data
-#     post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
-#     logger.debug("send_data_to_if: url={} total bytes={} data={}".format(
-#         post_url, get_json_size_bytes(data_to_post), data_to_post))
-#     send_request(post_url, 'POST', 'Could not send request to IF',
-#                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
-#                  data=data_to_post, proxies=if_config_vars['if_proxies'])
-#     logger.debug('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
-
-
-# def send_request(url, mode='GET', failure_message='Failure!', success_message='Success!', **request_passthrough):
-#     """ sends a request to the given url """
-#     # determine if post or get (default)
-#     req = requests.get
-#     if mode.upper() == 'POST':
-#         req = requests.post
-
-#     for i in range(ATTEMPTS):
-#         try:
-#             response = req(url, **request_passthrough)
-#             if response.status_code == httplib.OK:
-#                 logger.info(success_message)
-#                 return response
-#             else:
-#                 logger.warn(failure_message)
-#                 logger.debug('Response Code: {}\nTEXT: {}'.format(
-#                     response.status_code, response.text))
-#         # handle various exceptions
-#         except requests.exceptions.Timeout:
-#             logger.exception('Timed out. Reattempting...')
-#             continue
-#         except requests.exceptions.TooManyRedirects:
-#             logger.exception('Too many redirects.')
-#             break
-#         except requests.exceptions.RequestException as e:
-#             logger.exception('Exception ' + str(e))
-#             break
-
-#     logger.error('Failed! Gave up after {} attempts.'.format(i))
-#     return -1
-
-
 def get_data_type_from_project_type():
     if 'METRIC' in if_config_vars['project_type']:
         return 'Metric'
@@ -1793,16 +1753,3 @@ if __name__ == "__main__":
 
     # start data processing
     start_data_processing()
-
-    # process_list = []
-    # for i in range(0, cli_config_vars['threads']):
-    #     p = Process(target=initialize_data_gathering,
-    #                 args=(i,)
-    #                 )
-    #     process_list.append(p)
-
-    # for p in process_list:
-    #     p.start()
-
-    # for p in process_list:
-    #     p.join()
