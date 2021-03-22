@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import ConfigParser
+import configparser
 import json
 import logging
 import os
@@ -9,11 +9,9 @@ import sys
 import time
 import pytz
 import arrow
-import urlparse
-import httplib
+import urllib.parse
+import http.client
 import requests
-import statistics
-import subprocess
 import shlex
 import traceback
 
@@ -31,7 +29,7 @@ def start_data_processing():
     # get metrics
     metrics = []
     if len(agent_config_vars['metrics']) == 0:
-        url = urlparse.urljoin(agent_config_vars['api_url'], 'label/__name__/values')
+        url = urllib.parse.urljoin(agent_config_vars['api_url'], 'label/__name__/values')
         response = send_request(url, params={}, proxies=agent_config_vars['proxies'])
         if response != -1:
             result = response.json()
@@ -49,7 +47,7 @@ def start_data_processing():
 
     # filter metrics
     if agent_config_vars['metrics_to_ignore'] and len(agent_config_vars['metrics_to_ignore']) > 0:
-        metrics = filter(lambda x: x not in agent_config_vars['metrics_to_ignore'], metrics)
+        metrics = [x for x in metrics if x not in agent_config_vars['metrics_to_ignore']]
 
     if len(metrics) == 0:
         logger.error('Metric list is empty')
@@ -99,7 +97,7 @@ def query_messages_prometheus(metric, params):
     logger.info('Starting query metric: ' + metric)
 
     # execute sql string
-    url = urlparse.urljoin(agent_config_vars['api_url'], 'query')
+    url = urllib.parse.urljoin(agent_config_vars['api_url'], 'query')
     response = send_request(url, params=params, proxies=agent_config_vars['proxies'])
     if response == -1:
         logger.error('Query metric error: ' + metric)
@@ -169,7 +167,7 @@ def get_agent_config_vars():
     """ Read and parse config.ini """
     config_ini = config_ini_path()
     if os.path.exists(config_ini):
-        config_parser = ConfigParser.SafeConfigParser()
+        config_parser = configparser.ConfigParser()
         config_parser.read(config_ini)
 
         prometheus_kwargs = {}
@@ -183,14 +181,14 @@ def get_agent_config_vars():
             # prometheus settings
             prometheus_config = {}
             # only keep settings with values
-            prometheus_kwargs = {k: v for (k, v) in prometheus_config.items() if v}
+            prometheus_kwargs = {k: v for (k, v) in list(prometheus_config.items()) if v}
 
             # handle boolean setting
 
             # handle required arrays
             if len(config_parser.get('prometheus', 'prometheus_uri')) != 0:
                 prometheus_uri = config_parser.get('prometheus', 'prometheus_uri')
-                api_url = urlparse.urljoin(prometheus_uri, '/api/v1/')
+                api_url = urllib.parse.urljoin(prometheus_uri, '/api/v1/')
             else:
                 config_error('prometheus_uri')
 
@@ -218,20 +216,19 @@ def get_agent_config_vars():
             timezone = config_parser.get('prometheus', 'timezone') or 'UTC'
             data_fields = config_parser.get('prometheus', 'data_fields', raw=True)
 
-        except ConfigParser.NoOptionError as cp_noe:
+        except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
 
         # metrics
         if len(metrics) != 0:
-            metrics = filter(lambda x: x.strip(), metrics.split(','))
+            metrics = [x for x in metrics.split(',') if x.strip()]
         if len(metrics_to_ignore) != 0:
-            metrics_to_ignore = filter(lambda x: x.strip(), metrics_to_ignore.split(','))
+            metrics_to_ignore = [x for x in metrics_to_ignore.split(',') if x.strip()]
 
         if len(his_time_range) != 0:
-            his_time_range = filter(lambda x: x.strip(),
-                                    his_time_range.split(','))
-            his_time_range = map(lambda x: int(arrow.get(x).float_timestamp), his_time_range)
+            his_time_range = [x for x in his_time_range.split(',') if x.strip()]
+            his_time_range = [int(arrow.get(x).float_timestamp) for x in his_time_range]
 
         if len(target_timestamp_timezone) != 0:
             target_timestamp_timezone = int(arrow.now(target_timestamp_timezone).utcoffset().total_seconds())
@@ -262,8 +259,8 @@ def get_agent_config_vars():
 
         # fields
         # project_fields = project_field.split(',')
-        instance_fields = filter(lambda x: x.strip(), instance_field.split(','))
-        device_fields = filter(lambda x: x.strip(), device_field.split(','))
+        instance_fields = [x for x in instance_field.split(',') if x.strip()]
+        device_fields = [x for x in device_field.split(',') if x.strip()]
         timestamp_fields = timestamp_field.split(',')
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
@@ -314,7 +311,7 @@ def get_if_config_vars():
     """ get config.ini vars """
     config_ini = config_ini_path()
     if os.path.exists(config_ini):
-        config_parser = ConfigParser.SafeConfigParser()
+        config_parser = configparser.ConfigParser()
         config_parser.read(config_ini)
         try:
             user_name = config_parser.get('insightfinder', 'user_name')
@@ -328,7 +325,7 @@ def get_if_config_vars():
             if_url = config_parser.get('insightfinder', 'if_url')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
-        except ConfigParser.NoOptionError as cp_noe:
+        except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
 
@@ -585,7 +582,7 @@ def initialize_data_gathering():
 
 def clear_metric_buffer():
     # move all buffer data to current data, and send
-    buffer_values = metric_buffer['buffer_dict'].values()
+    buffer_values = list(metric_buffer['buffer_dict'].values())
 
     count = 0
     for row in buffer_values:
@@ -651,7 +648,7 @@ def send_data_to_if(chunk_metric_data):
         return
 
     # send the data
-    post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
+    post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
     send_request(post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
                  data=data_to_post, verify=False, proxies=if_config_vars['if_proxies'])
@@ -674,7 +671,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     for req_num in range(ATTEMPTS):
         try:
             response = req(url, **request_passthrough)
-            if response.status_code == httplib.OK:
+            if response.status_code == http.client.OK:
                 logger.info(success_message)
                 return response
             else:
