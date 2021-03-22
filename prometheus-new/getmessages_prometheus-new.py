@@ -16,7 +16,9 @@ import shlex
 import traceback
 
 from sys import getsizeof
+from itertools import chain
 from optparse import OptionParser
+from multiprocessing.pool import ThreadPool
 
 """
 This script gathers data to send to Insightfinder
@@ -54,19 +56,20 @@ def start_data_processing():
         sys.exit(1)
 
     # parse sql string by params
+    pool_map = ThreadPool(agent_config_vars['thread_pool'])
     logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
     if agent_config_vars['his_time_range']:
         logger.debug('Using time range for replay data')
         for timestamp in range(agent_config_vars['his_time_range'][0],
                                agent_config_vars['his_time_range'][1],
                                if_config_vars['sampling_interval']):
-            for metric in metrics:
-                # use resultType: "vector"
-                params = {
-                    'query': metric + agent_config_vars['query_label_selector'],
-                    'time': timestamp,
-                }
-                query_messages_prometheus(metric, params)
+            params = [(m, {
+                'query': m + agent_config_vars['query_label_selector'],
+                'time': timestamp,
+            }) for m in metrics]
+            results = pool_map.map(query_messages_prometheus, params)
+            result_list = list(chain(*results))
+            parse_messages_prometheus(result_list)
 
             # clear metric buffer when piece of time range end
             clear_metric_buffer()
@@ -76,37 +79,40 @@ def start_data_processing():
         # start_time = time_now - if_config_vars['sampling_interval']
         # end_time = time_now
 
-        for metric in metrics:
-            # use resultType: "vector"
-            params = {
-                'query': metric + agent_config_vars['query_label_selector'],
-                'time': time_now,
-                # 'start': start_time,
-                # 'end': end_time,
-                # 'step': if_config_vars['sampling_interval']
-            }
-            query_messages_prometheus(metric, params)
-
-        # clear metric buffer when piece of time range end
-        clear_metric_buffer()
+        params = [(m, {
+            'query': m + agent_config_vars['query_label_selector'],
+            'time': time_now,
+        }) for m in metrics]
+        results = pool_map.map(query_messages_prometheus, params)
+        result_list = list(chain(*results))
+        parse_messages_prometheus(result_list)
 
     logger.info('Closed......')
 
 
-def query_messages_prometheus(metric, params):
+def query_messages_prometheus(args):
+    metric, params = args
     logger.info('Starting query metric: ' + metric)
 
-    # execute sql string
-    url = urllib.parse.urljoin(agent_config_vars['api_url'], 'query')
-    response = send_request(url, params=params, proxies=agent_config_vars['proxies'])
-    if response == -1:
-        logger.error('Query metric error: ' + metric)
-    else:
-        result = response.json()
-        if result['status'] != 'success':
+    data = []
+    try:
+        # execute sql string
+        url = urllib.parse.urljoin(agent_config_vars['api_url'], 'query')
+        response = send_request(url, params=params, proxies=agent_config_vars['proxies'])
+        if response == -1:
             logger.error('Query metric error: ' + metric)
         else:
-            parse_messages_prometheus(result.get('data').get('result'))
+            result = response.json()
+            if result['status'] != 'success':
+                logger.error('Query metric error: ' + metric)
+            else:
+                data = result.get('data').get('result', [])
+
+    except Exception as e:
+        logger.error(e)
+        logger.error('Query metric error: ' + metric)
+
+    return data
 
 
 def parse_messages_prometheus(result):
@@ -115,7 +121,6 @@ def parse_messages_prometheus(result):
 
     for message in result:
         try:
-            logger.debug('Message received')
             logger.debug(message)
 
             # filter if quantile != 1
@@ -215,6 +220,7 @@ def get_agent_config_vars():
             timestamp_format = config_parser.get('prometheus', 'timestamp_format', raw=True)
             timezone = config_parser.get('prometheus', 'timezone') or 'UTC'
             data_fields = config_parser.get('prometheus', 'data_fields', raw=True)
+            thread_pool = config_parser.get('prometheus', 'thread_pool', raw=True)
 
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
@@ -277,6 +283,11 @@ def get_agent_config_vars():
                 if timestamp_field in data_fields:
                     data_fields.pop(data_fields.index(timestamp_field))
 
+        if len(thread_pool) != 0:
+            thread_pool = int(thread_pool)
+        else:
+            thread_pool = 20
+
         # add parsed variables to a global
         config_vars = {
             'prometheus_kwargs': prometheus_kwargs,
@@ -297,6 +308,7 @@ def get_agent_config_vars():
             'target_timestamp_timezone': target_timestamp_timezone,
             'timezone': timezone,
             'timestamp_format': timestamp_format,
+            'thread_pool': thread_pool,
         }
 
         return config_vars
@@ -663,16 +675,11 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     if mode.upper() == 'POST':
         req = requests.post
 
-    global REQUESTS
-    REQUESTS.update(request_passthrough)
-    # logger.debug(REQUESTS)
-
     req_num = 0
     for req_num in range(ATTEMPTS):
         try:
             response = req(url, **request_passthrough)
             if response.status_code == http.client.OK:
-                logger.info(success_message)
                 return response
             else:
                 logger.warn(failure_message)
@@ -793,7 +800,6 @@ if __name__ == "__main__":
     JSON_LEVEL_DELIM = '.'
     CSV_DELIM = r",|\t"
     ATTEMPTS = 3
-    REQUESTS = dict()
     track = dict()
     metric_buffer = dict()
 
