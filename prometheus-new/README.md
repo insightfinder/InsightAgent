@@ -51,12 +51,8 @@ sudo ./offline/remote-cp-run.sh list_of_nodes -f <nodelist_file>
 Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
 
 #### Manual Install (local only)
-###### Check Python version & upgrade if using Python 3
-```bash
-if [[ $(python -V 2>&1 | awk '{ print substr($NF, 1, 1) }') == "3" ]]; then \
-2to3 -w getmessages_prometheus.py; \
-else echo "No upgrade needed"; fi
-```
+###### Check Python version
+Agent required Python 3 environment.
 
 ###### Setup pip & required packages:
 ```bash
