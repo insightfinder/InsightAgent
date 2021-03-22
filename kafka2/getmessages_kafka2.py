@@ -186,15 +186,15 @@ def buffer_metric_data(metric_data_list, items):
 
 
 def encode_fields(data):
-    """ encode a list of data fields into IF format """
+    """ encode data fields into dict per IF requirements """
     instance, code, req_count, svc_mean, tx_mean, timestamp = data
-    # TODO: find out where timestamp get str float type.
+    # TODO: find out where timestamp get str float type. possibly pandas
     result = { "timestamp": str(int(float(timestamp))),
                f"req_count_{code}[{instance}]": str(req_count),
                f"svc_mean_{code}[{instance}]": str(svc_mean),
                f"tx_mean_{code}[{instance}]": str(tx_mean)
             }
-    return json.dumps(result)
+    return result
 
 
 def proc_metric_data_list(metric_data_list):
@@ -377,7 +377,7 @@ def start_data_processing():
 def get_agent_config_vars():
     """ Read and parse config.ini """
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))):
-        config_parser = configparser.SafeConfigParser()
+        config_parser = configparser.ConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
         try:
             # proxy settings
@@ -598,7 +598,7 @@ def get_agent_config_vars():
 def get_if_config_vars():
     """ get config.ini vars """
     if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))):
-        config_parser = configparser.SafeConfigParser()
+        config_parser = configparser.ConfigParser()
         config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
         try:
             user_name = config_parser.get('insightfinder', 'user_name')
