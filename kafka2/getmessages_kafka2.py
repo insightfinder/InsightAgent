@@ -32,7 +32,7 @@ import pandas as pd
 This script gathers data to send to Insightfinder
 '''
 logging.basicConfig(level=logging.WARNING,
-                    format=('%(asctime)-15s'
+                    format=('%(asctime)-15s '
                             '%(filename)s: '
                             '%(levelname)s: '
                             '%(funcName)s(): '
@@ -118,24 +118,25 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
         item = {'key': None, 'metric_vals': {}}
         start_time = time.time()
         try:
-            logger.info(f"rx_q size {q.qsize()}")
+            logger.debug(f"rx_q size {q.qsize()}")
             message = q.get(timeout=60)
-            logger.debug(f"pid={os.getpid()}, got a message")
+            logger.info("got a message")
             msg_dict = json.loads(message.value.decode("ascii", errors='ignore'))
             tags_dict = msg_dict.get("tags", {})
-            ts_ = parser.isoparse(tags_dict['time_bucket'])
+            # ts_ = parser.isoparse(tags_dict['time_bucket'])
             http_status = tags_dict.get("http_status")
             service_alias = tags_dict.get('service_alias', '')
 
             if not service_alias or not http_status:
+                logger.info("message dropped: no service alias or http_status")
                 continue
 
             if agent_config_vars['service_alias_filter'] and \
                 service_alias not in agent_config_vars['service_alias_filter']:
-                logger.debug(f"service_alias:{service_alias} got filtered!")
+                logger.info("message dropped: filtered.")
                 continue
 
-            ts = int(float(ts_.timestamp()))
+            ts = msg_dict.get("timestamp", 0)
             client_alias = tags_dict.get('client_alias', '')
             instance = "{}_{}".format(client_alias, service_alias)
             fields_dict = msg_dict.get("fields", {})
@@ -144,32 +145,14 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             item['key'] = key
             item['timestamp'] = ts
 
-            # change metric_vals to a list
-            # [timestamp, instance, http_status, svc_mean, tx_mean, req_count]
+            # save metric_vals
             item['metric_vals']['timestamp'] = ts * 1000
             item['metric_vals']['http_status'] = http_status
             item['metric_vals']['instance'] = instance
 
             for field in target_fields:
                 v = fields_dict.get(field)
-                field_name = field #'{}-{}[{}]'.format(field, http_status, instance)
-                item['metric_vals'][field_name] = None if v == 'null' else v
-                # if v is None or (isinstance(v, str) and v.lower() == 'null'):
-                #     continue
-
-                # if field == 'req_count':
-                #     # collect req_count separately for different http status
-                #     for code in http_status_codes:
-                #         field_name = '{}-{}[{}]'.format(field, code, instance)
-                #         item['metric_vals'][field_name] = \
-                #             str(v) if code == http_status else "0"
-
-                # else:
-                #     # collect other fields only for http status 2xx
-                #     if http_status == '2xx':
-                #         field_name = '{}-{}[{}]'.format(field, http_status, instance)
-                #         item['metric_vals'][field_name] = str(v)
-
+                item['metric_vals'][field] = None if v == 'null' else v
 
         except ValueError as e:
             logger.warning(e)
@@ -184,10 +167,10 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             print("-" * 60)
 
         if item['key'] is not None:
-            logger.debug("put item {item['key']} in the tx_q")
+            logger.debug(f"put item {item['key']} in the tx_q")
             tx_q.put(item)
 
-        logger.info(f"new_worker_process: processed in {time.time()-start_time:8.4f} secs")
+        logger.debug(f"new_worker_process: processed in {time.time()-start_time:8.4f} secs")
 
 
 
@@ -205,7 +188,8 @@ def buffer_metric_data(metric_data_list, items):
 def encode_fields(data):
     """ encode a list of data fields into IF format """
     instance, code, req_count, svc_mean, tx_mean, timestamp = data
-    result = { "timestamp": str(timestamp),
+    # TODO: find out where timestamp get str float type.
+    result = { "timestamp": str(int(float(timestamp))),
                f"req_count_{code}[{instance}]": str(req_count),
                f"svc_mean_{code}[{instance}]": str(svc_mean),
                f"tx_mean_{code}[{instance}]": str(tx_mean)
@@ -218,6 +202,7 @@ def proc_metric_data_list(metric_data_list):
         backfill with 0 for missed categories
         and proper encode each item
     """
+    logging.info(f"len of metric_data_list: {len(metric_data_list)}")
     df = pd.DataFrame(data=metric_data_list, columns = columns)
 
     df2 =df.groupby(['instance', 'http_status']).agg({
@@ -229,12 +214,13 @@ def proc_metric_data_list(metric_data_list):
     codes = set()
     l = []
     for group, val in df2.fillna(0).iterrows():
+        req_count, svc_mean, tx_mean, timestamp = val
         instance, code = group
 
         if instance != prev_instance and prev_instance is not None:
             # fill 0 for prev_instance
             for code in http_status_codes - codes:
-                t = (prev_instance, code, *[0]*len(val))
+                t = (prev_instance, code, 0, 0, 0, timestamp)
                 l.append(encode_fields(t))
             codes.clear()
 
@@ -254,7 +240,7 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
         start_time = time.time()
         try:
             # check the buffer
-            # logger.debug(f"buffer_d keys={buffer_d.keys()}")
+            logger.debug(f"find {len(buffer_d)} items")
 
             # flush buffer if we haven't received any data for a long time
             time_elapsed = time.time() - args_d['latest_received_time']
@@ -279,20 +265,12 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
                         buffer_d.pop(ts)
                     lock.release()
 
-            # send data
-            logger.info(f"metric_data_list length={len(metric_data_list)}")
-
-            logger.info(f"sender child thread: process takes {time.time()-start_time:8.4f} secs")
             if  len(metric_data_list) > 0:
                 metric_data_list_processed = proc_metric_data_list(metric_data_list)
 
-                # pprint(metric_data_list)
                 for chunk in data_chunks(metric_data_list_processed, if_config_vars["chunk_size"]):
-                    # TODO: process chunk of data
                     send_data(chunk)
                 metric_data_list.clear()
-
-            logger.info(f"sender child thread: total {time.time()-start_time:8.4f} secs")
 
         except Exception:
             print("-" * 60)
@@ -317,8 +295,9 @@ def new_sender_process(q, logger, if_config_vars):
     while True:
         start_time = time.time()
         try:
-            logger.info(f"tx_q size: {q.qsize()}")
+            logger.debug(f"tx_q size: {q.qsize()}")
             item = q.get()
+            logger.debug("get an item")
 
             timestamp = item['timestamp']
             # update latest messages time
@@ -343,6 +322,7 @@ def new_sender_process(q, logger, if_config_vars):
                 buffer_dict[timestamp][key].update(item['metric_vals'])
                 thread_lock.release()
             logger.debug(f"new item dict={buffer_dict[timestamp][key]}")
+            logger.info("processed item")
 
         except Exception:
             print("-" * 60)
