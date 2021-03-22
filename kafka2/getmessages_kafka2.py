@@ -118,7 +118,6 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
         item = {'key': None, 'metric_vals': {}}
         start_time = time.time()
         try:
-            logger.debug(f"rx_q size {q.qsize()}")
             message = q.get(timeout=60)
             logger.info("got a message")
             msg_dict = json.loads(message.value.decode("ascii", errors='ignore'))
@@ -295,7 +294,6 @@ def new_sender_process(q, logger, if_config_vars):
     while True:
         start_time = time.time()
         try:
-            logger.debug(f"tx_q size: {q.qsize()}")
             item = q.get()
             logger.debug("get an item")
 
