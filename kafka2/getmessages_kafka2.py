@@ -31,14 +31,6 @@ import pandas as pd
 '''
 This script gathers data to send to Insightfinder
 '''
-logging.basicConfig(level=logging.WARNING,
-                    format=('%(asctime)-15s '
-                            '%(filename)s: '
-                            '%(levelname)s: '
-                            '%(funcName)s(): '
-                            '%(lineno)d:\t'
-                            '%(message)s')
-                        )
 
 
 # TODO: load target_fields from config
@@ -239,7 +231,7 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
         start_time = time.time()
         try:
             # check the buffer
-            logger.debug(f"find {len(buffer_d)} items")
+            logger.info(f"find {len(buffer_d)} items")
 
             # flush buffer if we haven't received any data for a long time
             time_elapsed = time.time() - args_d['latest_received_time']
