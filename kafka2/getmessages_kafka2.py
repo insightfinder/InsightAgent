@@ -25,7 +25,7 @@ from multiprocessing import Process, Queue
 import queue
 from dateutil import parser
 import traceback
-from pprint import pprint
+from collections import defaultdict
 import pandas as pd
 
 '''
@@ -35,7 +35,7 @@ This script gathers data to send to Insightfinder
 
 # TODO: load target_fields from config
 target_fields = ['svc_mean', 'tx_mean', 'req_count'] # 'value',
-columns = ['timestamp','instance', 'http_status'] + target_fields
+columns = ['timestamp','project','instance', 'http_status'] + target_fields
 tx_q = Queue()
 WAIT_PERIOD = 10 * 60
 
@@ -140,6 +140,7 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             item['metric_vals']['timestamp'] = ts * 1000
             item['metric_vals']['http_status'] = http_status
             item['metric_vals']['instance'] = instance
+            item['metric_vals']['project'] = client_alias
 
             for field in target_fields:
                 v = fields_dict.get(field)
@@ -172,8 +173,7 @@ def get_buffer_size(data):
 
 def buffer_metric_data(metric_data_list, items):
     for item in items:
-        metric_data_list.append((item['timestamp'], item['instance'], item['http_status'],
-            item['svc_mean'], item['tx_mean'], item['req_count']))
+        metric_data_list.append([item[col] for col in columns])
 
 
 def encode_fields(data):
@@ -196,31 +196,32 @@ def proc_metric_data_list(metric_data_list):
     logging.info(f"len of metric_data_list: {len(metric_data_list)}")
     df = pd.DataFrame(data=metric_data_list, columns = columns)
 
-    df2 =df.groupby(['instance', 'http_status']).agg({
+    df2 =df.groupby(['project', 'instance', 'http_status']).agg({
         'req_count': ['sum'], 'svc_mean':['mean'], 'tx_mean':['mean'],
         'timestamp':['min']})
 
     http_status_codes = set(['2xx', '3xx', '4xx', '5xx'])
     prev_instance = None
     codes = set()
-    l = []
+    d = defaultdict(lambda: [])
+
     for group, val in df2.fillna(0).iterrows():
         req_count, svc_mean, tx_mean, timestamp = val
-        instance, code = group
+        project, instance, code = group
 
         if instance != prev_instance and prev_instance is not None:
             # fill 0 for prev_instance
             for code in http_status_codes - codes:
                 t = (prev_instance, code, 0, 0, 0, timestamp)
-                l.append(encode_fields(t))
+                d[project].append(encode_fields(t))
             codes.clear()
 
         # process instance
         t = (instance, code, *[str(i) for i in val])
-        l.append(encode_fields(t))
+        d[project].append(encode_fields(t))
         prev_instance = instance
         codes.add(code)
-    return l
+    return d
 
 def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
     metric_data_list = []
@@ -259,8 +260,9 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
             if  len(metric_data_list) > 0:
                 metric_data_list_processed = proc_metric_data_list(metric_data_list)
 
-                for chunk in data_chunks(metric_data_list_processed, if_config_vars["chunk_size"]):
-                    send_data(chunk)
+                for project, data in metric_data_list_processed.items():
+                    for chunk in data_chunks(data, if_config_vars["chunk_size"]):
+                        send_data(chunk, project)
                 metric_data_list.clear()
 
         except Exception:
@@ -1556,7 +1558,8 @@ def data_chunks(metric_data, chunk_size):
     for i in range(0, len(metric_data), num_msgs_per_chunk):
         yield(metric_data[i:i + num_msgs_per_chunk])
 
-def send_data(metric_data):
+# need refactor to take project name, metric data need be a dictionary with key as project name
+def send_data(metric_data, project_name=''):
     """ Send metric data dict to InsightFinder
     metric_data should be formatted as list of dicts
     """
@@ -1566,7 +1569,7 @@ def send_data(metric_data):
     # for backend so this is the camel case in to_send_data_dict
     to_send_data_dict["metricData"] = json.dumps(metric_data)
     to_send_data_dict["licenseKey"] = if_config_vars['license_key']
-    to_send_data_dict["projectName"] = if_config_vars['project_name']
+    to_send_data_dict["projectName"] = project_name or if_config_vars['project_name']
     to_send_data_dict["userName"] = if_config_vars['user_name']
     to_send_data_dict["agentType"] = "CUSTOM"
 
@@ -1576,7 +1579,7 @@ def send_data(metric_data):
     post_url = if_config_vars['if_url'] + "/customprojectrawdata"
     send_data_to_receiver(post_url, to_send_data_json, len(metric_data))
     logger.info("-" * 40)
-    logger.info(f"!!! packet of {len(metric_data)} items, size of {len(to_send_data_json)} bytes sent in {time.time() - send_data_time:8.4f} secs !!!")
+    logger.info(f"!!! project:{project_name}, packet of {len(metric_data)}, size: {len(to_send_data_json)} bytes sent in {time.time() - send_data_time:8.4f} secs !!!")
     logger.info("-" * 40)
 
 
