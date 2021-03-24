@@ -1570,7 +1570,8 @@ def send_data(metric_data, project_name=''):
     to_send_data_dict["metricData"] = json.dumps(metric_data)
     to_send_data_dict["licenseKey"] = if_config_vars['license_key']
     project_name = project_name or if_config_vars['project_name']
-    to_send_data_dict["projectName"] = project_name.replace('.', '-')
+    project_name = 'a-' + project_name.replace('.', '-')
+    to_send_data_dict["projectName"] = project_name
     to_send_data_dict["userName"] = if_config_vars['user_name']
     to_send_data_dict["agentType"] = "CUSTOM"
 
