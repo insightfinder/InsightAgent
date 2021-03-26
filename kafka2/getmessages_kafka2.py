@@ -165,7 +165,6 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
         logger.debug(f"new_worker_process: processed in {time.time()-start_time:8.4f} secs")
 
 
-
 def get_buffer_size(data):
     """ input : list of dicts, return size in bytes """
     return len(json.dumps(data))
@@ -188,20 +187,25 @@ def encode_fields(data):
     return result
 
 
+def fill_zeros(d, project, instance, codes, timestamp):
+    for code in set(['2xx', '3xx', '4xx', '5xx']) - codes:
+        t = (instance, code, 0, 0, 0, timestamp)
+        d[project].append(encode_fields(t))
+    codes.clear()
+
 def proc_metric_data_list(metric_data_list):
     """ aggregate by instance and http status code
         backfill with 0 for missed categories
         and proper encode each item
     """
-    logging.info(f"len of metric_data_list: {len(metric_data_list)}")
     df = pd.DataFrame(data=metric_data_list, columns = columns)
 
     df2 =df.groupby(['project', 'instance', 'http_status']).agg({
         'req_count': ['sum'], 'svc_mean':['mean'], 'tx_mean':['mean'],
         'timestamp':['min']})
 
-    http_status_codes = set(['2xx', '3xx', '4xx', '5xx'])
     prev_instance = None
+    prev_project = None
     codes = set()
     d = defaultdict(lambda: [])
 
@@ -209,19 +213,23 @@ def proc_metric_data_list(metric_data_list):
         req_count, svc_mean, tx_mean, timestamp = val
         project, instance, code = group
 
-        if instance != prev_instance and prev_instance is not None:
-            # fill 0 for prev_instance
-            for code in http_status_codes - codes:
-                t = (prev_instance, code, 0, 0, 0, timestamp)
-                d[project].append(encode_fields(t))
-            codes.clear()
+        if project != prev_project and prev_project is not None and prev_instance is not None:
+            fill_zeros(d, prev_project, prev_instance, codes, timestamp)
+
+        elif prev_instance is not None and instance != prev_instance:
+            fill_zeros(d, project, prev_instance, codes, timestamp)
 
         # process instance
         t = (instance, code, *[str(i) for i in val])
         d[project].append(encode_fields(t))
         prev_instance = instance
+        prev_project = project
         codes.add(code)
+
+    fill_zeros(d, project, prev_instance, codes, timestamp)
+
     return d
+
 
 def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
     metric_data_list = []
@@ -258,7 +266,12 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
                     lock.release()
 
             if  len(metric_data_list) > 0:
+                logger.warning("-"*60)
+                logger.warning(f"len of metric_data_list: {len(metric_data_list)}")
+                logger.warning(f"{metric_data_list}")
                 metric_data_list_processed = proc_metric_data_list(metric_data_list)
+                logger.warning("-"*60)
+                logger.warning(f"{metric_data_list_processed}")
 
                 for project, data in metric_data_list_processed.items():
                     for chunk in data_chunks(data, if_config_vars["chunk_size"]):
