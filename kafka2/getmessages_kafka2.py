@@ -266,12 +266,7 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
                     lock.release()
 
             if  len(metric_data_list) > 0:
-                logger.warning("-"*60)
-                logger.warning(f"len of metric_data_list: {len(metric_data_list)}")
-                logger.warning(f"{metric_data_list}")
                 metric_data_list_processed = proc_metric_data_list(metric_data_list)
-                logger.warning("-"*60)
-                logger.warning(f"{metric_data_list_processed}")
 
                 for project, data in metric_data_list_processed.items():
                     for chunk in data_chunks(data, if_config_vars["chunk_size"]):
