@@ -4,7 +4,7 @@ from getmessages_kafka2 import proc_metric_data_list
 import pandas as pd
 from pprint import pprint
 from copy import deepcopy
-
+import numpy as np
 
 class TestProcMetricDataList(TestCase):
     @staticmethod
@@ -43,6 +43,31 @@ class TestProcMetricDataList(TestCase):
             'svc_mean_5xx[test.instance]': '0',
             'timestamp': '1',
             'tx_mean_5xx[test.instance]': '0'}]))
+
+    def test_one_code_with_none(self):
+        # test data has null
+        data = [[1, 'test.project', 'test.instance', '2xx', 1, np.nan, 3]]
+        result = proc_metric_data_list(data)
+        self.assertTrue('test.project' in result.keys())
+        # pprint(result)
+        self.assertDictEqual(self.decode(result['test.project']),
+            self.decode(
+                         [{'req_count_2xx[test.instance]': '3.0',
+                            'svc_mean_2xx[test.instance]': '1.0',
+                            'timestamp': '1',
+                            'tx_mean_2xx[test.instance]': '0.0'},
+                            {'req_count_5xx[test.instance]': '0',
+                            'svc_mean_5xx[test.instance]': '0',
+                            'timestamp': '1',
+                            'tx_mean_5xx[test.instance]': '0'},
+                            {'req_count_4xx[test.instance]': '0',
+                            'svc_mean_4xx[test.instance]': '0',
+                            'timestamp': '1',
+                            'tx_mean_4xx[test.instance]': '0'},
+                            {'req_count_3xx[test.instance]': '0',
+                            'svc_mean_3xx[test.instance]': '0',
+                            'timestamp': '1',
+                            'tx_mean_3xx[test.instance]': '0'}]))
 
     def test_three_instances(self):
         # 3 instances with 3 codes, should fill 0 for 5xx

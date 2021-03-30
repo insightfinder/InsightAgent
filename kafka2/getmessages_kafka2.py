@@ -27,6 +27,7 @@ from dateutil import parser
 import traceback
 from collections import defaultdict
 import pandas as pd
+import numpy as np
 
 '''
 This script gathers data to send to Insightfinder
@@ -143,8 +144,8 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             item['metric_vals']['project'] = client_alias
 
             for field in target_fields:
-                v = fields_dict.get(field)
-                item['metric_vals'][field] = None if v == 'null' else v
+                v = fields_dict.get(field, np.nan)
+                item['metric_vals'][field] = np.nan if v == 'null' else v
 
         except ValueError as e:
             logger.warning(e)
