@@ -63,8 +63,10 @@ def get_kafka_consumer():
     logger.debug("consumer kafka_kwargs {}".format(agent_config_vars['kafka_kwargs']))
 
     consumer.subscribe(agent_config_vars['topics'])
-    logger.info('Successfully subscribed to topics' + str(agent_config_vars['topics']))
-    # logger.debug(consumer.topics())
+    status = consumer.subscription()
+    logger.info(f'subscribed to topics: {status}')
+    #logger.debug(consumer.topics())
+    #logger.debug('test')
     return consumer
 
 
@@ -97,6 +99,8 @@ def consumer_process(q, logger, agent_config_vars):
             try:
                 consumer.close()
             except Exception as ex2:
+                logger.warn(ex2)
+                logger.warn("exception in close")
                 pass
 
             break
@@ -241,7 +245,7 @@ def func_check_buffer(logger, if_config_vars, lock, buffer_d, args_d):
         start_time = time.time()
         try:
             # check the buffer
-            logger.info(f"find {len(buffer_d)} items")
+            logger.debug(f"find {len(buffer_d)} items")
 
             # flush buffer if we haven't received any data for a long time
             time_elapsed = time.time() - args_d['latest_received_time']
