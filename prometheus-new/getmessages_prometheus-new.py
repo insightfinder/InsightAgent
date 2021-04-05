@@ -47,6 +47,14 @@ def start_data_processing():
         except Exception as e:
             logger.error(e)
 
+    metrics_with_function = []
+    if agent_config_vars['metrics_whitelist_with_function']:
+        try:
+            db_regex = regex.compile(agent_config_vars['metrics_whitelist_with_function'])
+            metrics_with_function = list(filter(db_regex.match, metrics))
+        except Exception as e:
+            logger.error(e)
+
     # filter metrics
     if agent_config_vars['metrics_to_ignore'] and len(agent_config_vars['metrics_to_ignore']) > 0:
         metrics = [x for x in metrics if x not in agent_config_vars['metrics_to_ignore']]
@@ -57,8 +65,9 @@ def start_data_processing():
 
     def get_query_uri(m):
         query = '{}{}'.format(m, agent_config_vars['query_label_selector'])
-        if agent_config_vars['query_with_function'] == 'increase':
-            query = 'increase({}[{}s])'.format(query, if_config_vars['sampling_interval'])
+        if not agent_config_vars['metrics_whitelist_with_function'] or m in metrics_with_function:
+            if agent_config_vars['query_with_function'] == 'increase':
+                query = 'increase({}[{}s])'.format(query, if_config_vars['sampling_interval'])
         return query
 
     # parse sql string by params
@@ -192,6 +201,7 @@ def get_agent_config_vars():
         metrics_to_ignore = None
         query_label_selector = ''
         query_with_function = ''
+        metrics_whitelist_with_function = None
         his_time_range = None
         try:
             # prometheus settings
@@ -214,6 +224,7 @@ def get_agent_config_vars():
             metrics_to_ignore = config_parser.get('prometheus', 'metrics_to_ignore')
             query_label_selector = config_parser.get('prometheus', 'query_label_selector') or ''
             query_with_function = config_parser.get('prometheus', 'query_with_function')
+            metrics_whitelist_with_function = config_parser.get('prometheus', 'metrics_whitelist_with_function')
 
             # time range
             his_time_range = config_parser.get('prometheus', 'his_time_range')
@@ -312,6 +323,7 @@ def get_agent_config_vars():
             'metrics_to_ignore': metrics_to_ignore,
             'query_label_selector': query_label_selector,
             'query_with_function': query_with_function,
+            'metrics_whitelist_with_function': metrics_whitelist_with_function,
             'his_time_range': his_time_range,
 
             'proxies': agent_proxies,

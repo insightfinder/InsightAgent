@@ -14,6 +14,8 @@ metrics_to_ignore = ALERTS,ALERTS_FOR_STATE
 query_label_selector =
 # label function to calculate the metric's value, now only support functions: increase
 query_with_function =
+# metrics_whitelist_with_function is a regex string used to define which metrics will be calculate with query_with_function.
+metrics_whitelist_with_function =
 
 # history data time config. If these options is set, the agent will query results by time range
 # time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
