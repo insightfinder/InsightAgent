@@ -145,7 +145,7 @@ def new_worker_process(q, tx_q, logger, agent_config_vars):
             item['metric_vals']['timestamp'] = ts * 1000
             item['metric_vals']['http_status'] = http_status
             item['metric_vals']['instance'] = instance
-            item['metric_vals']['project'] = client_alias
+            item['metric_vals']['project'] = service_alias
 
             for field in target_fields:
                 v = fields_dict.get(field, np.nan)
