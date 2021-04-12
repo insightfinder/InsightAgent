@@ -152,6 +152,11 @@ def parse_messages_prometheus(result):
                 agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
                     agent_config_vars['instance_field']) > 0 else 'instance')
 
+            # filter by instance whitelist
+            if agent_config_vars['instance_whitelist_regex'] \
+                    and not agent_config_vars['instance_whitelist_regex'].match(instance):
+                continue
+
             # add device info if has
             device = None
             device_field = agent_config_vars['device_field']
@@ -202,6 +207,8 @@ def get_agent_config_vars():
         query_label_selector = ''
         query_with_function = ''
         metrics_whitelist_with_function = None
+        instance_whitelist = ''
+        instance_whitelist_regex = None
         his_time_range = None
         try:
             # prometheus settings
@@ -237,6 +244,7 @@ def get_agent_config_vars():
             data_format = config_parser.get('prometheus', 'data_format').upper()
             # project_field = config_parser.get('agent', 'project_field', raw=True)
             instance_field = config_parser.get('prometheus', 'instance_field', raw=True)
+            instance_whitelist = config_parser.get('prometheus', 'instance_whitelist')
             device_field = config_parser.get('prometheus', 'device_field', raw=True)
             timestamp_field = config_parser.get('prometheus', 'timestamp_field', raw=True) or 'timestamp'
             target_timestamp_timezone = config_parser.get('prometheus', 'target_timestamp_timezone', raw=True) or 'UTC'
@@ -257,6 +265,12 @@ def get_agent_config_vars():
 
         if len(query_with_function) != 0 and query_with_function not in ['increase']:
             config_error('target_timestamp_timezone')
+
+        if len(instance_whitelist) != 0:
+            try:
+                instance_whitelist_regex = regex.compile(instance_whitelist)
+            except Exception:
+                config_error('instance_whitelist')
 
         if len(his_time_range) != 0:
             his_time_range = [x for x in his_time_range.split(',') if x.strip()]
@@ -330,6 +344,7 @@ def get_agent_config_vars():
             'data_format': data_format,
             # 'project_field': project_fields,
             'instance_field': instance_fields,
+            "instance_whitelist_regex": instance_whitelist_regex,
             'device_field': device_fields,
             'data_fields': data_fields,
             'timestamp_field': timestamp_fields,
