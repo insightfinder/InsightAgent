@@ -47,6 +47,14 @@ def start_data_processing():
         except Exception as e:
             logger.error(e)
 
+    metrics_with_function = []
+    if agent_config_vars['metrics_whitelist_with_function']:
+        try:
+            db_regex = regex.compile(agent_config_vars['metrics_whitelist_with_function'])
+            metrics_with_function = list(filter(db_regex.match, metrics))
+        except Exception as e:
+            logger.error(e)
+
     # filter metrics
     if agent_config_vars['metrics_to_ignore'] and len(agent_config_vars['metrics_to_ignore']) > 0:
         metrics = [x for x in metrics if x not in agent_config_vars['metrics_to_ignore']]
@@ -54,6 +62,13 @@ def start_data_processing():
     if len(metrics) == 0:
         logger.error('Metric list is empty')
         sys.exit(1)
+
+    def get_query_uri(m):
+        query = '{}{}'.format(m, agent_config_vars['query_label_selector'])
+        if not agent_config_vars['metrics_whitelist_with_function'] or m in metrics_with_function:
+            if agent_config_vars['query_with_function'] == 'increase':
+                query = 'increase({}[{}s])'.format(query, if_config_vars['sampling_interval'])
+        return query
 
     # parse sql string by params
     pool_map = ThreadPool(agent_config_vars['thread_pool'])
@@ -64,7 +79,7 @@ def start_data_processing():
                                agent_config_vars['his_time_range'][1],
                                if_config_vars['sampling_interval']):
             params = [(m, {
-                'query': m + agent_config_vars['query_label_selector'],
+                'query': get_query_uri(m),
                 'time': timestamp,
             }) for m in metrics]
             results = pool_map.map(query_messages_prometheus, params)
@@ -80,7 +95,7 @@ def start_data_processing():
         # end_time = time_now
 
         params = [(m, {
-            'query': m + agent_config_vars['query_label_selector'],
+            'query': get_query_uri(m),
             'time': time_now,
         }) for m in metrics]
         results = pool_map.map(query_messages_prometheus, params)
@@ -112,6 +127,9 @@ def query_messages_prometheus(args):
         logger.error(e)
         logger.error('Query metric error: ' + metric)
 
+    # add metric name in the value
+    data = [{**item, 'metric_name': metric} for item in data]
+
     return data
 
 
@@ -128,10 +146,16 @@ def parse_messages_prometheus(result):
             if quantile and quantile != '1':
                 continue
 
-            date_field = message.get('metric').get('__name__')
+            # date_field = message.get('metric').get('__name__')
+            date_field = message.get('metric_name')
             instance = message.get('metric').get(
                 agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
                     agent_config_vars['instance_field']) > 0 else 'instance')
+
+            # filter by instance whitelist
+            if agent_config_vars['instance_whitelist_regex'] \
+                    and not agent_config_vars['instance_whitelist_regex'].match(instance):
+                continue
 
             # add device info if has
             device = None
@@ -181,6 +205,10 @@ def get_agent_config_vars():
         metrics_whitelist = None
         metrics_to_ignore = None
         query_label_selector = ''
+        query_with_function = ''
+        metrics_whitelist_with_function = None
+        instance_whitelist = ''
+        instance_whitelist_regex = None
         his_time_range = None
         try:
             # prometheus settings
@@ -202,6 +230,8 @@ def get_agent_config_vars():
             metrics_whitelist = config_parser.get('prometheus', 'metrics_whitelist')
             metrics_to_ignore = config_parser.get('prometheus', 'metrics_to_ignore')
             query_label_selector = config_parser.get('prometheus', 'query_label_selector') or ''
+            query_with_function = config_parser.get('prometheus', 'query_with_function')
+            metrics_whitelist_with_function = config_parser.get('prometheus', 'metrics_whitelist_with_function')
 
             # time range
             his_time_range = config_parser.get('prometheus', 'his_time_range')
@@ -214,6 +244,7 @@ def get_agent_config_vars():
             data_format = config_parser.get('prometheus', 'data_format').upper()
             # project_field = config_parser.get('agent', 'project_field', raw=True)
             instance_field = config_parser.get('prometheus', 'instance_field', raw=True)
+            instance_whitelist = config_parser.get('prometheus', 'instance_whitelist')
             device_field = config_parser.get('prometheus', 'device_field', raw=True)
             timestamp_field = config_parser.get('prometheus', 'timestamp_field', raw=True) or 'timestamp'
             target_timestamp_timezone = config_parser.get('prometheus', 'target_timestamp_timezone', raw=True) or 'UTC'
@@ -231,6 +262,15 @@ def get_agent_config_vars():
             metrics = [x for x in metrics.split(',') if x.strip()]
         if len(metrics_to_ignore) != 0:
             metrics_to_ignore = [x for x in metrics_to_ignore.split(',') if x.strip()]
+
+        if len(query_with_function) != 0 and query_with_function not in ['increase']:
+            config_error('target_timestamp_timezone')
+
+        if len(instance_whitelist) != 0:
+            try:
+                instance_whitelist_regex = regex.compile(instance_whitelist)
+            except Exception:
+                config_error('instance_whitelist')
 
         if len(his_time_range) != 0:
             his_time_range = [x for x in his_time_range.split(',') if x.strip()]
@@ -296,12 +336,15 @@ def get_agent_config_vars():
             'metrics_whitelist': metrics_whitelist,
             'metrics_to_ignore': metrics_to_ignore,
             'query_label_selector': query_label_selector,
+            'query_with_function': query_with_function,
+            'metrics_whitelist_with_function': metrics_whitelist_with_function,
             'his_time_range': his_time_range,
 
             'proxies': agent_proxies,
             'data_format': data_format,
             # 'project_field': project_fields,
             'instance_field': instance_fields,
+            "instance_whitelist_regex": instance_whitelist_regex,
             'device_field': device_fields,
             'data_fields': data_fields,
             'timestamp_field': timestamp_fields,
