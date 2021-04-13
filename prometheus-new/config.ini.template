@@ -34,6 +34,8 @@ instance_field = instance
 device_field =
 # multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>` or `<name>::==<value>`, where `<name>` and `<value>` can each be either a literal value (`name::value`) or formatted (`total time [{step}]::=={timing.end}-{timing.start}`). Use `::==` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `eval()`.
 data_fields =
+## number of thread to used in the pool, default is 20
+thread_pool = 20
 
 ## proxy
 agent_http_proxy =
