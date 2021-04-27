@@ -52,7 +52,7 @@ WEB_NORMAL_DATA = ["User checked the dash board page", "User changed the profile
 ALERT_INCIDENT_DATA = {"comments": "", "assignment group": "Software", "description": "", "close notes": "",
                        "configuration item": "", "priority": "1 - Critical", "caller": "Admin", "service": "",
                        "short description": "Production 911: Checkout server returns 500 error", "state": "In Progress",
-                       "work notes": "", "assigned to": "Don Goodliffe"}
+                       "work notes": "cusomter cannot checkout", "assigned to": "Don Goodliffe"}
 
 # Instance name for log
 LOG_INSTANCE_LIST = ["84.206.252.176", "203.133.162.186", "248.23.23.69", "9.111.192.107", "249.148.28.81", "39.237.183.95",

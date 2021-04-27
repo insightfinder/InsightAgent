@@ -154,7 +154,8 @@ def send_web_or_incident_data(time, time_delta, is_abnormal):
     if is_abnormal:
         if minute >= 55 and hour == 0:
             data = get_log_data(timestamp, constant.INSTANCE_ALERT, constant.ALERT_INCIDENT_DATA)
-            replay_log_data(configs[constant.ALERT], [data], "Alert incident data")
+            data_core_server = get_log_data(timestamp, constant.INSTANCE_CORE_SERVER, constant.ALERT_INCIDENT_DATA)
+            replay_log_data(configs[constant.ALERT], [data, data_core_server], "Alert incident data")
     else:
         num_message = random.randint(1, 3)
         data_array = []
