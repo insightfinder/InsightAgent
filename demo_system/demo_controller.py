@@ -111,7 +111,8 @@ def generate_config_file():
                            constant.REVERSE_DEPLOYMENT: 'False',
                            constant.NORMAL_TIME: time,
                            constant.ABNORMAL_TIME: 0,
-                           constant.ACTION_TRIGGERED_MAP: {}}
+                           constant.ACTION_TRIGGERED_MAP: {},
+                           constant.TIME_ZONE: 'GMT'}
     config[constant.LOG] = {constant.PROJECT_NAME: constant.LOG_PROJECT_NAME}
     config[constant.DEPLOYMENT] = {constant.PROJECT_NAME: constant.DEPLOYMENT_PROJECT_NAME}
     config[constant.WEB] = {constant.PROJECT_NAME: constant.WEB_PROJECT_NAME}
