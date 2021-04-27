@@ -7,16 +7,19 @@ NORMAL_TIME = "normal_time"
 ABNORMAL_TIME = "abnormal_time"
 PROJECT_NAME = "project_name"
 DATA_TYPE = "data_type"
+TIME_ZONE = "time_zone"
 ACTION_TRIGGERED_MAP = "action_triggered_map"
 REVERSE_DEPLOYMENT = "reverse_deployment"
 LOG = "Log"
 DEPLOYMENT = "Deployment"
 WEB = "Web"
 METRIC = "Metric"
+ALERT = "Alert"
 LOG_PROJECT_NAME = "TD_infrastructure_core"
 DEPLOYMENT_PROJECT_NAME = "TD_deployment"
 WEB_PROJECT_NAME = "TD_web"
 METRIC_PROJECT_NAME = "TD_metric"
+ALERT_PROJECT_NAME = "TD_alert"
 DATA_TYPE_NORMAL = "normal"
 DATA_TYPE_ABNORMAL = "abnormal"
 DATE_TIME_FORMAT_MINUTE = "%Y-%m-%dT%H:%M:00"
@@ -44,6 +47,12 @@ Author: Tom <Tom@insightfinder.com>\n
 WEB_INCIDENT_DATA = "Production 911: Checkout server returns 500 error"
 WEB_NORMAL_DATA = ["User checked the dash board page", "User changed the profile setting", "User logged out",
                    "User logged in"]
+
+# Alert data
+ALERT_INCIDENT_DATA = {"comments": "", "assignment group": "Software", "description": "", "close notes": "",
+                       "configuration item": "", "priority": "1 - Critical", "caller": "Admin", "service": "",
+                       "short description": "Production 911: Checkout server returns 500 error", "state": "In Progress",
+                       "work notes": "", "assigned to": "Don Goodliffe"}
 
 # Instance name for log
 LOG_INSTANCE_LIST = ["84.206.252.176", "203.133.162.186", "248.23.23.69", "9.111.192.107", "249.148.28.81", "39.237.183.95",
@@ -127,11 +136,11 @@ HEADER = "timestamp,system.net.bytes_sent[core server],system.cpu.idle[core serv
 # Config constant
 CONFIG_FILE = "config.ini"
 IF_CAT = 'InsightFinder'
-LOG_INSTANCE = "core server"
+INSTANCE_CORE_SERVER = "core server"
 DEP_INSTANCE = 'Jenkins'
 # Put the ip address of the machine where the demo scripts exist, e.g. on stg the demo scripts are in the app-server node
 # WEB_INSTANCE = 'ip-172-31-52-141.ec2.internal'
-WEB_INSTANCE = ''
+INSTANCE_ALERT = 'ip-172-31-52-141.ec2.internal'
 # Log data constant
 EVENT_ID = 'eventId'
 TAG = 'tag'
