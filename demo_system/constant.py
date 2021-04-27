@@ -140,7 +140,7 @@ INSTANCE_CORE_SERVER = "core server"
 DEP_INSTANCE = 'Jenkins'
 # Put the ip address of the machine where the demo scripts exist, e.g. on stg the demo scripts are in the app-server node
 # WEB_INSTANCE = 'ip-172-31-52-141.ec2.internal'
-INSTANCE_ALERT = 'ip-172-31-52-141.ec2.internal'
+INSTANCE_ALERT = ''
 # Log data constant
 EVENT_ID = 'eventId'
 TAG = 'tag'
