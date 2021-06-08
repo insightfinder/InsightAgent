@@ -652,7 +652,8 @@ def clear_metric_buffer():
     for row in buffer_values:
         # pop component map info
         component_map = row.pop('component_map')
-        track['component_map_list'].append(component_map)
+        if component_map:
+            track['component_map_list'].append(component_map)
 
         track['current_row'].append(row)
         count += 1
