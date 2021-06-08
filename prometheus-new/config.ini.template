@@ -29,10 +29,11 @@ data_format = json
 # timestamp format, as library [arrow]. multiple fields can be formatted together to create the timestamp a la `YYYY-MM-DD HH:mm:ss ZZ`. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
 timestamp_format =
 # timezone, as per pytz
-timezone = 
+timezone =
 timestamp_field =
 # Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
 target_timestamp_timezone = UTC
+component_field =
 # if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
 instance_field = instance
 # instance_whitelist is a regex string used to define which instances will be filtered.
@@ -48,10 +49,10 @@ agent_http_proxy =
 agent_https_proxy =
 
 [insightfinder]
-user_name = 
-license_key = 
+user_name =
+license_key =
 token =
-project_name = 
+project_name =
 # metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
 project_type = metric
 sampling_interval = 1
