@@ -707,6 +707,9 @@ def send_data_to_if(chunk_metric_data):
         for chunk in chunk_metric_data:
             chunk['data'] = json.dumps(chunk['data'])
     data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
+
+    # add component mapping to the post data
+    track['component_map_list'] = list({v['instanceName']: v for v in track['component_map_list']}.values())
     data_to_post['instanceMetaData'] = json.dumps(track['component_map_list'] or [])
 
     logger.debug('First:\n' + str(chunk_metric_data[0]))
