@@ -82,18 +82,19 @@ def modified_config_file():
     config = SafeConfigParser()
     config.read(config_file_name)
     current_data_type = config[constant.IF][constant.DATA_TYPE]
-    is_reverse = action_filter(config)
-    logging.info("Modification triggered: is_reverse is " + str(is_reverse))
-    if current_data_type == 'abnormal' and parameters[constant.DATA_TYPE] == 'normal' and is_reverse:
-        # Switch to normal data and trigger the reverse development
-        config[constant.IF][constant.REVERSE_DEPLOYMENT] = 'True'
-        config[constant.IF][constant.NORMAL_TIME] = get_current_date_minute()
-        config[constant.IF][constant.DATA_TYPE] = parameters[constant.DATA_TYPE]
-        logging.info("Reverse buggy deployment action triggered.")
-    if current_data_type == 'normal':
+    if current_data_type == 'abnormal' and parameters[constant.DATA_TYPE] == 'normal':
+        is_reverse = action_filter(config)
+        logging.info("Modification triggered: is_reverse is " + str(is_reverse))
+        if is_reverse:
+            # Switch to normal data and trigger the reverse development
+            config[constant.IF][constant.REVERSE_DEPLOYMENT] = 'True'
+            config[constant.IF][constant.NORMAL_TIME] = get_current_date_minute()
+            config[constant.IF][constant.DATA_TYPE] = parameters[constant.DATA_TYPE]
+            logging.info("Reverse buggy deployment action triggered.")
+    #if current_data_type == 'normal':
         # Swtich to abnormal data
-        config[constant.IF][constant.ABNORMAL_TIME] = get_current_date_minute()
-        config[constant.IF][constant.DATA_TYPE] = parameters[constant.DATA_TYPE]
+    #    config[constant.IF][constant.ABNORMAL_TIME] = get_current_date_minute()
+    #    config[constant.IF][constant.DATA_TYPE] = parameters[constant.DATA_TYPE]
     utility.save_config_file(config_file_name, config)
 
 
@@ -110,11 +111,13 @@ def generate_config_file():
                            constant.REVERSE_DEPLOYMENT: 'False',
                            constant.NORMAL_TIME: time,
                            constant.ABNORMAL_TIME: 0,
-                           constant.ACTION_TRIGGERED_MAP: {}}
+                           constant.ACTION_TRIGGERED_MAP: {},
+                           constant.TIME_ZONE: 'GMT'}
     config[constant.LOG] = {constant.PROJECT_NAME: constant.LOG_PROJECT_NAME}
     config[constant.DEPLOYMENT] = {constant.PROJECT_NAME: constant.DEPLOYMENT_PROJECT_NAME}
     config[constant.WEB] = {constant.PROJECT_NAME: constant.WEB_PROJECT_NAME}
     config[constant.METRIC] = {constant.PROJECT_NAME: constant.METRIC_PROJECT_NAME}
+    config[constant.ALERT] = {constant.PROJECT_NAME: constant.ALERT_PROJECT_NAME}
     utility.save_config_file(config_file_name, config)
 
 
