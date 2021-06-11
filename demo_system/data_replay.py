@@ -1,6 +1,7 @@
 import json
 import time
 import datetime
+import pytz
 import random
 import sys
 import os
@@ -27,11 +28,13 @@ def get_agent_config_vars():
             normal_time_str = parser.get(constant.IF, constant.NORMAL_TIME)
             abnormal_time_str = parser.get(constant.IF, constant.ABNORMAL_TIME)
             reverse_deployment = parser.getboolean(constant.IF, constant.REVERSE_DEPLOYMENT)
+            time_zone = parser.get(constant.IF, constant.TIME_ZONE)
             # DEMO project names config
             log_project_name = parser.get(constant.LOG, constant.PROJECT_NAME)
             deployment_project_name = parser.get(constant.DEPLOYMENT, constant.PROJECT_NAME)
             web_project_name = parser.get(constant.WEB, constant.PROJECT_NAME)
             metric_project_name = parser.get(constant.METRIC, constant.PROJECT_NAME)
+            alert_project_name = parser.get(constant.ALERT, constant.PROJECT_NAME)
             if len(license_key) == 0:
                 logging.warning("Demo agent not correctly configured(license key). Check config file.")
                 sys.exit(1)
@@ -53,6 +56,9 @@ def get_agent_config_vars():
             if len(metric_project_name) == 0:
                 logging.warning("Demo agent not correctly configured(Metric project name). Check config file.")
                 sys.exit(1)
+            if not time_zone:
+                time_zone = "GMT"
+            configs[constant.TIME_ZONE] = time_zone
             configs[constant.LICENSE_KEY] = license_key
             configs[constant.USER_NAME] = user_name
             configs[constant.SERVER_URL] = server_url
@@ -68,17 +74,18 @@ def get_agent_config_vars():
             configs[constant.DEPLOYMENT] = deployment_project_name
             configs[constant.WEB] = web_project_name
             configs[constant.METRIC] = metric_project_name
+            configs[constant.ALERT] = alert_project_name
     except IOError:
         logging.warning("config.ini file is missing")
     return configs
 
 
 def get_current_time():
-    return datetime.datetime.now()
+    return datetime.datetime.now(pytz.timezone(configs[constant.TIME_ZONE])).replace(tzinfo=None)
 
 
 def get_current_date_minute():
-    return datetime.datetime.now().strftime(constant.DATE_TIME_FORMAT_MINUTE)
+    return get_current_time().strftime(constant.DATE_TIME_FORMAT_MINUTE)
 
 
 def to_epochtime_minute(time):
@@ -138,63 +145,64 @@ def send_deployment_demo_data(time, time_delta, is_abnormal):
 
 
 '''
-Send incident data at 59 minutes 4th hour, otherwise normal log
+Send incident data after 55 minutes 4th hour, otherwise normal log
 '''
-def send_web_data(time, time_delta, is_abnormal):
+def send_web_or_incident_data(time, time_delta, is_abnormal):
     timestamp = to_epochtime_minute(time)
     minute = get_time_delta_minute(time_delta)
     hour = get_time_delta_hour(time_delta)
     if is_abnormal:
-        if minute == 59 and hour == 0:
-            data = get_log_data(timestamp, constant.WEB_INSTANCE, constant.WEB_INCIDENT_DATA)
-            replay_log_data(configs[constant.WEB], [data], "Web incident data")
+        if minute >= 55 and hour == 0:
+            data = get_log_data(timestamp, constant.INSTANCE_ALERT, constant.ALERT_INCIDENT_DATA)
+            data_core_server = get_log_data(timestamp, constant.INSTANCE_CORE_SERVER, constant.ALERT_INCIDENT_DATA)
+            replay_log_data(configs[constant.ALERT], [data, data_core_server], "Alert incident data")
     else:
         num_message = random.randint(1, 3)
         data_array = []
         for i in range(0, num_message):
-            data = get_log_data(timestamp + i, constant.WEB_INSTANCE, constant.WEB_NORMAL_DATA[random.randint(0, 3)])
+            data = get_log_data(timestamp + i, constant.INSTANCE_ALERT, constant.WEB_NORMAL_DATA[random.randint(0, 3)])
             data_array.append(data)
         replay_log_data(configs[constant.WEB], data_array, "Web normal data")
 
 
 '''
-Send exception data start at 35,45,55 minutes in 4th hour.
+Send exception data start at 30,40,50 minutes in 4th hour.
 '''
 def send_log_data(time, time_delta, is_abnormal):
     timestamp = to_epochtime_minute(time)
     minute = get_time_delta_minute(time_delta)
     hour = get_time_delta_hour(time_delta)
     if is_abnormal:
-        if minute in [35,45,55] and hour == 0:
+        if minute in [30,40,50] and hour == 0:
             num_message = 1
             data_array = []
             for i in range(0, num_message):
-                data = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.EXCEPTION_LOG_DATA)
+                data = get_log_data(timestamp + i, constant.INSTANCE_CORE_SERVER, constant.EXCEPTION_LOG_DATA)
                 data_array.append(data)
             replay_log_data(configs[constant.LOG], data_array, "Log exception data")
     num_message = random.randint(1, 3)
     data_array = []
     for i in range(0, num_message):
         for data in constant.NORMAL_LOG_DATA:
-            log_data = get_log_data_with_instance(timestamp + i, constant.LOG_INSTANCE, data)
+            log_data = get_log_data_with_instance(timestamp + i, constant.INSTANCE_CORE_SERVER, data)
             data_array.append(log_data)
     # stream some exception data
     for i in range(0, random.randint(1,3)):
-        exception_data = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_EXCEPTION_DATA[0])
+        exception_data = get_log_data(timestamp + i, constant.INSTANCE_CORE_SERVER, constant.NORMAL_EXCEPTION_DATA[0])
         data_array.append(exception_data)
     for i in range(0, random.randint(1,3)):
-        exception_data = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_EXCEPTION_DATA[1])
+        exception_data = get_log_data(timestamp + i, constant.INSTANCE_CORE_SERVER, constant.NORMAL_EXCEPTION_DATA[1])
         data_array.append(exception_data)
     for i in range(0, random.randint(1,3)):
-        exception_data = get_log_data(timestamp + i, constant.LOG_INSTANCE, constant.NORMAL_EXCEPTION_DATA[2])
+        exception_data = get_log_data(timestamp + i, constant.INSTANCE_CORE_SERVER, constant.NORMAL_EXCEPTION_DATA[2])
         data_array.append(exception_data)
     replay_log_data(configs[constant.LOG], data_array, "Log normal data")
 
 
-def read_metric_data(timestamp, index, metric_file_name, msg):
+def read_metric_data(timestamp, index, metric_file_name, msg, instance):
     with open(metric_file_name) as json_data:
         data = []
-        header = map(lambda x: x.strip(), constant.HEADER.split(','))
+        header = map(lambda x: x.strip(), constant.HEADER.replace(constant.INSTANCE_CORE_SERVER, instance).split(','))
         count = 0
         for line in json_data:
             if count == index:
@@ -213,13 +221,19 @@ def send_metric_data(time, time_delta, is_abnormal):
     if is_abnormal:
         if hour == 0:
             index = minute
-            read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data")
-        #else:
+            read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data",
+                             constant.INSTANCE_CORE_SERVER)
+            read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data",
+                             constant.INSTANCE_ALERT)
+        # else:
         #    index = 59
         #    read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data")
     else:
         index = minute + hour * 60
-        read_metric_data(timestamp, index, constant.NORMAL_DATA_FILENAME, "Metric normal data")
+        read_metric_data(timestamp, index, constant.NORMAL_DATA_FILENAME, "Metric normal data",
+                         constant.INSTANCE_CORE_SERVER)
+        read_metric_data(timestamp, index, constant.NORMAL_DATA_FILENAME, "Metric normal data",
+                         constant.INSTANCE_ALERT)
 
 def send_data_to_receiver(post_url, to_send_data, log_msg, num_of_message):
     attempts = 0
@@ -318,7 +332,7 @@ if __name__ == "__main__":
     configs = get_agent_config_vars()
     cur_time = get_current_time()
     time_delta, is_abnormal = get_time_delta(cur_time)
+    send_web_or_incident_data(cur_time, time_delta, is_abnormal)
     send_log_data(cur_time, time_delta, is_abnormal)
-    send_web_data(cur_time, time_delta, is_abnormal)
     send_deployment_demo_data(cur_time, time_delta, is_abnormal)
     send_metric_data(cur_time, time_delta, is_abnormal)
