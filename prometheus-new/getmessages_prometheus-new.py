@@ -164,6 +164,13 @@ def parse_messages_prometheus(result):
                 device = message.get('metric').get(agent_config_vars['device_field'][0])
             full_instance = make_safe_instance_string(instance, device)
 
+            # get component, and build component instance map info
+            component_map = None
+            if agent_config_vars['component_field']:
+                component = message.get('metric').get(agent_config_vars['component_field'])
+                if component:
+                    component_map = {"instanceName": full_instance, "componentName": component}
+
             vector_value = message.get('value')
             timestamp = int(vector_value[0]) * 1000
             data_value = vector_value[1]
@@ -174,7 +181,7 @@ def parse_messages_prometheus(result):
 
             key = '{}-{}'.format(timestamp, full_instance)
             if key not in metric_buffer['buffer_dict']:
-                metric_buffer['buffer_dict'][key] = {"timestamp": timestamp}
+                metric_buffer['buffer_dict'][key] = {"timestamp": timestamp, "component_map": component_map}
 
             metric_key = '{}[{}]'.format(date_field, full_instance)
             metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
@@ -243,6 +250,7 @@ def get_agent_config_vars():
             # message parsing
             data_format = config_parser.get('prometheus', 'data_format').upper()
             # project_field = config_parser.get('agent', 'project_field', raw=True)
+            component_field = config_parser.get('prometheus', 'component_field', raw=True)
             instance_field = config_parser.get('prometheus', 'instance_field', raw=True)
             instance_whitelist = config_parser.get('prometheus', 'instance_whitelist')
             device_field = config_parser.get('prometheus', 'device_field', raw=True)
@@ -343,6 +351,7 @@ def get_agent_config_vars():
             'proxies': agent_proxies,
             'data_format': data_format,
             # 'project_field': project_fields,
+            'component_field': component_field,
             'instance_field': instance_fields,
             "instance_whitelist_regex": instance_whitelist_regex,
             'device_field': device_fields,
@@ -641,6 +650,11 @@ def clear_metric_buffer():
 
     count = 0
     for row in buffer_values:
+        # pop component map info
+        component_map = row.pop('component_map')
+        if component_map:
+            track['component_map_list'].append(component_map)
+
         track['current_row'].append(row)
         count += 1
         if count % 100 == 0 or get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
@@ -669,6 +683,7 @@ def reset_track():
     track['start_time'] = time.time()
     track['line_count'] = 0
     track['current_row'] = []
+    track['component_map_list'] = []
 
 
 ################################
@@ -692,6 +707,10 @@ def send_data_to_if(chunk_metric_data):
         for chunk in chunk_metric_data:
             chunk['data'] = json.dumps(chunk['data'])
     data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
+
+    # add component mapping to the post data
+    track['component_map_list'] = list({v['instanceName']: v for v in track['component_map_list']}.values())
+    data_to_post['instanceMetaData'] = json.dumps(track['component_map_list'] or [])
 
     logger.debug('First:\n' + str(chunk_metric_data[0]))
     logger.debug('Last:\n' + str(chunk_metric_data[-1]))
