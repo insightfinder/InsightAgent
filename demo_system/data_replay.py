@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import json
 import time
 import datetime
@@ -117,45 +118,41 @@ def get_time_delta_minute(time_delta):
 
 
 def get_time_delta_hour(time_delta):
-    return (time_delta.seconds // constant.ONE_HOUR_SEC) % 4
+    return time_delta.seconds // constant.ONE_HOUR_SEC
 
-
-def change_reverse_status():
-    config_file_name = utility.get_config_file_name(user_name)
-    config = SafeConfigParser()
-    config.read(config_file_name)
-    config[constant.IF][constant.REVERSE_DEPLOYMENT] = 'False'
-    utility.save_config_file(config_file_name, config)
 
 '''
-Send deployemt data at 1 minutes in 4th hour, send reverse deployment data in 1 minute in even hour
+Send deployemt data based on the hour
 '''
-def send_deployment_demo_data(time, time_delta, is_abnormal):
+def send_deployment_demo_data(time, is_abnormal):
     timestamp = to_epochtime_minute(time)
-    minute = get_time_delta_minute(time_delta)
-    hour = get_time_delta_hour(time_delta)
-    if configs[constant.REVERSE_DEPLOYMENT]:
-        #data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_REVERSE)
-        #replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment reverse data")
-        change_reverse_status()
+    minute = time.minute
+    hour = time.hour
+    if hour not in constant.DEPLOYMENT_DATA_INDEX:
         return
-    if is_abnormal and minute == 1 and hour == 0:
-        data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA)
-        replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment data")
+    # buggy deployment happened 00：31 and 08:31
+    index = constant.DEPLOYMENT_DATA_INDEX[hour]
+    if is_abnormal and hour in [0, 8] and minute == 31:
+        data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_BUGGY[index])
+        replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment buggy data")
+    # normal deployment happened 4:31, 12:31, 16:31 and 20:31
+    elif hour in [4, 12, 16, 20] and minute == 31:
+        data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA[index])
+        replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment normal data")
+
 
 
 '''
-Send incident data after 55 minutes 4th hour, otherwise normal log
+Send incident start from 01:25 to 01:29 or 09:25 to 09:29
 '''
-def send_web_or_incident_data(time, time_delta, is_abnormal):
+def send_web_or_incident_data(time, is_abnormal):
     timestamp = to_epochtime_minute(time)
-    minute = get_time_delta_minute(time_delta)
-    hour = get_time_delta_hour(time_delta)
+    minute = time.minute
+    hour = time.hour
     if is_abnormal:
-        if minute >= 55 and hour == 0:
+        if hour in [1, 9] and minute in [25, 26, 27, 28, 29]:
             data = get_log_data(timestamp, constant.INSTANCE_ALERT, constant.ALERT_INCIDENT_DATA)
-            data_core_server = get_log_data(timestamp, constant.INSTANCE_CORE_SERVER, constant.ALERT_INCIDENT_DATA)
-            replay_log_data(configs[constant.ALERT], [data, data_core_server], "Alert incident data")
+            replay_log_data(configs[constant.ALERT], [data], "Alert incident data")
     else:
         num_message = random.randint(1, 3)
         data_array = []
@@ -166,14 +163,14 @@ def send_web_or_incident_data(time, time_delta, is_abnormal):
 
 
 '''
-Send exception data start at 30,40,50 minutes in 4th hour.
+Send exception data start at 1:00, 1:10, 1:20 or 9:00, 9:10, 9:20
 '''
-def send_log_data(time, time_delta, is_abnormal):
+def send_log_data(time, is_abnormal):
     timestamp = to_epochtime_minute(time)
-    minute = get_time_delta_minute(time_delta)
-    hour = get_time_delta_hour(time_delta)
+    minute = time.minute
+    hour = time.hour
     if is_abnormal:
-        if minute in [30,40,50] and hour == 0:
+        if hour in [1, 9] and minute in [0, 10, 20]:
             num_message = 1
             data_array = []
             for i in range(0, num_message):
@@ -199,10 +196,10 @@ def send_log_data(time, time_delta, is_abnormal):
     replay_log_data(configs[constant.LOG], data_array, "Log normal data")
 
 
-def read_metric_data(timestamp, index, metric_file_name, msg, instance):
+def read_metric_data(timestamp, index, metric_file_name, msg):
     with open(metric_file_name) as json_data:
         data = []
-        header = map(lambda x: x.strip(), constant.HEADER.replace(constant.INSTANCE_CORE_SERVER, instance).split(','))
+        header = map(lambda x: x.strip(), constant.HEADER.split(','))
         count = 0
         for line in json_data:
             if count == index:
@@ -214,26 +211,17 @@ def read_metric_data(timestamp, index, metric_file_name, msg, instance):
                 break
             count += 1
 
-def send_metric_data(time, time_delta, is_abnormal):
+def send_metric_data(time, is_abnormal):
     timestamp = to_epochtime_minute(time)
-    minute = get_time_delta_minute(time_delta)
-    hour = get_time_delta_hour(time_delta)
+    minute = time.minute
+    hour = time.hour
     if is_abnormal:
-        if hour == 0:
-            index = minute
-            read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data",
-                             constant.INSTANCE_CORE_SERVER)
-            read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data",
-                             constant.INSTANCE_ALERT)
-        # else:
-        #    index = 59
-        #    read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data")
+        if hour in [0, 1, 8, 9]:
+            index = (minute + 30) % 60
+            read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data")
     else:
-        index = minute + hour * 60
-        read_metric_data(timestamp, index, constant.NORMAL_DATA_FILENAME, "Metric normal data",
-                         constant.INSTANCE_CORE_SERVER)
-        read_metric_data(timestamp, index, constant.NORMAL_DATA_FILENAME, "Metric normal data",
-                         constant.INSTANCE_ALERT)
+        index = (hour * 60 + minute) % 180
+        read_metric_data(timestamp, index, constant.NORMAL_DATA_FILENAME, "Metric normal data")
 
 def send_data_to_receiver(post_url, to_send_data, log_msg, num_of_message):
     attempts = 0
@@ -325,14 +313,47 @@ def get_time_delta(cur_time):
     return time_delta, is_abnormal
 
 
+def is_abnormal_period(cur_time):
+    config_file_name = utility.get_config_file_name(user_name)
+    config = SafeConfigParser()
+    config.read(config_file_name)
+    is_abnormal = config[constant.IF][constant.DATA_TYPE] == 'abnormal'
+    is_reverse = config[constant.IF][constant.REVERSE_DEPLOYMENT] == "True"
+    if (cur_time.hour == 0 and cur_time.minute >= 30) or (cur_time.hour == 1 and cur_time.minute < 30):
+        if not is_abnormal:
+            config[constant.IF][constant.DATA_TYPE] = 'abnormal'
+            config[constant.IF][constant.REVERSE_DEPLOYMENT] = 'False'
+            utility.save_config_file(config_file_name, config)
+        is_abnormal = True
+    elif (cur_time.hour == 8 and cur_time.minute >= 30) or (cur_time.hour == 9 and cur_time.minute < 30):
+        if is_reverse:
+            config[constant.IF][constant.DATA_TYPE] = 'normal'
+            utility.save_config_file(config_file_name, config)
+            is_abnormal = False
+        elif not is_reverse and not is_abnormal:
+            config[constant.IF][constant.DATA_TYPE] = 'abnormal'
+            utility.save_config_file(config_file_name, config)
+            is_abnormal = True
+    else:
+        if is_reverse or is_abnormal:
+            config[constant.IF][constant.DATA_TYPE] = 'normal'
+            config[constant.IF][constant.REVERSE_DEPLOYMENT] = 'False'
+            utility.save_config_file(config_file_name, config)
+        is_abnormal = False
+    return is_abnormal
+
+
 if __name__ == "__main__":
     logging_setting()
     urllib3.disable_warnings()
     user_name = utility.get_username()
     configs = get_agent_config_vars()
     cur_time = get_current_time()
-    time_delta, is_abnormal = get_time_delta(cur_time)
-    send_web_or_incident_data(cur_time, time_delta, is_abnormal)
-    send_log_data(cur_time, time_delta, is_abnormal)
-    send_deployment_demo_data(cur_time, time_delta, is_abnormal)
-    send_metric_data(cur_time, time_delta, is_abnormal)
+    is_abnormal_flag = is_abnormal_period(cur_time)
+    print(cur_time, is_abnormal_flag)
+    logging.info("==========New Data Send Round==========")
+    send_web_or_incident_data(cur_time, is_abnormal_flag)
+    send_log_data(cur_time, is_abnormal_flag)
+    send_deployment_demo_data(cur_time, is_abnormal_flag)
+    send_metric_data(cur_time, is_abnormal_flag)
+    cur_time += datetime.timedelta(minutes=1)
