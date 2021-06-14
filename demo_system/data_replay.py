@@ -356,4 +356,3 @@ if __name__ == "__main__":
     send_log_data(cur_time, is_abnormal_flag)
     send_deployment_demo_data(cur_time, is_abnormal_flag)
     send_metric_data(cur_time, is_abnormal_flag)
-    cur_time += datetime.timedelta(minutes=1)
