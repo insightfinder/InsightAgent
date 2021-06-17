@@ -14,7 +14,7 @@ import http.client
 import requests
 import shlex
 import traceback
-
+import sqlite3
 from sys import getsizeof
 from itertools import chain
 from optparse import OptionParser
@@ -70,6 +70,11 @@ def start_data_processing():
                 query = 'increase({}[{}s])'.format(query, if_config_vars['sampling_interval'])
         return query
 
+    # connect to local cache
+    cache_loc = abs_path_from_cur(CACHE_NAME)
+    cache_con = sqlite3.connect(cache_loc)
+    cache_cur = cache_con.cursor()
+
     # parse sql string by params
     pool_map = ThreadPool(agent_config_vars['thread_pool'])
     logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
@@ -101,6 +106,8 @@ def start_data_processing():
         results = pool_map.map(query_messages_prometheus, params)
         result_list = list(chain(*results))
         parse_messages_prometheus(result_list)
+
+    cache_cur.close()
 
     logger.info('Closed......')
 
@@ -164,6 +171,9 @@ def parse_messages_prometheus(result):
                 device = message.get('metric').get(agent_config_vars['device_field'][0])
             full_instance = make_safe_instance_string(instance, device)
 
+            # check cache for instance
+            (instance, component) = get_instance_from_cache(instance)
+
             # get component, and build component instance map info
             component_map = None
             if agent_config_vars['component_field']:
@@ -198,6 +208,15 @@ def parse_messages_prometheus(result):
             logger.info('Parse {0} messages'.format(count))
     logger.info('Parse {0} messages'.format(count))
 
+def get_instance_from_cache(alias):
+    if cache_cur:
+        cache_cur.execute('select instance, component from cache where alias="%s"' % alias)
+        (instance, component) = cache_cur.fetchone()
+        if instance:
+            return (instance, component)
+        else: 
+            return (alias, "")
+            
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
@@ -862,8 +881,10 @@ if __name__ == "__main__":
     JSON_LEVEL_DELIM = '.'
     CSV_DELIM = r",|\t"
     ATTEMPTS = 3
+    CACHE_NAME = 'cache.db'
     track = dict()
     metric_buffer = dict()
+    cache_cur = ''
 
     # get config
     cli_config_vars = get_cli_config_vars()
