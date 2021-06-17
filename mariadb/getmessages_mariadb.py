@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import ConfigParser
+import configparser
 import json
 import logging
 import os
@@ -9,8 +9,8 @@ import sys
 import time
 import pytz
 import arrow
-import urlparse
-import httplib
+import urllib.parse
+import http.client
 import requests
 import statistics
 import subprocess
@@ -156,7 +156,7 @@ def start_data_processing():
             logger.error(e)
             logger.error('SQL execute error: '.format(sql_str))
     else:
-        database_list = filter(lambda x: x.strip(), agent_config_vars['database_list'].split(','))
+        database_list = [x for x in agent_config_vars['database_list'].split(',') if x.strip()]
 
     if agent_config_vars['database_whitelist']:
         try:
@@ -189,7 +189,7 @@ def start_data_processing():
             end_time = arrow.get(timestamp + agent_config_vars['sql_config']['sql_time_interval']).format(
                 agent_config_vars['sql_time_format'])
 
-            params = map(lambda d: (sql, d, start_time, end_time), database_list)
+            params = [(sql, d, start_time, end_time) for d in database_list]
             results = pool_map.map(query_messages_mariadb, params)
             for result in results:
                 parse_messages_mariadb(result)
@@ -205,7 +205,7 @@ def start_data_processing():
             agent_config_vars['sql_time_format'])
         end_time = time_now.format(agent_config_vars['sql_time_format'])
 
-        params = map(lambda d: (sql, d, start_time, end_time), database_list)
+        params = [(sql, d, start_time, end_time) for d in database_list]
         results = pool_map.map(query_messages_mariadb, params)
         for result in results:
             parse_messages_mariadb(result)
@@ -282,7 +282,7 @@ def parse_messages_mariadb(message_list):
             if not extension_metric:
                 continue
 
-            setting_values = agent_config_vars['data_fields'] or message.keys()
+            setting_values = agent_config_vars['data_fields'] or list(message.keys())
             for data_field in setting_values:
                 data_value = message[data_field]
                 if isinstance(data_value, Decimal):
@@ -311,7 +311,7 @@ def get_agent_config_vars():
     """ Read and parse config.ini """
     config_ini = config_ini_path()
     if os.path.exists(config_ini):
-        config_parser = ConfigParser.SafeConfigParser()
+        config_parser = configparser.SafeConfigParser()
         config_parser.read(config_ini)
 
         mariadb_kwargs = {}
@@ -346,7 +346,7 @@ def get_agent_config_vars():
                 'max_allowed_packet': config_parser.get('mariadb', 'max_allowed_packet'),
             }
             # only keep settings with values
-            mariadb_kwargs = {k: v for (k, v) in mariadb_config.items() if v}
+            mariadb_kwargs = {k: v for (k, v) in list(mariadb_config.items()) if v}
 
             # handle boolean setting
             if config_parser.get('mariadb', 'autocommit').upper() == 'FALSE':
@@ -370,7 +370,7 @@ def get_agent_config_vars():
             # metrics
             metrics = config_parser.get('mariadb', 'metrics')
             if len(metrics) != 0:
-                metrics = filter(lambda x: x.strip(), metrics.split(','))
+                metrics = [x for x in metrics.split(',') if x.strip()]
             metrics_whitelist = config_parser.get('mariadb', 'metrics_whitelist')
 
             # handle database info
@@ -449,9 +449,8 @@ def get_agent_config_vars():
             if len(config_parser.get('mariadb', 'sql_time_range')) != 0 and len(
                     config_parser.get('mariadb', 'sql_time_interval')) != 0:
                 try:
-                    sql_time_range = filter(lambda x: x.strip(),
-                                            config_parser.get('mariadb', 'sql_time_range').split(','))
-                    sql_time_range = map(lambda x: int(arrow.get(x).float_timestamp), sql_time_range)
+                    sql_time_range = [x for x in config_parser.get('mariadb', 'sql_time_range').split(',') if x.strip()]
+                    sql_time_range = [int(arrow.get(x).float_timestamp) for x in sql_time_range]
                     sql_time_interval = int(config_parser.get('mariadb', 'sql_time_interval'))
                     sql_config = {
                         "sql_time_range": sql_time_range,
@@ -482,7 +481,7 @@ def get_agent_config_vars():
                                                                   raw=True)
             thread_pool = config_parser.get('mariadb', 'thread_pool', raw=True)
 
-        except ConfigParser.NoOptionError as cp_noe:
+        except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
 
@@ -494,7 +493,7 @@ def get_agent_config_vars():
 
         # timestamp format
         if len(timestamp_format) != 0:
-            timestamp_format = filter(lambda x: x.strip(), timestamp_format.split(','))
+            timestamp_format = [x for x in timestamp_format.split(',') if x.strip()]
         else:
             config_error('timestamp_format')
 
@@ -597,7 +596,7 @@ def get_if_config_vars():
     """ get config.ini vars """
     config_ini = config_ini_path()
     if os.path.exists(config_ini):
-        config_parser = ConfigParser.SafeConfigParser()
+        config_parser = configparser.SafeConfigParser()
         config_parser.read(config_ini)
         try:
             user_name = config_parser.get('insightfinder', 'user_name')
@@ -611,7 +610,7 @@ def get_if_config_vars():
             if_url = config_parser.get('insightfinder', 'if_url')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
-        except ConfigParser.NoOptionError as cp_noe:
+        except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
 
@@ -861,7 +860,7 @@ def initialize_data_gathering():
 
 def clear_metric_buffer():
     # move all buffer data to current data, and send
-    for row in metric_buffer['buffer_dict'].values():
+    for row in list(metric_buffer['buffer_dict'].values()):
         track['current_row'].append(row)
         if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
             logger.debug('Sending buffer chunk')
@@ -924,7 +923,7 @@ def send_data_to_if(chunk_metric_data):
         return
 
     # send the data
-    post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
+    post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
     send_request(post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
                  data=data_to_post, proxies=if_config_vars['if_proxies'])
@@ -946,7 +945,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     for req_num in range(ATTEMPTS):
         try:
             response = req(url, **request_passthrough)
-            if response.status_code == httplib.OK:
+            if response.status_code == http.client.OK:
                 logger.info(success_message)
                 return response
             else:
