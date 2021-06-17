@@ -24,6 +24,20 @@ from multiprocessing.pool import ThreadPool
 This script gathers data to send to Insightfinder
 """
 
+def initialize_cache_connection(): 
+    # connect to local cache
+    cache_loc = abs_path_from_cur(CACHE_NAME)
+    if os.path.exists(cache_loc): 
+        cache_con = sqlite3.connect(cache_loc)
+        cache_cur = cache_con.cursor()
+    else: 
+        cache_con = sqlite3.connect(cache_loc)
+        cache_cur = cache_con.cursor()
+        cache_cur.execute('CREATE TABLE "cache" ( "instance"	TEXT NOT NULL UNIQUE, "alias"	TEXT NOT NULL)')
+
+    return cache_con, cache_cur
+        
+
 
 def start_data_processing():
     logger.info('Started......')
@@ -70,11 +84,6 @@ def start_data_processing():
                 query = 'increase({}[{}s])'.format(query, if_config_vars['sampling_interval'])
         return query
 
-    # connect to local cache
-    cache_loc = abs_path_from_cur(CACHE_NAME)
-    cache_con = sqlite3.connect(cache_loc)
-    cache_cur = cache_con.cursor()
-
     # parse sql string by params
     pool_map = ThreadPool(agent_config_vars['thread_pool'])
     logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
@@ -107,7 +116,7 @@ def start_data_processing():
         result_list = list(chain(*results))
         parse_messages_prometheus(result_list)
 
-    cache_cur.close()
+    cache_con.close()
 
     logger.info('Closed......')
 
@@ -171,8 +180,8 @@ def parse_messages_prometheus(result):
                 device = message.get('metric').get(agent_config_vars['device_field'][0])
             full_instance = make_safe_instance_string(instance, device)
 
-            # check cache for instance
-            (instance, component) = get_instance_from_cache(instance)
+            # check cache for alias
+            full_instance = get_alias_from_cache(full_instance)
 
             # get component, and build component instance map info
             component_map = None
@@ -208,14 +217,17 @@ def parse_messages_prometheus(result):
             logger.info('Parse {0} messages'.format(count))
     logger.info('Parse {0} messages'.format(count))
 
-def get_instance_from_cache(alias):
+def get_alias_from_cache(alias):
     if cache_cur:
-        cache_cur.execute('select instance, component from cache where alias="%s"' % alias)
-        (instance, component) = cache_cur.fetchone()
+        cache_cur.execute('select alias from cache where instance="%s"' % alias)
+        instance = cache_cur.fetchone()
         if instance:
-            return (instance, component)
+            return instance[0]
         else: 
-            return (alias, "")
+            # Hard coded if alias hasn't been added to cache, add it 
+            cache_cur.execute('insert into cache (instance, alias) values ("%s", "%s")' % (alias, alias))
+            cache_con.commit()
+            return alias
             
 
 def get_agent_config_vars():
@@ -884,7 +896,6 @@ if __name__ == "__main__":
     CACHE_NAME = 'cache.db'
     track = dict()
     metric_buffer = dict()
-    cache_cur = ''
 
     # get config
     cli_config_vars = get_cli_config_vars()
@@ -893,5 +904,7 @@ if __name__ == "__main__":
     if_config_vars = get_if_config_vars()
     agent_config_vars = get_agent_config_vars()
     print_summary_info()
+
+    (cache_con, cache_cur) = initialize_cache_connection()
 
     initialize_data_gathering()
