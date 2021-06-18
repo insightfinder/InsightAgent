@@ -14,7 +14,7 @@ import http.client
 import requests
 import shlex
 import traceback
-
+import sqlite3
 from sys import getsizeof
 from itertools import chain
 from optparse import OptionParser
@@ -23,6 +23,20 @@ from multiprocessing.pool import ThreadPool
 """
 This script gathers data to send to Insightfinder
 """
+
+def initialize_cache_connection(): 
+    # connect to local cache
+    cache_loc = abs_path_from_cur(CACHE_NAME)
+    if os.path.exists(cache_loc): 
+        cache_con = sqlite3.connect(cache_loc)
+        cache_cur = cache_con.cursor()
+    else: 
+        cache_con = sqlite3.connect(cache_loc)
+        cache_cur = cache_con.cursor()
+        cache_cur.execute('CREATE TABLE "cache" ( "instance"	TEXT NOT NULL UNIQUE, "alias"	TEXT NOT NULL)')
+
+    return cache_con, cache_cur
+        
 
 
 def start_data_processing():
@@ -102,6 +116,8 @@ def start_data_processing():
         result_list = list(chain(*results))
         parse_messages_prometheus(result_list)
 
+    cache_con.close()
+
     logger.info('Closed......')
 
 
@@ -164,6 +180,9 @@ def parse_messages_prometheus(result):
                 device = message.get('metric').get(agent_config_vars['device_field'][0])
             full_instance = make_safe_instance_string(instance, device)
 
+            # check cache for alias
+            full_instance = get_alias_from_cache(full_instance)
+
             # get component, and build component instance map info
             component_map = None
             if agent_config_vars['component_field']:
@@ -198,6 +217,18 @@ def parse_messages_prometheus(result):
             logger.info('Parse {0} messages'.format(count))
     logger.info('Parse {0} messages'.format(count))
 
+def get_alias_from_cache(alias):
+    if cache_cur:
+        cache_cur.execute('select alias from cache where instance="%s"' % alias)
+        instance = cache_cur.fetchone()
+        if instance:
+            return instance[0]
+        else: 
+            # Hard coded if alias hasn't been added to cache, add it 
+            cache_cur.execute('insert into cache (instance, alias) values ("%s", "%s")' % (alias, alias))
+            cache_con.commit()
+            return alias
+            
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
@@ -862,6 +893,7 @@ if __name__ == "__main__":
     JSON_LEVEL_DELIM = '.'
     CSV_DELIM = r",|\t"
     ATTEMPTS = 3
+    CACHE_NAME = 'cache.db'
     track = dict()
     metric_buffer = dict()
 
@@ -872,5 +904,7 @@ if __name__ == "__main__":
     if_config_vars = get_if_config_vars()
     agent_config_vars = get_agent_config_vars()
     print_summary_info()
+
+    (cache_con, cache_cur) = initialize_cache_connection()
 
     initialize_data_gathering()
