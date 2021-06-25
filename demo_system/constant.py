@@ -27,21 +27,58 @@ DATE_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 DATE_TIME_FORMAT_DAY = "%Y-%m-%d"
 
 # Deployment data
-DEPLOYMENT_DATA = '''jobType: DEPLOY\n
+DEPLOYMENT_DATA_BUGGY = [
+'''jobType: DEPLOY\n
 buildStatus: SUCCESS\n
 gitLog: commit fee8238318dfe94d849604a8da7dff0bd59234d9\n
 Merge: 2302b64a2 ef394aa82\n
 Author: Tom <Tom@insightfinder.com>\n
     Merge pull request #5010 from DEMO/II-7100_checkout_service_feature\n
-    Adding a new checkout service feature '''
-
-DEPLOYMENT_DATA_REVERSE = '''jobType: DEPLOY\n
+    Adding a new checkout service feature ''',
+'''jobType: DEPLOY\n
 buildStatus: SUCCESS\n
-gitLog: commit adr148898791juhssiue93710249ad19j9101ije0\n
-Merge: 21412r1sa r4teaw1qw\n
+gitLog: commit 84403f9803894f08dedc1037a1462ae0ec4d3eb8\n
+Merge: 2302b64a2 ef394aa82\n
 Author: Tom <Tom@insightfinder.com>\n
-    Merge pull request #5011 from DEMO/HOTFIX_reverse_checkout_service_feature\n
-    Reverse release from Tom Anderson '''
+    Merge pull request #5012 from DEMO/II-7100_checkout_service_feature\n
+    Adding another checkout service feature ''']
+
+DEPLOYMENT_DATA = [
+'''jobType: DEPLOY\n
+buildStatus: SUCCESS\n
+gitLog: commit bdcf7eb22a9772f2d476940894064515b20fb145\n
+Merge: 95fb86f 8d800832\n
+Author: Peter <Peter@insightfinder.com>\n
+    Merge pull request #5011 from DEMO/II-8000_fix_user_login_problem\n
+    Fix the user login problem due to the null pointer exception
+    Add try catch exception to avoid future exception''',
+'''jobType: DEPLOY\n
+buildStatus: SUCCESS\n
+gitLog: commit 8d80083afce9e8b940719589b9ef9d8d2a602d3e\n
+Merge: 0d7a465 503fca3\n
+Author: Jack <Jack@insightfinder.com>\n
+    Merge pull request #5013 from DEMO/II-8460_fix_database_connection_issue\n
+    Database connection error
+    Fix the misconfiguration
+    Change the timeout setting''',
+'''jobType: DEPLOY\n
+buildStatus: SUCCESS\n
+gitLog: commit 0d7a465e2631ac23546219bac4d686324cef218c\n
+Merge: 2268422 6148138\n
+Author: David <David@insightfinder.com>\n
+    Merge pull request #5014 from DEMO/II-8489_add_setting_change_api\n
+    Add the setting change api support
+    Add new setting of user management''',
+'''jobType: DEPLOY\n
+buildStatus: SUCCESS\n
+gitLog: commit 3bca2172b059166d42f15f9ec5bec839880722eb\n
+Merge: 84403f9 a54095b\n
+Author: Ariy <Ariy@insightfinder.com>\n
+    Merge pull request #5015 from DEMO/II-6892_optimize_data_loading\n
+    Add multithread support for data loading to enhance the performance
+    Add paging support for loading large chunk of data''']
+
+DEPLOYMENT_DATA_INDEX = {0:0, 4:0, 8:1, 12:1, 16:2, 20:3}
 
 # Web data
 WEB_INCIDENT_DATA = "Production 911: Checkout server returns 500 error"
@@ -139,8 +176,7 @@ IF_CAT = 'InsightFinder'
 INSTANCE_CORE_SERVER = "core server"
 DEP_INSTANCE = 'Jenkins'
 # Put the ip address of the machine where the demo scripts exist, e.g. on stg the demo scripts are in the app-server node
-# WEB_INSTANCE = 'ip-172-31-52-141.ec2.internal'
-INSTANCE_ALERT = ''
+INSTANCE_ALERT = 'Undefined Check the above comment'
 # Log data constant
 EVENT_ID = 'eventId'
 TAG = 'tag'
