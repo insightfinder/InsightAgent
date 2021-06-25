@@ -54,6 +54,7 @@ def start_data_processing():
                 response = send_request(url, headers=headers, params=params, proxies=agent_config_vars['proxies'])
                 if response != -1:
                     result = response.json()
+                    # TODO: Check the result is List
                     data = result or []
             except Exception as e:
                 logger.error(e)
@@ -70,10 +71,16 @@ def start_data_processing():
         params = {
             "search_type": 'any',
         }
-        response = send_request(url, headers=headers, params=params, proxies=agent_config_vars['proxies'])
-        if response != -1:
-            result = response.json()
-            result_list = result or []
+        try:
+            # execute sql string
+            response = send_request(url, headers=headers, params=params, proxies=agent_config_vars['proxies'])
+            if response != -1:
+                result = response.json()
+                # TODO: Check the result is List
+                result_list = result or []
+        except Exception as e:
+            logger.error(e)
+            logger.error('Query device list error')
 
     # parse device list
     for device in result_list:
@@ -131,8 +138,10 @@ def build_query_params(devices_ids, metric_query_params, start_time, end_time):
                     "until": end_time * 1000,
                     "metric_category": metric_query["metric_category"],
                     "metric_specs": metric_specs,
+                    # "metric_specs": json.dumps(metric_specs),
                     "object_type": agent_config_vars['object_type'],
                     "object_ids": devices_ids,
+                    # "object_ids": json.dumps(devices_ids),
                     "cycle": metric_query['cycle'] or 'auto',
                 }
             ))
@@ -152,6 +161,7 @@ def query_messages_extrahop(args):
             logger.error('Query metrics error')
         else:
             result = response.json()
+            # TODO: Check the result is Dict, and has field stats
             data = result["stats"] or []
 
     except Exception as e:
