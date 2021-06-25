@@ -17,6 +17,7 @@ import subprocess
 import shlex
 import traceback
 import pymysql
+import sqlite3
 
 from pymysql import ProgrammingError
 from datetime import datetime
@@ -27,6 +28,19 @@ from multiprocessing.pool import ThreadPool
 """
 This script gathers data to send to Insightfinder
 """
+
+def initialize_cache_connection(): 
+    # connect to local cache
+    cache_loc = abs_path_from_cur(CACHE_NAME)
+    if os.path.exists(cache_loc): 
+        cache_con = sqlite3.connect(cache_loc)
+        cache_cur = cache_con.cursor()
+    else: 
+        cache_con = sqlite3.connect(cache_loc)
+        cache_cur = cache_con.cursor()
+        cache_cur.execute('CREATE TABLE "cache" ( "instance"	TEXT NOT NULL UNIQUE, "alias"	TEXT NOT NULL)')
+
+    return cache_con, cache_cur
 
 
 def start_data_processing():
@@ -267,6 +281,9 @@ def parse_messages_mariadb(message_list):
                 if not instance:
                     continue
 
+            # check cache for alias
+            instance = get_alias_from_cache(instance)
+
             # filter by instance whitelist
             if agent_config_vars['instance_whitelist_regex'] \
                     and not agent_config_vars['instance_whitelist_regex'].match(instance):
@@ -305,6 +322,19 @@ def parse_messages_mariadb(message_list):
         if count % 1000 == 0:
             logger.info('Parse {0} messages'.format(count))
     logger.info('Parse {0} messages'.format(count))
+
+
+def get_alias_from_cache(alias):
+    if cache_cur:
+        cache_cur.execute('select alias from cache where instance="%s"' % alias)
+        instance = cache_cur.fetchone()
+        if instance:
+            return instance[0]
+        else: 
+            # Hard coded if alias hasn't been added to cache, add it 
+            cache_cur.execute('insert into cache (instance, alias) values ("%s", "%s")' % (alias, alias))
+            cache_con.commit()
+            return alias
 
 
 def get_agent_config_vars():
@@ -1066,6 +1096,7 @@ if __name__ == "__main__":
     ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
     JSON_LEVEL_DELIM = '.'
     CSV_DELIM = r",|\t"
+    CACHE_NAME = 'cache.db'
     ATTEMPTS = 3
     REQUESTS = dict()
     track = dict()
@@ -1078,5 +1109,7 @@ if __name__ == "__main__":
     if_config_vars = get_if_config_vars()
     agent_config_vars = get_agent_config_vars()
     print_summary_info()
+
+    (cache_con, cache_cur) = initialize_cache_connection()
 
     initialize_data_gathering()
