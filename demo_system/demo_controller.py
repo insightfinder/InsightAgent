@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import constant
 import utility
 import datetime
@@ -83,18 +84,14 @@ def modified_config_file():
     config.read(config_file_name)
     current_data_type = config[constant.IF][constant.DATA_TYPE]
     if current_data_type == 'abnormal' and parameters[constant.DATA_TYPE] == 'normal':
-        is_reverse = action_filter(config)
+        is_reverse = True
         logging.info("Modification triggered: is_reverse is " + str(is_reverse))
         if is_reverse:
-            # Switch to normal data and trigger the reverse development
+            # Action triggered switch to normal data
             config[constant.IF][constant.REVERSE_DEPLOYMENT] = 'True'
             config[constant.IF][constant.NORMAL_TIME] = get_current_date_minute()
             config[constant.IF][constant.DATA_TYPE] = parameters[constant.DATA_TYPE]
             logging.info("Reverse buggy deployment action triggered.")
-    #if current_data_type == 'normal':
-        # Swtich to abnormal data
-    #    config[constant.IF][constant.ABNORMAL_TIME] = get_current_date_minute()
-    #    config[constant.IF][constant.DATA_TYPE] = parameters[constant.DATA_TYPE]
     utility.save_config_file(config_file_name, config)
 
 
