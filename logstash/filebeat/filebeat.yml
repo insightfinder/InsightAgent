@@ -3,13 +3,13 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - c:\*.log
+    - <Path to log file>
   exclude_lines: ['^#']
   fields:
-      log_type: iis
+    log_type: <Tag for logstash processing (eg: appserver)> 
     
 
 #================================ Outputs ======================================
 output.logstash:
   enabled: true
-  hosts: ["localhost:5044"]
+  hosts: ["<Logstash server with port>"]
