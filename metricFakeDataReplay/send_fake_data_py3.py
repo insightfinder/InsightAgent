@@ -133,7 +133,7 @@ if __name__ == "__main__":
     start_time = config_vars['time_range'][0]
     end_time = config_vars['time_range'][1]
     timestamp = start_time
-    need_anomaly = False
+    need_anomaly = True
     has_anomaly = 0
 
     data = []
@@ -160,7 +160,7 @@ if __name__ == "__main__":
                 val = str(random.randint(*random_list))
 
                 # set anomaly value
-                if has_anomaly and instance_count <= 10:
+                if has_anomaly and i_count <= 10:
                     val = str(random.randint(*fake_data_map[9]))
 
                 new_entry["metric{}[node{}]".format(m_count, i_count)] = val
