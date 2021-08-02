@@ -1,12 +1,12 @@
 [InsightFinder]
 #The user name of the account
-insightFinder_user_name = user
+insightFinder_user_name =
 #The customer account license key, following the toturial to get it
-insightFinder_license_key = a333bd39662ad1edf64e99e97e4b776109827234
+insightFinder_license_key =
 #The project name
-insightFinder_project_name = test-metric-5w
+insightFinder_project_name =
 #The IF server url to send the data: https://app.insightfinder.com
-insightFinder_server_url = https://stg.insightfinder.com
+insightFinder_server_url = https://app.insightfinder.com
 
 # fake data time range, ex: 2021-07-01 00:00:00,2021-07-02 00:00:00
 fake_data_time_range = 2021-07-02 00:00:00,2021-07-02 01:00:00
