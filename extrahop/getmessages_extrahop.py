@@ -51,10 +51,10 @@ def start_data_processing():
             data = []
             try:
                 # execute sql string
-                response = send_request(url, headers=headers, params=params, proxies=agent_config_vars['proxies'])
+                response = send_request(url, headers=headers, params=params, verify=False,
+                                        proxies=agent_config_vars['proxies'])
                 if response != -1:
                     result = response.json()
-                    # TODO: Check the result is List
                     data = result or []
             except Exception as e:
                 logger.error(e)
@@ -73,10 +73,10 @@ def start_data_processing():
         }
         try:
             # execute sql string
-            response = send_request(url, headers=headers, params=params, proxies=agent_config_vars['proxies'])
+            response = send_request(url, headers=headers, params=params, verify=False,
+                                    proxies=agent_config_vars['proxies'])
             if response != -1:
                 result = response.json()
-                # TODO: Check the result is List
                 result_list = result or []
         except Exception as e:
             logger.error(e)
@@ -104,7 +104,7 @@ def start_data_processing():
             start_time = timestamp
             end_time = timestamp + if_config_vars['sampling_interval']
 
-            params = build_query_params(devices_ids, metric_query_params, start_time, end_time)
+            params = build_query_params(headers, devices_ids, metric_query_params, start_time, end_time)
             results = pool_map.map(query_messages_extrahop, params)
             result_list = list(chain(*results))
             parse_messages_extrahop(result_list, devices_ids_map)
@@ -117,7 +117,7 @@ def start_data_processing():
         start_time = time_now - if_config_vars['sampling_interval']
         end_time = time_now
 
-        params = build_query_params(devices_ids, metric_query_params, start_time, end_time)
+        params = build_query_params(headers, devices_ids, metric_query_params, start_time, end_time)
         results = pool_map.map(query_messages_extrahop, params)
         result_list = list(chain(*results))
         parse_messages_extrahop(result_list, devices_ids_map)
@@ -125,7 +125,7 @@ def start_data_processing():
     logger.info('Closed......')
 
 
-def build_query_params(devices_ids, metric_query_params, start_time, end_time):
+def build_query_params(headers, devices_ids, metric_query_params, start_time, end_time):
     params = []
     for metric_query in metric_query_params:
         for metric_obj in metric_query['metric_specs']:
@@ -133,6 +133,7 @@ def build_query_params(devices_ids, metric_query_params, start_time, end_time):
             metric_specs = [metric_obj]
             params.append((
                 metric,
+                headers,
                 {
                     "from": start_time * 1000,
                     "until": end_time * 1000,
@@ -149,14 +150,15 @@ def build_query_params(devices_ids, metric_query_params, start_time, end_time):
 
 
 def query_messages_extrahop(args):
-    metric, params = args
+    metric, headers, params = args
     logger.info('Starting query metrics with params: {}'.format(str(params)))
 
     data = []
     try:
         # execute sql string
         url = urllib.parse.urljoin(agent_config_vars['host'], '/api/v1/metrics')
-        response = send_request(url, mode='POST', data=params, verify=False, proxies=agent_config_vars['proxies'])
+        response = send_request(url, mode='POST', headers=headers, data=params, verify=False,
+                                proxies=agent_config_vars['proxies'])
         if response == -1:
             logger.error('Query metrics error')
         else:
@@ -285,7 +287,6 @@ def get_agent_config_vars():
             target_timestamp_timezone = config_parser.get('extrahop', 'target_timestamp_timezone', raw=True) or 'UTC'
             timestamp_format = config_parser.get('extrahop', 'timestamp_format', raw=True)
             timezone = config_parser.get('extrahop', 'timezone') or 'UTC'
-            data_fields = config_parser.get('extrahop', 'data_fields', raw=True)
             thread_pool = config_parser.get('extrahop', 'thread_pool', raw=True)
 
         except configparser.NoOptionError as cp_noe:
@@ -353,17 +354,6 @@ def get_agent_config_vars():
         instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
         device_fields = [x.strip() for x in device_field.split(',') if x.strip()]
         timestamp_fields = timestamp_field.split(',')
-        if len(data_fields) != 0:
-            data_fields = data_fields.split(',')
-            for instance_field in instance_fields:
-                if instance_field in data_fields:
-                    data_fields.pop(data_fields.index(instance_field))
-            for device_field in device_fields:
-                if device_field in data_fields:
-                    data_fields.pop(data_fields.index(device_field))
-            for timestamp_field in timestamp_fields:
-                if timestamp_field in data_fields:
-                    data_fields.pop(data_fields.index(timestamp_field))
 
         if len(thread_pool) != 0:
             thread_pool = int(thread_pool)
@@ -387,7 +377,6 @@ def get_agent_config_vars():
             'instance_field': instance_fields,
             "instance_whitelist_regex": instance_whitelist_regex,
             'device_field': device_fields,
-            'data_fields': data_fields,
             'timestamp_field': timestamp_fields,
             'target_timestamp_timezone': target_timestamp_timezone,
             'timezone': timezone,
