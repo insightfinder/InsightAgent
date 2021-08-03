@@ -4,11 +4,11 @@ host = extrahop.example.com
 api_key = 123456789abcdefghijklmnop
 
 # this field is used for query metrics, only support "device" for now.
-object_type = "device"
+object_type = device
 # device ip list. Multiple ips split with ','. If this options is empty, all active devices will be used.
 device_ip_list = 10.10.10.1,10.10.10.2
 # metrics query params, support multiple metric_category.
-metric_query_params = """[
+metric_query_params = [
         {
           "metric_category": "http_server",
           "metric_specs": [
@@ -25,7 +25,7 @@ metric_query_params = """[
           ],
           "cycle": "auto"
         }
-    ]"""
+    ]
 
 
 # history data time config. If these options is set, the agent will query results by time range
