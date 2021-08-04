@@ -218,6 +218,9 @@ def get_agent_config_vars():
                            x.strip()]
             else:
                 config_error('osmosys_servers')
+            for server in servers:
+                if len(server) != 2:
+                    config_error('osmosys_servers')
 
             # metrics
             metrics = config_parser.get('osmosys', 'metrics')
