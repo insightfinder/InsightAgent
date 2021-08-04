@@ -249,6 +249,8 @@ def get_agent_config_vars():
         # metrics
         if len(metrics) != 0:
             metrics = [x.strip() for x in metrics.split(',') if x.strip()]
+        else:
+            config_error('metrics')
 
         if len(instance_whitelist) != 0:
             try:
