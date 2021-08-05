@@ -38,11 +38,20 @@ def start_data_processing():
         "Authorization": "ExtraHop apikey=" + api_key
     }
 
+    metric_query_params = agent_config_vars['metric_query_params']
+    device_ip_list = agent_config_vars['device_ip_list'] or []
+
+    # merge all device ip list
+    for param in metric_query_params:
+        ips = param.get('device_ip_list') or []
+        device_ip_list.extend(ips)
+    device_ip_list = list(set(device_ip_list))
+
     # get devices list and id maps
     devices_ids = []
     devices_ids_map = {}
+    devices_ips_map = {}
     url = urllib.parse.urljoin(agent_config_vars['host'], '/api/v1/devices')
-    device_ip_list = agent_config_vars['device_ip_list']
     result_list = []
     if device_ip_list:
         def query_devices(args):
@@ -87,6 +96,7 @@ def start_data_processing():
         device_id = device['id']
         devices_ids.append(device_id)
         devices_ids_map[device_id] = device['ipaddr4']
+        devices_ips_map[device['ipaddr4']] = device_id
 
     # filter devices ids
     if len(devices_ids) == 0:
@@ -94,7 +104,6 @@ def start_data_processing():
         sys.exit(1)
 
     # parse sql string by params
-    metric_query_params = agent_config_vars['metric_query_params']
     logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
     if agent_config_vars['his_time_range']:
         logger.debug('Using time range for replay data')
@@ -104,7 +113,8 @@ def start_data_processing():
             start_time = timestamp
             end_time = timestamp + if_config_vars['sampling_interval']
 
-            params = build_query_params(headers, devices_ids, metric_query_params, start_time, end_time)
+            params = build_query_params(headers, devices_ips_map, devices_ids, metric_query_params, start_time,
+                                        end_time)
             results = pool_map.map(query_messages_extrahop, params)
             result_list = list(chain(*results))
             parse_messages_extrahop(result_list, devices_ids_map)
@@ -117,7 +127,7 @@ def start_data_processing():
         start_time = time_now - if_config_vars['sampling_interval']
         end_time = time_now
 
-        params = build_query_params(headers, devices_ids, metric_query_params, start_time, end_time)
+        params = build_query_params(headers, devices_ips_map, devices_ids, metric_query_params, start_time, end_time)
         results = pool_map.map(query_messages_extrahop, params)
         result_list = list(chain(*results))
         parse_messages_extrahop(result_list, devices_ids_map)
@@ -125,9 +135,14 @@ def start_data_processing():
     logger.info('Closed......')
 
 
-def build_query_params(headers, devices_ids, metric_query_params, start_time, end_time):
+def build_query_params(headers, devices_ips_map, devices_ids, metric_query_params, start_time, end_time):
     params = []
     for metric_query in metric_query_params:
+        device_ip_list = metric_query['device_ip_list']
+        current_devices_ids = devices_ids
+        if device_ip_list and len(device_ip_list) > 0:
+            current_devices_ids = [devices_ips_map.get(ip) for ip in device_ip_list if devices_ips_map.get(ip)]
+
         for metric_obj in metric_query['metric_specs']:
             metric = metric_obj['name']
             metric_specs = [metric_obj]
@@ -140,7 +155,7 @@ def build_query_params(headers, devices_ids, metric_query_params, start_time, en
                     "metric_category": metric_query["metric_category"],
                     "metric_specs": metric_specs,
                     "object_type": agent_config_vars['object_type'],
-                    "object_ids": devices_ids,
+                    "object_ids": current_devices_ids,
                     "cycle": metric_query['cycle'] or 'auto',
                 }
             ))
@@ -161,7 +176,7 @@ def query_messages_extrahop(args):
             logger.error('Query metrics error')
         else:
             result = response.json()
-            # TODO: Check the result is Dict, and has field stats
+            # Check the result is Dict, and has field stats
             data = result["stats"] or []
 
     except Exception as e:
@@ -310,6 +325,11 @@ def get_agent_config_vars():
                 config_error('metric_query_params')
         else:
             config_error('metric_query_params')
+        if not isinstance(metric_query_params, list):
+            config_error('metric_query_params')
+        for param in metric_query_params:
+            if param.get('device_ip_list') and not isinstance(param['device_ip_list'], list):
+                config_error('metric_query_params->device_ip_list')
 
         if len(instance_whitelist) != 0:
             try:
