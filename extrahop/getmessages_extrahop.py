@@ -139,10 +139,8 @@ def build_query_params(headers, devices_ids, metric_query_params, start_time, en
                     "until": end_time * 1000,
                     "metric_category": metric_query["metric_category"],
                     "metric_specs": metric_specs,
-                    # "metric_specs": json.dumps(metric_specs),
                     "object_type": agent_config_vars['object_type'],
                     "object_ids": devices_ids,
-                    # "object_ids": json.dumps(devices_ids),
                     "cycle": metric_query['cycle'] or 'auto',
                 }
             ))
@@ -151,13 +149,13 @@ def build_query_params(headers, devices_ids, metric_query_params, start_time, en
 
 def query_messages_extrahop(args):
     metric, headers, params = args
-    logger.info('Starting query metrics with params: {}'.format(str(params)))
+    logger.info('Starting query metrics with params: {}'.format(str(json.dumps(params))))
 
     data = []
     try:
         # execute sql string
         url = urllib.parse.urljoin(agent_config_vars['host'], '/api/v1/metrics')
-        response = send_request(url, mode='POST', headers=headers, data=params, verify=False,
+        response = send_request(url, mode='POST', headers=headers, data=json.dumps(params), verify=False,
                                 proxies=agent_config_vars['proxies'])
         if response == -1:
             logger.error('Query metrics error')
@@ -185,7 +183,7 @@ def parse_messages_extrahop(result, devices_ids_map):
 
             date_field = message.get('metric_name')
 
-            instance = message.get('metric').get(
+            instance = message.get(
                 agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
                     agent_config_vars['instance_field']) > 0 else 'oid')
             instance = devices_ids_map.get(instance, instance)
