@@ -4,8 +4,19 @@
 osmosys_servers =
 
 # required
-# metrics to query for, multiple metrics split with `,`
-metrics =
+# metric path to query for
+metric_path = cs.*.{region}.{env}.{system}.{instance}.{metric}
+# instances to query for, multiple instances split with `,`.will replace {instance} in the metric path.
+instances = 127.0.0.1,127.0.0.2
+# metrics to query for, multiple metrics split with `,`.will replace {metric} in the metric path.
+metrics = metric1,metric2
+
+# {region} in the metric path, default is *
+region =
+# {env} in the metric path, default is *
+env =
+# {system} in the metric path, default is *
+system =
 
 # history data time config. If these options is set, the agent will query results by time range
 # time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00

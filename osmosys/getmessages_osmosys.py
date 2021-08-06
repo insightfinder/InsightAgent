@@ -36,9 +36,17 @@ def start_data_processing():
         logger.error('Server list is empty')
         sys.exit(1)
 
+    metric_path = agent_config_vars['metric_path']
+
+    # get instances
+    instances = agent_config_vars['instances']
+    # filter instances
+    if len(instances) == 0:
+        logger.error('Instance list is empty')
+        sys.exit(1)
+
     # get metrics
     metrics = agent_config_vars['metrics']
-
     # filter metrics
     if len(metrics) == 0:
         logger.error('Metric list is empty')
@@ -57,16 +65,18 @@ def start_data_processing():
 
             params = []
             for server in servers:
-                params.extend(
-                    [(server[1], server[0], m, {
-                        'format': agent_config_vars['data_format'].lower(),
-                        'target': m,
-                        'from': start_time,
-                        'until': end_time,
-                        # 'from': arrow.get(start_time).format('HH:mm_YYYYMMDD'),
-                        # 'until': arrow.get(end_time).format('HH:mm_YYYYMMDD'),
-                    }) for m in metrics]
-                )
+                for ins in instances:
+                    for m in metrics:
+                        target = metric_path.format(region=agent_config_vars['region'], env=agent_config_vars['env'],
+                                                    system=agent_config_vars['system'], instance=ins, metric=m)
+                        params.append((server[1], server[0], ins, m, {
+                            'format': agent_config_vars['data_format'].lower(),
+                            'target': target,
+                            'from': start_time,
+                            'until': end_time,
+                            # 'from': arrow.get(start_time).format('HH:mm_YYYYMMDD'),
+                            # 'until': arrow.get(end_time).format('HH:mm_YYYYMMDD'),
+                        }))
             results = pool_map.map(query_messages_osmosys, params)
             result_list = list(chain(*results))
             parse_messages_osmosys(result_list)
@@ -81,16 +91,18 @@ def start_data_processing():
 
         params = []
         for server in servers:
-            params.extend(
-                [(server[1], server[0], m, {
-                    'format': agent_config_vars['data_format'].lower(),
-                    'target': m,
-                    'from': start_time,
-                    'until': end_time,
-                    # 'from': arrow.get(start_time).format('HH:mm_YYYYMMDD'),
-                    # 'until': arrow.get(end_time).format('HH:mm_YYYYMMDD'),
-                }) for m in metrics]
-            )
+            for ins in instances:
+                for m in metrics:
+                    target = metric_path.format(region=agent_config_vars['region'], env=agent_config_vars['env'],
+                                                system=agent_config_vars['system'], instance=ins, metric=m)
+                    params.append((server[1], server[0], ins, m, {
+                        'format': agent_config_vars['data_format'].lower(),
+                        'target': target,
+                        'from': start_time,
+                        'until': end_time,
+                        # 'from': arrow.get(start_time).format('HH:mm_YYYYMMDD'),
+                        # 'until': arrow.get(end_time).format('HH:mm_YYYYMMDD'),
+                    }))
         results = pool_map.map(query_messages_osmosys, params)
         result_list = list(chain(*results))
         parse_messages_osmosys(result_list)
@@ -99,7 +111,7 @@ def start_data_processing():
 
 
 def query_messages_osmosys(args):
-    server, server_name, metric, params = args
+    server, server_name, instance, metric, params = args
     logger.info('Starting query server name | metric: {} | {}'.format(server_name, metric))
 
     data = []
@@ -121,7 +133,7 @@ def query_messages_osmosys(args):
         logger.error('Query metric error: ' + metric)
 
     # add metric name in the value
-    data = [{**item, 'server_name': server_name, 'metric_name': metric, } for item in data]
+    data = [{**item, 'query_server_name': server_name, 'query_instance_name': instance, 'query_metric_name': metric, } for item in data]
 
     return data
 
@@ -134,11 +146,16 @@ def parse_messages_osmosys(result):
         try:
             logger.debug(message)
 
-            date_field = message.get('metric_name')
+            # TODO: get metric name in response, parse metric path
+            metric = message.get('metric')
+            metric = metric.split('.')
+            del metric[5]  # remove host in the metric path
+            date_field = '.'.join(metric)
 
+            # get instance name
             instance = message.get(
                 agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
-                    agent_config_vars['instance_field']) > 0 else 'server_name')
+                    agent_config_vars['instance_field']) > 0 else 'query_instance_name')
 
             # filter by instance whitelist
             if agent_config_vars['instance_whitelist_regex'] \
@@ -199,7 +216,12 @@ def get_agent_config_vars():
 
         osmosys_kwargs = {}
         servers = None
+        metric_path = ''
+        instances = None
         metrics = None
+        region = '*'
+        env = '*'
+        system = '*'
         his_time_range = None
 
         instance_whitelist_regex = None
@@ -222,8 +244,12 @@ def get_agent_config_vars():
                 if len(server) != 2:
                     config_error('osmosys_servers')
 
-            # metrics
+            metric_path = config_parser.get('osmosys', 'metric_path')
+            instances = config_parser.get('osmosys', 'instances')
             metrics = config_parser.get('osmosys', 'metrics')
+            region = config_parser.get('osmosys', 'region') or '*'
+            env = config_parser.get('osmosys', 'env') or '*'
+            system = config_parser.get('osmosys', 'system') or '*'
 
             # time range
             his_time_range = config_parser.get('osmosys', 'his_time_range')
@@ -249,6 +275,13 @@ def get_agent_config_vars():
             logger.error(cp_noe)
             config_error()
 
+        if len(metric_path) == 0:
+            config_error('metric_path')
+        # instances
+        if len(instances) != 0:
+            instances = [x.strip() for x in instances.split(',') if x.strip()]
+        else:
+            config_error('instances')
         # metrics
         if len(metrics) != 0:
             metrics = [x.strip() for x in metrics.split(',') if x.strip()]
@@ -317,7 +350,12 @@ def get_agent_config_vars():
         config_vars = {
             'osmosys_kwargs': osmosys_kwargs,
             'servers': servers,
+            'metric_path': metric_path,
+            'instances': instances,
             'metrics': metrics,
+            'region': region,
+            'env': env,
+            'system': system,
             'his_time_range': his_time_range,
 
             'proxies': agent_proxies,
