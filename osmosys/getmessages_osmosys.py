@@ -124,7 +124,7 @@ def query_messages_osmosys(args):
         else:
             result = response.json()
 
-            # TODO: make the real data has correct format, the results should be a list<object>
+            # make the real data has correct format, the results should be a list<object>
             # Example: data = [{'time': 1624435839000, 'metric': 'test_metric', 'data': '1.01'}]
             data = result or []
 
@@ -133,7 +133,8 @@ def query_messages_osmosys(args):
         logger.error('Query metric error: ' + metric)
 
     # add metric name in the value
-    data = [{**item, 'query_server_name': server_name, 'query_instance_name': instance, 'query_metric_name': metric, } for item in data]
+    data = [{**item, 'query_server_name': server_name, 'query_instance_name': instance, 'query_metric_name': metric, }
+            for item in data]
 
     return data
 
@@ -146,10 +147,10 @@ def parse_messages_osmosys(result):
         try:
             logger.debug(message)
 
-            # TODO: get metric name in response, parse metric path
-            metric = message.get('metric')
+            # get metric name in response, parse metric path
+            metric = message.get('target')
             metric = metric.split('.')
-            del metric[5]  # remove host in the metric path
+            metric = metric[6:]
             date_field = '.'.join(metric)
 
             # get instance name
@@ -176,23 +177,23 @@ def parse_messages_osmosys(result):
                 if component:
                     component_map = {"instanceName": full_instance, "componentName": component}
 
-            # timestamp should be misc unit
-            timestamp = message.get(
-                agent_config_vars['timestamp_field'][0] if agent_config_vars['timestamp_field'] else 'time')
+            # time and value in the datapoints
+            datapoints = message.get('datapoints', [])
+            for item in datapoints:
+                # timestamp should be misc unit
+                timestamp = item[1] * 1000
+                data_value = item[0]
 
-            data_value = message.get(
-                agent_config_vars['data_fields'][0] if agent_config_vars['data_fields'] else 'data')
+                # set offset for timestamp
+                timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
+                timestamp = str(timestamp)
 
-            # set offset for timestamp
-            timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
-            timestamp = str(timestamp)
+                key = '{}-{}'.format(timestamp, full_instance)
+                if key not in metric_buffer['buffer_dict']:
+                    metric_buffer['buffer_dict'][key] = {"timestamp": timestamp, "component_map": component_map}
 
-            key = '{}-{}'.format(timestamp, full_instance)
-            if key not in metric_buffer['buffer_dict']:
-                metric_buffer['buffer_dict'][key] = {"timestamp": timestamp, "component_map": component_map}
-
-            metric_key = '{}[{}]'.format(date_field, full_instance)
-            metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
+                metric_key = '{}[{}]'.format(date_field, full_instance)
+                metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
 
         except Exception as e:
             logger.warn('Error when parsing message')
