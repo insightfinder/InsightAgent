@@ -133,7 +133,7 @@ def query_messages_osmosys(args):
         logger.error('Query metric error: ' + metric)
 
     # add metric name in the value
-    data = [{**item, 'server_name': server_name, 'instance_name': instance, 'metric_name': metric, } for item in data]
+    data = [{**item, 'query_server_name': server_name, 'query_instance_name': instance, 'query_metric_name': metric, } for item in data]
 
     return data
 
@@ -149,13 +149,13 @@ def parse_messages_osmosys(result):
             # TODO: get metric name in response, parse metric path
             metric = message.get('metric')
             metric = metric.split('.')
-            del metric[-2]  # remove host in the metric path
+            del metric[5]  # remove host in the metric path
             date_field = '.'.join(metric)
 
             # get instance name
             instance = message.get(
                 agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
-                    agent_config_vars['instance_field']) > 0 else 'instance_name')
+                    agent_config_vars['instance_field']) > 0 else 'query_instance_name')
 
             # filter by instance whitelist
             if agent_config_vars['instance_whitelist_regex'] \
