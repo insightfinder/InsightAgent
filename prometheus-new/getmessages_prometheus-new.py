@@ -183,7 +183,9 @@ def parse_messages_prometheus(result):
             device = None
             device_field = agent_config_vars['device_field']
             if device_field and len(device_field) > 0:
-                device = message.get('metric').get(agent_config_vars['device_field'][0])
+                devices = [message.get('metric').get(d) for d in device_field]
+                devices = [d for d in devices if d]
+                device = devices[0] if len(devices) > 0 else None
             full_instance = make_safe_instance_string(instance, device)
 
             # check cache for alias
@@ -355,8 +357,8 @@ def get_agent_config_vars():
 
         # fields
         # project_fields = project_field.split(',')
-        instance_fields = [x for x in instance_field.split(',') if x.strip()]
-        device_fields = [x for x in device_field.split(',') if x.strip()]
+        instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
+        device_fields = [x.strip() for x in device_field.split(',') if x.strip()]
         timestamp_fields = timestamp_field.split(',')
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
