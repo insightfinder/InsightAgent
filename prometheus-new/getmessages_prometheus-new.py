@@ -157,11 +157,6 @@ def parse_messages_prometheus(result):
         try:
             logger.debug(message)
 
-            # filter if quantile != 1
-            # quantile = message.get('metric').get('quantile')
-            # if quantile and quantile != '1':
-            #     continue
-
             # date_field = message.get('metric').get('__name__')
             date_field = message.get('metric_name')
 
