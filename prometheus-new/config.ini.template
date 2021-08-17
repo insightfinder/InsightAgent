@@ -4,7 +4,7 @@
 prometheus_uri = http://localhost:9090
 
 ## metrics
-# metrics to query for. If none specified, all metrics returned from /api/v1/label/__names__/values will be used
+# Metrics to query for. Multiple fields are separated by `;`. If none specified, all metrics returned from /api/v1/label/__names__/values will be used
 metrics =
 # metrics_whitelist is a regex string used to define which metrics will be filtered.
 metrics_whitelist =
@@ -16,6 +16,8 @@ query_label_selector =
 query_with_function =
 # metrics_whitelist_with_function is a regex string used to define which metrics will be calculate with query_with_function.
 metrics_whitelist_with_function =
+# metric's name field, Multiple fields are separated by commas. EX: __name__, job, the metric name =  {__name__}_{job}
+metrics_name_field =
 
 # history data time config. If these options is set, the agent will query results by time range
 # time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
