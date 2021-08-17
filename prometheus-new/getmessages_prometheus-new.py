@@ -24,19 +24,19 @@ from multiprocessing.pool import ThreadPool
 This script gathers data to send to Insightfinder
 """
 
-def initialize_cache_connection(): 
+
+def initialize_cache_connection():
     # connect to local cache
     cache_loc = abs_path_from_cur(CACHE_NAME)
-    if os.path.exists(cache_loc): 
+    if os.path.exists(cache_loc):
         cache_con = sqlite3.connect(cache_loc)
         cache_cur = cache_con.cursor()
-    else: 
+    else:
         cache_con = sqlite3.connect(cache_loc)
         cache_cur = cache_con.cursor()
         cache_cur.execute('CREATE TABLE "cache" ( "instance"	TEXT NOT NULL UNIQUE, "alias"	TEXT NOT NULL)')
 
     return cache_con, cache_cur
-        
 
 
 def start_data_processing():
@@ -164,6 +164,12 @@ def parse_messages_prometheus(result):
 
             # date_field = message.get('metric').get('__name__')
             date_field = message.get('metric_name')
+
+            # get metric name from `metrics_name_field`
+            if agent_config_vars['metrics_name_field']:
+                date_field = '_'.join(
+                    [message.get('metric').get(f) for f in agent_config_vars['metrics_name_field'] or []])
+
             instance = message.get('metric').get(
                 agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
                     agent_config_vars['instance_field']) > 0 else 'instance')
@@ -217,18 +223,19 @@ def parse_messages_prometheus(result):
             logger.info('Parse {0} messages'.format(count))
     logger.info('Parse {0} messages'.format(count))
 
+
 def get_alias_from_cache(alias):
     if cache_cur:
         cache_cur.execute('select alias from cache where instance="%s"' % alias)
         instance = cache_cur.fetchone()
         if instance:
             return instance[0]
-        else: 
+        else:
             # Hard coded if alias hasn't been added to cache, add it 
             cache_cur.execute('insert into cache (instance, alias) values ("%s", "%s")' % (alias, alias))
             cache_con.commit()
             return alias
-            
+
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
@@ -245,6 +252,7 @@ def get_agent_config_vars():
         query_label_selector = ''
         query_with_function = ''
         metrics_whitelist_with_function = None
+        metrics_name_field = None
         instance_whitelist = ''
         instance_whitelist_regex = None
         his_time_range = None
@@ -270,6 +278,7 @@ def get_agent_config_vars():
             query_label_selector = config_parser.get('prometheus', 'query_label_selector') or ''
             query_with_function = config_parser.get('prometheus', 'query_with_function')
             metrics_whitelist_with_function = config_parser.get('prometheus', 'metrics_whitelist_with_function')
+            metrics_name_field = config_parser.get('prometheus', 'metrics_name_field')
 
             # time range
             his_time_range = config_parser.get('prometheus', 'his_time_range')
@@ -298,9 +307,9 @@ def get_agent_config_vars():
 
         # metrics
         if len(metrics) != 0:
-            metrics = [x for x in metrics.split(',') if x.strip()]
+            metrics = [x.strip() for x in metrics.split(';') if x.strip()]
         if len(metrics_to_ignore) != 0:
-            metrics_to_ignore = [x for x in metrics_to_ignore.split(',') if x.strip()]
+            metrics_to_ignore = [x.strip() for x in metrics_to_ignore.split(',') if x.strip()]
 
         if len(query_with_function) != 0 and query_with_function not in ['increase']:
             config_error('target_timestamp_timezone')
@@ -310,6 +319,8 @@ def get_agent_config_vars():
                 instance_whitelist_regex = regex.compile(instance_whitelist)
             except Exception:
                 config_error('instance_whitelist')
+        if len(metrics_name_field) != 0:
+            metrics_name_field = [x.strip() for x in metrics_name_field.split(',') if x.strip()]
 
         if len(his_time_range) != 0:
             his_time_range = [x for x in his_time_range.split(',') if x.strip()]
@@ -377,6 +388,7 @@ def get_agent_config_vars():
             'query_label_selector': query_label_selector,
             'query_with_function': query_with_function,
             'metrics_whitelist_with_function': metrics_whitelist_with_function,
+            'metrics_name_field': metrics_name_field,
             'his_time_range': his_time_range,
 
             'proxies': agent_proxies,
