@@ -329,7 +329,6 @@ def get_agent_config_vars():
             timestamp_format = config_parser.get('elasticsearch', 'timestamp_format', raw=True)
             timezone = config_parser.get('elasticsearch', 'timezone') or 'UTC'
             data_fields = config_parser.get('elasticsearch', 'data_fields', raw=True)
-            thread_pool = config_parser.get('elasticsearch', 'thread_pool', raw=True)
 
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
@@ -405,11 +404,6 @@ def get_agent_config_vars():
             if timestamp_field in data_fields:
                 data_fields.pop(data_fields.index(timestamp_field))
 
-        if len(thread_pool) != 0:
-            thread_pool = int(thread_pool)
-        else:
-            thread_pool = 20
-
         # add parsed variables to a global
         config_vars = {
             'elasticsearch_kwargs': elasticsearch_kwargs,
@@ -430,7 +424,6 @@ def get_agent_config_vars():
             'target_timestamp_timezone': target_timestamp_timezone,
             'timezone': timezone,
             'timestamp_format': timestamp_format,
-            'thread_pool': thread_pool,
         }
 
         return config_vars
