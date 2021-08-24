@@ -14,11 +14,10 @@ import http.client
 import requests
 import shlex
 import traceback
-import sqlite3
 from sys import getsizeof
-from itertools import chain
 from optparse import OptionParser
-from multiprocessing.pool import ThreadPool
+
+from elasticsearch import Elasticsearch
 
 """
 This script gathers data to send to Insightfinder
@@ -28,32 +27,13 @@ This script gathers data to send to Insightfinder
 def start_data_processing():
     logger.info('Started......')
 
-    # get servers
-    servers = agent_config_vars['servers']
+    # get conn
+    es_conn = get_es_connection()
 
-    # filter servers
-    if len(servers) == 0:
-        logger.error('Server list is empty')
-        sys.exit(1)
-
-    metric_path = agent_config_vars['metric_path']
-
-    # get instances
-    instances = agent_config_vars['instances']
-    # filter instances
-    if len(instances) == 0:
-        logger.error('Instance list is empty')
-        sys.exit(1)
-
-    # get metrics
-    metrics = agent_config_vars['metrics']
-    # filter metrics
-    if len(metrics) == 0:
-        logger.error('Metric list is empty')
-        sys.exit(1)
+    # time query
+    timestamp_field = agent_config_vars['timestamp_field']
 
     # parse sql string by params
-    pool_map = ThreadPool(agent_config_vars['thread_pool'])
     logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
     if agent_config_vars['his_time_range']:
         logger.debug('Using time range for replay data')
@@ -63,100 +43,180 @@ def start_data_processing():
             start_time = timestamp
             end_time = timestamp + if_config_vars['sampling_interval']
 
-            params = []
-            for server in servers:
-                for ins in instances:
-                    for m in metrics:
-                        target = metric_path.format(region=agent_config_vars['region'], env=agent_config_vars['env'],
-                                                    system=agent_config_vars['system'], instance=ins, metric=m)
-                        params.append((server[1], server[0], ins, m, {
-                            'format': agent_config_vars['data_format'].lower(),
-                            'target': target,
-                            'from': start_time,
-                            'until': end_time,
-                            # 'from': arrow.get(start_time).format('HH:mm_YYYYMMDD'),
-                            # 'until': arrow.get(end_time).format('HH:mm_YYYYMMDD'),
-                        }))
-            results = pool_map.map(query_messages_osmosys, params)
-            result_list = list(chain(*results))
-            parse_messages_osmosys(result_list)
+            # build query
+            query_body = {
+                "query": {
+                    "range": {
+                        timestamp_field: {
+                            "format": "epoch_second",
+                            'gte': start_time,
+                            'lte': end_time
+                        }
+                    }
+                }
+            }
+            # add user-defined query
+            if isinstance(agent_config_vars['query_json'], dict):
+                query_body.update(agent_config_vars['query_json'])
 
-            # clear metric buffer when piece of time range end
-            clear_metric_buffer()
+            # get total number of messages
+            response = es_conn.search(
+                body=query_body,
+                index=agent_config_vars['indeces'],
+                rest_total_hits_as_int=True,
+                ignore_unavailable=False,
+                size=0)
+            total = response.get('hits', {}).get('total', 0)
+
+            # validate successs
+            if 'error' in response:
+                logger.error('Query es error: ' + str(response))
+                sys.exit(1)
+
+            # build query with chunk
+            start_index = 0
+            while start_index < total:
+                query = dict({'from': start_index, "size": agent_config_vars['query_chunk_size']}, **query_body)
+                start_index += agent_config_vars['query_chunk_size']
+
+                data = query_messages_elasticsearch(es_conn, query)
+                parse_messages_elasticsearch(data)
+
+                # clear log buffer when piece of chunk range end
+                clear_log_buffer()
+
     else:
         logger.debug('Using current time for streaming data')
         time_now = int(arrow.utcnow().float_timestamp)
         start_time = time_now - if_config_vars['sampling_interval']
         end_time = time_now
 
-        params = []
-        for server in servers:
-            for ins in instances:
-                for m in metrics:
-                    target = metric_path.format(region=agent_config_vars['region'], env=agent_config_vars['env'],
-                                                system=agent_config_vars['system'], instance=ins, metric=m)
-                    params.append((server[1], server[0], ins, m, {
-                        'format': agent_config_vars['data_format'].lower(),
-                        'target': target,
-                        'from': start_time,
-                        'until': end_time,
-                        # 'from': arrow.get(start_time).format('HH:mm_YYYYMMDD'),
-                        # 'until': arrow.get(end_time).format('HH:mm_YYYYMMDD'),
-                    }))
-        results = pool_map.map(query_messages_osmosys, params)
-        result_list = list(chain(*results))
-        parse_messages_osmosys(result_list)
+        # build query
+        query_body = {
+            "query": {
+                "range": {
+                    timestamp_field: {
+                        "format": "epoch_second",
+                        'gte': start_time,
+                        'lte': end_time
+                    }
+                }
+            }
+        }
+        # add user-defined query
+        if isinstance(agent_config_vars['query_json'], dict):
+            query_body.update(agent_config_vars['query_json'])
+
+        # get total number of messages
+        response = es_conn.search(
+            body=query_body,
+            index=agent_config_vars['indeces'],
+            rest_total_hits_as_int=True,
+            ignore_unavailable=False,
+            size=0)
+        total = response.get('hits').get('total', 0)
+
+        # validate successs
+        if 'error' in response:
+            logger.error('Query es error: ' + str(response))
+            sys.exit(1)
+
+        # build query with chunk
+        start_index = 0
+        while start_index < total:
+            query = dict({'from': start_index, "size": agent_config_vars['query_chunk_size']}, **query_body)
+            start_index += agent_config_vars['query_chunk_size']
+
+            data = query_messages_elasticsearch(es_conn, query)
+            parse_messages_elasticsearch(data)
+
+            # clear log buffer when piece of chunk range end
+            clear_log_buffer()
 
     logger.info('Closed......')
 
 
-def query_messages_osmosys(args):
-    server, server_name, instance, metric, params = args
-    logger.info('Starting query server name | metric: {} | {}'.format(server_name, metric))
+def get_es_connection():
+    """ Try to connect to es """
+    hosts = build_es_connection_hosts()
+    try:
+        return Elasticsearch(hosts)
+    except Exception as e:
+        logger.error('Could not contact ElasticSearch with provided configuration.')
+        logger.error(e)
+        sys.exit(1)
+
+
+def build_es_connection_hosts():
+    """ Build array of host dicts """
+    hosts = []
+    for uri in agent_config_vars['es_uris']:
+        host = agent_config_vars['elasticsearch_kwargs'].copy()
+
+        # parse uri for overrides
+        uri = urllib.parse.urlparse(uri)
+        host['host'] = uri.hostname or uri.path
+        host['port'] = uri.port or host['port']
+        host['http_auth'] = '{}:{}'.format(uri.username, uri.password) or host['http_auth']
+        if uri.scheme == 'https':
+            host['use_ssl'] = True
+
+        # add ssl info
+        if len(agent_config_vars['elasticsearch_kwargs']) != 0:
+            host.update(agent_config_vars['elasticsearch_kwargs'])
+        hosts.append(host)
+    logger.debug(hosts)
+    return hosts
+
+
+def query_messages_elasticsearch(es_conn, query):
+    logger.info('Starting query server es')
 
     data = []
     try:
         # execute sql string
-        url = urllib.parse.urljoin(server, 'render')
-        response = send_request(url, params=params, proxies=agent_config_vars['proxies'])
-        if response == -1:
-            logger.error('Query metric error: ' + metric)
-        else:
-            result = response.json()
+        response = es_conn.search(
+            body=query,
+            index=agent_config_vars['indeces'],
+            rest_total_hits_as_int=True,
+            ignore_unavailable=False)
 
-            # make the real data has correct format, the results should be a list<object>
-            # Example: data = [{'time': 1624435839000, 'metric': 'test_metric', 'data': '1.01'}]
-            data = result or []
+        if 'error' in response:
+            logger.error('Query es error: ' + str(response))
+        else:
+            data = response.get('hits', {}).get('hits', [])
 
     except Exception as e:
         logger.error(e)
-        logger.error('Query metric error: ' + metric)
-
-    # add metric name in the value
-    data = [{**item, 'query_server_name': server_name, 'query_instance_name': instance, 'query_metric_name': metric, }
-            for item in data]
+        logger.error('Query log error.')
 
     return data
 
 
-def parse_messages_osmosys(result):
+def parse_messages_elasticsearch(result):
     count = 0
     logger.info('Reading {} messages'.format(len(result)))
 
     for message in result:
         try:
             logger.debug(message)
+            message = message.get('_source', {})
 
-            # get metric name in response, parse metric path
-            metric = message.get('target')
-            metric = metric.split('.')
-            metric = metric[6:]
-            date_field = '.'.join(metric)
+            # get timestamp
+            timestamp_field = agent_config_vars['timestamp_field']
+            timestamp_field = timestamp_field.split('.')
+            timestamp = safe_get(message, timestamp_field)
+            timestamp = int(arrow.get(timestamp).float_timestamp * 1000)
+
+            # set offset for timestamp
+            timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
+            timestamp = str(timestamp)
 
             # get instance name
-            instance = message.get(
-                agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
-                    agent_config_vars['instance_field']) > 0 else 'query_instance_name')
+            instance_field = agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
+                agent_config_vars['instance_field']) > 0 else 'agent.hostname'
+            instance_field = instance_field.split('.')
+            instance = safe_get(message, instance_field)
 
             # filter by instance whitelist
             if agent_config_vars['instance_whitelist_regex'] \
@@ -165,39 +225,26 @@ def parse_messages_osmosys(result):
 
             # add device info if has
             device = None
-            device_field = agent_config_vars['device_field']
+            device_field = agent_config_vars['device_field'][0] if agent_config_vars['device_field'] and len(
+                agent_config_vars['device_field']) > 0 else ''
             if device_field and len(device_field) > 0:
-                device = message.get(agent_config_vars['device_field'][0])
+                device_field = device_field.split('.')
+                device = safe_get(message, device_field)
             full_instance = make_safe_instance_string(instance, device)
 
-            # get component, and build component instance map info
-            component_map = None
-            if agent_config_vars['component_field']:
-                component = message.get(agent_config_vars['component_field'])
-                if component:
-                    component_map = {"instanceName": full_instance, "componentName": component}
+            # get data
+            data_fields = agent_config_vars['data_fields'][0] if agent_config_vars['data_fields'] and len(
+                agent_config_vars['data_fields']) > 0 else 'message'
+            data_fields = data_fields.split('.')
+            data = safe_get(message, data_fields)
 
-            # time and value in the datapoints
-            datapoints = message.get('datapoints', [])
-            for item in datapoints:
-                # timestamp should be misc unit
-                timestamp = item[1] * 1000
-                data_value = item[0]
-
-                # set offset for timestamp
-                timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
-                timestamp = str(timestamp)
-
-                key = '{}-{}'.format(timestamp, full_instance)
-                if key not in metric_buffer['buffer_dict']:
-                    metric_buffer['buffer_dict'][key] = {"timestamp": timestamp, "component_map": component_map}
-
-                metric_key = '{}[{}]'.format(date_field, full_instance)
-                metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
+            # build log entry
+            entry = prepare_log_entry(str(int(timestamp)), data, full_instance)
+            log_buffer['buffer_logs'].append(entry)
 
         except Exception as e:
-            logger.warn('Error when parsing message')
-            logger.warn(e)
+            logger.warning('Error when parsing message')
+            logger.warning(e)
             logger.debug(traceback.format_exc())
             continue
 
@@ -215,79 +262,97 @@ def get_agent_config_vars():
         config_parser = configparser.ConfigParser()
         config_parser.read(config_ini)
 
-        osmosys_kwargs = {}
-        servers = None
-        metric_path = ''
-        instances = None
-        metrics = None
-        region = '*'
-        env = '*'
-        system = '*'
+        elasticsearch_kwargs = {}
+        es_uris = None
+        query_json = None
+        query_chunk_size = None
+        indeces = None
         his_time_range = None
 
         instance_whitelist_regex = None
         try:
-            # osmosys settings
-            osmosys_config = {}
+            # elasticsearch settings
+            elasticsearch_config = {
+                'port': config_parser.get('elasticsearch', 'port'),
+                'http_auth': config_parser.get('elasticsearch', 'http_auth'),
+                'use_ssl': config_parser.get('elasticsearch', 'use_ssl'),
+                'ssl_version': config_parser.get('elasticsearch', 'ssl_version'),
+                'ssl_assert_hostname': config_parser.get('elasticsearch', 'ssl_assert_hostname'),
+                'ssl_assert_fingerprint': config_parser.get('elasticsearch', 'ssl_assert_fingerprint'),
+                'verify_certs': config_parser.get('elasticsearch', 'verify_certs'),
+                'ca_certs': config_parser.get('elasticsearch', 'ca_certs'),
+                'client_cert': config_parser.get('elasticsearch', 'client_cert'),
+                'client_key': config_parser.get('elasticsearch', 'client_key')
+            }
+
             # only keep settings with values
-            osmosys_kwargs = {k: v for (k, v) in list(osmosys_config.items()) if v}
+            elasticsearch_kwargs = {k: v for (k, v) in list(elasticsearch_config.items()) if v}
 
             # handle boolean setting
+            use_ssl = elasticsearch_kwargs.get('use_ssl')
+            if use_ssl and use_ssl.lower() == 'true':
+                elasticsearch_kwargs['use_ssl'] = True
 
-            # handle required arrays
-            if len(config_parser.get('osmosys', 'osmosys_servers')) != 0:
-                osmosys_servers = config_parser.get('osmosys', 'osmosys_servers')
-                servers = [[s.strip() for s in x.strip().split(',') if s.strip()] for x in osmosys_servers.split(';') if
-                           x.strip()]
-            else:
-                config_error('osmosys_servers')
-            for server in servers:
-                if len(server) != 2:
-                    config_error('osmosys_servers')
+            ssl_assert_hostname = elasticsearch_kwargs.get('ssl_assert_hostname')
+            if ssl_assert_hostname and ssl_assert_hostname.lower() == 'true':
+                elasticsearch_kwargs['ssl_assert_hostname'] = True
 
-            metric_path = config_parser.get('osmosys', 'metric_path')
-            instances = config_parser.get('osmosys', 'instances')
-            metrics = config_parser.get('osmosys', 'metrics')
-            region = config_parser.get('osmosys', 'region') or '*'
-            env = config_parser.get('osmosys', 'env') or '*'
-            system = config_parser.get('osmosys', 'system') or '*'
+            ssl_assert_fingerprint = elasticsearch_kwargs.get('ssl_assert_fingerprint')
+            if ssl_assert_fingerprint and ssl_assert_fingerprint.lower() == 'true':
+                elasticsearch_kwargs['ssl_assert_fingerprint'] = True
+
+            verify_certs = elasticsearch_kwargs.get('verify_certs')
+            if verify_certs and verify_certs.lower() == 'true':
+                elasticsearch_kwargs['verify_certs'] = True
+
+            es_uris = config_parser.get('elasticsearch', 'es_uris')
+            query_json = config_parser.get('elasticsearch', 'query_json')
+            query_chunk_size = config_parser.get('elasticsearch', 'query_chunk_size')
+            indeces = config_parser.get('elasticsearch', 'indeces')
 
             # time range
-            his_time_range = config_parser.get('osmosys', 'his_time_range')
+            his_time_range = config_parser.get('elasticsearch', 'his_time_range')
 
             # proxies
-            agent_http_proxy = config_parser.get('osmosys', 'agent_http_proxy')
-            agent_https_proxy = config_parser.get('osmosys', 'agent_https_proxy')
+            agent_http_proxy = config_parser.get('elasticsearch', 'agent_http_proxy')
+            agent_https_proxy = config_parser.get('elasticsearch', 'agent_https_proxy')
 
             # message parsing
-            data_format = config_parser.get('osmosys', 'data_format').upper()
-            component_field = config_parser.get('osmosys', 'component_field', raw=True)
-            instance_field = config_parser.get('osmosys', 'instance_field', raw=True)
-            instance_whitelist = config_parser.get('osmosys', 'instance_whitelist')
-            device_field = config_parser.get('osmosys', 'device_field', raw=True)
-            timestamp_field = config_parser.get('osmosys', 'timestamp_field', raw=True) or 'timestamp'
-            target_timestamp_timezone = config_parser.get('osmosys', 'target_timestamp_timezone', raw=True) or 'UTC'
-            timestamp_format = config_parser.get('osmosys', 'timestamp_format', raw=True)
-            timezone = config_parser.get('osmosys', 'timezone') or 'UTC'
-            data_fields = config_parser.get('osmosys', 'data_fields', raw=True)
-            thread_pool = config_parser.get('osmosys', 'thread_pool', raw=True)
+            data_format = config_parser.get('elasticsearch', 'data_format').upper()
+            component_field = config_parser.get('elasticsearch', 'component_field', raw=True)
+            instance_field = config_parser.get('elasticsearch', 'instance_field', raw=True)
+            instance_whitelist = config_parser.get('elasticsearch', 'instance_whitelist')
+            device_field = config_parser.get('elasticsearch', 'device_field', raw=True)
+            timestamp_field = config_parser.get('elasticsearch', 'timestamp_field', raw=True) or '@timestamp'
+            target_timestamp_timezone = config_parser.get('elasticsearch', 'target_timestamp_timezone',
+                                                          raw=True) or 'UTC'
+            timestamp_format = config_parser.get('elasticsearch', 'timestamp_format', raw=True)
+            timezone = config_parser.get('elasticsearch', 'timezone') or 'UTC'
+            data_fields = config_parser.get('elasticsearch', 'data_fields', raw=True)
+            thread_pool = config_parser.get('elasticsearch', 'thread_pool', raw=True)
 
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
 
-        if len(metric_path) == 0:
-            config_error('metric_path')
-        # instances
-        if len(instances) != 0:
-            instances = [x.strip() for x in instances.split(',') if x.strip()]
+        # uris required
+        if len(es_uris) != 0:
+            es_uris = [x.strip() for x in es_uris.split(',') if x.strip()]
         else:
-            config_error('instances')
-        # metrics
-        if len(metrics) != 0:
-            metrics = [x.strip() for x in metrics.split(',') if x.strip()]
-        else:
-            config_error('metrics')
+            logger.error('Agent not correctly configured (es_uris). Check config file.')
+            sys.exit(1)
+
+        if len(query_json) != 0:
+            try:
+                query_json = json.loads(query_json)
+            except Exception as e:
+                logger.error('Agent not correctly configured (query_json). Dropping.')
+        if len(query_chunk_size) != 0:
+            try:
+                query_chunk_size = int(query_chunk_size)
+            except Exception as e:
+                logger.error('Agent not correctly configured (query_chunk_size). Use 5000 by default.')
+                query_chunk_size = 5000
 
         if len(instance_whitelist) != 0:
             try:
@@ -329,7 +394,6 @@ def get_agent_config_vars():
         # fields
         instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
         device_fields = [x.strip() for x in device_field.split(',') if x.strip()]
-        timestamp_fields = timestamp_field.split(',')
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
             for instance_field in instance_fields:
@@ -338,9 +402,8 @@ def get_agent_config_vars():
             for device_field in device_fields:
                 if device_field in data_fields:
                     data_fields.pop(data_fields.index(device_field))
-            for timestamp_field in timestamp_fields:
-                if timestamp_field in data_fields:
-                    data_fields.pop(data_fields.index(timestamp_field))
+            if timestamp_field in data_fields:
+                data_fields.pop(data_fields.index(timestamp_field))
 
         if len(thread_pool) != 0:
             thread_pool = int(thread_pool)
@@ -349,14 +412,11 @@ def get_agent_config_vars():
 
         # add parsed variables to a global
         config_vars = {
-            'osmosys_kwargs': osmosys_kwargs,
-            'servers': servers,
-            'metric_path': metric_path,
-            'instances': instances,
-            'metrics': metrics,
-            'region': region,
-            'env': env,
-            'system': system,
+            'elasticsearch_kwargs': elasticsearch_kwargs,
+            'es_uris': es_uris,
+            'query_json': query_json,
+            'query_chunk_size': query_chunk_size,
+            'indeces': indeces,
             'his_time_range': his_time_range,
 
             'proxies': agent_proxies,
@@ -366,7 +426,7 @@ def get_agent_config_vars():
             "instance_whitelist_regex": instance_whitelist_regex,
             'device_field': device_fields,
             'data_fields': data_fields,
-            'timestamp_field': timestamp_fields,
+            'timestamp_field': timestamp_field,
             'target_timestamp_timezone': target_timestamp_timezone,
             'timezone': timezone,
             'timestamp_format': timestamp_format,
@@ -546,6 +606,28 @@ def config_error_no_config():
     sys.exit(1)
 
 
+def safe_get(dct, keys):
+    for key in keys:
+        try:
+            dct = dct[key]
+        except KeyError:
+            return None
+    return dct
+
+
+def prepare_log_entry(timestamp, data, instanceName):
+    """ creates the log entry """
+    entry = dict()
+    entry['data'] = data
+    if 'INCIDENT' in if_config_vars['project_type'] or 'DEPLOYMENT' in if_config_vars['project_type']:
+        entry['timestamp'] = timestamp
+        entry['instanceName'] = instanceName
+    else:  # LOG or ALERT
+        entry['eventId'] = timestamp
+        entry['tag'] = instanceName
+    return entry
+
+
 def get_json_size_bytes(json_data):
     """ get size of json object in bytes """
     # return len(bytearray(json.dumps(json_data)))
@@ -639,34 +721,30 @@ def print_summary_info():
 
 
 def initialize_data_gathering():
-    reset_metric_buffer()
+    reset_log_buffer()
     reset_track()
     track['chunk_count'] = 0
     track['entry_count'] = 0
 
     start_data_processing()
 
-    # clear metric buffer when data processing end
-    clear_metric_buffer()
+    # clear log buffer when data processing end
+    clear_log_buffer()
 
     logger.info('Total chunks created: ' + str(track['chunk_count']))
     logger.info('Total {} entries: {}'.format(
         if_config_vars['project_type'].lower(), track['entry_count']))
 
 
-def clear_metric_buffer():
+def clear_log_buffer():
     # move all buffer data to current data, and send
-    buffer_values = list(metric_buffer['buffer_dict'].values())
+    buffer_values = log_buffer['buffer_logs']
 
     count = 0
     for row in buffer_values:
-        # pop component map info
-        component_map = row.pop('component_map')
-        if component_map:
-            track['component_map_list'].append(component_map)
-
         track['current_row'].append(row)
         count += 1
+        track['line_count'] += 1
         if count % 100 == 0 or get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
             logger.debug('Sending buffer chunk')
             send_data_wrapper()
@@ -676,16 +754,11 @@ def clear_metric_buffer():
         logger.debug('Sending last chunk')
         send_data_wrapper()
 
-    reset_metric_buffer()
+    reset_log_buffer()
 
 
-def reset_metric_buffer():
-    metric_buffer['buffer_key_list'] = []
-    metric_buffer['buffer_ts_list'] = []
-    metric_buffer['buffer_dict'] = {}
-
-    metric_buffer['buffer_collected_list'] = []
-    metric_buffer['buffer_collected_dict'] = {}
+def reset_log_buffer():
+    log_buffer['buffer_logs'] = []
 
 
 def reset_track():
@@ -754,7 +827,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
             if response.status_code == http.client.OK:
                 return response
             else:
-                logger.warn(failure_message)
+                logger.warning(failure_message)
                 logger.info('Response Code: {}\nTEXT: {}'.format(
                     response.status_code, response.text))
         # handle various exceptions
@@ -874,7 +947,7 @@ if __name__ == "__main__":
     ATTEMPTS = 3
     CACHE_NAME = 'cache.db'
     track = dict()
-    metric_buffer = dict()
+    log_buffer = dict()
 
     # get config
     cli_config_vars = get_cli_config_vars()
