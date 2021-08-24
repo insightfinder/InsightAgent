@@ -1,22 +1,35 @@
-[osmosys]
+[elasticsearch]
 # required
-## osmosys servers info, multiple servers split with `;`, and each server both have server name and server url and split with `,`.
-osmosys_servers =
+# a comma delimited list of RFC-1738 formatted urls <scheme>://[<username>:<password>@]hostname:port
+es_uris = http://localhost:9200
+# json to add to the query body
+query_json =
+# The maximum messages number of each query, default is 5000, and max value id 10000.
+query_chunk_size = 5000
+# indexes to search over
+indeces = filebeat*
 
-# required
-# metric path to query for
-metric_path = cs.*.{region}.{env}.{system}.{instance}.{metric}
-# instances to query for, multiple instances split with `,`.will replace {instance} in the metric path.
-instances = 127.0.0.1,127.0.0.2
-# metrics to query for, multiple metrics split with `,`.will replace {metric} in the metric path.
-metrics = metric1,metric2
-
-# {region} in the metric path, default is *
-region =
-# {env} in the metric path, default is *
-env =
-# {system} in the metric path, default is *
-system =
+## parameters for all hosts
+# port to connect to (Can be parsed from url)
+port =
+# username:password (Can be parsed from url)
+http_auth =
+# True or False (True if uri scheme is https)
+use_ssl =
+# Version of SSL to use - one of SSLv23 (default), SSLv2, SSLv3, TLSv1
+ssl_version =
+# True or False - use hostname verification
+ssl_assert_hostname =
+# True or False - use fingerprint verification
+ssl_assert_fingerprint =
+# True or False
+verify_certs =
+# path to ca bundle
+ca_certs =
+# path to client cert
+client_cert =
+# path to client key
+client_key =
 
 # history data time config. If these options is set, the agent will query results by time range
 # time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
@@ -31,19 +44,17 @@ data_format = json
 timestamp_format =
 # timezone, as per pytz
 timezone =
-timestamp_field =
+timestamp_field = @timestamp
 # Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
 target_timestamp_timezone = UTC
 component_field =
 # if no instance given, the osmosys's server name will be used.
-instance_field =
+instance_field = agent.hostname
 # instance_whitelist is a regex string used to define which instances will be filtered.
 instance_whitelist =
 device_field =
 # multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>` or `<name>::==<value>`, where `<name>` and `<value>` can each be either a literal value (`name::value`) or formatted (`total time [{step}]::=={timing.end}-{timing.start}`). Use `::==` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `eval()`.
-data_fields =
-## number of thread to used in the pool, default is 20
-thread_pool = 20
+data_fields = message
 
 ## proxy
 agent_http_proxy =
@@ -55,7 +66,7 @@ license_key =
 token =
 project_name =
 # metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
-project_type = metric
+project_type = log
 sampling_interval = 1
 run_interval = 1
 # what size to limit chunks sent to IF to, as kb
