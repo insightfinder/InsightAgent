@@ -738,7 +738,7 @@ def clear_log_buffer():
         track['current_row'].append(row)
         count += 1
         track['line_count'] += 1
-        if count % 100 == 0 or get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+        if count % 500 == 0 or get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
             logger.debug('Sending buffer chunk')
             send_data_wrapper()
 
@@ -777,7 +777,7 @@ def send_data_wrapper():
 def send_data_to_if(chunk_metric_data):
     send_data_time = time.time()
 
-    # prepare data for metric streaming agent
+    # prepare data for metric/log streaming agent
     data_to_post = initialize_api_post_data()
     if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
         for chunk in chunk_metric_data:
