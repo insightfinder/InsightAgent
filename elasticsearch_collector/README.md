@@ -11,7 +11,7 @@ linux: yum install freetds
 
 ### Short Version
 ```bash
-bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) elasticsearch && cd elasticsearch
+bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) elasticsearch_collector && cd elasticsearch_collector
 vi config.ini
 sudo ./setup/install.sh --create  # install on localhost
                                   ## or on multiple nodes
@@ -23,8 +23,8 @@ See the `offline` README for instructions on installing prerequisites.
 ### Long Version
 ###### Download the agent tarball and untar it:
 ```bash
-curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/elasticsearch/elasticsearch.tar.gz
-tar xvf elasticsearch.tar.gz && cd elasticsearch
+curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/elasticsearch_collector/elasticsearch_collector.tar.gz
+tar xvf elasticsearch_collector.tar.gz && cd elasticsearch_collector
 ```
 
 ###### Set up `config.ini`
@@ -61,7 +61,7 @@ sudo ./setup/pip-config.sh
 
 ###### Test the agent:
 ```bash
-python getmessages_elasticsearch.py -t
+python getmessages_elasticsearch_collector.py -t
 ```
 
 ###### If satisfied with the output, configure the agent to run continuously:
