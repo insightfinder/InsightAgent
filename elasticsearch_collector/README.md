@@ -1,4 +1,4 @@
-# elasticsearch-new
+# elasticsearch_collector
 This agent collects data from elasticsearch and sends it to Insightfinder.
 ## Installing the Agent
 
