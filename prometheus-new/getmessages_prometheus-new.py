@@ -162,8 +162,10 @@ def parse_messages_prometheus(result):
 
             # get metric name from `metrics_name_field`
             if agent_config_vars['metrics_name_field']:
-                date_field = '_'.join(
-                    [message.get('metric').get(f) for f in agent_config_vars['metrics_name_field'] or []])
+                name_fields = [message.get('metric').get(f) for f in agent_config_vars['metrics_name_field'] or []]
+                name_fields = [f for f in name_fields if f]
+                if len(name_fields) > 0:
+                    date_field = '_'.join(name_fields)
 
             instance = message.get('metric').get(
                 agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
