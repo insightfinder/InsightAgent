@@ -1,0 +1,23 @@
+[InsightFinder]
+#The file name of the csv data
+file_name = 
+#The customer account license key, following the toturial to get it
+insightFinder_license_key = 
+#The project name
+insightFinder_project_name = 
+#The user name of the account
+insightFinder_user_name = 
+#The IF server url to send the data: https://app.insightfinder.com
+insightFinder_server_url = https://app.insightfinder.com
+
+[csv]
+#The column name for the instance - Required
+instance_field = 
+#The column name for the timestamp - Required
+timestamp_field = 
+#The timestamp parsing format using the python arrow library specifications: YYYY-MM-DD HH:mm:ss - Required
+timestamp_format = 
+#The timestamp timezone - Default is UTC
+timestamp_timezone = 
+#Comma separated list of columns to omit from the data sending to IF - Optional
+omit_columns = 
