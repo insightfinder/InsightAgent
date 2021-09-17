@@ -149,7 +149,9 @@ if __name__ == "__main__":
         for row in reader:
             entry = {}
             entry['tag'] = row[csv_vars['instance_field']]
-            timestamp = arrow.get(row[csv_vars['timestamp_field']], csv_vars['timestamp_format'])
+            timestamp = arrow.get(row[csv_vars['timestamp_field']], csv_vars['timestamp_format'], tzinfo=csv_vars['timestamp_timezone'])
+            # convert timezone to utc required by api 
+            timestamp = timestamp.to(pytz.utc)
             entry['eventId'] = timestamp.timestamp() * 1000
             entry['data'] = {}
             for header in row:
@@ -183,4 +185,3 @@ if __name__ == "__main__":
                 data = []
         if count != 0:
             send_data(data)
-
