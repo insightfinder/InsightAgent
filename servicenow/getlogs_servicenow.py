@@ -35,7 +35,6 @@ LINK_KEY = "link"
 VALUE_KEY = "value"
 NAME_KEY = "name"
 
-
 def start_data_processing(thread_number):
     # set sysparm limi/offset
     passthru = {'sysparm_limit': 100,
