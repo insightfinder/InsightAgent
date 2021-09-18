@@ -35,6 +35,7 @@ LINK_KEY = "link"
 VALUE_KEY = "value"
 NAME_KEY = "name"
 
+
 def start_data_processing(thread_number):
     # set sysparm limi/offset
     passthru = {'sysparm_limit': 100,
@@ -132,7 +133,9 @@ def start_data_processing(thread_number):
         'Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
     logger.debug(passthru)
     api_response = send_request(agent_config_vars['api_url'], auth=auth, params=passthru)
-    count = int(api_response.headers['X-Total-Count'])
+    count = 0
+    if api_response != -1 and not api_response.text.index('hibernating'):
+        count = int(api_response.headers['X-Total-Count'])
     logger.debug('Processing {} records'.format(count))
     while api_response != -1 and passthru['sysparm_offset'] < count:
         # parse messages
@@ -298,7 +301,7 @@ def get_agent_config_vars():
             'end_time': end_time,
             'is_historical': is_historical,
             'cron_start_time': cron_start_time,
-            'instance_regex':instance_regex
+            'instance_regex': instance_regex
         }
 
         return config_vars
@@ -416,7 +419,7 @@ def update_state(setting, value, append=False, write=False):
         agent_config_vars['state'][setting] = value
     logger.debug('setting {} to {}'.format(setting, value))
     # update config file
-    if write and not cli_config_vars['testing']:
+    if write:
         config_ini = config_ini_path()
         if os.path.exists(config_ini):
             config_parser = ConfigParser.SafeConfigParser()
@@ -429,7 +432,7 @@ def update_state(setting, value, append=False, write=False):
 
 
 def update_setting(setting, value, write=False):
-    if write and not cli_config_vars['testing']:
+    if write:
         config_ini = config_ini_path()
         if os.path.exists(config_ini):
             config_parser = ConfigParser.SafeConfigParser()
@@ -1470,8 +1473,8 @@ def send_data_to_if(chunk_metric_data):
     logger.debug('Total Lines: ' + str(track['line_count']))
 
     # do not send if only testing
-    # if cli_config_vars['testing']:
-    #     return
+    if cli_config_vars['testing']:
+        return
 
     # send the data
     post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
@@ -1604,8 +1607,9 @@ if __name__ == "__main__":
     agent_config_vars = get_agent_config_vars()
     print_summary_info()
 
+    initialize_data_gathering(1)
     # start data processing
-    for i in range(0, cli_config_vars['threads']):
-        Process(target=initialize_data_gathering,
-                args=(i,)
-                ).start()
+    # for i in range(0, cli_config_vars['threads']):
+    #     Process(target=initialize_data_gathering,
+    #             args=(i,)
+    #             ).start()
