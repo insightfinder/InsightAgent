@@ -1607,9 +1607,8 @@ if __name__ == "__main__":
     agent_config_vars = get_agent_config_vars()
     print_summary_info()
 
-    initialize_data_gathering(1)
     # start data processing
-    # for i in range(0, cli_config_vars['threads']):
-    #     Process(target=initialize_data_gathering,
-    #             args=(i,)
-    #             ).start()
+    for i in range(0, cli_config_vars['threads']):
+        Process(target=initialize_data_gathering,
+                args=(i,)
+                ).start()
