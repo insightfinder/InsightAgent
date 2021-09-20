@@ -29,6 +29,9 @@ def get_agent_config_vars():
             project_name = parser.get('InsightFinder', 'insightFinder_project_name')
             user_name = parser.get('InsightFinder', 'insightFinder_user_name')
             server_url = parser.get('InsightFinder', 'insightFinder_server_url')
+            http_proxy = parser.get('mariadb', 'http_proxy')
+            https_proxy = parser.get('mariadb', 'https_proxy')
+
             if len(file_name) == 0:
                 print("Agent not correctly configured(file name). Check config file.")
                 sys.exit(1)
@@ -44,11 +47,20 @@ def get_agent_config_vars():
             if len(server_url) == 0:
                 print("Agent not correctly configured(server url). Check config file.")
                 sys.exit(1)
+
+            # Proxies
+            proxies = dict()
+            if len(http_proxy) > 0:
+                proxies['http'] = http_proxy
+            if len(https_proxy) > 0:
+                proxies['https'] = https_proxy
+        
             config_vars['file_name'] = file_name
             config_vars['license_key'] = license_key
             config_vars['project_name'] = project_name
             config_vars['user_name'] = user_name
             config_vars['server_url'] = server_url
+            config_vars['proxies'] = proxies            
 
             instance_field = parser.get('csv', 'instance_field')
             timestamp_field = parser.get('csv', 'timestamp_field')
@@ -118,7 +130,7 @@ def send_data_to_receiver(post_url, to_send_data, num_of_message):
         response_code = -1
         attempts += 1
         try:
-            response = requests.post(post_url, data=json.loads(to_send_data), verify=False)
+            response = requests.post(post_url, data=json.loads(to_send_data), proxies=config_vars['proxies'], verify=False)
             response_code = response.status_code
         except:
             print("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
@@ -185,3 +197,4 @@ if __name__ == "__main__":
                 data = []
         if count != 0:
             send_data(data)
+
