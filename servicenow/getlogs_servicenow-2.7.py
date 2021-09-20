@@ -1617,8 +1617,7 @@ if __name__ == "__main__":
     print_summary_info()
 
     # start data processing
-    initialize_data_gathering(1)
-    # for i in range(0, cli_config_vars['threads']):
-    #     Process(target=initialize_data_gathering,
-    #             args=(i,)
-    #             ).start()
+    for i in range(0, cli_config_vars['threads']):
+        Process(target=initialize_data_gathering,
+                args=(i,)
+                ).start()

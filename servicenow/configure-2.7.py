@@ -12,7 +12,7 @@ def prompt(option, default='', silent=False):
     def tell_value(prompt, value):
         return '\033[F{}{}\n'.format(prompt, value)
 
-    prompt = '{}: '.format(option) if not default else '{} [Default: {}]: '.format(option, default)
+    prompt = u'{}: '.format(option) if not default else u'{} [Default: {}]: '.format(option, default)
     # open /dev/tty
     with open('/dev/tty', mode='w+', buffering=1) as stream:
         # ask the question
