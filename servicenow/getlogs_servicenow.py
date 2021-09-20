@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import ConfigParser
+import configparser
 import json
 import logging
 import os
@@ -12,16 +12,15 @@ from optparse import OptionParser
 from multiprocessing import Process
 from datetime import datetime
 import dateutil
-import tzlocal
-import urlparse
-import httplib
+import urllib.parse
+import http.client
 import requests
 import statistics
 import subprocess
 import shlex
 import ifobfuscate
 import re
-import distutils
+import sqlite3
 
 '''
 This script gathers data to send to Insightfinder
@@ -47,8 +46,9 @@ def start_data_processing(thread_number):
     # get utc earliest datetime
     utc_earliest_epoch = time.time()
     # get localized earliest datetime
-    local_earliest_datetime = tzlocal.get_localzone().localize(
-        datetime.fromtimestamp(utc_earliest_epoch))
+    # local_earliest_datetime = tzlocal.get_localzone().localize(
+    #     datetime.fromtimestamp(utc_earliest_epoch))
+    local_earliest_datetime = datetime.fromtimestamp(utc_earliest_epoch)
     # convert earliest datetime to the data timezone
     data_earliest_datetime = local_earliest_datetime.astimezone(
         agent_config_vars['timezone'])
@@ -70,8 +70,9 @@ def start_data_processing(thread_number):
         if agent_config_vars['cron_start_time']:
             utc_cron_epoch = agent_config_vars['cron_start_time']
             # get localized earliest datetime
-            local_cron_datetime = tzlocal.get_localzone().localize(
-                datetime.fromtimestamp(float(utc_cron_epoch)))
+            # local_cron_datetime = tzlocal.get_localzone().localize(
+            #     datetime.fromtimestamp(float(utc_cron_epoch)))
+            local_cron_datetime = datetime.fromtimestamp(float(utc_cron_epoch))
             # convert earliest datetime to the data timezone
             data_cron_datetime = local_cron_datetime.astimezone(
                 agent_config_vars['timezone'])
@@ -165,7 +166,7 @@ def get_agent_config_vars():
     """ Read and parse config.ini """
     config_ini = config_ini_path()
     if os.path.exists(config_ini):
-        config_parser = ConfigParser.SafeConfigParser()
+        config_parser = configparser.ConfigParser()
         config_parser.read(config_ini)
         try:
             # state
@@ -202,12 +203,12 @@ def get_agent_config_vars():
             instance_regex = config_parser.get('agent', 'instance_regex', raw=True)
 
 
-        except ConfigParser.NoOptionError as cp_noe:
+        except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
 
         # API
-        api_url = urlparse.urljoin(base_url, api_endpoint)
+        api_url = urllib.parse.urljoin(base_url, api_endpoint)
         if len(api_url) == 0:
             config_error('base_url or api_endpoint')
         if len(username) == 0:
@@ -323,6 +324,33 @@ def get_agent_config_vars():
 #########################
 ### START_BOILERPLATE ###
 #########################
+def get_alias_from_cache(alias):
+    if cache_cur:
+        cache_cur.execute('select alias from cache where instance="%s"' % alias)
+        instance = cache_cur.fetchone()
+        if instance:
+            return instance[0]
+        else:
+            # Hard coded if alias hasn't been added to cache, add it
+            cache_cur.execute('insert into cache (instance, alias) values ("%s", "%s")' % (alias, alias))
+            cache_con.commit()
+            return alias
+
+
+def initialize_cache_connection():
+    # connect to local cache
+    cache_loc = abs_path_from_cur(CACHE_NAME)
+    if os.path.exists(cache_loc):
+        cache_con = sqlite3.connect(cache_loc)
+        cache_cur = cache_con.cursor()
+    else:
+        cache_con = sqlite3.connect(cache_loc)
+        cache_cur = cache_con.cursor()
+        cache_cur.execute('CREATE TABLE "cache" ( "instance"	TEXT NOT NULL UNIQUE, "alias"	TEXT NOT NULL)')
+
+    return cache_con, cache_cur
+
+
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
@@ -331,7 +359,7 @@ def get_if_config_vars():
     """ get config.ini vars """
     config_ini = config_ini_path()
     if os.path.exists(config_ini):
-        config_parser = ConfigParser.SafeConfigParser()
+        config_parser = configparser.ConfigParser()
         config_parser.read(config_ini)
         try:
             user_name = config_parser.get('insightfinder', 'user_name')
@@ -345,7 +373,7 @@ def get_if_config_vars():
             if_url = config_parser.get('insightfinder', 'if_url')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
-        except ConfigParser.NoOptionError as cp_noe:
+        except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
 
@@ -437,7 +465,7 @@ def update_state(setting, value, append=False, write=False):
     if write:
         config_ini = config_ini_path()
         if os.path.exists(config_ini):
-            config_parser = ConfigParser.SafeConfigParser()
+            config_parser = configparser.ConfigParser()
             config_parser.read(config_ini)
             config_parser.set('state', setting, str(value))
             with open(config_ini, 'w') as config_file:
@@ -538,7 +566,7 @@ def strip_tz_info(timestamp_format):
 
 def get_json_size_bytes(json_data):
     """ get size of json object in bytes """
-    return len(bytearray(json.dumps(json_data)))
+    return len(bytearray(json.dumps(json_data), encoding='utf8'))
 
 
 def is_formatted(setting_value):
@@ -588,7 +616,7 @@ def parse_formatted(message, setting_value, default='', allow_list=False, remove
 
 
 def get_data_values(timestamp, message):
-    setting_values = agent_config_vars['data_fields'] or message.keys()
+    setting_values = agent_config_vars['data_fields'] or list(message.keys())
     # reverse list so it's in priority order, as shared fields names will get overwritten
     setting_values.reverse()
     data = {x: dict() for x in timestamp}
@@ -936,8 +964,8 @@ def parse_json_message_single(message):
         group = re.search(agent_config_vars['instance_regex'], instance)
         if (group != None):
             instance = group.group(0)
-
-    logger.warn(instance)
+    instance = get_alias_from_cache(instance)
+    logger.warning(instance)
     device = get_setting_value(message,
                                'device_field',
                                remove=True)
@@ -953,27 +981,19 @@ def parse_json_message_single(message):
                                       remove=True,
                                       allow_list=True)
     except Exception as e:
-        logger.warn(e)
+        logger.warning(e)
         sys.exit(1)
-    logger.warn(timestamp)
+    logger.warning(timestamp)
 
     # get data
     data = get_data_values(timestamp, message)
 
     # hand off
-    for timestamp, report_data in data.items():
-        # check if this is within the time range
+    for timestamp, report_data in list(data.items()):
         ts = get_timestamp_from_date_string(timestamp)
-        if long((time.time() - if_config_vars['run_interval']) * 1000) > ts and not agent_config_vars[
-            'start_time'] and not agent_config_vars['end_time']:
-            logger.debug('skipping message with timestamp {}'.format(ts))
-            continue
-        if ts < agent_config_vars['start_time'] and ts > agent_config_vars['end_time']:
-            logger.debug('skipping message with timestamp {}'.format(ts))
-            continue
         if 'METRIC' in if_config_vars['project_type']:
             data_folded = fold_up(report_data, value_tree=True)  # put metric data in top level
-            for data_field, data_value in data_folded.items():
+            for data_field, data_value in list(data_folded.items()):
                 if data_value is not None:
                     metric_handoff(
                         ts,
@@ -1124,7 +1144,7 @@ def get_timestamp_from_datetime(timestamp_datetime):
     timestamp_localize = agent_config_vars['timezone'].localize(timestamp_datetime)
 
     # calc seconds since Unix Epoch 0
-    epoch = long(
+    epoch = int(
         (timestamp_localize - datetime(1970, 1, 1, tzinfo=agent_config_vars['timezone'])).total_seconds()) * 1000
     return epoch
 
@@ -1371,7 +1391,7 @@ def append_metric_data_to_entry(timestamp, field_name, data, instance, device=''
 
     # use the next non-null value to overwrite the prev value
     # for the same metric in the same timestamp
-    if key in current_obj.keys():
+    if key in list(current_obj.keys()):
         if data is not None and len(str(data)) > 0:
             current_obj[key] += '|' + str(data)
     else:
@@ -1381,14 +1401,14 @@ def append_metric_data_to_entry(timestamp, field_name, data, instance, device=''
 
 def transpose_metrics():
     """ flatten data up to the timestamp"""
-    for timestamp, kvs in track['current_dict'].items():
+    for timestamp, kvs in list(track['current_dict'].items()):
         track['line_count'] += 1
         new_row = dict()
         new_row['timestamp'] = timestamp
-        for key, value in kvs.items():
+        for key, value in list(kvs.items()):
             if '|' in value:
                 value = statistics.median(
-                    map(lambda v: float(v), value.split('|')))
+                    [float(v) for v in value.split('|')])
             new_row[key] = str(value)
         track['current_row'].append(new_row)
 
@@ -1398,7 +1418,7 @@ def fold_up(tree, sentence_tree=False, value_tree=False):
     Entry point for fold_up. See fold_up_helper for details
     '''
     folded = dict()
-    for node_name, node in tree.items():
+    for node_name, node in list(tree.items()):
         fold_up_helper(
             folded,
             node_name,
@@ -1424,8 +1444,8 @@ def fold_up_helper(current_path, node_name, node, sentence_tree=False, value_tre
         this also returns a hash of
             <formatted path : value>
     '''
-    while isinstance(node, dict) and (len(node.keys()) == 1 or '_name' in node.keys()):
-        keys = node.keys()
+    while isinstance(node, dict) and (len(list(node.keys())) == 1 or '_name' in list(node.keys())):
+        keys = list(node.keys())
         # if we've reached a terminal end
         if '_name' in keys:
             if sentence_tree:
@@ -1443,7 +1463,7 @@ def fold_up_helper(current_path, node_name, node, sentence_tree=False, value_tre
             # node is the value of the metric node_name
             current_path[node_name] = node
     else:
-        for node_nested, node_next in node.items():
+        for node_nested, node_next in list(node.items()):
             fold_up_helper(
                 current_path,
                 '{}/{}'.format(node_name, node_nested),
@@ -1486,7 +1506,7 @@ def send_data_to_if(chunk_metric_data):
         return
 
     # send the data
-    post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
+    post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
     send_request(post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
                  data=data_to_post, proxies=if_config_vars['if_proxies'])
@@ -1507,11 +1527,11 @@ def send_request(url, mode='GET', failure_message='No message', success_message=
     for i in range(ATTEMPTS):
         try:
             response = req(url, **request_passthrough)
-            if response.status_code == httplib.OK:
+            if response.status_code == http.client.OK:
                 logger.info(success_message)
                 return response
             else:
-                logger.warn(failure_message)
+                logger.warning(failure_message)
                 logger.debug('Response Code: {}\nTEXT: {}'.format(
                     response.status_code, response.text))
         # handle various exceptions
@@ -1607,6 +1627,7 @@ if __name__ == "__main__":
     ATTEMPTS = 3
     REQUESTS = dict()
     track = dict()
+    CACHE_NAME = 'cache.db'
 
     # get config
     cli_config_vars = get_cli_config_vars()
@@ -1614,11 +1635,11 @@ if __name__ == "__main__":
     logger.debug(cli_config_vars)
     if_config_vars = get_if_config_vars()
     agent_config_vars = get_agent_config_vars()
+    (cache_con, cache_cur) = initialize_cache_connection()
     print_summary_info()
 
     # start data processing
-    initialize_data_gathering(1)
-    # for i in range(0, cli_config_vars['threads']):
-    #     Process(target=initialize_data_gathering,
-    #             args=(i,)
-    #             ).start()
+    for i in range(0, cli_config_vars['threads']):
+        Process(target=initialize_data_gathering,
+                args=(i,)
+                ).start()
