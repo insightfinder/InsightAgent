@@ -281,7 +281,7 @@ def get_agent_config_vars():
         except Exception:
             sysparm_offset = 0
 
-        with open("status", 'r') as status_file:
+        with open("status", 'r+') as status_file:
             # print(status_file.readlines().split('='))
             content = status_file.readline()
             if content != None and content != '':
