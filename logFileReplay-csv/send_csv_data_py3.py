@@ -29,8 +29,8 @@ def get_agent_config_vars():
             project_name = parser.get('InsightFinder', 'insightFinder_project_name')
             user_name = parser.get('InsightFinder', 'insightFinder_user_name')
             server_url = parser.get('InsightFinder', 'insightFinder_server_url')
-            http_proxy = parser.get('mariadb', 'http_proxy')
-            https_proxy = parser.get('mariadb', 'https_proxy')
+            http_proxy = parser.get('InsightFinder', 'http_proxy')
+            https_proxy = parser.get('InsightFinder', 'https_proxy')
 
             if len(file_name) == 0:
                 print("Agent not correctly configured(file name). Check config file.")
