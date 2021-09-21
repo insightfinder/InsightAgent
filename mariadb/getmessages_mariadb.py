@@ -38,7 +38,7 @@ def initialize_cache_connection():
     else: 
         cache_con = sqlite3.connect(cache_loc)
         cache_cur = cache_con.cursor()
-        cache_cur.execute('CREATE TABLE "cache" ( "instance"	TEXT NOT NULL UNIQUE, "alias"	TEXT NOT NULL)')
+        cache_cur.execute('CREATE TABLE "cache" ( "instance"	TEXT NOT NULL UNIQUE, "alias"	TEXT NOT NULL, "component"	TEXT)')
 
     return cache_con, cache_cur
 
@@ -137,7 +137,7 @@ def start_data_processing():
             metric_map = {}
             for message in cursor:
                 id_str = str(message[agent_config_vars['metric_map_conn']['metric_map_id_field']])
-                name_str = str(message[agent_config_vars['metric_map_conn']['metric_map_name_field']].encode('utf8'))
+                name_str = str(message[agent_config_vars['metric_map_conn']['metric_map_name_field']])
 
                 # filter metrics if need
                 if len(metrics) > 0 and name_str not in metrics:
@@ -284,6 +284,12 @@ def parse_messages_mariadb(message_list):
             # check cache for alias
             instance = get_alias_from_cache(instance)
 
+            component = get_component_from_cache(instance)
+
+            component_map = None
+            if component:
+                    component_map = {"instanceName": instance, "componentName": component}
+
             # filter by instance whitelist
             if agent_config_vars['instance_whitelist_regex'] \
                     and not agent_config_vars['instance_whitelist_regex'].match(instance):
@@ -291,7 +297,7 @@ def parse_messages_mariadb(message_list):
 
             key = '{}-{}'.format(timestamp, instance)
             if key not in metric_buffer['buffer_dict']:
-                metric_buffer['buffer_dict'][key] = {"timestamp": timestamp}
+                metric_buffer['buffer_dict'][key] = {"timestamp": timestamp, "component_map": component_map}
 
             extension_metric = str(message[agent_config_vars['extension_metric_field']])
             extension_metric = agent_config_vars['metric_map'].get(extension_metric)
@@ -309,6 +315,7 @@ def parse_messages_mariadb(message_list):
                                                                                extension_metric)
                     metric_format = metric_format.replace('{{metric}}', data_field)
                     data_field = metric_format
+                
                 metric_key = '{}[{}]'.format(data_field, instance)
                 metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
 
@@ -324,18 +331,26 @@ def parse_messages_mariadb(message_list):
     logger.info('Parse {0} messages'.format(count))
 
 
-def get_alias_from_cache(alias):
+def get_alias_from_cache(instance):
     if cache_cur:
-        cache_cur.execute('select alias from cache where instance="%s"' % alias)
+        cache_cur.execute('select alias from cache where instance="%s"' % instance)
+        alias = cache_cur.fetchone()
+        if alias:
+            return alias[0]
+        else: 
+            # Hard coded if alias hasn't been added to cache, add it 
+            cache_cur.execute('insert into cache (instance, alias) values ("%s", "%s")' % (instance, instance))
+            cache_con.commit()
+            return instance
+
+def get_component_from_cache(instance):
+    if cache_cur:
+        cache_cur.execute('select component from cache where instance="%s"' % instance)
         instance = cache_cur.fetchone()
         if instance:
             return instance[0]
         else: 
-            # Hard coded if alias hasn't been added to cache, add it 
-            cache_cur.execute('insert into cache (instance, alias) values ("%s", "%s")' % (alias, alias))
-            cache_con.commit()
-            return alias
-
+            return ""
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
@@ -891,7 +906,14 @@ def initialize_data_gathering():
 def clear_metric_buffer():
     # move all buffer data to current data, and send
     for row in list(metric_buffer['buffer_dict'].values()):
+
+        # pop component map info
+        component_map = row.pop('component_map')
+        if component_map:
+            track['component_map_list'].append(component_map)
+
         track['current_row'].append(row)
+
         if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
             logger.debug('Sending buffer chunk')
             send_data_wrapper()
@@ -918,6 +940,7 @@ def reset_track():
     track['start_time'] = time.time()
     track['line_count'] = 0
     track['current_row'] = []
+    track['component_map_list'] = []
 
 
 ################################
@@ -941,6 +964,10 @@ def send_data_to_if(chunk_metric_data):
         for chunk in chunk_metric_data:
             chunk['data'] = json.dumps(chunk['data'])
     data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
+
+    # add component mapping to the post data
+    track['component_map_list'] = list({v['instanceName']: v for v in track['component_map_list']}.values())
+    data_to_post['instanceMetaData'] = json.dumps(track['component_map_list'] or [])
 
     logger.debug('First:\n' + str(chunk_metric_data[0] if len(chunk_metric_data) > 0 else ''))
     logger.debug('Last:\n' + str(chunk_metric_data[-1] if len(chunk_metric_data) > 0 else ''))
