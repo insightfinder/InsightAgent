@@ -964,7 +964,7 @@ def parse_json_message_single(message):
         if (group != None):
             instance = group.group(0)
     instance = get_alias_from_cache(instance)
-    logger.warning(instance)
+    logger.info(instance)
     device = get_setting_value(message,
                                'device_field',
                                remove=True)
@@ -982,7 +982,7 @@ def parse_json_message_single(message):
     except Exception as e:
         logger.warning(e)
         sys.exit(1)
-    logger.warning(timestamp)
+    logger.info(timestamp)
 
     # get data
     data = get_data_values(timestamp, message)
