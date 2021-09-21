@@ -266,6 +266,14 @@ def get_alias_from_cache(alias):
             cache_con.commit()
             return alias
 
+def get_component_from_cache(instance):
+    if cache_cur:
+        cache_cur.execute('select component from cache where instance="%s"' % instance)
+        instance = cache_cur.fetchone()
+        if instance:
+            return instance[0]
+        else:
+            return ""
 
 def initialize_cache_connection():
     # connect to local cache
@@ -276,7 +284,7 @@ def initialize_cache_connection():
     else:
         cache_con = sqlite3.connect(cache_loc)
         cache_cur = cache_con.cursor()
-        cache_cur.execute('CREATE TABLE "cache" ( "instance"	TEXT NOT NULL UNIQUE, "alias"	TEXT NOT NULL)')
+        cache_cur.execute('CREATE TABLE "cache" ( "instance"	TEXT NOT NULL UNIQUE, "alias"	TEXT NOT NULL, "component"	TEXT)')
 
     return cache_con, cache_cur
 
@@ -848,6 +856,10 @@ def parse_json_message_single(message):
         if (group != None):
             instance = group.group(0)
     instance = get_alias_from_cache(instance)
+
+    # Component setting works for log project, but not for metric
+    component = get_component_from_cache(instance)
+
     logger.info(instance)
     device = get_setting_value(message,
                                'device_field',
@@ -885,7 +897,7 @@ def parse_json_message_single(message):
                         instance,
                         device)
         else:
-            log_handoff(ts, report_data, instance, device)
+            log_handoff(ts, report_data, instance, component, device)
 
 
 def label_message(message, fields=[]):
@@ -1116,12 +1128,12 @@ def alert_handoff(timestamp, data, instance, device=''):
     send_log(timestamp, data, instance or HOSTNAME, device)
 
 
-def log_handoff(timestamp, data, instance, device=''):
-    send_log(timestamp, data, instance or HOSTNAME, device)
+def log_handoff(timestamp, data, instance, component, device=''):
+    send_log(timestamp, data, instance or HOSTNAME, component, device)
 
 
-def send_log(timestamp, data, instance, device=''):
-    entry = prepare_log_entry(str(int(timestamp)), data, instance, device)
+def send_log(timestamp, data, instance, component, device=''):
+    entry = prepare_log_entry(str(int(timestamp)), data, instance, component, device)
     track['current_row'].append(entry)
     track['line_count'] += 1
     track['entry_count'] += 1
@@ -1133,7 +1145,7 @@ def send_log(timestamp, data, instance, device=''):
             get_json_size_bytes(track['current_row'])))
 
 
-def prepare_log_entry(timestamp, data, instance, device=''):
+def prepare_log_entry(timestamp, data, instance, component, device=''):
     """ creates the log entry """
     entry = dict()
     entry['data'] = data
@@ -1143,6 +1155,8 @@ def prepare_log_entry(timestamp, data, instance, device=''):
     else:  # LOG or ALERT
         entry['eventId'] = timestamp
         entry['tag'] = make_safe_instance_string(instance, device)
+        if component:
+            entry['componentName'] = component
     return entry
 
 
