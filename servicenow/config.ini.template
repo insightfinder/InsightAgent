@@ -38,7 +38,8 @@ instance_regex =
 instance_key = 
 #YYYY-MM-DD
 start_time = 
-end_time = 
+end_time =
+is_historical=
 
 ## proxy
 agent_http_proxy =
