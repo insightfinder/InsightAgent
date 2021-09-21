@@ -1544,7 +1544,7 @@ def send_request(url, mode='GET', failure_message='No message', success_message=
             logger.exception('Exception ' + str(e))
             break
 
-    logger.error('No message! Gave up after {} attempts.'.format(i + 1))
+    logger.warning('No message! Gave up after {} attempts.'.format(i + 1))
     return -1
 
 
