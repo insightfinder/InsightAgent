@@ -75,8 +75,8 @@ sudo ./setup/cron-config.sh
 * `metrics_whitelist`: metrics_whitelist is a regex string used to define which metrics will be filtered.
 * `metrics_to_ignore`: Comma-delimited metrics to not report. Defaults to `ALERTS,ALERTS_FOR_STATE`.
 * `query_label_selector`: Label selector to use when querying for metrics, ie `{namespace="monitoring"}`.
-* `query_with_function`: Label function to calculate the metric's value, now only support functions: `increase`.
-* `metrics_whitelist_with_function`: This field is a regex string used to define which metrics will be calculate with `query_with_function`.
+* `query_with_function`: Label function to calculate the metric's value, now only support functions: `increase`. Example: `query_with_function = increase`.
+* `metrics_whitelist_with_function`: This field is a regex string used to define which metrics will be calculate with `query_with_function`. Example: `metrics_whitelist_with_function = total_mem_.*`.
 * `metrics_name_field`: This field is used to get metric's name from response data field. Multiple fields are separated by commas. EX: `__name__, job`, the `metric name` =  `{__name__}_{job}`.  If none specified, agent will use the metric name from config var `metrics`.
 * `his_time_range`: History data time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00. If this option is set, the agent will query metric values by time range.
 * **`data_format`**: The format of the data to parse: RAW, RAWTAIL, CSV, CSVTAIL, XLS, XLSX, JSON, JSONTAIL, AVRO, or XML. \*TAIL formats keep track of the current file being read & the position in the file.
