@@ -84,6 +84,10 @@ sudo ./setup/cron-config.sh
 * `data_fields`: Comma-delimited list of field names to use as data fields. If not set, all fields will be reported. Each data field can either be a field name (`name`) or a labeled field (`<name>::<value>` or `<name>::==<value>`), where `<name>` and `<value>` can be raw strings (`fieldname::fieldvalue`) or curly-formatted (`{na} [{me}]::=={val} - {ue}`). If `::==` is used as the separator, `<value>` is treated as a mathematical expression that can be evaluated with `eval()`.
 * `agent_http_proxy`: HTTP proxy used to connect to the agent.
 * `agent_https_proxy`: As above, but HTTPS.
+* `is_historical`: if it is 'true', the script will grab the data according to the data range; if it is false, it the script will grab the real time data with the Cron
+* `start_time`: The start time of timestamp field, it is used to grab the history data
+* `end_time`: The end time of timestamp field, it is used to grab the history data
+
 * **`user_name`**: User name in InsightFinder
 * **`license_key`**: License Key from your Account Profile in the InsightFinder UI. 
 * `token`: Token from your Account Profile in the InsightFinder UI. 
