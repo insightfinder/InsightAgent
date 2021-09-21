@@ -62,8 +62,6 @@ def start_data_processing(thread_number):
         # convert earliest datetime to the data timezone
         data_cron_datetime = local_cron_datetime.astimezone(
             agent_config_vars['timezone'])
-        # do not apply timezone conversion later
-        agent_config_vars['timezone'] = pytz.utc
         # convert to string for Glide
         cron_date_and_time = data_cron_datetime.strftime(
             agent_config_vars['timestamp_format'][0]).split(' ')
