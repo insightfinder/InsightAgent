@@ -42,19 +42,6 @@ def start_data_processing(thread_number):
                 'sysparm_offset': agent_config_vars['state']['sysparm_offset'],
                 'sysparm_query': ''}
 
-    ## add timestamp query
-    # get utc earliest datetime
-    utc_earliest_epoch = time.time()
-    # get localized earliest datetime
-    local_earliest_datetime = datetime.fromtimestamp(utc_earliest_epoch)
-    # convert earliest datetime to the data timezone
-    data_earliest_datetime = local_earliest_datetime.astimezone(
-        agent_config_vars['timezone'])
-    # do not apply timezone conversion later
-    # agent_config_vars['timezone'] = pytz.utc
-    # convert to string for Glide
-    earliest_date_and_time = data_earliest_datetime.strftime(
-        agent_config_vars['timestamp_format'][0]).split(' ')
     # add timestamp filter
     if agent_config_vars['start_time'] and agent_config_vars['end_time'] and agent_config_vars['is_historical'] == True:
         start_time = agent_config_vars['start_time']
@@ -65,22 +52,25 @@ def start_data_processing(thread_number):
         passthru['sysparm_query'] = '{}^OR{}'.format(passthru['sysparm_query'], statement) if len(
             passthru['sysparm_query']) != 0 else statement
     elif agent_config_vars['is_historical'] == False:
+        update_status('cron_start_time', time.time())
         if agent_config_vars['cron_start_time']:
-            utc_cron_epoch = agent_config_vars['cron_start_time']
-            # get localized earliest datetime
-            local_cron_datetime = datetime.fromtimestamp(float(utc_cron_epoch))
-            # convert earliest datetime to the data timezone
-            data_cron_datetime = local_cron_datetime.astimezone(
-                agent_config_vars['timezone'])
-            # do not apply timezone conversion later
-            agent_config_vars['timezone'] = pytz.utc
-            # convert to string for Glide
-            cron_date_and_time = data_cron_datetime.strftime(
-                agent_config_vars['timestamp_format'][0]).split(' ')
-            earliest_date = cron_date_and_time[0]
+            utc_cron_epoch = float(agent_config_vars['cron_start_time'])
+        else:
+            utc_cron_epoch = time.time()
+        # get localized earliest datetime
+        local_cron_datetime = datetime.fromtimestamp(utc_cron_epoch)
+        # convert earliest datetime to the data timezone
+        data_cron_datetime = local_cron_datetime.astimezone(
+            agent_config_vars['timezone'])
+        # do not apply timezone conversion later
+        agent_config_vars['timezone'] = pytz.utc
+        # convert to string for Glide
+        cron_date_and_time = data_cron_datetime.strftime(
+            agent_config_vars['timestamp_format'][0]).split(' ')
+        earliest_date = cron_date_and_time[0]
+        if agent_config_vars['cron_start_time']:
             earliest_time = cron_date_and_time[1]
         else:
-            earliest_date = earliest_date_and_time[0]
             earliest_time = '00:00:00'
         for timestamp_field in agent_config_vars['timestamp_field']:
             if not is_formatted(timestamp_field):
@@ -92,38 +82,10 @@ def start_data_processing(thread_number):
                 passthru['sysparm_query'] = '{}^OR{}'.format(passthru['sysparm_query'], statement) if len(
                     passthru['sysparm_query']) != 0 else statement
         passthru['sysparm_offset'] = 0
-    # add applicable keyword filtering
-    for in_filter in agent_config_vars['filters_include']:
-        filter_keyword, filter_values = in_filter.split(':')
-        filter_statement = ''
-        for filter_value in filter_values.split(','):
-            statement = '{keyword}*{value}^{keyword}ISNOTEMPTY'.format(keyword=filter_keyword, value=filter_value)
-            # OR between values
-            filter_statement = '{}^OR{}'.format(filter_statement, statement) if len(
-                filter_statement) != 0 else statement
-        # AND between keywords
-        passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], filter_statement) if len(
-            passthru['sysparm_query']) != 0 else '{}'.format(filter_statement)
-    # clear since it's handled already
-    agent_config_vars['filters_include'] = ''
-    for ex_filter in agent_config_vars['filters_exclude']:
-        filter_keyword, filter_values = ex_filter.split(':')
-        filter_statement = ''
-        for filter_value in filter_values.split(','):
-            statement = '{keyword}!*{value}^{keyword}ISNOTEMPTY'.format(keyword=filter_keyword, value=filter_value)
-            # OR between values
-            filter_statement = '{}^OR{}'.format(filter_statement, statement) if len(
-                filter_statement) != 0 else statement
-        # AND between keywords
-        passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], filter_statement) if len(
-            passthru['sysparm_query']) != 0 else '{}'.format(filter_statement)
-    # clear since it's handled already
-    agent_config_vars['filters_exclude'] = ''
     passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], agent_config_vars['addl_query']) if len(
         agent_config_vars['addl_query']) != 0 else passthru['sysparm_query']
     # build auth
     auth = (agent_config_vars['username'], ifobfuscate.decode(agent_config_vars['password']))
-    # logger.debug(ifobfuscate.decode(agent_config_vars['password']))
     # call API
     logger.info(
         'Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
@@ -151,9 +113,6 @@ def start_data_processing(thread_number):
                                                                            passthru['sysparm_offset']))
         api_response = send_request(agent_config_vars['api_url'], auth=auth, params=passthru)
 
-    if agent_config_vars['is_historical'] == False:
-        update_status('cron_start_time', utc_earliest_epoch, write=True)
-
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
@@ -176,13 +135,9 @@ def get_agent_config_vars():
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
 
-            # filters
-            filters_include = config_parser.get('agent', 'filters_include')
-            filters_exclude = config_parser.get('agent', 'filters_exclude')
 
             # message parsing
             json_top_level = config_parser.get('agent', 'json_top_level')
-            # project_field = config_parser.get('agent', 'project_field', raw=True)
             instance_field = config_parser.get('agent', 'instance_field', raw=True)
             device_field = config_parser.get('agent', 'device_field', raw=True)
             timestamp_field = config_parser.get('agent', 'timestamp_field', raw=True) or 'timestamp'
@@ -192,7 +147,6 @@ def get_agent_config_vars():
             start_time = config_parser.get('agent', 'start_time', raw=True)
             end_time = config_parser.get('agent', 'end_time', raw=True)
             is_historical = config_parser.get('agent', 'is_historical', raw=True)
-            # cron_start_time = config_parser.get('agent', 'cron_start_time', raw=True)
             instance_regex = config_parser.get('agent', 'instance_regex', raw=True)
 
 
@@ -219,14 +173,7 @@ def get_agent_config_vars():
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
 
-        # filters
-        if len(filters_include) != 0:
-            filters_include = filters_include.split('|')
-        if len(filters_exclude) != 0:
-            filters_exclude = filters_exclude.split('|')
 
-        # fields
-        # project_fields = project_field.split(',')
         instance_fields = instance_field.split(',')
         device_fields = device_field.split(',')
         timestamp_fields = timestamp_field.split(',')
@@ -235,18 +182,6 @@ def get_agent_config_vars():
                                'business_service']
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
-            # for project_field in project_fields:
-            #   if project_field in data_fields:
-            #       data_fields.pop(data_fields.index(project_field))
-            # for instance_field in instance_fields:
-            #     if instance_field in data_fields:
-            #         data_fields.pop(data_fields.index(instance_field))
-            # for device_field in device_fields:
-            #     if device_field in data_fields:
-            #         data_fields.pop(data_fields.index(device_field))
-            # for timestamp_field in timestamp_fields:
-            #     if timestamp_field in data_fields:
-            #         data_fields.pop(data_fields.index(timestamp_field))
         else:
             data_fields = list()
         data_fields.extend(default_data_fields)
@@ -296,8 +231,6 @@ def get_agent_config_vars():
             'password': password,
             'addl_query': addl_query,
             'proxies': agent_proxies,
-            'filters_include': filters_include,
-            'filters_exclude': filters_exclude,
             'data_format': 'JSON',
             'json_top_level': json_top_level,
             # 'project_field': project_fields,
@@ -473,7 +406,7 @@ def update_state(setting, value, append=False, write=False):
     return value
 
 
-def update_status(setting, value, write=False):
+def update_status(setting, value):
     with open('status', 'w') as f:
         f.write(setting + " = " + str(value))
 
@@ -906,53 +839,6 @@ def parse_json_message(messages):
 
 def parse_json_message_single(message):
     message = json.loads(json.dumps(message))
-    # filter
-    if len(agent_config_vars['filters_include']) != 0:
-        # for each provided filter
-        is_valid = False
-        for _filter in agent_config_vars['filters_include']:
-            filter_field = _filter.split(':')[0]
-            filter_vals = _filter.split(':')[1].split(',')
-            filter_check = get_json_field(
-                message,
-                filter_field,
-                allow_list=True)
-            # check if a valid value
-            for filter_val in filter_vals:
-                if filter_val.upper() in filter_check.upper():
-                    is_valid = True
-                    break
-            if is_valid:
-                break
-        if not is_valid:
-            logger.debug('filtered message (inclusion): {} not in {}'.format(
-                filter_check, filter_vals))
-            return
-        else:
-            logger.debug('passed filter (inclusion)')
-
-    if len(agent_config_vars['filters_exclude']) != 0:
-        # for each provided filter
-        for _filter in agent_config_vars['filters_exclude']:
-            filter_field = _filter.split(':')[0]
-            filter_vals = _filter.split(':')[1].split(',')
-            filter_check = get_json_field(
-                message,
-                filter_field,
-                allow_list=True)
-            # check if a valid value
-            for filter_val in filter_vals:
-                if filter_val.upper() in filter_check.upper():
-                    logger.debug('filtered message (exclusion): {} in {}'.format(
-                        filter_val, filter_check))
-                    return
-        logger.debug('passed filter (exclusion)')
-
-    # get project, instance, & device
-    # check_project(get_setting_value(message,
-    #                                'project_field',
-    #                                default=if_config_vars['project_name']),
-    #                                remove=True)
     logging.debug('message: ' + str(message))
     instance = get_setting_value(message,
                                  'instance_field',
@@ -1016,92 +902,6 @@ def label_message(message, fields=[]):
 
 def minlen(one, two):
     return min(len(one), len(two))
-
-
-def parse_csv_message(message):
-    # filter
-    if len(agent_config_vars['filters_include']) != 0:
-        # for each provided filter, check if there are any allowed valued
-        is_valid = False
-        for _filter in agent_config_vars['filters_include']:
-            filter_field = _filter.split(':')[0]
-            filter_vals = _filter.split(':')[1].split(',')
-            filter_check = message[int(filter_field)]
-            # check if a valid value
-            for filter_val in filter_vals:
-                if filter_val.upper() in filter_check.upper():
-                    is_valid = True
-                    break
-            if is_valid:
-                break
-        if not is_valid:
-            logger.debug('filtered message (inclusion): {} not in {}'.format(
-                filter_check, filter_vals))
-            return
-        else:
-            logger.debug('passed filter (inclusion)')
-
-    if len(agent_config_vars['filters_exclude']) != 0:
-        # for each provided filter, check if there are any disallowed values
-        for _filter in agent_config_vars['filters_exclude']:
-            filter_field = _filter.split(':')[0]
-            filter_vals = _filter.split(':')[1].split(',')
-            filter_check = message[int(filter_field)]
-            # check if a valid value
-            for filter_val in filter_vals:
-                if filter_val.upper() in filter_check.upper():
-                    logger.debug('filtered message (exclusion): {} in {}'.format(
-                        filter_check, filter_val))
-                    return
-        logger.debug('passed filter (exclusion)')
-
-    # project
-    # if isinstance(agent_config_vars['project_field'], int):
-    #    check_project(message[agent_config_vars['project_field']])
-
-    # instance
-    instance = HOSTNAME
-    if isinstance(agent_config_vars['instance_field'], int):
-        instance = message[agent_config_vars['instance_field']]
-
-    # device
-    device = ''
-    if isinstance(agent_config_vars['device_field'], int):
-        device = message[agent_config_vars['device_field']]
-
-    # data & timestamp
-    columns = [agent_config_vars['timestamp_field']] + agent_config_vars['data_fields']
-    row = list(message[i] for i in columns)
-    fields = list(agent_config_vars['csv_field_names'][j] for j in agent_config_vars['data_fields'])
-    parse_csv_row(row, fields, instance, device)
-
-
-def parse_csv_data(csv_data, instance, device=''):
-    """
-    parses CSV data, assuming the format is given as:
-        header row:  timestamp,field_1,field_2,...,field_n
-        n data rows: TIMESTAMP,value_1,value_2,...,value_n
-    """
-
-    # get field names from header row
-    field_names = csv_data.pop(0).split(CSV_DELIM)[1:]
-
-    # go through each row
-    for row in csv_data:
-        if len(row) > 0:
-            parse_csv_row(row.split(CSV_DELIM), field_names, instance, device)
-
-
-def parse_csv_row(row, field_names, instance, device=''):
-    timestamp = get_timestamp_from_date_string(row.pop(0))
-    if 'METRIC' in if_config_vars['project_type']:
-        for i in range(len(row)):
-            metric_handoff(timestamp, field_names[i], row[i], instance, device)
-    else:
-        json_message = dict()
-        for i in range(len(row)):
-            json_message[field_names[i]] = row[i]
-        log_handoff(timestamp, json_message, instance, device)
 
 
 def get_timestamp_from_date_string(date_string):
