@@ -46,8 +46,6 @@ def start_data_processing(thread_number):
     # get utc earliest datetime
     utc_earliest_epoch = time.time()
     # get localized earliest datetime
-    # local_earliest_datetime = tzlocal.get_localzone().localize(
-    #     datetime.fromtimestamp(utc_earliest_epoch))
     local_earliest_datetime = datetime.fromtimestamp(utc_earliest_epoch)
     # convert earliest datetime to the data timezone
     data_earliest_datetime = local_earliest_datetime.astimezone(
@@ -70,8 +68,6 @@ def start_data_processing(thread_number):
         if agent_config_vars['cron_start_time']:
             utc_cron_epoch = agent_config_vars['cron_start_time']
             # get localized earliest datetime
-            # local_cron_datetime = tzlocal.get_localzone().localize(
-            #     datetime.fromtimestamp(float(utc_cron_epoch)))
             local_cron_datetime = datetime.fromtimestamp(float(utc_cron_epoch))
             # convert earliest datetime to the data timezone
             data_cron_datetime = local_cron_datetime.astimezone(
@@ -137,7 +133,7 @@ def start_data_processing(thread_number):
     if api_response != -1 and api_response.text.find('hibernating') == -1:
         count = int(api_response.headers['X-Total-Count'])
     logger.debug('Processing {} records'.format(count))
-    while api_response != -1 and passthru['sysparm_offset'] < count:
+    while api_response != -1:
         # parse messages
         try:
             api_json = json.loads(api_response.content)
@@ -145,18 +141,10 @@ def start_data_processing(thread_number):
         except Exception as e:
             logger.warning(e)
             pass
-        # set limit and offset
-        passthru['sysparm_offset'] = passthru['sysparm_offset'] + passthru['sysparm_limit']
-        passthru['sysparm_limit'] = min(100, count - passthru['sysparm_offset'])
-        if passthru['sysparm_offset'] >= count or passthru['sysparm_limit'] <= 0:
-            break
-        update_state('sysparm_offset', passthru['sysparm_offset'], write=True)
         # call API for next cycle
         logger.info('Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'],
                                                                            passthru['sysparm_offset']))
         api_response = send_request(agent_config_vars['api_url'], auth=auth, params=passthru)
-
-    update_state('sysparm_offset', count, write=True)
 
     if agent_config_vars['is_historical'] == False:
         update_status('cron_start_time', utc_earliest_epoch, write=True)
