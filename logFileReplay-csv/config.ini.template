@@ -9,6 +9,8 @@ insightFinder_project_name =
 insightFinder_user_name = 
 #The IF server url to send the data: https://app.insightfinder.com
 insightFinder_server_url = https://app.insightfinder.com
+http_proxy = 
+https_proxy = 
 
 [csv]
 #The column name for the instance - Required
