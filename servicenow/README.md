@@ -55,6 +55,10 @@ else echo "No upgrade needed"; fi
 ```bash
 sudo ./setup/pip-config.sh
 ```
+###### Run the script & input the password to get the encrypted password
+```bash
+python3 ifobfuscate.py
+```
 
 ###### Test the agent:
 ```bash
