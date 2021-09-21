@@ -149,13 +149,13 @@ def start_data_processing(thread_number):
         passthru['sysparm_limit'] = min(100, count - passthru['sysparm_offset'])
         if passthru['sysparm_offset'] >= count or passthru['sysparm_limit'] <= 0:
             break
-        update_state('sysparm_offset', passthru['sysparm_offset'], write=True)
+        # update_state('sysparm_offset', passthru['sysparm_offset'], write=True)
         # call API for next cycle
         logger.info('Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'],
                                                                            passthru['sysparm_offset']))
         api_response = send_request(agent_config_vars['api_url'], auth=auth, params=passthru)
 
-    update_state('sysparm_offset', count, write=True)
+    # update_state('sysparm_offset', count, write=True)
 
     if agent_config_vars['is_historical'] == False:
         update_status('cron_start_time', utc_earliest_epoch, write=True)
@@ -280,13 +280,20 @@ def get_agent_config_vars():
         except Exception:
             sysparm_offset = 0
 
-        with open("status", 'w+') as status_file:
-            # print(status_file.readlines().split('='))
-            content = status_file.readline()
-            if content != None and content != '':
-                cron_start_time = content.split('=')[1]
-            else:
-                cron_start_time = None
+        if os.path.exists("status"):
+            with open("status", 'r+') as status_file:
+                content = status_file.readline()
+                if content != None and content != '':
+                    cron_start_time = content.split('=')[1]
+                else:
+                    cron_start_time = None
+        else:
+            with open("status", 'w+') as status_file:
+                content = status_file.readline()
+                if content != None and content != '':
+                    cron_start_time = content.split('=')[1]
+                else:
+                    cron_start_time = None
 
         # add parsed variables to a global
         config_vars = {

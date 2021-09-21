@@ -133,7 +133,7 @@ def start_data_processing(thread_number):
     if api_response != -1 and api_response.text.find('hibernating') == -1:
         count = int(api_response.headers['X-Total-Count'])
     logger.debug('Processing {} records'.format(count))
-    while api_response != -1:
+    while api_response != -1 and passthru['sysparm_offset'] < count:
         # parse messages
         try:
             api_json = json.loads(api_response.content)
@@ -141,6 +141,11 @@ def start_data_processing(thread_number):
         except Exception as e:
             logger.warning(e)
             pass
+        # set limit and offset
+        passthru['sysparm_offset'] = passthru['sysparm_offset'] + passthru['sysparm_limit']
+        passthru['sysparm_limit'] = min(100, count - passthru['sysparm_offset'])
+        if passthru['sysparm_offset'] >= count or passthru['sysparm_limit'] <= 0:
+            break
         # call API for next cycle
         logger.info('Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'],
                                                                            passthru['sysparm_offset']))
@@ -268,14 +273,20 @@ def get_agent_config_vars():
             sysparm_offset = int(sysparm_offset)
         except Exception:
             sysparm_offset = 0
-
-        with open("status", 'w+') as status_file:
-            # print(status_file.readlines().split('='))
-            content = status_file.readline()
-            if content != None and content != '':
-                cron_start_time = content.split('=')[1]
-            else:
-                cron_start_time = None
+        if os.path.exists("status"):
+            with open("status", 'r+') as status_file:
+                content = status_file.readline()
+                if content != None and content != '':
+                    cron_start_time = content.split('=')[1]
+                else:
+                    cron_start_time = None
+        else:
+            with open("status", 'w+') as status_file:
+                content = status_file.readline()
+                if content != None and content != '':
+                    cron_start_time = content.split('=')[1]
+                else:
+                    cron_start_time = None
 
         # add parsed variables to a global
         config_vars = {
