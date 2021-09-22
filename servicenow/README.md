@@ -28,6 +28,12 @@ The configure_python.sh script sets up a virtual python environment and installs
 ###### Agent configuration:
 The config.ini file contains all of the configuration settings needed to connect to the ServiceNow instance and to stream the data to InsightFinder.
 
+The password for the ServiceNow user will need to be obfuscated using the ifobfuscate.py script.  It will prompt you for the password and provide the value to add to the configuration file. 
+
+```
+python ./ifobfuscate.py 
+```
+
 The configure_python.sh script will generate a config.ini file for you; however, if you need to create a new one, you can simply copy the config.ini.template file over the config.ini file to start over. 
 
 Populate all of the necessary fields in the config.ini file with the relevant data.  More details about each field can be found in the comments of the config.ini file and the Config Variables below. 
