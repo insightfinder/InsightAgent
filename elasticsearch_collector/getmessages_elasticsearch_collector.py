@@ -63,10 +63,12 @@ def start_data_processing():
             response = es_conn.search(
                 body=query_body,
                 index=agent_config_vars['indeces'],
-                rest_total_hits_as_int=True,
                 ignore_unavailable=False,
-                size=0)
+                size=0
+            )
             total = response.get('hits', {}).get('total', 0)
+            if not isinstance(total, int):
+                total = total.get('value', 0)
 
             # validate successs
             if 'error' in response:
@@ -111,7 +113,6 @@ def start_data_processing():
         response = es_conn.search(
             body=query_body,
             index=agent_config_vars['indeces'],
-            rest_total_hits_as_int=True,
             ignore_unavailable=False,
             size=0)
         total = response.get('hits').get('total', 0)
@@ -178,7 +179,6 @@ def query_messages_elasticsearch(es_conn, query):
         response = es_conn.search(
             body=query,
             index=agent_config_vars['indeces'],
-            rest_total_hits_as_int=True,
             ignore_unavailable=False)
 
         if 'error' in response:
