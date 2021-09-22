@@ -1,78 +1,89 @@
 #!/usr/bin/env bash
 
-# run as root
-if [[ $EUID -ne 0 ]]; then
-    echo "This script should be ran as root. Exiting..."
-    exit 1
-fi
+## Utility Functions
 
 # get input params
 function echo_params() {
     echo "Usage:"
-    echo "-c --create   Set to run this in commit mode."
-    echo "-h --help     Display this help text and exit."
+    echo "-c --create   Install the cron command (root)."
+    echo "-d --display  Display the cron command (non-root)."
     exit 1
 }
 
-DRY_RUN=1
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -c|--create)
-            DRY_RUN=0
-            ;;  
-        -h|--help)
-            echo_params
-            ;;
-        *)
-            echo "Improper flag or parameter passed to script."
-            echo_params
-            ;;
-    esac
-    shift
-done
-
-# is config.ini configured?
-function get_config_setting() {
-    cat config.ini | grep "$1" | awk -F '=' '{print $NF}' | tr -d [:space:]
-}
-function echo_config_err() {
-    echo "config.ini is not configured."
-    echo "Please configure config.ini before running this script"
-    exit 1
-}
-if [[ ! -f "config.ini" ]];
-then
-    cp config.ini.template config.ini
-    echo_config_err
-else
-    USER_NAME=$(get_config_setting ^user_name)
-    LICENSE_KEY=$(get_config_setting ^license_key)
-    PROJECT_NAME=$(get_config_setting ^project_name)
-    PROJECT_TYPE=$(get_config_setting ^project_type)
-    if [[ -z ${USER_NAME} || -z ${LICENSE_KEY} || -z ${PROJECT_NAME} || -z ${PROJECT_TYPE} ]];
-    then
-        echo_config_err
-    fi
-fi
-
-# Dry run mode?
+# Dry run mode
 function is_dry_run() {
     [[ ${DRY_RUN} -gt 0 ]]
 }
 
-#######################
-# shared portion done #
-#######################
-
-function echo_usage() {
-    echo "No or invalid run interval specified in config.ini."
-    echo "Please edit config.ini and specify how often the cron should run in"
-    echo "\tseconds: \"6s\" - must be an integer divisor of 60,"
-    echo "\tminutes: \"6m\" or \"6\" (default),"
-    echo "\thours: \"6h\", or"
-    echo "\tdays: \"6d\""
-    exit 1
+# Get value from config.ini settings
+function get_config_setting() {
+    cat config.ini | grep "$1" | awk -F '=' '{print $NF}' | tr -d [:space:]
 }
+
+# Get value from agent.txt settings
+function get_agent_setting() {
+    cat agent.txt | grep "$1" | awk -F '=' '{print $NF}' | tr -d [:space:]
+}
+
+# Get absolute path from relative path
+function abspath() {
+    # $1     : relative filename
+    # return : absolute path
+    if [ -d "$1" ]; then
+        # dir
+        (cd "$1"; pwd)
+    elif [ -f "$1" ]; then
+        # file
+        if [[ $1 = /* ]]; then
+            echo "$1"
+        elif [[ $1 == */* ]]; then
+            echo "$(cd "${1%/*}"; pwd)/${1##*/}"
+        else
+            echo "$(pwd)/$1"
+        fi
+    fi
+}
+
+case "$1" in
+    -c|--create)
+        DRY_RUN=0
+        ;;  
+    -d|--display)
+        DRY_RUN=1
+        ;;  
+    *) 
+        echo_params
+        ;;  
+esac
+
+# Check if root for non-dry run
+if [[ $EUID -ne 0 ]] && ! is_dry_run ; then
+    echo "This script should be ran as root. Exiting..."
+    exit 1
+fi
+
+ORIGIN="$( pwd )"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# Change to agent directory
+cd $SCRIPT_DIR && cd ..
+
+# verify python has been set up, and config.ini is present
+if [[ ! -f venv/bin/python3 ]];
+then 
+    echo "Missing virtual env. Please run configure_python.sh." 
+    exit 1
+elif [[ ! -f config.ini ]];
+then 
+    echo "Missing config.ini.  Please copy config.ini.template to config.ini and update the configuration file."
+    exit 1
+fi
+
+# agent settings
+PY_CMD="$(abspath "./venv/bin/python3")"
+AGENT="$(get_agent_setting ^name)"
+AGENT_FULL_PATH="$(abspath "./$(get_agent_setting ^script_name)")"
+AGENT_FULL_PATH_LOG="$(abspath "./")/log.out"
 
 # get interval
 RUN_INTERVAL=$(get_config_setting ^run_interval)
@@ -82,32 +93,14 @@ then
 fi
 if [[ -z "${RUN_INTERVAL}" ]];
 then
-    echo_usage
-fi
-
-# get agent
-AGENT=$(pwd | awk -F "/" '{print $NF}')
-function get_agent_script() {
-    \ls -l | awk '{print $NF}' | grep $1
-}
-AGENT_SCRIPT=$(get_agent_script ^get[^\-].*\.py$)
-if [[ -z ${AGENT_SCRIPT} ]];
-then
-    AGENT_SCRIPT=$(get_agent_script ^replay*\.py$)
-fi
-if [[ -z ${AGENT_SCRIPT} ]];
-then
-    echo "No script found. Exiting..."
+    echo "Missing run_interval/ sampling_interval config.ini. Exiting..."
     exit 1
 fi
-AGENT_FULL_PATH="$(pwd)/${AGENT_SCRIPT}"
-AGENT_FULL_PATH_CONFIG="$(pwd)/config.ini"
-AGENT_FULL_PATH_LOG="$(pwd)/log.out"
 
-# crontab
+# crontab settings
 CRON_FILE="/etc/cron.d/${AGENT}"
-CRON_USER="root"
-CRON_COMMAND="command -p python3 ${AGENT_FULL_PATH} >${AGENT_FULL_PATH_LOG}"
+CRON_USER="$( logname )"
+CRON_COMMAND="command -p ${PY_CMD} ${AGENT_FULL_PATH} > ${AGENT_FULL_PATH_LOG} 2>&1"
 RUN_INTERVAL_VAL=${RUN_INTERVAL}
 RUN_INTERVAL_UNIT="${RUN_INTERVAL: -1}"
 
@@ -160,8 +153,11 @@ echo "" 2>&1 | if is_dry_run; then awk '{print}'; else tee -a ${CRON_FILE}; fi
 if is_dry_run;
 then
     echo "To create a cron config at ${CRON_FILE}, run this again as"
-    echo "  ./setup/cron-config --create"
+    echo "  sudo ./setup/install.sh --create"
 else
     echo "Cron config created at ${CRON_FILE}"
 fi
 exit 0
+
+# Return to original directory
+cd $ORIGIN
