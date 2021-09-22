@@ -2,73 +2,66 @@
 This agent collects data from servicenow and sends it to Insightfinder.
 ## Installing the Agent
 
-### Short Version
+### Required Dependencies:
+1. Python 3.x 
+1. Pip3
+
+###### Installation Steps:
+1. Download the servicenow.tar.gz package
+1. Copy the agent package to the machine that will be running the agent
+1. Extract the package
+1. Navigate to the extracted location 
+1. Configure venv and python dependencies
+1. Configure agent settings
+1. Test the agent
+1. Add agent to the cron
+
+The final steps are described in more detail below. 
+
+###### Configure venv and python dependencies:
+The configure_python.sh script sets up a virtual python environment and installs all required libraries for running the agent. 
+
 ```bash
-bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) servicenow && cd servicenow
-vi config.ini
-sudo ./setup/install.sh --create  # install on localhost
-                                  ## or on multiple nodes
-sudo ./offline/remote-cp-run.sh list_of_nodes
+./setup/configure_python.sh
 ```
 
-See the `offline` README for instructions on installing prerequisites.
+###### Agent configuration:
+The config.ini file contains all of the configuration settings needed to connect to the ServiceNow instance and to stream the data to InsightFinder.
 
-### Long Version
-###### Download the agent tarball and untar it:
-```bash
-curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/servicenow/servicenow.tar.gz
-tar xvf servicenow.tar.gz && cd servicenow
+The password for the ServiceNow user will need to be obfuscated using the ifobfuscate.py script.  It will prompt you for the password and provide the value to add to the configuration file. 
+
 ```
-
-###### Set up `config.ini`
-```bash
-python configure.py
-```
-See below for a further explanation of each variable. 
-
-#### Automated Install (local or remote)
-###### Review propsed changes from install:
-```bash
-sudo ./setup/install.sh
+python ./ifobfuscate.py 
 ```
 
-###### Once satisfied, run:
-```bash
-sudo ./setup/install.sh --create
-```
+The configure_python.sh script will generate a config.ini file for you; however, if you need to create a new one, you can simply copy the config.ini.template file over the config.ini file to start over. 
 
-###### To deploy on multiple hosts, instead call 
-```bash
-sudo ./offline/remote-cp-run.sh list_of_nodes -f <nodelist_file>
-```
-Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
-
-#### Manual Install (local only)
-###### Check Python version & upgrade if using Python 3
-```bash
-if [[ $(python -V 2>&1 | awk '{ print substr($NF, 1, 1) }') == "3" ]]; then \
-2to3 -w getlogs_servicenow.py; \
-else echo "No upgrade needed"; fi
-```
-
-###### Setup pip & required packages:
-```bash
-sudo ./setup/pip-config.sh
-```
-###### Run the script & input the password to get the encrypted password
-```bash
-python3 ifobfuscate.py
-```
+Populate all of the necessary fields in the config.ini file with the relevant data.  More details about each field can be found in the comments of the config.ini file and the Config Variables below. 
 
 ###### Test the agent:
+Once you have finished configuring the config.ini file, you can test the agent to validate the settings. 
+
+This will connect to the ServiceNow instance, but it will not send any data to InsightFinder. This allows you to verify that you are getting data from ServiceNow and that there are no failing exceptions in the agent configuration. 
+
 ```bash
-python getlogs_servicenow.py -t
+./setup/test_agent.sh
 ```
 
-###### If satisfied with the output, configure the agent to run continuously:
+###### Add agent to the cron:
+For the agent to run continuously, it will need to be added as a cron job. 
+
+The install_cron.sh script will add a cron file to run the agent on a regular schedule.
+
 ```bash
-sudo ./setup/cron-config.sh
+# Display the cron entry without adding it 
+./setup/install_cron.sh --display
+
+# Add the cron entry, once you are ready to start streaming
+sudo ./setup/install_cron.sh --create
 ```
+
+###### Pausing or stopping the agent:
+Once the cron is running, you can either pause the agent by commenting out the relevant line in the cron file or stop the agent by removing the cron file. 
 
 ### Config Variables
 * **`base_url`**: Base URL to build the API off of.
