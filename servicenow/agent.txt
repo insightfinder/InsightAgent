@@ -1,2 +1,2 @@
-name = ServiceNowAgent
+name = servicenow
 script_name = getlogs_servicenow-3.8.py
