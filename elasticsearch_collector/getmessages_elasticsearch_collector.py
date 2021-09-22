@@ -67,6 +67,8 @@ def start_data_processing():
                 size=0
             )
             total = response.get('hits', {}).get('total', 0)
+            if not isinstance(total, int):
+                total = total.get('value', 0)
 
             # validate successs
             if 'error' in response:
