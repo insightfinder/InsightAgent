@@ -80,6 +80,39 @@ def start_data_processing(thread_number):
                 passthru['sysparm_query'] = '{}^OR{}'.format(passthru['sysparm_query'], statement) if len(
                     passthru['sysparm_query']) != 0 else statement
         passthru['sysparm_offset'] = 0
+
+
+
+# add applicable keyword filtering
+    for in_filter in agent_config_vars['filters_include']:
+        filter_keyword, filter_values = in_filter.split(':')
+        filter_statement = ''
+        for filter_value in filter_values.split(','):
+            # LIKE means contains in servicenow query
+            statement = '{keyword}LIKE{value}^{keyword}ISNOTEMPTY'.format(keyword=filter_keyword, value=filter_value)
+            # OR between values
+            filter_statement = '{}^OR{}'.format(filter_statement, statement) if len(
+                filter_statement) != 0 else statement
+        # AND between keywords
+        passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], filter_statement) if len(
+            passthru['sysparm_query']) != 0 else '{}'.format(filter_statement)
+    # clear since it's handled already
+    agent_config_vars['filters_include'] = ''
+    for ex_filter in agent_config_vars['filters_exclude']:
+        filter_keyword, filter_values = ex_filter.split(':')
+        filter_statement = ''
+        for filter_value in filter_values.split(','):
+            # NOT LIKE means not contains in servicenow query
+            statement = '{keyword}NOT LIKE{value}^{keyword}ISNOTEMPTY'.format(keyword=filter_keyword, value=filter_value)
+            # OR between values
+            filter_statement = '{}^OR{}'.format(filter_statement, statement) if len(
+                filter_statement) != 0 else statement
+        # AND between keywords
+        passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], filter_statement) if len(
+            passthru['sysparm_query']) != 0 else '{}'.format(filter_statement)
+    # clear since it's handled already
+    agent_config_vars['filters_exclude'] = ''
+
     passthru['sysparm_query'] = '{}^{}'.format(passthru['sysparm_query'], agent_config_vars['addl_query']) if len(
         agent_config_vars['addl_query']) != 0 else passthru['sysparm_query']
     # build auth
@@ -88,7 +121,7 @@ def start_data_processing(thread_number):
     logger.info(
         'Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
     logger.debug(passthru)
-    api_response = send_request(agent_config_vars['api_url'], auth=auth, params=passthru)
+    api_response = send_request(agent_config_vars['api_url'], auth=auth, proxies=agent_config_vars['proxies'],params=passthru)
     count = 0
     if api_response != -1 and api_response.text.find('hibernating') == -1:
         count = int(api_response.headers['X-Total-Count'])
@@ -109,7 +142,7 @@ def start_data_processing(thread_number):
         # call API for next cycle
         logger.info('Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'],
                                                                            passthru['sysparm_offset']))
-        api_response = send_request(agent_config_vars['api_url'], auth=auth, params=passthru)
+        api_response = send_request(agent_config_vars['api_url'], auth=auth, proxies=agent_config_vars['proxies'], params=passthru)
 
 
 def get_agent_config_vars():
@@ -133,6 +166,9 @@ def get_agent_config_vars():
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
 
+            # filters
+            filters_include = config_parser.get('agent', 'filters_include')
+            filters_exclude = config_parser.get('agent', 'filters_exclude')
 
             # message parsing
             json_top_level = config_parser.get('agent', 'json_top_level')
@@ -171,6 +207,11 @@ def get_agent_config_vars():
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
 
+        # filters
+        if len(filters_include) != 0:
+            filters_include = filters_include.split('|')
+        if len(filters_exclude) != 0:
+            filters_exclude = filters_exclude.split('|')
 
         instance_fields = instance_field.split(',')
         device_fields = device_field.split(',')
@@ -229,6 +270,8 @@ def get_agent_config_vars():
             'password': password,
             'addl_query': addl_query,
             'proxies': agent_proxies,
+            'filters_include': filters_include,
+            'filters_exclude': filters_exclude,
             'data_format': 'JSON',
             'json_top_level': json_top_level,
             # 'project_field': project_fields,
@@ -266,6 +309,7 @@ def get_alias_from_cache(alias):
             cache_con.commit()
             return alias
 
+
 def get_component_from_cache(instance):
     if cache_cur:
         cache_cur.execute('select component from cache where instance="%s"' % instance)
@@ -274,6 +318,7 @@ def get_component_from_cache(instance):
             return instance[0]
         else:
             return ""
+
 
 def initialize_cache_connection():
     # connect to local cache
@@ -284,7 +329,8 @@ def initialize_cache_connection():
     else:
         cache_con = sqlite3.connect(cache_loc)
         cache_cur = cache_con.cursor()
-        cache_cur.execute('CREATE TABLE "cache" ( "instance"	TEXT NOT NULL UNIQUE, "alias"	TEXT NOT NULL, "component"	TEXT)')
+        cache_cur.execute(
+            'CREATE TABLE "cache" ( "instance"	TEXT NOT NULL UNIQUE, "alias"	TEXT NOT NULL, "component"	TEXT)')
 
     return cache_con, cache_cur
 
@@ -632,7 +678,7 @@ def get_complex_value(message, this_field, metadata, that_field, default='', all
                 key = param
                 value = REQUESTS[key]
             passthrough[key] = value
-        response = send_request(ref, **passthrough)
+        response = send_request(ref,  proxies=agent_config_vars['proxies'],**passthrough)
         if response == -1:
             return default
         data = response.content
@@ -845,6 +891,48 @@ def parse_json_message(messages):
 
 def parse_json_message_single(message):
     message = json.loads(json.dumps(message))
+    # filter
+    if len(agent_config_vars['filters_include']) != 0:
+        # for each provided filter
+        is_valid = False
+        for _filter in agent_config_vars['filters_include']:
+            filter_field = _filter.split(':')[0]
+            filter_vals = _filter.split(':')[1].split(',')
+            filter_check = get_json_field(
+                message,
+                filter_field,
+                allow_list=True)
+            # check if a valid value
+            for filter_val in filter_vals:
+                if filter_val.upper() in filter_check.upper():
+                    is_valid = True
+                    break
+            if is_valid:
+                break
+        if not is_valid:
+            logger.debug('filtered message (inclusion): {} not in {}'.format(
+                filter_check, filter_vals))
+            return
+        else:
+            logger.debug('passed filter (inclusion)')
+
+    if len(agent_config_vars['filters_exclude']) != 0:
+        # for each provided filter
+        for _filter in agent_config_vars['filters_exclude']:
+            filter_field = _filter.split(':')[0]
+            filter_vals = _filter.split(':')[1].split(',')
+            filter_check = get_json_field(
+                message,
+                filter_field,
+                allow_list=True)
+            # check if a valid value
+            for filter_val in filter_vals:
+                if filter_val.upper() in filter_check.upper():
+                    logger.debug('filtered message (exclusion): {} in {}'.format(
+                        filter_val, filter_check))
+                    return
+        logger.debug('passed filter (exclusion)')
+
     logging.debug('message: ' + str(message))
     instance = get_setting_value(message,
                                  'instance_field',
@@ -951,10 +1039,11 @@ def get_datetime_from_date_string(date_string):
 def get_timestamp_from_datetime(timestamp_datetime):
     # add tzinfo
     timestamp_localize = agent_config_vars['timezone'].localize(timestamp_datetime)
-
+    # timestamp_localize=timestamp_datetime.astimezone(agent_config_vars['timezone'])
     # calc seconds since Unix Epoch 0
+    # agent_config_vars['timezone'] = pytz.utc
     epoch = int(
-        (timestamp_localize - datetime(1970, 1, 1, tzinfo=agent_config_vars['timezone'])).total_seconds()) * 1000
+        (timestamp_localize - datetime(1970, 1, 1, tzinfo= pytz.utc)).total_seconds()) * 1000
     return epoch
 
 
