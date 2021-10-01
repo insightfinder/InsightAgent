@@ -89,7 +89,8 @@ def start_data_processing(thread_number):
     logger.info(
         'Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'], passthru['sysparm_offset']))
     logger.debug(passthru)
-    api_response = send_request(agent_config_vars['api_url'], auth=auth, proxies=agent_config_vars['proxies'],params=passthru)
+    api_response = send_request(agent_config_vars['api_url'], auth=auth, proxies=agent_config_vars['proxies'],
+                                params=passthru)
     count = 0
     if api_response != -1 and api_response.text.find('hibernating') == -1:
         count = int(api_response.headers['X-Total-Count'])
@@ -110,7 +111,8 @@ def start_data_processing(thread_number):
         # call API for next cycle
         logger.info('Trying to get next {} records, starting at {}'.format(passthru['sysparm_limit'],
                                                                            passthru['sysparm_offset']))
-        api_response = send_request(agent_config_vars['api_url'], auth=auth, proxies=agent_config_vars['proxies'], params=passthru)
+        api_response = send_request(agent_config_vars['api_url'], auth=auth, proxies=agent_config_vars['proxies'],
+                                    params=passthru)
 
 
 def get_agent_config_vars():
@@ -633,7 +635,7 @@ def get_complex_value(message, this_field, metadata, that_field, default='', all
                 key = param
                 value = REQUESTS[key]
             passthrough[key] = value
-        response = send_request(ref,  proxies=agent_config_vars['proxies'],**passthrough)
+        response = send_request(ref, proxies=agent_config_vars['proxies'], **passthrough)
         if response == -1:
             return default
         data = response.content
@@ -856,7 +858,7 @@ def parse_json_message_single(message):
     if instance != UNKNOWN_INSTANCE and agent_config_vars['instance_regex']:
         group = re.search(agent_config_vars['instance_regex'], instance)
         if (group != None):
-            instance = group.group(0)
+            instance = get_matched_string(group)
     instance = get_alias_from_cache(instance)
 
     # Component setting works for log project, but not for metric
@@ -900,6 +902,17 @@ def parse_json_message_single(message):
                         device)
         else:
             log_handoff(ts, report_data, instance, component, device)
+
+
+def get_matched_string(group):
+    if len(group.groups()) >= 1:
+        for num in range(1, len(group.groups())):
+            instance = group.group(num)
+            if instance and len(instance) != 0 and not instance.isspace():
+                return instance
+    else:
+        return group.group(0)
+    return UNKNOWN_INSTANCE
 
 
 def label_message(message, fields=[]):
@@ -955,7 +968,7 @@ def get_timestamp_from_datetime(timestamp_datetime):
     timestamp_localize = agent_config_vars['timezone'].localize(timestamp_datetime)
     # calc seconds since Unix Epoch 0
     epoch = int(
-        (timestamp_localize - datetime(1970, 1, 1, tzinfo= pytz.utc)).total_seconds()) * 1000
+        (timestamp_localize - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
     return epoch
 
 
@@ -1321,7 +1334,7 @@ def send_data_to_if(chunk_metric_data):
     post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
     send_request(post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
-                 data=data_to_post, proxies=if_config_vars['if_proxies'])
+                 verify=False, data=data_to_post, proxies=if_config_vars['if_proxies'])
     logger.debug('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
 
 
