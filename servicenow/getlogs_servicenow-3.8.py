@@ -853,7 +853,7 @@ def parse_json_message_single(message):
     instance = get_setting_value(message,
                                  'instance_field',
                                  default=UNKNOWN_INSTANCE,
-                                 remove=True)
+                                 remove=False)
 
     if instance != UNKNOWN_INSTANCE and agent_config_vars['instance_regex']:
         group = re.search(agent_config_vars['instance_regex'], instance)
@@ -869,17 +869,17 @@ def parse_json_message_single(message):
     logger.info(instance)
     device = get_setting_value(message,
                                'device_field',
-                               remove=True)
+                               remove=False)
     # get timestamp
     try:
         timestamp = get_setting_value(message,
                                       'timestamp_field',
-                                      remove=True)
+                                      remove=False)
         timestamp = [timestamp]
     except ListNotAllowedError as lnae:
         timestamp = get_setting_value(message,
                                       'timestamp_field',
-                                      remove=True,
+                                      remove=False,
                                       allow_list=True)
     except Exception as e:
         logger.warning(e)
