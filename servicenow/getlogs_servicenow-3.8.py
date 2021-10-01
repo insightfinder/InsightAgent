@@ -859,6 +859,8 @@ def parse_json_message_single(message):
         group = re.search(agent_config_vars['instance_regex'], instance)
         if (group != None):
             instance = get_matched_string(group)
+        else:
+            instance = UNKNOWN_INSTANCE
     instance = get_alias_from_cache(instance)
 
     # Component setting works for log project, but not for metric
