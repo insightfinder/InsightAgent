@@ -8,16 +8,11 @@ username =
 # do not set password below. Instead, run `python ifobfuscate.py`
 password_encrypted = 
 
-## filters
-# define a list of filters to use as field:allowed values|field:allowed values
+## filter
+# define a query string from servicenow
 # for example:
-#   message.env:stg,prd|message.status:complete
-filters_include = 
-# as above, but instead define values that are not allowed
-# for example:
-#   message.env:dev,cde|message.status:draft
-filters_exclude = 
-sysparm_query = 
+#   state=2^ORstate=1^category=inquiry
+filter_query =
 
 # for multi-entry messages, define the top-level
 # fields in json can be defined as level0.level1.levelN
@@ -35,7 +30,6 @@ device_field =
 # multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>` or `<name>::==<value>`, where `<name>` and `<value>` can each be either a literal value (`name::value`) or formatted (`total time [{step}]::=={timing.end}-{timing.start}`). Use `::==` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `eval()`.
 data_fields =
 instance_regex =
-instance_key = 
 #YYYY-MM-DD
 start_time = 
 end_time =
@@ -48,9 +42,8 @@ agent_https_proxy =
 [insightfinder]
 user_name = 
 license_key = 
-token =
-project_name = 
-# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
+project_name =
+# alert
 project_type = 
 sampling_interval = 1
 run_interval = 10
