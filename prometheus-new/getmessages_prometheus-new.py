@@ -69,6 +69,14 @@ def start_data_processing():
         except Exception as e:
             logger.error(e)
 
+    query_label_vector_matching_whitelist = []
+    if agent_config_vars['query_label_vector_matching_whitelist']:
+        try:
+            db_regex = regex.compile(agent_config_vars['query_label_vector_matching_whitelist'])
+            query_label_vector_matching_whitelist = list(filter(db_regex.match, metrics))
+        except Exception as e:
+            logger.error(e)
+
     # filter metrics
     if agent_config_vars['metrics_to_ignore'] and len(agent_config_vars['metrics_to_ignore']) > 0:
         metrics = [x for x in metrics if x not in agent_config_vars['metrics_to_ignore']]
@@ -82,6 +90,9 @@ def start_data_processing():
         if not agent_config_vars['metrics_whitelist_with_function'] or m in metrics_with_function:
             if agent_config_vars['query_with_function'] == 'increase':
                 query = 'increase({}[{}s])'.format(query, if_config_vars['sampling_interval'])
+        if not agent_config_vars['query_label_vector_matching_whitelist'] or m in query_label_vector_matching_whitelist:
+            if agent_config_vars['query_label_vector_matching']:
+                query = agent_config_vars['query_label_vector_matching'].replace('{{query_label}}', query)
         return query
 
     # parse sql string by params
@@ -249,6 +260,8 @@ def get_agent_config_vars():
         metrics_whitelist = None
         metrics_to_ignore = None
         query_label_selector = ''
+        query_label_vector_matching = ''
+        query_label_vector_matching_whitelist = ''
         query_with_function = ''
         metrics_whitelist_with_function = None
         metrics_name_field = None
@@ -275,6 +288,8 @@ def get_agent_config_vars():
             metrics_whitelist = config_parser.get('prometheus', 'metrics_whitelist')
             metrics_to_ignore = config_parser.get('prometheus', 'metrics_to_ignore')
             query_label_selector = config_parser.get('prometheus', 'query_label_selector') or ''
+            query_label_vector_matching = config_parser.get('prometheus', 'query_label_vector_matching') or ''
+            query_label_vector_matching_whitelist = config_parser.get('prometheus', 'query_label_vector_matching_whitelist') or ''
             query_with_function = config_parser.get('prometheus', 'query_with_function')
             metrics_whitelist_with_function = config_parser.get('prometheus', 'metrics_whitelist_with_function')
             metrics_name_field = config_parser.get('prometheus', 'metrics_name_field')
@@ -385,6 +400,8 @@ def get_agent_config_vars():
             'metrics_whitelist': metrics_whitelist,
             'metrics_to_ignore': metrics_to_ignore,
             'query_label_selector': query_label_selector,
+            'query_label_vector_matching': query_label_vector_matching,
+            'query_label_vector_matching_whitelist': query_label_vector_matching_whitelist,
             'query_with_function': query_with_function,
             'metrics_whitelist_with_function': metrics_whitelist_with_function,
             'metrics_name_field': metrics_name_field,

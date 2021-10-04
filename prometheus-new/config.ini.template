@@ -10,8 +10,12 @@ metrics =
 metrics_whitelist =
 # metrics to not report
 metrics_to_ignore = ALERTS,ALERTS_FOR_STATE
-# label selector to use when querying for metrics, ie {namespace="monitoring"}
+# label selector to use when querying for metrics, ie: {namespace="monitoring"}
 query_label_selector =
+# label vector matching to use when querying for metrics, ie: query_label_vector_matching = {{query_label}} * on(instance) group_left(nodename) (node_uname_info).
+query_label_vector_matching =
+# query_label_vector_matching_whitelist is a regex string used to define which metrics will be calculate with query_label_vector_matching. Example: query_label_vector_matching_whitelist = .*
+query_label_vector_matching_whitelist =
 # label function to calculate the metric's value, now only support functions: increase. Example: query_with_function = increase
 query_with_function =
 # metrics_whitelist_with_function is a regex string used to define which metrics will be calculate with query_with_function. Example: metrics_whitelist_with_function = total_mem_.*
