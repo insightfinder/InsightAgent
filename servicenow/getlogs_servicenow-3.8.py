@@ -21,6 +21,8 @@ import shlex
 import ifobfuscate
 import re
 import sqlite3
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 '''
 This script gathers data to send to Insightfinder
