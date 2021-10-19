@@ -1,0 +1,25 @@
+[insightFinder_vars]
+# https://app.insightfinder.com
+host_url = 
+# /customprojectrawdata
+api = 
+licenseKey = 
+project_name = 
+username = 
+# number of retries for http requests in case of failure
+retries = 
+# time between retries
+sleep_seconds = 
+
+[sentry_vars]
+# https://sentry.io
+host_url = 
+# /api/0/projects/{}/{}/events/
+api = 
+organization_name = 
+project_name = 
+auth_token = 
+# number of retries for http requests in case of failure
+retries = 
+# time between retries
+sleep_seconds = 
