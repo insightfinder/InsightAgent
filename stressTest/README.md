@@ -21,7 +21,7 @@ Sample command:
 python stress_cpu.py --process 4 --percentage 50 --duration 60
 ```
 
-NOTE: The default configuration is to use python2; however, this can be changed via the `python_cmd variable in the stress_cpu.py` script. This will need to be updated from "python2" to "python3".
+NOTE: The default configuration is to use python2; however, this can be changed via the `python_cmd` variable in the `stress_cpu.py` script. This variable will need to be updated from "python2" to "python3".
 
 ### Memory Stress Test
 This script consumes system memory by allocating a configurable number of strings of configurable length for a configurable amount of time.
