@@ -7,6 +7,8 @@ Currently, we have support for two metric stressors:
 1. CPU
 1. Memory 
 
+To run these scripts, download the stressTest.tar.gz package and extract the scripts to a local directory on the target system. The required command line script arguments are documented below. 
+
 Requirements:
 Python 2.x, 3.x 
 
