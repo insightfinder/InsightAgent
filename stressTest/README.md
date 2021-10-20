@@ -1,9 +1,11 @@
 # stressTest
 
-### Script Details
+### stressTest Details
 These scripts have been developed to stress the usage of a system. They have been built to minimize any external depencies to maintain support for legacy systems.
 
-Currently, we have support for two metric stressors: CPU and Memory. 
+Currently, we have support for two metric stressors: 
+1. CPU
+1. Memory 
 
 Requirements:
 Python 2.x, 3.x 
