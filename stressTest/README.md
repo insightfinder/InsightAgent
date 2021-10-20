@@ -14,9 +14,9 @@ Python 2.x, 3.x
 This script utilizes CPU cores at a configurable rate for a configurable amount of time. The script requires the utility script process.py to be in the local directory. 
 
 Required Arguments:
---processes <integer>: Number of processes to run (Should be less than max system cores)
---percentage <integer>: Percentage of the CPU core to consume
---duration <integer>: Duration of time in seconds to consume CPU cores
+* --processes <integer>: Number of processes to run (Should be less than max system cores)
+* --percentage <integer>: Percentage of the CPU core to consume
+* --duration <integer>: Duration of time in seconds to consume CPU cores
 
 Sample command: 
 ```
@@ -29,10 +29,10 @@ NOTE: The default configuration is to use python2; however, this can be changed 
 This script consumes system memory by allocating a configurable number of strings of configurable length for a configurable amount of time.
 
 Required Arguments:
---size <integer>: Size of string to allocate, Capped at 2 GB to support older systems
---unit <KB,MB,GB>: Unit of measurment for string size
---multiplier <integer>: Number of strings to allocate
---duration <integer>: Duration of time in seconds to consume memory
+* --size <integer>: Size of string to allocate, Capped at 2 GB to support older systems
+* --unit <KB,MB,GB>: Unit of measurment for string size
+* --multiplier <integer>: Number of strings to allocate
+* --duration <integer>: Duration of time in seconds to consume memory
 
 Sample command: 
 ```
