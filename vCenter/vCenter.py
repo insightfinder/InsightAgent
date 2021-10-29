@@ -247,8 +247,7 @@ def query_single_metric(args):
         idx = [sample.timestamp for sample in result[0].sampleInfo]
         instance_name = entity.name.replace('_', '-')
         if type(entity) == vim.VirtualMachine:
-            container_name = entity.runtime.host.name.replace('_', '-')
-            instance_name = container_name + '_' + instance_name
+            instance_name += ('_' + entity.runtime.host.name.replace('_', '-'))
         df = pd.DataFrame(data, index=idx, columns=['{}[{}]'.format(metric, instance_name)])
         df = df[execution_time - timedelta(minutes=query_interval):]
     else:
