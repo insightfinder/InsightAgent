@@ -136,7 +136,7 @@ def collect_metric_data():
 
     pool_map = ThreadPool(agent_vars['thread_pool'])
     params = [(content, counter_info, entity, metric) for entity in entities for metric in metrics]
-    logger.info("Collecting the performance metrics. This may take a few seconds.")
+    logger.info("Collecting the performance metrics.")
     metric_data = pool_map.map(query_single_metric, params)
     
     metric_data = pd.concat(metric_data, axis=1, sort=True)
