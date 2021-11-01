@@ -108,6 +108,8 @@ def collect_metric_data():
 
     counter_info = {}
     for counter in content.perfManager.perfCounter:
+        if counter.rollupType == 'none':
+            continue
         counter_full = "{}.{}.{}".format(counter.groupInfo.key, counter.nameInfo.key, counter.rollupType)
         counter_info[counter_full] = counter.key
 
@@ -226,7 +228,6 @@ def query_single_metric(args):
     
     content, counter_info, entity, metric = args
     metric_id = get_metric_id(counter_info, metric)
-    intervalId = 300 if type(entity) == vim.Datastore else 20
     query_interval = 15
 
     spec = vim.PerformanceManager.QuerySpec(
@@ -234,7 +235,7 @@ def query_single_metric(args):
                 metricId=[metric_id],
                 startTime=execution_time - timedelta(minutes=query_interval),
                 endTime=execution_time,
-                intervalId=intervalId)
+                intervalId=300)
 
     try:
         result = content.perfManager.QueryStats(querySpec=[spec])
