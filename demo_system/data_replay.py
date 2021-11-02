@@ -150,7 +150,7 @@ def send_web_or_incident_data(time, is_abnormal):
     minute = time.minute
     hour = time.hour
     if is_abnormal:
-        if hour in [1, 9, 16] and minute in [25, 26, 27, 28, 29]:
+        if hour in [1, 9, 17] and minute in [25, 26, 27, 28, 29]:
             data = get_log_data(timestamp, constant.INSTANCE_ALERT, constant.ALERT_INCIDENT_DATA)
             replay_log_data(configs[constant.ALERT], [data], "Alert incident data")
     else:
@@ -170,7 +170,7 @@ def send_log_data(time, is_abnormal):
     minute = time.minute
     hour = time.hour
     if is_abnormal:
-        if hour in [1, 9, 16] and minute in [0, 10, 20]:
+        if hour in [1, 9, 17] and minute in [0, 10, 20]:
             num_message = 1
             data_array = []
             for i in range(0, num_message):
