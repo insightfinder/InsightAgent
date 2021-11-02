@@ -110,7 +110,7 @@ def collect_metric_data():
     for counter in content.perfManager.perfCounter:
         if counter.rollupType == 'none':
             continue
-        counter_full = "{}.{}.{}".format(counter.groupInfo.key, counter.nameInfo.key, counter.rollupType)
+        counter_full = "{}.{}.{}.{}".format(counter.groupInfo.key, counter.nameInfo.key, counter.unitInfo.key, counter.rollupType)
         counter_info[counter_full] = counter.key
 
     if vCenter_vars['metrics_list']:
@@ -251,6 +251,8 @@ def query_single_metric(args):
             instance_name += ('_' + entity.runtime.host.name.replace('_', '-'))
         df = pd.DataFrame(data, index=idx, columns=['{}[{}]'.format(metric, instance_name)])
         df = df[execution_time - timedelta(minutes=query_interval):]
+        if 'percent' in metric:
+            df = df / 100
     else:
         return pd.DataFrame()
     
