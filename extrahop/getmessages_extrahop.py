@@ -208,38 +208,72 @@ def parse_messages_extrahop(result, devices_ids_map):
                     and not agent_config_vars['instance_whitelist_regex'].match(instance):
                 continue
 
-            # add device info if has
-            device = None
-            device_field = agent_config_vars['device_field']
-            if device_field and len(device_field) > 0:
-                device = message.get(agent_config_vars['device_field'][0])
-            full_instance = make_safe_instance_string(instance, device)
-
-            # get component, and build component instance map info
-            component_map = None
-            if agent_config_vars['component_field']:
-                component = message.get(agent_config_vars['component_field'])
-                if component:
-                    component_map = {"instanceName": full_instance, "componentName": component}
-
             # timestamp should be misc unit
             timestamp = message.get(
                 agent_config_vars['timestamp_field'][0] if agent_config_vars['timestamp_field'] else 'time')
-
-            data_value = message.get('values')
-            if isinstance(data_value, list) and len(data_value) > 0:
-                data_value = data_value[0]
 
             # set offset for timestamp
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
             timestamp = str(timestamp)
 
-            key = '{}-{}'.format(timestamp, full_instance)
-            if key not in metric_buffer['buffer_dict']:
-                metric_buffer['buffer_dict'][key] = {"timestamp": timestamp, "component_map": component_map}
+            # get values with different format
+            values = message.get('values')
+            if len(values) == 0:
+                continue
+            value_val = values[0]
+            if isinstance(value_val, list):
+                for value_item in value_val:
+                    data_value = value_item['value']
+                    key_meta_data = value_item['key'] or {}
 
-            metric_key = '{}[{}]'.format(date_field, full_instance)
-            metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
+                    # add device info if has
+                    device = None
+                    device_field = agent_config_vars['device_field']
+                    if device_field and len(device_field) > 0:
+                        devices = [key_meta_data.get(d) for d in device_field]
+                        devices = [d for d in devices if d]
+                        device = devices[0] if len(devices) > 0 else None
+                    full_instance = make_safe_instance_string(instance, device)
+
+                    # get component, and build component instance map info
+                    component_map = None
+                    if agent_config_vars['component_field']:
+                        component = key_meta_data.get(agent_config_vars['component_field'])
+                        if component:
+                            component_map = {"instanceName": full_instance, "componentName": component}
+
+                    key = '{}-{}'.format(timestamp, full_instance)
+                    if key not in metric_buffer['buffer_dict']:
+                        metric_buffer['buffer_dict'][key] = {"timestamp": timestamp, "component_map": component_map}
+
+                    metric_key = '{}[{}]'.format(date_field, full_instance)
+                    metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
+
+            else:
+                data_value = value_val
+
+                # add device info if has
+                device = None
+                device_field = agent_config_vars['device_field']
+                if device_field and len(device_field) > 0:
+                    devices = [message.get(d) for d in device_field]
+                    devices = [d for d in devices if d]
+                    device = devices[0] if len(devices) > 0 else None
+                full_instance = make_safe_instance_string(instance, device)
+
+                # get component, and build component instance map info
+                component_map = None
+                if agent_config_vars['component_field']:
+                    component = message.get(agent_config_vars['component_field'])
+                    if component:
+                        component_map = {"instanceName": full_instance, "componentName": component}
+
+                key = '{}-{}'.format(timestamp, full_instance)
+                if key not in metric_buffer['buffer_dict']:
+                    metric_buffer['buffer_dict'][key] = {"timestamp": timestamp, "component_map": component_map}
+
+                metric_key = '{}[{}]'.format(date_field, full_instance)
+                metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
 
         except Exception as e:
             logger.warn('Error when parsing message')
@@ -584,7 +618,7 @@ def get_json_size_bytes(json_data):
 def make_safe_instance_string(instance, device=''):
     """ make a safe instance name string, concatenated with device if appropriate """
     # strip underscores
-    instance = UNDERSCORE.sub('.', instance)
+    instance = UNDERSCORE.sub('.', str(instance))
     instance = COLONS.sub('-', instance)
     # if there's a device, concatenate it to the instance with an underscore
     if device:
