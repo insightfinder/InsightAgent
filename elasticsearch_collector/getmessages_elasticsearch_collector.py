@@ -233,10 +233,9 @@ def parse_messages_elasticsearch(result):
             full_instance = make_safe_instance_string(instance, device)
 
             # get data
-            data_fields = agent_config_vars['data_fields'][0] if agent_config_vars['data_fields'] and len(
-                agent_config_vars['data_fields']) > 0 else 'message'
-            data_fields = data_fields.split('.')
-            data = safe_get(message, data_fields)
+            data_fields = agent_config_vars['data_fields'] if agent_config_vars['data_fields'] and len(
+                agent_config_vars['data_fields']) > 0 else ['message']
+            data = safe_get_data(message, data_fields)
 
             # build log entry
             entry = prepare_log_entry(str(int(timestamp)), data, full_instance)
@@ -598,7 +597,6 @@ def config_error_no_config():
     logger.error('No config file found. Exiting...')
     sys.exit(1)
 
-
 def safe_get(dct, keys):
     for key in keys:
         try:
@@ -607,6 +605,18 @@ def safe_get(dct, keys):
             return None
     return dct
 
+def safe_get_data(dct, keys):
+    data = {}
+    for key in keys:
+        named_key = key.split('::')
+        try:
+            if len(named_key) > 1:
+                data[named_key[0]] = dct[named_key[1]]
+            else: 
+                data[named_key[0]] = dct[named_key[0]]
+        except KeyError:
+            return None
+    return data
 
 def prepare_log_entry(timestamp, data, instanceName):
     """ creates the log entry """
