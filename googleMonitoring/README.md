@@ -5,15 +5,27 @@ This agent can be used to get metric data from Google cloud and ingest it to an 
 #### Pre-requisites:
 
 - Python 3.6+
+- Pip3
 - InsightFinder Credentials
 - Google Cloud Credentials & Permissions
 
-To install the required python libraries, use:
+#### Installation Steps:
+1. Download the googleMonitoring.tar.gz package
+1. Copy the agent package to the machine that will be running the agent
+1. Extract the package
+1. Navigate to the extracted location 
+1. Configure venv and python dependencies
+1. Configure agent settings
+1. Test the agent
+1. Add agent to cron/any other job scheduler
+
+###### Configuring venv and python dependencies
+Set up a virutal environment. Then, to install the required python libraries, use:
 ```
 pip3 install -r requirements.txt
 ```
 
-#### Deployment:
+###### Configuring and testing the agent
 
 Set the hardcoded parameters in the CONFIG.ini file. To ingest Google Cloud metrics into an InsightFinder metric project, use:
 ```
