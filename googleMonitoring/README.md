@@ -5,27 +5,15 @@ This agent can be used to get metric data from Google cloud and ingest it to an 
 #### Pre-requisites:
 
 - Python 3.6+
-- Pip3
 - InsightFinder Credentials
 - Google Cloud Credentials & Permissions
 
-#### Installation Steps:
-1. Download the googleMonitoring.tar.gz package
-1. Copy the agent package to the machine that will be running the agent
-1. Extract the package
-1. Navigate to the extracted location 
-1. Configure venv and python dependencies
-1. Configure agent settings
-1. Test the agent
-1. Add agent to cron/any other job scheduler
-
-###### Configuring venv and python dependencies
-Set up a virutal environment. Then, to install the required python libraries, use:
+To install the required python libraries, use:
 ```
 pip3 install -r requirements.txt
 ```
 
-###### Configuring and testing the agent
+#### Deployment:
 
 Set the hardcoded parameters in the CONFIG.ini file. To ingest Google Cloud metrics into an InsightFinder metric project, use:
 ```
@@ -63,5 +51,7 @@ python GoogleMonitoring.py
 #### agent_vars:
 * **`historical_time_range`**: Time range for ingesting historical metric data; enter start and end times separated by comma (,); use the format YYYY-MM-DD HH:MM:SS. Should be left empty for live mode.
 * **`query_interval`**: Time interval for the query (in minutes). Used for live mode only.
+* **`sampling_interval`**: Sampling interval/frequency for data collection by the agent; should match the interval used in project settings on IF.
+* **`run_interval`**: Frequency at which the agent is ran; should match the interval used in cron.
 * **`thread_pool`**: Number of threads to be used in the multiprocessing pool.
 * **`chunk_size_kb`**: Maximum size of a data chunk to be sent to IF, in kilobytes.
