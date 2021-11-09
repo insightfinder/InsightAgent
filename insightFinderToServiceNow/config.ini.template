@@ -1,0 +1,44 @@
+[insightFinder_vars]
+# https://app.insightfinder.com
+host_url = 
+http_proxy = 
+https_proxy = 
+# /api/v2/servicenowagentpush
+api = 
+licenseKey = 
+# number of retries for http requests in case of failure
+retries = 
+# time between retries
+sleep_seconds = 
+
+[serviceNow_vars]
+# https://<>.service-now.com
+host_url = 
+http_proxy = 
+https_proxy = 
+# /api/now/table/<>
+# Example: /api/now/table/incident
+api = 
+username = 
+# do not enter the password here; instead, enter the obfuscated password (run 'ifobfuscate.py')
+password = 
+# incident, u_incident // all tables except 'incident' are considered staging
+target_table = 
+# minimum time between two post requests of the similar incident
+# number of retries for http requests in case of failure
+retries = 
+# time between retries
+sleep_seconds = 
+dampening_minutes = 
+
+[payload_vars]
+environment_name = 
+# enter the system ID(s) separated by comma(s)
+# Example 1: f3cc1f0b0a6fd928f9
+# Example 2: f3cc1f0b0a6fd928f9, afce202fe9c89ae849
+system_id_list = 
+customer_name = 
+# leave dates empty for live mode; will be assigned today's date
+# enter dates in ISO format (YYYY-MM-DD) // local time
+start_date = 
+end_date = 
