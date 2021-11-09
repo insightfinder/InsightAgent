@@ -16,6 +16,7 @@ from multiprocessing.pool import ThreadPool
 import json
 import logging
 from configparser import ConfigParser
+from optparse import OptionParser
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -88,10 +89,16 @@ def get_config_vars(config_path):
         agent_vars['historical_time_range'] = [datetime.strptime(metric.strip(), '%Y-%m-%d %H:%M:%S')
                                                         for metric in agent_vars['historical_time_range'].split(',')]
     agent_vars['query_interval'] = config.getint('agent_vars', 'query_interval')
+    agent_vars['sampling_interval'] = config.getint('agent_vars', 'sampling_interval')
     agent_vars['thread_pool'] = config.getint('agent_vars', 'thread_pool')
     agent_vars['chunk_size'] = config.getint('agent_vars', 'chunk_size_kb') * 1024
 
-    return if_vars, monitoring_vars, agent_vars
+    parser = OptionParser()
+    parser.add_option('-t', '--testing', action='store_true', dest='testing', default=False,
+                        help='Set to testing mode (do not send data).')
+    (options, args) = parser.parse_args()
+
+    return if_vars, monitoring_vars, agent_vars, options
 
 def collect_metric_data():
     '''
@@ -147,7 +154,7 @@ def collect_metric_data():
         logger.warning("No metric data found for the given parameters.")
         sys.exit(1)
 
-    metric_data = metric_data.resample('T').mean().dropna(how='all')    
+    metric_data = metric_data.resample('{}T'.format(agent_vars['sampling_interval'])).mean().dropna(how='all')    
     metric_data.index = ((metric_data.index.view(int) / 10**6)).astype(int)
     metric_data.index.name = 'timestamp'
     metric_data = metric_data.reset_index()
@@ -375,10 +382,11 @@ if __name__ == '__main__':
     logger = set_logger_config()
     
     config_path = 'config.ini'
-    if_vars, monitoring_vars, agent_vars = get_config_vars(config_path)
+    if_vars, monitoring_vars, agent_vars, options = get_config_vars(config_path)
 
     try:
         metric_data = collect_metric_data()
-        send_metric_data(metric_data)
+        if not options.testing:
+            send_metric_data(metric_data)
     except Exception as e:
         logger.error(e, exc_info=True)

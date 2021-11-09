@@ -52,6 +52,10 @@ zone_regex =
 historical_time_range = 
 # used for live mode only; set value to be a little larger than the interval at which script is scheduled to run; value in minutes
 query_interval = 
+# sampling interval/frequency for data collection by the agent; should match the interval used in project settings on IF
+sampling_interval = 1
+# frequency at which the agent is ran; should match the interval used in cron
+run_interval = 10
 # number of threads to be used in the pool
 thread_pool = 
 # Maximum size of a data chunk to be sent to IF, in kilobytes
