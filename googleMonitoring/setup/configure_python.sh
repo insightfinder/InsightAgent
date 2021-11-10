@@ -22,7 +22,6 @@ cd $SCRIPT_DIR && cd ..
 if [[ ! -d venv ]];
 then
     echo "Setting up virtual env"
-    mkdir venv
     python3 -m venv ./venv
 else
     echo "Virtual env detected: ./venv/"
@@ -32,6 +31,7 @@ fi
 if [[ -f requirements.txt ]];
 then
     source ./venv/bin/activate
+    pip3 install --upgrade pip --no-index --find-links=./offline/pip/packages/ 
     pip3 install -r requirements.txt --no-index --find-links=./offline/pip/packages/
 else 
     echo "Unable to install requirements: missing requirements.txt"

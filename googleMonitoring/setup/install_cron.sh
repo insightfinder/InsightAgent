@@ -82,8 +82,9 @@ fi
 # agent settings
 PY_CMD="$(abspath "./venv/bin/python3")"
 AGENT="$(get_agent_setting ^name)"
+AGENT_DIR="$(abspath "./")"
 AGENT_FULL_PATH="$(abspath "./$(get_agent_setting ^script_name)")"
-AGENT_FULL_PATH_LOG="$(abspath "./")/log.out"
+AGENT_FULL_PATH_LOG="${AGENT_DIR}/log.out"
 
 # get interval
 RUN_INTERVAL=$(get_config_setting ^run_interval)
@@ -100,7 +101,7 @@ fi
 # crontab settings
 CRON_FILE="/etc/cron.d/${AGENT}"
 CRON_USER="$( logname )"
-CRON_COMMAND="command -p ${PY_CMD} ${AGENT_FULL_PATH} > ${AGENT_FULL_PATH_LOG} 2>&1"
+CRON_COMMAND="command -p cd ${AGENT_DIR} && ${PY_CMD} ${AGENT_FULL_PATH} > ${AGENT_FULL_PATH_LOG} 2>&1"
 RUN_INTERVAL_VAL=${RUN_INTERVAL}
 RUN_INTERVAL_UNIT="${RUN_INTERVAL: -1}"
 

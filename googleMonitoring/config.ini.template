@@ -58,5 +58,5 @@ sampling_interval = 1
 run_interval = 10
 # number of threads to be used in the pool
 thread_pool = 
-# Maximum size of a data chunk to be sent to IF, in kilobytes
-chunk_size_kb = 
+# Maximum size of a data chunk to be sent to IF, in kilobytes (set to 2048, if no preference)
+chunk_size_kb = 2048
