@@ -12,6 +12,7 @@ import pickle
 import logging
 from collections import deque
 from configparser import ConfigParser
+from optparse import OptionParser
 from ifobfuscate import decode
 
 import warnings
@@ -45,7 +46,6 @@ class GeneratePredictedIncidentServiceNowTicket:
         self.insightFinder_vars['host_url'] = config.get('insightFinder_vars', 'host_url')
         self.insightFinder_vars['http_proxy'] = config.get('insightFinder_vars', 'http_proxy')
         self.insightFinder_vars['https_proxy'] = config.get('insightFinder_vars', 'https_proxy')
-        self.insightFinder_vars['api'] = config.get('insightFinder_vars', 'api')
         self.insightFinder_vars['licenseKey'] = config.get('insightFinder_vars', 'licenseKey')
         self.insightFinder_vars['retries'] = config.getint('insightFinder_vars', 'retries')
         self.insightFinder_vars['sleep_seconds'] = config.getint('insightFinder_vars', 'sleep_seconds')
@@ -70,6 +70,11 @@ class GeneratePredictedIncidentServiceNowTicket:
         self.payload_vars['start_date'] = config.get('payload_vars', 'start_date')
         self.payload_vars['end_date'] = config.get('payload_vars', 'end_date')
 
+        parser = OptionParser()
+        parser.add_option('-t', '--testing', action='store_true', dest='testing', default=False,
+                        help='Set to testing mode (do not send data).')
+        (self.options, args) = parser.parse_args()
+
     def post_all_incidents(self):
         '''
         Process all incidents between the start and end dates
@@ -89,7 +94,8 @@ class GeneratePredictedIncidentServiceNowTicket:
         day = start_date
         while day <= end_date:
             data = self.get_predicted_incident_json(day)
-            self.post_day_incidents(data)
+            if not self.options.testing:
+                self.post_day_incidents(data)
 
             day += timedelta(days=1)
 
@@ -99,7 +105,7 @@ class GeneratePredictedIncidentServiceNowTicket:
         RETURNS: dict/JSON
         '''
         
-        url = self.insightFinder_vars['host_url'] + self.insightFinder_vars['api']
+        url = self.insightFinder_vars['host_url'] + "/api/v2/servicenowagentpush"
         proxies = {}
         if len(self.insightFinder_vars['http_proxy']) > 0:
             proxies['http'] = self.insightFinder_vars['http_proxy']
@@ -125,10 +131,11 @@ class GeneratePredictedIncidentServiceNowTicket:
             attempts += 1
 
         if response.status_code == 200:
-            message = "\nSuccessfully retrieved the incident data for {} from InsightFinder.".format(day)
+            data = response.json()
+            message = "\nSuccessfully retrieved {} incidents for {} from InsightFinder.".format(len(data), day)
             print(message)
             logger.info(message)
-            return response.json()
+            return data
         else:
             message = "Failed to get data for {} in {} attempts. Check logs for details.".format(
                 day, self.insightFinder_vars['retries'])
