@@ -73,7 +73,7 @@ Once the cron is running, you can either pause the agent by commenting out the r
 
 #### nagios_vars:
 * **`host_url`**: URL for Nagios.
-* **`http_proxy`**: HTTP proxy used to connect to Nagios. DO NOT include the protocol prefix.
+* **`http_proxy`**: HTTP proxy used to connect to Nagios.
 * **`https_proxy`**: As above, but HTTPS.
 * **`api_key`**: The API key for Nagios.
 * **`host_names_list`**: Comma-separated list of host names to be selected. Given precedence over regex.
