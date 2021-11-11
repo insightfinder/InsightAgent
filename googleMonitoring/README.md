@@ -73,7 +73,7 @@ Once the cron is running, you can either pause the agent by commenting out the r
 
 #### googleMonitoring_vars:
 * **`service_key_json`**: Path to the JSON file downloaded from Google Cloud with a project's service account's private key.
-* **`http_proxy`**: HTTP proxy used to connect to the Google Monitoring API. DO NOT include the protocol prefix.
+* **`http_proxy`**: HTTP proxy used to connect to the Google Monitoring API.
 * **`https_proxy`**: As above, but HTTPS.
 * **`project_id`**: Project's ProjectID on Google Cloud.
 * **`metrics_list`**: Comma-separated list of metrics to be selected. Given precedence over regex.
