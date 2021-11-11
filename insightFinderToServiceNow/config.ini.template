@@ -3,8 +3,6 @@
 host_url = 
 http_proxy = 
 https_proxy = 
-# /api/v2/servicenowagentpush
-api = 
 licenseKey = 
 # number of retries for http requests in case of failure
 retries = 
@@ -24,11 +22,11 @@ username =
 password = 
 # incident, u_incident // all tables except 'incident' are considered staging
 target_table = 
-# minimum time between two post requests of the similar incident
 # number of retries for http requests in case of failure
 retries = 
 # time between retries
 sleep_seconds = 
+# minimum time between two post requests of the similar incident
 dampening_minutes = 
 
 [payload_vars]
@@ -42,3 +40,5 @@ customer_name =
 # enter dates in ISO format (YYYY-MM-DD) // local time
 start_date = 
 end_date = 
+# frequency at which the agent is to be ran; should match the interval used in cron; value in minutes
+run_interval = 
