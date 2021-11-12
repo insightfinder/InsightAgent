@@ -5,8 +5,9 @@ This agent can be used to get metric data from the Nagios API and ingest it to a
 ## Installing the Agent
 
 ### Required Dependencies:
-1. Python 3.x 
+1. Python 3.6
 1. Pip3
+1. Nagios 5.7+
 
 ###### Installation Steps:
 1. Download the nagios.tar.gz package
