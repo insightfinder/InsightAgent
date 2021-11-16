@@ -154,7 +154,7 @@ echo "" 2>&1 | if is_dry_run; then awk '{print}'; else tee -a ${CRON_FILE}; fi
 if is_dry_run;
 then
     echo "To create a cron config at ${CRON_FILE}, run this again as"
-    echo "  sudo ./setup/install.sh --create"
+    echo "  sudo ./setup/install_cron.sh --create"
 else
     echo "Cron config created at ${CRON_FILE}"
 fi
