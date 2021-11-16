@@ -286,7 +286,7 @@ def query_nagiosAPI(args):
         return pd.DataFrame()
 
     data = [row['v'] for row in result['data']['row']]
-    index = [row['t'] * 1000 for row in result['data']['row']]
+    index = [int(row['t']) * 1000 for row in result['data']['row']]
     columns = result['meta']['legend']['entry']
 
     if type(columns) == list:
