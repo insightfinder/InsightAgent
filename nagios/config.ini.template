@@ -1,0 +1,45 @@
+[insightFinder_vars]
+# https://app.insightfinder.com
+host_url = 
+http_proxy = 
+https_proxy = 
+licenseKey = 
+project_name = 
+username = 
+# number of retries for http requests in case of failure
+retries = 
+# time between retries
+sleep_seconds = 
+
+[nagios_vars]
+host_url = 
+http_proxy = 
+https_proxy = 
+api_key = 
+# enter a list of host names separated by comma(,) or a regex to match from all available host names
+# if list and regex are both provided, the list is given precedence and the regex param will be ignored
+# if both are missing, no host names will be processed (set regex to < .* > to select all host names)
+host_names_list = 
+host_names_regex = 
+# enter a list of service descriptors separated by comma(,) or a regex to match from all available service descriptors
+# if list and regex are both provided, the list is given precedence and the regex param will be ignored
+# if both are missing, no service descriptors will be processed (set regex to < .* > to select all service descriptors)
+# NOTE: the selected hosts are also used to filter/whitelist virtual machines
+service_descriptors_list = 
+service_descriptors_regex = 
+# number of retries for http requests in case of failure
+retries = 1
+# time between retries
+sleep_seconds = 20
+
+[agent_vars]
+# used for live mode only; set value to be a little larger than the run interval; value in minutes
+query_interval = 
+# sampling interval/frequency for data collection by the agent; should match the interval used in project settings on IF; value in minutes
+sampling_interval = 
+# frequency at which the agent is to be ran; should match the interval used in cron; value in minutes
+run_interval = 
+# number of threads to be used in the multiprocessing pool
+thread_pool = 
+# maximum size of a data chunk to be sent to IF, in kilobytes (set to 2048, if no preference)
+chunk_size_kb = 2048
