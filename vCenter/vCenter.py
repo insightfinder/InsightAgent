@@ -18,6 +18,7 @@ from multiprocessing.pool import ThreadPool
 import json
 import logging
 from configparser import ConfigParser
+from optparse import OptionParser
 from ifobfuscate import decode
 
 import warnings
@@ -34,7 +35,7 @@ def set_logger_config():
     
     ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger.setLevel(cli_config_vars['log_level'])
     logging_format = logging.Formatter(
         '{ts} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
             ts='%(asctime)s',
@@ -92,6 +93,40 @@ def get_config_vars(config_path):
     agent_vars['chunk_size'] = config.getint('agent_vars', 'chunk_size_kb') * 1024
 
     return if_vars, vCenter_vars, agent_vars
+    
+def abs_path_from_cur(filename=''):
+    return os.path.abspath(os.path.join(__file__, os.pardir, filename))
+
+def get_cli_config_vars():
+    """ get CLI options. use of these options should be rare """
+    usage = 'Usage: %prog [options]'
+    parser = OptionParser(usage=usage)
+    parser.add_option('-c', '--config', action='store', dest='config', default=abs_path_from_cur('config.ini'),
+                      help='Path to the config file to use. Defaults to {}'.format(abs_path_from_cur('config.ini')))
+    parser.add_option('-q', '--quiet', action='store_true', dest='quiet', default=False,
+                      help='Only display warning and error log messages')
+    parser.add_option('-v', '--verbose', action='store_true', dest='verbose', default=False,
+                      help='Enable verbose logging')
+    parser.add_option('-t', '--testing', action='store_true', dest='testing', default=False,
+                      help='Set to testing mode (do not send data).' +
+                           ' Automatically turns on verbose logging')
+    (options, args) = parser.parse_args()
+
+    config_vars = {
+        'config': options.config if os.path.isfile(options.config) else abs_path_from_cur('config.ini'),
+        'testing': False,
+        'log_level': logging.INFO
+    }
+
+    if options.testing:
+        config_vars['testing'] = True
+
+    if options.verbose:
+        config_vars['log_level'] = logging.DEBUG
+    elif options.quiet:
+        config_vars['log_level'] = logging.WARNING
+
+    return config_vars
 
 def collect_metric_data():
     '''
@@ -138,6 +173,7 @@ def collect_metric_data():
 
     pool_map = ThreadPool(agent_vars['thread_pool'])
     params = [(content, counter_info, entity, metric) for entity in entities for metric in metrics]
+    logger.debug("Size of paramters in bytes {}".format(sys.getsizeof(params)))
     logger.info("Collecting the performance metrics.")
     metric_data = pool_map.map(query_single_metric, params)
     
@@ -145,7 +181,10 @@ def collect_metric_data():
     if len(metric_data) == 0:
         logger.warning("No metric data found for the given parameters.")
         sys.exit(1)
-    
+
+    logger.info("Finished collecting metrics.")
+    logger.debug("Size of data in bytes {}".format(sys.getsizeof(metric_data)))
+
     metric_data = metric_data.resample('T').mean().dropna(how='all')
     metric_data.index = ((metric_data.index.view(int) / 10**6)).astype(int)
     metric_data.index.name = 'timestamp'
@@ -256,6 +295,7 @@ def query_single_metric(args):
     else:
         return pd.DataFrame()
     
+    logger.debug("Retrieved {} metric for {} entity".format(metric, entity.name))
     return df
 
 def get_metric_id(counter_info, metric):
@@ -334,13 +374,16 @@ def send_data_chunk(data_chunk):
 
 if __name__ == '__main__':
     execution_time = datetime.now(pytz.timezone('UTC'))
+
+    cli_config_vars = get_cli_config_vars()
+
     logger = set_logger_config()
     
-    config_path = 'config.ini'
-    if_vars, vCenter_vars, agent_vars = get_config_vars(config_path)
+    if_vars, vCenter_vars, agent_vars = get_config_vars(cli_config_vars['config'])
 
     try:
         metric_data = collect_metric_data()
-        send_metric_data(metric_data)
+        if not cli_config_vars['testing']:
+            send_metric_data(metric_data)
     except Exception as e:
         logger.error(e, exc_info=True)
