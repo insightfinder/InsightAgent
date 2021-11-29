@@ -46,18 +46,25 @@ def start_data_processing():
             # build query
             query_body = {
                 "query": {
-                    "range": {
-                        timestamp_field: {
-                            "format": "epoch_second",
-                            'gte': start_time,
-                            'lte': end_time
-                        }
-                    }
+                    "bool": {
+                        "must": [
+                            {
+                                "range": {
+                                    timestamp_field: {
+                                        "format": "epoch_second",
+                                        'gte': start_time,
+                                        'lte': end_time
+                                    }
+                                }
+                            }
+                        ],
+                    },
+
                 }
             }
             # add user-defined query
             if isinstance(agent_config_vars['query_json'], dict):
-                query_body.update(agent_config_vars['query_json'])
+                merge(agent_config_vars['query_json'], query_body)
 
             # get total number of messages
             response = es_conn.search(
@@ -96,18 +103,25 @@ def start_data_processing():
         # build query
         query_body = {
             "query": {
-                "range": {
-                    timestamp_field: {
-                        "format": "epoch_second",
-                        'gte': start_time,
-                        'lte': end_time
-                    }
-                }
+                "bool": {
+                    "must": [
+                        {
+                            "range": {
+                                timestamp_field: {
+                                    "format": "epoch_second",
+                                    'gte': start_time,
+                                    'lte': end_time
+                                }
+                            }
+                        }
+                    ],
+                },
+
             }
         }
         # add user-defined query
         if isinstance(agent_config_vars['query_json'], dict):
-            query_body.update(agent_config_vars['query_json'])
+            merge(agent_config_vars['query_json'], query_body)
 
         # get total number of messages
         response = es_conn.search(
@@ -597,6 +611,7 @@ def config_error_no_config():
     logger.error('No config file found. Exiting...')
     sys.exit(1)
 
+
 def safe_get(dct, keys):
     for key in keys:
         try:
@@ -605,6 +620,7 @@ def safe_get(dct, keys):
             return None
     return dct
 
+
 def safe_get_data(dct, keys):
     data = {}
     for key in keys:
@@ -612,11 +628,12 @@ def safe_get_data(dct, keys):
         try:
             if len(named_key) > 1:
                 data[named_key[0]] = dct[named_key[1]]
-            else: 
+            else:
                 data[named_key[0]] = dct[named_key[0]]
         except KeyError:
             return None
     return data
+
 
 def prepare_log_entry(timestamp, data, instanceName):
     """ creates the log entry """
@@ -666,6 +683,26 @@ def make_safe_string(string):
     string = UNDERSCORE.sub('.', string)
     string = NON_ALNUM.sub('', string)
     return string
+
+
+def merge(source, destination):
+    """
+    run me with nosetests --with-doctest file.py
+
+    >>> a = { 'first' : { 'all_rows' : { 'pass' : 'dog', 'number' : '1' } } }
+    >>> b = { 'first' : { 'all_rows' : { 'fail' : 'cat', 'number' : '5' } } }
+    >>> merge(b, a) == { 'first' : { 'all_rows' : { 'pass' : 'dog', 'fail' : 'cat', 'number' : '5' } } }
+    True
+    """
+    for key, value in source.items():
+        if isinstance(value, dict):
+            # get node or create one
+            node = destination.setdefault(key, {})
+            merge(value, node)
+        else:
+            destination[key] = value
+
+    return destination
 
 
 def format_command(cmd):
