@@ -5,6 +5,7 @@ This agent monitoring metrics from Elasticsearch service itself and sends it to 
 ### Required Dependencies:
 1. Python 3.x 
 1. Pip3
+1. Metricbeat installed and configured on node(s) and instance(s)
 
 ###### Installation Steps:
 1. Download the elkmetrics.tar.gz package
@@ -84,7 +85,7 @@ Once the cron is running, you can either pause the agent by commenting out the r
 * **`user_name`**: User name in InsightFinder
 * **`license_key`**: License Key from your Account Profile in the InsightFinder UI. 
 * **`project_name`**: Name of the project created in the InsightFinder UI. 
-* **`project_type`**: Type of the project -  `alert`.
+* **`project_type`**: Type of the project -  `metric`.
 * **`sampling_interval`**: How frequently data is collected. Should match the interval used in project settings.
 * **`run_interval`**: How frequently the agent is ran. Should match the interval used in cron.
 * `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
