@@ -88,7 +88,7 @@ fi
 ## update readme
 echo "Updating README.md"
 COPY=$(type -P cp)
-LOCS=". offline" # agent dir, then offline
+LOCS="." # agent dir
 for LOC in ${LOCS};
 do
     mkdir -p "${LOC}"
@@ -183,7 +183,7 @@ echo "  Removing old tarball"
 rm ${TARBALL_PATH}
 
 echo "  Creating tarball ${TARBALL_NAME}"
-EXCLUDE_LIST="'@*' '*.out' '*.pyc' '*.bck' '*.old' '.*' 'config*.ini' '__pycache__'"
+EXCLUDE_LIST="'venv' '@*' '*.out' '*.pyc' '*.bck' '*.old' '.*' 'config*.ini' '__pycache__'"
 EXCLUDE_STMT=""
 for EXCLUDE in ${EXCLUDE_LIST};
 do
