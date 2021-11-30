@@ -37,7 +37,7 @@ agent_https_proxy =
 user_name =
 license_key =
 project_name =
-# alert
+# metric
 project_type =
 sampling_interval = 1
 run_interval = 10
