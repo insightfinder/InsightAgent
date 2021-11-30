@@ -71,7 +71,7 @@ sudo ./setup/cron-config.sh
 
 ### Config Variables
 * **`es_uris`**: A comma delimited list of RFC-1738 formatted urls `<scheme>://[<username>:<password>@]hostname:port`
-* `query_json`: JSON to add the the query
+* `query_json`: JSON to add the the query.
 * `query_chunk_size`: The maximum messages number of each query, default is 5000, max is 10000.
 * `indeces`: Indeces to search over (comma-separated, wildcards supported)
 * `port`: Port to connect to for ES. Overridden if in URI

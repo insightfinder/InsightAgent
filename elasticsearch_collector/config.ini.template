@@ -2,7 +2,26 @@
 # required
 # a comma delimited list of RFC-1738 formatted urls <scheme>://[<username>:<password>@]hostname:port
 es_uris = http://localhost:9200
-# json to add to the query body
+# json to add to the query body. For exclude DEBUG log, ie:
+# regexp-syntax: https://www.elastic.co/guide/en/elasticsearch/reference/current/regexp-syntax.html
+# query_json = {
+#              "query": {
+#                "bool": {
+#                  "filter": {
+#                    "bool": {
+#                      "must_not": {
+#                        "regexp": {
+#                          "message": {
+#                            "value": ".*DEBUG.*",
+#                            "flags": "ALL"
+#                          }
+#                        }
+#                      }
+#                    }
+#                  }
+#                }
+#              }
+#            }
 query_json =
 # The maximum messages number of each query, default is 5000, and max value id 10000.
 query_chunk_size = 5000
