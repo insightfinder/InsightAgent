@@ -1,0 +1,23 @@
+[InsightFinder]
+#The customer account license key, following the toturial to get it
+insightFinder_license_key = 
+#The project name
+insightFinder_project_name = 
+#The user name of the account
+insightFinder_user_name = 
+#The IF server url to send the data: https://app.insightfinder.com
+insightFinder_server_url = https://app.insightfinder.com
+# Optional proxy configuration to IF
+http_proxy = 
+https_proxy = 
+
+[LogParsing]
+# Instance identifier for the system where the log file is from
+instance = 
+# Regex to parse the timestamp from the log file, must surround regex with () to use a capture group
+timestamp_regex = 
+# Optional timestamp format, using arrow formatting, will default to using arrow date parsing
+# https://arrow.readthedocs.io/en/latest/ - Supported Tokens
+timestamp_format = 
+# Optional timezone of the timestamp if the log format is TZ naive (example: "Asia/Tokyo")
+timestamp_timezone = 
