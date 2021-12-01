@@ -86,7 +86,7 @@ def get_agent_config_vars():
             https_proxy = parser.get('InsightFinder', 'https_proxy')
 
             # Log Parsing Variables
-            instance_name = parser.get('LogParsing', 'instance_name')
+            instance_name = parser.get('LogParsing', 'instance')
             timestamp_regex = parser.get('LogParsing', 'timestamp_regex')
             timestamp_format = parser.get('LogParsing', 'timestamp_format')
             timestamp_timezone = parser.get('LogParsing', 'timestamp_timezone')
