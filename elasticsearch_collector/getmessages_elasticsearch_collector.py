@@ -870,19 +870,22 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
                 logger.warning(failure_message)
                 logger.info('Response Code: {}\nTEXT: {}'.format(
                     response.status_code, response.text))
+
         # handle various exceptions
+        except requests.exceptions.ConnectionError:
+            logger.exception('Connection refused. Reattempting...')
         except requests.exceptions.Timeout:
             logger.exception('Timed out. Reattempting...')
-            continue
         except requests.exceptions.TooManyRedirects:
             logger.exception('Too many redirects.')
-            break
         except requests.exceptions.RequestException as e:
             logger.exception('Exception ' + str(e))
-            break
+
+        # retry after sleep
+        time.sleep(RETRY_WAIT_TIME_IN_SEC)
 
     logger.error('Failed! Gave up after {} attempts.'.format(req_num + 1))
-    return -1
+    sys.exit(1)
 
 
 def get_data_type_from_project_type():
@@ -985,6 +988,7 @@ if __name__ == "__main__":
     JSON_LEVEL_DELIM = '.'
     CSV_DELIM = r",|\t"
     ATTEMPTS = 3
+    RETRY_WAIT_TIME_IN_SEC = 30
     CACHE_NAME = 'cache.db'
     track = dict()
     log_buffer = dict()
