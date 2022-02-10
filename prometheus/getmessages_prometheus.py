@@ -26,6 +26,8 @@ import pytz
 import regex
 import requests
 
+# import ifobfuscate
+
 """
 This script gathers data to send to Insightfinder
 """
