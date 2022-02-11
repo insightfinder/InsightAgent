@@ -1,73 +1,69 @@
-# prometheus-new
+# prometheus
 This agent collects data from prometheus and sends it to Insightfinder.
 ## Installing the Agent
 
-### Before install agent
-###### Install freetds for linux/osx
+### Required Dependencies:
+1. Python 3.x 
+1. Pip3
+
+###### Installation Steps:
+1. Download the prometheus.tar.gz package
+1. Copy the agent package to the machine that will be running the agent
+1. Extract the package
+1. Navigate to the extracted location 
+1. Configure venv and python dependencies
+1. Configure agent settings under `conf.d/`
+1. Test the agent
+1. Add agent to the cron
+
+The final steps are described in more detail below. 
+
+###### Configure venv and python dependencies:
+The configure_python.sh script sets up a virtual python environment and installs all required libraries for running the agent. 
+
 ```bash
-osx: brew install freetds
-linux: yum install freetds
+./setup/configure_python.sh
 ```
 
-### Short Version
-```bash
-bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) prometheus-new && cd prometheus-new
-vi config.ini
-sudo ./setup/install.sh --create  # install on localhost
-                                  ## or on multiple nodes
-sudo ./offline/remote-cp-run.sh list_of_nodes
+###### Agent configuration:
+The config.ini file contains all of the configuration settings needed to connect to the Prometheus instance and to stream the data to InsightFinder.
+
+The password for the Prometheus user will need to be obfuscated using the ifobfuscate.py script.  It will prompt you for the password and provide the value to add to the configuration file. 
+
+```
+python ./ifobfuscate.py 
 ```
 
-See the `offline` README for instructions on installing prerequisites.
+The configure_python.sh script will generate a config.ini file for you; however, if you need to create a new one, you can simply copy the config.ini.template file over the config.ini file to start over. 
 
-### Long Version
-###### Download the agent tarball and untar it:
-```bash
-curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/prometheus-new/prometheus-new.tar.gz
-tar xvf prometheus-new.tar.gz && cd prometheus-new
-```
-
-###### Set up `config.ini`
-```bash
-python configure.py
-```
-See below for a further explanation of each variable. 
-
-#### Automated Install (local or remote)
-###### Review propsed changes from install:
-```bash
-sudo ./setup/install.sh
-```
-
-###### Once satisfied, run:
-```bash
-sudo ./setup/install.sh --create
-```
-
-###### To deploy on multiple hosts, instead call 
-```bash
-sudo ./offline/remote-cp-run.sh list_of_nodes -f <nodelist_file>
-```
-Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
-
-#### Manual Install (local only)
-###### Check Python version
-Agent required Python 3 environment.
-
-###### Setup pip & required packages:
-```bash
-sudo ./setup/pip-config.sh
-```
+Populate all of the necessary fields in the config.ini file with the relevant data.  More details about each field can be found in the comments of the config.ini file and the Config Variables below. 
 
 ###### Test the agent:
+Once you have finished configuring the config.ini file, you can test the agent to validate the settings. 
+
+This will connect to the Prometheus instance, but it will not send any data to InsightFinder. This allows you to verify that you are getting data from Prometheus and that there are no failing exceptions in the agent configuration.
+
+User `-p` to define max processes, use `--timeout` to define max timeout.
+
 ```bash
-python getmessages_prometheus.py -t
+./setup/test_agent.sh
 ```
 
-###### If satisfied with the output, configure the agent to run continuously:
+###### Add agent to the cron:
+For the agent to run continuously, it will need to be added as a cron job. 
+
+The install_cron.sh script will add a cron file to run the agent on a regular schedule.
+
 ```bash
-sudo ./setup/cron-config.sh
+# Display the cron entry without adding it 
+./setup/install_cron.sh --display
+
+# Add the cron entry, once you are ready to start streaming
+sudo ./setup/install_cron.sh --create
 ```
+
+###### Pausing or stopping the agent:
+Once the cron is running, you can either pause the agent by commenting out the relevant line in the cron file or stop the agent by removing the cron file. 
 
 ### Config Variables
 * **`prometheus_uri`**: URI for Prometheus API as `scheme://host:port`. Defaults to `http://localhost:9090`
