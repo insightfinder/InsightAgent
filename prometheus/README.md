@@ -41,7 +41,9 @@ Populate all of the necessary fields in the config.ini file with the relevant da
 ###### Test the agent:
 Once you have finished configuring the config.ini file, you can test the agent to validate the settings. 
 
-This will connect to the Prometheus instance, but it will not send any data to InsightFinder. This allows you to verify that you are getting data from Prometheus and that there are no failing exceptions in the agent configuration. 
+This will connect to the Prometheus instance, but it will not send any data to InsightFinder. This allows you to verify that you are getting data from Prometheus and that there are no failing exceptions in the agent configuration.
+
+User `-p` to define max processes, use `--timeout` to define max timeout.
 
 ```bash
 ./setup/test_agent.sh
