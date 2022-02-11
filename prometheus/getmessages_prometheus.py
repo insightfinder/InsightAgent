@@ -19,7 +19,7 @@ from optparse import OptionParser
 from logging.handlers import QueueHandler
 import multiprocessing
 from multiprocessing.pool import ThreadPool
-from multiprocessing import Pool
+from multiprocessing import Pool, TimeoutError
 
 import arrow
 import pytz
@@ -466,7 +466,7 @@ def get_cli_config_vars():
     """
     parser.add_option('-c', '--config', action='store', dest='config', default=abs_path_from_cur('conf.d'),
                       help='Path to the config files to use. Defaults to {}'.format(abs_path_from_cur('conf.d')))
-    parser.add_option('-p', '--processes', action='store', dest='processes', default=16,
+    parser.add_option('-p', '--processes', action='store', dest='processes', default=multiprocessing.cpu_count() * 4,
                       help='Number of processes to run')
     parser.add_option('-q', '--quiet', action='store_true', dest='quiet', default=False,
                       help='Only display warning and error log messages')
@@ -475,18 +475,16 @@ def get_cli_config_vars():
     parser.add_option('-t', '--testing', action='store_true', dest='testing', default=False,
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
+    parser.add_option('--timeout', action='store', dest='timeout', default=5,
+                      help='Minutes of timeout for all processes')
     (options, args) = parser.parse_args()
-
-    try:
-        processes = int(options.processes)
-    except ValueError:
-        processes = 16
 
     config_vars = {
         'config': options.config if os.path.isdir(options.config) else abs_path_from_cur('conf.d'),
-        'processes': processes,
+        'processes': int(options.processes),
         'testing': False,
-        'log_level': logging.INFO
+        'log_level': logging.INFO,
+        'timeout': int(options.timeout) * 60,
     }
 
     if options.testing:
@@ -676,6 +674,7 @@ def initialize_data_gathering(logger, c_config, if_config_vars, agent_config_var
 
     # close cache
     cache_con.close()
+    return True
 
 
 def clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track):
@@ -906,6 +905,7 @@ def worker_process(args):
     worker_configurer(q, c_config['log_level'])
     logger = logging.getLogger('worker')
     logger.info("Setup logger in PID {}".format(os.getpid()))
+    logger.info("Process start with config: {}".format(config_file))
 
     if_config_vars = get_if_config_vars(logger, config_file)
     if not if_config_vars:
@@ -917,6 +917,9 @@ def worker_process(args):
 
     # start run
     initialize_data_gathering(logger, c_config, if_config_vars, agent_config_vars, time_now)
+
+    logger.info("Process is done with config: {}".format(config_file))
+    return True
 
 
 if __name__ == "__main__":
@@ -951,11 +954,24 @@ if __name__ == "__main__":
 
     # start sub process by pool
     pool = Pool(cli_config_vars['processes'])
-    pool.map(worker_process, arg_list)
+    pool_result = pool.map_async(worker_process, arg_list)
     pool.close()
-    pool.join()
+
+    # wait 5 minutes for every worker to finish
+    pool_result.wait(timeout=cli_config_vars['timeout'])
+
+    try:
+        results = pool_result.get(timeout=1)
+        pool.join()
+    except TimeoutError:
+        main_logger.error("We lacked patience and got a multiprocessing.TimeoutError")
+        pool.terminate()
+
+    # end
+    main_logger.info("Now the pool is closed and no longer available")
 
     # send kill signal
+    time.sleep(1)
     kill_logger = logging.getLogger('KILL')
     kill_logger.info('KILL')
     listener.join()
