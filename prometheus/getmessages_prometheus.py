@@ -68,7 +68,7 @@ def initialize_cache_connection():
 
 
 def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
-                          cache_cur):
+                          cache_cur, time_now):
     logger.info('Started......')
 
     # get metrics
@@ -135,10 +135,6 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
     else:
         logger.debug('Using current time for streaming data')
-        time_now = int(arrow.utcnow().float_timestamp)
-        # start_time = time_now - if_config_vars['sampling_interval']
-        # end_time = time_now
-
         params = [(logger, if_config_vars, agent_config_vars, m, {
             'query': get_query_uri(m),
             'time': time_now,
@@ -657,7 +653,7 @@ def format_command(cmd):
     return list(cmd)
 
 
-def initialize_data_gathering(logger, c_config, if_config_vars, agent_config_vars):
+def initialize_data_gathering(logger, c_config, if_config_vars, agent_config_vars, time_now):
     metric_buffer = dict()
     track = dict()
     reset_metric_buffer(metric_buffer)
@@ -669,7 +665,7 @@ def initialize_data_gathering(logger, c_config, if_config_vars, agent_config_var
     (cache_con, cache_cur) = initialize_cache_connection()
 
     start_data_processing(logger, c_config, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
-                          cache_cur)
+                          cache_cur, time_now)
 
     # clear metric buffer when data processing end
     clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
@@ -904,7 +900,7 @@ def worker_configurer(q, level):
 
 
 def worker_process(args):
-    (config_file, c_config, q) = args
+    (config_file, c_config, time_now, q) = args
 
     # start sub process
     worker_configurer(q, c_config['log_level'])
@@ -920,7 +916,7 @@ def worker_process(args):
     print_summary_info(logger, if_config_vars, agent_config_vars)
 
     # start run
-    initialize_data_gathering(logger, c_config, if_config_vars, agent_config_vars)
+    initialize_data_gathering(logger, c_config, if_config_vars, agent_config_vars, time_now)
 
 
 if __name__ == "__main__":
@@ -950,7 +946,8 @@ if __name__ == "__main__":
     config_files = glob.glob(files_path)
 
     # get args
-    arg_list = [(f, cli_config_vars, queue) for f in config_files]
+    utc_time_now = int(arrow.utcnow().float_timestamp)
+    arg_list = [(f, cli_config_vars, utc_time_now, queue) for f in config_files]
 
     # start sub process by pool
     pool = Pool(cli_config_vars['processes'])
