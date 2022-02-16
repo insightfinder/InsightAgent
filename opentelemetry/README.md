@@ -6,13 +6,13 @@
 - Go to Settings->System Settings and select "Add New Project" 
 - Select the "Custom" project from the list and "Create Project"
 - Configure: 
--- Instance Type: Private Cloud
--- Data Type: Trace
--- Agent Type: Live Streaming
--- Hot/Cold event sampling interval: 10 min (default) 
+	- Instance Type: Private Cloud
+	- Data Type: Trace
+	- Agent Type: Live Streaming
+	- Hot/Cold event sampling interval: 10 min (default) 
 - Create Project: 
--- Project Name
--- System Name
+	- Project Name
+	- System Name
 - Note down the project name and license key which will be used for agent installation. The license key is available in "User Account Information". To go to "User Account Information", click the userid on the top right corner.
 
 ### Installation Instructions
