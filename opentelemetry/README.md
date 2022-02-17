@@ -16,7 +16,7 @@
 - Note down the project name and license key which will be used for agent installation. The license key is available in "User Account Information". To go to "User Account Information", click the userid on the top right corner.
 
 ### Installation Instructions
-1. Download the OpenTelemetry Agent to the targent system: [For Java](https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases)
+1. Download the OpenTelemetry Agent to the target system: [For Java](https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases)
 1. Set Environment Variables
 	1. OTEL_SERVICE_NAME = `<Project Name>#<User Name>#<License Key>`
 	1. OTEL_TRACES_EXPORTER = otlp
