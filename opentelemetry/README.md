@@ -23,14 +23,13 @@
 	1. OTEL_EXPORTER_OTLP_ENDPOINT = https://app.insightfinder.com/api
 	1. OTEL_EXPORTER_OTLP_PROTOCOL = http/protobuf
 1. Add OpenTelemetry Agent to Application
-	1. For Java: `-javaagent:<Path>/opentelemetry-javaagent.jar`
+	1. For Java: `-javaagent:<Full Path>/opentelemetry-javaagent.jar`
 
-
-Or run in one command:
+### Sample Java configuration
 ```
+OTEL_SERVICE_NAME=<Project Name>#<User Name>#<License Key> 
 OTEL_TRACES_EXPORTER=otlp 
 OTEL_EXPORTER_OTLP_ENDPOINT="https://app.insightfinder.com/api" 
-OTEL_SERVICE_NAME=<Project Name>#<User Name>#<License Key> 
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf 
-java -javaagent:<Path>/opentelemetry-javaagent.jar -jar  <your app name>.jar
+java -javaagent:<Full Path>/opentelemetry-javaagent.jar -jar  <your app name>.jar
 ```
