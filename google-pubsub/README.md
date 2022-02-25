@@ -12,11 +12,10 @@ filters/03-http-output.conf
 ```
 
 ### Prerequisites:
-Logstash:
-https://www.elastic.co/guide/en/logstash/current/getting-started-with-logstash.html
+[Logstash](https://www.elastic.co/guide/en/logstash/current/getting-started-with-logstash.html)
+[Logstash Input Plugin: Google Pub/Sub](https://www.elastic.co/guide/en/logstash/current/plugins-inputs-google_pubsub.html)
+[Logstash Filter Plugin: json_encode](https://www.elastic.co/guide/en/logstash/current/plugins-filters-json_encode.html)
 
-Logstash: Google_pubsub input plugin:
-https://www.elastic.co/guide/en/logstash/current/plugins-inputs-google_pubsub.html
 
 ### Installation
 1. Download and copy the filters to the filter folder for your logstash installation
@@ -36,8 +35,8 @@ https://www.elastic.co/guide/en/logstash/current/plugins-inputs-google_pubsub.ht
 
 
 ### Uninstallation:
-Simply remove the pubsub configuration files from /etc/logstash/conf.d and restart Logstash:
+Simply remove the logstash configuration files from /etc/logstash/conf.d and stop Logstash:
 ```
-service logstash restart
+service logstash stop
 ```
 
