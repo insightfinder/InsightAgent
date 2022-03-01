@@ -115,8 +115,9 @@ if __name__ == "__main__":
             timestamp_start = new_entry['TIMESTAMP_START']
             timestamp = int(float(timestamp_start) * 1000)
             metric_data['timestamp'] = str(timestamp)
-            instance = "{}-{}_{}-{}".format(new_entry['DST_IP'], new_entry['DST_PORT'], new_entry['SRC_IP'],
-                                            new_entry['SRC_PORT'])
+            # instance = "{}-{}_{}-{}".format(new_entry['DST_IP'], new_entry['DST_PORT'], new_entry['SRC_IP'],
+            #                                 new_entry['SRC_PORT'])
+            instance = new_entry['SRC_IP']
             for m in METRICS:
                 if m not in new_entry:
                     continue
