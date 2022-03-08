@@ -17,7 +17,7 @@ https_proxy =
 instance_field = 
 #The column name for the timestamp - Required
 timestamp_field = 
-#The timestamp parsing format using the python arrow library specifications: YYYY-MM-DD HH:mm:ss - Required
+#The timestamp parsing format using the python arrow library specifications: YYYY-MM-DD HH:mm:ss - Leave blank if timestamp already in EPOCH time
 timestamp_format = 
 #The timestamp timezone - Default is UTC
 timestamp_timezone = 
