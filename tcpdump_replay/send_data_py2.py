@@ -11,7 +11,7 @@ from ConfigParser import SafeConfigParser
 
 MAX_RETRY_NUM = 10
 RETRY_WAIT_TIME_IN_SEC = 30
-METRICS = ['PACKETS', 'BYTES']
+
 
 def get_agent_config_vars():
     config_vars = {}
@@ -24,6 +24,8 @@ def get_agent_config_vars():
             project_name = parser.get('InsightFinder', 'insightFinder_project_name')
             user_name = parser.get('InsightFinder', 'insightFinder_user_name')
             server_url = parser.get('InsightFinder', 'insightFinder_server_url')
+            instance_field = parser.get('InsightFinder', 'instance_field')
+            metrics = parser.get('InsightFinder', 'metrics')
             if len(file_name) == 0:
                 print "Agent not correctly configured(file name). Check config file."
                 sys.exit(1)
@@ -39,11 +41,20 @@ def get_agent_config_vars():
             if len(server_url) == 0:
                 print "Agent not correctly configured(server url). Check config file."
                 sys.exit(1)
+            if len(instance_field) == 0:
+                print("Agent not correctly configured(instance_field). Check config file.")
+                sys.exit(1)
+            if len(metrics) == 0:
+                print("Agent not correctly configured(metrics). Check config file.")
+                sys.exit(1)
             config_vars['file_name'] = file_name
             config_vars['license_key'] = license_key
             config_vars['project_name'] = project_name
             config_vars['user_name'] = user_name
             config_vars['server_url'] = server_url
+
+            config_vars['instance_field'] = [x.strip() for x in instance_field.split(',') if x.strip()]
+            config_vars['metrics'] = [x.strip() for x in metrics.split(',') if x.strip()]
     except IOError:
         print "config.ini file is missing"
     return config_vars
@@ -114,12 +125,22 @@ if __name__ == "__main__":
             metric_data['timestamp'] = str(timestamp)
             # instance = "{}-{}_{}-{}".format(new_entry['DST_IP'], new_entry['DST_PORT'], new_entry['SRC_IP'],
             #                                 new_entry['SRC_PORT'])
-            instance = new_entry['SRC_IP']
-            for m in METRICS:
-                if m not in new_entry:
+            instance = '-'.join([new_entry[x] for x in config_vars['instance_field']])
+            for m in config_vars['metrics']:
+                metric = m
+                m_value = new_entry.get(metric)
+                if '::' in m:
+                    metric, cal_str = m.split("::")
+                    cal_str = cal_str.format(**new_entry)
+                    try:
+                        m_value = eval(cal_str)
+                    except:
+                        print "This metric format is not correct: {}".format(m)
+                        continue
+                elif m not in new_entry:
                     continue
-                m_name = '{}[{}]'.format(m, instance)
-                m_value = new_entry[m]
+
+                m_name = '{}[{}]'.format(metric, instance)
                 metric_data[m_name] = str(m_value)
 
             data.append(metric_data)
