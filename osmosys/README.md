@@ -74,6 +74,7 @@ sudo ./setup/cron-config.sh
 * **`metric_path`**: Metric path to query for
 * **`instances`**: Instances to query for, multiple instances split with `,`. Will replace {instance} in the metric path.
 * **`metrics`**: Metrics to query for, multiple metrics split with `,`. Will replace {metric} in the metric path.
+* `metrics_whitelist`: This field is a regex string used to define which metrics will be filtered.
 * `region`: `{region}` in the metric path, default is `*`.
 * `env`: `{env}` in the metric path, default is `*`.
 * `system`: `{system}` in the metric path, default is `*`.
