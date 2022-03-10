@@ -10,7 +10,7 @@ metric_path = cs.*.{region}.{env}.{system}.{instance}.{metric}
 instances = 127.0.0.1,127.0.0.2
 # metrics to query for, multiple metrics split with `,`.will replace {metric} in the metric path.
 metrics = metric1,metric2
-# metrics_whitelist is a regex string used to define which metrics will be filtered.
+# metrics_whitelist is a regex string used to define which metrics will be filtered. Example: cpu.*|mem.*|disk.*
 metrics_whitelist =
 
 # {region} in the metric path, default is *
