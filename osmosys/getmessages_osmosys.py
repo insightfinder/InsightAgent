@@ -153,6 +153,11 @@ def parse_messages_osmosys(result):
             metric = metric[6:]
             date_field = '.'.join(metric)
 
+            # filter by metric whitelist
+            if agent_config_vars['metrics_whitelist_regex'] \
+                    and not agent_config_vars['metrics_whitelist_regex'].match(date_field):
+                continue
+
             # get instance name
             instance = message.get(
                 agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
@@ -220,11 +225,13 @@ def get_agent_config_vars():
         metric_path = ''
         instances = None
         metrics = None
+        metrics_whitelist = None
         region = '*'
         env = '*'
         system = '*'
         his_time_range = None
 
+        metrics_whitelist_regex = None
         instance_whitelist_regex = None
         try:
             # osmosys settings
@@ -248,6 +255,7 @@ def get_agent_config_vars():
             metric_path = config_parser.get('osmosys', 'metric_path')
             instances = config_parser.get('osmosys', 'instances')
             metrics = config_parser.get('osmosys', 'metrics')
+            metrics_whitelist = config_parser.get('osmosys', 'metrics_whitelist')
             region = config_parser.get('osmosys', 'region') or '*'
             env = config_parser.get('osmosys', 'env') or '*'
             system = config_parser.get('osmosys', 'system') or '*'
@@ -289,6 +297,11 @@ def get_agent_config_vars():
         else:
             config_error('metrics')
 
+        if len(metrics_whitelist) != 0:
+            try:
+                metrics_whitelist_regex = regex.compile(metrics_whitelist)
+            except Exception:
+                config_error('metrics_whitelist')
         if len(instance_whitelist) != 0:
             try:
                 instance_whitelist_regex = regex.compile(instance_whitelist)
@@ -354,6 +367,7 @@ def get_agent_config_vars():
             'metric_path': metric_path,
             'instances': instances,
             'metrics': metrics,
+            'metrics_whitelist_regex': metrics_whitelist_regex,
             'region': region,
             'env': env,
             'system': system,
