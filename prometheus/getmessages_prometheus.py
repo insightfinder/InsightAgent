@@ -511,6 +511,7 @@ def get_if_config_vars(logger, config_ini):
             license_key = config_parser.get('insightfinder', 'license_key')
             token = config_parser.get('insightfinder', 'token')
             project_name = config_parser.get('insightfinder', 'project_name')
+            system_name = config_parser.get('insightfinder', 'system_name')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             run_interval = config_parser.get('insightfinder', 'run_interval')
@@ -585,6 +586,7 @@ def get_if_config_vars(logger, config_ini):
             'license_key': license_key,
             'token': token,
             'project_name': project_name,
+            'system_name': system_name,
             'project_type': project_type,
             'sampling_interval': int(sampling_interval),  # as seconds
             'run_interval': int(run_interval),  # as seconds
@@ -865,7 +867,6 @@ def check_project_exist(logger, if_config_vars):
     is_project_exist = False
     try:
         logger.info('Starting check project: ' + if_config_vars['project_name'])
-        # execute sql string
         params = {
             'operation': 'check',
             'userName': if_config_vars['user_name'],
@@ -892,12 +893,12 @@ def check_project_exist(logger, if_config_vars):
     if not is_project_exist:
         try:
             logger.info('Starting add project: ' + if_config_vars['project_name'])
-            # execute sql string
             params = {
                 'operation': 'create',
                 'userName': if_config_vars['user_name'],
                 'licenseKey': if_config_vars['license_key'],
                 'projectName': if_config_vars['project_name'],
+                'systemName': if_config_vars['system_name'] or if_config_vars['project_name'],
                 'instanceType': 'PrivateCloud',
                 'projectCloudType': 'PrivateCloud',
                 'dataType': get_data_type_from_project_type(if_config_vars),
@@ -927,7 +928,6 @@ def check_project_exist(logger, if_config_vars):
         time.sleep(10)
         try:
             logger.info('Starting check project: ' + if_config_vars['project_name'])
-            # execute sql string
             params = {
                 'operation': 'check',
                 'userName': if_config_vars['user_name'],

@@ -91,7 +91,8 @@ Once the cron is running, you can either pause the agent by commenting out the r
 * **`user_name`**: User name in InsightFinder
 * **`license_key`**: License Key from your Account Profile in the InsightFinder UI. 
 * `token`: Token from your Account Profile in the InsightFinder UI. 
-* **`project_name`**: Name of the project created in the InsightFinder UI, If this project is not exist, agent will create it automatically. 
+* **`project_name`**: Name of the project created in the InsightFinder UI, If this project is not exist, agent will create it automatically.
+* `system_name`: Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name. 
 * **`project_type`**: Type of the project - one of `metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay`.
 * **`sampling_interval`**: How frequently (in Minutes) data is collected. Should match the interval used in project settings.
 * **`run_interval`**: How frequently (in Minutes) the agent is ran. Should match the interval used in cron.
