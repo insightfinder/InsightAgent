@@ -1,0 +1,2 @@
+name = prometheus
+script_name = getmessages_prometheus.py
