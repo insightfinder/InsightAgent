@@ -55,10 +55,10 @@ The install_cron.sh script will add a cron file to run the agent on a regular sc
 
 ```bash
 # Display the cron entry without adding it 
-./setup/install_cron.sh  --monit --display
+./setup/install_cron.sh  --monitor --display
 
 # Add the cron entry, once you are ready to start streaming
-sudo ./setup/install_cron.sh --monit --create
+sudo ./setup/install_cron.sh --monitor --create
 ```
 
 ###### Pausing or stopping the agent:
