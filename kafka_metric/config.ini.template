@@ -1,0 +1,69 @@
+[agent]
+## kafka info
+# required
+bootstrap_servers = 127.0.0.1:9092
+# required
+topics = metrics
+# required
+group_id = insigthfinder
+client_id =
+
+## SSL
+# set to SSL to use SSL
+security_protocol =
+ssl_context =
+# true or false
+ssl_check_hostname =
+ssl_cafile =
+ssl_certfile =
+ssl_keyfile =
+ssl_password =
+ssl_crlfile =
+ssl_ciphers =
+
+## SASL
+# valid options are PLAIN GSSAPI OAUTHBEARER
+sasl_mechanism =
+sasl_plain_username =
+sasl_plain_password =
+sasl_kerberos_service_name =
+sasl_kerberos_domain_name =
+sasl_oauth_token_provider =
+
+# metrics_whitelist is a regex string used to define which metrics will be filtered.
+metrics_whitelist =
+
+## message parsing
+# timezone, as per pytz
+timezone =
+timestamp_field =
+# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+target_timestamp_timezone = UTC
+component_field =
+# if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
+instance_field =
+# instance_whitelist is a regex string used to define which instances will be filtered.
+instance_whitelist =
+device_field =
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
+[insightfinder]
+user_name =
+license_key =
+token =
+# Name of the project created in the InsightFinder UI, If this project is not exist, agent will create it automatically.
+project_name =
+# Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name =
+# metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
+project_type = metric
+sampling_interval = 1
+run_interval = 1
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
