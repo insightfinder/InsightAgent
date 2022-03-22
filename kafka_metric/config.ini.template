@@ -30,21 +30,31 @@ sasl_kerberos_service_name =
 sasl_kerberos_domain_name =
 sasl_oauth_token_provider =
 
+
+# if raw data, the regex used to parse the log. It must use named capture groups `(?<name>.*)` that correspond to the *_field config variables below (ie  `(?<timestamp>.*)`,  `(?<host>.*)`,  `(?<device>.*)`,  `(?<etc>.*)`.
+raw_regex = ^\w+\.(?P<project>[\w|]+\.\w+\.\w+)\.\w+\.(?P<instance>\w+)\.(?P<metric>.*) (?P<value>.*) (?P<timestamp>\d+)$
+
+# if this field is empty, agent will use project_name in insightfinder section
+project_field = project
+
+metric_field = metric
 # metrics_whitelist is a regex string used to define which metrics will be filtered.
 metrics_whitelist =
 
 ## message parsing
 # timezone, as per pytz
 timezone =
-timestamp_field =
+timestamp_field = timestamp
 # Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
 target_timestamp_timezone = UTC
 component_field =
 # if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
-instance_field =
+instance_field = instance
 # instance_whitelist is a regex string used to define which instances will be filtered.
 instance_whitelist =
 device_field =
+# multiple of sampling_interval witch buffered the metric data. Default is 2 multiple
+buffer_sampling_interval_multiple = 2
 
 ## proxy
 agent_http_proxy =
@@ -64,6 +74,6 @@ sampling_interval = 1
 run_interval = 1
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
-if_url = https://app.insightfinder.com
+if_url = https://stg.insightfinder.com
 if_http_proxy =
 if_https_proxy =
