@@ -1,2 +1,2 @@
-name = prometheus
-script_name = getmessages_prometheus.py
+name = kafka_metric
+script_name = getmessages_kafka_metric.py
