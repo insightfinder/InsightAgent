@@ -15,14 +15,11 @@ from sys import getsizeof
 from optparse import OptionParser
 import threading
 
-from kafka import KafkaConsumer
-
 import arrow
 import pytz
 import regex
 import requests
-
-# import ifobfuscate
+from kafka import KafkaConsumer
 
 """
 This script gathers data to send to Insightfinder
@@ -39,6 +36,8 @@ LEFT_BRACE = regex.compile(r"\[")
 RIGHT_BRACE = regex.compile(r"\]")
 PERIOD = regex.compile(r"\.")
 COMMA = regex.compile(r"\,")
+PIPE = regex.compile(r"\|+")
+PROJECT_ALNUM = regex.compile(r"[@\._]+")
 NON_ALNUM = regex.compile(r"[^a-zA-Z0-9]")
 FORMAT_STR = regex.compile(r"{(.*?)}")
 HOSTNAME = socket.gethostname().partition('.')[0]
@@ -69,7 +68,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
 
     # open consumer
     consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
-    if not consumer.bootstrap_connected():
+    if len(consumer.topics()) == 0:
         config_error(logger, 'kafka connection error')
         sys.exit(1)
 
@@ -89,17 +88,20 @@ def parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffe
     count = 0
     for msg in consumer:
         try:
-            logger.debug(msg.value)
+            msg_value = msg.value
+            if isinstance(msg.value, bytes):
+                msg_value = msg_value.decode("utf-8")
+            logger.debug(msg_value)
 
             message = {}
             if agent_config_vars['raw_regex']:
-                matches = agent_config_vars['raw_regex'].match(message.value)
+                matches = agent_config_vars['raw_regex'].match(msg_value)
                 if not matches:
                     logger.error('Parse message failed with raw_regex: {}'.format(message.value))
                     continue
                 message = matches.groupdict()
             else:
-                message = json.loads(message.value)
+                message = json.loads(msg_value)
 
             # metric name
             date_field = message.get(agent_config_vars['metric_field'] or 'metric')
@@ -140,7 +142,7 @@ def parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffe
             data_value = message.get('value')
 
             # get timestamp
-            timestamp = message.get(agent_config_vars['timestamp_field'] or 'timestamp')
+            timestamp = message.get(agent_config_vars['timestamp_field'][0])
             timestamp = int(timestamp) * 1000
             # set offset for timestamp
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
@@ -152,6 +154,7 @@ def parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffe
                 project = message.get(agent_config_vars['project_field'])
                 if not project:
                     continue
+                project = make_safe_project_string(project)
 
             if lock.acquire():
                 # build buffer dict
@@ -180,11 +183,24 @@ def parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffe
 
 
 def func_check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars):
-    utc_time_now = int(arrow.utcnow().float_timestamp)
+    while True:
+        buffer_check_thead = threading.Thread(target=check_buffer,
+                                              args=(
+                                                  lock, metric_buffer, logger, c_config, if_config_vars,
+                                                  agent_config_vars))
+        buffer_check_thead.start()
+        buffer_check_thead.join()
+        time.sleep(if_config_vars['sampling_interval'])
+        # time.sleep(10)
+
+
+def check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars):
+    utc_time_now = arrow.utcnow().float_timestamp
     logger.info('Start clear buffer: {}'.format(arrow.get(utc_time_now).format()))
 
     clear_time = utc_time_now - agent_config_vars['buffer_sampling_interval_multiple'] * if_config_vars[
-        'sampling_interval'] * 1000
+        'sampling_interval']
+    clear_time *= 1000
     # empty data to send
     project_data_map = {}
 
@@ -206,7 +222,7 @@ def func_check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, age
         lock.release()
 
     # send data
-    for project, buffer in metric_buffer.items():
+    for project, buffer in project_data_map.items():
         # check project name first
         check_success = check_project_exist(logger, if_config_vars, project)
         if not check_success:
@@ -297,19 +313,20 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             kafka_kwargs = {k: v for (k, v) in list(kafka_config.items()) if v}
 
             # handle boolean setting
-            if kafka_kwargs['ssl_check_hostname']:
+            if kafka_kwargs.get('ssl_check_hostname'):
                 kafka_kwargs['ssl_check_hostname'] = kafka_kwargs['ssl_check_hostname'].lower() == 'true'
             else:
-                kafka_kwargs['ssl_check_hostname'] = None
+                kafka_kwargs['ssl_check_hostname'] = False
 
             # handle required arrays
             # bootstrap serverss
-            if len(kafka_kwargs['bootstrap_servers']) != 0:
-                topics = [x.strip() for x in kafka_kwargs['bootstrap_servers'].split(',') if x.strip()]
+            if len(kafka_kwargs.get('bootstrap_servers')) != 0:
+                kafka_kwargs['bootstrap_servers'] = [x.strip() for x in kafka_kwargs['bootstrap_servers'].split(',') if
+                                                     x.strip()]
             else:
                 return config_error(logger, 'bootstrap_servers')
             # group_id
-            if len(kafka_kwargs['group_id']) != 0:
+            if len(kafka_kwargs.get('group_id')) != 0:
                 kafka_kwargs['group_id'] = kafka_kwargs['group_id'].strip()
             else:
                 return config_error(logger, 'group_id')
@@ -499,8 +516,8 @@ def get_if_config_vars(logger, config_ini):
             return config_error(logger, 'user_name')
         if len(license_key) == 0:
             return config_error(logger, 'license_key')
-        if len(project_name) == 0:
-            return config_error(logger, 'project_name')
+        # if len(project_name) == 0:
+        #     return config_error(logger, 'project_name')
         if len(project_type) == 0:
             return config_error(logger, 'project_type')
 
@@ -587,6 +604,14 @@ def get_json_size_bytes(json_data):
     return getsizeof(json.dumps(json_data))
 
 
+def make_safe_project_string(project):
+    """ make a safe project name string """
+    # strip underscores
+    project = PIPE.sub('', project)
+    project = PROJECT_ALNUM.sub('-', project)
+    return project
+
+
 def make_safe_instance_string(instance, device=''):
     """ make a safe instance name string, concatenated with device if appropriate """
     # strip underscores
@@ -629,10 +654,11 @@ def initialize_data_gathering(logger, c_config, if_config_vars, agent_config_var
 
     # start timing threading to check and send metric data
     lock = threading.Lock()
-    buffer_check_thead = threading.Timer(if_config_vars['sampling_interval'], func_check_buffer,
-                                         args=(
-                                             lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars))
-    buffer_check_thead.start()
+    loop_thead = threading.Thread(target=func_check_buffer,
+                                  args=(
+                                      lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars))
+    loop_thead.setDaemon(True)
+    loop_thead.start()
 
     # get cache
     (cache_con, cache_cur) = initialize_cache_connection()
@@ -921,7 +947,7 @@ def main():
     logger.info(cli_data_block)
 
     # get config file
-    config_file = os.path.join(__file__, os.pardir, 'config.ini')
+    config_file = os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))
     logger.info("Process start with config: {}".format(config_file))
 
     if_config_vars = get_if_config_vars(logger, config_file)
