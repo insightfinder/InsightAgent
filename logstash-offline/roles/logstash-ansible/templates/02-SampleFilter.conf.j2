@@ -1,0 +1,14 @@
+filter {
+    # Get epoch
+    ruby { code => "event.set('epoch', event.get(%{@timestamp}).to_i * 1000)" }
+    mutate {
+        add_field => {
+            "data" => "%{message}"
+            "agent_type" => "LogStreaming"
+            "project_name" => "{{ project_name }}"
+            "instance_name" => "{{ hostname }}"
+            "component_name" => "{{ component_name }}"
+        }
+    }
+
+}
