@@ -1,0 +1,11 @@
+---
+# defaults file for logstash-ansible
+userName: "{{ username }}"
+project_name: nathan-testLogstash-project #"%{[fields][site]}-%{[fields][technology]}-%{[fields][log]}-%{[fields][foundation]}" #
+hostname: "%{[host][hostname]}"
+component_name: "%{[fields][technology]}"
+license_key: "{{ license_key }}"
+server_url: "{{ server_url }}"
+logstash_user: "{{ logstash_user }}"
+ls_user: "{{ ls_user }}"
+ls_group: "{{ ls_group }}"

@@ -1,0 +1,13 @@
+---
+# tasks file for logstash-ansible
+
+- name: install logstash
+  include: install-logstash.yaml
+  tags:
+  - install
+
+- name: start logstash
+  include: start-logstash.yaml
+  tags:
+  - start
+  

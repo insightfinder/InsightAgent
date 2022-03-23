@@ -1,0 +1,7 @@
+---
+- hosts: logstash
+  become: yes
+  become_method: sudo
+  roles:
+  - logstash-ansible
+  
