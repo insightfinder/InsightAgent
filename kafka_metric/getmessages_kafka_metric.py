@@ -3,6 +3,7 @@ import configparser
 import json
 import logging
 import os
+import queue
 import socket
 import sys
 import time
@@ -10,10 +11,10 @@ import urllib.parse
 import http.client
 import shlex
 import traceback
-import sqlite3
 from sys import getsizeof
 from optparse import OptionParser
-import threading
+from threading import Thread
+from multiprocessing import Process, Queue, Lock, Manager
 
 import arrow
 import pytz
@@ -45,28 +46,10 @@ ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 JSON_LEVEL_DELIM = '.'
 CSV_DELIM = r",|\t"
 ATTEMPTS = 3
-CACHE_NAME = 'cache.db'
 
+def get_data(logger, agent_config_vars, messages):
 
-def initialize_cache_connection():
-    # connect to local cache
-    cache_loc = abs_path_from_cur(CACHE_NAME)
-    if os.path.exists(cache_loc):
-        cache_con = sqlite3.connect(cache_loc)
-        cache_cur = cache_con.cursor()
-    else:
-        cache_con = sqlite3.connect(cache_loc)
-        cache_cur = cache_con.cursor()
-        cache_cur.execute('CREATE TABLE "cache" ( "instance"	TEXT NOT NULL UNIQUE, "alias"	TEXT NOT NULL)')
-
-    return cache_con, cache_cur
-
-
-def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, metric_buffer, cache_con,
-                          cache_cur, lock):
-    logger.info('Started......')
-
-    # open consumer
+    logger.info('Started data thread ......')
     consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
     if len(consumer.topics()) == 0:
         config_error(logger, 'kafka connection error')
@@ -75,22 +58,28 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     # subscribe to given topics
     consumer.subscribe(agent_config_vars['topics'])
 
-    # start consuming messages
-    parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffer, cache_con, cache_cur,
-                         consumer, lock)
-
-    consumer.close()
-    logger.info('Closed......')
-
-
-def parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffer, cache_con, cache_cur,
-                         consumer, lock):
-    count = 0
     for msg in consumer:
         try:
             msg_value = msg.value
             if isinstance(msg.value, bytes):
                 msg_value = msg_value.decode("utf-8")
+            if agent_config_vars['initial_filter'] \
+                and not agent_config_vars['initial_filter'].search(msg_value):
+                continue
+            messages.put(msg_value)
+        except Exception as e:
+            logger.warn('Error when parsing message')
+            logger.warn(e)
+            logger.debug(traceback.format_exc())
+            continue
+
+    logger.info('Closed data thread......')
+
+
+def parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffer, lock, messages):
+    count = 0
+    for msg_value in messages.get():
+        try:
             logger.debug(msg_value)
 
             message = {}
@@ -127,9 +116,6 @@ def parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffe
                 devices = [d for d in devices if d]
                 device = devices[0] if len(devices) > 0 else None
             full_instance = make_safe_instance_string(instance, device)
-
-            # check cache for alias
-            full_instance = get_alias_from_cache(cache_con, cache_cur, full_instance)
 
             # get component, and build component instance map info
             component_map = None
@@ -188,7 +174,7 @@ def parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffe
 
 def func_check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars):
     while True:
-        buffer_check_thead = threading.Thread(target=check_buffer,
+        buffer_check_thead = Thread(target=check_buffer,
                                               args=(
                                                   lock, metric_buffer, logger, c_config, if_config_vars,
                                                   agent_config_vars))
@@ -342,6 +328,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
                 return config_error(logger, 'topics')
 
             # metrics
+            initial_filter = config_parser.get('agent', 'initial_filter')
             raw_regex = config_parser.get('agent', 'raw_regex')
 
             project_field = config_parser.get('agent', 'project_field')
@@ -384,6 +371,13 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
                 return config_error(logger, 'raw_regex')
         else:
             return config_error(logger, 'raw_regex')
+
+        if len(initial_filter) != 0:
+            try:
+                raw_regex = regex.compile(initial_filter)
+            except Exception as e:
+                logger.error(e)
+                return config_error(logger, 'initial_filter')
 
         if len(metrics_whitelist) != 0:
             try:
@@ -428,7 +422,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
         config_vars = {
             'kafka_kwargs': kafka_kwargs,
             'topics': topics,
-
+            'initial_filter': initial_filter,
             'raw_regex': raw_regex,
             'project_field': project_field,
             'project_whitelist_regex': project_whitelist_regex,
@@ -664,23 +658,30 @@ def format_command(cmd):
 
 
 def initialize_data_gathering(logger, c_config, if_config_vars, agent_config_vars):
-    metric_buffer = dict()
+    with Manager() as manager: 
+        metric_buffer = manager.dict()
+        messages = Queue()
+        lock = Lock()
 
-    # start timing threading to check and send metric data
-    lock = threading.Lock()
-    loop_thead = threading.Thread(target=func_check_buffer,
-                                  args=(
-                                      lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars))
-    loop_thead.setDaemon(True)
-    loop_thead.start()
 
-    # get cache
-    (cache_con, cache_cur) = initialize_cache_connection()
-    start_data_processing(logger, c_config, if_config_vars, agent_config_vars, metric_buffer, cache_con,
-                          cache_cur, lock)
+        # start timing threading to check and send metric data
+        loop_thead = Thread(target=func_check_buffer,
+                                    args=(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars))
+        loop_thead.setDaemon(True)
+        loop_thead.start()
 
-    # close cache
-    cache_con.close()
+        numDataProcessors = 5
+        dataProcessors = []
+        for x in range(numDataProcessors):
+            dataProcessors.append(Process(target=parse_messages_kafka,
+                                                args=(logger, if_config_vars, agent_config_vars, metric_buffer, lock, messages)))
+
+        numKafkaConsumers = 5
+        kafkaConsumers = []
+        for x in range(numKafkaConsumers):
+            kafkaConsumers.append(Thread(target=get_data,
+                                    args=(logger, agent_config_vars, messages)))
+
     return True
 
 
