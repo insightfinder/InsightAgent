@@ -87,6 +87,7 @@ Once the cron is running, you can either pause the agent by commenting out the r
 * `sasl_oauth_token_provider`: OAuthBearer token provider instance.
 * `raw_regex`: Regex used to parse raw data. Must use named capture groups `(?<name>...)` corresponding to fields defined below, as only those named capture groups will be reported.
 * `project_field`: Field name for the project name. If this field is empty, agent will use project_name in insightfinder section. 
+* `project_whitelist`: project_whitelist is a regex string used to define which projects form project_field will be filtered.
 * `metric_field`: Field name for the metric name. 
 * `metrics_whitelist`: metrics_whitelist is a regex string used to define which metrics will be filtered.
 * `timezone`: Timezone of the timestamp data stored in/returned by the DB. Note that if timezone information is not included in the data returned by the DB, then this field has to be specified. 
