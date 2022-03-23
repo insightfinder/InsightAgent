@@ -673,14 +673,21 @@ def initialize_data_gathering(logger, c_config, if_config_vars, agent_config_var
         numDataProcessors = 5
         dataProcessors = []
         for x in range(numDataProcessors):
-            dataProcessors.append(Process(target=parse_messages_kafka,
-                                                args=(logger, if_config_vars, agent_config_vars, metric_buffer, lock, messages)))
+            d = Process(target=parse_messages_kafka,
+                                                args=(logger, if_config_vars, agent_config_vars, metric_buffer, lock, messages))
+            d.start()
+            dataProcessors.append(d)
 
         numKafkaConsumers = 5
         kafkaConsumers = []
         for x in range(numKafkaConsumers):
-            kafkaConsumers.append(Thread(target=get_data,
-                                    args=(logger, agent_config_vars, messages)))
+            k = Thread(target=get_data,
+                                    args=(logger, agent_config_vars, messages))
+            k.start()
+            kafkaConsumers.append(k)
+        
+        # TODO: Exit properly
+        kafkaConsumers[0].join()
 
     return True
 
