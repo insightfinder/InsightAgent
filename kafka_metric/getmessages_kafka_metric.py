@@ -97,7 +97,7 @@ def parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffe
             if agent_config_vars['raw_regex']:
                 matches = agent_config_vars['raw_regex'].match(msg_value)
                 if not matches:
-                    logger.error('Parse message failed with raw_regex: {}'.format(message.value))
+                    logger.error('Parse message failed with raw_regex: {}'.format(msg_value))
                     continue
                 message = matches.groupdict()
             else:
