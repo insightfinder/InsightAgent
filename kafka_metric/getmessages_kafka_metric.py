@@ -154,6 +154,10 @@ def parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffe
                 project = message.get(agent_config_vars['project_field'])
                 if not project:
                     continue
+                # filter by project whitelist
+                if agent_config_vars['project_whitelist_regex'] \
+                        and not agent_config_vars['project_whitelist_regex'].match(project):
+                    continue
                 project = make_safe_project_string(project)
 
             if lock.acquire():
@@ -274,6 +278,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
 
         kafka_kwargs = {}
         topics = []
+        project_whitelist_regex = None
         metric_whitelist_regex = None
         instance_whitelist_regex = None
         try:
@@ -340,6 +345,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             raw_regex = config_parser.get('agent', 'raw_regex')
 
             project_field = config_parser.get('agent', 'project_field')
+            project_whitelist = config_parser.get('agent', 'project_whitelist')
 
             metric_field = config_parser.get('agent', 'metric_field')
             metrics_whitelist = config_parser.get('agent', 'metrics_whitelist')
@@ -361,6 +367,13 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             return config_error(logger)
+
+        if len(project_whitelist) != 0:
+            try:
+                project_whitelist_regex = regex.compile(project_whitelist)
+            except Exception as e:
+                logger.error(e)
+                return config_error(logger, 'project_whitelist')
 
         # metrics
         if len(raw_regex) != 0:
@@ -418,6 +431,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
 
             'raw_regex': raw_regex,
             'project_field': project_field,
+            'project_whitelist_regex': project_whitelist_regex,
             'metric_field': metric_field,
             'metric_whitelist_regex': metric_whitelist_regex,
             'timezone': timezone,

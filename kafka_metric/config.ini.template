@@ -36,6 +36,8 @@ raw_regex = ^\w+\.(?P<project>[\w|]+\.\w+\.\w+)\.\w+\.(?P<instance>\w+)\.(?P<met
 
 # if this field is empty, agent will use project_name in insightfinder section
 project_field = project
+# project_whitelist is a regex string used to define which projects form project_field will be filtered.
+project_whitelist =
 
 metric_field = metric
 # metrics_whitelist is a regex string used to define which metrics will be filtered.
