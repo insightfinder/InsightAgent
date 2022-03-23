@@ -30,6 +30,8 @@ sasl_kerberos_service_name =
 sasl_kerberos_domain_name =
 sasl_oauth_token_provider =
 
+# Optional preprocessing filter (regex) to eliminate raw data from being parsed. Data must match filter to be parsed if set
+initial_filter = 
 
 # if raw data, the regex used to parse the log. It must use named capture groups `(?<name>.*)` that correspond to the *_field config variables below (ie  `(?<timestamp>.*)`,  `(?<host>.*)`,  `(?<device>.*)`,  `(?<etc>.*)`.
 raw_regex = ^\w+\.(?P<project>[\w|]+\.\w+\.\w+)\.\w+\.(?P<instance>\w+)\.(?P<metric>.*) (?P<value>.*) (?P<timestamp>\d+)$
