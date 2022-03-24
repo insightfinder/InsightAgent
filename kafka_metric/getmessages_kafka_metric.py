@@ -13,8 +13,9 @@ import shlex
 import traceback
 from sys import getsizeof
 from optparse import OptionParser
-from threading import Thread
-from multiprocessing import Process, Queue, Lock, Manager
+from threading import Thread, Lock
+import multiprocessing
+from multiprocessing import Process, Queue
 
 import arrow
 import pytz
@@ -47,8 +48,8 @@ JSON_LEVEL_DELIM = '.'
 CSV_DELIM = r",|\t"
 ATTEMPTS = 3
 
-def get_data(logger, agent_config_vars, messages):
 
+def process_get_data(logger, if_config_vars, agent_config_vars, messages):
     logger.info('Started data thread ......')
     consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
     if len(consumer.topics()) == 0:
@@ -64,7 +65,7 @@ def get_data(logger, agent_config_vars, messages):
             if isinstance(msg.value, bytes):
                 msg_value = msg_value.decode("utf-8")
             if agent_config_vars['initial_filter'] \
-                and not agent_config_vars['initial_filter'].search(msg_value):
+                    and not agent_config_vars['initial_filter'].search(msg_value):
                 continue
             messages.put(msg_value)
         except Exception as e:
@@ -73,13 +74,14 @@ def get_data(logger, agent_config_vars, messages):
             logger.debug(traceback.format_exc())
             continue
 
-    logger.info('Closed data thread......')
+    logger.info('Closed data process......')
 
 
-def parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffer, lock, messages):
+def process_parse_messages(logger, if_config_vars, agent_config_vars, messages, datas):
     count = 0
-    for msg_value in messages.get():
+    while True:
         try:
+            msg_value = messages.get()
             logger.debug(msg_value)
 
             message = {}
@@ -91,48 +93,6 @@ def parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffe
                 message = matches.groupdict()
             else:
                 message = json.loads(msg_value)
-
-            # metric name
-            date_field = message.get(agent_config_vars['metric_field'] or 'metric')
-            # filter by metric whitelist
-            if agent_config_vars['metric_whitelist_regex'] \
-                    and not agent_config_vars['metric_whitelist_regex'].match(date_field):
-                continue
-
-            # instance name
-            instance = message.get(
-                agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
-                    agent_config_vars['instance_field']) > 0 else 'instance')
-            # filter by instance whitelist
-            if agent_config_vars['instance_whitelist_regex'] \
-                    and not agent_config_vars['instance_whitelist_regex'].match(instance):
-                continue
-
-            # add device info if has
-            device = None
-            device_field = agent_config_vars['device_field']
-            if device_field and len(device_field) > 0:
-                devices = [message.get('metric').get(d) for d in device_field]
-                devices = [d for d in devices if d]
-                device = devices[0] if len(devices) > 0 else None
-            full_instance = make_safe_instance_string(instance, device)
-
-            # get component, and build component instance map info
-            component_map = None
-            if agent_config_vars['component_field']:
-                component = message.get('metric').get(agent_config_vars['component_field'])
-                if component:
-                    component_map = {"instanceName": full_instance, "componentName": component}
-
-            # get value
-            data_value = message.get('value')
-
-            # get timestamp
-            timestamp = message.get(agent_config_vars['timestamp_field'][0])
-            timestamp = int(timestamp) * 1000
-            # set offset for timestamp
-            timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
-            timestamp = str(timestamp)
 
             # get project
             project = if_config_vars['project_name']
@@ -146,19 +106,49 @@ def parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffe
                     continue
                 project = make_safe_project_string(project)
 
-            if lock.acquire():
-                # build buffer dict
-                if project not in metric_buffer:
-                    metric_buffer[project] = {'buffer_dict': {}, "times": []}
-                if timestamp not in metric_buffer[project]['buffer_dict']:
-                    metric_buffer[project]['buffer_dict'][timestamp] = {}
-                    metric_buffer[project]['times'].append(timestamp)
-                if full_instance not in metric_buffer[project]['buffer_dict'][timestamp]:
-                    metric_buffer[project]['buffer_dict'][timestamp][full_instance] = {"timestamp": timestamp,
-                                                                                       "component_map": component_map}
-                metric_key = '{}[{}]'.format(date_field, full_instance)
-                metric_buffer[project]['buffer_dict'][timestamp][full_instance][metric_key] = str(data_value)
-                lock.release()
+            # instance name
+            instance = message.get(
+                agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
+                    agent_config_vars['instance_field']) > 0 else 'instance')
+            # filter by instance whitelist
+            if agent_config_vars['instance_whitelist_regex'] \
+                    and not agent_config_vars['instance_whitelist_regex'].match(instance):
+                continue
+
+            # metric name
+            date_field = message.get(agent_config_vars['metric_field'] or 'metric')
+            # filter by metric whitelist
+            if agent_config_vars['metric_whitelist_regex'] \
+                    and not agent_config_vars['metric_whitelist_regex'].match(date_field):
+                continue
+
+            # add device info if has
+            device = None
+            device_field = agent_config_vars['device_field']
+            if device_field and len(device_field) > 0:
+                devices = [message.get('metric').get(d) for d in device_field]
+                devices = [d for d in devices if d]
+                device = devices[0] if len(devices) > 0 else None
+            full_instance = make_safe_instance_string(instance, device)
+
+            # get value
+            data_value = message.get('value')
+
+            # get timestamp
+            timestamp = message.get(agent_config_vars['timestamp_field'][0])
+            timestamp = int(timestamp) * 1000
+            # set offset for timestamp
+            timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
+            timestamp = str(timestamp)
+
+            metric_key = '{}[{}]'.format(date_field, full_instance)
+            datas.put({
+                'project': project,
+                'timestamp': timestamp,
+                'full_instance': full_instance,
+                'metric_key': metric_key,
+                'value': str(data_value)
+            })
 
         except Exception as e:
             logger.warn('Error when parsing message')
@@ -172,16 +162,54 @@ def parse_messages_kafka(logger, if_config_vars, agent_config_vars, metric_buffe
     logger.info('Parse {0} messages'.format(count))
 
 
+def process_build_buffer(logger, c_config, if_config_vars, agent_config_vars, datas):
+    lock = Lock()
+    metric_buffer = {}
+
+    # check buffer and send data
+    loop_thead = Thread(target=func_check_buffer,
+                        args=(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars))
+    loop_thead.setDaemon(True)
+    loop_thead.start()
+
+    # build buffer
+    while True:
+        try:
+            message = datas.get()
+            project = message['project']
+            timestamp = message['timestamp']
+            full_instance = message['full_instance']
+            metric_key = message['metric_key']
+            value = message['value']
+            if lock.acquire():
+                # build buffer dict
+                if project not in metric_buffer:
+                    metric_buffer[project] = {'buffer_dict': {}, "times": []}
+                if timestamp not in metric_buffer[project]['buffer_dict']:
+                    metric_buffer[project]['buffer_dict'][timestamp] = {}
+                    metric_buffer[project]['times'].append(timestamp)
+                if full_instance not in metric_buffer[project]['buffer_dict'][timestamp]:
+                    metric_buffer[project]['buffer_dict'][timestamp][full_instance] = {"timestamp": timestamp}
+                metric_buffer[project]['buffer_dict'][timestamp][full_instance][metric_key] = value
+                lock.release()
+
+        except Exception as e:
+            logger.warn('Error when build buffer message')
+            logger.warn(e)
+            logger.debug(traceback.format_exc())
+            continue
+
+
 def func_check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars):
     while True:
         buffer_check_thead = Thread(target=check_buffer,
-                                              args=(
-                                                  lock, metric_buffer, logger, c_config, if_config_vars,
-                                                  agent_config_vars))
+                                    args=(
+                                        lock, metric_buffer, logger, c_config, if_config_vars,
+                                        agent_config_vars))
         buffer_check_thead.start()
         buffer_check_thead.join()
         time.sleep(if_config_vars['sampling_interval'])
-        # time.sleep(10)
+        # time.sleep(20)
 
 
 def check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars):
@@ -218,13 +246,8 @@ def check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_co
         if not check_success:
             sys.exit(1)
 
-        track = {'current_row': [], 'component_map_list': [], 'line_count': 0}
+        track = {'current_row': [], 'line_count': 0}
         for row in buffer:
-            # pop component map info
-            component_map = row.pop('component_map')
-            if component_map:
-                track['component_map_list'].append(component_map)
-
             track['current_row'].append(row)
             track['line_count'] += 1
             if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
@@ -361,7 +384,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
 
         if len(initial_filter) != 0:
             try:
-                raw_regex = regex.compile(initial_filter)
+                initial_filter = regex.compile(initial_filter)
             except Exception as e:
                 logger.error(e)
                 return config_error(logger, 'initial_filter')
@@ -645,44 +668,32 @@ def format_command(cmd):
 
 
 def initialize_data_gathering(logger, c_config, if_config_vars, agent_config_vars):
-    with Manager() as manager: 
-        metric_buffer = manager.dict()
-        messages = Queue()
-        lock = Lock()
+    # raw data
+    messages = Queue()
+    # parsed data
+    datas = Queue()
 
+    # consumer
+    for x in range(multiprocessing.cpu_count()):
+        d = Process(target=process_get_data,
+                    args=(logger, if_config_vars, agent_config_vars, messages))
+        d.daemon = True
+        d.start()
 
-        # start timing threading to check and send metric data
-        loop_thead = Thread(target=func_check_buffer,
-                                    args=(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars))
-        loop_thead.setDaemon(True)
-        loop_thead.start()
+    # parser
+    for x in range(multiprocessing.cpu_count()):
+        d = Process(target=process_parse_messages,
+                    args=(logger, if_config_vars, agent_config_vars, messages, datas))
+        d.daemon = True
+        d.start()
 
-        numDataProcessors = 5
-        dataProcessors = []
-        for x in range(numDataProcessors):
-            d = Process(target=parse_messages_kafka,
-                                                args=(logger, if_config_vars, agent_config_vars, metric_buffer, lock, messages))
-            d.start()
-            dataProcessors.append(d)
-
-        numKafkaConsumers = 5
-        kafkaConsumers = []
-        for x in range(numKafkaConsumers):
-            k = Thread(target=get_data,
-                                    args=(logger, agent_config_vars, messages))
-            k.start()
-            kafkaConsumers.append(k)
-        
-        # TODO: Exit properly
-        kafkaConsumers[0].join()
-
-    return True
+    # build buffer and send data
+    process_build_buffer(logger, c_config, if_config_vars, agent_config_vars, datas)
 
 
 def reset_track(track):
     """ reset the track global for the next chunk """
     track['current_row'] = []
-    track['component_map_list'] = []
     track['line_count'] = 0
 
 
@@ -698,10 +709,6 @@ def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data, 
         for chunk in chunk_metric_data:
             chunk['data'] = json.dumps(chunk['data'])
     data_to_post[get_data_field_from_project_type(if_config_vars)] = json.dumps(chunk_metric_data)
-
-    # add component mapping to the post data
-    track['component_map_list'] = list({v['instanceName']: v for v in track['component_map_list']}.values())
-    data_to_post['instanceMetaData'] = json.dumps(track['component_map_list'] or [])
 
     logger.debug('First:\n' + str(chunk_metric_data[0]))
     logger.debug('Last:\n' + str(chunk_metric_data[-1]))
