@@ -1,5 +1,7 @@
 ---
 # defaults file for logstash-ansible
+# These variables are using the logstash formatting for referencing the fields provided from filebeat.
+# If the filebeat field that is being referenced needs to be updated, update these variables.
 userName: "{{ username }}"
 project_name: "%{[fields][site]}-%{[fields][technology]}-%{[fields][log]}-%{[fields][foundation]}" #
 hostname: "%{[host][hostname]}"

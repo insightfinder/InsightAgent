@@ -38,31 +38,15 @@
     - 01-input.conf
     - 98-merge.conf
 
-- name: Add conf template 02-SampleFilter.conf
+- name: Add conf templates
   become: yes
   template:
-    src: 02-SampleFilter.conf.j2
-    dest: /etc/logstash/conf.d/02-SampleFilter.conf
-    mode: 0700
-
-- name: Add conf templates 99-output.conf
-  become: yes
-  template:
-    src: 99-output.conf.j2
-    dest: /etc/logstash/conf.d/99-output.conf
-    mode: 0700
-
-- name: Add logstash.service
-  become: yes
-  template:
-    src: logstash.service.j2
-    dest: /etc/systemd/system/logstash.service
-    mode: 0700
-
-- name: Inject startup.options template
-  become: yes
-  template:
-    src: startup.options.j2
-    dest: /etc/logstash/config/startup.options
-    mode: 0700
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "{{ item.mode }}"
+  with_items:
+    - { src: 99-output.conf.j2, dest: /etc/logstash/conf.d/99-output.conf, mode: 0700 }
+    - { src: 02-SampleFilter.conf.j2, dest: /etc/logstash/conf.d/02-SampleFilter.conf, mode: 0700 }
+    - { src: logstash.service.j2, dest: /etc/systemd/system/logstash.service, mode: 0700 }
+    - { src: startup.options.j2, dest: /etc/logstash/config/startup.options, mode: 0700 }
     
