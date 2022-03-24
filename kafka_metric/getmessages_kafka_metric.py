@@ -14,6 +14,7 @@ import traceback
 from sys import getsizeof
 from optparse import OptionParser
 from threading import Thread, Lock
+from logging.handlers import QueueHandler
 import multiprocessing
 from multiprocessing import Process, Queue
 
@@ -49,8 +50,10 @@ CSV_DELIM = r",|\t"
 ATTEMPTS = 3
 
 
-def process_get_data(logger, if_config_vars, agent_config_vars, messages):
-    logger.info('Started data thread ......')
+def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages):
+    worker_configurer(log_queue, cli_config_vars['log_level'])
+    logger = logging.getLogger('worker')
+    logger.info('Started data consumer process ......')
     consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
     if len(consumer.topics()) == 0:
         config_error(logger, 'kafka connection error')
@@ -77,7 +80,11 @@ def process_get_data(logger, if_config_vars, agent_config_vars, messages):
     logger.info('Closed data process......')
 
 
-def process_parse_messages(logger, if_config_vars, agent_config_vars, messages, datas):
+def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, datas):
+    worker_configurer(log_queue, cli_config_vars['log_level'])
+    logger = logging.getLogger('worker')
+    logger.info('Started data parse process ......')
+
     count = 0
     while True:
         try:
@@ -667,28 +674,28 @@ def format_command(cmd):
     return list(cmd)
 
 
-def initialize_data_gathering(logger, c_config, if_config_vars, agent_config_vars):
+def initialize_data_gathering(logger, log_queue, cli_config_vars, if_config_vars, agent_config_vars):
     # raw data
     messages = Queue()
     # parsed data
     datas = Queue()
 
-    # consumer
+    # consumer process
     for x in range(multiprocessing.cpu_count()):
         d = Process(target=process_get_data,
-                    args=(logger, if_config_vars, agent_config_vars, messages))
+                    args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages))
         d.daemon = True
         d.start()
 
-    # parser
+    # parser process
     for x in range(multiprocessing.cpu_count()):
         d = Process(target=process_parse_messages,
-                    args=(logger, if_config_vars, agent_config_vars, messages, datas))
+                    args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, datas))
         d.daemon = True
         d.start()
 
     # build buffer and send data
-    process_build_buffer(logger, c_config, if_config_vars, agent_config_vars, datas)
+    process_build_buffer(logger, cli_config_vars, if_config_vars, agent_config_vars, datas)
 
 
 def reset_track(track):
@@ -917,7 +924,7 @@ def check_project_exist(logger, if_config_vars, project):
     return is_project_exist
 
 
-def listener_configurer(level):
+def listener_configurer():
     """ set up logging according to the defined log level """
     # create a logging format
     formatter = logging.Formatter(
@@ -932,9 +939,9 @@ def listener_configurer(level):
         ISO8601[0])
 
     # Get the root logger
-    root = logging.getLogger(__name__)
+    root = logging.getLogger()
     # No level or filter logic applied - just do it!
-    root.setLevel(level)
+    # root.setLevel(level)
 
     # route INFO and DEBUG logging to stdout from stderr
     logging_handler_out = logging.StreamHandler(sys.stdout)
@@ -946,15 +953,41 @@ def listener_configurer(level):
     logging_handler_err.setLevel(logging.WARNING)
     logging_handler_err.setFormatter(formatter)
     root.addHandler(logging_handler_err)
-    return root
+
+
+def listener_process(q, c_config):
+    listener_configurer()
+    while True:
+        while not q.empty():
+            record = q.get()
+            if record.name == 'worker':
+                logger = logging.getLogger(record.name)
+                logger.handle(record)
+        time.sleep(1)
+
+
+def worker_configurer(q, level):
+    h = QueueHandler(q)  # Just the one handler needed
+    root = logging.getLogger()
+    root.addHandler(h)
+    root.setLevel(level)
 
 
 def main():
     # get config
     cli_config_vars = get_cli_config_vars()
 
+    # logger queue, must use Manager().Queue() because agent may use pool create process
+    m = multiprocessing.Manager()
+    log_queue = m.Queue()
+    listener = Process(target=listener_process, args=(log_queue, cli_config_vars))
+    listener.daemon = True
+    listener.start()
+
     # set logger
-    logger = listener_configurer(cli_config_vars['log_level'])
+    worker_configurer(log_queue, cli_config_vars['log_level'])
+    logger = logging.getLogger('worker')
+    # logger = listener_configurer(cli_config_vars['log_level'])
 
     # variables from cli config
     cli_data_block = '\nCLI settings:'
@@ -975,7 +1008,7 @@ def main():
     print_summary_info(logger, if_config_vars, agent_config_vars)
 
     # start run
-    initialize_data_gathering(logger, cli_config_vars, if_config_vars, agent_config_vars)
+    initialize_data_gathering(logger, log_queue, cli_config_vars, if_config_vars, agent_config_vars)
     logger.info("Process is done with config: {}".format(config_file))
 
 
