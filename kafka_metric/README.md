@@ -85,6 +85,7 @@ Once the cron is running, you can either pause the agent by commenting out the r
 * `sasl_kerberos_service_name`: Service name to include in GSSAPI sasl mechanism handshake.
 * `sasl_kerberos_domain_name`: kerberos domain name to use in GSSAPI sasl mechanism handshake.
 * `sasl_oauth_token_provider`: OAuthBearer token provider instance.
+* `initial_filter`: Optional preprocessing filter (regex) to eliminate raw data from being parsed. Data must match filter to be parsed if set.
 * `raw_regex`: Regex used to parse raw data. Must use named capture groups `(?<name>...)` corresponding to fields defined below, as only those named capture groups will be reported.
 * `project_field`: Field name for the project name. If this field is empty, agent will use project_name in insightfinder section. 
 * `project_whitelist`: project_whitelist is a regex string used to define which projects form project_field will be filtered.
