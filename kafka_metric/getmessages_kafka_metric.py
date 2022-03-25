@@ -868,7 +868,7 @@ def check_project_exist(logger, if_config_vars, project):
                 'userName': if_config_vars['user_name'],
                 'licenseKey': if_config_vars['license_key'],
                 'projectName': project or if_config_vars['project_name'],
-                'systemName': if_config_vars['system_name'] or if_config_vars['project_name'],
+                'systemName': if_config_vars['system_name'] or project or if_config_vars['project_name'],
                 'instanceType': 'PrivateCloud',
                 'projectCloudType': 'PrivateCloud',
                 'dataType': get_data_type_from_project_type(if_config_vars),
