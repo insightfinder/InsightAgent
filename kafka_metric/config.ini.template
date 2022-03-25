@@ -1,11 +1,11 @@
 [agent]
 ## kafka info
-# required
-bootstrap_servers = 127.0.0.1:9092
-# required
-topics = metrics
-# required
-group_id = insigthfinder
+# Comma separated list of kafka boostrap servers (eg: 192.168.1.1:9092,192.168.1.2:9092) - Required 
+bootstrap_servers = 
+# Comma separated list of kafka topics to subscribe to - Required
+topics = 
+# Kafka Group ID - Required
+group_id = 
 client_id =
 
 ## SSL
@@ -34,26 +34,28 @@ sasl_oauth_token_provider =
 initial_filter = 
 
 # if raw data, the regex used to parse the log. It must use named capture groups `(?<name>.*)` that correspond to the *_field config variables below (ie  `(?<timestamp>.*)`,  `(?<host>.*)`,  `(?<device>.*)`,  `(?<etc>.*)`.
-raw_regex = ^\w+\.(?P<project>[\w|]+\.\w+\.\w+)\.\w+\.(?P<instance>\w+)\.(?P<metric>.*) (?P<value>.*) (?P<timestamp>\d+)$
+raw_regex = 
 
-# if this field is empty, agent will use project_name in insightfinder section
-project_field = project
+# Field that contains the project name. If this field is empty, agent will use project_name in insightfinder section
+project_field = 
 # project_whitelist is a regex string used to define which projects form project_field will be filtered.
 project_whitelist =
 
-metric_field = metric
+# Field that contains the metric name - Required
+metric_field = 
 # metrics_whitelist is a regex string used to define which metrics will be filtered.
 metrics_whitelist =
 
 ## message parsing
 # timezone, as per pytz
 timezone =
-timestamp_field = timestamp
+# Field that contains the timestamp - Required 
+timestamp_field = 
 # Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
 target_timestamp_timezone = UTC
 component_field =
-# if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
-instance_field = instance
+# if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list. - Required
+instance_field = 
 # instance_whitelist is a regex string used to define which instances will be filtered.
 instance_whitelist =
 device_field =
@@ -68,9 +70,9 @@ agent_https_proxy =
 user_name =
 license_key =
 token =
-# Name of the project created in the InsightFinder UI, If this project is not exist, agent will create it automatically.
+# Name of the project created in the InsightFinder UI. If this project does not exist, agent will create it automatically.
 project_name =
-# Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+# Name of system owned by project. If project_name does not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
 system_name =
 # metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
 project_type = metric
@@ -78,6 +80,6 @@ sampling_interval = 1
 run_interval = 1
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
-if_url = https://stg.insightfinder.com
+if_url = https://app.insightfinder.com
 if_http_proxy =
 if_https_proxy =
