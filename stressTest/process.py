@@ -11,20 +11,21 @@ print('Starting Process: %d' % pid)
 
 chunk = percent/interval #5
 chunkTime = timeout/interval #10
-increment = 0
+increment = chunk
 
 end = time.time() + float(timeout)  # X minutes from now
-percentage = float(percent)/100
+
 incrementTime = time.time() + float(chunkTime) #current time plus 10 seconds
+
 while time.time() < end:
-    incrementPercent = float(increment)/100
+    busyPercent = float(increment)/100
     if time.time() >= incrementTime:
         incrementTime = time.time() + float(chunkTime)
         increment += chunk
     start = time.time()
-    while time.time() - start < percentage:
+    while time.time() - start < busyPercent:
         x = 1
-    time.sleep(1-incrementPercent)
-    print(incrementPercent)
+    time.sleep(1-busyPercent)
+    print(busyPercent)
     
 print('Finished Process: %d' % pid)
