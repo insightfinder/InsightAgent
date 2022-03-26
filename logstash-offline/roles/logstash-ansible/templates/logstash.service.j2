@@ -1,0 +1,9 @@
+[Unit]
+Description=Logstash Service
+
+[Service]
+User={{ logstash_user }}
+ExecStart=/etc/logstash/bin/logstash -f /etc/logstash/conf.d
+
+[Install]
+Alias=logstash.service
