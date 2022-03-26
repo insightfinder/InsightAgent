@@ -1,0 +1,7 @@
+---
+- name: start logstash service
+  become: yes
+  systemd:
+    name: logstash.service
+    state: started
+    
