@@ -144,7 +144,10 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                     component = make_safe_instance_string(component)
 
             # get message
-            log_message = message.get(agent_config_vars['log_content_field']) or message
+            log_message = message.get(agent_config_vars['log_content_field']) if agent_config_vars[
+                'log_content_field'] else message
+            if not log_message:
+                continue
 
             # get timestamp
             timestamp = message.get(agent_config_vars['timestamp_field'][0])

@@ -89,6 +89,7 @@ Once the cron is running, you can either pause the agent by commenting out the r
 * `raw_regex`: Regex used to parse raw data. Must use named capture groups `(?<name>...)` corresponding to fields defined below, as only those named capture groups will be reported.
 * `project_field`: Field name for the project name. If this field is empty, agent will use project_name in insightfinder section. 
 * `project_whitelist`: project_whitelist is a regex string used to define which projects form project_field will be filtered.
+* `log_content_field`: Field that contains the log message. If this field is empty, agent will use whole message from kafka. 
 * `timezone`: Timezone of the timestamp data stored in/returned by the DB. Note that if timezone information is not included in the data returned by the DB, then this field has to be specified. 
 * `timestamp_field`: Field name for the timestamp. Default is `timestamp`.
 * `target_timestamp_timezone`: Timezone of the timestamp data to be sent and stored in InsightFinder. Default value is UTC. Only if you wish to store data with a time zone other than UTC, this field should be specified to be the desired time zone.
