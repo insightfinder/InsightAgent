@@ -395,8 +395,8 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
                 return config_error(logger, 'instance_whitelist')
 
         # fields
-        project_field = project_field.strip() if project_field.strip() else None
-        log_content_field = log_content_field.strip() if log_content_field.strip() else None
+        project_field = project_field.strip() if project_field else None
+        log_content_field = log_content_field.strip() if log_content_field else None
         component_field = component_field.strip() if component_field.strip() else None
         timestamp_fields = [x.strip() for x in timestamp_field.split(',') if x.strip()]
         instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
