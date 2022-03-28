@@ -1,0 +1,2 @@
+name = kafka_metric
+script_name = getmessages_kafka_metric.py
