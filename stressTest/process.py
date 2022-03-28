@@ -26,6 +26,5 @@ while time.time() < end:
     while time.time() - start < busyPercent:
         x = 1
     time.sleep(1-busyPercent)
-    print(busyPercent)
     
 print('Finished Process: %d' % pid)
