@@ -99,7 +99,12 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                     continue
                 message = matches.groupdict()
             else:
-                message = json.loads(msg_value)
+                try:
+                    message = json.loads(msg_value)
+                except Exception as e:
+                    logger.warning(e)
+                    logger.debug('Parse message failed with json: {}'.format(msg_value))
+                    continue
 
             # get project
             project = if_config_vars['project_name']
@@ -122,13 +127,6 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                     and not agent_config_vars['instance_whitelist_regex'].match(instance):
                 continue
 
-            # metric name
-            date_field = message.get(agent_config_vars['metric_field'] or 'metric')
-            # filter by metric whitelist
-            if agent_config_vars['metric_whitelist_regex'] \
-                    and not agent_config_vars['metric_whitelist_regex'].match(date_field):
-                continue
-
             # add device info if has
             device = None
             device_field = agent_config_vars['device_field']
@@ -138,23 +136,29 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                 device = devices[0] if len(devices) > 0 else None
             full_instance = make_safe_instance_string(instance, device)
 
-            # get value
-            data_value = message.get('value')
+            # get component
+            component = None
+            if agent_config_vars['component_field']:
+                component = message.get(agent_config_vars['component_field'])
+                if component:
+                    component = make_safe_instance_string(component)
+
+            # get message
+            log_message = message.get(agent_config_vars['log_content_field']) or message
 
             # get timestamp
             timestamp = message.get(agent_config_vars['timestamp_field'][0])
             timestamp = int(timestamp) * 1000
             # set offset for timestamp
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
-            timestamp = str(timestamp)
+            # timestamp = str(timestamp)
 
-            metric_key = '{}[{}]'.format(date_field, full_instance)
             datas.put({
                 'project': project,
-                'timestamp': timestamp,
-                'full_instance': full_instance,
-                'metric_key': metric_key,
-                'value': str(data_value)
+                'eventId': timestamp,
+                'tag': full_instance,
+                'componentName': component,
+                'data': log_message
             })
 
         except Exception as e:
@@ -171,11 +175,11 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
 
 def process_build_buffer(logger, c_config, if_config_vars, agent_config_vars, datas):
     lock = Lock()
-    metric_buffer = {}
+    log_buffer = {}
 
     # check buffer and send data
     loop_thead = Thread(target=func_check_buffer,
-                        args=(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars))
+                        args=(lock, log_buffer, logger, c_config, if_config_vars, agent_config_vars))
     loop_thead.setDaemon(True)
     loop_thead.start()
 
@@ -183,21 +187,12 @@ def process_build_buffer(logger, c_config, if_config_vars, agent_config_vars, da
     while True:
         try:
             message = datas.get()
-            project = message['project']
-            timestamp = message['timestamp']
-            full_instance = message['full_instance']
-            metric_key = message['metric_key']
-            value = message['value']
+            project = message.pop('project')
             if lock.acquire():
                 # build buffer dict
-                if project not in metric_buffer:
-                    metric_buffer[project] = {'buffer_dict': {}, "times": []}
-                if timestamp not in metric_buffer[project]['buffer_dict']:
-                    metric_buffer[project]['buffer_dict'][timestamp] = {}
-                    metric_buffer[project]['times'].append(timestamp)
-                if full_instance not in metric_buffer[project]['buffer_dict'][timestamp]:
-                    metric_buffer[project]['buffer_dict'][timestamp][full_instance] = {"timestamp": timestamp}
-                metric_buffer[project]['buffer_dict'][timestamp][full_instance][metric_key] = value
+                if project not in log_buffer:
+                    log_buffer[project] = []
+                log_buffer[project].append(message)
                 lock.release()
 
         except Exception as e:
@@ -207,11 +202,11 @@ def process_build_buffer(logger, c_config, if_config_vars, agent_config_vars, da
             continue
 
 
-def func_check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars):
+def func_check_buffer(lock, log_buffer, logger, c_config, if_config_vars, agent_config_vars):
     while True:
         buffer_check_thead = Thread(target=check_buffer,
                                     args=(
-                                        lock, metric_buffer, logger, c_config, if_config_vars,
+                                        lock, log_buffer, logger, c_config, if_config_vars,
                                         agent_config_vars))
         buffer_check_thead.start()
         buffer_check_thead.join()
@@ -219,31 +214,18 @@ def func_check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, age
         # time.sleep(20)
 
 
-def check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars):
+def check_buffer(lock, log_buffer, logger, c_config, if_config_vars, agent_config_vars):
     utc_time_now = arrow.utcnow().float_timestamp
     logger.info('Start clear buffer: {}'.format(arrow.get(utc_time_now).format()))
 
-    clear_time = utc_time_now - agent_config_vars['buffer_sampling_interval_multiple'] * if_config_vars[
-        'sampling_interval']
-    clear_time *= 1000
     # empty data to send
     project_data_map = {}
 
     if lock.acquire():
-        for project, buffer in metric_buffer.items():
+        for project, buffer in log_buffer.items():
             if project not in project_data_map:
                 project_data_map[project] = []
-
-            buffer_times = []
-            for timestamp in buffer['times']:
-                if int(timestamp) >= clear_time:
-                    buffer_times.append(timestamp)
-                else:
-                    buffer_dict_time = buffer['buffer_dict'].pop(timestamp)
-                    buffer_values = list(buffer_dict_time.values())
-                    project_data_map[project].extend(buffer_values)
-            # reset times
-            buffer['times'] = buffer_times
+            project_data_map[project].extend(buffer)
         lock.release()
 
     # send data
@@ -282,7 +264,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
         kafka_kwargs = {}
         topics = []
         project_whitelist_regex = None
-        metric_whitelist_regex = None
         instance_whitelist_regex = None
         try:
             # agent settings
@@ -344,15 +325,14 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             else:
                 return config_error(logger, 'topics')
 
-            # metrics
+            # logs
             initial_filter = config_parser.get('agent', 'initial_filter')
             raw_regex = config_parser.get('agent', 'raw_regex')
 
             project_field = config_parser.get('agent', 'project_field')
             project_whitelist = config_parser.get('agent', 'project_whitelist')
 
-            metric_field = config_parser.get('agent', 'metric_field')
-            metrics_whitelist = config_parser.get('agent', 'metrics_whitelist')
+            log_content_field = config_parser.get('prometheus', 'log_content_field', raw=True)
 
             # message parsing
             timezone = config_parser.get('agent', 'timezone') or 'UTC'
@@ -362,7 +342,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             instance_field = config_parser.get('agent', 'instance_field', raw=True)
             instance_whitelist = config_parser.get('agent', 'instance_whitelist')
             device_field = config_parser.get('agent', 'device_field', raw=True)
-            buffer_sampling_interval_multiple = config_parser.get('agent', 'buffer_sampling_interval_multiple')
 
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
@@ -379,7 +358,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
                 logger.error(e)
                 return config_error(logger, 'project_whitelist')
 
-        # metrics
+        # logs
         if len(raw_regex) != 0:
             try:
                 raw_regex = regex.compile(raw_regex)
@@ -395,13 +374,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             except Exception as e:
                 logger.error(e)
                 return config_error(logger, 'initial_filter')
-
-        if len(metrics_whitelist) != 0:
-            try:
-                metric_whitelist_regex = regex.compile(metrics_whitelist)
-            except Exception as e:
-                logger.error(e)
-                return config_error(logger, 'metrics_whitelist')
 
         if timezone:
             if timezone not in pytz.all_timezones:
@@ -421,12 +393,11 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
 
         # fields
         project_field = project_field.strip() if project_field.strip() else None
-        metric_field = metric_field.strip() if metric_field.strip() else None
+        log_content_field = log_content_field.strip() if log_content_field.strip() else None
+        component_field = component_field.strip() if component_field.strip() else None
         timestamp_fields = [x.strip() for x in timestamp_field.split(',') if x.strip()]
         instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
         device_fields = [x.strip() for x in device_field.split(',') if x.strip()]
-        buffer_sampling_interval_multiple = int(
-            buffer_sampling_interval_multiple.strip()) if buffer_sampling_interval_multiple.strip() else 2
 
         # proxies
         agent_proxies = dict()
@@ -443,8 +414,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             'raw_regex': raw_regex,
             'project_field': project_field,
             'project_whitelist_regex': project_whitelist_regex,
-            'metric_field': metric_field,
-            'metric_whitelist_regex': metric_whitelist_regex,
+            'log_content_field': log_content_field,
             'timezone': timezone,
             'timestamp_field': timestamp_fields,
             'target_timestamp_timezone': target_timestamp_timezone,
@@ -452,7 +422,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             'instance_field': instance_fields,
             "instance_whitelist_regex": instance_whitelist_regex,
             'device_field': device_fields,
-            'buffer_sampling_interval_multiple': buffer_sampling_interval_multiple,
             'proxies': agent_proxies,
         }
 
