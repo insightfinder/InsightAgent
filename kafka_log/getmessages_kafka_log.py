@@ -213,7 +213,7 @@ def func_check_buffer(lock, log_buffer, logger, c_config, if_config_vars, agent_
                                         agent_config_vars))
         buffer_check_thead.start()
         buffer_check_thead.join()
-        time.sleep(if_config_vars['sampling_interval'])
+        time.sleep(if_config_vars['run_interval'])
         # time.sleep(20)
 
 
