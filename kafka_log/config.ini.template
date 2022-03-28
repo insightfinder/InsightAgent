@@ -41,8 +41,7 @@ project_field =
 # project_whitelist is a regex string used to define which projects form project_field will be filtered.
 project_whitelist =
 
-# Field that contains the log message.
-# required
+# Field that contains the log message. If this field is empty, agent will use whole message from kafka.
 log_content_field =
 
 ## message parsing
