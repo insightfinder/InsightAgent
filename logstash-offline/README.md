@@ -1,7 +1,7 @@
 ## Getting Started
 
 ### Instructions to register a project in Insightfinder.com
-- Go to the link https://insightfinder.com/
+- Go to the link https://app.insightfinder.com/
 - Sign in with the user credentials or sign up for a new account.
 - Go to Settings and Register for a project under "Insight Agent" tab.
 - Give a project name, select Project Type as "Log" and Agent Type as "Custom".
