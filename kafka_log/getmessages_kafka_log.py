@@ -156,13 +156,17 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
             # timestamp = str(timestamp)
 
-            datas.put({
+            # build log entry
+            log_entry = {
                 'project': project,
                 'eventId': timestamp,
                 'tag': full_instance,
-                'componentName': component,
                 'data': log_message
-            })
+            }
+            if component:
+                log_entry['componentName'] = component
+
+            datas.put(log_entry)
 
         except Exception as e:
             logger.warn('Error when parsing message')
@@ -214,7 +218,7 @@ def func_check_buffer(lock, log_buffer, logger, c_config, if_config_vars, agent_
         buffer_check_thead.start()
         buffer_check_thead.join()
         time.sleep(if_config_vars['run_interval'])
-        # time.sleep(20)
+        # time.sleep(10)
 
 
 def check_buffer(lock, log_buffer, logger, c_config, if_config_vars, agent_config_vars):
@@ -225,10 +229,8 @@ def check_buffer(lock, log_buffer, logger, c_config, if_config_vars, agent_confi
     project_data_map = {}
 
     if lock.acquire():
-        for project, buffer in log_buffer.items():
-            if project not in project_data_map:
-                project_data_map[project] = []
-            project_data_map[project].extend(buffer)
+        for project in list(log_buffer.keys()):
+            project_data_map[project] = log_buffer.pop(project)
         lock.release()
 
     # send data
@@ -335,7 +337,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             project_field = config_parser.get('agent', 'project_field')
             project_whitelist = config_parser.get('agent', 'project_whitelist')
 
-            log_content_field = config_parser.get('prometheus', 'log_content_field', raw=True)
+            log_content_field = config_parser.get('agent', 'log_content_field', raw=True)
 
             # message parsing
             timezone = config_parser.get('agent', 'timezone') or 'UTC'
@@ -368,8 +370,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             except Exception as e:
                 logger.error(e)
                 return config_error(logger, 'raw_regex')
-        else:
-            return config_error(logger, 'raw_regex')
 
         if len(initial_filter) != 0:
             try:
