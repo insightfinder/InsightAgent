@@ -66,8 +66,8 @@ Once the cron is running, you can either pause the agent by commenting out the r
 ### Config Variables
 * **`base_url`**: Base URL to build the API off of.
 * **`api_endpoint`**: API endpoint to call. 
-    * **`/api/now/v1/table/incident` or 
-    * **`/api/now/v1/table/change_request`
+    * `/api/now/v1/table/incident` or 
+    * `/api/now/v1/table/change_request`
 * `sysparm_offset`: Offset to use when calling the API. Generally speaking, you should not touch this setting.
 * **`username`**: Username to authenticate with.
 * **`password_encrypted`**: Password, encoded in base64. To set this, run `python configure.py`.
@@ -89,13 +89,13 @@ Once the cron is running, you can either pause the agent by commenting out the r
 * **`license_key`**: License Key from your Account Profile in the InsightFinder UI. 
 * **`project_name`**: Name of the project created in the InsightFinder UI. 
 * **`project_type`**: Type of the project 
-    * **`alert` or 
-    * **`deployment`.
+    * `alert` or 
+    * `deployment`.
 * **`sampling_interval`**: How frequently data is collected. Should match the interval used in project settings.
 * **`run_interval`**: How frequently the agent is ran. Should match the interval used in cron.
 * `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
 * `if_url`: URL for InsightFinder. 
-    * **Default is `https://app.insightfinder.com`. 
-    * **if the project_type is `deployment` change to `https://app.insightfinder.com/api/v1/` .
+    * Default is `https://app.insightfinder.com`. 
+    * if the project_type is `deployment` change to `https://app.insightfinder.com/api/v1/` .
 * `if_http_proxy`: HTTP proxy used to connect to InsightFinder.
 * `if_https_proxy`: As above, but HTTPS.
