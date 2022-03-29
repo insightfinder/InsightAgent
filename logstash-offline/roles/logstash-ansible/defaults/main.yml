@@ -3,7 +3,7 @@
 # These variables are using the logstash formatting for referencing the fields provided from filebeat.
 # If the filebeat field that is being referenced needs to be updated, update these variables.
 userName: "{{ username }}"
-project_name: "%{[fields][site]}-%{[fields][technology]}-%{[fields][log]}-%{[fields][foundation]}" #
+project_name: "%{[fields][site]}-%{[fields][foundation]}-%{[fields][technology]}-Log" #GTDC-F1-scaleio-Log
 hostname: "%{[host][hostname]}"
 component_name: "%{[fields][technology]}"
 license_key: "{{ license_key }}"

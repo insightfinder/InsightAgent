@@ -13,7 +13,7 @@ InsightFinder can parse log data sent via logstash. We utilize json_encode filte
 ### 1. Requirements
 
 Ansible: Deploy and install logstash
-Filebeat: Streaming data to logstash with preconfigured fields for data parsing
+Filebeat: Assumed version is 7.17. Streaming data to logstash with preconfigured fields for data parsing
 
 
 ### 2. Configuration
@@ -26,8 +26,8 @@ In logstash-offline/hosts
       - username: the username of the InsightFinder user
       - license_key: the key associated with the InsightFinder User
       - server_url: the url used to reach InsightFinder. Use only the base url, for example: app.insightfinder.com
-      - logstash_user: the user to host the logstash processes
-      - logstash_group: the group the logstash_user is in, also the group that can run logstash processes
+      - logstash_user: the user to host the logstash processes, user must already exist
+      - logstash_group: the group the logstash_user is in, also the group that can run logstash processes, group must already exist
 
 
 ### 3. Run the playbook
@@ -47,6 +47,6 @@ In logstash/conf.d/,  01-input.conf, 02-SampleFilter.conf, 98-merge.conf, 99-out
 
 You can check to ensure that the logstash service is running after the playbook is finished by running the command 'sudo systemctl status logstash.service'. 
 
-If it says failed, you can try running 'sudo systemctl restart logstash'.
+If it says failed, you can try running 'sudo systemctl restart logstash'. Error logs can be found either at "/var/log/messages" or "/var/log/syslog"
 
-If it says success and you are suspicious that logs are not being sent to InsightFinder, you can check the logs using 'sudo vi /var/log/syslog'.
+If it says success and you are suspicious that logs are not being sent to InsightFinder, you can check the logs using 'sudo vi /var/log/syslog' or 'sudo vi /var/log/messages'.
