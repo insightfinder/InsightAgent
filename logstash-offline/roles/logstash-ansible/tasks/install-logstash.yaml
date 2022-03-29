@@ -22,18 +22,20 @@
   become: yes
   command: mv /etc/temp/logstash-7.17.1 /etc/logstash
 
-- name: Create conf.d
+- name: Create dirs
   become: yes
   file:
-    path: /etc/logstash/conf.d
+    path: /etc/logstash/"{{ item }}"
     state: directory
+  with_items:
+    - conf.d
+    - logs
 
 - name: Add conf files
   become: yes
   copy:
     src: "{{ item }}"
     dest: /etc/logstash/conf.d/
-    mode: 0700
   with_items:
     - 01-input.conf
     - 98-merge.conf
@@ -43,10 +45,13 @@
   template:
     src: "{{ item.src }}"
     dest: "{{ item.dest }}"
-    mode: "{{ item.mode }}"
   with_items:
-    - { src: 99-output.conf.j2, dest: /etc/logstash/conf.d/99-output.conf, mode: 0700 }
-    - { src: 02-SampleFilter.conf.j2, dest: /etc/logstash/conf.d/02-SampleFilter.conf, mode: 0700 }
-    - { src: logstash.service.j2, dest: /etc/systemd/system/logstash.service, mode: 0700 }
-    - { src: startup.options.j2, dest: /etc/logstash/config/startup.options, mode: 0700 }
+    - { src: 99-output.conf.j2, dest: /etc/logstash/conf.d/99-output.conf}
+    - { src: 02-SampleFilter.conf.j2, dest: /etc/logstash/conf.d/02-SampleFilter.conf 
+    - { src: logstash.service.j2, dest: /etc/systemd/system/logstash.service}
+    - { src: startup.options.j2, dest: /etc/logstash/config/startup.options}
+
+- name: Give correct permissions to logstash dir
+  become: yes
+  command: chmod -R 0777 /etc/logstash
     
