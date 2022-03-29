@@ -27,8 +27,7 @@ In logstash-offline/hosts
       - license_key: the key associated with the InsightFinder User
       - server_url: the url used to reach InsightFinder. Use only the base url, for example: app.insightfinder.com
       - logstash_user: the user to host the logstash processes
-      - ls_user: same as logstash_user
-      - ls_group: the group the logstash_user is in, also the group that can run logstash processes
+      - logstash_group: the group the logstash_user is in, also the group that can run logstash processes
 
 
 ### 3. Run the playbook
@@ -44,36 +43,10 @@ You can follow our samples under logstash/conf.d/ to send data to the Insightfin
 
 In logstash/conf.d/,  01-input.conf, 02-SampleFilter.conf, 98-merge.conf, 99-output.conf are filters to handle messages sent from filebeat. They are used combined with the sample filebeat config files.  
 
+### 5. Check that logstash is running
 
-### 5. Implementation Notes
+You can check to ensure that the logstash service is running after the playbook is finished by running the command 'sudo systemctl status logstash.service'. 
 
-You will need a different filter for each log file format sent by filebeat. Each filter will process the log messages for the corresponding tag set by filebeat.  Each filebeat tag is handled by the filter with the corresponding tag set and sent to the InsightFinder project that is configured in that filter. If the tag does not match, the filter will not be applied. 
+If it says failed, you can try running 'sudo systemctl restart logstash'.
 
-You can copy the 02-SampleFilter.conf file as needed and customize with the corresponding log_type tag, grok and project name configured.
-
-Necessary fields are denoted by a brief description surrounded by <>.  Replace from < to > inclusive. 
-
-Information that needs to be populated: 
-Filebeat:
-1) Log file path 
-2) Log type flag
-3) Logstash server with port (eg: localhost:5044) 
-
-Logstash Filter:
-1) Log type flag that matches the filebeat configuration
-2) Grok regex to match and parse the log message
-3) Any custom processing/ formatting of the log message. Two fields that need to be set by the end of the processing: 
-   a) ts_event -- Timestamp of log message 
-   b) data -- Content of log message to send 
-4) Project name in InsightFinder
-
-Output: 
-1) IF server
-2) IF username
-3) IF license key
-
-
-#### Furthermore
-
-- Try it with different input/filter/codec plugins
-- Start LogStash as a service/daemon in your production environment
+If it says success and you are suspicious that logs are not being sent to InsightFinder, you can check the logs using 'sudo vi /var/log/syslog'.
