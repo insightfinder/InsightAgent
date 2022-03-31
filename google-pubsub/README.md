@@ -12,8 +12,8 @@ filters/03-http-output.conf
 ```
 
 ### Prerequisites:
-[Logstash](https://www.elastic.co/guide/en/logstash/current/getting-started-with-logstash.html)
-[Logstash Input Plugin: Google Pub/Sub](https://www.elastic.co/guide/en/logstash/current/plugins-inputs-google_pubsub.html)
+[Logstash](https://www.elastic.co/guide/en/logstash/current/getting-started-with-logstash.html)<br/>
+[Logstash Input Plugin: Google Pub/Sub](https://www.elastic.co/guide/en/logstash/current/plugins-inputs-google_pubsub.html)<br/>
 [Logstash Filter Plugin: json_encode](https://www.elastic.co/guide/en/logstash/current/plugins-filters-json_encode.html)
 
 
