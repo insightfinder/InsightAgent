@@ -2,6 +2,10 @@
 This agent collects data from k8s_logs and sends it to Insightfinder.
 ## Installing the Agent
 
+### Required Dependencies:
+1. Python 3.x 
+1. Pip3
+
 ### Short Version
 ```bash
 bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) k8s_logs && cd k8s_logs
@@ -45,12 +49,6 @@ sudo ./offline/remote-cp-run.sh list_of_nodes -f <nodelist_file>
 Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
 
 #### Manual Install (local only)
-###### Check Python version & upgrade if using Python 3
-```bash
-if [[ $(python -V 2>&1 | awk '{ print substr($NF, 1, 1) }') == "3" ]]; then \
-2to3 -w getlogs_k8s.py; \
-else echo "No upgrade needed"; fi
-```
 
 ###### Setup pip & required packages:
 ```bash
@@ -70,7 +68,7 @@ sudo ./setup/cron-config.sh
 ### Config Variables
 * `filters_include`: Used to filter messages based on allowed values.
 * `filters_exclude`: Used to filter messages based on unallowed values.
-* `namespace`: Namespaces to include.
+* `namespaces`: Namespaces to include.
 * `pod_names`: Pod names to inlcude.
 * `pod_field_selector`: Selector for pod field.
 * `pod_label_selector`: Selector for pod label.

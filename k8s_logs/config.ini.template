@@ -6,7 +6,7 @@ filters_include =
 filters_exclude =
 
 ## namespaces & pods
-namespace = 
+namespaces =
 pod_names = 
 
 ## pod selectors
