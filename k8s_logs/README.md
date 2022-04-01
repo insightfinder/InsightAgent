@@ -78,7 +78,7 @@ sudo ./setup/cron-config.sh
 * **`license_key`**: License Key from your Account Profile in the InsightFinder UI. 
 * `token`: Token from your Account Profile in the InsightFinder UI. 
 * **`project_name`**: Name of the project created in the InsightFinder UI. 
-* **`project_type`**: Type of the project - one of `metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay`.
+* **`project_type`**: Type of the project - one of `log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay`.
 * **`sampling_interval`**: How frequently data is collected. Should match the interval used in project settings.
 * `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
 * `if_url`: URL for InsightFinder. Default is `https://app.insightfinder.com`.

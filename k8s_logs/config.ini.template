@@ -22,7 +22,7 @@ user_name =
 license_key = 
 token =
 project_name = 
-# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
+# log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
 project_type = 
 sampling_interval = 10
 # what size to limit chunks sent to IF to, as kb
