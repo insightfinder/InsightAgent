@@ -1,16 +1,20 @@
 [agent]
 ## filters
 # define a list of filters to use as a comma-delimited list (only one need be present)
-filters_include = 
+filters_include =
 # as above, but instead define values that are not allowed
 filters_exclude =
 
+# config file path, if this field is empty, will use default config path: ~/.kube/config
+config_file =
+
 ## namespaces & pods
 namespaces =
-pod_names = 
+namespaces_exclude =
+pod_names =
 
 ## pod selectors
-pod_field_selector = 
+pod_field_selector =
 pod_label_selector =
 
 ## proxy
@@ -18,13 +22,14 @@ agent_http_proxy =
 agent_https_proxy =
 
 [insightfinder]
-user_name = 
-license_key = 
+user_name =
+license_key =
 token =
-project_name = 
+project_name =
 # log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
-project_type = 
-sampling_interval = 10
+project_type =
+# How frequently data is collected. Unit is minutes.
+sampling_interval = 1
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
 if_url = https://app.insightfinder.com
