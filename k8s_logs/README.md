@@ -68,7 +68,9 @@ sudo ./setup/cron-config.sh
 ### Config Variables
 * `filters_include`: Used to filter messages based on allowed values.
 * `filters_exclude`: Used to filter messages based on unallowed values.
+* `config_file`: Path of config file, if this field is empty, will use default config path: `~/.kube/config`.
 * `namespaces`: Namespaces to include.
+* `namespaces_exclude`: Namespaces to exclude.
 * `pod_names`: Pod names to inlcude.
 * `pod_field_selector`: Selector for pod field.
 * `pod_label_selector`: Selector for pod label.
