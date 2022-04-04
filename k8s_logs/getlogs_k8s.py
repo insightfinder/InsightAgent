@@ -131,7 +131,7 @@ def get_pods():
 
 def extract_host(pod):
     host_value = pod.status.host_ip
-    return host_value
+    return host_value or 'Application'
 
 
 def extract_group(pod):
