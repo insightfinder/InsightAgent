@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import pdb
 import configparser
 import collections
 import json
@@ -10,7 +11,7 @@ import sys
 import time
 import pytz
 import dateutil
-import urllib.parse
+import urllib
 import http.client
 from sys import getsizeof
 from optparse import OptionParser
@@ -164,24 +165,23 @@ def call_k8s_api(api_endpoint, **api_request_vars):
 
 def get_agent_config_vars():
     """ Read and parse config.ini """
-    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))):
+    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, 'conf.d/config.ini'))):
         config_parser = configparser.ConfigParser()
-        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
+        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'conf.d/config.ini')))
         try:
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
-
+            
             # filters
             filters_include = config_parser.get('agent', 'filters_include')
             filters_exclude = config_parser.get('agent', 'filters_exclude')
-
+            
             # namespaces & pods
             config_file = config_parser.get('agent', 'config_file')
             namespaces = config_parser.get('agent', 'namespaces')
             namespaces_exclude = config_parser.get('agent', 'namespaces_exclude')
             names = config_parser.get('agent', 'pod_names')
-
             # pod selector
             pod_field_selector = config_parser.get('agent', 'pod_field_selector')
             pod_label_selector = config_parser.get('agent', 'pod_label_selector')
@@ -217,7 +217,7 @@ def get_agent_config_vars():
         if len(names) != 0:
             names = [x.strip() for x in names(',') if x.strip()]
 
-            # timestamp format
+        # timestamp format
         ts_format_info = {'strip_tz': False, 'strip_tz_fmt': '', 'timestamp_format': '%Y-%m-%dT%H:%M:%S'}
 
         # add parsed variables to a global
@@ -249,9 +249,9 @@ def get_agent_config_vars():
 ########################
 def get_if_config_vars():
     """ get config.ini vars """
-    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))):
+    if os.path.exists(os.path.abspath(os.path.join(__file__, os.pardir, 'conf.d/config.ini'))):
         config_parser = configparser.ConfigParser()
-        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini')))
+        config_parser.read(os.path.abspath(os.path.join(__file__, os.pardir, 'conf.d/config.ini')))
         try:
             user_name = config_parser.get('insightfinder', 'user_name')
             license_key = config_parser.get('insightfinder', 'license_key')
