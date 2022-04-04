@@ -108,6 +108,8 @@ def get_pods():
         namespace = pod.metadata.namespace
         if should_include_per_config('namespaces', namespace):
             continue
+        if should_exclude_per_config('namespaces_exclude', namespace):
+            continue
 
         # check pod name
         name = pod.metadata.name
@@ -129,9 +131,7 @@ def get_pods():
 
 def extract_host(pod):
     host_value = pod.status.host_ip
-    parsed = urllib.parse.urlparse(host_value)
-    host = parsed.hostname or parsed.path.split(':')[0]
-    return host
+    return host_value or 'Application'
 
 
 def extract_group(pod):
@@ -177,7 +177,9 @@ def get_agent_config_vars():
             filters_exclude = config_parser.get('agent', 'filters_exclude')
 
             # namespaces & pods
+            config_file = config_parser.get('agent', 'config_file')
             namespaces = config_parser.get('agent', 'namespaces')
+            namespaces_exclude = config_parser.get('agent', 'namespaces_exclude')
             names = config_parser.get('agent', 'pod_names')
 
             # pod selector
@@ -202,21 +204,31 @@ def get_agent_config_vars():
             filters_exclude = filters_exclude.split(',')
 
         # names & namespaces
-        if len(names) != 0:
-            names = names.split(',')
+        if len(config_file) != 0:
+            if not os.path.exists(config_file):
+                logger.error('Config file is not exist: {}.'.format(config_file))
+                sys.exit(1)
+        else:
+            config_file = None
         if len(namespaces) != 0:
-            namespaces = namespaces.split(',')
+            namespaces = [x.strip() for x in namespaces.split(',') if x.strip()]
+        if len(namespaces_exclude) != 0:
+            namespaces_exclude = [x.strip() for x in namespaces_exclude.split(',') if x.strip()]
+        if len(names) != 0:
+            names = [x.strip() for x in names(',') if x.strip()]
 
-        # timestamp format
+            # timestamp format
         ts_format_info = {'strip_tz': False, 'strip_tz_fmt': '', 'timestamp_format': '%Y-%m-%dT%H:%M:%S'}
 
         # add parsed variables to a global
         config_vars = {
             'proxies': agent_proxies,
-            'k8s_api': kubernetes.client.CoreV1Api(kubernetes.config.load_kube_config()),
+            'k8s_api': kubernetes.client.CoreV1Api(kubernetes.config.load_kube_config(config_file)),
             'pods': dict(),
-            'names': names,
+            'config_file': config_file,
             'namespaces': namespaces,
+            'namespaces_exclude': namespaces_exclude,
+            'names': names,
             'pod_field_selector': pod_field_selector,
             'pod_label_selector': pod_label_selector,
             'filters_include': filters_include,
