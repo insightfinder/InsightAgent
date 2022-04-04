@@ -131,9 +131,7 @@ def get_pods():
 
 def extract_host(pod):
     host_value = pod.status.host_ip
-    parsed = urllib.parse.urlparse(host_value)
-    host = parsed.hostname or parsed.path.split(':')[0]
-    return host
+    return host_value
 
 
 def extract_group(pod):
