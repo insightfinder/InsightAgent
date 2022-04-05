@@ -19,10 +19,11 @@ Required Arguments:
 * --processes <integer>: Number of processes to run (Should be less than max system cores)
 * --percentage <integer>: Percentage of the CPU core to consume
 * --duration <integer>: Duration of time in seconds to consume CPU cores
+* --interval <integer>: Number of iterations to increase the CPU by. For example, entering "5" will increase the cpu usage 5 times over the duration until it reaches the designated percentage.
 
 Sample command: 
 ```
-python stress_cpu.py --process 4 --percentage 50 --duration 60
+python stress_cpu.py --process 4 --percentage 50 --duration 60 --interval 5
 ```
 
 NOTE: The default configuration is to use python2; however, this can be changed via the `python_cmd` variable in the `stress_cpu.py` script. This variable will need to be updated from "python2" to "python3".
