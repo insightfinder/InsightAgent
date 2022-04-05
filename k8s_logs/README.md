@@ -3,8 +3,9 @@ This agent collects data from k8s_logs and sends it to Insightfinder.
 ## Installing the Agent
 
 ### Required Dependencies:
-1. Python 3.x 
+1. Python 3.x, though we provide the libraries for version 3.7
 2. Pip3
+3. kubernetes config file
 
 ###### Installation Steps:
 1. Download the k8s_logs.tar.gz package
