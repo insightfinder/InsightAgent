@@ -28,7 +28,15 @@ fi
 # Install python requirements
 if [[ -f requirements.txt ]]; then
   source ./venv/bin/activate
-  pip3 install -r requirements.txt --no-index --find-links=./offline/pip/packages/
+  if pip3 install -r requirements.txt; then 
+    echo "Installed pip using online dependencies"
+  else  
+    if pip3 install -r requirements.txt --no-index --find-links=./offline/pip/packages/; then 
+      echo "Installed pip using online dependencies"
+    else 
+      echo "Failed to install depencies"
+    fi
+  fi
 else
   echo "Unable to install requirements: missing requirements.txt"
 fi
