@@ -35,6 +35,7 @@ if [[ -f requirements.txt ]]; then
       echo "Installed pip using online dependencies"
     else 
       echo "Failed to install depencies"
+    fi
   fi
 else
   echo "Unable to install requirements: missing requirements.txt"
