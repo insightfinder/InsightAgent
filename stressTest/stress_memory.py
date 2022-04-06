@@ -15,7 +15,7 @@ def consume(size, unit, multiplier, duration, interval):
     consumed = []
 
     for x in range(multiplier):
-        consumed.append(' ' * busy_string)
+        consumed.append(' ' * int(busy_string))
     
     end = time.time() + float(duration)  # X minutes from now
 
@@ -27,7 +27,7 @@ def consume(size, unit, multiplier, duration, interval):
         if time.time() > step_up:
             step_up = time.time() + float(busy_time)
             for x in range(multiplier):
-                consumed.append(' ' * busy_string)
+                consumed.append(' ' * int(busy_string))
 
         if time.time() > end:
             for x in consumed:
