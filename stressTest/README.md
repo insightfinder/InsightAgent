@@ -23,7 +23,7 @@ Required Arguments:
 
 Sample command: 
 ```
-python stress_cpu.py --process 4 --percentage 50 --duration 60 --interval 5
+python stress_cpu.py --processes 4 --percentage 50 --duration 60 --interval 5
 ```
 This command will increase the CPU usage to 50 percent on 4 cores over 60 seconds, increasing the usage by 10 percent every 12 seconds.
 
