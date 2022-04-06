@@ -56,12 +56,20 @@ function abspath() {
   fi
 }
 
+function check_agent() {
+  echo "adding monitoring cron job to automatically restart agent"
+  echo "*/5 * * * * ${CRON_USER} $(abspath "./")/monitor.sh" 2>&1 | tee -a ${CRON_FILE};
+}
+
 case "$1" in
 -c | --create)
   DRY_RUN=0
   ;;
 -d | --display)
   DRY_RUN=1
+  ;;
+-m | --monitor)
+  check_agent
   ;;
 *)
   echo_params
