@@ -17,9 +17,9 @@ This script utilizes CPU cores at a configurable rate for a configurable amount 
 
 Required Arguments:
 * --processes <integer>: Number of processes to run (Should be less than max system cores)
-* --percentage <integer>: Percentage of the CPU core to consume, including any other process running on the host.
+* --percentage <integer>: Total Percentage of the CPU core to consume, including any other process running on the host.
 * --duration <integer>: Duration of time in seconds to consume CPU cores
-* --interval <integer>: Number of iterations to increase the CPU by. For example, entering "5" will increase the cpu usage 5 times over the duration until it reaches the designated percentage.
+* --interval <integer>: Number of iterations to increase the CPU by. For example, entering "5" will increase the cpu usage in 5 iterations over the duration until it reaches the designated percentage.
 
 Sample command: 
 ```
