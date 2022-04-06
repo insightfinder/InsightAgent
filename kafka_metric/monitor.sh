@@ -1,16 +1,5 @@
 #!/usr/bin/env bash
 
-# Get min value from ./*.ini settings
-function get_config_setting() {
-  min=1
-  config_files=$(find -name "*.ini")
-  for file in $config_files; do
-    interval=$(cat "$file" | grep "$1" | awk -F '=' '{print $NF}' | tr -d [:space:])
-    [ $min -gt "$interval" ] && min=$interval
-  done
-  echo "$min"
-}
-
 # Get value from agent.txt settings
 function get_agent_setting() {
   cat agent.txt | grep "$1" | awk -F '=' '{print $NF}' | tr -d [:space:]
