@@ -13,11 +13,11 @@ Requirements:
 Python 2.x, 3.x 
 
 ### CPU Stress Test
-This script utilizes CPU cores at a configurable rate for a configurable amount of time to be increased up to the rate over a configurable amount of iterations. The script requires the utility script process.py to be in the local directory. 
+This script utilizes CPU cores at a configurable rate for a configurable amount of time. The script requires the utility script process.py to be in the local directory. 
 
 Required Arguments:
 * --processes <integer>: Number of processes to run (Should be less than max system cores)
-* --percentage <integer>: Percentage of the CPU core to consume
+* --percentage <integer>: Percentage of the CPU core to consume, including any other process running on the host.
 * --duration <integer>: Duration of time in seconds to consume CPU cores
 * --interval <integer>: Number of iterations to increase the CPU by. For example, entering "5" will increase the cpu usage 5 times over the duration until it reaches the designated percentage.
 
