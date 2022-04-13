@@ -386,8 +386,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             except Exception as e:
                 logger.error(e)
                 return config_error(logger, 'raw_regex')
-        else:
-            return config_error(logger, 'raw_regex')
 
         if len(initial_filter) != 0:
             try:
