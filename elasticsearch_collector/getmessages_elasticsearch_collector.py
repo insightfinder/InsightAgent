@@ -864,14 +864,13 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     req_num = 0
     for req_num in range(ATTEMPTS):
         try:
-            response = req(url, **request_passthrough)
+            response = req(url, verify=False, **request_passthrough)
             if response.status_code == http.client.OK:
                 return response
             else:
                 logger.warning(failure_message)
                 logger.info('Response Code: {}\nTEXT: {}'.format(
                     response.status_code, response.text))
-
         # handle various exceptions
         except requests.exceptions.ConnectionError:
             logger.exception('Connection refused. Reattempting...')
