@@ -75,7 +75,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     metrics = []
     if len(agent_config_vars['metrics']) == 0:
         url = urllib.parse.urljoin(agent_config_vars['api_url'], 'label/__name__/values')
-        response = send_request(logger, url, params={}, proxies=agent_config_vars['proxies'])
+        response = send_request(logger, url, params={}, verify=False, proxies=agent_config_vars['proxies'])
         if response != -1:
             result = response.json()
             if result['status'] == 'success':
@@ -157,7 +157,7 @@ def query_messages_prometheus(args):
     try:
         # execute sql string
         url = urllib.parse.urljoin(agent_config_vars['api_url'], 'query')
-        response = send_request(logger, url, params=params, proxies=agent_config_vars['proxies'])
+        response = send_request(logger, url, params=params, verify=False, proxies=agent_config_vars['proxies'])
         if response == -1:
             logger.error('Query metric error: ' + metric)
         else:
@@ -776,7 +776,7 @@ def send_request(logger, url, mode='GET', failure_message='Failure!', success_me
     req_num = 0
     for req_num in range(ATTEMPTS):
         try:
-            response = req(url, verify=False, **request_passthrough)
+            response = req(url, **request_passthrough)
             if response.status_code == http.client.OK:
                 return response
             else:
