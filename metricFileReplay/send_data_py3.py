@@ -10,9 +10,9 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
 import requests
 
-
 MAX_RETRY_NUM = 10
 RETRY_WAIT_TIME_IN_SEC = 30
+
 
 def get_agent_config_vars():
     config_vars = {}
@@ -61,6 +61,10 @@ def send_data(metric_data):
     to_send_data_dict["projectName"] = config_vars['project_name']
     to_send_data_dict["userName"] = config_vars['user_name']
     to_send_data_dict["agentType"] = "MetricFileReplay"
+    # set maxTimestamp and minTimestamp for this chunk
+    timestamps = [int(d['timestamp']) for d in metric_data]
+    to_send_data_dict["maxTimestamp"] = max(timestamps) if len(timestamps) > 0 else None
+    to_send_data_dict["minTimestamp"] = min(timestamps) if len(timestamps) > 0 else None
 
     to_send_data_json = json.dumps(to_send_data_dict)
 
@@ -68,6 +72,7 @@ def send_data(metric_data):
     post_url = config_vars['server_url'] + "/customprojectrawdata"
     send_data_to_receiver(post_url, to_send_data_json, len(metric_data))
     print("--- Send data time: %s seconds ---" + str(time.time() - send_data_time))
+
 
 def send_data_to_receiver(post_url, to_send_data, num_of_message):
     attempts = 0
@@ -91,6 +96,7 @@ def send_data_to_receiver(post_url, to_send_data, num_of_message):
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
     if attempts == MAX_RETRY_NUM:
         sys.exit(1)
+
 
 if __name__ == "__main__":
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
