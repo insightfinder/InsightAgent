@@ -776,7 +776,7 @@ def send_request(logger, url, mode='GET', failure_message='Failure!', success_me
     req_num = 0
     for req_num in range(ATTEMPTS):
         try:
-            response = req(url, **request_passthrough)
+            response = req(url, verify=False, **request_passthrough)
             if response.status_code == http.client.OK:
                 return response
             else:
@@ -1023,10 +1023,11 @@ def worker_process(args):
         return
     print_summary_info(logger, if_config_vars, agent_config_vars)
 
-    # check project name first
-    check_success = check_project_exist(logger, if_config_vars)
-    if not check_success:
-        return
+    if not c_config['testing']:
+        # check project name first
+        check_success = check_project_exist(logger, if_config_vars)
+        if not check_success:
+            return
 
     # start run
     initialize_data_gathering(logger, c_config, if_config_vars, agent_config_vars, time_now)
