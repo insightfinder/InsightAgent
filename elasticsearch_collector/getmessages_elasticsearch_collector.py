@@ -269,7 +269,7 @@ def parse_messages_elasticsearch(result):
 
 
 def get_agent_config_vars():
-    """ Read and parse config.ini """
+    """ Read and parse conf.d/config.ini """
     config_ini = config_ini_path()
     if os.path.exists(config_ini):
         config_parser = configparser.ConfigParser()
@@ -448,7 +448,7 @@ def get_agent_config_vars():
 #   START_BOILERPLATE   #
 #########################
 def get_if_config_vars():
-    """ get config.ini vars """
+    """ get conf.d/config.ini vars """
     config_ini = config_ini_path()
     if os.path.exists(config_ini):
         config_parser = configparser.ConfigParser()
@@ -563,8 +563,9 @@ def get_cli_config_vars():
     parser.add_option('--threads', default=1, action='store', dest='threads',
                       help='Number of threads to run')
     """
-    parser.add_option('-c', '--config', action='store', dest='config', default=abs_path_from_cur('config.ini'),
-                      help='Path to the config file to use. Defaults to {}'.format(abs_path_from_cur('config.ini')))
+    parser.add_option('-c', '--config', action='store', dest='config', default=abs_path_from_cur('conf.d/config.ini'),
+                      help='Path to the config file to use. Defaults to {}'.format(
+                          abs_path_from_cur('conf.d/config.ini')))
     parser.add_option('-q', '--quiet', action='store_true', dest='quiet', default=False,
                       help='Only display warning and error log messages')
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose', default=False,
@@ -583,7 +584,7 @@ def get_cli_config_vars():
     """
 
     config_vars = {
-        'config': options.config if os.path.isfile(options.config) else abs_path_from_cur('config.ini'),
+        'config': options.config if os.path.isfile(options.config) else abs_path_from_cur('conf.d/config.ini'),
         'threads': 1,
         'testing': False,
         'log_level': logging.INFO
@@ -870,7 +871,6 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
                 logger.warning(failure_message)
                 logger.info('Response Code: {}\nTEXT: {}'.format(
                     response.status_code, response.text))
-
         # handle various exceptions
         except requests.exceptions.ConnectionError:
             logger.exception('Connection refused. Reattempting...')

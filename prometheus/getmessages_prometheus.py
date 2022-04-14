@@ -75,7 +75,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     metrics = []
     if len(agent_config_vars['metrics']) == 0:
         url = urllib.parse.urljoin(agent_config_vars['api_url'], 'label/__name__/values')
-        response = send_request(logger, url, params={}, proxies=agent_config_vars['proxies'])
+        response = send_request(logger, url, params={}, verify=False, proxies=agent_config_vars['proxies'])
         if response != -1:
             result = response.json()
             if result['status'] == 'success':
@@ -157,7 +157,7 @@ def query_messages_prometheus(args):
     try:
         # execute sql string
         url = urllib.parse.urljoin(agent_config_vars['api_url'], 'query')
-        response = send_request(logger, url, params=params, proxies=agent_config_vars['proxies'])
+        response = send_request(logger, url, params=params, verify=False, proxies=agent_config_vars['proxies'])
         if response == -1:
             logger.error('Query metric error: ' + metric)
         else:
@@ -1023,10 +1023,11 @@ def worker_process(args):
         return
     print_summary_info(logger, if_config_vars, agent_config_vars)
 
-    # check project name first
-    check_success = check_project_exist(logger, if_config_vars)
-    if not check_success:
-        return
+    if not c_config['testing']:
+        # check project name first
+        check_success = check_project_exist(logger, if_config_vars)
+        if not check_success:
+            return
 
     # start run
     initialize_data_gathering(logger, c_config, if_config_vars, agent_config_vars, time_now)
