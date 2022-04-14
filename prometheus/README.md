@@ -14,7 +14,7 @@ This agent collects data from prometheus and sends it to Insightfinder.
 1. Configure venv and python dependencies
 1. Configure agent settings under `conf.d/`
 1. Test the agent
-1. Add agent to the cron
+1. Run agent with cron.py
 
 The final steps are described in more detail below. 
 
