@@ -56,7 +56,7 @@ For the agent to run continuously, it will need to run as a cron job with `cron.
 nohup venv/bin/python3 cron.py &
 ```
 
-###### Pausing or stopping the agent:
+###### Stopping the agent:
 Once the cron is running, you can stop the agent by kill the `cron.py` process.
 
 ```bash
