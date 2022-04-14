@@ -864,7 +864,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     req_num = 0
     for req_num in range(ATTEMPTS):
         try:
-            response = req(url, verify=False, **request_passthrough)
+            response = req(url, **request_passthrough)
             if response.status_code == http.client.OK:
                 return response
             else:
