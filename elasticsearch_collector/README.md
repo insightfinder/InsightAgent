@@ -2,72 +2,69 @@
 This agent collects data from elasticsearch and sends it to Insightfinder.
 ## Installing the Agent
 
-### Before install agent
-###### Install freetds for linux/osx
+### Required Dependencies:
+1. Python 3.x 
+1. Pip3
+
+###### Installation Steps:
+1. Download the elasticsearch_collector.tar.gz package
+1. Copy the agent package to the machine that will be running the agent
+1. Extract the package
+1. Navigate to the extracted location 
+1. Configure venv and python dependencies
+1. Configure agent settings under `conf.d/`
+1. Test the agent
+1. Run agent with cron.py
+
+The final steps are described in more detail below. 
+
+###### Configure venv and python dependencies:
+The configure_python.sh script sets up a virtual python environment and installs all required libraries for running the agent. 
+
 ```bash
-osx: brew install freetds
-linux: yum install freetds
+./setup/configure_python.sh
 ```
 
-### Short Version
-```bash
-bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) elasticsearch_collector && cd elasticsearch_collector
-vi config.ini
-sudo ./setup/install.sh --create  # install on localhost
-                                  ## or on multiple nodes
-sudo ./offline/remote-cp-run.sh list_of_nodes
+###### Agent configuration:
+The config.ini file contains all of the configuration settings needed to connect to the Elasticsearch instance and to stream the data to InsightFinder.
+
+The password for the Elasticsearch user will need to be obfuscated using the ifobfuscate.py script.  It will prompt you for the password and provide the value to add to the configuration file. 
+
+```
+python ./ifobfuscate.py 
 ```
 
-See the `offline` README for instructions on installing prerequisites.
+The configure_python.sh script will generate a config.ini file for you; however, if you need to create a new one, you can simply copy the config.ini.template file over the config.ini file to start over. 
 
-### Long Version
-###### Download the agent tarball and untar it:
-```bash
-curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/elasticsearch_collector/elasticsearch_collector.tar.gz
-tar xvf elasticsearch_collector.tar.gz && cd elasticsearch_collector
-```
-
-###### Set up `config.ini`
-```bash
-python configure.py
-```
-See below for a further explanation of each variable. 
-
-#### Automated Install (local or remote)
-###### Review propsed changes from install:
-```bash
-sudo ./setup/install.sh
-```
-
-###### Once satisfied, run:
-```bash
-sudo ./setup/install.sh --create
-```
-
-###### To deploy on multiple hosts, instead call 
-```bash
-sudo ./offline/remote-cp-run.sh list_of_nodes -f <nodelist_file>
-```
-Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
-
-#### Manual Install (local only)
-###### Check Python version
-Agent required Python 3 environment.
-
-###### Setup pip & required packages:
-```bash
-sudo ./setup/pip-config.sh
-```
+Populate all of the necessary fields in the config.ini file with the relevant data.  More details about each field can be found in the comments of the config.ini file and the Config Variables below. 
 
 ###### Test the agent:
+Once you have finished configuring the config.ini file, you can test the agent to validate the settings. 
+
+This will connect to the Elasticsearch instance, but it will not send any data to InsightFinder. This allows you to verify that you are getting data from Prometheus and that there are no failing exceptions in the agent configuration.
+
+User `-p` to define max processes, use `--timeout` to define max timeout.
+
 ```bash
-python getmessages_elasticsearch_collector.py -t
+./setup/test_agent.sh
 ```
 
-###### If satisfied with the output, configure the agent to run continuously:
+###### Run agent with cron:
+For the agent to run continuously, it will need to run as a cron job with `cron.py`. 
+
 ```bash
-sudo ./setup/cron-config.sh
+nohup venv/bin/python3 cron.py &
 ```
+
+###### Stopping the agent:
+Once the cron is running, you can stop the agent by kill the `cron.py` process.
+
+```bash
+# get pid of backgroud jobs
+jobs -l
+# kill the cron process
+kill -9 PID
+``` 
 
 ### Config Variables
 * **`es_uris`**: A comma delimited list of RFC-1738 formatted urls `<scheme>://[<username>:<password>@]hostname:port`
