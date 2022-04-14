@@ -49,21 +49,22 @@ User `-p` to define max processes, use `--timeout` to define max timeout.
 ./setup/test_agent.sh
 ```
 
-###### Add agent to the cron:
-For the agent to run continuously, it will need to be added as a cron job. 
-
-The install_cron.sh script will add a cron file to run the agent on a regular schedule.
+###### Run agent with cron:
+For the agent to run continuously, it will need to run as a cron job with `cron.py`. 
 
 ```bash
-# Display the cron entry without adding it 
-./setup/install_cron.sh --display
-
-# Add the cron entry, once you are ready to start streaming
-sudo ./setup/install_cron.sh --create
+nohup venv/bin/python3 cron.py &
 ```
 
 ###### Pausing or stopping the agent:
-Once the cron is running, you can either pause the agent by commenting out the relevant line in the cron file or stop the agent by removing the cron file. 
+Once the cron is running, you can stop the agent by kill the `cron.py` process.
+
+```bash
+# get pid of backgroud jobs
+jobs -l
+# kill the cron process
+kill -9 PID
+``` 
 
 ### Config Variables
 * **`prometheus_uri`**: URI for Prometheus API as `scheme://host:port`. Defaults to `http://localhost:9090`
