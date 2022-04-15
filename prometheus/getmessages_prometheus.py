@@ -75,7 +75,8 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     metrics = []
     if len(agent_config_vars['metrics']) == 0:
         url = urllib.parse.urljoin(agent_config_vars['api_url'], 'label/__name__/values')
-        response = send_request(logger, url, params={}, verify=False, proxies=agent_config_vars['proxies'])
+        response = send_request(logger, url, params={}, proxies=agent_config_vars['proxies'],
+                                **agent_config_vars['ssl_kwargs'])
         if response != -1:
             result = response.json()
             if result['status'] == 'success':
@@ -276,6 +277,7 @@ def get_agent_config_vars(logger, config_ini):
         config_parser.read_file(fp)
 
         prometheus_kwargs = {}
+        ssl_kwargs = {}
         api_url = ''
         metrics = None
         metrics_whitelist = None
@@ -289,11 +291,28 @@ def get_agent_config_vars(logger, config_ini):
         his_time_range = None
         try:
             # prometheus settings
-            prometheus_config = {}
+            prometheus_config = {
+                'verify_certs': config_parser.get('prometheus', 'verify_certs'),
+                'ca_certs': config_parser.get('prometheus', 'ca_certs'),
+                'client_cert': config_parser.get('prometheus', 'client_cert'),
+                'client_key': config_parser.get('prometheus', 'client_key')
+            }
             # only keep settings with values
             prometheus_kwargs = {k: v for (k, v) in list(prometheus_config.items()) if v}
 
             # handle boolean setting
+            verify_certs = prometheus_kwargs.get('verify_certs')
+            if verify_certs and verify_certs.lower() == 'true':
+                prometheus_kwargs['verify_certs'] = True
+
+            # handle Tls config
+            verify_certs = prometheus_kwargs.get('verify_certs', False)
+            ca_certs = prometheus_kwargs.get('ca_certs')
+            verify_certs = ca_certs if verify_certs and ca_certs else verify_certs
+            client_cert = prometheus_kwargs.get('client_cert')
+            client_key = prometheus_kwargs.get('client_key')
+            cert = (client_cert, client_key) if client_cert and client_key else client_cert if client_cert else None
+            ssl_kwargs = {'verify': verify_certs, 'cert': cert}
 
             # handle required arrays
             if len(config_parser.get('prometheus', 'prometheus_uri')) != 0:
@@ -412,6 +431,7 @@ def get_agent_config_vars(logger, config_ini):
         # add parsed variables to a global
         config_vars = {
             'prometheus_kwargs': prometheus_kwargs,
+            'ssl_kwargs': ssl_kwargs,
             'api_url': api_url,
             'metrics': metrics,
             'metrics_whitelist': metrics_whitelist,

@@ -2,6 +2,14 @@
 ## prometheus info
 # required
 prometheus_uri = http://localhost:9090
+# True or False
+verify_certs =
+# path to ca bundle
+ca_certs =
+# path to client cert
+client_cert =
+# path to client key
+client_key =
 
 ## metrics
 # Metrics to query for. Multiple fields are separated by `;`. If none specified, all metrics returned from /api/v1/label/__names__/values will be used
