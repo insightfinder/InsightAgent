@@ -158,7 +158,8 @@ def query_messages_prometheus(args):
     try:
         # execute sql string
         url = urllib.parse.urljoin(agent_config_vars['api_url'], 'query')
-        response = send_request(logger, url, params=params, verify=False, proxies=agent_config_vars['proxies'])
+        response = send_request(logger, url, params=params, verify=False, proxies=agent_config_vars['proxies'],
+                                **agent_config_vars['ssl_kwargs'])
         if response == -1:
             logger.error('Query metric error: ' + metric)
         else:
@@ -302,17 +303,17 @@ def get_agent_config_vars(logger, config_ini):
 
             # handle boolean setting
             verify_certs = prometheus_kwargs.get('verify_certs')
-            if verify_certs and verify_certs.lower() == 'true':
-                prometheus_kwargs['verify_certs'] = True
+            if verify_certs:
+                prometheus_kwargs['verify_certs'] = verify_certs.lower() == 'true'
 
-            # handle Tls config
+            # handle TLS config
             verify_certs = prometheus_kwargs.get('verify_certs', False)
             ca_certs = prometheus_kwargs.get('ca_certs')
             verify_certs = ca_certs if verify_certs and ca_certs else verify_certs
             client_cert = prometheus_kwargs.get('client_cert')
             client_key = prometheus_kwargs.get('client_key')
             cert = (client_cert, client_key) if client_cert and client_key else client_cert if client_cert else None
-            ssl_kwargs = {'verify': verify_certs, 'cert': cert}
+            ssl_kwargs = {'verify': verify_certs, 'cert': cert if verify_certs else None}
 
             # handle required arrays
             if len(config_parser.get('prometheus', 'prometheus_uri')) != 0:
