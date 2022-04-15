@@ -158,7 +158,7 @@ def query_messages_prometheus(args):
     try:
         # execute sql string
         url = urllib.parse.urljoin(agent_config_vars['api_url'], 'query')
-        response = send_request(logger, url, params=params, verify=False, proxies=agent_config_vars['proxies'],
+        response = send_request(logger, url, params=params, proxies=agent_config_vars['proxies'],
                                 **agent_config_vars['ssl_kwargs'])
         if response == -1:
             logger.error('Query metric error: ' + metric)
