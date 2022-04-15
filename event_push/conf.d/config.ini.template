@@ -1,95 +1,36 @@
-[elasticsearch]
-# required
-# a comma delimited list of RFC-1738 formatted urls <scheme>://[<username>:<password>@]hostname:port
-es_uris = http://localhost:9200
-# json to add to the query body. For exclude DEBUG log, ie:
-# regexp-syntax: https://www.elastic.co/guide/en/elasticsearch/reference/current/regexp-syntax.html
-# query_json = {
-#              "query": {
-#                "bool": {
-#                  "filter": {
-#                    "bool": {
-#                      "must_not": {
-#                        "regexp": {
-#                          "message": {
-#                            "value": ".*DEBUG.*",
-#                            "flags": "ALL"
-#                          }
-#                        }
-#                      }
-#                    }
-#                  }
-#                }
-#              }
-#            }
-query_json =
-# The maximum messages number of each query, default is 5000, and max value id 10000.
-query_chunk_size = 5000
-# indexes to search over
-indeces = filebeat*
-
-## parameters for all hosts
-# port to connect to (Can be parsed from url)
-port =
-# username:password (Can be parsed from url)
-http_auth =
-# True or False (True if uri scheme is https)
-use_ssl =
-# Version of SSL to use - one of SSLv23 (default), SSLv2, SSLv3, TLSv1
-ssl_version =
-# True or False - use hostname verification
-ssl_assert_hostname =
-# True or False - use fingerprint verification
-ssl_assert_fingerprint =
-# True or False
-verify_certs =
-# path to ca bundle
-ca_certs =
-# path to client cert
-client_cert =
-# path to client key
-client_key =
-
-# history data time config. If these options is set, the agent will query results by time range
-# time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
-his_time_range =
-
-# raw, rawtail, csv, csvtail, xls, xlsx, json, jsontail, avro, or xml
-# *tail formats keep track of the current file & position + completed files in [state] below
-data_format = json
-
-## message parsing
-# timestamp format, as library [arrow]. multiple fields can be formatted together to create the timestamp a la `YYYY-MM-DD HH:mm:ss ZZ`. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
-timestamp_format =
-# timezone, as per pytz
-timezone =
-timestamp_field = @timestamp
-# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
-target_timestamp_timezone = UTC
-component_field =
-# if no instance given, the osmosys's server name will be used.
-instance_field = agent.hostname
-# instance_whitelist is a regex string used to define which instances will be filtered.
-instance_whitelist =
-device_field =
-# multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>`.
-data_fields = message
-
-## proxy
-agent_http_proxy =
-agent_https_proxy =
-
-[insightfinder]
+[edge]
+## Edge Node Parameters
 user_name =
 license_key =
-token =
 project_name =
-# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
-project_type = log
-sampling_interval = 1
-run_interval = 1
-# what size to limit chunks sent to IF to, as kb
-chunk_size_kb = 2048
-if_url = https://app.insightfinder.com
-if_http_proxy =
-if_https_proxy =
+# log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
+project_type =
+# timezone, default is UTC
+timezone =
+# Edge Node URL including prefix [http, https]
+if_url =
+# default to 3 retries
+retry =
+http_proxy =
+https_proxy =
+
+[main]
+## Main IF Parameters
+user_name =
+license_key =
+# Name of the project created in the InsightFinder UI, If this project is not exist, agent will create it automatically.
+project_name =
+# Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name =
+# log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
+project_type =
+sampling_interval = 10
+# Main IF URL including prefix [http, https]
+if_url =
+# default to 3 retries
+retry =
+http_proxy =
+https_proxy =
+
+[insightfinder]
+run_interval = 60
