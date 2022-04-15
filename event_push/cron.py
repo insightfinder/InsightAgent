@@ -35,7 +35,7 @@ def main():
 
     # get job info
     # get interval
-    interval_seconds = 60
+    interval_seconds = None
     conf_path = os.path.abspath(os.path.join(__file__, os.pardir, 'conf.d/*.ini'))
     conf_files = glob.glob(conf_path)
     if len(conf_files) == 0:
@@ -46,17 +46,26 @@ def main():
         config_parser = configparser.ConfigParser()
         config_parser.read_file(fp)
 
-        run_interval = config_parser.get('insightfinder', 'run_interval')
-        sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
-        if run_interval.endswith('s'):
-            run_interval = int(run_interval[:-1])
-        else:
-            run_interval = int(run_interval) * 60
-        if sampling_interval.endswith('s'):
-            sampling_interval = int(sampling_interval[:-1])
-        else:
-            sampling_interval = int(sampling_interval) * 60
-        interval_seconds = run_interval or sampling_interval or interval_seconds
+        try:
+            run_interval = config_parser.get('insightfinder', 'run_interval')
+            if run_interval.endswith('s'):
+                run_interval = int(run_interval[:-1])
+            else:
+                run_interval = int(run_interval) * 60
+            if run_interval and not interval_seconds:
+                interval_seconds = run_interval
+
+            sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
+            if sampling_interval.endswith('s'):
+                sampling_interval = int(sampling_interval[:-1])
+            else:
+                sampling_interval = int(sampling_interval) * 60
+            if sampling_interval and not interval_seconds:
+                interval_seconds = sampling_interval
+        except Exception as e:
+            print(e)
+    if not interval_seconds:
+        return False
 
     # get python path
     python_cmp = os.path.abspath(os.path.join(__file__, os.pardir, './venv/bin/python3'))
