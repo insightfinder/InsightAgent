@@ -76,7 +76,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     if len(agent_config_vars['metrics']) == 0:
         url = urllib.parse.urljoin(agent_config_vars['api_url'], 'label/__name__/values')
         response = send_request(logger, url, params={}, proxies=agent_config_vars['proxies'],
-                                **agent_config_vars['ssl_kwargs'])
+                                **agent_config_vars['auth_kwargs'], **agent_config_vars['ssl_kwargs'])
         if response != -1:
             result = response.json()
             if result['status'] == 'success':
@@ -159,7 +159,7 @@ def query_messages_prometheus(args):
         # execute sql string
         url = urllib.parse.urljoin(agent_config_vars['api_url'], 'query')
         response = send_request(logger, url, params=params, proxies=agent_config_vars['proxies'],
-                                **agent_config_vars['ssl_kwargs'])
+                                **agent_config_vars['auth_kwargs'], **agent_config_vars['ssl_kwargs'])
         if response == -1:
             logger.error('Query metric error: ' + metric)
         else:
@@ -278,6 +278,7 @@ def get_agent_config_vars(logger, config_ini):
         config_parser.read_file(fp)
 
         prometheus_kwargs = {}
+        auth_kwargs = {}
         ssl_kwargs = {}
         api_url = ''
         metrics = None
@@ -293,6 +294,8 @@ def get_agent_config_vars(logger, config_ini):
         try:
             # prometheus settings
             prometheus_config = {
+                'user': config_parser.get('prometheus', 'user'),
+                'password': config_parser.get('prometheus', 'password'),
                 'verify_certs': config_parser.get('prometheus', 'verify_certs'),
                 'ca_certs': config_parser.get('prometheus', 'ca_certs'),
                 'client_cert': config_parser.get('prometheus', 'client_cert'),
@@ -305,6 +308,11 @@ def get_agent_config_vars(logger, config_ini):
             verify_certs = prometheus_kwargs.get('verify_certs')
             if verify_certs:
                 prometheus_kwargs['verify_certs'] = verify_certs.lower() == 'true'
+
+            # handle Basic Authentication
+            user = prometheus_kwargs.get('user')
+            password = prometheus_kwargs.get('password')
+            auth_kwargs = {"auth": (user, password) if user and password else None}
 
             # handle TLS config
             verify_certs = prometheus_kwargs.get('verify_certs', False)
@@ -432,6 +440,7 @@ def get_agent_config_vars(logger, config_ini):
         # add parsed variables to a global
         config_vars = {
             'prometheus_kwargs': prometheus_kwargs,
+            'auth_kwargs': auth_kwargs,
             'ssl_kwargs': ssl_kwargs,
             'api_url': api_url,
             'metrics': metrics,

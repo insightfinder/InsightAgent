@@ -2,6 +2,9 @@
 ## prometheus info
 # required
 prometheus_uri = http://localhost:9090
+# Basic Authentication
+user =
+password =
 # True or False
 verify_certs =
 # path to ca bundle
