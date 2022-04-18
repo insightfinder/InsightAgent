@@ -68,6 +68,12 @@ kill -9 PID
 
 ### Config Variables
 * **`prometheus_uri`**: URI for Prometheus API as `scheme://host:port`. Defaults to `http://localhost:9090`
+* `user`: User name of Basic Authentication.
+* `password`: Password of Basic Authentication.
+* `verify_certs`: True or False if certificates should be verified.
+* `ca_certs`: Path to CA bundle.
+* `client_cert`: Path to certificate.
+* `client_key`: Path to client.
 * `metrics`: Metrics to query for. Multiple fields are separated by `;`. If none specified, all metrics returned from `/api/v1/label/__names__/values` will be used.
 * `metrics_whitelist`: metrics_whitelist is a regex string used to define which metrics will be filtered.
 * `metrics_to_ignore`: Comma-delimited metrics to not report. Defaults to `ALERTS,ALERTS_FOR_STATE`.
