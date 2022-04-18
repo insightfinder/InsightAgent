@@ -458,6 +458,7 @@ def get_if_config_vars():
             license_key = config_parser.get('insightfinder', 'license_key')
             token = config_parser.get('insightfinder', 'token')
             project_name = config_parser.get('insightfinder', 'project_name')
+            system_name = config_parser.get('insightfinder', 'system_name')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             run_interval = config_parser.get('insightfinder', 'run_interval')
@@ -532,6 +533,7 @@ def get_if_config_vars():
             'license_key': license_key,
             'token': token,
             'project_name': project_name,
+            'system_name': system_name,
             'project_type': project_type,
             'sampling_interval': int(sampling_interval),  # as seconds
             'run_interval': int(run_interval),  # as seconds
@@ -847,13 +849,14 @@ def send_data_to_if(chunk_metric_data):
 
     # send the data
     post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
-    send_request(post_url, 'POST', 'Could not send request to IF',
+    send_request(logger, post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
                  data=data_to_post, verify=False, proxies=if_config_vars['if_proxies'])
     logger.info('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
 
 
-def send_request(url, mode='GET', failure_message='Failure!', success_message='Success!', **request_passthrough):
+def send_request(logger, url, mode='GET', failure_message='Failure!', success_message='Success!',
+                 **request_passthrough):
     """ sends a request to the given url """
     # determine if post or get (default)
     requests.packages.urllib3.disable_warnings()
@@ -868,40 +871,54 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
             if response.status_code == http.client.OK:
                 return response
             else:
-                logger.warning(failure_message)
+                logger.warn(failure_message)
                 logger.info('Response Code: {}\nTEXT: {}'.format(
                     response.status_code, response.text))
         # handle various exceptions
-        except requests.exceptions.ConnectionError:
-            logger.exception('Connection refused. Reattempting...')
         except requests.exceptions.Timeout:
             logger.exception('Timed out. Reattempting...')
+            continue
         except requests.exceptions.TooManyRedirects:
             logger.exception('Too many redirects.')
+            break
         except requests.exceptions.RequestException as e:
             logger.exception('Exception ' + str(e))
+            break
 
         # retry after sleep
         time.sleep(RETRY_WAIT_TIME_IN_SEC)
 
     logger.error('Failed! Gave up after {} attempts.'.format(req_num + 1))
-    sys.exit(1)
+    return -1
 
 
-def get_data_type_from_project_type():
+def get_data_type_from_project_type(if_config_vars):
+    """ use project type to determine data type """
     if 'METRIC' in if_config_vars['project_type']:
         return 'Metric'
-    elif 'LOG' in if_config_vars['project_type']:
-        return 'Log'
     elif 'ALERT' in if_config_vars['project_type']:
         return 'Alert'
     elif 'INCIDENT' in if_config_vars['project_type']:
         return 'Incident'
     elif 'DEPLOYMENT' in if_config_vars['project_type']:
         return 'Deployment'
+    elif 'TRACE' in if_config_vars['project_type']:
+        return 'Trace'
+    else:  # LOG
+        return 'Log'
+
+
+def get_agent_type_from_project_type(if_config_vars):
+    """ use project type to determine agent type """
+    if 'METRIC' in if_config_vars['project_type']:
+        if if_config_vars['is_replay']:
+            return 'MetricFile'
+        else:
+            return 'Custom'
+    elif if_config_vars['is_replay']:
+        return 'LogFile'
     else:
-        logger.warning('Project Type not correctly configured')
-        sys.exit(1)
+        return 'Custom'
 
 
 def get_insight_agent_type_from_project_type():
@@ -917,20 +934,6 @@ def get_insight_agent_type_from_project_type():
             return 'LogFile'
     else:
         return 'Custom'
-
-
-def get_agent_type_from_project_type():
-    """ use project type to determine agent type """
-    if 'METRIC' in if_config_vars['project_type']:
-        if if_config_vars['is_replay']:
-            return 'MetricFileReplay'
-        else:
-            return 'CUSTOM'
-    elif if_config_vars['is_replay']:
-        return 'LogFileReplay'
-    else:
-        return 'LogStreaming'
-    # INCIDENT and DEPLOYMENT don't use this
 
 
 def get_data_field_from_project_type():
@@ -962,11 +965,102 @@ def initialize_api_post_data():
     to_send_data_dict['licenseKey'] = if_config_vars['license_key']
     to_send_data_dict['projectName'] = if_config_vars['project_name']
     to_send_data_dict['instanceName'] = HOSTNAME
-    to_send_data_dict['agentType'] = get_agent_type_from_project_type()
+    to_send_data_dict['agentType'] = get_agent_type_from_project_type(if_config_vars)
     if 'METRIC' in if_config_vars['project_type'] and 'sampling_interval' in if_config_vars:
         to_send_data_dict['samplingInterval'] = str(if_config_vars['sampling_interval'])
     logger.debug(to_send_data_dict)
     return to_send_data_dict
+
+
+def check_project_exist(logger, if_config_vars):
+    is_project_exist = False
+    try:
+        logger.info('Starting check project: ' + if_config_vars['project_name'])
+        params = {
+            'operation': 'check',
+            'userName': if_config_vars['user_name'],
+            'licenseKey': if_config_vars['license_key'],
+            'projectName': if_config_vars['project_name'],
+        }
+        url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
+        response = send_request(logger, url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
+        if response == -1:
+            logger.error('Check project error: ' + if_config_vars['project_name'])
+        else:
+            result = response.json()
+            if result['success'] is False or result['isProjectExist'] is False:
+                logger.error('Check project error: ' + if_config_vars['project_name'])
+            else:
+                is_project_exist = True
+                logger.info('Check project success: ' + if_config_vars['project_name'])
+
+    except Exception as e:
+        logger.error(e)
+        logger.error('Check project error: ' + if_config_vars['project_name'])
+
+    create_project_sucess = False
+    if not is_project_exist:
+        try:
+            logger.info('Starting add project: ' + if_config_vars['project_name'])
+            params = {
+                'operation': 'create',
+                'userName': if_config_vars['user_name'],
+                'licenseKey': if_config_vars['license_key'],
+                'projectName': if_config_vars['project_name'],
+                'systemName': if_config_vars['system_name'] or if_config_vars['project_name'],
+                'instanceType': 'PrivateCloud',
+                'projectCloudType': 'PrivateCloud',
+                'dataType': get_data_type_from_project_type(if_config_vars),
+                'insightAgentType': get_agent_type_from_project_type(if_config_vars),
+                'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
+                'samplingIntervalInSeconds': if_config_vars['sampling_interval'],
+            }
+            url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
+            response = send_request(logger, url, 'POST', data=params, verify=False,
+                                    proxies=if_config_vars['if_proxies'])
+            if response == -1:
+                logger.error('Add project error: ' + if_config_vars['project_name'])
+            else:
+                result = response.json()
+                if result['success'] is False:
+                    logger.error('Add project error: ' + if_config_vars['project_name'])
+                else:
+                    create_project_sucess = True
+                    logger.info('Add project success: ' + if_config_vars['project_name'])
+
+        except Exception as e:
+            logger.error(e)
+            logger.error('Add project error: ' + if_config_vars['project_name'])
+
+    if create_project_sucess:
+        # if create project is success, sleep 10s and check again
+        time.sleep(10)
+        try:
+            logger.info('Starting check project: ' + if_config_vars['project_name'])
+            params = {
+                'operation': 'check',
+                'userName': if_config_vars['user_name'],
+                'licenseKey': if_config_vars['license_key'],
+                'projectName': if_config_vars['project_name'],
+            }
+            url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
+            response = send_request(logger, url, 'POST', data=params, verify=False,
+                                    proxies=if_config_vars['if_proxies'])
+            if response == -1:
+                logger.error('Check project error: ' + if_config_vars['project_name'])
+            else:
+                result = response.json()
+                if result['success'] is False or result['isProjectExist'] is False:
+                    logger.error('Check project error: ' + if_config_vars['project_name'])
+                else:
+                    is_project_exist = True
+                    logger.info('Check project success: ' + if_config_vars['project_name'])
+
+        except Exception as e:
+            logger.error(e)
+            logger.error('Check project error: ' + if_config_vars['project_name'])
+
+    return is_project_exist
 
 
 if __name__ == "__main__":
@@ -1000,5 +1094,11 @@ if __name__ == "__main__":
     if_config_vars = get_if_config_vars()
     agent_config_vars = get_agent_config_vars()
     print_summary_info()
+
+    if not cli_config_vars['testing']:
+        # check project name first
+        check_success = check_project_exist(logger, if_config_vars)
+        if not check_success:
+            sys.exit(1)
 
     initialize_data_gathering()
