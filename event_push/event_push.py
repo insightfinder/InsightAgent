@@ -503,7 +503,10 @@ def worker_process(args):
     logger.info("Setup logger in PID {}".format(os.getpid()))
     logger.info("Process start with config: {}".format(config_file))
 
-    (edge_vars, main_vars, if_config_vars) = get_config_vars(logger, config_file)
+    config_props = get_config_vars(logger, config_file)
+    if not config_props:
+        return
+    (edge_vars, main_vars, if_config_vars) = config_props
     if not edge_vars:
         return
     if not main_vars:

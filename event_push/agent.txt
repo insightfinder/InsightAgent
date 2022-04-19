@@ -1,2 +1,2 @@
-name = elasticsearch_collector
-script_name = getmessages_elasticsearch_collector.py
+name = event_push
+script_name = event_push.py
