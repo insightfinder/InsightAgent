@@ -3,7 +3,7 @@
 user_name =
 license_key =
 project_name =
-# log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
+# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
 project_type =
 # timezone, default is UTC
 timezone =
@@ -22,7 +22,7 @@ license_key =
 project_name =
 # Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
 system_name =
-# log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
+# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
 project_type =
 sampling_interval = 10
 # Main IF URL including prefix [http, https]

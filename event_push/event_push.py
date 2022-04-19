@@ -166,6 +166,8 @@ def get_config_vars(logger, config_ini):
 
         # Placeholders for Metric as Metric is not configured
         if edge_project_type not in {
+            'METRIC',
+            'METRICREPLAY',
             'LOG',
             'LOGREPLAY',
             'INCIDENT',
@@ -177,6 +179,8 @@ def get_config_vars(logger, config_ini):
         }:
             return config_error(logger, 'project_type')
         if main_project_type not in {
+            'METRIC',
+            'METRICREPLAY',
             'LOG',
             'LOGREPLAY',
             'INCIDENT',
