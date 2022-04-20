@@ -81,7 +81,7 @@ def sendFile(clientSocket, parameters):
     script_parameters = request_parameters['sp']
     action = script_file + " " + script_parameters
     command = script_command + os.path.join(parameters['homepath'], action)
-    if 1==0: #verifyUser(user_name, license_key, project_name):
+    if verifyUser(user_name, license_key, project_name):
         runCommand(command, clientSocket)
     else:
         clientSocket.send("Status: 500".encode(encoding='UTF-8'))
