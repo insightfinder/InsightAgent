@@ -72,6 +72,10 @@ def send_data(metric_data):
     to_send_data_dict["projectName"] = config_vars['project_name']
     to_send_data_dict["userName"] = config_vars['user_name']
     to_send_data_dict["agentType"] = "MetricFileReplay"
+    # set maxTimestamp and minTimestamp for this chunk
+    timestamps = [int(d['timestamp']) for d in metric_data]
+    to_send_data_dict["maxTimestamp"] = max(timestamps) if len(timestamps) > 0 else None
+    to_send_data_dict["minTimestamp"] = min(timestamps) if len(timestamps) > 0 else None
 
     to_send_data_json = json.dumps(to_send_data_dict)
 
