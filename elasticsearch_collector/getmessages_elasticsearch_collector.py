@@ -131,6 +131,9 @@ def start_data_processing():
             size=0)
         total = response.get('hits').get('total', 0)
 
+        if not isinstance(total, int):
+            total = total.get('value', 0)
+
         # validate successs
         if 'error' in response:
             logger.error('Query es error: ' + str(response))
@@ -317,6 +320,8 @@ def get_agent_config_vars():
             verify_certs = elasticsearch_kwargs.get('verify_certs')
             if verify_certs and verify_certs.lower() == 'true':
                 elasticsearch_kwargs['verify_certs'] = True
+            else: 
+                elasticsearch_kwargs['verify_certs'] = False
 
             es_uris = config_parser.get('elasticsearch', 'es_uris')
             query_json = config_parser.get('elasticsearch', 'query_json')
@@ -859,7 +864,6 @@ def send_request(logger, url, mode='GET', failure_message='Failure!', success_me
                  **request_passthrough):
     """ sends a request to the given url """
     # determine if post or get (default)
-    requests.packages.urllib3.disable_warnings()
     req = requests.get
     if mode.upper() == 'POST':
         req = requests.post
@@ -1086,6 +1090,8 @@ if __name__ == "__main__":
     CACHE_NAME = 'cache.db'
     track = dict()
     log_buffer = dict()
+    requests.packages.urllib3.disable_warnings()
+
 
     # get config
     cli_config_vars = get_cli_config_vars()
