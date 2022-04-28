@@ -326,7 +326,7 @@ def get_agent_config_vars(logger, config_ini):
             # handle required arrays
             if len(config_parser.get('prometheus', 'prometheus_uri')) != 0:
                 prometheus_uri = config_parser.get('prometheus', 'prometheus_uri')
-                api_url = urllib.parse.urljoin(prometheus_uri, '/api/v1/')
+                api_url = urllib.parse.urljoin(prometheus_uri, 'api/v1/')
             else:
                 return config_error(logger, 'prometheus_uri')
 
