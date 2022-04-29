@@ -28,7 +28,8 @@ def get_anomaly_data(logger, edge_vars, main_vars, if_config_vars, time_now):
     if_url = edge_vars['if_url']
 
     end_time = (time_now + edge_vars['edge_timezone']) * 1000
-    start_time = end_time - if_config_vars['run_interval'] * 1000
+    start_time = end_time - if_config_vars['query_timewindow_of_multiple_run_interval'] * if_config_vars[
+        'run_interval'] * 1000
 
     data = {'projectName': edge_vars['project_name'], 'transferToProjectName': main_vars['project_name'],
             'transferToCustomerName': main_vars['user_name'],
@@ -160,6 +161,8 @@ def get_config_vars(logger, config_ini):
 
             # if config
             run_interval = config_parser.get('insightfinder', 'run_interval')
+            query_timewindow_of_multiple_run_interval = config_parser.get('insightfinder',
+                                                                          'query_timewindow_of_multiple_run_interval')
 
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
@@ -231,6 +234,14 @@ def get_config_vars(logger, config_ini):
             run_interval = int(run_interval[:-1])
         else:
             run_interval = int(run_interval) * 60
+        if len(query_timewindow_of_multiple_run_interval) == 0:
+            query_timewindow_of_multiple_run_interval = 3
+        else:
+            try:
+                query_timewindow_of_multiple_run_interval = int(query_timewindow_of_multiple_run_interval)
+            except Exception as e:
+                logger.exception('Exception: ' + str(e))
+                return config_error(logger, 'query_timewindow_of_multiple_run_interval')
 
         edge = {
             'user_name': edge_user,
@@ -259,6 +270,7 @@ def get_config_vars(logger, config_ini):
 
         if_config_vars = {
             'run_interval': int(run_interval),  # as seconds
+            'query_timewindow_of_multiple_run_interval': query_timewindow_of_multiple_run_interval,
         }
 
         return edge, main, if_config_vars
