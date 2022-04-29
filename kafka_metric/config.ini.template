@@ -76,6 +76,8 @@ project_name =
 system_name =
 # metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
 project_type = metric
+# Set to `YES` if project is container.
+containerize = no
 sampling_interval = 1
 run_interval = 1
 # what size to limit chunks sent to IF to, as kb

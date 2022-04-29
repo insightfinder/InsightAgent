@@ -24,6 +24,8 @@ project_name =
 system_name =
 # metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
 project_type =
+# Set to `YES` if project is container.
+containerize = no
 sampling_interval = 10
 # Main IF URL including prefix [http, https]
 if_url =
