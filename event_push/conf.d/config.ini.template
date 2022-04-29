@@ -36,3 +36,5 @@ https_proxy =
 
 [insightfinder]
 run_interval = 60
+# The time window of the requested data, in multiples of run_interval. Default is 3.
+query_timewindow_of_multiple_run_interval = 3

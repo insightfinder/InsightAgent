@@ -91,5 +91,6 @@ kill -9 PID
 
 #### Runtime config
 * **`run_interval`**: How frequently (in Minutes) the agent is ran.
+* **`query_timewindow_of_multiple_run_interval`**: The time window of the requested data, in multiples of run_interval. Default is 3.
 
 
