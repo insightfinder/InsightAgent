@@ -320,7 +320,7 @@ def get_agent_config_vars():
             verify_certs = elasticsearch_kwargs.get('verify_certs')
             if verify_certs and verify_certs.lower() == 'true':
                 elasticsearch_kwargs['verify_certs'] = True
-            else: 
+            else:
                 elasticsearch_kwargs['verify_certs'] = False
 
             es_uris = config_parser.get('elasticsearch', 'es_uris')
@@ -465,6 +465,7 @@ def get_if_config_vars():
             project_name = config_parser.get('insightfinder', 'project_name')
             system_name = config_parser.get('insightfinder', 'system_name')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
+            containerize = config_parser.get('insightfinder', 'containerize').upper()
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             run_interval = config_parser.get('insightfinder', 'run_interval')
             chunk_size_kb = config_parser.get('insightfinder', 'chunk_size_kb')
@@ -495,7 +496,9 @@ def get_if_config_vars():
             'ALERT',
             'ALERTREPLAY',
             'DEPLOYMENT',
-            'DEPLOYMENTREPLAY'
+            'DEPLOYMENTREPLAY',
+            'TRACE',
+            'TRACEREPLAY',
         }:
             config_error('project_type')
         is_replay = 'REPLAY' in project_type
@@ -540,6 +543,7 @@ def get_if_config_vars():
             'project_name': project_name,
             'system_name': system_name,
             'project_type': project_type,
+            'containerize': True if containerize == 'YES' else False,
             'sampling_interval': int(sampling_interval),  # as seconds
             'run_interval': int(run_interval),  # as seconds
             'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
@@ -912,25 +916,18 @@ def get_data_type_from_project_type(if_config_vars):
         return 'Log'
 
 
-def get_agent_type_from_project_type(if_config_vars):
-    """ use project type to determine agent type """
-    if 'METRIC' in if_config_vars['project_type']:
-        if if_config_vars['is_replay']:
-            return 'MetricFile'
+def get_insight_agent_type_from_project_type(if_config_vars):
+    if 'containerize' in if_config_vars and if_config_vars['containerize']:
+        if 'METRIC' in if_config_vars['project_type']:
+            if if_config_vars['is_replay']:
+                return 'containerReplay'
+            else:
+                return 'containerStreaming'
         else:
-            return 'Custom'
-    elif if_config_vars['is_replay']:
-        return 'LogFile'
-    else:
-        return 'Custom'
-
-
-def get_insight_agent_type_from_project_type():
-    if 'containerize' in agent_config_vars and agent_config_vars['containerize']:
-        if if_config_vars['is_replay']:
-            return 'containerReplay'
-        else:
-            return 'containerStreaming'
+            if if_config_vars['is_replay']:
+                return 'ContainerHistorical'
+            else:
+                return 'ContainerCustom'
     elif if_config_vars['is_replay']:
         if 'METRIC' in if_config_vars['project_type']:
             return 'MetricFile'
@@ -938,6 +935,20 @@ def get_insight_agent_type_from_project_type():
             return 'LogFile'
     else:
         return 'Custom'
+
+
+def get_agent_type_from_project_type(if_config_vars):
+    """ use project type to determine agent type """
+    if 'METRIC' in if_config_vars['project_type']:
+        if if_config_vars['is_replay']:
+            return 'MetricFileReplay'
+        else:
+            return 'CUSTOM'
+    elif if_config_vars['is_replay']:
+        return 'LogFileReplay'
+    else:
+        return 'LogStreaming'
+    # INCIDENT and DEPLOYMENT don't use this
 
 
 def get_data_field_from_project_type():
@@ -1015,7 +1026,7 @@ def check_project_exist(logger, if_config_vars):
                 'instanceType': 'PrivateCloud',
                 'projectCloudType': 'PrivateCloud',
                 'dataType': get_data_type_from_project_type(if_config_vars),
-                'insightAgentType': get_agent_type_from_project_type(if_config_vars),
+                'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
                 'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
                 'samplingIntervalInSeconds': if_config_vars['sampling_interval'],
             }
@@ -1091,7 +1102,6 @@ if __name__ == "__main__":
     track = dict()
     log_buffer = dict()
     requests.packages.urllib3.disable_warnings()
-
 
     # get config
     cli_config_vars = get_cli_config_vars()
