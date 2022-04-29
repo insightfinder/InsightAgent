@@ -18,7 +18,7 @@ tar xvf newrelic.tar.gz && cd newrelic
 cp config.ini.template config.ini
 vi config.ini
 ```
-See below for a further explanaticontainerizeon of each variable.
+See below for a further explanation of each variable.
 
 **Setup pip & required packages:**
 ```
