@@ -150,6 +150,7 @@ def get_config_vars(logger, config_ini):
             main_license = config_parser.get('main', 'license_key')
             main_project_name = config_parser.get('main', 'project_name')
             main_project_type = config_parser.get('main', 'project_type').upper()
+            containerize = config_parser.get('main', 'containerize').upper()
             system_name = config_parser.get('main', 'system_name')
             sampling_interval = config_parser.get('main', 'sampling_interval')
             main_url = config_parser.get('main', 'if_url')
@@ -247,6 +248,7 @@ def get_config_vars(logger, config_ini):
             'license_key': main_license,
             'project_name': main_project_name,
             'project_type': main_project_type,
+            'containerize': True if containerize == 'YES' else False,
             'system_name': system_name,
             'sampling_interval': int(sampling_interval),  # as seconds
             'retry': main_retry,
@@ -339,15 +341,23 @@ def get_data_type_from_project_type(if_config_vars):
         return 'Log'
 
 
-def get_agent_type_from_project_type(if_config_vars):
-    """ use project type to determine agent type """
-    if 'METRIC' in if_config_vars['project_type']:
-        if if_config_vars['is_replay']:
+def get_insight_agent_type_from_project_type(if_config_vars):
+    if 'containerize' in if_config_vars and if_config_vars['containerize']:
+        if 'METRIC' in if_config_vars['project_type']:
+            if if_config_vars['is_replay']:
+                return 'containerReplay'
+            else:
+                return 'containerStreaming'
+        else:
+            if if_config_vars['is_replay']:
+                return 'ContainerHistorical'
+            else:
+                return 'ContainerCustom'
+    elif if_config_vars['is_replay']:
+        if 'METRIC' in if_config_vars['project_type']:
             return 'MetricFile'
         else:
-            return 'Custom'
-    elif if_config_vars['is_replay']:
-        return 'LogFile'
+            return 'LogFile'
     else:
         return 'Custom'
 
@@ -391,7 +401,7 @@ def check_project_exist(logger, if_config_vars):
                 'instanceType': '',
                 'projectCloudType': 'Shadow',
                 'dataType': get_data_type_from_project_type(if_config_vars),
-                'insightAgentType': get_agent_type_from_project_type(if_config_vars),
+                'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
                 'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
                 'samplingIntervalInSeconds': if_config_vars['sampling_interval'],
             }
