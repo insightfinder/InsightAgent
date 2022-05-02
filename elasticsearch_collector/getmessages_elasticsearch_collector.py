@@ -249,10 +249,10 @@ def parse_messages_elasticsearch(result):
                 device = safe_get(message, device_field)
             if agent_config_vars['device_field_regex']:
                 matches = agent_config_vars['device_field_regex'].match(device)
-                if not matches or len(matches.groups()) != 1:
+                if not matches or 'device' not in matches.groupdict().keys():
                     logger.debug('Parse message failed with device_field_regex: {}'.format(device))
                     continue
-                device = matches.group(1)
+                device = matches.group('device')
             full_instance = make_safe_instance_string(instance, device)
 
             # get data
