@@ -45,6 +45,7 @@ PERIOD = regex.compile(r"\.")
 COMMA = regex.compile(r"\,")
 NON_ALNUM = regex.compile(r"[^a-zA-Z0-9]")
 FORMAT_STR = regex.compile(r"{(.*?)}")
+STRIP_PORT = regex.compile(r"(.*):\d+")
 HOSTNAME = socket.gethostname().partition('.')[0]
 ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 JSON_LEVEL_DELIM = '.'
@@ -201,6 +202,9 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
             instance = message.get('metric').get(
                 agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
                     agent_config_vars['instance_field']) > 0 else 'instance')
+
+            if STRIP_PORT.match(instance):
+                instance = STRIP_PORT.match(instance).group(1)
 
             # filter by instance whitelist
             if agent_config_vars['instance_whitelist_regex'] \

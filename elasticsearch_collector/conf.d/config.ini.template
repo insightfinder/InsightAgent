@@ -72,6 +72,8 @@ instance_field = agent.hostname
 # instance_whitelist is a regex string used to define which instances will be filtered.
 instance_whitelist =
 device_field =
+# Optional regex to retrieve the device name using a regex capture group '(.*)'
+device_field_regex = 
 # multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>`.
 data_fields = message
 
