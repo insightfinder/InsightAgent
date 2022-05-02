@@ -247,6 +247,12 @@ def parse_messages_elasticsearch(result):
             if device_field and len(device_field) > 0:
                 device_field = device_field.split('.')
                 device = safe_get(message, device_field)
+            if agent_config_vars['device_field_regex']:
+                matches = agent_config_vars['device_field_regex'].match(device)
+                if not matches or len(matches.groups()) != 1:
+                    logger.debug('Parse message failed with device_field_regex: {}'.format(device))
+                    continue
+                device = matches.group(1)
             full_instance = make_safe_instance_string(instance, device)
 
             # get data
@@ -341,6 +347,7 @@ def get_agent_config_vars():
             instance_field = config_parser.get('elasticsearch', 'instance_field', raw=True)
             instance_whitelist = config_parser.get('elasticsearch', 'instance_whitelist')
             device_field = config_parser.get('elasticsearch', 'device_field', raw=True)
+            device_field_regex = config_parser.get('elasticsearch', 'device_field_regex', raw=True)
             timestamp_field = config_parser.get('elasticsearch', 'timestamp_field', raw=True) or '@timestamp'
             target_timestamp_timezone = config_parser.get('elasticsearch', 'target_timestamp_timezone',
                                                           raw=True) or 'UTC'
@@ -422,6 +429,13 @@ def get_agent_config_vars():
             if timestamp_field in data_fields:
                 data_fields.pop(data_fields.index(timestamp_field))
 
+        if len(device_field_regex) != 0:
+            try:
+                device_field_regex = regex.compile(device_field_regex)
+            except Exception as e:
+                logger.error(e)
+                return config_error(logger, 'device_field_regex')
+
         # add parsed variables to a global
         config_vars = {
             'elasticsearch_kwargs': elasticsearch_kwargs,
@@ -437,6 +451,7 @@ def get_agent_config_vars():
             'instance_field': instance_fields,
             "instance_whitelist_regex": instance_whitelist_regex,
             'device_field': device_fields,
+            'device_field_regex': device_field_regex,
             'data_fields': data_fields,
             'timestamp_field': timestamp_field,
             'target_timestamp_timezone': target_timestamp_timezone,
