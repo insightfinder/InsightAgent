@@ -17,13 +17,23 @@ function is_dry_run() {
 
 # Get min value from conf.d/*.ini settings
 function get_config_setting() {
-  min=1
-  config_files=$(find conf.d/ -name "*.ini")
-  for file in $config_files; do
+  if [[ -d conf.d ]]; then 
+    min=-1
+    config_files=$(find conf.d/ -name "*.ini")
+    for file in $config_files; do
+      interval=$(cat "$file" | grep "$1" | awk -F '=' '{print $NF}' | tr -d [:space:])
+      if $min == -1; then 
+        min=$interval
+      else 
+        [ $min -gt "$interval" ] && min=$interval
+      fi
+    done
+    echo "$min"
+  else 
+    file="config.ini"
     interval=$(cat "$file" | grep "$1" | awk -F '=' '{print $NF}' | tr -d [:space:])
-    [ $min -gt "$interval" ] && min=$interval
-  done
-  echo "$min"
+    echo "$interval"
+  fi
 }
 
 # Get value from agent.txt settings
@@ -89,13 +99,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 cd $SCRIPT_DIR && cd ..
 
 # verify python has been set up, and *.ini is present
-configs_length=$(find conf.d/ -name "*.ini" | wc -l | sed 's/ //g')
+if [[ -d conf.d ]]; then 
+  configs_length=$(find conf.d/ -name "*.ini" | wc -l | sed 's/ //g')
+else
+  if [[ -f config.ini ]]; then 
+    configs_length=1
+  fi
+fi
 if [[ ! -f venv/bin/python3 ]]; then
   echo "Missing virtual env. Please run configure_python.sh."
   exit 1
 elif [ "$configs_length" == '0' ]; then
   # echo "$configs_length"
-  echo "Missing conf.d/*.ini.  Please copy conf.d/config.ini.template to conf.d/*.ini and update the configuration file."
+  echo "Missing *.ini.  Please copy config.ini.template to config.ini and update the configuration file."
   exit 1
 fi
 
