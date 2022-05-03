@@ -78,8 +78,8 @@ system_name =
 project_type = metric
 # Set to `YES` if project is container.
 containerize = no
-sampling_interval = 1
-run_interval = 1
+sampling_interval = 5
+run_interval = 5
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
 if_url = https://app.insightfinder.com

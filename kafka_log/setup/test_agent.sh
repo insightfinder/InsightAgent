@@ -39,7 +39,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 cd $SCRIPT_DIR && cd ..
 
 # verify python has been set up, and *.ini is present
-configs_length=$(find conf.d/ -name "*.ini" | wc -l | sed 's/ //g')
+if [[ -d conf.d ]]; then 
+  configs_length=$(find conf.d/ -name "*.ini" | wc -l | sed 's/ //g')
+else
+  if [[ -f config.ini ]]; then 
+    configs_length=1
+  fi
+fi
 if [[ ! -f venv/bin/python3 ]]; then
   echo "Missing virtual env. Please run configure_python.sh."
   exit 1
