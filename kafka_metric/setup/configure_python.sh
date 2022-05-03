@@ -34,8 +34,14 @@ else
 fi
 
 # Set up conf.d/config.ini from template
-if [[ ! -f conf.d/config.ini ]]; then
-  cp conf.d/config.ini.template conf.d/config.ini
+if [[ -d conf.d ]]; then 
+  if [[ ! -f conf.d/config.ini ]]; then
+    cp conf.d/config.ini.template conf.d/config.ini
+  fi
+else
+  if [[ ! -f config.ini ]]; then
+    cp config.ini.template config.ini
+  fi
 fi
 
 # Return to original directory
