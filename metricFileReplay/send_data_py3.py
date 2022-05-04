@@ -70,12 +70,10 @@ def send_data(config_vars, metric_data, replay_status):
     to_send_data_dict["minTimestamp"] = min(timestamps) if len(timestamps) > 0 else None
     # set replay status
     replay_status = {
-        'tb': replay_status['total_bytes'],
-        'cb': len(bytearray(json.dumps(metric_data), 'utf8')),
         'tc': replay_status['total_chunk'],
         "cc": replay_status['current_chunk'],
         "dr": {"s": replay_status['start_timestamp'], "e": replay_status['end_timestamp']},
-        "rt": int(time.time() * 1000),
+        "rt": replay_status['run_time'],
     }
     to_send_data_dict["metricReplayStatus"] = json.dumps(replay_status)
 
@@ -114,8 +112,7 @@ def send_data_to_receiver(post_url, to_send_data, num_of_message):
 def get_replay_status(json_data, header):
     all_timestamps = []
     replay_data = []
-    total_bytes = 0
-    lines = 0
+    total_chunk = 0
     for line in json_data:
         entry = [x.strip() for x in line.split(',')]
         new_entry = dict(list(zip(header, entry)))
@@ -123,20 +120,19 @@ def get_replay_status(json_data, header):
         all_timestamps.append(timestamp)
 
         replay_data.append(new_entry)
-        lines += 1
-        if lines % 10000 == 0:
-            total_bytes += len(bytearray(json.dumps(replay_data), 'utf8'))
+
+        if len(bytearray(json.dumps(replay_data), 'utf8')) >= CHUNK_SIZE:
+            total_chunk += 1
             replay_data = []
     if len(replay_data) != 0:
-        total_bytes += len(bytearray(json.dumps(replay_data), 'utf8'))
+        total_chunk += 1
 
-    total_chunk = int(math.ceil(float(total_bytes) / CHUNK_SIZE))
     all_timestamps = [int(x) for x in all_timestamps]
     start_timestamp = min(all_timestamps) if len(all_timestamps) > 0 else None
     end_timestamp = max(all_timestamps) if len(all_timestamps) > 0 else None
 
     return {'total_chunk': total_chunk, 'start_timestamp': start_timestamp, 'end_timestamp': end_timestamp,
-            'total_bytes': total_bytes}
+            'run_time': int(time.time() * 1000)}
 
 
 def main():
@@ -163,7 +159,7 @@ def main():
             new_entry = dict(list(zip(header, entry)))
             data.append(new_entry)
             count += 1
-            if count % 10 == 0 and len(bytearray(json.dumps(data), 'utf8')) >= CHUNK_SIZE:
+            if len(bytearray(json.dumps(data), 'utf8')) >= CHUNK_SIZE:
                 current_chunk += 1
                 replay_status['current_chunk'] = current_chunk
                 send_data(config_vars, data, replay_status)
