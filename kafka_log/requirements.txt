@@ -2,4 +2,4 @@ arrow==0.15.5
 pytz==2019.3
 regex==2020.2.18
 requests==2.23.0
-kafka==2.0.2
+kafka_python==2.0.2
