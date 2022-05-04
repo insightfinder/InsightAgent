@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
 import json
 import os
-import socket
 import sys
 import time
+import math
 import requests
 import urllib3
 from ConfigParser import SafeConfigParser
 
-
 MAX_RETRY_NUM = 10
 RETRY_WAIT_TIME_IN_SEC = 30
+# chunk size is 2Mb
+CHUNK_SIZE = 2 * 1024 * 1024
+
 
 def get_agent_config_vars():
     config_vars = {}
@@ -48,7 +50,7 @@ def get_agent_config_vars():
     return config_vars
 
 
-def send_data(metric_data):
+def send_data(config_vars, metric_data, replay_status):
     """ Sends parsed metric data to InsightFinder """
     send_data_time = time.time()
     # prepare data for metric streaming agent
@@ -63,6 +65,16 @@ def send_data(metric_data):
     timestamps = [int(d['timestamp']) for d in metric_data]
     to_send_data_dict["maxTimestamp"] = max(timestamps) if len(timestamps) > 0 else None
     to_send_data_dict["minTimestamp"] = min(timestamps) if len(timestamps) > 0 else None
+    # set replay status
+    replay_status = {
+        'tb': replay_status['total_bytes'],
+        'cb': len(bytearray(json.dumps(metric_data), 'utf8')),
+        'tc': replay_status['total_chunk'],
+        "cc": replay_status['current_chunk'],
+        "dr": {"s": replay_status['start_timestamp'], "e": replay_status['end_timestamp']},
+        "rt": int(time.time() * 1000),
+    }
+    to_send_data_dict["metricReplayStatus"] = json.dumps(replay_status)
 
     to_send_data_json = json.dumps(to_send_data_dict)
 
@@ -70,6 +82,7 @@ def send_data(metric_data):
     post_url = config_vars['server_url'] + "/customprojectrawdata"
     send_data_to_receiver(post_url, to_send_data_json, len(metric_data))
     print "--- Send data time: %s seconds ---" + str(time.time() - send_data_time)
+
 
 def send_data_to_receiver(post_url, to_send_data, num_of_message):
     attempts = 0
@@ -94,27 +107,72 @@ def send_data_to_receiver(post_url, to_send_data, num_of_message):
     if attempts == MAX_RETRY_NUM:
         sys.exit(1)
 
-if __name__ == "__main__":
+
+def get_replay_status(json_data, header):
+    all_timestamps = []
+    replay_data = []
+    total_bytes = 0
+    lines = 0
+    for line in json_data:
+        entry = [x.strip() for x in line.split(',')]
+        new_entry = dict(list(zip(header, entry)))
+        timestamp = new_entry.get('timestamp', 0)
+        all_timestamps.append(timestamp)
+
+        replay_data.append(new_entry)
+        lines += 1
+        if lines % 10000 == 0:
+            total_bytes += len(bytearray(json.dumps(replay_data), 'utf8'))
+            replay_data = []
+    if len(replay_data) != 0:
+        total_bytes += len(bytearray(json.dumps(replay_data), 'utf8'))
+
+    total_chunk = int(math.ceil(float(total_bytes) / CHUNK_SIZE))
+    all_timestamps = [int(x) for x in all_timestamps]
+    start_timestamp = min(all_timestamps) if len(all_timestamps) > 0 else None
+    end_timestamp = max(all_timestamps) if len(all_timestamps) > 0 else None
+
+    return {'total_chunk': total_chunk, 'start_timestamp': start_timestamp, 'end_timestamp': end_timestamp,
+            'total_bytes': total_bytes}
+
+
+def main():
     urllib3.disable_warnings()
     reload(sys)
     sys.setdefaultencoding('utf-8')
     config_vars = get_agent_config_vars()
-    # chunk size is 2Mb
-    CHUNK_SIZE = 2 * 1024 * 1024
     with open(config_vars["file_name"]) as json_data:
+        header_str = json_data.readline()
+        offset = len(header_str)
+        header = [x.strip() for x in header_str.split(',')]
+
+        # get replay status
+        replay_status = get_replay_status(json_data, header)
+        print "--- Replay status: %s ---" + str(replay_status)
+
+        # seek to second line
+        json_data.seek(offset)
+        # read file and send data
         data = []
         count = 0
-        header_str = json_data.readline()
-        header = map(lambda x: x.strip(), header_str.split(','))
+        current_chunk = 0
         for line in json_data:
-            entry = map(lambda x: x.strip(), line.split(','))
-            new_entry = dict(zip(header, entry))
+            entry = [x.strip() for x in line.split(',')]
+            new_entry = dict(list(zip(header, entry)))
             data.append(new_entry)
             count += 1
-            if count % 10 == 0 and len(bytearray(json.dumps(data))) >= CHUNK_SIZE:
-                send_data(data)
+            if count % 10 == 0 and len(bytearray(json.dumps(data), 'utf8')) >= CHUNK_SIZE:
+                current_chunk += 1
+                replay_status['current_chunk'] = current_chunk
+                send_data(config_vars, data, replay_status)
                 data = []
         if len(data) != 0:
-            send_data(data)
+            current_chunk += 1
+            replay_status['current_chunk'] = current_chunk
+            send_data(config_vars, data, replay_status)
 
     print "--- Total count: %s ---" + str(count)
+
+
+if __name__ == "__main__":
+    main()
