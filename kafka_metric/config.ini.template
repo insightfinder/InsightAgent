@@ -1,11 +1,11 @@
 [agent]
 ## kafka info
 # Comma separated list of kafka boostrap servers (eg: 192.168.1.1:9092,192.168.1.2:9092) - Required 
-bootstrap_servers = 
+bootstrap_servers =
 # Comma separated list of kafka topics to subscribe to - Required
-topics = 
+topics =
 # Kafka Group ID - Required
-group_id = 
+group_id =
 client_id =
 
 ## SSL
@@ -31,33 +31,33 @@ sasl_kerberos_domain_name =
 sasl_oauth_token_provider =
 
 # Optional preprocessing filter (regex) to eliminate raw data from being parsed. Data must match filter to be parsed if set
-initial_filter = 
+initial_filter =
 
 # if raw data, the regex used to parse the log. It must use named capture groups `(?<name>.*)` that correspond to the *_field config variables below (ie  `(?<timestamp>.*)`,  `(?<host>.*)`,  `(?<device>.*)`,  `(?<etc>.*)`.
-raw_regex = 
+raw_regex =
 
 # Field that contains the project name. If this field is empty, agent will use project_name in insightfinder section
-project_field = 
+project_field =
 # project_whitelist is a regex string used to define which projects form project_field will be filtered.
 project_whitelist =
 
-# Field that contains the metric name - Required
-metric_field = 
+# Metric names, multiple fields are separated by commas. A field can be named with the syntax `<metric_name>::<metric_value>`, where `<metric_name>` and `<metric_value>` can each be either a field name in message. Ex: metric1,metric_field::metric_value_field.
+metric_fields =
 # metrics_whitelist is a regex string used to define which metrics will be filtered.
 metrics_whitelist =
 
 ## message parsing
 # timezone, as per pytz
 timezone =
-# Field that contains the timestamp - Required 
-timestamp_field = 
+timestamp_field =
 # Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
 target_timestamp_timezone = UTC
 component_field =
-# if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list. - Required
-instance_field = 
+# if no instance given, will set to 'Application'. Can also set instance name from multiple fields which separated by commas. Ex: instance_name_part1,instance_name_part2.
+instance_field =
 # instance_whitelist is a regex string used to define which instances will be filtered.
 instance_whitelist =
+# Field name of device. Can also set device name from multiple fields which separated by commas. Ex: device_name_part1,device_name_part2.
 device_field =
 # multiple of sampling_interval witch buffered the metric data. Default is 2 multiple
 buffer_sampling_interval_multiple = 2
