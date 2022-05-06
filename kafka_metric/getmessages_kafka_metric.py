@@ -114,32 +114,23 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                 project = make_safe_project_string(project)
 
             # instance name
-            instance = message.get(
-                agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
-                    agent_config_vars['instance_field']) > 0 else 'instance')
+            instance = 'Application'
+            instance_field = agent_config_vars['instance_field']
+            if instance_field and len(instance_field) > 0:
+                instances = [message.get(d) for d in instance_field if message.get(d)]
+                instance = '-'.join(instances) if len(instances) > 0 else None
             # filter by instance whitelist
             if agent_config_vars['instance_whitelist_regex'] \
                     and not agent_config_vars['instance_whitelist_regex'].match(instance):
-                continue
-
-            # metric name
-            date_field = message.get(agent_config_vars['metric_field'] or 'metric')
-            # filter by metric whitelist
-            if agent_config_vars['metric_whitelist_regex'] \
-                    and not agent_config_vars['metric_whitelist_regex'].match(date_field):
                 continue
 
             # add device info if has
             device = None
             device_field = agent_config_vars['device_field']
             if device_field and len(device_field) > 0:
-                devices = [message.get('metric').get(d) for d in device_field]
-                devices = [d for d in devices if d]
-                device = devices[0] if len(devices) > 0 else None
+                devices = [message.get(d) for d in device_field if message.get(d)]
+                device = '-'.join(devices) if len(devices) > 0 else None
             full_instance = make_safe_instance_string(instance, device)
-
-            # get value
-            data_value = message.get('value')
 
             # get timestamp
             timestamp = message.get(agent_config_vars['timestamp_field'][0])
@@ -148,14 +139,30 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
             timestamp = str(timestamp)
 
-            metric_key = '{}[{}]'.format(date_field, full_instance)
-            datas.put({
-                'project': project,
-                'timestamp': timestamp,
-                'full_instance': full_instance,
-                'metric_key': metric_key,
-                'value': str(data_value)
-            })
+            # metric name
+            for field in agent_config_vars['metric_fields']:
+                data_field = field
+                data_value = message.get(field)
+                if field.find("::") != -1:
+                    metric_name, metric_value = field.split('::')
+                    data_field = message.get(metric_name)
+                    data_value = message.get(metric_value)
+                if not data_field:
+                    continue
+
+                # filter by metric whitelist
+                if agent_config_vars['metric_whitelist_regex'] \
+                        and not agent_config_vars['metric_whitelist_regex'].match(data_field):
+                    continue
+
+                metric_key = '{}[{}]'.format(data_field, full_instance)
+                datas.put({
+                    'project': project,
+                    'timestamp': timestamp,
+                    'full_instance': full_instance,
+                    'metric_key': metric_key,
+                    'value': str(data_value)
+                })
 
         except Exception as e:
             logger.warn('Error when parsing message')
@@ -351,7 +358,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             project_field = config_parser.get('agent', 'project_field')
             project_whitelist = config_parser.get('agent', 'project_whitelist')
 
-            metric_field = config_parser.get('agent', 'metric_field')
+            metric_fields = config_parser.get('agent', 'metric_fields')
             metrics_whitelist = config_parser.get('agent', 'metrics_whitelist')
 
             # message parsing
@@ -417,9 +424,12 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
                 logger.error(e)
                 return config_error(logger, 'instance_whitelist')
 
+        if len(metric_fields) == 0:
+            return config_error(logger, 'metric_fields')
+
         # fields
         project_field = project_field.strip() if project_field.strip() else None
-        metric_field = metric_field.strip() if metric_field.strip() else None
+        metric_fields = [x.strip() for x in metric_fields.split(',') if x.strip()]
         timestamp_fields = [x.strip() for x in timestamp_field.split(',') if x.strip()]
         instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
         device_fields = [x.strip() for x in device_field.split(',') if x.strip()]
@@ -441,8 +451,8 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             'raw_regex': raw_regex,
             'project_field': project_field,
             'project_whitelist_regex': project_whitelist_regex,
-            'metric_field': metric_field,
             'metric_whitelist_regex': metric_whitelist_regex,
+            'metric_fields': metric_fields,
             'timezone': timezone,
             'timestamp_field': timestamp_fields,
             'target_timestamp_timezone': target_timestamp_timezone,
