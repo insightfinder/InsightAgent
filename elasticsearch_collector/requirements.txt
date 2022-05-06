@@ -8,4 +8,3 @@ zipp==3.8.0
 backports.zoneinfo==0.2.1
 importlib_resources==5.7.1
 apscheduler==3.9.1
-cd ../
