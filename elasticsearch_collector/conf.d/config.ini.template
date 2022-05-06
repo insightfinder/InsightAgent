@@ -67,7 +67,7 @@ timestamp_field = @timestamp
 # Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
 target_timestamp_timezone = UTC
 component_field =
-# if no instance given, the osmosys's server name will be used.
+# if no instance given, the agent server name will be used.
 instance_field = agent.hostname
 # instance_whitelist is a regex string used to define which instances will be filtered.
 instance_whitelist =
