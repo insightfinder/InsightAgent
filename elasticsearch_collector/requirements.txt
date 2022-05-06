@@ -4,7 +4,7 @@ regex==2020.2.18
 requests==2.23.0
 statistics==1.0.3.5
 elasticsearch==7.13.3
-zipp==3.8.0
-backports.zoneinfo==0.2.1
-importlib_resources==5.7.1
+# zipp==3.8.0
+# backports.zoneinfo==0.2.1
+# importlib_resources==5.7.1
 apscheduler==3.9.1

@@ -13,6 +13,22 @@ def run_job(python_cmp, file_agent, file_agent_log):
     subprocess.run("{} {} > {} 2>&1".format(python_cmp, file_agent, file_agent_log), shell=True)
 
 
+def get_cron_params(interval_seconds):
+    unit = 'second'
+    interval = interval_seconds
+    if interval >= 60:
+        interval = int(interval / 60)
+        unit = 'minute'
+    if interval >= 60:
+        interval = int(interval / 60)
+        unit = 'hour'
+    if interval >= 24:
+        interval = int(interval / 24)
+        unit = 'day'
+
+    return {unit: '*/{}'.format(interval)}
+
+
 def main():
     scheduler = BlockingScheduler()
 
@@ -57,6 +73,8 @@ def main():
         else:
             sampling_interval = int(sampling_interval) * 60
         interval_seconds = run_interval or sampling_interval or interval_seconds
+    # build cron params
+    cron_params = get_cron_params(interval_seconds)
 
     # get python path
     python_cmp = os.path.abspath(os.path.join(__file__, os.pardir, './venv/bin/python3'))
@@ -74,8 +92,7 @@ def main():
     file_agent_log = os.path.abspath(os.path.join(__file__, os.pardir, 'output.log'))
 
     # add job
-    scheduler.add_job(run_job, 'interval', (python_cmp, file_agent, file_agent_log), seconds=interval_seconds,
-                      next_run_time=datetime.now(pytz.utc))
+    scheduler.add_job(run_job, 'cron', (python_cmp, file_agent, file_agent_log), **cron_params)
 
     # start scheduler
     try:
