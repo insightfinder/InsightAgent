@@ -27,14 +27,14 @@ def get_anomaly_data(logger, edge_vars, main_vars, if_config_vars, time_now):
     # Format Request
     if_url = edge_vars['if_url']
 
-    end_time = (time_now + edge_vars['edge_timezone']) * 1000
+    end_time = (time_now + edge_vars['edge_timezone_offset']) * 1000
     start_time = end_time - if_config_vars['query_timewindow_of_multiple_run_interval'] * if_config_vars[
         'run_interval'] * 1000
 
     data = {'projectName': edge_vars['project_name'], 'transferToProjectName': main_vars['project_name'],
             'transferToCustomerName': main_vars['user_name'],
             'startTime': start_time, 'endTime': end_time, 'licenseKey': edge_vars['license_key'],
-            'userName': edge_vars['user_name']}
+            'userName': edge_vars['user_name'], 'timezone': edge_vars['edge_timezone']}
 
     url = if_url + '/api/v2/projectanomalytransfer'
 
@@ -210,7 +210,7 @@ def get_config_vars(logger, config_ini):
             sampling_interval = int(sampling_interval) * 60
 
         if len(edge_timezone) != 0:
-            edge_timezone = int(arrow.now(edge_timezone).utcoffset().total_seconds())
+            edge_timezone_offset = int(arrow.now(edge_timezone).utcoffset().total_seconds())
         else:
             return config_error(logger, 'edge_timezone')
 
@@ -249,6 +249,7 @@ def get_config_vars(logger, config_ini):
             'project_name': edge_project_name,
             'project_type': edge_project_type,
             'edge_timezone': edge_timezone,
+            'edge_timezone_offset': edge_timezone_offset,
             'retry': edge_retry,
             'if_url': edge_url,
             'if_proxies': edge_proxies

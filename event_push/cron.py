@@ -13,6 +13,22 @@ def run_job(python_cmp, file_agent, file_agent_log):
     subprocess.run("{} {} > {} 2>&1".format(python_cmp, file_agent, file_agent_log), shell=True)
 
 
+def get_cron_params(interval_seconds):
+    unit = 'second'
+    interval = interval_seconds
+    if interval >= 60:
+        interval = int(interval / 60)
+        unit = 'minute'
+    if interval >= 60:
+        interval = int(interval / 60)
+        unit = 'hour'
+    if interval >= 24:
+        interval = int(interval / 24)
+        unit = 'day'
+
+    return {unit: '*/{}'.format(interval)}
+
+
 def main():
     scheduler = BlockingScheduler()
 
@@ -35,7 +51,7 @@ def main():
 
     # get job info
     # get interval
-    interval_seconds = None
+    interval_seconds = 60
     conf_path = os.path.abspath(os.path.join(__file__, os.pardir, 'conf.d/*.ini'))
     conf_files = glob.glob(conf_path)
     if len(conf_files) == 0:
@@ -46,26 +62,23 @@ def main():
         config_parser = configparser.ConfigParser()
         config_parser.read_file(fp)
 
-        try:
+        run_interval = None
+        sampling_interval = None
+        if 'run_interval' in config_parser.options('insightfinder'):
             run_interval = config_parser.get('insightfinder', 'run_interval')
             if run_interval.endswith('s'):
                 run_interval = int(run_interval[:-1])
-            else:
+            elif run_interval:
                 run_interval = int(run_interval) * 60
-            if run_interval and not interval_seconds:
-                interval_seconds = run_interval
-
+        if 'sampling_interval' in config_parser.options('insightfinder'):
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             if sampling_interval.endswith('s'):
                 sampling_interval = int(sampling_interval[:-1])
-            else:
+            elif sampling_interval:
                 sampling_interval = int(sampling_interval) * 60
-            if sampling_interval and not interval_seconds:
-                interval_seconds = sampling_interval
-        except Exception as e:
-            print(e)
-    if not interval_seconds:
-        return False
+        interval_seconds = run_interval or sampling_interval or interval_seconds
+    # build cron params
+    cron_params = get_cron_params(interval_seconds)
 
     # get python path
     python_cmp = os.path.abspath(os.path.join(__file__, os.pardir, './venv/bin/python3'))
@@ -83,8 +96,7 @@ def main():
     file_agent_log = os.path.abspath(os.path.join(__file__, os.pardir, 'output.log'))
 
     # add job
-    scheduler.add_job(run_job, 'interval', (python_cmp, file_agent, file_agent_log), seconds=interval_seconds,
-                      next_run_time=datetime.now(pytz.utc))
+    scheduler.add_job(run_job, 'cron', (python_cmp, file_agent, file_agent_log), **cron_params)
 
     # start scheduler
     try:
