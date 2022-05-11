@@ -1,2 +1,2 @@
-name = files_name_retrieval
-script_name = files_name_retrieval.py
+name = file_retrieval
+script_name = file_retrieval.py

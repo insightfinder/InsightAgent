@@ -81,6 +81,7 @@ def query_messages(logger, if_config_vars, agent_config_vars):
         logger.error("Run command error: {}".format(agent_config_vars['scan_command']))
         logger.error(e)
 
+    data = [f for f in data if f.strip()]
     return data
 
 
@@ -95,29 +96,28 @@ def parse_messages(logger, if_config_vars, agent_config_vars, log_buffer, track,
             if not os.path.exists(file):
                 continue
 
-            # get file info
             message = {}
-            with open(file, 'r') as f:
 
-                # parse file name
-                fname = f.name
-                if agent_config_vars['file_name_regex']:
-                    matches = agent_config_vars['file_name_regex'].match(fname)
-                    if not matches:
-                        logger.debug('Parse file name failed with file_name_regex: {}'.format(fname))
-                        continue
+            # get file info
+            # parse file name
+            _, f_name = os.path.split(file)
+            if agent_config_vars['file_name_regex']:
+                matches = agent_config_vars['file_name_regex'].match(f_name)
+                if matches:
                     message.update(matches.groupdict() or dict)
 
-                # parse file content
-                if agent_config_vars['file_content_regex']:
+            # parse file content
+            if agent_config_vars['file_content_regex']:
+                with open(file, 'r') as f:
                     content = f.read()
                     matches = agent_config_vars['file_content_regex'].match(content)
-                    if not matches:
-                        continue
-                    message.update(matches.groupdict() or dict)
+                    if matches:
+                        message.update(matches.groupdict() or dict)
 
             # get timestamp
             timestamp = message.get(agent_config_vars['timestamp_field'][0])
+            if not timestamp:
+                continue
             if agent_config_vars['timestamp_format']:
                 timestamp = int(arrow.get(timestamp, agent_config_vars['timestamp_format']).float_timestamp * 1000)
             else:
@@ -129,6 +129,8 @@ def parse_messages(logger, if_config_vars, agent_config_vars, log_buffer, track,
             instance = message.get('metric').get(
                 agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
                     agent_config_vars['instance_field']) > 0 else 'instance')
+            if not instance:
+                continue
             # filter by instance whitelist
             if agent_config_vars['instance_whitelist_regex'] \
                     and not agent_config_vars['instance_whitelist_regex'].match(instance):
