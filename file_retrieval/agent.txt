@@ -1,0 +1,2 @@
+name = files_name_retrieval
+script_name = files_name_retrieval.py
