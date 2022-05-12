@@ -63,9 +63,6 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, l
     data = query_messages(logger, if_config_vars, agent_config_vars)
     parse_messages(logger, if_config_vars, agent_config_vars, log_buffer, track, data)
 
-    # clear log buffer when piece of chunk range end
-    clear_log_buffer(logger, c_config, if_config_vars, log_buffer, track)
-
     logger.info('Closed......')
 
 
@@ -115,7 +112,7 @@ def parse_messages(logger, if_config_vars, agent_config_vars, log_buffer, track,
                         message.update(matches.groupdict() or dict)
 
             # get timestamp
-            timestamp = message.get(agent_config_vars['timestamp_field'][0])
+            timestamp = message.get(agent_config_vars['timestamp_field'])
             if not timestamp:
                 continue
             if agent_config_vars['timestamp_format']:
@@ -126,7 +123,7 @@ def parse_messages(logger, if_config_vars, agent_config_vars, log_buffer, track,
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
             timestamp = str(timestamp)
 
-            instance = message.get('metric').get(
+            instance = message.get(
                 agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
                     agent_config_vars['instance_field']) > 0 else 'instance')
             if not instance:
@@ -140,7 +137,7 @@ def parse_messages(logger, if_config_vars, agent_config_vars, log_buffer, track,
             device = None
             device_field = agent_config_vars['device_field']
             if device_field and len(device_field) > 0:
-                devices = [message.get('metric').get(d) for d in device_field]
+                devices = [message.get(d) for d in device_field]
                 devices = [d for d in devices if d]
                 device = devices[0] if len(devices) > 0 else None
             full_instance = make_safe_instance_string(instance, device)
@@ -148,8 +145,9 @@ def parse_messages(logger, if_config_vars, agent_config_vars, log_buffer, track,
             # get data from data_fields
             data = {}
             for data_field in agent_config_vars['data_fields']:
-                data_val = message.get(data_field)
-                data[data_field] = data_val
+                if data_field in message.keys():
+                    data_val = message.get(data_field)
+                    data[data_field] = data_val
 
             # build log entry
             entry = prepare_log_entry(if_config_vars, str(int(timestamp)), data, full_instance)
