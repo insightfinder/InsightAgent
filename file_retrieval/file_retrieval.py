@@ -67,7 +67,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, l
 
 
 def query_messages(logger, if_config_vars, agent_config_vars):
-    logger.info('Starting query server es')
+    logger.info('Starting exec shell command')
 
     data = []
     try:
