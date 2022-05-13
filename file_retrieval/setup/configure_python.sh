@@ -16,6 +16,10 @@ fi
 # Change to agent directory
 cd $SCRIPT_DIR && cd ..
 
+#install required system packages
+yum localinstall ./offline/pip/packages/gcc-4.8.5-44.el7.x86_64.rpm
+yum localinstall ./offline/pip/packages/python3-devel-3.6.8-18.el7.x86_64.rpm
+
 # Check if virtualenv is configured, if not set it up
 if [[ ! -d venv ]]; then
   echo "Setting up virtual env"
