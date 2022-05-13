@@ -744,7 +744,7 @@ def check_project_exist(logger, if_config_vars):
                 'projectName': if_config_vars['project_name'],
                 'systemName': if_config_vars['system_name'] or if_config_vars['project_name'],
                 'instanceType': '',
-                'projectCloudType': 'Shadow',
+                'projectCloudType': 'PrivateCloud',
                 'dataType': get_data_type_from_project_type(if_config_vars),
                 'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
                 'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
