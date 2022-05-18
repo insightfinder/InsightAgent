@@ -153,13 +153,13 @@ def send_web_or_incident_data(time, is_abnormal):
         if hour in [1, 9] and minute in [25, 26, 27, 28, 29]:
             data = get_log_data(timestamp, constant.INSTANCE_ALERT, constant.ALERT_INCIDENT_DATA)
             replay_log_data(configs[constant.ALERT], [data], "Alert incident data")
-    else:
-        num_message = random.randint(1, 3)
-        data_array = []
-        for i in range(0, num_message):
-            data = get_log_data(timestamp + i, constant.INSTANCE_ALERT, constant.WEB_NORMAL_DATA[random.randint(0, 3)])
-            data_array.append(data)
-        replay_log_data(configs[constant.WEB], data_array, "Web normal data")
+    num_message = random.randint(10, 50)
+    data_array = []
+    status = is_abnormal and minute <= 29
+    for i in range(0, num_message):
+        data = get_log_data(timestamp + i * 1000, constant.INSTANCE_ALERT, generate_web_data(status))
+        data_array.append(data)
+    replay_log_data(configs[constant.WEB], data_array, "Web normal data")
 
 
 '''
@@ -342,6 +342,19 @@ def is_abnormal_period(cur_time):
         is_abnormal = False
     return is_abnormal
 
+
+def get_random_from_list(list):
+    return list[random.randint(0, len(list))]
+
+
+def generate_web_data(is_abnormal_flag):
+    user = get_random_from_list(constant.WEB_USER)
+    state = get_random_from_list(constant.WEB_ENV)
+    api = get_random_from_list(constant.WEB_ENV)
+    api_data = {"user": user,"state": state, "api": api, "status":200}
+    if is_abnormal_flag:
+        api_data["status"] = get_random_from_list(constant.WEB_ERROR_CODE)
+    return api_data
 
 if __name__ == "__main__":
     logging_setting()

@@ -84,6 +84,11 @@ DEPLOYMENT_DATA_INDEX = {0:0, 4:0, 8:1, 12:1, 16:2, 20:3}
 WEB_INCIDENT_DATA = "Production 911: Checkout server returns 500 error"
 WEB_NORMAL_DATA = ["User checked the dash board page", "User changed the profile setting", "User logged out",
                    "User logged in"]
+WEB_USER = ["James", "Robert", "William", "Mary", "Patricia", "Jennifer"]
+WEB_API = ["api/v1/login", "api/v1/settingchange", "api/v1/password", "api/v1/checkout", "api/v1/shoppinglist", "api/v1/paymentupdate", "api/v1/passwordchange"]
+WEB_ENV = ["NY", "TX", "WA", "CA", "NJ", "NC"]
+WEB_ERROR_CODE = [500, 504, 404, 400]
+WEB_OK_CODE = 200
 
 # Alert data
 ALERT_INCIDENT_DATA = {"comments": "", "assignment group": "Software", "description": "", "close notes": "",
