@@ -5,6 +5,5 @@
 username=
 license_key=
 server_url=
-logstash_user=
 ls_user=
 ls_group=
