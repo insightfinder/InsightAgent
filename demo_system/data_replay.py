@@ -150,13 +150,13 @@ def send_web_or_incident_data(time, is_abnormal):
     minute = time.minute
     hour = time.hour
     if is_abnormal:
-        if hour in [1, 9] and minute in [25, 26, 27, 28, 29]:
+        if hour in [1] and minute in [25, 26, 27, 28, 29]:
             data = get_log_data(timestamp, constant.INSTANCE_ALERT, constant.ALERT_INCIDENT_DATA)
             replay_log_data(configs[constant.ALERT], [data], "Alert incident data")
     normal_num = random.randint(100, 500)
     error_num = random.randint(0, 25)
     data_array = []
-    status = is_abnormal and minute in [0, 1, 2, 10, 11, 12, 20, 21, 22]
+    status = is_abnormal and minute <= 25
     for i in range(0, normal_num):
         data = get_log_data(timestamp + i * 1000, constant.INSTANCE_ALERT, generate_web_data(False))
         data_array.append(data)
@@ -169,6 +169,7 @@ def send_web_or_incident_data(time, is_abnormal):
             data = get_log_data(timestamp + i * 100, constant.INSTANCE_ALERT, generate_error_web_data("James", "api/v1/settingchange", "NY"))
             data_array.append(data)
             data = get_log_data(timestamp + i * 100, constant.INSTANCE_ALERT, generate_error_web_data("Robert", "api/v1/checkout", "NY"))
+            data_array.append(data)
     replay_log_data(configs[constant.WEB], data_array, "Web data")
 
 
@@ -271,7 +272,7 @@ def replay_deployment_data(project_name, deployment_data, log_msg):
 def replay_log_data(project_name, data, log_msg):
     to_send_data = {"metricData": json.dumps(data), "licenseKey": configs[constant.LICENSE_KEY],
                     "projectName": project_name,
-                    "userName": user_name, "agentType": "LogFileReplay"}
+                    "userName": user_name, "agentType": "LogStreaming"}
     to_send_data = json.dumps(to_send_data)
     post_url = configs[constant.SERVER_URL] + "/customprojectrawdata"
     send_data_to_receiver(post_url, to_send_data, log_msg, len(data))
@@ -329,13 +330,13 @@ def is_abnormal_period(cur_time):
     config.read(config_file_name)
     is_abnormal = config[constant.IF][constant.DATA_TYPE] == 'abnormal'
     is_reverse = config[constant.IF][constant.REVERSE_DEPLOYMENT] == "True"
+    #if (cur_time.hour == 0 and cur_time.minute >= 30) or (cur_time.hour == 1 and cur_time.minute < 30):
+    #    if not is_abnormal:
+    #        config[constant.IF][constant.DATA_TYPE] = 'abnormal'
+    #        config[constant.IF][constant.REVERSE_DEPLOYMENT] = 'False'
+    #        utility.save_config_file(config_file_name, config)
+    #    is_abnormal = True
     if (cur_time.hour == 0 and cur_time.minute >= 30) or (cur_time.hour == 1 and cur_time.minute < 30):
-        if not is_abnormal:
-            config[constant.IF][constant.DATA_TYPE] = 'abnormal'
-            config[constant.IF][constant.REVERSE_DEPLOYMENT] = 'False'
-            utility.save_config_file(config_file_name, config)
-        is_abnormal = True
-    elif (cur_time.hour == 8 and cur_time.minute >= 30) or (cur_time.hour == 9 and cur_time.minute < 30):
         if is_reverse:
             config[constant.IF][constant.DATA_TYPE] = 'normal'
             utility.save_config_file(config_file_name, config)
@@ -366,7 +367,6 @@ def generate_web_data(is_abnormal_flag):
         api_data["status"] = get_random_from_list(constant.WEB_ERROR_CODE)
     return api_data
 
-
 def generate_error_web_data(user, api, state):
     return {"user": user,"state": state, "api": api, "status":500}
 
@@ -375,11 +375,14 @@ if __name__ == "__main__":
     urllib3.disable_warnings()
     user_name = utility.get_username()
     configs = get_agent_config_vars()
-    cur_time = get_current_time()
-    is_abnormal_flag = is_abnormal_period(cur_time)
-    print(cur_time, is_abnormal_flag)
-    logging.info("==========New Data Send Round==========")
-    send_web_or_incident_data(cur_time, is_abnormal_flag)
-    send_log_data(cur_time, is_abnormal_flag)
-    send_deployment_demo_data(cur_time, is_abnormal_flag)
-    send_metric_data(cur_time, is_abnormal_flag)
+    #cur_time = get_current_time()
+    cur_time = datetime.datetime(2022, 5, 16, 0, 30, 0)
+    for i in range(0, 60):
+        is_abnormal_flag = is_abnormal_period(cur_time)
+        print(cur_time, is_abnormal_flag)
+        logging.info("==========New Data Send Round==========")
+        send_web_or_incident_data(cur_time, is_abnormal_flag)
+        cur_time = cur_time + datetime.timedelta(minutes=1)
+    #send_log_data(cur_time, is_abnormal_flag)
+    #send_deployment_demo_data(cur_time, is_abnormal_flag)
+    #send_metric_data(cur_time, is_abnormal_flag)
