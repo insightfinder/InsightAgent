@@ -199,13 +199,18 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
                 if len(name_fields) > 0:
                     date_field = '_'.join(name_fields)
 
-            instance = message.get('metric').get(
-                agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
-                    agent_config_vars['instance_field']) > 0 else 'instance')
-
-            if STRIP_PORT.match(instance):
-                instance = STRIP_PORT.match(instance).group(1)
-
+            # instance name
+            instance = 'Application'
+            instance_field = agent_config_vars['instance_field']
+            if instance_field and len(instance_field) > 0:
+                instances = [message.get('metric').get(d) for d in instance_field]
+                instance_list = []
+                for i in instances:
+                    if i and STRIP_PORT.match(i):
+                        i = STRIP_PORT.match(i).group(1)
+                    instance_list.append(i)
+                instance = agent_config_vars['instance_connector'].join(instance_list) if len(
+                    instance_list) > 0 else None
             # filter by instance whitelist
             if agent_config_vars['instance_whitelist_regex'] \
                     and not agent_config_vars['instance_whitelist_regex'].match(instance):
@@ -216,8 +221,7 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
             device_field = agent_config_vars['device_field']
             if device_field and len(device_field) > 0:
                 devices = [message.get('metric').get(d) for d in device_field]
-                devices = [d for d in devices if d]
-                device = devices[0] if len(devices) > 0 else None
+                device = agent_config_vars['instance_connector'].join(devices) if len(devices) > 0 else None
             full_instance = make_safe_instance_string(instance, device)
 
             # check cache for alias
@@ -361,7 +365,7 @@ def get_agent_config_vars(logger, config_ini):
             target_timestamp_timezone = config_parser.get('prometheus', 'target_timestamp_timezone', raw=True) or 'UTC'
             timestamp_format = config_parser.get('prometheus', 'timestamp_format', raw=True)
             timezone = config_parser.get('prometheus', 'timezone') or 'UTC'
-            data_fields = config_parser.get('prometheus', 'data_fields', raw=True)
+            instance_connector = config_parser.get('prometheus', 'instance_connector') or '-'
             thread_pool = config_parser.get('prometheus', 'thread_pool', raw=True)
 
         except configparser.NoOptionError as cp_noe:
@@ -409,37 +413,23 @@ def get_agent_config_vars(logger, config_ini):
         else:
             return config_error(logger, 'data_format')
 
+        # fields
+        # project_fields = project_field.split(',')
+        instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
+        device_fields = [x.strip() for x in device_field.split(',') if x.strip()]
+        timestamp_fields = timestamp_field.split(',')
+
+        if len(thread_pool) != 0:
+            thread_pool = int(thread_pool)
+        else:
+            thread_pool = 20
+
         # proxies
         agent_proxies = dict()
         if len(agent_http_proxy) > 0:
             agent_proxies['http'] = agent_http_proxy
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
-
-        # fields
-        # project_fields = project_field.split(',')
-        instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
-        device_fields = [x.strip() for x in device_field.split(',') if x.strip()]
-        timestamp_fields = timestamp_field.split(',')
-        if len(data_fields) != 0:
-            data_fields = data_fields.split(',')
-            # for project_field in project_fields:
-            #   if project_field in data_fields:
-            #       data_fields.pop(data_fields.index(project_field))
-            for instance_field in instance_fields:
-                if instance_field in data_fields:
-                    data_fields.pop(data_fields.index(instance_field))
-            for device_field in device_fields:
-                if device_field in data_fields:
-                    data_fields.pop(data_fields.index(device_field))
-            for timestamp_field in timestamp_fields:
-                if timestamp_field in data_fields:
-                    data_fields.pop(data_fields.index(timestamp_field))
-
-        if len(thread_pool) != 0:
-            thread_pool = int(thread_pool)
-        else:
-            thread_pool = 20
 
         # add parsed variables to a global
         config_vars = {
@@ -463,11 +453,11 @@ def get_agent_config_vars(logger, config_ini):
             'instance_field': instance_fields,
             "instance_whitelist_regex": instance_whitelist_regex,
             'device_field': device_fields,
-            'data_fields': data_fields,
             'timestamp_field': timestamp_fields,
             'target_timestamp_timezone': target_timestamp_timezone,
             'timezone': timezone,
             'timestamp_format': timestamp_format,
+            'instance_connector': instance_connector,
             'thread_pool': thread_pool,
         }
 

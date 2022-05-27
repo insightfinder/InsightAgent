@@ -47,13 +47,14 @@ timestamp_field =
 # Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
 target_timestamp_timezone = UTC
 component_field =
-# if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
+# if no instance given, will set to 'Application'. Can also set instance name from multiple fields which separated by commas. Ex: instance_name_part1,instance_name_part2.
 instance_field = instance
 # instance_whitelist is a regex string used to define which instances will be filtered.
 instance_whitelist =
+# Field name of device. Can also set device name from multiple fields which separated by commas. Ex: device_name_part1,device_name_part2.
 device_field =
-# multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>` or `<name>::==<value>`, where `<name>` and `<value>` can each be either a literal value (`name::value`) or formatted (`total time [{step}]::=={timing.end}-{timing.start}`). Use `::==` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `eval()`.
-data_fields =
+# The connector for build `instance_field` or `device_field` from multiple fields. Default is `-`.
+instance_connector =
 ## number of thread to used in the pool, default is 20
 thread_pool = 20
 
