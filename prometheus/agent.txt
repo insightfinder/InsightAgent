@@ -1,2 +1,3 @@
 name = prometheus
 script_name = getmessages_prometheus.py
+version = 20220610.1
