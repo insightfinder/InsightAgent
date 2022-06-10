@@ -36,7 +36,9 @@ python ./ifobfuscate.py
 
 The configure_python.sh script will generate a config.ini file for you; however, if you need to create a new one, you can simply copy the config.ini.template file over the config.ini file to start over. 
 
-Populate all of the necessary fields in the config.ini file with the relevant data.  More details about each field can be found in the comments of the config.ini file and the Config Variables below. 
+Populate all of the necessary fields in the config.ini file with the relevant data.  More details about each field can be found in the comments of the config.ini file and the Config Variables below.
+
+If you want create a container project, please set variable `containerize=yes`, and set variable `device_field` to specify field name of container.
 
 ###### Test the agent:
 Once you have finished configuring the config.ini file, you can test the agent to validate the settings. 
