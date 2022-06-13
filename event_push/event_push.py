@@ -23,13 +23,9 @@ ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 ATTEMPTS = 3
 
 
-def get_anomaly_data(logger, edge_vars, main_vars, if_config_vars, time_now):
+def get_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_time, end_time):
     # Format Request
     if_url = edge_vars['if_url']
-
-    end_time = (time_now + edge_vars['edge_timezone_offset']) * 1000
-    start_time = end_time - if_config_vars['query_timewindow_of_multiple_run_interval'] * if_config_vars[
-        'run_interval'] * 1000
 
     data = {'projectName': edge_vars['project_name'], 'transferToProjectName': main_vars['project_name'],
             'transferToCustomerName': main_vars['user_name'],
@@ -160,6 +156,8 @@ def get_config_vars(logger, config_ini):
             main_https_proxy = config_parser.get('main', 'https_proxy')
 
             # if config
+            # time range
+            his_time_range = config_parser.get('insightfinder', 'his_time_range')
             run_interval = config_parser.get('insightfinder', 'run_interval')
             query_timewindow_of_multiple_run_interval = config_parser.get('insightfinder',
                                                                           'query_timewindow_of_multiple_run_interval')
@@ -228,6 +226,9 @@ def get_config_vars(logger, config_ini):
         if len(main_https_proxy) > 0:
             main_proxies['https'] = main_https_proxy
 
+        if len(his_time_range) != 0:
+            his_time_range = [x for x in his_time_range.split(',') if x.strip()]
+            his_time_range = [int(arrow.get(x).float_timestamp) for x in his_time_range]
         if len(run_interval) == 0:
             return config_error(logger, 'run_interval')
         if run_interval.endswith('s'):
@@ -270,6 +271,7 @@ def get_config_vars(logger, config_ini):
         }
 
         if_config_vars = {
+            'his_time_range': his_time_range,
             'run_interval': int(run_interval),  # as seconds
             'query_timewindow_of_multiple_run_interval': query_timewindow_of_multiple_run_interval,
         }
@@ -548,9 +550,28 @@ def worker_process(args):
         if not check_success:
             return
 
-    # start run
-    edge_data = get_anomaly_data(logger, edge_vars, main_vars, if_config_vars, time_now)
-    send_anomaly_data(logger, c_config, main_vars, edge_data)
+    logger.debug('history range config: {}'.format(if_config_vars['his_time_range']))
+    if if_config_vars['his_time_range']:
+        logger.debug('Using time range for replay data')
+        for timestamp in range(if_config_vars['his_time_range'][0],
+                               if_config_vars['his_time_range'][1],
+                               if_config_vars['run_interval']):
+            start_time = int(arrow.get(timestamp).float_timestamp * 1000)
+            end_time = int(arrow.get(timestamp + if_config_vars['run_interval']).float_timestamp * 1000)
+
+            # start run
+            edge_data = get_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_time, end_time)
+            send_anomaly_data(logger, c_config, main_vars, edge_data)
+    else:
+        logger.debug('Using current time for streaming data')
+
+        end_time = (time_now + edge_vars['edge_timezone_offset']) * 1000
+        start_time = end_time - if_config_vars['query_timewindow_of_multiple_run_interval'] * if_config_vars[
+            'run_interval'] * 1000
+
+        # start run
+        edge_data = get_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_time, end_time)
+        send_anomaly_data(logger, c_config, main_vars, edge_data)
 
     logger.info("Process is done with config: {}".format(config_file))
     return True
@@ -591,10 +612,12 @@ if __name__ == "__main__":
     pool.close()
 
     # wait 5 minutes for every worker to finish
-    pool_result.wait(timeout=cli_config_vars['timeout'])
+    need_timeout = cli_config_vars['timeout'] > 0
+    if need_timeout:
+        pool_result.wait(timeout=cli_config_vars['timeout'])
 
     try:
-        results = pool_result.get(timeout=1)
+        results = pool_result.get(timeout=1 if need_timeout else None)
         pool.join()
     except TimeoutError:
         main_logger.error("We lacked patience and got a multiprocessing.TimeoutError")
