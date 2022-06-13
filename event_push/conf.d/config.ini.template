@@ -35,6 +35,10 @@ http_proxy =
 https_proxy =
 
 [insightfinder]
+# history data time config. If these options is set, the agent will query results by time range
+# time range, Example: 2022-06-10 00:00:00,2022-06-13 00:00:00
+his_time_range =
+# For streaming data, this var is the interval with cron, For history data, this var is the interval of each api call, could set to 1440.
 run_interval = 60
 # The time window of the requested data, in multiples of run_interval. Default is 3.
 query_timewindow_of_multiple_run_interval = 3
