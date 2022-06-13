@@ -47,13 +47,6 @@ User `-p` to define max processes, use `--timeout` to define max timeout.
 ./setup/test_agent.sh
 ```
 
-###### Run agent with history data:
-For the agent to replay history data, it will need to run with `--timeout 0`. 
-
-```bash
-venv/bin/python3 event_push.py --timeout 0
-```
-
 ###### Run agent with cron:
 For the agent to run continuously, it will need to run as a cron job with `cron.py`. 
 
@@ -69,7 +62,17 @@ Once the cron is running, you can stop the agent by kill the `cron.py` process.
 jobs -l
 # kill the cron process
 kill -9 PID
-``` 
+```
+
+###### Run agent with history data:
+For the agent to replay history data, it will need to run with `--timeout 0`.
+ 
+Before run agent, please set `his_time_range` and `run_interval` in the config file. Please follow the description of these config vars. 
+
+```bash
+venv/bin/python3 event_push.py --timeout 0
+```
+ 
 
 ### Config Variables
 #### Insightfinder edge cluster
