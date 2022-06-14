@@ -236,9 +236,10 @@ def check_buffer(lock, log_buffer, logger, c_config, if_config_vars, agent_confi
     # send data
     for project, buffer in project_data_map.items():
         # check project name first
-        check_success = check_project_exist(logger, if_config_vars, project)
-        if not check_success:
-            sys.exit(1)
+        if not c_config['testing']:
+            check_success = check_project_exist(logger, if_config_vars, project)
+            if not check_success:
+                sys.exit(1)
 
         track = {'current_row': [], 'line_count': 0}
         for row in buffer:
