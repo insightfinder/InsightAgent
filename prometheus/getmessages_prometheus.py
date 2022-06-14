@@ -1122,10 +1122,12 @@ if __name__ == "__main__":
     pool.close()
 
     # wait 5 minutes for every worker to finish
-    pool_result.wait(timeout=cli_config_vars['timeout'])
+    need_timeout = cli_config_vars['timeout'] > 0
+    if need_timeout:
+        pool_result.wait(timeout=cli_config_vars['timeout'])
 
     try:
-        results = pool_result.get(timeout=1)
+        results = pool_result.get(timeout=1 if need_timeout else None)
         pool.join()
     except TimeoutError:
         main_logger.error("We lacked patience and got a multiprocessing.TimeoutError")

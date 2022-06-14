@@ -3,7 +3,7 @@ This agent get events from Insightfinder edge cluster and sends it to Insightfin
 ## Installing the Agent
 
 ### Required Dependencies:
-1. Python 3.x 
+1. Python >= 3.6.8
 1. Pip3
 
 ###### Installation Steps:
@@ -62,7 +62,17 @@ Once the cron is running, you can stop the agent by kill the `cron.py` process.
 jobs -l
 # kill the cron process
 kill -9 PID
-``` 
+```
+
+###### Run agent with history data:
+For the agent to replay history data, it will need to run with `--timeout 0`.
+ 
+Before run agent, please set `his_time_range` and `run_interval` in the config file. Please follow the description of these config vars. 
+
+```bash
+venv/bin/python3 event_push.py --timeout 0
+```
+ 
 
 ### Config Variables
 #### Insightfinder edge cluster
@@ -90,7 +100,8 @@ kill -9 PID
 * `https_proxy`: As above, but HTTPS.
 
 #### Runtime config
-* **`run_interval`**: How frequently (in Minutes) the agent is ran.
+* `his_time_range`: History data time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00. If this option is set, the agent will query results by time range.
+* **`run_interval`**: How frequently (in Minutes) the agent is ran. For history data, this var is the time range of each api call, could set to 1440.
 * **`query_timewindow_of_multiple_run_interval`**: The time window of the requested data, in multiples of run_interval. Default is 3.
 
 
