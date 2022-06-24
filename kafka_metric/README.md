@@ -61,6 +61,19 @@ sudo ./setup/install_cron.sh --monitor
 ###### Stopping the agent:
 Once the cron is running, you can stop the agent removing the cron file or commenting the line in the cron file, then kill all of it's relevant processes.
 
+To stop the cron, you can either comment out the line in the cron file that is created, or you can delete the file itself.
+```#To comment out the line, use the # symbol at the start of the line
+vi /etc/cron.d/kafka_metric
+# <cron>
+```
+```#To delete the file, run this command
+sudo rm /etc/cron.d/kafka_metric
+```
+
+```#To kill the agent, first print the list of processes running, then kill the agent processes based on their process ID.
+ps auwx | grep getmessages_kafka_metric.py
+sudo kill <Processs ID>
+```
 ### Config Variables
 * **`bootstrap_servers`**: Comma-delimited list of `host[:port]` Kafka servers to connect to.
 * **`topics`**: Topics in Kafka to subscribe to.
