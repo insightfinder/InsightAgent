@@ -51,18 +51,15 @@ This will connect to the Kafka instance, but it will not send any data to Insigh
 ###### Add agent to the cron:
 For the agent to run continuously, it will need to be added as a cron job. 
 
-The install_cron.sh script will add a cron file to run the agent on a regular schedule.
+The install_cron.sh script will add a cron file to run the agent.  
 
 ```bash
-# Display the cron entry without adding it 
-./setup/install_cron.sh  --monitor --display
-
 # Add the cron entry, once you are ready to start streaming
-sudo ./setup/install_cron.sh --monitor --create
+sudo ./setup/install_cron.sh --monitor
 ```
 
-###### Pausing or stopping the agent:
-Once the cron is running, you can either pause the agent by commenting out the relevant line in the cron file or stop the agent by removing the cron file. 
+###### Stopping the agent:
+Once the cron is running, you can stop the agent removing the cron file or commenting the line in the cron file, then kill all of it's relevant processes.
 
 ### Config Variables
 * **`bootstrap_servers`**: Comma-delimited list of `host[:port]` Kafka servers to connect to.
