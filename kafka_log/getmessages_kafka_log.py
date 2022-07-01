@@ -63,20 +63,30 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
     # subscribe to given topics
     consumer.subscribe(agent_config_vars['topics'])
 
-    for msg in consumer:
+    while True:
         try:
-            msg_value = msg.value
-            if isinstance(msg.value, bytes):
-                msg_value = msg_value.decode("utf-8")
-            if agent_config_vars['initial_filter'] \
-                    and not agent_config_vars['initial_filter'].search(msg_value):
+            msg_pack = consumer.poll(timeout_ms=10)
+
+            if not msg_pack:
+                logger.info('No data received, waiting...')
+                time.sleep(20)
                 continue
-            messages.put(msg_value)
+
+            for tp, msgs in msg_pack.items():
+                for msg in msgs:
+                    msg_value = msg.value
+                    if isinstance(msg_value, bytes):
+                        msg_value = msg_value.decode("utf-8")
+                    if agent_config_vars['initial_filter'] \
+                            and not agent_config_vars['initial_filter'].search(msg_value):
+                        continue
+                    messages.put(msg_value)
+
         except Exception as e:
-            logger.warn('Error when parsing message')
-            logger.warn(e)
+            # Handle any exception here
+            logger.error('Error when poll messages')
+            logger.error(e)
             logger.debug(traceback.format_exc())
-            continue
 
     logger.info('Closed data process......')
 
