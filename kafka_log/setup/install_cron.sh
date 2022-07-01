@@ -15,6 +15,10 @@ function is_dry_run() {
   [[ ${DRY_RUN} -gt 0 ]]
 }
 
+function is_monitor() {
+  [[ ${MONITOR} -gt 0 ]]
+}
+
 # Get min value from conf.d/*.ini settings
 function get_config_setting() {
   if [[ -d conf.d ]]; then 
@@ -68,7 +72,7 @@ function abspath() {
 
 function check_agent() {
   echo "adding monitoring cron job to automatically restart agent"
-  echo "*/5 * * * * ${CRON_USER} $(abspath "./")/monitor.sh" 2>&1 | tee -a ${CRON_FILE};
+  echo "*/5 * * * * ${CRON_USER} $(abspath "./")/monitor.sh > ${AGENT_FULL_PATH_LOG}" 2>&1 | tee -a ${CRON_FILE};
 }
 
 case "$1" in
@@ -79,7 +83,7 @@ case "$1" in
   DRY_RUN=1
   ;;
 -m | --monitor)
-  check_agent
+  MONITOR=1
   ;;
 *)
   echo_params
@@ -138,6 +142,12 @@ CRON_COMMAND="command -p ${PY_CMD} ${AGENT_FULL_PATH} > ${AGENT_FULL_PATH_LOG} 2
 RUN_INTERVAL_VAL=${RUN_INTERVAL}
 RUN_INTERVAL_UNIT="${RUN_INTERVAL: -1}"
 
+# Create cron file with monitor script
+if is_monitor; then
+  check_agent
+  exit
+fi
+
 # create files
 if ! is_dry_run; then
   touch ${CRON_FILE}
@@ -178,6 +188,7 @@ h) # hours
   echo_usage
   ;;
 esac
+
 # end with a blank line
 echo "" 2>&1 | if is_dry_run; then awk '{print}'; else tee -a ${CRON_FILE}; fi
 

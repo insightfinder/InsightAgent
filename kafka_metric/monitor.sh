@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Change working dir to script location
+cd ${0%/*}
 
 # Get value from agent.txt settings
 function get_agent_setting() {
@@ -34,7 +36,7 @@ PY_CMD="$(abspath "./venv/bin/python3")"
 AGENT="$(get_agent_setting ^name)"
 AGENT_FULL_PATH="$(abspath "./$(get_agent_setting ^script_name)")"
 AGENT_FULL_PATH_LOG="$(abspath "./")/log.out"
-CRON_COMMAND="command -p nohup ${PY_CMD} ${AGENT_FULL_PATH} > ${AGENT_FULL_PATH_LOG} 2>&1"
+CRON_COMMAND="command -p nohup ${PY_CMD} ${AGENT_FULL_PATH} 2>&1 &"
 
 status=`ps x | grep -v grep | grep -c "$(get_agent_setting ^script_name)"`
   if [[ $status == 0 ]] ; then
