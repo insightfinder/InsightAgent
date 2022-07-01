@@ -11,6 +11,7 @@ import urllib.parse
 import http.client
 import shlex
 import traceback
+import signal
 from sys import getsizeof
 from optparse import OptionParser
 from threading import Thread, Lock
@@ -62,20 +63,30 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
     # subscribe to given topics
     consumer.subscribe(agent_config_vars['topics'])
 
-    for msg in consumer:
+    while True:
         try:
-            msg_value = msg.value
-            if isinstance(msg.value, bytes):
-                msg_value = msg_value.decode("utf-8")
-            if agent_config_vars['initial_filter'] \
-                    and not agent_config_vars['initial_filter'].search(msg_value):
+            msg_pack = consumer.poll(timeout_ms=10)
+
+            if not msg_pack:
+                logger.info('No data received, waiting...')
+                time.sleep(20)
                 continue
-            messages.put(msg_value)
+
+            for tp, msgs in msg_pack.items():
+                for msg in msgs:
+                    msg_value = msg.value
+                    if isinstance(msg_value, bytes):
+                        msg_value = msg_value.decode("utf-8")
+                    if agent_config_vars['initial_filter'] \
+                            and not agent_config_vars['initial_filter'].search(msg_value):
+                        continue
+                    messages.put(msg_value)
+
         except Exception as e:
-            logger.warn('Error when parsing message')
-            logger.warn(e)
+            # Handle any exception here
+            logger.error('Error when poll messages')
+            logger.error(e)
             logger.debug(traceback.format_exc())
-            continue
 
     logger.info('Closed data process......')
 
@@ -651,30 +662,6 @@ def format_command(cmd):
     return list(cmd)
 
 
-def initialize_data_gathering(logger, log_queue, cli_config_vars, if_config_vars, agent_config_vars):
-    # raw data
-    messages = Queue()
-    # parsed data
-    datas = Queue()
-
-    # consumer process
-    for x in range(multiprocessing.cpu_count()):
-        d = Process(target=process_get_data,
-                    args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages))
-        d.daemon = True
-        d.start()
-
-    # parser process
-    for x in range(multiprocessing.cpu_count()):
-        d = Process(target=process_parse_messages,
-                    args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, datas))
-        d.daemon = True
-        d.start()
-
-    # build buffer and send data
-    process_build_buffer(logger, cli_config_vars, if_config_vars, agent_config_vars, datas)
-
-
 def reset_track(track):
     """ reset the track global for the next chunk """
     track['current_row'] = []
@@ -1007,8 +994,45 @@ def main():
     print_summary_info(logger, if_config_vars, agent_config_vars)
 
     # start run
-    initialize_data_gathering(logger, log_queue, cli_config_vars, if_config_vars, agent_config_vars)
-    logger.info("Process is done with config: {}".format(config_file))
+    # raw data
+    messages = Queue()
+    # parsed data
+    datas = Queue()
+    # all processes
+    processes = []
+
+    # consumer process
+    for x in range(multiprocessing.cpu_count()):
+        d = Process(target=process_get_data,
+                    args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages))
+        d.daemon = True
+        d.start()
+        processes.append(d)
+
+    # parser process
+    for x in range(multiprocessing.cpu_count()):
+        d = Process(target=process_parse_messages,
+                    args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, datas))
+        d.daemon = True
+        d.start()
+        processes.append(d)
+
+    def term(sig_num, addtion):
+        try:
+            for p in processes:
+                logger.info('process %d terminate' % p.pid)
+                p.terminate()
+
+            logger.info("Process is done with config: {}".format(config_file))
+            time.sleep(1)
+            sys.exit(1)
+        except Exception as e:
+            logger.error(str(e))
+
+    signal.signal(signal.SIGTERM, term)
+
+    # build buffer and send data
+    process_build_buffer(logger, cli_config_vars, if_config_vars, agent_config_vars, datas)
 
 
 if __name__ == "__main__":
