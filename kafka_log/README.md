@@ -3,7 +3,7 @@ This agent collects data from kafka and sends it to Insightfinder.
 ## Installing the Agent
 
 ### Required Dependencies:
-1. Python 3.x 
+1. Python >= 3.6.8
 1. Pip3
 
 ###### Installation Steps:
@@ -19,6 +19,14 @@ This agent collects data from kafka and sends it to Insightfinder.
 The final steps are described in more detail below. 
 
 ###### Configure venv and python dependencies:
+Before configure python venv, please install `librdkafka` first.
+
+```bash
+git clone https://github.com/edenhill/librdkafka.git
+cd librdkafka
+./configure --prefix=/usr && make -j && sudo make install
+```
+
 The configure_python.sh script sets up a virtual python environment and installs all required libraries for running the agent. 
 
 ```bash
