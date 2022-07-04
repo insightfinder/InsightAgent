@@ -480,6 +480,11 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
         buffer_sampling_interval_multiple = int(
             buffer_sampling_interval_multiple.strip()) if buffer_sampling_interval_multiple.strip() else 2
 
+        if len(timestamp_fields) == 0:
+            return config_error(logger, 'timestamp_field')
+        if len(instance_fields) == 0:
+            return config_error(logger, 'instance_field')
+
         # proxies
         agent_proxies = dict()
         if len(agent_http_proxy) > 0:

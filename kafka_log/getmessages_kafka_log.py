@@ -144,9 +144,11 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                 project = make_safe_project_string(project)
 
             # instance name
-            instance = message.get(
-                agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
-                    agent_config_vars['instance_field']) > 0 else 'instance')
+            instance = 'Application'
+            instance_field = agent_config_vars['instance_field']
+            if instance_field and len(instance_field) > 0:
+                instances = [message.get(d) for d in instance_field if message.get(d)]
+                instance = '-'.join(instances) if len(instances) > 0 else None
             # filter by instance whitelist
             if agent_config_vars['instance_whitelist_regex'] \
                     and not agent_config_vars['instance_whitelist_regex'].match(instance):
@@ -156,9 +158,8 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
             device = None
             device_field = agent_config_vars['device_field']
             if device_field and len(device_field) > 0:
-                devices = [message.get('metric').get(d) for d in device_field]
-                devices = [d for d in devices if d]
-                device = devices[0] if len(devices) > 0 else None
+                devices = [message.get(d) for d in device_field if message.get(d)]
+                device = '-'.join(devices) if len(devices) > 0 else None
             full_instance = make_safe_instance_string(instance, device)
 
             # get component
@@ -168,18 +169,18 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                 if component:
                     component = make_safe_instance_string(component)
 
-            # get message
-            log_message = message.get(agent_config_vars['log_content_field']) if agent_config_vars[
-                'log_content_field'] else message
-            if not log_message:
-                continue
-
             # get timestamp
             timestamp = message.get(agent_config_vars['timestamp_field'][0])
             timestamp = int(timestamp) * 1000
             # set offset for timestamp
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
             # timestamp = str(timestamp)
+
+            # get message
+            log_message = message.get(agent_config_vars['log_content_field']) if agent_config_vars[
+                'log_content_field'] else message
+            if not log_message:
+                continue
 
             # build log entry
             log_entry = {
@@ -445,6 +446,11 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
         timestamp_fields = [x.strip() for x in timestamp_field.split(',') if x.strip()]
         instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
         device_fields = [x.strip() for x in device_field.split(',') if x.strip()]
+
+        if len(timestamp_fields) == 0:
+            return config_error(logger, 'timestamp_field')
+        if len(instance_fields) == 0:
+            return config_error(logger, 'instance_field')
 
         # proxies
         agent_proxies = dict()
