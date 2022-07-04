@@ -23,7 +23,9 @@ import arrow
 import pytz
 import regex
 import requests
-from kafka import KafkaConsumer
+from confluent_kafka import Consumer
+from confluent_kafka.avro import AvroConsumer
+from confluent_kafka.avro.serializer import SerializerError
 
 """
 This script gathers data to send to Insightfinder
@@ -55,8 +57,10 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
     worker_configurer(log_queue, cli_config_vars['log_level'])
     logger = logging.getLogger('worker')
     logger.info('Started data consumer process ......')
-    consumer = KafkaConsumer(**agent_config_vars['kafka_kwargs'])
-    if len(consumer.topics()) == 0:
+    is_avro = agent_config_vars['kafka_kwargs'].get('schema.registry.url') is not None
+    consumer = AvroConsumer(**agent_config_vars['kafka_kwargs']) if is_avro else Consumer(
+        **agent_config_vars['kafka_kwargs'])
+    if not consumer.list_topics():
         config_error(logger, 'kafka connection error')
         sys.exit(1)
 
@@ -65,22 +69,31 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
 
     while True:
         try:
-            msg_pack = consumer.poll(timeout_ms=10)
+            msg = consumer.poll(10)
 
-            if not msg_pack:
+            if msg is None:
                 logger.info('No data received, waiting...')
                 time.sleep(20)
                 continue
 
-            for tp, msgs in msg_pack.items():
-                for msg in msgs:
-                    msg_value = msg.value
-                    if isinstance(msg_value, bytes):
-                        msg_value = msg_value.decode("utf-8")
-                    if agent_config_vars['initial_filter'] \
-                            and not agent_config_vars['initial_filter'].search(msg_value):
-                        continue
-                    messages.put(msg_value)
+            if msg.error():
+                if is_avro:
+                    logger.error("AvroConsumer error: {}".format(msg.error()))
+                else:
+                    logger.error("Consumer error: {}".format(msg.error()))
+                continue
+
+            msg_value = msg.value()
+            if isinstance(msg_value, bytes):
+                msg_value = msg_value.decode("utf-8")
+            if agent_config_vars['initial_filter'] \
+                    and not agent_config_vars['initial_filter'].search(msg_value):
+                continue
+            messages.put(msg_value)
+
+        except SerializerError as e:
+            logger.error("Message deserialization failed for {}: {}".format(msg, e))
+            break
 
         except Exception as e:
             # Handle any exception here
@@ -88,6 +101,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
             logger.error(e)
             logger.debug(traceback.format_exc())
 
+    consumer.close()
     logger.info('Closed data process......')
 
 
@@ -306,56 +320,74 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             # agent settings
             kafka_config = {
                 # hardcoded
-                'api_version': (0, 9),
-                'auto_offset_reset': 'latest',
-                'consumer_timeout_ms': 30 * if_config_vars['sampling_interval'] * 1000 if 'METRIC' in if_config_vars[
-                    'project_type'] or 'LOG' in if_config_vars['project_type'] else None,
+                'auto.offset.reset': 'latest',
 
                 # consumer settings
-                'bootstrap_servers': config_parser.get('agent', 'bootstrap_servers'),
-                'group_id': config_parser.get('agent', 'group_id'),
-                'client_id': config_parser.get('agent', 'client_id'),
+                'bootstrap.servers': config_parser.get('agent', 'bootstrap.servers'),
+                'group.id': config_parser.get('agent', 'group.id'),
+                'client.id': config_parser.get('agent', 'client.id') or None,
+                'api.version.request': config_parser.get('agent', 'api.version.request'),
+                'broker.version.fallback': config_parser.get('agent', 'broker.version.fallback') or None,
+
+                # avro
+                'schema.registry.url': config_parser.get('agent', 'schema.registry.url') or None,
 
                 # SSL
-                'security_protocol': 'SSL' if config_parser.get('agent', 'security_protocol') == 'SSL' else 'PLAINTEXT',
-                'ssl_context': config_parser.get('agent', 'ssl_context'),
-                'ssl_cafile': config_parser.get('agent', 'ssl_cafile'),
-                'ssl_certfile': config_parser.get('agent', 'ssl_certfile'),
-                'ssl_keyfile': config_parser.get('agent', 'ssl_keyfile'),
-                'ssl_password': config_parser.get('agent', 'ssl_password'),
-                'ssl_crlfile': config_parser.get('agent', 'ssl_crlfile'),
-                'ssl_ciphers': config_parser.get('agent', 'ssl_ciphers'),
-                'ssl_check_hostname': config_parser.get('agent', 'ssl_check_hostname'),
+                'security.protocol': config_parser.get('agent', 'security.protocol') or None,
+                'ssl.ca.location': config_parser.get('agent', 'ssl.ca.location') or None,
+                'ssl.key.location': config_parser.get('agent', 'ssl.key.location') or None,
+                'ssl.key.password': config_parser.get('agent', 'ssl.key.password') or None,
+                'ssl.certificate.location': config_parser.get('agent', 'ssl.certificate.location') or None,
+                'ssl.crl.location': config_parser.get('agent', 'ssl.crl.location') or None,
+                'ssl.keystore.location': config_parser.get('agent', 'ssl.keystore.location') or None,
+                'ssl.keystore.password': config_parser.get('agent', 'ssl.keystore.password') or None,
+                'ssl.engine.location': config_parser.get('agent', 'ssl.engine.location') or None,
 
                 # SASL
-                'sasl_mechanism': config_parser.get('agent', 'sasl_mechanism'),
-                'sasl_plain_username': config_parser.get('agent', 'sasl_plain_username'),
-                'sasl_plain_password': config_parser.get('agent', 'sasl_plain_password'),
-                'sasl_kerberos_service_name': config_parser.get('agent', 'sasl_kerberos_service_name'),
-                'sasl_kerberos_domain_name': config_parser.get('agent', 'sasl_kerberos_domain_name'),
-                'sasl_oauth_token_provider': config_parser.get('agent', 'sasl_oauth_token_provider')
+                'sasl.mechanisms': config_parser.get('agent', 'sasl.mechanisms') or None,
+                'sasl.mechanism': config_parser.get('agent', 'sasl.mechanism') or None,
+                'sasl.kerberos.service.name': config_parser.get('agent', 'sasl.kerberos.service.name') or None,
+                'sasl.kerberos.principal': config_parser.get('agent', 'sasl.kerberos.principal') or None,
+                'sasl.username': config_parser.get('agent', 'sasl.username') or None,
+                'sasl.password': config_parser.get('agent', 'sasl.password') or None,
+                'sasl.oauthbearer.config': config_parser.get('agent', 'sasl.oauthbearer.config') or None,
+                'enable.sasl.oauthbearer.unsecure.jwt': config_parser.get('agent',
+                                                                          'enable.sasl.oauthbearer.unsecure.jwt'),
+                'sasl.oauthbearer.method': config_parser.get('agent', 'sasl.oauthbearer.method') or None,
+                'sasl.oauthbearer.client.id': config_parser.get('agent', 'sasl.oauthbearer.client.id') or None,
+                'sasl.oauthbearer.client.secret': config_parser.get('agent', 'sasl.oauthbearer.client.secret') or None,
+                'sasl.oauthbearer.scope': config_parser.get('agent', 'sasl.oauthbearer.scope') or None,
+                'sasl.oauthbearer.extensions': config_parser.get('agent', 'sasl.oauthbearer.extensions') or None,
+                'sasl.oauthbearer.token.endpoint.url': config_parser.get('agent',
+                                                                         'sasl.oauthbearer.token.endpoint.url') or None,
             }
             # only keep settings with values
             kafka_kwargs = {k: v for (k, v) in list(kafka_config.items()) if v}
 
             # handle boolean setting
-            if kafka_kwargs.get('ssl_check_hostname'):
-                kafka_kwargs['ssl_check_hostname'] = kafka_kwargs['ssl_check_hostname'].lower() == 'true'
+            if kafka_kwargs.get('api.version.request'):
+                kafka_kwargs['api.version.request'] = kafka_kwargs['api.version.request'].lower() == 'true'
             else:
-                kafka_kwargs['ssl_check_hostname'] = False
+                kafka_kwargs['api.version.request'] = False
+            if kafka_kwargs.get('enable.sasl.oauthbearer.unsecure.jwt'):
+                kafka_kwargs['enable.sasl.oauthbearer.unsecure.jwt'] = kafka_kwargs[
+                                                                           'enable.sasl.oauthbearer.unsecure.jwt'].lower() == 'true'
+            else:
+                kafka_kwargs['enable.sasl.oauthbearer.unsecure.jwt'] = False
 
             # handle required arrays
             # bootstrap serverss
-            if len(kafka_kwargs.get('bootstrap_servers')) != 0:
-                kafka_kwargs['bootstrap_servers'] = [x.strip() for x in kafka_kwargs['bootstrap_servers'].split(',') if
-                                                     x.strip()]
+            if len(kafka_kwargs.get('bootstrap.servers')) != 0:
+                kafka_kwargs['bootstrap.servers'] = ','.join(
+                    [x.strip() for x in kafka_kwargs['bootstrap.servers'].split(',') if
+                     x.strip()])
             else:
-                return config_error(logger, 'bootstrap_servers')
+                return config_error(logger, 'bootstrap.servers')
             # group_id
-            if len(kafka_kwargs.get('group_id')) != 0:
-                kafka_kwargs['group_id'] = kafka_kwargs['group_id'].strip()
+            if len(kafka_kwargs.get('group.id')) != 0:
+                kafka_kwargs['group.id'] = kafka_kwargs['group.id'].strip()
             else:
-                return config_error(logger, 'group_id')
+                return config_error(logger, 'group.id')
             # topics
             if len(config_parser.get('agent', 'topics')) != 0:
                 topics = [x.strip() for x in config_parser.get('agent', 'topics').split(',') if x.strip()]
