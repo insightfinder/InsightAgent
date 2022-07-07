@@ -19,12 +19,14 @@ This agent collects data from kafka and sends it to Insightfinder.
 The final steps are described in more detail below. 
 
 ###### Configure venv and python dependencies:
-Before configure python venv, please install `librdkafka` first.
+Before configure python venv, please install `librdkafka` and `ca-certificates` first.
 
 ```bash
 git clone https://github.com/edenhill/librdkafka.git
 cd librdkafka
 ./configure --prefix=/usr && make -j && sudo make install
+
+sudo yum reinstall ca-certificates
 ```
 
 The configure_python.sh script sets up a virtual python environment and installs all required libraries for running the agent. 
@@ -82,6 +84,7 @@ sudo rm /etc/cron.d/kafka_metric
 ps auwx | grep getmessages_kafka_metric.py
 sudo kill <Processs ID>
 ```
+
 ### Config Variables
 * **`bootstrap.servers`**: Comma-delimited list of `host[:port]` Kafka servers to connect to.
 * **`group.id`**: Group ID to use in Kafka connection.
@@ -89,7 +92,9 @@ sudo kill <Processs ID>
 * `api.version.request`: If you use Kafka broker 0.9 or 0.8 you must set api.version.request=false and set broker.version.fallback to your broker version, e.g broker.version.fallback=0.9.0.1.
 * `broker.version.fallback`: If you use Kafka broker 0.9 or 0.8 you must set api.version.request=false and set broker.version.fallback to your broker version, e.g broker.version.fallback=0.9.0.1.
 * **`topics`**: Topics in Kafka to subscribe to.
-* `schema.registry.url`: Url for avro schema.
+* `schema.registry.url`: Comma-separated list of URLs for Schema Registry instances that can be used to register or look up schemas.
+* `basic.auth.credentials.source`: Specify how to pick the credentials for the Basic authentication header. The supported values are URL, USER_INFO and SASL_INHERIT.
+* `basic.auth.user.info`: Specify the user info for the Basic authentication in the form of {username}:{password}. schema.registry.basic.auth.user.info is a deprecated alias for this configuration.
 * `security.protocol`: Security protocol to use. Valid options are `PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL`.
 * `ssl.ca.location`: File or directory path to CA certificate(s) for verifying the broker's key. Defaults: On Windows the system's CA certificates are automatically looked up in the Windows Root certificate store. On Mac OSX this configuration defaults to probe. It is recommended to install openssl using Homebrew, to provide CA certificates. On Linux install the distribution's ca-certificates package. If OpenSSL is statically linked or ssl.ca.location is set to probe a list of standard paths will be probed and the first one found will be used as the default CA certificate location path. If OpenSSL is dynamically linked the OpenSSL library's default path will be used (see OPENSSLDIR in openssl version -a).
 * `ssl.key.location`: Path to client's private key (PEM) used for authentication.
@@ -101,10 +106,10 @@ sudo kill <Processs ID>
 * `ssl.engine.location`: Path to OpenSSL engine library. OpenSSL >= 1.1.0 required.
 * `sasl.mechanisms`: SASL mechanism to use for authentication. Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER. NOTE: Despite the name only one mechanism must be configured.
 * `sasl.mechanism`: Alias for sasl.mechanisms: SASL mechanism to use for authentication. Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER. NOTE: Despite the name only one mechanism must be configured.
-* `sasl.kerberos.service.name`: Kerberos principal name that Kafka runs as, not including /hostname@REALM.
-* `sasl.kerberos.principal`: This client's Kerberos principal name. (Not supported on Windows, will use the logon user's principal).
 * `sasl.username`: SASL username for use with the PLAIN and SASL-SCRAM-.. mechanisms.
 * `sasl.password`: SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism.
+* `sasl.kerberos.service.name`: Kerberos principal name that Kafka runs as, not including /hostname@REALM.
+* `sasl.kerberos.principal`: This client's Kerberos principal name. (Not supported on Windows, will use the logon user's principal).
 * `sasl.oauthbearer.config`: SASL/OAUTHBEARER configuration. The format is implementation-dependent and must be parsed accordingly. The default unsecured token implementation (see https://tools.ietf.org/html/rfc7515#appendix-A.5) recognizes space-separated name=value pairs with valid names including principalClaimName, principal, scopeClaimName, scope, and lifeSeconds. The default value for principalClaimName is "sub", the default value for scopeClaimName is "scope", and the default value for lifeSeconds is 3600. The scope value is CSV format with the default value being no/empty scope. For example: principalClaimName=azp principal=admin scopeClaimName=roles scope=role1,role2 lifeSeconds=600. In addition, SASL extensions can be communicated to the broker via extension_NAME=value. For example: principal=admin extension_traceId=123.
 * `enable.sasl.oauthbearer.unsecure.jwt`: Enable the builtin unsecure JWT OAUTHBEARER token handler if no oauthbearer_refresh_cb has been set. This builtin handler should only be used for development or testing, and not in production.
 * `sasl.oauthbearer.method`: Set to "default" or "oidc" to control which login method to be used. If set to "oidc", the following properties must also be be specified: sasl.oauthbearer.client.id, sasl.oauthbearer.client.secret, and sasl.oauthbearer.token.endpoint.url.

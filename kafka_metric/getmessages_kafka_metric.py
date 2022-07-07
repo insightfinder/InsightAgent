@@ -3,7 +3,6 @@ import configparser
 import json
 import logging
 import os
-import queue
 import socket
 import sys
 import time
@@ -23,6 +22,7 @@ import arrow
 import pytz
 import regex
 import requests
+import certifi
 from confluent_kafka import Consumer
 from confluent_kafka.avro import AvroConsumer
 from confluent_kafka.avro.serializer import SerializerError
@@ -322,6 +322,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             kafka_config = {
                 # hardcoded
                 'auto.offset.reset': 'latest',
+                # 'session.timeout.ms': 45000,
 
                 # consumer settings
                 'bootstrap.servers': config_parser.get('agent', 'bootstrap.servers'),
@@ -332,10 +333,12 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
 
                 # avro
                 'schema.registry.url': config_parser.get('agent', 'schema.registry.url') or None,
+                'basic.auth.credentials.source': config_parser.get('agent', 'basic.auth.credentials.source') or None,
+                'basic.auth.user.info': config_parser.get('agent', 'basic.auth.user.info') or None,
 
                 # SSL
                 'security.protocol': config_parser.get('agent', 'security.protocol') or None,
-                'ssl.ca.location': config_parser.get('agent', 'ssl.ca.location') or None,
+                'ssl.ca.location': config_parser.get('agent', 'ssl.ca.location') or certifi.where(),
                 'ssl.key.location': config_parser.get('agent', 'ssl.key.location') or None,
                 'ssl.key.password': config_parser.get('agent', 'ssl.key.password') or None,
                 'ssl.certificate.location': config_parser.get('agent', 'ssl.certificate.location') or None,

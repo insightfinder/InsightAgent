@@ -13,6 +13,9 @@ broker.version.fallback =
 topics =
 # Set to avro schema url if use avro
 schema.registry.url =
+basic.auth.credentials.source =
+basic.auth.user.info =
+
 
 ## SSL
 # set to 'SSL' (or 'SASL_SSL' if SASL authentication is used).
@@ -28,10 +31,10 @@ ssl.engine.location =
 
 sasl.mechanisms =
 sasl.mechanism =
-sasl.kerberos.service.name =
-sasl.kerberos.principal =
 sasl.username =
 sasl.password =
+sasl.kerberos.service.name =
+sasl.kerberos.principal =
 sasl.oauthbearer.config =
 enable.sasl.oauthbearer.unsecure.jwt =
 sasl.oauthbearer.method =
