@@ -1,12 +1,4 @@
 [edge]
-## Edge Node Parameters
-user_name =
-license_key =
-project_name =
-# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
-project_type =
-# timezone, default is UTC
-timezone =
 # Edge Node URL including prefix [http, https]
 if_url =
 # default to 3 retries
@@ -15,18 +7,6 @@ http_proxy =
 https_proxy =
 
 [main]
-## Main IF Parameters
-user_name =
-license_key =
-# Name of the project created in the InsightFinder UI, If this project is not exist, agent will create it automatically.
-project_name =
-# Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
-system_name =
-# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
-project_type =
-# Set to `YES` if project is container.
-containerize = no
-sampling_interval = 10
 # Main IF URL including prefix [http, https]
 if_url =
 # default to 3 retries
@@ -38,7 +18,5 @@ https_proxy =
 # history data time config. If these options is set, the agent will query results by time range
 # time range, Example: 2022-06-10 00:00:00,2022-06-13 00:00:00
 his_time_range =
-# For streaming data, this var is the interval with cron, For history data, this var is the interval of each api call, could set to 1440.
+# For streaming data, this var is the interval with cron, could set to 60. For history data, this var is the time range of each api call, could set to 1440.
 run_interval = 60
-# The time window of the requested data, in multiples of run_interval. Default is 3.
-query_timewindow_of_multiple_run_interval = 3
