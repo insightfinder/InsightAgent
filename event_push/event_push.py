@@ -23,26 +23,19 @@ ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 ATTEMPTS = 3
 
 
-def get_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_time, end_time):
+def get_anomaly_data(logger, edge_vars, main_vars, if_config_vars):
     # Format Request
-    if_url = edge_vars['if_url']
-
-    data = {'projectName': edge_vars['project_name'], 'transferToProjectName': main_vars['project_name'],
-            'transferToCustomerName': main_vars['user_name'],
-            'startTime': start_time, 'endTime': end_time, 'licenseKey': edge_vars['license_key'],
-            'userName': edge_vars['user_name'], 'timezone': edge_vars['edge_timezone']}
-
-    url = if_url + '/api/v2/projectanomalytransfer'
-
-    logger.info(f"{url} {data}")
+    params = {}
+    url = edge_vars['if_url'] + '/api/v2/projectanomalytransferall'
+    logger.info(f"{url} {params}")
 
     # Send Request
-    resp = requests.get(url, params=data, verify=False)
+    resp = requests.get(url, params=params, verify=False)
     count = 0
     logger.info(f"HTTP Response Code: {resp.status_code}")
     while resp.status_code != 200 and count < edge_vars['retry']:
         time.sleep(60)
-        resp = requests.post(url, data=data, verify=False)
+        resp = requests.get(url, params=params, verify=False)
         logger.info(f"HTTP Response Code: {resp.status_code}")
         count += 1
 
@@ -57,21 +50,20 @@ def get_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_time, e
 
 
 def send_anomaly_data(logger, c_config, main_vars, data):
-    if_url = main_vars['if_url']
-    url = if_url + '/api/v2/projectanomalyreceive'
-    auth = {'licenseKey': main_vars['license_key'], 'userName': main_vars['user_name']}
-    logger.info(f"{url} {auth} {data}")
+    params = {}
+    url = main_vars['if_url'] + '/api/v2/projectanomalyreceive'
+    logger.info(f"{url} {params}")
 
     # do not send if only testing
     if c_config['testing']:
         return
 
-    resp = requests.post(url, params=auth, json=data, verify=False)
+    resp = requests.post(url, params=params, json=data, verify=False)
     count = 0
     logger.info(f"HTTP Response Code: {resp.status_code}")
     while resp.status_code != 200 and count < main_vars['retry']:
         time.sleep(60)
-        resp = requests.post(url, params=auth, json=data, verify=False)
+        resp = requests.post(url, params=params, json=data, verify=False)
         logger.info(f"HTTP Response Code: {resp.status_code}")
         count += 1
     return resp.status_code
@@ -132,24 +124,16 @@ def get_config_vars(logger, config_ini):
 
         try:
             # Edge Node Parameters
-            edge_user = config_parser.get('edge', 'user_name')
-            edge_license = config_parser.get('edge', 'license_key')
-            edge_project_name = config_parser.get('edge', 'project_name')
-            edge_project_type = config_parser.get('edge', 'project_type').upper()
-            edge_timezone = config_parser.get('edge', 'timezone') or 'UTC'
+            # edge_user = config_parser.get('edge', 'user_name')
+            # edge_license = config_parser.get('edge', 'license_key')
             edge_url = config_parser.get('edge', 'if_url')
             edge_retry = config_parser.get('edge', 'retry') or 3
             edge_http_proxy = config_parser.get('edge', 'http_proxy')
             edge_https_proxy = config_parser.get('edge', 'https_proxy')
 
             # Main IF Parameters
-            main_user = config_parser.get('main', 'user_name')
-            main_license = config_parser.get('main', 'license_key')
-            main_project_name = config_parser.get('main', 'project_name')
-            main_project_type = config_parser.get('main', 'project_type').upper()
-            containerize = config_parser.get('main', 'containerize').upper()
-            system_name = config_parser.get('main', 'system_name')
-            sampling_interval = config_parser.get('main', 'sampling_interval')
+            # main_user = config_parser.get('main', 'user_name')
+            # main_license = config_parser.get('main', 'license_key')
             main_url = config_parser.get('main', 'if_url')
             main_retry = config_parser.get('main', 'retry') or 3
             main_http_proxy = config_parser.get('main', 'http_proxy')
@@ -159,58 +143,10 @@ def get_config_vars(logger, config_ini):
             # time range
             his_time_range = config_parser.get('insightfinder', 'his_time_range')
             run_interval = config_parser.get('insightfinder', 'run_interval')
-            query_timewindow_of_multiple_run_interval = config_parser.get('insightfinder',
-                                                                          'query_timewindow_of_multiple_run_interval')
 
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             return config_error(logger)
-
-        # Placeholders for Metric as Metric is not configured
-        if edge_project_type not in {
-            'METRIC',
-            'METRICREPLAY',
-            'LOG',
-            'LOGREPLAY',
-            'INCIDENT',
-            'INCIDENTREPLAY',
-            'ALERT',
-            'ALERTREPLAY',
-            'DEPLOYMENT',
-            'DEPLOYMENTREPLAY'
-        }:
-            return config_error(logger, 'project_type')
-        if main_project_type not in {
-            'METRIC',
-            'METRICREPLAY',
-            'LOG',
-            'LOGREPLAY',
-            'INCIDENT',
-            'INCIDENTREPLAY',
-            'ALERT',
-            'ALERTREPLAY',
-            'DEPLOYMENT',
-            'DEPLOYMENTREPLAY'
-        }:
-            return config_error(logger, 'project_type')
-        is_replay = 'REPLAY' in main_project_type
-
-        if len(sampling_interval) == 0:
-            if 'METRIC' in main_project_type:
-                return config_error(logger, 'sampling_interval')
-            else:
-                # set default for non-metric
-                sampling_interval = 10
-
-        if sampling_interval.endswith('s'):
-            sampling_interval = int(sampling_interval[:-1])
-        else:
-            sampling_interval = int(sampling_interval) * 60
-
-        if len(edge_timezone) != 0:
-            edge_timezone_offset = int(arrow.now(edge_timezone).utcoffset().total_seconds())
-        else:
-            return config_error(logger, 'edge_timezone')
 
         # set edge proxies
         edge_proxies = dict()
@@ -235,45 +171,26 @@ def get_config_vars(logger, config_ini):
             run_interval = int(run_interval[:-1])
         else:
             run_interval = int(run_interval) * 60
-        if len(query_timewindow_of_multiple_run_interval) == 0:
-            query_timewindow_of_multiple_run_interval = 3
-        else:
-            try:
-                query_timewindow_of_multiple_run_interval = int(query_timewindow_of_multiple_run_interval)
-            except Exception as e:
-                logger.exception('Exception: ' + str(e))
-                return config_error(logger, 'query_timewindow_of_multiple_run_interval')
 
         edge = {
-            'user_name': edge_user,
-            'license_key': edge_license,
-            'project_name': edge_project_name,
-            'project_type': edge_project_type,
-            'edge_timezone': edge_timezone,
-            'edge_timezone_offset': edge_timezone_offset,
+            # 'user_name': edge_user,
+            # 'license_key': edge_license,
             'retry': edge_retry,
             'if_url': edge_url,
             'if_proxies': edge_proxies
         }
 
         main = {
-            'user_name': main_user,
-            'license_key': main_license,
-            'project_name': main_project_name,
-            'project_type': main_project_type,
-            'containerize': True if containerize == 'YES' else False,
-            'system_name': system_name,
-            'sampling_interval': int(sampling_interval),  # as seconds
+            # 'user_name': main_user,
+            # 'license_key': main_license,
             'retry': main_retry,
             'if_url': main_url,
             'if_proxies': main_proxies,
-            'is_replay': is_replay
         }
 
         if_config_vars = {
             'his_time_range': his_time_range,
             'run_interval': int(run_interval),  # as seconds
-            'query_timewindow_of_multiple_run_interval': query_timewindow_of_multiple_run_interval,
         }
 
         return edge, main, if_config_vars
@@ -377,97 +294,6 @@ def get_insight_agent_type_from_project_type(if_config_vars):
         return 'Custom'
 
 
-def check_project_exist(logger, if_config_vars):
-    is_project_exist = False
-    try:
-        logger.info('Starting check project: ' + if_config_vars['project_name'])
-        params = {
-            'operation': 'check',
-            'userName': if_config_vars['user_name'],
-            'licenseKey': if_config_vars['license_key'],
-            'projectName': if_config_vars['project_name'],
-        }
-        url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
-        response = send_request(logger, url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
-        if response == -1:
-            logger.error('Check project error: ' + if_config_vars['project_name'])
-        else:
-            result = response.json()
-            if result['success'] is False or result['isProjectExist'] is False:
-                logger.error('Check project error: ' + if_config_vars['project_name'])
-            else:
-                is_project_exist = True
-                logger.info('Check project success: ' + if_config_vars['project_name'])
-
-    except Exception as e:
-        logger.error(e)
-        logger.error('Check project error: ' + if_config_vars['project_name'])
-
-    create_project_sucess = False
-    if not is_project_exist:
-        try:
-            logger.info('Starting add project: ' + if_config_vars['project_name'])
-            params = {
-                'operation': 'create',
-                'userName': if_config_vars['user_name'],
-                'licenseKey': if_config_vars['license_key'],
-                'projectName': if_config_vars['project_name'],
-                'systemName': if_config_vars['system_name'] or if_config_vars['project_name'],
-                'instanceType': '',
-                'projectCloudType': 'Shadow',
-                'dataType': get_data_type_from_project_type(if_config_vars),
-                'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
-                'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
-                'samplingIntervalInSeconds': if_config_vars['sampling_interval'],
-            }
-            url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
-            response = send_request(logger, url, 'POST', data=params, verify=False,
-                                    proxies=if_config_vars['if_proxies'])
-            if response == -1:
-                logger.error('Add project error: ' + if_config_vars['project_name'])
-            else:
-                result = response.json()
-                if result['success'] is False:
-                    logger.error('Add project error: ' + if_config_vars['project_name'])
-                else:
-                    create_project_sucess = True
-                    logger.info('Add project success: ' + if_config_vars['project_name'])
-
-        except Exception as e:
-            logger.error(e)
-            logger.error('Add project error: ' + if_config_vars['project_name'])
-
-    if create_project_sucess:
-        # if create project is success, sleep 10s and check again
-        time.sleep(10)
-        try:
-            logger.info('Starting check project: ' + if_config_vars['project_name'])
-            params = {
-                'operation': 'check',
-                'userName': if_config_vars['user_name'],
-                'licenseKey': if_config_vars['license_key'],
-                'projectName': if_config_vars['project_name'],
-            }
-            url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
-            response = send_request(logger, url, 'POST', data=params, verify=False,
-                                    proxies=if_config_vars['if_proxies'])
-            if response == -1:
-                logger.error('Check project error: ' + if_config_vars['project_name'])
-            else:
-                result = response.json()
-                if result['success'] is False or result['isProjectExist'] is False:
-                    logger.error('Check project error: ' + if_config_vars['project_name'])
-                else:
-                    is_project_exist = True
-                    logger.info('Check project success: ' + if_config_vars['project_name'])
-
-        except Exception as e:
-            logger.error(e)
-            logger.error('Check project error: ' + if_config_vars['project_name'])
-
-    return is_project_exist
-
-
 def listener_configurer():
     """ set up logging according to the defined log level """
     # create a logging format
@@ -544,12 +370,6 @@ def worker_process(args):
         return
     print_summary_info(logger, edge_vars, main_vars, if_config_vars)
 
-    if not c_config['testing']:
-        # check project name first
-        check_success = check_project_exist(logger, main_vars)
-        if not check_success:
-            return
-
     logger.debug('history range config: {}'.format(if_config_vars['his_time_range']))
     if if_config_vars['his_time_range']:
         logger.debug('Using time range for replay data')
@@ -565,12 +385,8 @@ def worker_process(args):
     else:
         logger.debug('Using current time for streaming data')
 
-        end_time = (time_now + edge_vars['edge_timezone_offset']) * 1000
-        start_time = end_time - if_config_vars['query_timewindow_of_multiple_run_interval'] * if_config_vars[
-            'run_interval'] * 1000
-
         # start run
-        edge_data = get_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_time, end_time)
+        edge_data = get_anomaly_data(logger, edge_vars, main_vars, if_config_vars)
         send_anomaly_data(logger, c_config, main_vars, edge_data)
 
     logger.info("Process is done with config: {}".format(config_file))
