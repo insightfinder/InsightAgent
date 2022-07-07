@@ -17,32 +17,32 @@ basic.auth.credentials.source =
 basic.auth.user.info =
 
 
-## SSL
+## SSL, please refer document: https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md to set SSL config vars.
 # set to 'SSL' (or 'SASL_SSL' if SASL authentication is used).
 security.protocol =
 ssl.ca.location =
-ssl.key.location =
-ssl.key.password =
-ssl.certificate.location =
-ssl.crl.location =
-ssl.keystore.location =
-ssl.keystore.password =
-ssl.engine.location =
+# ssl.key.location =
+# ssl.key.password =
+# ssl.certificate.location =
+# ssl.crl.location =
+# ssl.keystore.location =
+# ssl.keystore.password =
+# ssl.engine.location =
 
 sasl.mechanisms =
-sasl.mechanism =
+# sasl.mechanism =
 sasl.username =
 sasl.password =
-sasl.kerberos.service.name =
-sasl.kerberos.principal =
-sasl.oauthbearer.config =
-enable.sasl.oauthbearer.unsecure.jwt =
-sasl.oauthbearer.method =
-sasl.oauthbearer.client.id =
-sasl.oauthbearer.client.secret =
-sasl.oauthbearer.scope =
-sasl.oauthbearer.extensions =
-sasl.oauthbearer.token.endpoint.url =
+# sasl.kerberos.service.name =
+# sasl.kerberos.principal =
+# sasl.oauthbearer.config =
+# enable.sasl.oauthbearer.unsecure.jwt =
+# sasl.oauthbearer.method =
+# sasl.oauthbearer.client.id =
+# sasl.oauthbearer.client.secret =
+# sasl.oauthbearer.scope =
+# sasl.oauthbearer.extensions =
+# sasl.oauthbearer.token.endpoint.url =
 
 # Optional preprocessing filter (regex) to eliminate raw data from being parsed. Data must match filter to be parsed if set
 initial_filter =
