@@ -49,6 +49,72 @@ def get_anomaly_data(logger, edge_vars, main_vars, if_config_vars):
     return result
 
 
+def get_his_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_time, end_time, time_now):
+    # Send task
+    params = {'startTime': start_time, "endTime": end_time}
+    url = edge_vars['if_url'] + '/localcron/anomalytransfer'
+    logger.info(f"{url} {params}")
+
+    transfer_key = None
+    resp = requests.get(url, params=params, verify=False)
+    count = 0
+    logger.info(f"HTTP Response Code: {resp.status_code}")
+    while resp.status_code != 200 and count < edge_vars['retry']:
+        time.sleep(60)
+        resp = requests.get(url, params=params, verify=False)
+        logger.info(f"HTTP Response Code: {resp.status_code}")
+        count += 1
+    transfer_key = resp.json().get('AnomalyTransferHistoricalStatusKey')
+
+    # check the status, and wait the timeout
+    is_finished = False
+    utc_time_check = int(arrow.utcnow().float_timestamp)
+    while not is_finished and utc_time_check - time_now < (cli_config_vars['timeout'] - 60):
+        params = {'anomalyTransferHistoricalStatusKeyStr': transfer_key}
+        url = edge_vars['if_url'] + '/api/v2/projectanomalytransferstatus'
+        resp = requests.get(url, params=params, verify=False)
+        count = 0
+        logger.info(f"HTTP Response Code: {resp.status_code}")
+        while resp.status_code != 200 and count < edge_vars['retry']:
+            time.sleep(60)
+            resp = requests.get(url, params=params, verify=False)
+            logger.info(f"HTTP Response Code: {resp.status_code}")
+            count += 1
+        result = resp.json()
+        is_finished = result.get('isFinished', False)
+        total_task_number = result.get('totalTaskNumber', 0)
+        finish_task_number = result.get('finishedTaskNumber', 0)
+        logger.info(f"Task status finsihed: {is_finished}. {finish_task_number}/{total_task_number}")
+
+        # sleep if not finished
+        if not is_finished:
+            time.sleep(10)
+            utc_time_check = int(arrow.utcnow().float_timestamp)
+
+    # Get all data
+    params = {'anomalyTransferHistoricalStatusKeyStr': transfer_key}
+    url = edge_vars['if_url'] + '/api/v2/projectanomalytransferall'
+    logger.info(f"{url} {params}")
+
+    resp = requests.get(url, params=params, verify=False)
+    count = 0
+    logger.info(f"HTTP Response Code: {resp.status_code}")
+    while resp.status_code != 200 and count < edge_vars['retry']:
+        time.sleep(60)
+        resp = requests.get(url, params=params, verify=False)
+        logger.info(f"HTTP Response Code: {resp.status_code}")
+        count += 1
+
+    result = {}
+    try:
+        result = resp.json()
+    except Exception as e:
+        logger.warning(e)
+
+    logger.debug(f"{result}")
+    return result
+
+
 def send_anomaly_data(logger, c_config, main_vars, data):
     params = {}
     url = main_vars['if_url'] + '/api/v2/projectanomalyreceive'
@@ -380,7 +446,8 @@ def worker_process(args):
             end_time = int(arrow.get(timestamp + if_config_vars['run_interval']).float_timestamp * 1000)
 
             # start run
-            edge_data = get_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_time, end_time)
+            edge_data = get_his_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_time, end_time,
+                                             time_now)
             send_anomaly_data(logger, c_config, main_vars, edge_data)
     else:
         logger.debug('Using current time for streaming data')
