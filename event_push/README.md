@@ -3,7 +3,7 @@ This agent get events from Insightfinder edge cluster and sends it to Insightfin
 ## Installing the Agent
 
 ### Required Dependencies:
-1. Python >= 3.6.8
+1. Python == 3.6.8
 1. Pip3
 
 ###### Installation Steps:
@@ -65,12 +65,12 @@ kill -9 PID
 ```
 
 ###### Run agent with history data:
-For the agent to replay history data, it will need to run with `--timeout 0`.
+For the agent to replay history data, it may need to set `--timeout` with greater than 5 minutes.
  
 Before run agent, please set `his_time_range` and `run_interval` in the config file. Please follow the description of these config vars. 
 
 ```bash
-venv/bin/python3 event_push.py --timeout 0
+venv/bin/python3 event_push.py --timeout 60
 ```
  
 
