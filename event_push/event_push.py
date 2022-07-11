@@ -79,6 +79,7 @@ def get_his_anomaly_data(args):
     while not is_finished and utc_time_check - time_now < time_wait_result:
         params = {'anomalyTransferHistoricalStatusKeyStr': transfer_key}
         url = edge_vars['if_url'] + '/api/v2/projectanomalytransferstatus'
+        logger.info(f"checking task status: {url} {params}")
         resp = requests.get(url, params=params, verify=False)
         count = 0
         logger.debug(f"HTTP Response Code: {resp.status_code}")
@@ -92,7 +93,7 @@ def get_his_anomaly_data(args):
         total_task_number = result.get('totalTaskNumber', 0)
         finish_task_number = result.get('finishedTaskNumber', 0)
         logger.info(
-            f"Task status check: {'finished' if is_finished else 'Not finished'}. {finish_task_number}/{total_task_number}")
+            f"Task status: {'finished' if is_finished else 'Not finished'}. {finish_task_number}/{total_task_number}")
 
         # sleep if not finished
         if not is_finished:
