@@ -28,23 +28,25 @@ def get_anomaly_data(logger, edge_vars, main_vars, if_config_vars):
     # Format Request
     params = {}
     url = edge_vars['if_url'] + '/api/v2/projectanomalytransferall'
-    logger.info(f"{url} {params}")
+    logger.info(f"Start fetching data: {url} {params}")
 
     # Send Request
     resp = requests.get(url, params=params, verify=False)
     count = 0
-    logger.info(f"HTTP Response Code: {resp.status_code}")
+    logger.debug(f"HTTP Response Code: {resp.status_code}")
     while resp.status_code not in [200, 204] and count < edge_vars['retry']:
         time.sleep(60)
         resp = requests.get(url, params=params, verify=False)
-        logger.info(f"HTTP Response Code: {resp.status_code}")
+        logger.debug(f"HTTP Response Code: {resp.status_code}")
         count += 1
 
     result = {}
     try:
         result = resp.json()
+        logger.info(f"Fetching data successfully.")
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
+        logger.error(f"Fetching data error!")
 
     logger.debug(f"{result}")
     return result
@@ -56,18 +58,19 @@ def get_his_anomaly_data(args):
     # Send task
     params = {'startTime': start_time, "endTime": end_time}
     url = edge_vars['if_url'] + '/localcron/anomalytransfer'
-    logger.info(f"{url} {params}")
+    logger.info(f"Send fetching data task: {url} {params}")
 
     transfer_key = None
     resp = requests.get(url, params=params, verify=False)
     count = 0
-    logger.info(f"HTTP Response Code: {resp.status_code}")
+    logger.debug(f"HTTP Response Code: {resp.status_code}")
     while resp.status_code != 200 and count < edge_vars['retry']:
         time.sleep(60)
         resp = requests.get(url, params=params, verify=False)
-        logger.info(f"HTTP Response Code: {resp.status_code}")
+        logger.debug(f"HTTP Response Code: {resp.status_code}")
         count += 1
     transfer_key = resp.json().get('AnomalyTransferHistoricalStatusKey')
+    logger.info(f"Transfer key: {transfer_key}")
 
     # check the status, and wait the timeout
     is_finished = False
@@ -78,42 +81,50 @@ def get_his_anomaly_data(args):
         url = edge_vars['if_url'] + '/api/v2/projectanomalytransferstatus'
         resp = requests.get(url, params=params, verify=False)
         count = 0
-        logger.info(f"HTTP Response Code: {resp.status_code}")
+        logger.debug(f"HTTP Response Code: {resp.status_code}")
         while resp.status_code != 200 and count < edge_vars['retry']:
             time.sleep(60)
             resp = requests.get(url, params=params, verify=False)
-            logger.info(f"HTTP Response Code: {resp.status_code}")
+            logger.debug(f"HTTP Response Code: {resp.status_code}")
             count += 1
         result = resp.json()
         is_finished = result.get('isFinished', False)
         total_task_number = result.get('totalTaskNumber', 0)
         finish_task_number = result.get('finishedTaskNumber', 0)
-        logger.info(f"Task status finsihed: {is_finished}. {finish_task_number}/{total_task_number}")
+        logger.info(
+            f"Task status check: {'finished' if is_finished else 'Not finished'}. {finish_task_number}/{total_task_number}")
 
         # sleep if not finished
         if not is_finished:
             time.sleep(10)
             utc_time_check = int(arrow.utcnow().float_timestamp)
 
+    if is_finished:
+        logger.info(f'Task:{transfer_key} finished.')
+    else:
+        logger.warning(f'Task:{transfer_key} not finished!')
+
     # Get all data
     params = {'anomalyTransferHistoricalStatusKeyStr': transfer_key}
     url = edge_vars['if_url'] + '/api/v2/projectanomalytransferall'
-    logger.info(f"{url} {params}")
+    logger.info(f"Start fetching data with no wait: {url} {params}")
 
     resp = requests.get(url, params=params, verify=False)
     count = 0
-    logger.info(f"HTTP Response Code: {resp.status_code}")
+    logger.debug(f"HTTP Response Code: {resp.status_code}")
     while resp.status_code not in [200, 204] and count < edge_vars['retry']:
         time.sleep(60)
         resp = requests.get(url, params=params, verify=False)
-        logger.info(f"HTTP Response Code: {resp.status_code}")
+        logger.debug(f"HTTP Response Code: {resp.status_code}")
         count += 1
 
     result = {}
     try:
         result = resp.json()
+        logger.info(f"Fetching data successfully.")
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
+        logger.error(f"Fetching data error!")
 
     logger.debug(f"{result}")
     return result
@@ -124,7 +135,7 @@ def send_anomaly_data(args):
 
     params = {}
     url = main_vars['if_url'] + '/api/v2/projectanomalyreceive'
-    logger.info(f"{url} {params}")
+    logger.info(f"Start sending data: {url} {params}")
 
     # do not send if only testing
     if c_config['testing']:
@@ -132,12 +143,18 @@ def send_anomaly_data(args):
 
     resp = requests.post(url, params=params, json=data, verify=False)
     count = 0
-    logger.info(f"HTTP Response Code: {resp.status_code}")
+    logger.debug(f"HTTP Response Code: {resp.status_code}")
     while resp.status_code != 200 and count < main_vars['retry']:
         time.sleep(60)
         resp = requests.post(url, params=params, json=data, verify=False)
-        logger.info(f"HTTP Response Code: {resp.status_code}")
+        logger.debug(f"HTTP Response Code: {resp.status_code}")
         count += 1
+
+    if resp.status_code in [200]:
+        logger.info(f"Sending data successfully.")
+    else:
+        logger.error(f"Sending data error!")
+
     return resp.status_code
 
 
