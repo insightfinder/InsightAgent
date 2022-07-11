@@ -14,6 +14,7 @@ from datetime import date, datetime
 from optparse import OptionParser
 from logging.handlers import QueueHandler
 import multiprocessing
+from multiprocessing.pool import ThreadPool
 from multiprocessing import Pool, TimeoutError
 
 import arrow
@@ -33,7 +34,7 @@ def get_anomaly_data(logger, edge_vars, main_vars, if_config_vars):
     resp = requests.get(url, params=params, verify=False)
     count = 0
     logger.info(f"HTTP Response Code: {resp.status_code}")
-    while resp.status_code != 200 and count < edge_vars['retry']:
+    while resp.status_code not in [200, 204] and count < edge_vars['retry']:
         time.sleep(60)
         resp = requests.get(url, params=params, verify=False)
         logger.info(f"HTTP Response Code: {resp.status_code}")
@@ -49,7 +50,9 @@ def get_anomaly_data(logger, edge_vars, main_vars, if_config_vars):
     return result
 
 
-def get_his_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_time, end_time, time_now):
+def get_his_anomaly_data(args):
+    logger, edge_vars, main_vars, if_config_vars, time_now, start_time, end_time = args
+
     # Send task
     params = {'startTime': start_time, "endTime": end_time}
     url = edge_vars['if_url'] + '/localcron/anomalytransfer'
@@ -69,7 +72,8 @@ def get_his_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_tim
     # check the status, and wait the timeout
     is_finished = False
     utc_time_check = int(arrow.utcnow().float_timestamp)
-    while not is_finished and utc_time_check - time_now < (cli_config_vars['timeout'] - 60):
+    time_wait_result = cli_config_vars['timeout'] - 60 if cli_config_vars['timeout'] > 60 else 0
+    while not is_finished and utc_time_check - time_now < time_wait_result:
         params = {'anomalyTransferHistoricalStatusKeyStr': transfer_key}
         url = edge_vars['if_url'] + '/api/v2/projectanomalytransferstatus'
         resp = requests.get(url, params=params, verify=False)
@@ -99,7 +103,7 @@ def get_his_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_tim
     resp = requests.get(url, params=params, verify=False)
     count = 0
     logger.info(f"HTTP Response Code: {resp.status_code}")
-    while resp.status_code != 200 and count < edge_vars['retry']:
+    while resp.status_code not in [200, 204] and count < edge_vars['retry']:
         time.sleep(60)
         resp = requests.get(url, params=params, verify=False)
         logger.info(f"HTTP Response Code: {resp.status_code}")
@@ -115,7 +119,9 @@ def get_his_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_tim
     return result
 
 
-def send_anomaly_data(logger, c_config, main_vars, data):
+def send_anomaly_data(args):
+    logger, c_config, main_vars, data = args
+
     params = {}
     url = main_vars['if_url'] + '/api/v2/projectanomalyreceive'
     logger.info(f"{url} {params}")
@@ -439,22 +445,34 @@ def worker_process(args):
     logger.debug('history range config: {}'.format(if_config_vars['his_time_range']))
     if if_config_vars['his_time_range']:
         logger.debug('Using time range for replay data')
+        time_ranges = []
         for timestamp in range(if_config_vars['his_time_range'][0],
                                if_config_vars['his_time_range'][1],
                                if_config_vars['run_interval']):
             start_time = int(arrow.get(timestamp).float_timestamp * 1000)
             end_time = int(arrow.get(timestamp + if_config_vars['run_interval']).float_timestamp * 1000)
+            time_ranges.append((start_time, end_time))
 
-            # start run
-            edge_data = get_his_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_time, end_time,
-                                             time_now)
-            send_anomaly_data(logger, c_config, main_vars, edge_data)
+        # query his data
+        thread_get_data_pool = ThreadPool(len(time_ranges))
+        params = [(logger, edge_vars, main_vars, if_config_vars, time_now, tr[0], tr[1]) for tr in time_ranges]
+        results = thread_get_data_pool.map(get_his_anomaly_data, params)
+        thread_get_data_pool.close()
+        thread_get_data_pool.join()
+
+        # send his data
+        thread_send_data_pool = ThreadPool(len(time_ranges))
+        params = [(logger, c_config, main_vars, edge_data) for edge_data in results]
+        thread_send_data_pool.map(send_anomaly_data, params)
+        thread_send_data_pool.close()
+        thread_send_data_pool.join()
+
     else:
         logger.debug('Using current time for streaming data')
 
         # start run
         edge_data = get_anomaly_data(logger, edge_vars, main_vars, if_config_vars)
-        send_anomaly_data(logger, c_config, main_vars, edge_data)
+        send_anomaly_data((logger, c_config, main_vars, edge_data), )
 
     logger.info("Process is done with config: {}".format(config_file))
     return True
