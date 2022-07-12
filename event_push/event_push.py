@@ -213,7 +213,7 @@ def get_cli_config_vars():
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
     parser.add_option('--timeout', action='store', dest='timeout', default=5,
-                      help='Minutes of timeout for all processes.')
+                      help='Minutes of timeout for all processes. Default is 5.')
     parser.add_option('--debug-project', action='store', dest='debug-project',
                       help='The name of the project used to get debug information. '
                            + 'If this argument is specified, agent will not get data from edge server. '
@@ -221,7 +221,7 @@ def get_cli_config_vars():
                            + 'Example: test_project@user')
     parser.add_option('--debug-timerange', action='store', dest='debug-timerange',
                       help='The range of times used to get details debug information. '
-                           + 'Example: --debug-timerange 2022-06-10 00:00:00,2022-06-11 00:00:00')
+                           + 'Example: --debug-timerange "2022-06-10 00:00:00,2022-06-11 00:00:00"')
     (options, args) = parser.parse_args()
 
     config_vars = {
