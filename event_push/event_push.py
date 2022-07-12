@@ -159,6 +159,42 @@ def send_anomaly_data(args):
     return resp.status_code
 
 
+def get_debug_info(logger, c_config, edge_vars, main_vars, if_config_vars):
+    if c_config['debug-project']:
+        project_name, project_owner = c_config['debug-project'].split('@')
+        params = {'projectName': project_name, 'userName': project_owner}
+
+        if c_config['debug-timerange']:
+            try:
+                time_range = [x for x in c_config['debug-timerange'].split(',') if x.strip()]
+                time_range = [int(arrow.get(x).float_timestamp * 1000) for x in time_range]
+                params['startTime'] = time_range[0]
+                params['endTime'] = time_range[1]
+            except Exception as e:
+                logger.warning(e)
+                logger.error('Error argument: debug-timerange')
+
+        # get project debug info
+        url = edge_vars['if_url'] + '/api/v1/projectreport'
+        logger.info(f"Start fetching debug info: {url} {params}")
+        resp = requests.get(url, params=params, verify=False)
+        count = 0
+        logger.debug(f"HTTP Response Code: {resp.status_code}")
+        while resp.status_code != 200 and count < edge_vars['retry']:
+            time.sleep(60)
+            resp = requests.get(url, params=params, verify=False)
+            logger.debug(f"HTTP Response Code: {resp.status_code}")
+            count += 1
+
+        try:
+            result = resp.json()
+            logger.info(f"Fetching debug info successfully.")
+            logger.info(f"Debug info: {result}")
+        except Exception as e:
+            logger.error(e)
+            logger.error(f"Fetching debug info error!")
+
+
 def get_cli_config_vars():
     """ get CLI options. use of these options should be rare """
     usage = 'Usage: %prog [options]'
@@ -177,7 +213,15 @@ def get_cli_config_vars():
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
     parser.add_option('--timeout', action='store', dest='timeout', default=5,
-                      help='Minutes of timeout for all processes')
+                      help='Minutes of timeout for all processes.')
+    parser.add_option('--debug-project', action='store', dest='debug-project',
+                      help='The name of the project used to get debug information. '
+                           + 'If this argument is specified, agent will not get data from edge server. '
+                           + 'Please add `@owner` behind the project name. '
+                           + 'Example: test_project@user')
+    parser.add_option('--debug-timerange', action='store', dest='debug-timerange',
+                      help='The range of times used to get details debug information. '
+                           + 'Example: --debug-timerange 2022-06-10 00:00:00,2022-06-11 00:00:00')
     (options, args) = parser.parse_args()
 
     config_vars = {
@@ -186,6 +230,8 @@ def get_cli_config_vars():
         'testing': False,
         'log_level': logging.INFO,
         'timeout': int(options.timeout) * 60,
+        'debug-project': options.ensure_value('debug-project', None),
+        'debug-timerange': options.ensure_value('debug-timerange', None),
     }
 
     if options.testing:
@@ -459,6 +505,13 @@ def worker_process(args):
     if not if_config_vars:
         return
     print_summary_info(logger, edge_vars, main_vars, if_config_vars)
+
+    # TODO: get debug info
+    get_debug_info(logger, c_config, edge_vars, main_vars, if_config_vars)
+
+    if c_config['debug-project']:
+        logger.info("Process is done with debug arguments.")
+        return True
 
     logger.debug('history range config: {}'.format(if_config_vars['his_time_range']))
     if if_config_vars['his_time_range']:
