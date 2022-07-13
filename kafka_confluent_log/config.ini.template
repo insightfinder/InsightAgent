@@ -1,0 +1,97 @@
+[agent]
+## kafka info
+# Comma separated list of kafka boostrap servers (eg: 192.168.1.1:9092,192.168.1.2:9092) - Required
+bootstrap.servers =
+# Kafka Group ID - Required
+group.id =
+client.id =
+# If you use Kafka broker 0.9 or 0.8 you must set api.version.request=false and set broker.version.fallback to your broker version, e.g broker.version.fallback=0.9.0.1
+api.version.request = true
+broker.version.fallback =
+
+# Comma separated list of kafka topics to subscribe to - Required
+topics =
+# Set to avro schema url if use avro
+schema.registry.url =
+basic.auth.credentials.source =
+basic.auth.user.info =
+
+
+## SSL, please refer document: https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md to set SSL config vars.
+# set to 'SSL' (or 'SASL_SSL' if SASL authentication is used).
+security.protocol =
+ssl.ca.location =
+# ssl.key.location =
+# ssl.key.password =
+# ssl.certificate.location =
+# ssl.crl.location =
+# ssl.keystore.location =
+# ssl.keystore.password =
+# ssl.engine.location =
+
+sasl.mechanisms =
+# sasl.mechanism =
+sasl.username =
+sasl.password =
+# sasl.kerberos.service.name =
+# sasl.kerberos.principal =
+# sasl.oauthbearer.config =
+# enable.sasl.oauthbearer.unsecure.jwt =
+# sasl.oauthbearer.method =
+# sasl.oauthbearer.client.id =
+# sasl.oauthbearer.client.secret =
+# sasl.oauthbearer.scope =
+# sasl.oauthbearer.extensions =
+# sasl.oauthbearer.token.endpoint.url =
+
+# Optional preprocessing filter (regex) to eliminate raw data from being parsed. Data must match filter to be parsed if set
+initial_filter =
+
+# if raw data, the regex used to parse the log. It must use named capture groups `(?<name>.*)` that correspond to the *_field config variables below (ie  `(?<timestamp>.*)`,  `(?<host>.*)`,  `(?<device>.*)`,  `(?<etc>.*)`.
+raw_regex =
+
+# Field that contains the project name. If this field is empty, agent will use project_name in insightfinder section
+project_field =
+# project_whitelist is a regex string used to define which projects form project_field will be filtered.
+project_whitelist =
+
+# Field that contains the log message. If this field is empty, agent will use whole message from kafka.
+log_content_field =
+
+## message parsing
+# timezone, as per pytz
+timezone =
+# Field that contains the timestamp - Required 
+timestamp_field =
+# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+target_timestamp_timezone = UTC
+component_field =
+# if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list. - Required
+instance_field =
+# instance_whitelist is a regex string used to define which instances will be filtered.
+instance_whitelist =
+device_field =
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
+[insightfinder]
+user_name =
+license_key =
+token =
+# Name of the project created in the InsightFinder UI. If this project does not exist, agent will create it automatically.
+project_name =
+# Name of system owned by project. If project_name does not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name =
+# metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
+project_type = log
+# Set to `YES` if project is container.
+containerize = no
+sampling_interval = 10
+run_interval = 20s
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
