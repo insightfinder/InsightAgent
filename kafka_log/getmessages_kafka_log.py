@@ -26,7 +26,7 @@ import requests
 from kafka import KafkaConsumer
 
 """
-This script gathers data to send to Insightfinder
+This script gathers data to send to Insightfinder 
 """
 
 # declare a few vars
