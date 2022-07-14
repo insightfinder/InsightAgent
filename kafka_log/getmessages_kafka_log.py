@@ -25,7 +25,6 @@ import regex
 import requests
 from kafka import KafkaConsumer
 
-
 """
 This script gathers data to send to Insightfinder
 """
