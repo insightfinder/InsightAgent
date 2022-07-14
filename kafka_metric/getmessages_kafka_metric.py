@@ -27,6 +27,7 @@ from confluent_kafka import Consumer
 from confluent_kafka.avro import AvroConsumer
 from confluent_kafka.avro.serializer import SerializerError
 
+
 """
 This script gathers data to send to Insightfinder
 """
