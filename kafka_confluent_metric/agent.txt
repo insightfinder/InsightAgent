@@ -1,0 +1,2 @@
+name = kafka_confluent_metric
+script_name = getmessages_kafka_confluent_metric.py
