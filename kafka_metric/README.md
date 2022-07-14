@@ -3,7 +3,7 @@ This agent collects data from kafka and sends it to Insightfinder.
 ## Installing the Agent
 
 ### Required Dependencies:
-1. Python == 3.6.8
+1. Python 3.x 
 1. Pip3
 
 ###### Installation Steps:
@@ -19,16 +19,6 @@ This agent collects data from kafka and sends it to Insightfinder.
 The final steps are described in more detail below. 
 
 ###### Configure venv and python dependencies:
-Before configure python venv, please install `librdkafka` and `ca-certificates` first.
-
-```bash
-git clone https://github.com/edenhill/librdkafka.git
-cd librdkafka
-./configure --prefix=/usr && make -j && sudo make install
-
-sudo yum reinstall ca-certificates
-```
-
 The configure_python.sh script sets up a virtual python environment and installs all required libraries for running the agent. 
 
 ```bash
@@ -84,22 +74,27 @@ sudo rm /etc/cron.d/kafka_metric
 ps auwx | grep getmessages_kafka_metric.py
 sudo kill <Processs ID>
 ```
-
 ### Config Variables
-* **`bootstrap.servers`**: Comma-delimited list of `host[:port]` Kafka servers to connect to.
-* **`group.id`**: Group ID to use in Kafka connection.
-* `client.id`: Client ID to use in Kafka connection.
-* `api.version.request`: If you use Kafka broker 0.9 or 0.8 you must set api.version.request=false and set broker.version.fallback to your broker version, e.g broker.version.fallback=0.9.0.1.
-* `broker.version.fallback`: If you use Kafka broker 0.9 or 0.8 you must set api.version.request=false and set broker.version.fallback to your broker version, e.g broker.version.fallback=0.9.0.1.
+* **`bootstrap_servers`**: Comma-delimited list of `host[:port]` Kafka servers to connect to.
 * **`topics`**: Topics in Kafka to subscribe to.
-* `schema.registry.url`: Comma-separated list of URLs for Schema Registry instances that can be used to register or look up schemas.
-* `basic.auth.credentials.source`: Specify how to pick the credentials for the Basic authentication header. The supported values are URL, USER_INFO and SASL_INHERIT.
-* `basic.auth.user.info`: Specify the user info for the Basic authentication in the form of {username}:{password}. schema.registry.basic.auth.user.info is a deprecated alias for this configuration.
-* `security.protocol`: Security protocol to use. Valid options are `PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL`.
-* `ssl.ca.location`: File or directory path to CA certificate(s) for verifying the broker's key. Defaults: On Windows the system's CA certificates are automatically looked up in the Windows Root certificate store. On Mac OSX this configuration defaults to probe. It is recommended to install openssl using Homebrew, to provide CA certificates. On Linux install the distribution's ca-certificates package. If OpenSSL is statically linked or ssl.ca.location is set to probe a list of standard paths will be probed and the first one found will be used as the default CA certificate location path. If OpenSSL is dynamically linked the OpenSSL library's default path will be used (see OPENSSLDIR in openssl version -a).
-* `sasl.mechanisms`: SASL mechanism to use for authentication. Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER. NOTE: Despite the name only one mechanism must be configured.
-* `sasl.username`: SASL username for use with the PLAIN and SASL-SCRAM-.. mechanisms.
-* `sasl.password`: SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism.
+* **`group_id`**: Group ID to use in Kafka connection.
+* `client_id`: Client ID to use in Kafka connection.
+* `security_protocol`: Security protocol to use. Valid options are `PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL`.
+* `sasl_mechanism`: Mechanism used when `security_protocol` is `SASL_PLAINTEXT or SASL_SSL`. Valid options are `PLAIN, GSSAPI, or OAUTHBEARER`.
+* `ssl_context`: Pre-configured SSLContext for wrapping socket connections.
+* `ssl_check_hostname`: True if hostname should be checked - whether ssl handshake should verify that the certificate matches the brokers hostname.
+* `ssl_cafile`: ca file to use in certificate verification.
+* `ssl_certfile`: pem file to use in certificate verification.
+* `ssl_keyfile`: Client private key file to use in certificate verification.
+* `ssl_password`: Password used when loading the certificate chain. Note that this is stored as plaintext!
+* `ssl_crlfile`: CRL to check for certificate expiration.
+* `ssl_ciphers`: Set the available ciphers for ssl connections.
+* `sasl_mechanism`: Mechanism used when `security_protocol` is `SASL_PLAINTEXT or SASL_SSL`. Valid options are `PLAIN, GSSAPI, or OAUTHBEARER`.
+* `sasl_plain_username`: Username for sasl PLAIN authentication.
+* `sasl_plain_password`: Password for sasl PLAIN authentication. Note that this is stored as plaintext!
+* `sasl_kerberos_service_name`: Service name to include in GSSAPI sasl mechanism handshake.
+* `sasl_kerberos_domain_name`: kerberos domain name to use in GSSAPI sasl mechanism handshake.
+* `sasl_oauth_token_provider`: OAuthBearer token provider instance.
 * `initial_filter`: Optional preprocessing filter (regex) to eliminate raw data from being parsed. Data must match filter to be parsed if set.
 * `raw_regex`: Regex used to parse raw data. Must use named capture groups `(?<name>...)` corresponding to fields defined below, as only those named capture groups will be reported.
 * `project_field`: Field name for the project name. If this field is empty, agent will use project_name in insightfinder section. 
