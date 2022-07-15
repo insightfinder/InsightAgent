@@ -22,7 +22,7 @@ The final steps are described in more detail below.
 Before configure python venv, please install `gcc gcc-c++` and `librdkafka` and `ca-certificates` first.
 
 ```bash
-sudo yum install gcc gcc-c++
+sudo yum install gcc gcc-c++ openssl-devel
 
 unzip ./offline/system/librdkafka-master.zip -d ./offline/system/
 cd ./offline/system/librdkafka-master
