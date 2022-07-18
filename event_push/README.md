@@ -73,8 +73,8 @@ Before run agent, please set `his_time_range` and `run_interval` in the config f
 venv/bin/python3 event_push.py --timeout 60
 ```
 
-###### Check the projects info in edge cluster:
-Agent support use options to check the project info in edge cluster, please read help message to debug.
+###### Check the project info in edge cluster:
+Agent support use command options to check the project info in edge cluster, please read help message to debug.
 
 ```bash
 python3 event_push.py --help
