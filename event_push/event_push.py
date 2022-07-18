@@ -160,19 +160,46 @@ def send_anomaly_data(args):
 
 
 def get_debug_info(logger, c_config, edge_vars, main_vars, if_config_vars):
-    if c_config['debug-project']:
-        project_name, project_owner = c_config['debug-project'].split('@')
-        params = {'projectName': project_name, 'userName': project_owner}
+    # list all projects info
+    if c_config.get('list-projects'):
+        url = edge_vars['if_url'] + '/api/v1/listallprojects'
+        logger.info(f"Start fetching projects info: {url}")
+        resp = requests.get(url, params=None, verify=False)
+        count = 0
+        logger.debug(f"HTTP Response Code: {resp.status_code}")
+        while resp.status_code != 200 and count < edge_vars['retry']:
+            time.sleep(60)
+            resp = requests.get(url, params=None, verify=False)
+            logger.debug(f"HTTP Response Code: {resp.status_code}")
+            count += 1
 
-        if c_config['debug-timerange']:
+        try:
+            result = resp.json()
+            logger.info(f"Fetching projects info successfully.")
+            logger.info(f"Projects info: {result}")
+        except Exception as e:
+            logger.error(e)
+            logger.error(f"Fetching projects info error!")
+
+    elif c_config.get('debug-project'):
+        params = {
+            'projectName': c_config.get('debug-project'),
+            'userName': c_config.get('project-owner'),
+            'projectType': c_config.get('project-type'),
+            'includeModelDetail': c_config.get('includeModelDetail', False),
+            'includeDetectionDetail': c_config.get('includeDetectionDetail', False),
+            'includeOther': c_config.get('includeOther', False),
+        }
+
+        if c_config.get('timerange'):
             try:
-                time_range = [x for x in c_config['debug-timerange'].split(',') if x.strip()]
+                time_range = [x for x in c_config['timerange'].split(',') if x.strip()]
                 time_range = [int(arrow.get(x).float_timestamp * 1000) for x in time_range]
                 params['startTime'] = time_range[0]
                 params['endTime'] = time_range[1]
             except Exception as e:
                 logger.warning(e)
-                logger.error('Error argument: debug-timerange')
+                logger.error('Error argument: timerange')
 
         # get project debug info
         url = edge_vars['if_url'] + '/api/v1/projectreport'
@@ -214,14 +241,38 @@ def get_cli_config_vars():
                            ' Automatically turns on verbose logging')
     parser.add_option('--timeout', action='store', dest='timeout', default=5,
                       help='Minutes of timeout for all processes. Default is 5.')
+    parser.add_option('--list-projects', action='store_true', dest='list-projects', default=False,
+                      help='List all projects in edge server. ')
     parser.add_option('--debug-project', action='store', dest='debug-project',
                       help='The name of the project used to get debug information. '
-                           + 'If this argument is specified, agent will not get data from edge server. '
-                           + 'Please add `@owner` behind the project name. '
-                           + 'Example: --debug-project=test_project@user')
-    parser.add_option('--debug-timerange', action='store', dest='debug-timerange',
+                           + 'This can be get from field "projectName" in project list with option "--list-projects". '
+                           + 'Please also specify "--project-owner" and "--project-type"  '
+                           + 'belong to this project. '
+                           + 'Example: --debug-project="test_project"')
+    parser.add_option('--project-owner', action='store', dest='project-owner',
+                      help='The owner of the debug-project used to get debug information. '
+                           + 'This can be get from field "userName" in project list with option "--list-projects". '
+                           + 'Example: --project-owner="user"')
+    parser.add_option('--project-type', action='store', dest='project-type',
+                      help='The type of the debug-project used to get debug information. '
+                           + 'This can be get from field "dataType" in project list with option "--list-projects". '
+                           + 'Example: --project-type="Log" or --project-type="Metric"')
+    parser.add_option('--timerange', action='store', dest='timerange',
                       help='The range of times used to get details debug information. '
-                           + 'Example: --debug-timerange="2022-06-10 00:00:00,2022-06-11 00:00:00"')
+                           + 'Example: --timerange="2022-06-10 00:00:00,2022-06-11 00:00:00"')
+    parser.add_option('--includeModelDetail', action='store_true', dest='includeModelDetail', default=False,
+                      help='Check the models info belong to debug-project. '
+                           + 'For metric project, If you set "--includeModelDetail", '
+                           + 'but you don’t have "modelDetails" in your return, '
+                           + 'it means your project don’t have model created for detection within these time range, '
+                           + 'your detection will fail, '
+                           + 'if rawCsvLength=0 or numberOfColumn=0 or numberOfRow=0, '
+                           + 'it means your data in metric may have some problem, '
+                           + 'this project didn’t receive any data for that range. ')
+    parser.add_option('--includeDetectionDetail', action='store_true', dest='includeDetectionDetail', default=False,
+                      help='Check the detections info belong to debug-project. ')
+    parser.add_option('--includeOther', action='store_true', dest='includeOther', default=False,
+                      help='Check the others info belong to debug-project. ')
     (options, args) = parser.parse_args()
 
     config_vars = {
@@ -231,7 +282,9 @@ def get_cli_config_vars():
         'log_level': logging.INFO,
         'timeout': int(options.timeout) * 60,
         'debug-project': options.ensure_value('debug-project', None),
-        'debug-timerange': options.ensure_value('debug-timerange', None),
+        'project-owner': options.ensure_value('project-owner', None),
+        'project-type': options.ensure_value('project-type', None),
+        'timerange': options.ensure_value('timerange', None),
     }
 
     if options.testing:
@@ -241,6 +294,15 @@ def get_cli_config_vars():
         config_vars['log_level'] = logging.DEBUG
     elif options.quiet:
         config_vars['log_level'] = logging.WARNING
+
+    if options.ensure_value('list-projects', False):
+        config_vars['list-projects'] = True
+    if options.ensure_value('includeModelDetail', False):
+        config_vars['includeModelDetail'] = True
+    if options.ensure_value('includeDetectionDetail', False):
+        config_vars['includeDetectionDetail'] = True
+    if options.ensure_value('includeOther', False):
+        config_vars['includeOther'] = True
 
     return config_vars
 
