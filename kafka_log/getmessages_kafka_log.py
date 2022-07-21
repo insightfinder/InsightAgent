@@ -162,7 +162,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
 
             # get timestamp
             timestamp = message.get(agent_config_vars['timestamp_field'][0])
-            timestamp = int(timestamp) if len(timestamp) > 10 else int(timestamp) * 1000
+            timestamp = int(timestamp) if len(str(timestamp)) > 10 else int(timestamp) * 1000
             # set offset for timestamp
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
             # timestamp = str(timestamp)
