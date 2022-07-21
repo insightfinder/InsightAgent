@@ -248,8 +248,7 @@ def func_check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, age
                                         agent_config_vars))
         buffer_check_thead.start()
         buffer_check_thead.join()
-        time.sleep(if_config_vars['sampling_interval'])
-        # time.sleep(20)
+        time.sleep(min(60, if_config_vars['sampling_interval']))
 
 
 def check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars):
