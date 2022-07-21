@@ -1,6 +1,8 @@
 [edge]
 # Edge Node URL including prefix [http, https]
 if_url =
+user_name =
+license_key =
 # default to 3 retries
 retry =
 http_proxy =
@@ -9,6 +11,8 @@ https_proxy =
 [main]
 # Main IF URL including prefix [http, https]
 if_url =
+user_name =
+license_key =
 # default to 3 retries
 retry =
 http_proxy =

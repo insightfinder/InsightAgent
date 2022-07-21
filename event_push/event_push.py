@@ -3,6 +3,7 @@ import sys
 import time
 import pytz
 import glob
+import json
 import logging
 import configparser
 import urllib.parse
@@ -26,7 +27,10 @@ ATTEMPTS = 3
 
 def get_anomaly_data(logger, edge_vars, main_vars, if_config_vars):
     # Format Request
-    params = {}
+    params = {
+        "customerName": edge_vars['user_name'],
+        "licenseKey": edge_vars['license_key']
+    }
     url = edge_vars['if_url'] + '/api/v2/projectanomalytransferall'
     logger.info(f"Start fetching data: {url} {params}")
 
@@ -56,7 +60,12 @@ def get_his_anomaly_data(args):
     logger, edge_vars, main_vars, if_config_vars, time_now, start_time, end_time = args
 
     # Send task
-    params = {'startTime': start_time, "endTime": end_time}
+    params = {
+        "customerName": edge_vars['user_name'],
+        "licenseKey": edge_vars['license_key'],
+        'startTime': start_time,
+        "endTime": end_time
+    }
     url = edge_vars['if_url'] + '/localcron/anomalytransfer'
     logger.info(f"Send fetching data task: {url} {params}")
 
@@ -77,7 +86,11 @@ def get_his_anomaly_data(args):
     utc_time_check = int(arrow.utcnow().float_timestamp)
     time_wait_result = cli_config_vars['timeout'] - 60 if cli_config_vars['timeout'] > 60 else 0
     while not is_finished and utc_time_check - time_now < time_wait_result:
-        params = {'anomalyTransferHistoricalStatusKeyStr': transfer_key}
+        params = {
+            "customerName": edge_vars['user_name'],
+            "licenseKey": edge_vars['license_key'],
+            'anomalyTransferHistoricalStatusKeyStr': transfer_key
+        }
         url = edge_vars['if_url'] + '/api/v2/projectanomalytransferstatus'
         logger.info(f"checking task status: {url} {params}")
         resp = requests.get(url, params=params, verify=False)
@@ -106,7 +119,11 @@ def get_his_anomaly_data(args):
         logger.warning(f'Task:{transfer_key} not finished!')
 
     # Get all data
-    params = {'anomalyTransferHistoricalStatusKeyStr': transfer_key}
+    params = {
+        "customerName": edge_vars['user_name'],
+        "licenseKey": edge_vars['license_key'],
+        'anomalyTransferHistoricalStatusKeyStr': transfer_key
+    }
     url = edge_vars['if_url'] + '/api/v2/projectanomalytransferall'
     logger.info(f"Start fetching data with no wait: {url} {params}")
 
@@ -134,7 +151,11 @@ def get_his_anomaly_data(args):
 def send_anomaly_data(args):
     logger, c_config, main_vars, data = args
 
-    params = {}
+    params = {
+        'userName': main_vars['user_name'],
+        "customerName": main_vars['user_name'],
+        "licenseKey": main_vars['license_key']
+    }
     url = main_vars['if_url'] + '/api/v2/projectanomalyreceive'
     logger.info(f"Start sending data: {url} {params}")
 
@@ -322,16 +343,16 @@ def get_config_vars(logger, config_ini):
 
         try:
             # Edge Node Parameters
-            # edge_user = config_parser.get('edge', 'user_name')
-            # edge_license = config_parser.get('edge', 'license_key')
+            edge_user = config_parser.get('edge', 'user_name')
+            edge_license = config_parser.get('edge', 'license_key')
             edge_url = config_parser.get('edge', 'if_url')
             edge_retry = config_parser.get('edge', 'retry') or 3
             edge_http_proxy = config_parser.get('edge', 'http_proxy')
             edge_https_proxy = config_parser.get('edge', 'https_proxy')
 
             # Main IF Parameters
-            # main_user = config_parser.get('main', 'user_name')
-            # main_license = config_parser.get('main', 'license_key')
+            main_user = config_parser.get('main', 'user_name')
+            main_license = config_parser.get('main', 'license_key')
             main_url = config_parser.get('main', 'if_url')
             main_retry = config_parser.get('main', 'retry') or 3
             main_http_proxy = config_parser.get('main', 'http_proxy')
@@ -371,16 +392,16 @@ def get_config_vars(logger, config_ini):
             run_interval = int(run_interval) * 60
 
         edge = {
-            # 'user_name': edge_user,
-            # 'license_key': edge_license,
+            'user_name': edge_user,
+            'license_key': edge_license,
             'retry': edge_retry,
             'if_url': edge_url,
             'if_proxies': edge_proxies
         }
 
         main = {
-            # 'user_name': main_user,
-            # 'license_key': main_license,
+            'user_name': main_user,
+            'license_key': main_license,
             'retry': main_retry,
             'if_url': main_url,
             'if_proxies': main_proxies,
@@ -594,18 +615,52 @@ def worker_process(args):
         thread_get_data_pool.join()
 
         # send his data
-        thread_send_data_pool = ThreadPool(len(time_ranges))
-        params = [(logger, c_config, main_vars, edge_data) for edge_data in results]
-        thread_send_data_pool.map(send_anomaly_data, params)
-        thread_send_data_pool.close()
-        thread_send_data_pool.join()
+        for edge_data in results:
+            # send data per project
+            params = []
+            for project_edge_data in edge_data:
+                if project_edge_data.get("noResult"):
+                    continue
+                try:
+                    transfer_data = project_edge_data.get("transferData")
+                    transfer_data = json.loads(transfer_data)
+                    params.append((logger, c_config, main_vars, transfer_data))
+                except Exception as e:
+                    logger.error(f'Parse project: {project_edge_data.get("projectName")} transfer_data error.')
+                    logger.error(e)
+            if len(params) > 0:
+                thread_send_data_pool = ThreadPool(len(params))
+                thread_send_data_pool.map(send_anomaly_data, params)
+                thread_send_data_pool.close()
+                thread_send_data_pool.join()
+                logger.info(f"Complete with send data.")
+            logger.info(f"{len(params)} project have results. {len(edge_data) - len(params)} project no results.")
 
     else:
         logger.debug('Using current time for streaming data')
 
         # start run
         edge_data = get_anomaly_data(logger, edge_vars, main_vars, if_config_vars)
-        send_anomaly_data((logger, c_config, main_vars, edge_data), )
+
+        # send data per project
+        params = []
+        for project_edge_data in edge_data:
+            if project_edge_data.get("noResult"):
+                continue
+            try:
+                transfer_data = project_edge_data.get("transferData")
+                transfer_data = json.loads(transfer_data)
+                params.append((logger, c_config, main_vars, transfer_data))
+            except Exception as e:
+                logger.error(f'Parse project: {project_edge_data.get("projectName")} transfer_data error.')
+                logger.error(e)
+        if len(params) > 0:
+            thread_send_data_pool = ThreadPool(len(params))
+            thread_send_data_pool.map(send_anomaly_data, params)
+            thread_send_data_pool.close()
+            thread_send_data_pool.join()
+            logger.info(f"Complete with send data.")
+        logger.info(f"{len(params)} project have results. {len(edge_data) - len(params)} project no results.")
 
     logger.info("Process is done with config: {}".format(config_file))
     return True
