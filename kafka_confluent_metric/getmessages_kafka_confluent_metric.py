@@ -160,7 +160,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
 
             # get timestamp
             timestamp = message.get(agent_config_vars['timestamp_field'][0])
-            timestamp = int(timestamp) * 1000
+            timestamp = int(timestamp) if len(str(timestamp)) > 10 else int(timestamp) * 1000
             # set offset for timestamp
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
             timestamp = str(timestamp)
@@ -248,8 +248,7 @@ def func_check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, age
                                         agent_config_vars))
         buffer_check_thead.start()
         buffer_check_thead.join()
-        time.sleep(if_config_vars['sampling_interval'])
-        # time.sleep(20)
+        time.sleep(min(60, if_config_vars['sampling_interval']))
 
 
 def check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars):
