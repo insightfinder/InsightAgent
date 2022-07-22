@@ -127,7 +127,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     # filter devices ids
     if len(devices_ids) == 0:
         logger.error('Devices list is empty')
-        sys.exit(1)
+        return
 
     # parse sql string by params
     logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
@@ -370,17 +370,17 @@ def get_agent_config_vars(logger, config_ini):
 
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
-            config_error(logger)
+            return config_error(logger)
 
         # handle boolean setting
 
         # handle required arrays
         if not host:
-            config_error(logger, 'host')
+            return config_error(logger, 'host')
         if not api_key:
-            config_error(logger, 'api_key')
+            return config_error(logger, 'api_key')
         if not object_type:
-            config_error(logger, 'object_type')
+            return config_error(logger, 'object_type')
         if device_ip_list:
             device_ip_list = [ip.strip() for ip in device_ip_list.split(',') if ip.strip()]
         if metric_query_params:
@@ -388,20 +388,20 @@ def get_agent_config_vars(logger, config_ini):
                 metric_query_params = eval(metric_query_params)
             except Exception as e:
                 logger.error(e)
-                config_error(logger, 'metric_query_params')
+                return config_error(logger, 'metric_query_params')
         else:
-            config_error(logger, 'metric_query_params')
+            return config_error(logger, 'metric_query_params')
         if not isinstance(metric_query_params, list):
-            config_error(logger, 'metric_query_params')
+            return config_error(logger, 'metric_query_params')
         for param in metric_query_params:
             if param.get('device_ip_list') and not isinstance(param['device_ip_list'], list):
-                config_error(logger, 'metric_query_params->device_ip_list')
+                return config_error(logger, 'metric_query_params->device_ip_list')
 
         if len(instance_whitelist) != 0:
             try:
                 instance_whitelist_regex = regex.compile(instance_whitelist)
             except Exception:
-                config_error(logger, 'instance_whitelist')
+                return config_error(logger, 'instance_whitelist')
 
         if len(his_time_range) != 0:
             his_time_range = [x.strip() for x in his_time_range.split(',') if x.strip()]
@@ -410,11 +410,11 @@ def get_agent_config_vars(logger, config_ini):
         if len(target_timestamp_timezone) != 0:
             target_timestamp_timezone = int(arrow.now(target_timestamp_timezone).utcoffset().total_seconds())
         else:
-            config_error(logger, 'target_timestamp_timezone')
+            return config_error(logger, 'target_timestamp_timezone')
 
         if timezone:
             if timezone not in pytz.all_timezones:
-                config_error(logger, 'timezone')
+                return config_error(logger, 'timezone')
             else:
                 timezone = pytz.timezone(timezone)
 
@@ -425,7 +425,7 @@ def get_agent_config_vars(logger, config_ini):
                            'XML'}:
             pass
         else:
-            config_error(logger, 'data_format')
+            return config_error(logger, 'data_format')
 
         # proxies
         agent_proxies = dict()
@@ -496,17 +496,17 @@ def get_if_config_vars(logger, config_ini):
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
-            config_error(logger)
+            return config_error(logger)
 
         # check required variables
         if len(user_name) == 0:
-            config_error(logger, 'user_name')
+            return config_error(logger, 'user_name')
         if len(license_key) == 0:
-            config_error(logger, 'license_key')
+            return config_error(logger, 'license_key')
         if len(project_name) == 0:
-            config_error(logger, 'project_name')
+            return config_error(logger, 'project_name')
         if len(project_type) == 0:
-            config_error(logger, 'project_type')
+            return config_error(logger, 'project_type')
 
         if project_type not in {
             'METRIC',
@@ -520,12 +520,12 @@ def get_if_config_vars(logger, config_ini):
             'DEPLOYMENT',
             'DEPLOYMENTREPLAY'
         }:
-            config_error(logger, 'project_type')
+            return config_error(logger, 'project_type')
         is_replay = 'REPLAY' in project_type
 
         if len(sampling_interval) == 0:
             if 'METRIC' in project_type:
-                config_error(logger, 'sampling_interval')
+                return config_error(logger, 'sampling_interval')
             else:
                 # set default for non-metric
                 sampling_interval = 10
@@ -536,7 +536,7 @@ def get_if_config_vars(logger, config_ini):
             sampling_interval = int(sampling_interval) * 60
 
         if len(run_interval) == 0:
-            config_error(logger, 'run_interval')
+            return config_error(logger, 'run_interval')
 
         if run_interval.endswith('s'):
             run_interval = int(run_interval[:-1])
@@ -586,12 +586,11 @@ def get_cli_config_vars():
     usage = 'Usage: %prog [options]'
     parser = OptionParser(usage=usage)
     """
-    ## not ready.
-    parser.add_option('--threads', default=1, action='store', dest='threads',
-                      help='Number of threads to run')
     """
-    parser.add_option('-c', '--config', action='store', dest='config', default=abs_path_from_cur('config.ini'),
-                      help='Path to the config file to use. Defaults to {}'.format(abs_path_from_cur('config.ini')))
+    parser.add_option('-c', '--config', action='store', dest='config', default=abs_path_from_cur('conf.d'),
+                      help='Path to the config files to use. Defaults to {}'.format(abs_path_from_cur('conf.d')))
+    parser.add_option('-p', '--processes', action='store', dest='processes', default=multiprocessing.cpu_count() * 4,
+                      help='Number of processes to run')
     parser.add_option('-q', '--quiet', action='store_true', dest='quiet', default=False,
                       help='Only display warning and error log messages')
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose', default=False,
@@ -599,21 +598,16 @@ def get_cli_config_vars():
     parser.add_option('-t', '--testing', action='store_true', dest='testing', default=False,
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
+    parser.add_option('--timeout', action='store', dest='timeout', default=5,
+                      help='Minutes of timeout for all processes')
     (options, args) = parser.parse_args()
 
-    """
-    # not ready
-    try:
-        threads = int(options.threads)
-    except ValueError:
-        threads = 1
-    """
-
     config_vars = {
-        'config': options.config if os.path.isfile(options.config) else abs_path_from_cur('config.ini'),
-        'threads': 1,
+        'config': options.config if os.path.isdir(options.config) else abs_path_from_cur('conf.d'),
+        'processes': int(options.processes),
         'testing': False,
-        'log_level': logging.INFO
+        'log_level': logging.INFO,
+        'timeout': int(options.timeout) * 60,
     }
 
     if options.testing:
@@ -631,7 +625,7 @@ def config_error(logger, setting=''):
     info = ' ({})'.format(setting) if setting else ''
     logger.error('Agent not correctly configured{}. Check config file.'.format(
         info))
-    sys.exit(1)
+    return False
 
 
 def get_json_size_bytes(json_data):
@@ -731,7 +725,7 @@ def clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track):
         logger.debug('Sending last chunk')
         send_data_wrapper()
 
-    reset_metric_buffer()
+    reset_metric_buffer(metric_buffer)
 
 
 def reset_metric_buffer(metric_buffer):
