@@ -64,10 +64,14 @@ user_name =
 license_key =
 token =
 project_name =
+# Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name =
 # metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
-project_type = metric
-sampling_interval = 1
-run_interval = 1
+project_type = log
+# Set to `YES` if project is container.
+containerize = no
+sampling_interval = 10
+run_interval = 10
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
 if_url = https://app.insightfinder.com

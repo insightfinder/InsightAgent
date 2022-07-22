@@ -1,72 +1,73 @@
-# extrahop-new
+# extrahop
 This agent collects data from extrahop and sends it to Insightfinder.
 ## Installing the Agent
 
-### Before install agent
-###### Install freetds for linux/osx
+### Required Dependencies:
+1. Python >= 3.6.8
+1. Pip3
+
+###### Installation Steps:
+1. Download the event_push.tar.gz package
+1. Copy the agent package to the machine that will be running the agent
+1. Extract the package
+1. Navigate to the extracted location 
+1. Configure venv and python dependencies
+1. Configure agent settings under `conf.d/`
+1. Test the agent
+1. Run agent with cron.py
+
+The final steps are described in more detail below. 
+
+###### Install freetds for linux/osx before install agent
 ```bash
 osx: brew install freetds
 linux: yum install freetds
 ```
 
-### Short Version
+###### Configure venv and python dependencies:
+The configure_python.sh script sets up a virtual python environment and installs all required libraries for running the agent. 
+
 ```bash
-bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) extrahop && cd extrahop
-vi config.ini
-sudo ./setup/install.sh --create  # install on localhost
-                                  ## or on multiple nodes
-sudo ./offline/remote-cp-run.sh list_of_nodes
+./setup/configure_python.sh
 ```
 
-See the `offline` README for instructions on installing prerequisites.
+###### Agent configuration:
+The config.ini file contains all of the configuration settings needed to connect to the extrahop and to stream the data to Insightfinder cluster.
 
-### Long Version
-###### Download the agent tarball and untar it:
-```bash
-curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/extrahop/extrahop.tar.gz
-tar xvf extrahop.tar.gz && cd extrahop
+```
+python ./ifobfuscate.py 
 ```
 
-###### Set up `config.ini`
-```bash
-python configure.py
-```
-See below for a further explanation of each variable. 
+The configure_python.sh script will generate a config.ini file for you; however, if you need to create a new one, you can simply copy the config.ini.template file over the config.ini file to start over. 
 
-#### Automated Install (local or remote)
-###### Review propsed changes from install:
-```bash
-sudo ./setup/install.sh
-```
-
-###### Once satisfied, run:
-```bash
-sudo ./setup/install.sh --create
-```
-
-###### To deploy on multiple hosts, instead call 
-```bash
-sudo ./offline/remote-cp-run.sh list_of_nodes -f <nodelist_file>
-```
-Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
-
-#### Manual Install (local only)
-###### Check Python version
-Agent required Python 3 environment.
-
-###### Setup pip & required packages:
-```bash
-sudo ./setup/pip-config.sh
-```
+Populate all of the necessary fields in the config.ini file with the relevant data.  More details about each field can be found in the comments of the config.ini file and the Config Variables below. 
 
 ###### Test the agent:
+Once you have finished configuring the config.ini file, you can test the agent to validate the settings. 
+
+This will connect to the extrahop, but it will not send any data to Insightfinder cluster. This allows you to verify that you are getting data from Insightfinder edge cluster and that there are no failing exceptions in the agent configuration.
+
+User `-p` to define max processes, use `--timeout` to define max timeout.
+
 ```bash
-python getmessages_extrahop.py -t
+./setup/test_agent.sh
 ```
 
-###### If satisfied with the output, configure the agent to run continuously:
+###### Run agent with cron:
+For the agent to run continuously, it will need to run as a cron job with `cron.py`. 
+
 ```bash
-sudo ./setup/cron-config.sh
+nohup venv/bin/python3 cron.py &
+```
+
+###### Stopping the agent:
+Once the cron is running, you can stop the agent by kill the `cron.py` process.
+
+```bash
+# get pid of backgroud jobs
+jobs -l
+# kill the cron process
+kill -9 PID
 ```
 
 ### Config Variables
@@ -91,8 +92,10 @@ sudo ./setup/cron-config.sh
 * **`user_name`**: User name in InsightFinder
 * **`license_key`**: License Key from your Account Profile in the InsightFinder UI. 
 * `token`: Token from your Account Profile in the InsightFinder UI. 
-* **`project_name`**: Name of the project created in the InsightFinder UI. 
+* **`project_name`**: Name of the project created in the InsightFinder UI, If this project is not exist, agent will create it automatically.
+* `system_name`: Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name. 
 * **`project_type`**: Type of the project - one of `metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay`.
+* `containerize`: Set to `YES` if project is container.
 * **`sampling_interval`**: How frequently (in Minutes) data is collected. Should match the interval used in project settings.
 * **`run_interval`**: How frequently (in Minutes) the agent is ran. Should match the interval used in cron.
 * `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
