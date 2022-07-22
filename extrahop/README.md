@@ -7,7 +7,7 @@ This agent collects data from extrahop and sends it to Insightfinder.
 1. Pip3
 
 ###### Installation Steps:
-1. Download the event_push.tar.gz package
+1. Download the extrahop.tar.gz package
 1. Copy the agent package to the machine that will be running the agent
 1. Extract the package
 1. Navigate to the extracted location 

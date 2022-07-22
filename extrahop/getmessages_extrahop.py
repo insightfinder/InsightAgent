@@ -147,7 +147,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
                                     devices_ids_map)
 
             # clear metric buffer when piece of time range end
-            clear_metric_buffer()
+            clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
     else:
         logger.debug('Using current time for streaming data')
         start_time = time_now - if_config_vars['sampling_interval']
