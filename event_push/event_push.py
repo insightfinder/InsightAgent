@@ -157,7 +157,7 @@ def send_anomaly_data(args):
     user_name = project_edge_data.get("customerName")
     data_type = project_edge_data.get("dataType")
     agent_type = project_edge_data.get("insightAgentType")
-    sampling_interval = project_edge_data.get("sampling_interval")
+    sampling_interval = project_edge_data.get("samplingInterval")
     transfer_data = project_edge_data.get("transferData")
     data = json.loads(transfer_data)
 
