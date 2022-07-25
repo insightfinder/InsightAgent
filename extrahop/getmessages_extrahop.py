@@ -1095,7 +1095,7 @@ if __name__ == "__main__":
     m = multiprocessing.Manager()
     queue = m.Queue()
     listener = multiprocessing.Process(
-        target=listener_process, args=(queue, cli_config_vars))
+        target=listener_process, args=(queue,))
     listener.start()
 
     # set up main logger following example from work_process

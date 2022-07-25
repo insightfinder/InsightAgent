@@ -1,6 +1,6 @@
 [extrahop]
 # required
-host = extrahop.example.com
+host = http://extrahop.example.com
 api_key = 123456789abcdefghijklmnop
 
 # this field is used for query metrics, only support "device" for now.
