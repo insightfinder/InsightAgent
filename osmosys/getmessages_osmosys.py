@@ -143,7 +143,7 @@ def query_messages_osmosys(args):
     try:
         # execute sql string
         url = urllib.parse.urljoin(server, 'render')
-        response = send_request(url, params=params, proxies=agent_config_vars['proxies'])
+        response = send_request(logger, url, params=params, proxies=agent_config_vars['proxies'])
         if response == -1:
             logger.error('Query metric error: ' + metric)
         else:
@@ -433,7 +433,9 @@ def get_if_config_vars(logger, config_ini):
             license_key = config_parser.get('insightfinder', 'license_key')
             token = config_parser.get('insightfinder', 'token')
             project_name = config_parser.get('insightfinder', 'project_name')
+            system_name = config_parser.get('insightfinder', 'system_name')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
+            containerize = config_parser.get('insightfinder', 'containerize').upper()
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             run_interval = config_parser.get('insightfinder', 'run_interval')
             chunk_size_kb = config_parser.get('insightfinder', 'chunk_size_kb')
@@ -507,7 +509,9 @@ def get_if_config_vars(logger, config_ini):
             'license_key': license_key,
             'token': token,
             'project_name': project_name,
+            'system_name': system_name,
             'project_type': project_type,
+            'containerize': True if containerize == 'YES' else False,
             'sampling_interval': int(sampling_interval),  # as seconds
             'run_interval': int(run_interval),  # as seconds
             'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
@@ -664,12 +668,12 @@ def clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track):
         count += 1
         if count % 100 == 0 or get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
             logger.debug('Sending buffer chunk')
-            send_data_wrapper()
+            send_data_wrapper(logger, c_config, if_config_vars, track)
 
     # last chunk
     if len(track['current_row']) > 0:
         logger.debug('Sending last chunk')
-        send_data_wrapper()
+        send_data_wrapper(logger, c_config, if_config_vars, track)
 
     reset_metric_buffer(metric_buffer)
 
@@ -700,18 +704,18 @@ def send_data_wrapper(logger, c_config, if_config_vars, track):
         round(time.time() - track['start_time'], 2)))
     send_data_to_if(logger, c_config, if_config_vars, track, track['current_row'])
     track['chunk_count'] += 1
-    reset_track()
+    reset_track(track)
 
 
 def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data):
     send_data_time = time.time()
 
     # prepare data for metric streaming agent
-    data_to_post = initialize_api_post_data()
+    data_to_post = initialize_api_post_data(logger, if_config_vars)
     if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
         for chunk in chunk_metric_data:
             chunk['data'] = json.dumps(chunk['data'])
-    data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
+    data_to_post[get_data_field_from_project_type(if_config_vars)] = json.dumps(chunk_metric_data)
 
     # add component mapping to the post data
     track['component_map_list'] = list({v['instanceName']: v for v in track['component_map_list']}.values())
@@ -727,7 +731,7 @@ def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data):
         return
 
     # send the data
-    post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
+    post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type(if_config_vars))
     send_request(logger, post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
                  data=data_to_post, verify=False, proxies=if_config_vars['if_proxies'])
@@ -848,7 +852,7 @@ def initialize_api_post_data(logger, if_config_vars):
     to_send_data_dict['licenseKey'] = if_config_vars['license_key']
     to_send_data_dict['projectName'] = if_config_vars['project_name']
     to_send_data_dict['instanceName'] = HOSTNAME
-    to_send_data_dict['agentType'] = get_agent_type_from_project_type()
+    to_send_data_dict['agentType'] = get_agent_type_from_project_type(if_config_vars)
     if 'METRIC' in if_config_vars['project_type'] and 'sampling_interval' in if_config_vars:
         to_send_data_dict['samplingInterval'] = str(if_config_vars['sampling_interval'])
     logger.debug(to_send_data_dict)
@@ -977,7 +981,7 @@ def listener_configurer():
     root.addHandler(logging_handler_err)
 
 
-def listener_process(q, c_config):
+def listener_process(q):
     listener_configurer()
     while True:
         while not q.empty():
