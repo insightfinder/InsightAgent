@@ -152,14 +152,19 @@ def send_anomaly_data(args):
     logger, c_config, main_vars, project_edge_data = args
 
     # parse data
-    system_name = project_edge_data.get("systemName")
+    transfer_data = project_edge_data.get("transferData")
+    try:
+        data = json.loads(transfer_data)
+    except Exception as e:
+        logger.error(e)
+        return
+
     project_name = project_edge_data.get("projectName")
     user_name = project_edge_data.get("customerName")
-    data_type = project_edge_data.get("dataType")
-    agent_type = project_edge_data.get("insightAgentType")
-    sampling_interval = project_edge_data.get("samplingInterval")
-    transfer_data = project_edge_data.get("transferData")
-    data = json.loads(transfer_data)
+    system_name = data.get('DATA').get("systemName")
+    data_type = data.get('DATA').get("dataType")
+    agent_type = data.get('DATA').get("insightAgentType")
+    sampling_interval = data.get('DATA').get("sampleIntervalInMinutes")
 
     # do not send if only testing
     if c_config['testing']:
