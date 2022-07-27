@@ -282,7 +282,7 @@ def handle_send_data_project(args):
             entry = {
                 "tag": instance,
                 "eventId": utc_time_now,
-                "entry": choice(SAMPLE_LOGS)
+                "data": choice(SAMPLE_LOGS)
             }
             data.append(entry)
             count += 1
