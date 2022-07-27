@@ -149,7 +149,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     return -1
 
 
-def send_data(config_vars, metric_data):
+def send_data(config_vars, project_name, metric_data):
     """ Sends parsed metric data to InsightFinder """
     send_data_time = time.time()
     # prepare data for metric streaming agent
@@ -157,7 +157,7 @@ def send_data(config_vars, metric_data):
     # for backend so this is the camel case in to_send_data_dict
     to_send_data_dict["metricData"] = json.dumps(metric_data)
     to_send_data_dict["licenseKey"] = config_vars['license_key']
-    to_send_data_dict["projectName"] = config_vars['project_name']
+    to_send_data_dict["projectName"] = project_name
     to_send_data_dict["userName"] = config_vars['user_name']
     to_send_data_dict["agentType"] = "LogStreaming"
 
@@ -290,13 +290,13 @@ def handle_send_data_project(args):
             # use number 1000 for check the size
             if count % 1000 == 0 and get_json_size_bytes(data) >= config_vars['chunk_size']:
                 # send data
-                loop_thead = Thread(target=send_data, args=(config_vars, data))
+                loop_thead = Thread(target=send_data, args=(config_vars, project_name, data))
                 loop_thead.start()
                 threads.append(loop_thead)
                 data = []
 
     if len(data) != 0:
-        loop_thead = Thread(target=send_data, args=(config_vars, data))
+        loop_thead = Thread(target=send_data, args=(config_vars, project_name, data))
         loop_thead.start()
         threads.append(loop_thead)
 
