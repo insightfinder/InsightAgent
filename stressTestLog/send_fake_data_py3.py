@@ -159,7 +159,7 @@ def send_data(config_vars, project_name, metric_data):
     to_send_data_dict["licenseKey"] = config_vars['license_key']
     to_send_data_dict["projectName"] = project_name
     to_send_data_dict["userName"] = config_vars['user_name']
-    to_send_data_dict["agentType"] = "LogStreaming"
+    to_send_data_dict["agentType"] = "Custom"
 
     data_to_post = to_send_data_dict
 
