@@ -6,6 +6,7 @@ import time
 import urllib3
 import importlib
 import signal
+import socket
 import urllib.parse
 import http.client
 from sys import getsizeof
@@ -18,6 +19,7 @@ from multiprocessing import Pool, Process, Queue
 import requests
 import arrow
 
+HOSTNAME = socket.gethostname().partition('.')[0]
 ATTEMPTS = 3
 RETRY_WAIT_TIME_IN_SEC = 30
 SAMPLE_LOGS = [
@@ -156,10 +158,11 @@ def send_data(config_vars, project_name, metric_data):
     to_send_data_dict = dict()
     # for backend so this is the camel case in to_send_data_dict
     to_send_data_dict["metricData"] = json.dumps(metric_data)
+    to_send_data_dict["userName"] = config_vars['user_name']
     to_send_data_dict["licenseKey"] = config_vars['license_key']
     to_send_data_dict["projectName"] = project_name
-    to_send_data_dict["userName"] = config_vars['user_name']
-    to_send_data_dict["agentType"] = "Custom"
+    to_send_data_dict['instanceName'] = HOSTNAME
+    to_send_data_dict["agentType"] = "LogStreaming"
 
     data_to_post = to_send_data_dict
 
@@ -290,12 +293,14 @@ def handle_send_data_project(args):
             # use number 1000 for check the size
             if count % 1000 == 0 and get_json_size_bytes(data) >= config_vars['chunk_size']:
                 # send data
+                # send_data(config_vars, project_name, data)
                 loop_thead = Thread(target=send_data, args=(config_vars, project_name, data))
                 loop_thead.start()
                 threads.append(loop_thead)
                 data = []
 
     if len(data) != 0:
+        # send_data(config_vars, project_name, data)
         loop_thead = Thread(target=send_data, args=(config_vars, project_name, data))
         loop_thead.start()
         threads.append(loop_thead)
