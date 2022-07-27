@@ -1,6 +1,6 @@
-# InsightAgent: MetricFakeDataReplay
-Agent Type: MetricFileReplay
-Platform: Linux, Python 3.7
+# InsightAgent: stressTestLog
+Agent Type: stressTestLog
+Platform: Linux, Python 3.6.8
 
 
-This agent used to ingest fake metric data to insightfinder.
+This agent used to ingest fake log data to Insightfinder.
