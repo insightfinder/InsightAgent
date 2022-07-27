@@ -353,8 +353,8 @@ def main():
     while True:
         buffer_check_thead = Thread(target=handle_send_data,
                                     args=(config_vars,))
+        buffer_check_thead.setDaemon(True)
         buffer_check_thead.start()
-        buffer_check_thead.join()
         # run with 1 minute interval
         time.sleep(60)
 
