@@ -1,7 +1,7 @@
 import os
 import sys
 import time
-import pytz
+import warnings
 import glob
 import json
 import logging
@@ -214,9 +214,13 @@ def send_anomaly_data(args):
 def get_debug_info(logger, c_config, edge_vars, main_vars, if_config_vars):
     # list all projects info
     if c_config.get('list-projects'):
+        params = {
+            "userName": edge_vars['user_name'],
+            "licenseKey": edge_vars['license_key'],
+        }
         url = edge_vars['if_url'] + '/api/v1/listallprojects'
         logger.info(f"Start fetching projects info: {url}")
-        resp = requests.get(url, params=None, verify=False)
+        resp = requests.get(url, params=params, verify=False)
         count = 0
         logger.debug(f"HTTP Response Code: {resp.status_code}")
         while resp.status_code != 200 and count < edge_vars['retry']:
@@ -235,8 +239,9 @@ def get_debug_info(logger, c_config, edge_vars, main_vars, if_config_vars):
 
     elif c_config.get('debug-project'):
         params = {
+            "userName": edge_vars['user_name'],
+            "licenseKey": edge_vars['license_key'],
             'projectName': c_config.get('debug-project'),
-            'userName': c_config.get('project-owner'),
             'projectType': c_config.get('project-type'),
             'includeModelDetail': c_config.get('includeModelDetail', False),
             'includeDetectionDetail': c_config.get('includeDetectionDetail', False),
@@ -298,13 +303,9 @@ def get_cli_config_vars():
     parser.add_option('--debug-project', action='store', dest='debug-project',
                       help='The name of the project used to get debug information. '
                            + 'This can be get from field "projectName" in project list with option "--list-projects". '
-                           + 'Please also specify "--project-owner" and "--project-type"  '
+                           + 'Please also specify "--project-type"  '
                            + 'belong to this project. '
                            + 'Example: --debug-project="test_project"')
-    parser.add_option('--project-owner', action='store', dest='project-owner',
-                      help='The owner of the debug-project used to get debug information. '
-                           + 'This can be get from field "userName" in project list with option "--list-projects". '
-                           + 'Example: --project-owner="user"')
     parser.add_option('--project-type', action='store', dest='project-type',
                       help='The type of the debug-project used to get debug information. '
                            + 'This can be get from field "dataType" in project list with option "--list-projects". '
@@ -334,10 +335,13 @@ def get_cli_config_vars():
         'log_level': logging.INFO,
         'timeout': int(options.timeout) * 60,
         'debug-project': options.ensure_value('debug-project', None),
-        'project-owner': options.ensure_value('project-owner', None),
         'project-type': options.ensure_value('project-type', None),
         'timerange': options.ensure_value('timerange', None),
     }
+
+    # handle some requirement info
+    if config_vars['debug-project'] and not config_vars['project-type']:
+        sys.exit(f'Error. If you want debug project info, please also specify "--project-type".')
 
     if options.testing:
         config_vars['testing'] = True
@@ -715,7 +719,7 @@ def worker_process(args):
     # TODO: get debug info
     get_debug_info(logger, c_config, edge_vars, main_vars, if_config_vars)
 
-    if c_config['debug-project']:
+    if c_config.get('list-projects') or c_config.get('debug-project'):
         logger.info("Process is done with debug arguments.")
         return True
 
