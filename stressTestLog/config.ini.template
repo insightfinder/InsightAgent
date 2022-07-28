@@ -1,0 +1,21 @@
+[InsightFinder]
+#The user name of the account
+insightFinder_user_name =
+#The customer account license key, following the toturial to get it
+insightFinder_license_key =
+#The IF server url to send the data: https://app.insightfinder.com
+insightFinder_server_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
+
+# Test used info
+# project name, can be separate by comma.
+project_name = test-log-1,test-log-2,test-log-3,test-log-4,test-log-5,test-log-6,test-log-7,test-log-8,test-log-9,test-log-10,test-log-11,test-log-12,test-log-13,test-log-14,test-log-15,test-log-16,test-log-17
+# Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name = Stress Test
+sampling_interval = 10
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+fake_data_instance_prefix = node-
+fake_data_instance_count_per_project = 30
+fake_data_logs_total_count_per_minute = 3200000
