@@ -584,8 +584,8 @@ def check_project_exist(logger, if_config_vars):
                 'licenseKey': if_config_vars['license_key'],
                 'projectName': if_config_vars['project_name'],
                 'systemName': if_config_vars['system_name'] or if_config_vars['project_name'],
-                'instanceType': 'PrivateCloud',
-                'projectCloudType': 'PrivateCloud',
+                'instanceType': 'Shadow',
+                'projectCloudType': 'Shadow',
                 'dataType': if_config_vars.get('dataType') or get_data_type_from_project_type(if_config_vars),
                 'insightAgentType': if_config_vars.get('insightAgentType') or get_insight_agent_type_from_project_type(
                     if_config_vars),
