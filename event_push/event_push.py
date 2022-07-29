@@ -161,10 +161,10 @@ def send_anomaly_data(args):
 
     project_name = project_edge_data.get("projectName")
     user_name = project_edge_data.get("customerName")
-    system_name = data.get('DATA').get("systemName")
-    data_type = data.get('DATA').get("dataType")
-    agent_type = data.get('DATA').get("insightAgentType")
-    sampling_interval = data.get('DATA').get("sampleIntervalInMinutes")
+    system_name = data.get('DATA', {}).get("systemName")
+    data_type = data.get('DATA', {}).get("dataType")
+    agent_type = data.get('DATA', {}).get("insightAgentType")
+    sampling_interval = data.get('DATA', {}).get("sampleIntervalInMinutes")
 
     # do not send if only testing
     if c_config['testing']:
@@ -178,8 +178,8 @@ def send_anomaly_data(args):
         "if_proxies": main_vars['if_proxies'],
         "system_name": system_name,
         "project_name": project_name,
-        "dataType": data_type,
-        "insightAgentType": agent_type,
+        "dataType": data_type or 'Log',
+        "insightAgentType": agent_type or 'Custom',
         "sampling_interval": int(sampling_interval or 10) * 60,
     }
     check_success = check_project_exist(logger, check_project_vals)
