@@ -173,7 +173,7 @@ def send_anomaly_data(args):
     # check project and create
     check_project_vals = {
         'if_url': main_vars['if_url'],
-        'user_name': user_name,
+        'user_name': main_vars['user_name'],
         "license_key": main_vars['license_key'],
         "if_proxies": main_vars['if_proxies'],
         "system_name": system_name,
@@ -415,6 +415,15 @@ def get_config_vars(logger, config_ini):
             main_proxies['http'] = main_http_proxy
         if len(main_https_proxy) > 0:
             main_proxies['https'] = main_https_proxy
+
+        if not edge_user or not main_user:
+            return config_error(logger, 'user_name')
+        if not edge_license or not main_license:
+            return config_error(logger, 'license_key')
+        if not edge_url or not main_url:
+            return config_error(logger, 'if_url')
+        if edge_user != main_user:
+            return config_error(logger, 'user_name should be same in microbrain and mainbrain')
 
         if len(his_time_range) != 0:
             his_time_range = [x for x in his_time_range.split(',') if x.strip()]

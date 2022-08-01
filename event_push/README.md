@@ -92,7 +92,7 @@ python3 event_push.py --help
 
 #### Insightfinder main cluster
 * **`if_url`**: URL for InsightFinder. Default is `https://app.insightfinder.com`.
-* **`user_name`**: User name in InsightFinder
+* **`user_name`**: User name in InsightFinder. Should be same as user name in edge cluster.
 * **`license_key`**: License Key from your Account Profile in the InsightFinder UI.
 * `retry`: Number of retry to send http requests. Default is `3`.
 * `http_proxy`: HTTP proxy used to connect to InsightFinder.
