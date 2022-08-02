@@ -1,8 +1,9 @@
 import os
 import sys
 import time
-import pytz
+import warnings
 import glob
+import json
 import logging
 import configparser
 import urllib.parse
@@ -14,6 +15,7 @@ from datetime import date, datetime
 from optparse import OptionParser
 from logging.handlers import QueueHandler
 import multiprocessing
+from multiprocessing.pool import ThreadPool
 from multiprocessing import Pool, TimeoutError
 
 import arrow
@@ -23,58 +25,258 @@ ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 ATTEMPTS = 3
 
 
-def get_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_time, end_time):
+def get_anomaly_data(logger, edge_vars, main_vars, if_config_vars):
     # Format Request
-    if_url = edge_vars['if_url']
-
-    data = {'projectName': edge_vars['project_name'], 'transferToProjectName': main_vars['project_name'],
-            'transferToCustomerName': main_vars['user_name'],
-            'startTime': start_time, 'endTime': end_time, 'licenseKey': edge_vars['license_key'],
-            'userName': edge_vars['user_name'], 'timezone': edge_vars['edge_timezone']}
-
-    url = if_url + '/api/v2/projectanomalytransfer'
-
-    logger.info(f"{url} {data}")
+    params = {
+        "customerName": edge_vars['user_name'],
+        "licenseKey": edge_vars['license_key']
+    }
+    url = edge_vars['if_url'] + '/api/v2/projectanomalytransferall'
+    logger.info(f"Start fetching data: {url} {params}")
 
     # Send Request
-    resp = requests.get(url, params=data, verify=False)
+    resp = requests.get(url, params=params, verify=False)
     count = 0
-    logger.info(f"HTTP Response Code: {resp.status_code}")
-    while resp.status_code != 200 and count < edge_vars['retry']:
+    logger.debug(f"HTTP Response Code: {resp.status_code}")
+    while resp.status_code not in [200, 204] and count < edge_vars['retry']:
         time.sleep(60)
-        resp = requests.post(url, data=data, verify=False)
-        logger.info(f"HTTP Response Code: {resp.status_code}")
+        resp = requests.get(url, params=params, verify=False)
+        logger.debug(f"HTTP Response Code: {resp.status_code}")
         count += 1
 
     result = {}
     try:
         result = resp.json()
+        logger.info(f"Fetching data successfully.")
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
+        logger.error(f"Fetching data error!")
 
     logger.debug(f"{result}")
     return result
 
 
-def send_anomaly_data(logger, c_config, main_vars, data):
-    if_url = main_vars['if_url']
-    url = if_url + '/api/v2/projectanomalyreceive'
-    auth = {'licenseKey': main_vars['license_key'], 'userName': main_vars['user_name']}
-    logger.info(f"{url} {auth} {data}")
+def get_his_anomaly_data(args):
+    logger, edge_vars, main_vars, if_config_vars, time_now, start_time, end_time = args
+
+    # Send task
+    params = {
+        "customerName": edge_vars['user_name'],
+        "licenseKey": edge_vars['license_key'],
+        'startTime': start_time,
+        "endTime": end_time
+    }
+    url = edge_vars['if_url'] + '/localcron/anomalytransfer'
+    logger.info(f"Send fetching data task: {url} {params}")
+
+    transfer_key = None
+    resp = requests.get(url, params=params, verify=False)
+    count = 0
+    logger.debug(f"HTTP Response Code: {resp.status_code}")
+    while resp.status_code != 200 and count < edge_vars['retry']:
+        time.sleep(60)
+        resp = requests.get(url, params=params, verify=False)
+        logger.debug(f"HTTP Response Code: {resp.status_code}")
+        count += 1
+    transfer_key = resp.json().get('AnomalyTransferHistoricalStatusKey')
+    logger.info(f"Transfer key: {transfer_key}")
+
+    # check the status, and wait the timeout
+    is_finished = False
+    utc_time_check = int(arrow.utcnow().float_timestamp)
+    time_wait_result = cli_config_vars['timeout'] - 60 if cli_config_vars['timeout'] > 60 else 0
+    while not is_finished and utc_time_check - time_now < time_wait_result:
+        params = {
+            "customerName": edge_vars['user_name'],
+            "licenseKey": edge_vars['license_key'],
+            'anomalyTransferHistoricalStatusKeyStr': transfer_key
+        }
+        url = edge_vars['if_url'] + '/api/v2/projectanomalytransferstatus'
+        logger.info(f"checking task status: {url} {params}")
+        resp = requests.get(url, params=params, verify=False)
+        count = 0
+        logger.debug(f"HTTP Response Code: {resp.status_code}")
+        while resp.status_code != 200 and count < edge_vars['retry']:
+            time.sleep(60)
+            resp = requests.get(url, params=params, verify=False)
+            logger.debug(f"HTTP Response Code: {resp.status_code}")
+            count += 1
+        result = resp.json()
+        is_finished = result.get('isFinished', False)
+        total_task_number = result.get('totalTaskNumber', 0)
+        finish_task_number = result.get('finishedTaskNumber', 0)
+        logger.info(
+            f"Task status: {'finished' if is_finished else 'Not finished'}. {finish_task_number}/{total_task_number}")
+
+        # sleep if not finished
+        if not is_finished:
+            time.sleep(10)
+            utc_time_check = int(arrow.utcnow().float_timestamp)
+
+    if is_finished:
+        logger.info(f'Task:{transfer_key} finished.')
+    else:
+        logger.warning(f'Task:{transfer_key} not finished!')
+
+    # Get all data
+    params = {
+        "customerName": edge_vars['user_name'],
+        "licenseKey": edge_vars['license_key'],
+        'anomalyTransferHistoricalStatusKeyStr': transfer_key
+    }
+    url = edge_vars['if_url'] + '/api/v2/projectanomalytransferall'
+    logger.info(f"Start fetching data with no wait: {url} {params}")
+
+    resp = requests.get(url, params=params, verify=False)
+    count = 0
+    logger.debug(f"HTTP Response Code: {resp.status_code}")
+    while resp.status_code not in [200, 204] and count < edge_vars['retry']:
+        time.sleep(60)
+        resp = requests.get(url, params=params, verify=False)
+        logger.debug(f"HTTP Response Code: {resp.status_code}")
+        count += 1
+
+    result = {}
+    try:
+        result = resp.json()
+        logger.info(f"Fetching data successfully.")
+    except Exception as e:
+        logger.error(e)
+        logger.error(f"Fetching data error!")
+
+    logger.debug(f"{result}")
+    return result
+
+
+def send_anomaly_data(args):
+    logger, c_config, main_vars, project_edge_data = args
+
+    # parse data
+    transfer_data = project_edge_data.get("transferData")
+    try:
+        data = json.loads(transfer_data)
+    except Exception as e:
+        logger.error(e)
+        return
+
+    project_name = project_edge_data.get("projectName")
+    user_name = project_edge_data.get("customerName")
+    system_name = data.get('DATA', {}).get("systemName")
+    data_type = data.get('DATA', {}).get("dataType")
+    agent_type = data.get('DATA', {}).get("insightAgentType")
+    sampling_interval = data.get('DATA', {}).get("sampleIntervalInMinutes")
 
     # do not send if only testing
     if c_config['testing']:
         return
 
-    resp = requests.post(url, params=auth, json=data, verify=False)
+    # check project and create
+    check_project_vals = {
+        'if_url': main_vars['if_url'],
+        'user_name': main_vars['user_name'],
+        "license_key": main_vars['license_key'],
+        "if_proxies": main_vars['if_proxies'],
+        "system_name": system_name,
+        "project_name": project_name,
+        "dataType": data_type or 'Log',
+        "insightAgentType": agent_type or 'Custom',
+        "sampling_interval": int(sampling_interval or 10) * 60,
+    }
+    check_success = check_project_exist(logger, check_project_vals)
+    if not check_success:
+        return
+
+    # send project data
+    params = {
+        'userName': main_vars['user_name'],
+        "customerName": main_vars['user_name'],
+        "licenseKey": main_vars['license_key']
+    }
+    url = main_vars['if_url'] + '/api/v2/projectanomalyreceive'
+    logger.info(f"Start sending data: {url} {params}")
+    resp = requests.post(url, params=params, json=data, verify=False)
     count = 0
-    logger.info(f"HTTP Response Code: {resp.status_code}")
+    logger.debug(f"HTTP Response Code: {resp.status_code}")
     while resp.status_code != 200 and count < main_vars['retry']:
         time.sleep(60)
-        resp = requests.post(url, params=auth, json=data, verify=False)
-        logger.info(f"HTTP Response Code: {resp.status_code}")
+        resp = requests.post(url, params=params, json=data, verify=False)
+        logger.debug(f"HTTP Response Code: {resp.status_code}")
         count += 1
+
+    if resp.status_code in [200]:
+        logger.info(f"Sending data successfully.")
+    else:
+        logger.error(f"Sending data error!")
+
     return resp.status_code
+
+
+def get_debug_info(logger, c_config, edge_vars, main_vars, if_config_vars):
+    # list all projects info
+    if c_config.get('list-projects'):
+        params = {
+            "userName": edge_vars['user_name'],
+            "licenseKey": edge_vars['license_key'],
+        }
+        url = edge_vars['if_url'] + '/api/v1/listallprojects'
+        logger.info(f"Start fetching projects info: {url}")
+        resp = requests.get(url, params=params, verify=False)
+        count = 0
+        logger.debug(f"HTTP Response Code: {resp.status_code}")
+        while resp.status_code != 200 and count < edge_vars['retry']:
+            time.sleep(60)
+            resp = requests.get(url, params=None, verify=False)
+            logger.debug(f"HTTP Response Code: {resp.status_code}")
+            count += 1
+
+        try:
+            result = resp.json()
+            logger.info(f"Fetching projects info successfully.")
+            logger.info(f"Projects info: {result}")
+        except Exception as e:
+            logger.error(e)
+            logger.error(f"Fetching projects info error!")
+
+    elif c_config.get('debug-project'):
+        params = {
+            "userName": edge_vars['user_name'],
+            "licenseKey": edge_vars['license_key'],
+            'projectName': c_config.get('debug-project'),
+            'projectType': c_config.get('project-type'),
+            'includeModelDetail': c_config.get('includeModelDetail', False),
+            'includeDetectionDetail': c_config.get('includeDetectionDetail', False),
+            'includeOther': c_config.get('includeOther', False),
+        }
+
+        if c_config.get('timerange'):
+            try:
+                time_range = [x for x in c_config['timerange'].split(',') if x.strip()]
+                time_range = [int(arrow.get(x).float_timestamp * 1000) for x in time_range]
+                params['startTime'] = time_range[0]
+                params['endTime'] = time_range[1]
+            except Exception as e:
+                logger.warning(e)
+                logger.error('Error argument: timerange')
+
+        # get project debug info
+        url = edge_vars['if_url'] + '/api/v1/projectreport'
+        logger.info(f"Start fetching debug info: {url} {params}")
+        resp = requests.get(url, params=params, verify=False)
+        count = 0
+        logger.debug(f"HTTP Response Code: {resp.status_code}")
+        while resp.status_code != 200 and count < edge_vars['retry']:
+            time.sleep(60)
+            resp = requests.get(url, params=params, verify=False)
+            logger.debug(f"HTTP Response Code: {resp.status_code}")
+            count += 1
+
+        try:
+            result = resp.json()
+            logger.info(f"Fetching debug info successfully.")
+            logger.info(f"Debug info: {result}")
+        except Exception as e:
+            logger.error(e)
+            logger.error(f"Fetching debug info error!")
 
 
 def get_cli_config_vars():
@@ -95,7 +297,35 @@ def get_cli_config_vars():
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
     parser.add_option('--timeout', action='store', dest='timeout', default=5,
-                      help='Minutes of timeout for all processes')
+                      help='Minutes of timeout for all processes. Default is 5.')
+    parser.add_option('--list-projects', action='store_true', dest='list-projects', default=False,
+                      help='List all projects in edge server. ')
+    parser.add_option('--debug-project', action='store', dest='debug-project',
+                      help='The name of the project used to get debug information. '
+                           + 'This can be get from field "projectName" in project list with option "--list-projects". '
+                           + 'Please also specify "--project-type"  '
+                           + 'belong to this project. '
+                           + 'Example: --debug-project="test_project"')
+    parser.add_option('--project-type', action='store', dest='project-type',
+                      help='The type of the debug-project used to get debug information. '
+                           + 'This can be get from field "dataType" in project list with option "--list-projects". '
+                           + 'Example: --project-type="Log" or --project-type="Metric"')
+    parser.add_option('--timerange', action='store', dest='timerange',
+                      help='The range of times used to get details debug information. '
+                           + 'Example: --timerange="2022-06-10 00:00:00,2022-06-11 00:00:00"')
+    parser.add_option('--includeModelDetail', action='store_true', dest='includeModelDetail', default=False,
+                      help='Check the models info belong to debug-project. '
+                           + 'For metric project, If you set "--includeModelDetail", '
+                           + 'but you don’t have "modelDetails" in your return, '
+                           + 'it means your project don’t have model created for detection within these time range, '
+                           + 'your detection will fail, '
+                           + 'if rawCsvLength=0 or numberOfColumn=0 or numberOfRow=0, '
+                           + 'it means your data in metric may have some problem, '
+                           + 'this project didn’t receive any data for that range. ')
+    parser.add_option('--includeDetectionDetail', action='store_true', dest='includeDetectionDetail', default=False,
+                      help='Check the detections info belong to debug-project. ')
+    parser.add_option('--includeOther', action='store_true', dest='includeOther', default=False,
+                      help='Check the others info belong to debug-project. ')
     (options, args) = parser.parse_args()
 
     config_vars = {
@@ -104,7 +334,14 @@ def get_cli_config_vars():
         'testing': False,
         'log_level': logging.INFO,
         'timeout': int(options.timeout) * 60,
+        'debug-project': options.ensure_value('debug-project', None),
+        'project-type': options.ensure_value('project-type', None),
+        'timerange': options.ensure_value('timerange', None),
     }
+
+    # handle some requirement info
+    if config_vars['debug-project'] and not config_vars['project-type']:
+        sys.exit(f'Error. If you want debug project info, please also specify "--project-type".')
 
     if options.testing:
         config_vars['testing'] = True
@@ -113,6 +350,15 @@ def get_cli_config_vars():
         config_vars['log_level'] = logging.DEBUG
     elif options.quiet:
         config_vars['log_level'] = logging.WARNING
+
+    if options.ensure_value('list-projects', False):
+        config_vars['list-projects'] = True
+    if options.ensure_value('includeModelDetail', False):
+        config_vars['includeModelDetail'] = True
+    if options.ensure_value('includeDetectionDetail', False):
+        config_vars['includeDetectionDetail'] = True
+    if options.ensure_value('includeOther', False):
+        config_vars['includeOther'] = True
 
     return config_vars
 
@@ -134,9 +380,6 @@ def get_config_vars(logger, config_ini):
             # Edge Node Parameters
             edge_user = config_parser.get('edge', 'user_name')
             edge_license = config_parser.get('edge', 'license_key')
-            edge_project_name = config_parser.get('edge', 'project_name')
-            edge_project_type = config_parser.get('edge', 'project_type').upper()
-            edge_timezone = config_parser.get('edge', 'timezone') or 'UTC'
             edge_url = config_parser.get('edge', 'if_url')
             edge_retry = config_parser.get('edge', 'retry') or 3
             edge_http_proxy = config_parser.get('edge', 'http_proxy')
@@ -145,11 +388,6 @@ def get_config_vars(logger, config_ini):
             # Main IF Parameters
             main_user = config_parser.get('main', 'user_name')
             main_license = config_parser.get('main', 'license_key')
-            main_project_name = config_parser.get('main', 'project_name')
-            main_project_type = config_parser.get('main', 'project_type').upper()
-            containerize = config_parser.get('main', 'containerize').upper()
-            system_name = config_parser.get('main', 'system_name')
-            sampling_interval = config_parser.get('main', 'sampling_interval')
             main_url = config_parser.get('main', 'if_url')
             main_retry = config_parser.get('main', 'retry') or 3
             main_http_proxy = config_parser.get('main', 'http_proxy')
@@ -159,58 +397,10 @@ def get_config_vars(logger, config_ini):
             # time range
             his_time_range = config_parser.get('insightfinder', 'his_time_range')
             run_interval = config_parser.get('insightfinder', 'run_interval')
-            query_timewindow_of_multiple_run_interval = config_parser.get('insightfinder',
-                                                                          'query_timewindow_of_multiple_run_interval')
 
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             return config_error(logger)
-
-        # Placeholders for Metric as Metric is not configured
-        if edge_project_type not in {
-            'METRIC',
-            'METRICREPLAY',
-            'LOG',
-            'LOGREPLAY',
-            'INCIDENT',
-            'INCIDENTREPLAY',
-            'ALERT',
-            'ALERTREPLAY',
-            'DEPLOYMENT',
-            'DEPLOYMENTREPLAY'
-        }:
-            return config_error(logger, 'project_type')
-        if main_project_type not in {
-            'METRIC',
-            'METRICREPLAY',
-            'LOG',
-            'LOGREPLAY',
-            'INCIDENT',
-            'INCIDENTREPLAY',
-            'ALERT',
-            'ALERTREPLAY',
-            'DEPLOYMENT',
-            'DEPLOYMENTREPLAY'
-        }:
-            return config_error(logger, 'project_type')
-        is_replay = 'REPLAY' in main_project_type
-
-        if len(sampling_interval) == 0:
-            if 'METRIC' in main_project_type:
-                return config_error(logger, 'sampling_interval')
-            else:
-                # set default for non-metric
-                sampling_interval = 10
-
-        if sampling_interval.endswith('s'):
-            sampling_interval = int(sampling_interval[:-1])
-        else:
-            sampling_interval = int(sampling_interval) * 60
-
-        if len(edge_timezone) != 0:
-            edge_timezone_offset = int(arrow.now(edge_timezone).utcoffset().total_seconds())
-        else:
-            return config_error(logger, 'edge_timezone')
 
         # set edge proxies
         edge_proxies = dict()
@@ -226,6 +416,15 @@ def get_config_vars(logger, config_ini):
         if len(main_https_proxy) > 0:
             main_proxies['https'] = main_https_proxy
 
+        if not edge_user or not main_user:
+            return config_error(logger, 'user_name')
+        if not edge_license or not main_license:
+            return config_error(logger, 'license_key')
+        if not edge_url or not main_url:
+            return config_error(logger, 'if_url')
+        if edge_user != main_user:
+            return config_error(logger, 'user_name should be same in microbrain and mainbrain')
+
         if len(his_time_range) != 0:
             his_time_range = [x for x in his_time_range.split(',') if x.strip()]
             his_time_range = [int(arrow.get(x).float_timestamp) for x in his_time_range]
@@ -235,22 +434,10 @@ def get_config_vars(logger, config_ini):
             run_interval = int(run_interval[:-1])
         else:
             run_interval = int(run_interval) * 60
-        if len(query_timewindow_of_multiple_run_interval) == 0:
-            query_timewindow_of_multiple_run_interval = 3
-        else:
-            try:
-                query_timewindow_of_multiple_run_interval = int(query_timewindow_of_multiple_run_interval)
-            except Exception as e:
-                logger.exception('Exception: ' + str(e))
-                return config_error(logger, 'query_timewindow_of_multiple_run_interval')
 
         edge = {
             'user_name': edge_user,
             'license_key': edge_license,
-            'project_name': edge_project_name,
-            'project_type': edge_project_type,
-            'edge_timezone': edge_timezone,
-            'edge_timezone_offset': edge_timezone_offset,
             'retry': edge_retry,
             'if_url': edge_url,
             'if_proxies': edge_proxies
@@ -259,21 +446,14 @@ def get_config_vars(logger, config_ini):
         main = {
             'user_name': main_user,
             'license_key': main_license,
-            'project_name': main_project_name,
-            'project_type': main_project_type,
-            'containerize': True if containerize == 'YES' else False,
-            'system_name': system_name,
-            'sampling_interval': int(sampling_interval),  # as seconds
             'retry': main_retry,
             'if_url': main_url,
             'if_proxies': main_proxies,
-            'is_replay': is_replay
         }
 
         if_config_vars = {
             'his_time_range': his_time_range,
             'run_interval': int(run_interval),  # as seconds
-            'query_timewindow_of_multiple_run_interval': query_timewindow_of_multiple_run_interval,
         }
 
         return edge, main, if_config_vars
@@ -342,34 +522,34 @@ def send_request(logger, url, mode='GET', failure_message='Failure!',
 
 def get_data_type_from_project_type(if_config_vars):
     """ use project type to determine data type """
-    if 'METRIC' in if_config_vars['project_type']:
+    if 'METRIC' in if_config_vars.get('project_type'):
         return 'Metric'
-    elif 'ALERT' in if_config_vars['project_type']:
+    elif 'ALERT' in if_config_vars.get('project_type'):
         return 'Alert'
-    elif 'INCIDENT' in if_config_vars['project_type']:
+    elif 'INCIDENT' in if_config_vars.get('project_type'):
         return 'Incident'
-    elif 'DEPLOYMENT' in if_config_vars['project_type']:
+    elif 'DEPLOYMENT' in if_config_vars.get('project_type'):
         return 'Deployment'
-    elif 'TRACE' in if_config_vars['project_type']:
+    elif 'TRACE' in if_config_vars.get('project_type'):
         return 'Trace'
     else:  # LOG
         return 'Log'
 
 
 def get_insight_agent_type_from_project_type(if_config_vars):
-    if 'containerize' in if_config_vars and if_config_vars['containerize']:
-        if 'METRIC' in if_config_vars['project_type']:
-            if if_config_vars['is_replay']:
+    if if_config_vars.get('containerize'):
+        if 'METRIC' in if_config_vars.get('project_type'):
+            if if_config_vars.get('is_replay'):
                 return 'containerReplay'
             else:
                 return 'containerStreaming'
         else:
-            if if_config_vars['is_replay']:
+            if if_config_vars.get('is_replay'):
                 return 'ContainerHistorical'
             else:
                 return 'ContainerCustom'
-    elif if_config_vars['is_replay']:
-        if 'METRIC' in if_config_vars['project_type']:
+    elif if_config_vars.get('is_replay'):
+        if 'METRIC' in if_config_vars.get('project_type'):
             return 'MetricFile'
         else:
             return 'LogFile'
@@ -413,10 +593,11 @@ def check_project_exist(logger, if_config_vars):
                 'licenseKey': if_config_vars['license_key'],
                 'projectName': if_config_vars['project_name'],
                 'systemName': if_config_vars['system_name'] or if_config_vars['project_name'],
-                'instanceType': '',
+                'instanceType': 'Shadow',
                 'projectCloudType': 'Shadow',
-                'dataType': get_data_type_from_project_type(if_config_vars),
-                'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
+                'dataType': if_config_vars.get('dataType') or get_data_type_from_project_type(if_config_vars),
+                'insightAgentType': if_config_vars.get('insightAgentType') or get_insight_agent_type_from_project_type(
+                    if_config_vars),
                 'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
                 'samplingIntervalInSeconds': if_config_vars['sampling_interval'],
             }
@@ -544,34 +725,76 @@ def worker_process(args):
         return
     print_summary_info(logger, edge_vars, main_vars, if_config_vars)
 
-    if not c_config['testing']:
-        # check project name first
-        check_success = check_project_exist(logger, main_vars)
-        if not check_success:
-            return
+    # TODO: get debug info
+    get_debug_info(logger, c_config, edge_vars, main_vars, if_config_vars)
+
+    if c_config.get('list-projects') or c_config.get('debug-project'):
+        logger.info("Process is done with debug arguments.")
+        return True
 
     logger.debug('history range config: {}'.format(if_config_vars['his_time_range']))
     if if_config_vars['his_time_range']:
         logger.debug('Using time range for replay data')
+        time_ranges = []
         for timestamp in range(if_config_vars['his_time_range'][0],
                                if_config_vars['his_time_range'][1],
                                if_config_vars['run_interval']):
             start_time = int(arrow.get(timestamp).float_timestamp * 1000)
             end_time = int(arrow.get(timestamp + if_config_vars['run_interval']).float_timestamp * 1000)
+            time_ranges.append((start_time, end_time))
 
-            # start run
-            edge_data = get_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_time, end_time)
-            send_anomaly_data(logger, c_config, main_vars, edge_data)
+        # query his data
+        thread_get_data_pool = ThreadPool(len(time_ranges))
+        params = [(logger, edge_vars, main_vars, if_config_vars, time_now, tr[0], tr[1]) for tr in time_ranges]
+        results = thread_get_data_pool.map(get_his_anomaly_data, params)
+        thread_get_data_pool.close()
+        thread_get_data_pool.join()
+
+        # send his data
+        for edge_data in results:
+            # send data per project
+            params = []
+            for project_edge_data in edge_data:
+                if project_edge_data.get("noResult"):
+                    continue
+                try:
+                    transfer_data = project_edge_data.get("transferData")
+                    transfer_data = json.loads(transfer_data)
+                    params.append((logger, c_config, main_vars, transfer_data))
+                except Exception as e:
+                    logger.error(f'Parse project: {project_edge_data.get("projectName")} transfer_data error.')
+                    logger.error(e)
+            if len(params) > 0:
+                thread_send_data_pool = ThreadPool(len(params))
+                thread_send_data_pool.map(send_anomaly_data, params)
+                thread_send_data_pool.close()
+                thread_send_data_pool.join()
+                logger.info(f"Complete with send data.")
+            logger.info(f"{len(params)} project have results. {len(edge_data) - len(params)} project no results.")
+
     else:
         logger.debug('Using current time for streaming data')
 
-        end_time = (time_now + edge_vars['edge_timezone_offset']) * 1000
-        start_time = end_time - if_config_vars['query_timewindow_of_multiple_run_interval'] * if_config_vars[
-            'run_interval'] * 1000
-
         # start run
-        edge_data = get_anomaly_data(logger, edge_vars, main_vars, if_config_vars, start_time, end_time)
-        send_anomaly_data(logger, c_config, main_vars, edge_data)
+        edge_data = get_anomaly_data(logger, edge_vars, main_vars, if_config_vars)
+
+        # send data per project
+        params = []
+        for project_edge_data in edge_data:
+            if project_edge_data.get("noResult"):
+                continue
+            try:
+                params.append((logger, c_config, main_vars, project_edge_data))
+            except Exception as e:
+                logger.error(f'Parse project: {project_edge_data.get("projectName")} transfer_data error.')
+                logger.error(e)
+        if len(params) > 0:
+            thread_send_data_pool = ThreadPool(len(params))
+            thread_send_data_pool.map(send_anomaly_data, params)
+            thread_send_data_pool.close()
+            thread_send_data_pool.join()
+            logger.info(f"Complete with send data.")
+        logger.info(f"{len(params)} project have results. {len(edge_data) - len(params)} project no results.")
 
     logger.info("Process is done with config: {}".format(config_file))
     return True

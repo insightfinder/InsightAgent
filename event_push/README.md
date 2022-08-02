@@ -3,7 +3,7 @@ This agent get events from Insightfinder edge cluster and sends it to Insightfin
 ## Installing the Agent
 
 ### Required Dependencies:
-1. Python >= 3.6.8
+1. Python == 3.6.8
 1. Pip3
 
 ###### Installation Steps:
@@ -65,36 +65,35 @@ kill -9 PID
 ```
 
 ###### Run agent with history data:
-For the agent to replay history data, it will need to run with `--timeout 0`.
+For the agent to replay history data, it may need to set `--timeout` with greater than 5 minutes.
  
 Before run agent, please set `his_time_range` and `run_interval` in the config file. Please follow the description of these config vars. 
 
 ```bash
-venv/bin/python3 event_push.py --timeout 0
+venv/bin/python3 event_push.py --timeout 60
 ```
+
+###### Check the project info in edge cluster:
+Agent support use command options to check the project info in edge cluster, please read help message to debug.
+
+```bash
+python3 event_push.py --help
+``` 
  
 
 ### Config Variables
 #### Insightfinder edge cluster
-* **`user_name`**: User name in InsightFinder
-* **`license_key`**: License Key from your Account Profile in the InsightFinder UI. 
-* **`project_name`**: Name of the project created in the InsightFinder UI. 
-* **`project_type`**: Type of the project - one of `metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay`.
-* `timezone`: Timezone for selected user. Default is `UTC`.
 * **`if_url`**: URL for InsightFinder. Default is `https://app.insightfinder.com`.
+* **`user_name`**: User name in InsightFinder
+* **`license_key`**: License Key from your Account Profile in the InsightFinder UI.
 * `retry`: Number of retry to send http requests. Default is `3`.
 * `http_proxy`: HTTP proxy used to connect to InsightFinder.
 * `https_proxy`: As above, but HTTPS.
 
 #### Insightfinder main cluster
-* **`user_name`**: User name in InsightFinder
-* **`license_key`**: License Key from your Account Profile in the InsightFinder UI. 
-* **`project_name`**: Name of the project created in the InsightFinder UI, If this project is not exist, agent will create it automatically.
-* `system_name`: Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name. 
-* **`project_type`**: Type of the project - one of `metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay`.
-* `containerize`: Set to `YES` if project is container.
-* **`sampling_interval`**: How frequently (in Minutes) data is collected. Should match the interval used in project settings. 
 * **`if_url`**: URL for InsightFinder. Default is `https://app.insightfinder.com`.
+* **`user_name`**: User name in InsightFinder. Should be same as user name in edge cluster.
+* **`license_key`**: License Key from your Account Profile in the InsightFinder UI.
 * `retry`: Number of retry to send http requests. Default is `3`.
 * `http_proxy`: HTTP proxy used to connect to InsightFinder.
 * `https_proxy`: As above, but HTTPS.
@@ -102,6 +101,5 @@ venv/bin/python3 event_push.py --timeout 0
 #### Runtime config
 * `his_time_range`: History data time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00. If this option is set, the agent will query results by time range.
 * **`run_interval`**: How frequently (in Minutes) the agent is ran. For history data, this var is the time range of each api call, could set to 1440.
-* **`query_timewindow_of_multiple_run_interval`**: The time window of the requested data, in multiples of run_interval. Default is 3.
 
 
