@@ -101,7 +101,7 @@ kill -9 PID
 * `system_name`: Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name. 
 * **`project_type`**: Type of the project - one of `metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay`.
 * `containerize`: Set to `YES` if project is container.
-* `enableHolisticModel`: Enable holistic model when auto create project. Default is `false`.
+* `enable_holistic_model`: Enable holistic model when auto create project. Default is `false`.
 * **`sampling_interval`**: How frequently (in Minutes) data is collected. Should match the interval used in project settings.
 * **`run_interval`**: How frequently (in Minutes) the agent is ran. Should match the interval used in cron.
 * `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
