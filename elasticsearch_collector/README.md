@@ -3,7 +3,7 @@ This agent collects data from elasticsearch and sends it to Insightfinder.
 ## Installing the Agent
 
 ### Required Dependencies:
-1. Python 3.x 
+1. Python 3.6.8
 1. Pip3
 
 ###### Installation Steps:
