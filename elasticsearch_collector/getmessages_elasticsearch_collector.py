@@ -514,6 +514,7 @@ def get_if_config_vars(logger, config_ini):
             system_name = config_parser.get('insightfinder', 'system_name')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
             containerize = config_parser.get('insightfinder', 'containerize').upper()
+            enableHolisticModel = config_parser.get('insightfinder', 'enableHolisticModel').upper()
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             run_interval = config_parser.get('insightfinder', 'run_interval')
             chunk_size_kb = config_parser.get('insightfinder', 'chunk_size_kb')
@@ -592,6 +593,7 @@ def get_if_config_vars(logger, config_ini):
             'system_name': system_name,
             'project_type': project_type,
             'containerize': True if containerize == 'YES' else False,
+            'enableHolisticModel': True if enableHolisticModel == 'TRUE' else False,
             'sampling_interval': int(sampling_interval),  # as seconds
             'run_interval': int(run_interval),  # as seconds
             'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
@@ -1059,6 +1061,7 @@ def check_project_exist(logger, if_config_vars):
                 'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
                 'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
                 'samplingIntervalInSeconds': if_config_vars['sampling_interval'],
+                'projectModelFlag': if_config_vars['enableHolisticModel'],
             }
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
             response = send_request(logger, url, 'POST', data=params, verify=False,
