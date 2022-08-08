@@ -65,6 +65,10 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
     if not es_conn:
         return config_error(logger, 'ElasticSearch connection error')
 
+    # pit used
+    pit_response = es_conn.open_point_in_time(index=agent_config_vars['indeces'], keep_alive="1m")
+    pit = pit_response['id']
+
     # time query
     timestamp_field = agent_config_vars['timestamp_field']
 
@@ -80,6 +84,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
 
             # build query
             query_body = {
+                "size": agent_config_vars['query_chunk_size'],
                 "query": {
                     "bool": {
                         "must": [
@@ -94,37 +99,18 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
                             }
                         ],
                     },
-                }
+                },
+                "pit": {'id': pit, 'keep_alive': '1m'},
+                "sort": [
+                    {timestamp_field: {"order": "asc"}}
+                ]
             }
             # add user-defined query
             if isinstance(agent_config_vars['query_json'], dict):
                 merge(agent_config_vars['query_json'], query_body)
 
-            # get total number of messages
-            response = es_conn.search(
-                body=query_body,
-                index=agent_config_vars['indeces'],
-                ignore_unavailable=False,
-                size=0
-            )
-            total = response.get('hits', {}).get('total', 0)
-            if not isinstance(total, int):
-                total = total.get('value', 0)
-
-            # validate successs
-            if 'error' in response:
-                logger.error('Query es error: ' + str(response))
-                return
-
             # build query with chunk
-            start_index = 0
-            while start_index < total:
-                query = dict({'from': start_index, "size": agent_config_vars['query_chunk_size']}, **query_body)
-                start_index += agent_config_vars['query_chunk_size']
-
-                data = query_messages_elasticsearch(logger, if_config_vars, agent_config_vars, es_conn, query)
-                for msg_value in data:
-                    messages.put(msg_value)
+            query_messages_elasticsearch(logger, if_config_vars, agent_config_vars, es_conn, query_body, messages)
 
     else:
         logger.debug('Using current time for streaming data')
@@ -132,12 +118,9 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
         start_time = time_now - if_config_vars['sampling_interval']
         end_time = time_now
 
-        # TODO: pit used
-        # pit_response = es_conn.open_point_in_time(index=agent_config_vars['indeces'], keep_alive="1m")
-        # pit = pit_response['id']
-
         # build query
         query_body = {
+            "size": agent_config_vars['query_chunk_size'],
             "query": {
                 "bool": {
                     "must": [
@@ -153,40 +136,17 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
                     ],
                 },
             },
-            # "pit": {'id': pit, 'keep_alive': '1m'},
-            # "sort": [
-            #     {timestamp_field: {"order": "asc"}}
-            # ]
+            "pit": {'id': pit, 'keep_alive': '1m'},
+            "sort": [
+                {timestamp_field: {"order": "asc"}}
+            ]
         }
         # add user-defined query
         if isinstance(agent_config_vars['query_json'], dict):
             merge(agent_config_vars['query_json'], query_body)
 
-        # get total number of messages
-        response = es_conn.search(
-            body=query_body,
-            index=agent_config_vars['indeces'],
-            ignore_unavailable=False,
-            size=0)
-        total = response.get('hits').get('total', 0)
-
-        if not isinstance(total, int):
-            total = total.get('value', 0)
-
-        # validate successs
-        if 'error' in response:
-            logger.error('Query es error: ' + str(response))
-            return
-
         # build query with chunk
-        start_index = 0
-        while start_index < total:
-            query = dict({'from': start_index, "size": agent_config_vars['query_chunk_size']}, **query_body)
-            start_index += agent_config_vars['query_chunk_size']
-
-            data = query_messages_elasticsearch(logger, if_config_vars, agent_config_vars, es_conn, query)
-            for msg_value in data:
-                messages.put(msg_value)
+        query_messages_elasticsearch(logger, if_config_vars, agent_config_vars, es_conn, query_body, messages)
 
     # send close single for each worker
     for i in range(0, worker_process):
@@ -229,27 +189,56 @@ def build_es_connection_hosts(logger, agent_config_vars):
     return hosts
 
 
-def query_messages_elasticsearch(logger, if_config_vars, agent_config_vars, es_conn, query):
+def query_messages_elasticsearch(logger, if_config_vars, agent_config_vars, es_conn, query_body, messages):
     logger.info('Starting query server es')
 
-    data = []
-    try:
-        # execute sql string
-        response = es_conn.search(
-            body=query,
-            index=agent_config_vars['indeces'],
-            ignore_unavailable=False)
+    # get total number of messages
+    response = es_conn.search(
+        body=query_body,
+        ignore_unavailable=False,
+    )
 
-        if 'error' in response:
-            logger.error('Query es error: ' + str(response))
-        else:
-            data = response.get('hits', {}).get('hits', [])
+    # validate successs
+    if 'error' in response:
+        logger.error('Query es error: ' + str(response))
+        return
 
-    except Exception as e:
-        logger.error(e)
-        logger.error('Query log error.')
+    data = response.get('hits', {}).get('hits', [])
+    if len(data) == 0:
+        return
+    for item in data:
+        messages.put(item)
 
-    return data
+    # next query
+    last_time = response.get('hits').get('hits')[-1].get('sort')
+    pit = response.get('pit_id')
+    while len(data) >= agent_config_vars['query_chunk_size']:
+        try:
+            query_body["search_after"] = last_time
+            query_body['pit']['id'] = pit
+            response = es_conn.search(
+                body=query_body,
+                ignore_unavailable=False
+            )
+
+            if 'error' in response:
+                logger.error('Query es error: ' + str(response))
+                return
+            else:
+                data = response.get('hits', {}).get('hits', [])
+                if len(data) == 0:
+                    return
+                for item in data:
+                    messages.put(item)
+
+                # next query
+                last_time = response.get('hits').get('hits')[-1].get('sort')
+                pit = response.get('pit_id')
+
+        except Exception as e:
+            logger.error(e)
+            logger.error('Query log error.')
+            return
 
 
 def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, datas):
@@ -1284,7 +1273,7 @@ def main():
     datas = Queue()
     # all processes
     processes = []
-    worker_process = 1 or multiprocessing.cpu_count()
+    worker_process = multiprocessing.cpu_count()
 
     # consumer process
     d = Process(target=process_get_data,
