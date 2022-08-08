@@ -344,13 +344,15 @@ def process_build_buffer(logger, c_config, if_config_vars, agent_config_vars, da
     closed_worker = 0
     while True:
         try:
-            message = datas.get()
-            if message == CLOSED_MESSAGE:
-                closed_worker += 1
             if closed_worker >= worker_process:
                 global ALL_BUFFER_CLEAR
                 ALL_BUFFER_CLEAR = True
                 break
+
+            message = datas.get()
+            if message == CLOSED_MESSAGE:
+                closed_worker += 1
+                continue
 
             project = message.pop('project')
             if lock.acquire():
