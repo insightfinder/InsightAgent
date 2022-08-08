@@ -92,6 +92,7 @@ system_name =
 project_type = log
 # Set to `YES` if project is container.
 containerize = no
+enable_holistic_model = false
 sampling_interval = 10
 run_interval = 10
 # what size to limit chunks sent to IF to, as kb
