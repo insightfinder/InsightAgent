@@ -104,6 +104,7 @@ kill -9 PID
 * `containerize`: Set to `YES` if project is container.
 * `enable_holistic_model`: Enable holistic model when auto create project. Default is `false`.
 * **`sampling_interval`**: How frequently (in Minutes) data is collected. Should match the interval used in project settings.
+* **`frequency_sampling_interval`**: How frequently (in Minutes) the hot event detected.
 * **`run_interval`**: How frequently (in Minutes) the agent is ran. Should match the interval used in cron.
 * `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
 * `if_url`: URL for InsightFinder. Default is `https://app.insightfinder.com`.
