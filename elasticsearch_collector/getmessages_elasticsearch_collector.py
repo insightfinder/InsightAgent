@@ -339,7 +339,6 @@ def process_build_buffer(logger, c_config, if_config_vars, agent_config_vars, da
     # check buffer and send data
     loop_thead = Thread(target=func_check_buffer,
                         args=(lock, log_buffer, logger, c_config, if_config_vars, agent_config_vars))
-    loop_thead.setDaemon(True)
     loop_thead.start()
 
     # build buffer
