@@ -50,7 +50,7 @@ User `-p` to define max processes, use `--timeout` to define max timeout.
 ```
 
 ###### Run agent with cron:
-For the agent to run continuously, it will need to run as a cron job with `cron.py`. 
+For the agent to run continuously, it will need to run as a cron job with `cron.py`. Every config file will start a cron job.
 
 ```bash
 nohup venv/bin/python3 cron.py &
