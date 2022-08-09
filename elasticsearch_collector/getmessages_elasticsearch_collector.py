@@ -53,6 +53,7 @@ ATTEMPTS = 3
 RETRY_WAIT_TIME_IN_SEC = 30
 CLOSED_MESSAGE = "CLOSED_MESSAGE"
 ALL_BUFFER_CLEAR = False
+SESSION = requests.Session()
 
 
 def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, worker_process):
@@ -418,7 +419,9 @@ def check_buffer(lock, log_buffer, logger, c_config, if_config_vars, agent_confi
         for row in buffer:
             track['current_row'].append(row)
             track['line_count'] += 1
-            if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+            # check the buffer every 100 lines
+            if track['line_count'] % 100 == 0 and get_json_size_bytes(track['current_row']) >= if_config_vars[
+                'chunk_size']:
                 logger.debug('Sending buffer chunk')
                 send_data_to_if(logger, c_config, if_config_vars, track, track['current_row'], project)
                 reset_track(track)
@@ -972,9 +975,9 @@ def send_request(logger, url, mode='GET', failure_message='Failure!', success_me
                  **request_passthrough):
     """ sends a request to the given url """
     # determine if post or get (default)
-    req = requests.get
+    req = SESSION.get
     if mode.upper() == 'POST':
-        req = requests.post
+        req = SESSION.post
 
     req_num = 0
     for req_num in range(ATTEMPTS):
