@@ -51,6 +51,7 @@ JSON_LEVEL_DELIM = '.'
 CSV_DELIM = r",|\t"
 ATTEMPTS = 3
 RETRY_WAIT_TIME_IN_SEC = 30
+BUFFER_CHECK_COUNT = 1000
 CLOSED_MESSAGE = "CLOSED_MESSAGE"
 ALL_BUFFER_CLEAR = False
 SESSION = requests.Session()
@@ -419,9 +420,9 @@ def check_buffer(lock, log_buffer, logger, c_config, if_config_vars, agent_confi
         for row in buffer:
             track['current_row'].append(row)
             track['line_count'] += 1
-            # check the buffer every 100 lines
-            if track['line_count'] % 100 == 0 and get_json_size_bytes(track['current_row']) >= if_config_vars[
-                'chunk_size']:
+            # check the buffer every BUFFER_CHECK_COUNT lines
+            if track['line_count'] % BUFFER_CHECK_COUNT == 0 and get_json_size_bytes(track['current_row']) >= \
+                    if_config_vars['chunk_size']:
                 logger.debug('Sending buffer chunk')
                 send_data_to_if(logger, c_config, if_config_vars, track, track['current_row'], project)
                 reset_track(track)
