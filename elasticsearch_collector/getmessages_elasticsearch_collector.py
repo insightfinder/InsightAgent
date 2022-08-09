@@ -646,6 +646,7 @@ def get_if_config_vars(logger, config_ini):
             containerize = config_parser.get('insightfinder', 'containerize').upper()
             enable_holistic_model = config_parser.get('insightfinder', 'enable_holistic_model').upper()
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
+            frequency_sampling_interval = config_parser.get('insightfinder', 'frequency_sampling_interval')
             run_interval = config_parser.get('insightfinder', 'run_interval')
             chunk_size_kb = config_parser.get('insightfinder', 'chunk_size_kb')
             if_url = config_parser.get('insightfinder', 'if_url')
@@ -693,6 +694,10 @@ def get_if_config_vars(logger, config_ini):
             sampling_interval = int(sampling_interval[:-1])
         else:
             sampling_interval = int(sampling_interval) * 60
+        if frequency_sampling_interval.endswith('s'):
+            frequency_sampling_interval = int(frequency_sampling_interval[:-1])
+        else:
+            frequency_sampling_interval = int(frequency_sampling_interval) * 60
 
         if len(run_interval) == 0:
             return config_error(logger, 'run_interval')
@@ -725,6 +730,7 @@ def get_if_config_vars(logger, config_ini):
             'containerize': True if containerize == 'YES' else False,
             'enable_holistic_model': True if enable_holistic_model == 'TRUE' else False,
             'sampling_interval': int(sampling_interval),  # as seconds
+            'frequency_sampling_interval': int(frequency_sampling_interval),  # as seconds
             'run_interval': int(run_interval),  # as seconds
             'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
             'if_url': if_url,
@@ -1134,8 +1140,8 @@ def check_project_exist(logger, if_config_vars, project):
                 'projectCloudType': 'PrivateCloud',
                 'dataType': get_data_type_from_project_type(if_config_vars),
                 'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
-                'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
-                'samplingIntervalInSeconds': if_config_vars['sampling_interval'],
+                'samplingInterval': int(if_config_vars['frequency_sampling_interval'] / 60),
+                'samplingIntervalInSeconds': if_config_vars['frequency_sampling_interval'],
                 'projectModelFlag': if_config_vars['enable_holistic_model'],
             }
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
