@@ -18,9 +18,11 @@ import traceback
 from time import sleep
 from sys import getsizeof
 from optparse import OptionParser
-from threading import Thread, Lock, Event
+import threading
+from threading import Lock
 from logging.handlers import QueueHandler
 import multiprocessing
+from multiprocessing.pool import ThreadPool
 from multiprocessing import Process, Queue
 
 from elasticsearch import Elasticsearch
@@ -53,7 +55,6 @@ ATTEMPTS = 3
 RETRY_WAIT_TIME_IN_SEC = 30
 BUFFER_CHECK_COUNT = 1000
 CLOSED_MESSAGE = "CLOSED_MESSAGE"
-ALL_BUFFER_CLEAR = False
 SESSION = requests.Session()
 
 
@@ -252,10 +253,11 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
     while True:
         try:
             message = messages.get()
-            logger.debug(message)
             if message == CLOSED_MESSAGE:
                 logger.info('All logs parsed.')
                 break
+
+            logger.debug(message)
 
             # get source
             message = message.get('_source', {})
@@ -316,6 +318,8 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
             log_entry = prepare_log_entry(if_config_vars, str(int(timestamp)), data, full_instance)
             log_entry['project'] = project
 
+            log_entry['data_size'] = getsizeof(str(data))
+
             datas.put(log_entry)
 
         except Exception as e:
@@ -332,36 +336,51 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
     logger.info('Parse {0} messages'.format(count))
 
 
-def process_build_buffer(logger, c_config, if_config_vars, agent_config_vars, datas, worker_process):
-    lock = Lock()
-    log_buffer = {}
-
-    # check buffer and send data
-    loop_thead = Thread(target=func_check_buffer,
-                        args=(lock, log_buffer, logger, c_config, if_config_vars, agent_config_vars))
-    loop_thead.start()
+def process_build_buffer(args):
+    logger, c_config, if_config_vars, datas, meta_info, project_create_lock = args
+    logger.info(f'Start to send data in thread {threading.current_thread().ident}')
 
     # build buffer
-    closed_worker = 0
+    project_tracks = {}
     while True:
         try:
-            if closed_worker >= worker_process:
-                global ALL_BUFFER_CLEAR
-                ALL_BUFFER_CLEAR = True
+            message = datas.get()
+
+            # parser process is closed. process and threads is one2one mapping
+            if message == CLOSED_MESSAGE:
+                # last chunk
+                for project in project_tracks.keys():
+                    if len(project_tracks[project]['current_row']) > 0:
+                        logger.debug('Sending last chunk')
+                        send_data_to_if(logger, c_config, if_config_vars, project_tracks[project],
+                                        project_tracks[project]['current_row'], project)
+                        reset_track(project_tracks[project])
                 break
 
-            message = datas.get()
-            if message == CLOSED_MESSAGE:
-                closed_worker += 1
-                continue
-
             project = message.pop('project')
-            if lock.acquire():
-                # build buffer dict
-                if project not in log_buffer:
-                    log_buffer[project] = []
-                log_buffer[project].append(message)
-                lock.release()
+
+            # check and create project
+            if not c_config['testing']:
+                with project_create_lock:
+                    if project not in meta_info['projects']:
+                        check_success = check_project_exist(logger, if_config_vars, project)
+                        if not check_success:
+                            sys.exit(1)
+                        meta_info['projects'][project] = True
+
+            if project not in project_tracks.keys():
+                project_tracks[project] = {'current_row': [], 'line_count': 0, 'data_size': 0}
+            project_tracks[project]['current_row'].append(message)
+            project_tracks[project]['line_count'] += 1
+            project_tracks[project]['data_size'] += message.pop('data_size')
+
+            # check the buffer every BUFFER_CHECK_COUNT lines
+            if project_tracks[project]['line_count'] % BUFFER_CHECK_COUNT == 0 \
+                    and project_tracks[project]['data_size'] >= if_config_vars['chunk_size']:
+                logger.debug(f'Sending buffer chunk: {project_tracks[project]["data_size"]}')
+                send_data_to_if(logger, c_config, if_config_vars, project_tracks[project],
+                                project_tracks[project]['current_row'], project)
+                reset_track(project_tracks[project])
 
         except Exception as e:
             logger.warn('Error when build buffer message')
@@ -369,68 +388,7 @@ def process_build_buffer(logger, c_config, if_config_vars, agent_config_vars, da
             logger.debug(traceback.format_exc())
             continue
 
-    logger.info('No data need send')
-    loop_thead.join()
-
-
-def func_check_buffer(lock, log_buffer, logger, c_config, if_config_vars, agent_config_vars):
-    while True:
-        # no buffer and main thread exist
-        if not log_buffer and ALL_BUFFER_CLEAR:
-            break
-
-        buffer_check_thead = Thread(target=check_buffer,
-                                    args=(
-                                        lock, log_buffer, logger, c_config, if_config_vars,
-                                        agent_config_vars))
-        buffer_check_thead.start()
-        buffer_check_thead.join()
-        time.sleep(10)
-
-    logger.info('All buffer cleared')
-
-    # send kill signal
-    time.sleep(1)
-    kill_logger = logging.getLogger('KILL')
-    kill_logger.info('KILL')
-
-
-def check_buffer(lock, log_buffer, logger, c_config, if_config_vars, agent_config_vars):
-    utc_time_now = arrow.utcnow().float_timestamp
-    logger.info('Start clear buffer: {}'.format(arrow.get(utc_time_now).format()))
-
-    # empty data to send
-    project_data_map = {}
-
-    if lock.acquire():
-        for project in list(log_buffer.keys()):
-            project_data_map[project] = log_buffer.pop(project)
-        lock.release()
-
-    # send data
-    for project, buffer in project_data_map.items():
-        # check project name first
-        if not c_config['testing']:
-            check_success = check_project_exist(logger, if_config_vars, project)
-            if not check_success:
-                sys.exit(1)
-
-        track = {'current_row': [], 'line_count': 0}
-        for row in buffer:
-            track['current_row'].append(row)
-            track['line_count'] += 1
-            # check the buffer every BUFFER_CHECK_COUNT lines
-            if track['line_count'] % BUFFER_CHECK_COUNT == 0 and get_json_size_bytes(track['current_row']) >= \
-                    if_config_vars['chunk_size']:
-                logger.debug('Sending buffer chunk')
-                send_data_to_if(logger, c_config, if_config_vars, track, track['current_row'], project)
-                reset_track(track)
-
-        # last chunk
-        if len(track['current_row']) > 0:
-            logger.debug('Sending last chunk')
-            send_data_to_if(logger, c_config, if_config_vars, track, track['current_row'], project)
-            reset_track(track)
+    logger.info(f'End of send data in thread {threading.current_thread().ident}')
 
 
 def get_agent_config_vars(logger, config_ini):
@@ -945,6 +903,7 @@ def reset_track(track):
     """ reset the track global for the next chunk """
     track['current_row'] = []
     track['line_count'] = 0
+    track['data_size'] = 0
 
 
 ################################
@@ -1229,6 +1188,9 @@ def listener_process(q, c_config):
         while not q.empty():
             record = q.get()
 
+            if not record:
+                continue
+
             if record.name == 'KILL':
                 return
 
@@ -1245,6 +1207,8 @@ def worker_configurer(q, level):
 
 
 def main():
+    timer = arrow.utcnow().float_timestamp
+
     # get config
     cli_config_vars = get_cli_config_vars()
 
@@ -1315,13 +1279,26 @@ def main():
 
     signal.signal(signal.SIGTERM, term)
 
-    # build buffer and send data
-    process_build_buffer(logger, cli_config_vars, if_config_vars, agent_config_vars, datas, worker_process)
+    # build ThreadPool to send data
+    meta_info = {"projects": {}}
+    project_create_lock = Lock()
+    pool_map = ThreadPool(worker_process)
+    pool_map.map_async(process_build_buffer,
+                       [(logger, cli_config_vars, if_config_vars, datas, meta_info, project_create_lock)
+                        for i in range(worker_process)])
+    pool_map.close()
+    pool_map.join()
 
     # clear all process
     for p in processes:
         p.join()
-    listener.join()
+
+    logger.info("Agent completed in {} seconds".format(arrow.utcnow().float_timestamp - timer))
+
+    # send kill signal
+    time.sleep(1)
+    kill_logger = logging.getLogger('KILL')
+    kill_logger.info('KILL')
 
 
 if __name__ == "__main__":
