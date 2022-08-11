@@ -586,7 +586,7 @@ def get_agent_config_vars(logger, config_ini):
 #########################
 #   START_BOILERPLATE   #
 #########################
-def get_if_config_vars(logger, config_ini):
+def get_if_config_vars(logger, config_ini, agent_config_vars):
     """ get config.ini vars """
     if not os.path.exists(config_ini):
         logger.error('No config file found. Exiting...')
@@ -619,8 +619,8 @@ def get_if_config_vars(logger, config_ini):
             return config_error(logger, 'user_name')
         if len(license_key) == 0:
             return config_error(logger, 'license_key')
-        if len(project_name) == 0:
-            return config_error(logger, 'project_name')
+        if not agent_config_vars['project_field'] and len(project_name) == 0:
+            return config_error(logger, 'project_field or project_name')
         if len(project_type) == 0:
             return config_error(logger, 'project_type')
 
@@ -1233,11 +1233,13 @@ def main():
     config_file = config_ini_path(cli_config_vars)
     logger.info("Process start with config: {}".format(config_file))
 
-    if_config_vars = get_if_config_vars(logger, config_file)
-    if not if_config_vars:
-        sys.exit(1)
     agent_config_vars = get_agent_config_vars(logger, config_file)
     if not agent_config_vars:
+        time.sleep(1)
+        sys.exit(1)
+    if_config_vars = get_if_config_vars(logger, config_file, agent_config_vars)
+    if not if_config_vars:
+        time.sleep(1)
         sys.exit(1)
     print_summary_info(logger, if_config_vars, agent_config_vars)
 
