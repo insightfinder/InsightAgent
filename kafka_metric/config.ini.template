@@ -40,6 +40,8 @@ raw_regex =
 project_field =
 # project_whitelist is a regex string used to define which projects form project_field will be filtered.
 project_whitelist =
+# Custom project mapping relationship, multiple fields are separated by commas. Ex: 1234::Customer-Project-1::System1, 4567::Customer-Project-2
+project_map_id =
 
 # Metric names, multiple fields are separated by commas. A field can be named with the syntax `<metric_name>::<metric_value>`, where `<metric_name>` and `<metric_value>` can each be either a field name in message. Ex: metric1,metric_field::metric_value_field.
 metric_fields =
