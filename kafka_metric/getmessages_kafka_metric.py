@@ -252,7 +252,7 @@ def check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_co
     utc_time_now = arrow.utcnow().float_timestamp
     logger.info('Start clear buffer: {}'.format(arrow.get(utc_time_now).format()))
 
-    clear_time = utc_time_now + agent_config_vars['buffer_sampling_interval_multiple'] * if_config_vars[
+    clear_time = utc_time_now - agent_config_vars['buffer_sampling_interval_multiple'] * if_config_vars[
         'sampling_interval']
     clear_time *= 1000
     # empty data to send
