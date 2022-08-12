@@ -299,22 +299,16 @@ def check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_co
             reset_track(track)
 
 
-def get_agent_config_vars(logger, config_ini, if_config_vars):
-    """ Read and parse config.ini """
-    """ get config.ini vars """
-    if not os.path.exists(config_ini):
+def get_multiple_kafka_info(logger, kafka_config, if_config_vars):
+    if not os.path.exists(kafka_config):
         logger.error('No config file found. Exiting...')
         return False
-    with open(config_ini) as fp:
+    with open(kafka_config) as fp:
         config_parser = configparser.ConfigParser()
         config_parser.read_file(fp)
-
-        kafka_kwargs = {}
-        topics = []
-        project_whitelist_regex = None
-        metric_whitelist_regex = None
-        instance_whitelist_regex = None
         try:
+            kafka_info = {}
+            topics = []
             # agent settings
             kafka_config = {
                 # hardcoded
@@ -373,7 +367,28 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
                 topics = [x.strip() for x in config_parser.get('agent', 'topics').split(',') if x.strip()]
             else:
                 return config_error(logger, 'topics')
+            return {'kafka_kwargs': kafka_kwargs, 'topics': topics}
+        except configparser.NoOptionError as cp_noe:
+            logger.error(cp_noe)
+            return config_error(logger)
 
+
+def get_agent_config_vars(logger, config_ini, if_config_vars):
+    """ Read and parse config.ini """
+    """ get config.ini vars """
+    if not os.path.exists(config_ini):
+        logger.error('No config file found. Exiting...')
+        return False
+    with open(config_ini) as fp:
+        config_parser = configparser.ConfigParser()
+        config_parser.read_file(fp)
+        try:
+            # kafka config file
+            kafka_connect_file = config_parser.get('agent', 'kafka_connect_file').split(',')
+
+            project_whitelist_regex = None
+            metric_whitelist_regex = None
+            instance_whitelist_regex = None
             # metrics
             initial_filter = config_parser.get('agent', 'initial_filter')
             raw_regex = config_parser.get('agent', 'raw_regex')
@@ -469,8 +484,9 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
 
         # add parsed variables to a global
         config_vars = {
-            'kafka_kwargs': kafka_kwargs,
-            'topics': topics,
+            'kafka_kwargs': '',
+            'topics': '',
+            'kafka_connect_file': kafka_connect_file,
             'initial_filter': initial_filter,
             'raw_regex': raw_regex,
             'project_field': project_field,
@@ -1074,13 +1090,16 @@ def main():
     # all processes
     processes = []
 
-    # consumer process
-    for x in range(multiprocessing.cpu_count()):
-        d = Process(target=process_get_data,
-                    args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages))
-        d.daemon = True
-        d.start()
-        processes.append(d)
+    for kafka_connect in agent_config_vars['kafka_connect_file']:
+        kafka_info = get_multiple_kafka_info(logger, kafka_connect, if_config_vars)
+        agent_config_vars.update(kafka_kwargs=kafka_info['kafka_kwargs'], topics=kafka_info['topics'])
+        # consumer process
+        for x in range(multiprocessing.cpu_count()):
+            d = Process(target=process_get_data,
+                        args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages))
+            d.daemon = True
+            d.start()
+            processes.append(d)
 
     project_mapping_dict = project_mapping(agent_config_vars)
     # parser process
