@@ -50,7 +50,7 @@ User `-p` to define max processes, use `--timeout` to define max timeout.
 ```
 
 ###### Run agent with cron:
-For the agent to run continuously, it will need to run as a cron job with `cron.py`. 
+For the agent to run continuously, it will need to run as a cron job with `cron.py`. Every config file will start a cron job.
 
 ```bash
 nohup venv/bin/python3 cron.py &
@@ -82,7 +82,8 @@ kill -9 PID
 * `client_cert`: Path to certificate
 * `client_key`: Path to client
 * `his_time_range`: History data time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00. If this option is set, the agent will query metric values by time range.
-* **`data_format`**: The format of the data to parse: RAW, RAWTAIL, CSV, CSVTAIL, XLS, XLSX, JSON, JSONTAIL, AVRO, or XML. \*TAIL formats keep track of the current file being read & the position in the file.
+* `project_field`: Field name for the project name. If this field is empty, agent will use project_name in insightfinder section. 
+* `project_whitelist`: project_whitelist is a regex string used to define which projects form project_field will be filtered.
 * `timestamp_format`: Format of the timestamp, in python [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). If the timestamp is in Unix epoch, this can be set to `epoch`. If the timestamp is split over multiple fields, curlies can be used to indicate formatting, ie: `YYYY-MM-DD HH:mm:ss ZZ`; alternatively, if the timestamp can be in one of multiple fields, a priority list of field names can be given: `timestamp1,timestamp2`.
 * `timezone`: Timezone of the timestamp data stored in/returned by the DB. Note that if timezone information is not included in the data returned by the DB, then this field has to be specified. 
 * **`timestamp_field`**: Field name for the timestamp. Default is `timestamp`.
@@ -103,6 +104,7 @@ kill -9 PID
 * `containerize`: Set to `YES` if project is container.
 * `enable_holistic_model`: Enable holistic model when auto create project. Default is `false`.
 * **`sampling_interval`**: How frequently (in Minutes) data is collected. Should match the interval used in project settings.
+* **`frequency_sampling_interval`**: How frequently (in Minutes) the hot event detected.
 * **`run_interval`**: How frequently (in Minutes) the agent is ran. Should match the interval used in cron.
 * `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
 * `if_url`: URL for InsightFinder. Default is `https://app.insightfinder.com`.
