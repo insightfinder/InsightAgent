@@ -54,9 +54,10 @@ client_key =
 # time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
 his_time_range =
 
-# raw, rawtail, csv, csvtail, xls, xlsx, json, jsontail, avro, or xml
-# *tail formats keep track of the current file & position + completed files in [state] below
-data_format = json
+# Field that contains the project name. If this field is empty, agent will use project_name in insightfinder section
+project_field =
+# project_whitelist is a regex string used to define which projects form project_field will be filtered.
+project_whitelist =
 
 ## message parsing
 # timestamp format, as library [arrow]. multiple fields can be formatted together to create the timestamp a la `YYYY-MM-DD HH:mm:ss ZZ`. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
@@ -93,8 +94,9 @@ project_type = log
 # Set to `YES` if project is container.
 containerize = no
 enable_holistic_model = false
-sampling_interval = 10
-run_interval = 10
+sampling_interval = 1
+frequency_sampling_interval = 10
+run_interval = 1
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
 if_url = https://app.insightfinder.com
