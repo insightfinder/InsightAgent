@@ -1,0 +1,2 @@
+name = Dell_agent
+script_name = getmessages_kafka_confluent_metric.py
