@@ -44,5 +44,16 @@ else
   fi
 fi
 
+# Set up conf.d/kafka_config.ini from template
+if [[ -d conf.d ]]; then
+  if [[ ! -f conf.d/kafka_config.ini ]]; then
+    cp conf.d/config.ini.template conf.d/kafka_config.ini
+  fi
+else
+  if [[ ! -f kafka_config.ini ]]; then
+    cp kafka_config.ini.template kafka_config.ini
+  fi
+fi
+
 # Return to original directory
 cd $ORIGIN
