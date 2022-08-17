@@ -792,6 +792,7 @@ def send_request(logger, url, mode='GET', failure_message='Failure!', success_me
     for req_num in range(ATTEMPTS):
         try:
             response = req(url, **request_passthrough)
+            logger.info()
             if response.status_code == http.client.OK:
                 return response
             else:
