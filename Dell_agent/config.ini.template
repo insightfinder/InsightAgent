@@ -1,59 +1,6 @@
 [agent]
-## kafka info
-# Comma separated list of kafka boostrap servers (eg: 192.168.1.1:9092,192.168.1.2:9092) - Required
-bootstrap.servers =
-# Kafka Group ID - Required
-group.id =
-client.id =
-# If you use Kafka broker 0.9 or 0.8 you must set api.version.request=false and set broker.version.fallback to your broker version, e.g broker.version.fallback=0.9.0.1
-api.version.request = true
-broker.version.fallback =
-
-# Comma separated list of kafka topics to subscribe to - Required
-topics =
-# Set to avro schema url if use avro
-schema.registry.url =
-basic.auth.credentials.source =
-basic.auth.user.info =
-
-
-## SSL, please refer document: https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md to set SSL config vars.
-# set to 'SSL' (or 'SASL_SSL' if SASL authentication is used).
-security.protocol =
-ssl.ca.location =
-# ssl.key.location =
-# ssl.key.password =
-# ssl.certificate.location =
-# ssl.crl.location =
-# ssl.keystore.location =
-# ssl.keystore.password =
-# ssl.engine.location =
-
-sasl.mechanisms =
-# sasl.mechanism =
-sasl.username =
-sasl.password =
-# sasl.kerberos.service.name =
-# sasl.kerberos.principal =
-# sasl.oauthbearer.config =
-# enable.sasl.oauthbearer.unsecure.jwt =
-# sasl.oauthbearer.method =
-# sasl.oauthbearer.client.id =
-# sasl.oauthbearer.client.secret =
-# sasl.oauthbearer.scope =
-# sasl.oauthbearer.extensions =
-# sasl.oauthbearer.token.endpoint.url =
-
-# Optional preprocessing filter (regex) to eliminate raw data from being parsed. Data must match filter to be parsed if set
-initial_filter =
-
-# if raw data, the regex used to parse the log. It must use named capture groups `(?<name>.*)` that correspond to the *_field config variables below (ie  `(?<timestamp>.*)`,  `(?<host>.*)`,  `(?<device>.*)`,  `(?<etc>.*)`.
-raw_regex =
-
-# Field that contains the project name. If this field is empty, agent will use project_name in insightfinder section
-project_field =
-# project_whitelist is a regex string used to define which projects form project_field will be filtered.
-project_whitelist =
+# API. Can also set API from multiple fields which separated by commas. eg: http://localhost:8080,http://localhost:8000
+api_url =
 
 # Metric names, multiple fields are separated by commas. A field can be named with the syntax `<metric_name>::<metric_value>`, where `<metric_name>` and `<metric_value>` can each be either a field name in message. Ex: metric1,metric_field::metric_value_field.
 metric_fields =
