@@ -17,92 +17,36 @@ from threading import Thread, Lock
 from logging.handlers import QueueHandler
 import multiprocessing
 from multiprocessing import Process, Queue
-
 import arrow
 import pytz
 import regex
 import requests
 import certifi
-from confluent_kafka import Consumer
-from confluent_kafka.avro import AvroConsumer
-from confluent_kafka.avro.serializer import SerializerError
+
 
 """
 This script gathers data to send to Insightfinder
 """
 
 # declare a few vars
-TRUE = regex.compile(r"T(RUE)?", regex.IGNORECASE)
-FALSE = regex.compile(r"F(ALSE)?", regex.IGNORECASE)
-SPACES = regex.compile(r"\s+")
-SLASHES = regex.compile(r"\/+")
-UNDERSCORE = regex.compile(r"\_+")
-COLONS = regex.compile(r"\:+")
-LEFT_BRACE = regex.compile(r"\[")
-RIGHT_BRACE = regex.compile(r"\]")
-PERIOD = regex.compile(r"\.")
-COMMA = regex.compile(r"\,")
 PIPE = regex.compile(r"\|+")
 PROJECT_ALNUM = regex.compile(r"[@\._]+")
-NON_ALNUM = regex.compile(r"[^a-zA-Z0-9]")
-FORMAT_STR = regex.compile(r"{(.*?)}")
 HOSTNAME = socket.gethostname().partition('.')[0]
 ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
-JSON_LEVEL_DELIM = '.'
-CSV_DELIM = r",|\t"
 ATTEMPTS = 3
 
 
-def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages):
+def process_get_data(log_queue, cli_config_vars, method, url, messages):
     worker_configurer(log_queue, cli_config_vars['log_level'])
     logger = logging.getLogger('worker')
     logger.info('Started data consumer process ......')
-    is_avro = agent_config_vars['kafka_kwargs'].get('schema.registry.url') is not None
-    consumer = AvroConsumer(**agent_config_vars['kafka_kwargs']) if is_avro else Consumer(
-        **agent_config_vars['kafka_kwargs'])
-    if not consumer.list_topics():
-        config_error(logger, 'kafka connection error')
-        time.sleep(1)
-        sys.exit(1)
 
-    # subscribe to given topics
-    consumer.subscribe(agent_config_vars['topics'])
+    req = requests.get
+    if method.upper() == 'POST':
+        req = requests.post
+    messages = req(url)
+    print(messages)
 
-    while True:
-        try:
-            msg = consumer.poll(10)
-
-            if msg is None:
-                logger.info('No data received, waiting...')
-                time.sleep(20)
-                continue
-
-            if msg.error():
-                if is_avro:
-                    logger.error("AvroConsumer error: {}".format(msg.error()))
-                else:
-                    logger.error("Consumer error: {}".format(msg.error()))
-                continue
-
-            msg_value = msg.value()
-            if isinstance(msg_value, bytes):
-                msg_value = msg_value.decode("utf-8")
-            if agent_config_vars['initial_filter'] \
-                    and not agent_config_vars['initial_filter'].search(msg_value):
-                continue
-            messages.put(msg_value)
-
-        except SerializerError as e:
-            logger.error("Message deserialization failed for {}: {}".format(msg, e))
-            break
-
-        except Exception as e:
-            # Handle any exception here
-            logger.error('Error when poll messages')
-            logger.error(e)
-            logger.debug(traceback.format_exc())
-
-    consumer.close()
     logger.info('Closed data process......')
 
 
@@ -313,103 +257,29 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
         config_parser = configparser.ConfigParser()
         config_parser.read_file(fp)
 
-        kafka_kwargs = {}
-        topics = []
         project_whitelist_regex = None
         metric_whitelist_regex = None
         instance_whitelist_regex = None
         try:
-            # agent settings
-            kafka_config = {
-                # hardcoded
-                'auto.offset.reset': 'latest',
-                # 'session.timeout.ms': 45000,
-
-                # consumer settings
-                'bootstrap.servers': config_parser.get('agent', 'bootstrap.servers'),
-                'group.id': config_parser.get('agent', 'group.id'),
-                'client.id': config_parser.get('agent', 'client.id', fallback=None),
-                'api.version.request': config_parser.get('agent', 'api.version.request'),
-                'broker.version.fallback': config_parser.get('agent', 'broker.version.fallback', fallback=None),
-
-                # avro
-                'schema.registry.url': config_parser.get('agent', 'schema.registry.url', fallback=None),
-                'basic.auth.credentials.source': config_parser.get('agent', 'basic.auth.credentials.source',
-                                                                   fallback=None),
-                'basic.auth.user.info': config_parser.get('agent', 'basic.auth.user.info', fallback=None),
-
-                # SSL
-                'security.protocol': config_parser.get('agent', 'security.protocol', fallback=None),
-                'ssl.ca.location': config_parser.get('agent', 'ssl.ca.location', fallback=certifi.where()),
-                'ssl.key.location': config_parser.get('agent', 'ssl.key.location', fallback=None),
-                'ssl.key.password': config_parser.get('agent', 'ssl.key.password', fallback=None),
-                'ssl.certificate.location': config_parser.get('agent', 'ssl.certificate.location', fallback=None),
-                'ssl.crl.location': config_parser.get('agent', 'ssl.crl.location', fallback=None),
-                'ssl.keystore.location': config_parser.get('agent', 'ssl.keystore.location', fallback=None),
-                'ssl.keystore.password': config_parser.get('agent', 'ssl.keystore.password', fallback=None),
-                'ssl.engine.location': config_parser.get('agent', 'ssl.engine.location', fallback=None),
-
-                # SASL
-                'sasl.mechanisms': config_parser.get('agent', 'sasl.mechanisms', fallback=None),
-                'sasl.mechanism': config_parser.get('agent', 'sasl.mechanism', fallback=None),
-                'sasl.kerberos.service.name': config_parser.get('agent', 'sasl.kerberos.service.name', fallback=None),
-                'sasl.kerberos.principal': config_parser.get('agent', 'sasl.kerberos.principal', fallback=None),
-                'sasl.username': config_parser.get('agent', 'sasl.username', fallback=None),
-                'sasl.password': config_parser.get('agent', 'sasl.password', fallback=None),
-                'sasl.oauthbearer.config': config_parser.get('agent', 'sasl.oauthbearer.config', fallback=None),
-                'enable.sasl.oauthbearer.unsecure.jwt': config_parser.get('agent',
-                                                                          'enable.sasl.oauthbearer.unsecure.jwt',
-                                                                          fallback=''),
-                'sasl.oauthbearer.method': config_parser.get('agent', 'sasl.oauthbearer.method', fallback=None),
-                'sasl.oauthbearer.client.id': config_parser.get('agent', 'sasl.oauthbearer.client.id', fallback=None),
-                'sasl.oauthbearer.client.secret': config_parser.get('agent', 'sasl.oauthbearer.client.secret',
-                                                                    fallback=None),
-                'sasl.oauthbearer.scope': config_parser.get('agent', 'sasl.oauthbearer.scope', fallback=None),
-                'sasl.oauthbearer.extensions': config_parser.get('agent', 'sasl.oauthbearer.extensions', fallback=None),
-                'sasl.oauthbearer.token.endpoint.url': config_parser.get('agent',
-                                                                         'sasl.oauthbearer.token.endpoint.url',
-                                                                         fallback=None),
-            }
-            # only keep settings with values
-            kafka_kwargs = {k: v for (k, v) in list(kafka_config.items()) if v}
-
-            # handle boolean setting
-            if kafka_kwargs.get('api.version.request'):
-                kafka_kwargs['api.version.request'] = kafka_kwargs['api.version.request'].lower() == 'true'
-            else:
-                kafka_kwargs['api.version.request'] = False
-            if kafka_kwargs.get('enable.sasl.oauthbearer.unsecure.jwt'):
-                kafka_kwargs['enable.sasl.oauthbearer.unsecure.jwt'] = kafka_kwargs[
-                                                                           'enable.sasl.oauthbearer.unsecure.jwt'].lower() == 'true'
-            else:
-                kafka_kwargs['enable.sasl.oauthbearer.unsecure.jwt'] = False
+            # api settings
+            api_urls = config_parser.get('agent', 'api_urls')
+            request_method = config_parser.get('agent', 'request_method')
 
             # handle required arrays
-            # bootstrap serverss
-            if len(kafka_kwargs.get('bootstrap.servers')) != 0:
-                kafka_kwargs['bootstrap.servers'] = ','.join(
-                    [x.strip() for x in kafka_kwargs['bootstrap.servers'].split(',') if
-                     x.strip()])
+            # api_urls
+            if api_urls:
+                api_urls = api_urls.split(',')
             else:
-                return config_error(logger, 'bootstrap.servers')
-            # group_id
-            if len(kafka_kwargs.get('group.id')) != 0:
-                kafka_kwargs['group.id'] = kafka_kwargs['group.id'].strip()
-            else:
-                return config_error(logger, 'group.id')
-            # topics
-            if len(config_parser.get('agent', 'topics')) != 0:
-                topics = [x.strip() for x in config_parser.get('agent', 'topics').split(',') if x.strip()]
-            else:
-                return config_error(logger, 'topics')
+                return config_error(logger, 'api_urls')
 
-            # metrics
-            initial_filter = config_parser.get('agent', 'initial_filter')
-            raw_regex = config_parser.get('agent', 'raw_regex')
+            if not request_method:
+                return config_error(logger, 'request_method')
 
+            # project
             project_field = config_parser.get('agent', 'project_field')
             project_whitelist = config_parser.get('agent', 'project_whitelist')
 
+            # metric
             metric_fields = config_parser.get('agent', 'metric_fields')
             metrics_whitelist = config_parser.get('agent', 'metrics_whitelist')
 
@@ -420,7 +290,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             component_field = config_parser.get('agent', 'component_field', raw=True)
             instance_field = config_parser.get('agent', 'instance_field', raw=True)
             instance_whitelist = config_parser.get('agent', 'instance_whitelist')
-            device_field = config_parser.get('agent', 'device_field', raw=True)
             buffer_sampling_interval_multiple = config_parser.get('agent', 'buffer_sampling_interval_multiple')
 
             # proxies
@@ -438,20 +307,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
                 logger.error(e)
                 return config_error(logger, 'project_whitelist')
 
-        # metrics
-        if len(raw_regex) != 0:
-            try:
-                raw_regex = regex.compile(raw_regex)
-            except Exception as e:
-                logger.error(e)
-                return config_error(logger, 'raw_regex')
-
-        if len(initial_filter) != 0:
-            try:
-                initial_filter = regex.compile(initial_filter)
-            except Exception as e:
-                logger.error(e)
-                return config_error(logger, 'initial_filter')
 
         if len(metrics_whitelist) != 0:
             try:
@@ -484,7 +339,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
         metric_fields = [x.strip() for x in metric_fields.split(',') if x.strip()]
         timestamp_fields = [x.strip() for x in timestamp_field.split(',') if x.strip()]
         instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
-        device_fields = [x.strip() for x in device_field.split(',') if x.strip()]
         buffer_sampling_interval_multiple = int(
             buffer_sampling_interval_multiple.strip()) if buffer_sampling_interval_multiple.strip() else 2
 
@@ -502,10 +356,8 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
 
         # add parsed variables to a global
         config_vars = {
-            'kafka_kwargs': kafka_kwargs,
-            'topics': topics,
-            'initial_filter': initial_filter,
-            'raw_regex': raw_regex,
+            'api_urls': api_urls,
+            'request_method': request_method,
             'project_field': project_field,
             'project_whitelist_regex': project_whitelist_regex,
             'metric_whitelist_regex': metric_whitelist_regex,
@@ -516,7 +368,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             'component_field': component_field,
             'instance_field': instance_fields,
             "instance_whitelist_regex": instance_whitelist_regex,
-            'device_field': device_fields,
             'buffer_sampling_interval_multiple': buffer_sampling_interval_multiple,
             'proxies': agent_proxies,
         }
@@ -723,18 +574,6 @@ def make_safe_metric_key(metric):
     metric = RIGHT_BRACE.sub(')', metric)
     metric = PERIOD.sub('/', metric)
     return metric
-
-
-def make_safe_string(string):
-    """
-    Take a single string and return the same string with spaces, slashes,
-    underscores, and non-alphanumeric characters subbed out.
-    """
-    string = SPACES.sub('-', string)
-    string = SLASHES.sub('.', string)
-    string = UNDERSCORE.sub('.', string)
-    string = NON_ALNUM.sub('', string)
-    return string
 
 
 def format_command(cmd):
@@ -1085,9 +924,9 @@ def main():
     processes = []
 
     # consumer process
-    for x in range(multiprocessing.cpu_count()):
+    for url in agent_config_vars['api_urls']:
         d = Process(target=process_get_data,
-                    args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages))
+                    args=(log_queue, cli_config_vars, agent_config_vars['request_method'], url, messages))
         d.daemon = True
         d.start()
         processes.append(d)
