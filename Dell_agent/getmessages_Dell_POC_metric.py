@@ -15,13 +15,13 @@ from sys import getsizeof
 from optparse import OptionParser
 from threading import Thread, Lock
 from logging.handlers import QueueHandler
-import multiprocessing
-from multiprocessing import Process, Queue
 import arrow
 import pytz
 import regex
 import requests
 import certifi
+import pandas as pd
+import numpy as np
 
 
 """
@@ -44,8 +44,14 @@ def process_get_data(log_queue, cli_config_vars, method, url, messages):
     req = requests.get
     if method.upper() == 'POST':
         req = requests.post
-    messages = req(url)
-    print(messages)
+    response = req(url)
+    if response.status_code == http.client.OK:
+        message = response.json()
+        messages.put(message)
+    else:
+        logger.warn('Fail')
+        logger.info('Response Code: {}\nTEXT: {}'.format(
+            response.status_code, response.text))
 
     logger.info('Closed data process......')
 
@@ -144,107 +150,6 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
         if count % 1000 == 0:
             logger.info('Parse {0} messages'.format(count))
     logger.info('Parse {0} messages'.format(count))
-
-
-def process_build_buffer(logger, c_config, if_config_vars, agent_config_vars, datas):
-    lock = Lock()
-    metric_buffer = {}
-
-    # check buffer and send data
-    loop_thead = Thread(target=func_check_buffer,
-                        args=(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars))
-    loop_thead.setDaemon(True)
-    loop_thead.start()
-
-    # build buffer
-    while True:
-        try:
-            message = datas.get()
-            project = message['project']
-            timestamp = message['timestamp']
-            full_instance = message['full_instance']
-            metric_key = message['metric_key']
-            value = message['value']
-            if lock.acquire():
-                # build buffer dict
-                if project not in metric_buffer:
-                    metric_buffer[project] = {'buffer_dict': {}, "times": []}
-                if timestamp not in metric_buffer[project]['buffer_dict']:
-                    metric_buffer[project]['buffer_dict'][timestamp] = {}
-                    metric_buffer[project]['times'].append(timestamp)
-                if full_instance not in metric_buffer[project]['buffer_dict'][timestamp]:
-                    metric_buffer[project]['buffer_dict'][timestamp][full_instance] = {"timestamp": timestamp}
-                metric_buffer[project]['buffer_dict'][timestamp][full_instance][metric_key] = value
-                lock.release()
-
-        except Exception as e:
-            logger.warn('Error when build buffer message')
-            logger.warn(e)
-            logger.debug(traceback.format_exc())
-            continue
-
-
-def func_check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars):
-    while True:
-        buffer_check_thead = Thread(target=check_buffer,
-                                    args=(
-                                        lock, metric_buffer, logger, c_config, if_config_vars,
-                                        agent_config_vars))
-        buffer_check_thead.start()
-        buffer_check_thead.join()
-        time.sleep(min(60, if_config_vars['sampling_interval']))
-
-
-def check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_config_vars):
-    utc_time_now = arrow.utcnow().float_timestamp
-    logger.info('Start clear buffer: {}'.format(arrow.get(utc_time_now).format()))
-
-    clear_time = utc_time_now - agent_config_vars['buffer_sampling_interval_multiple'] * if_config_vars[
-        'sampling_interval']
-    clear_time *= 1000
-    # empty data to send
-    project_data_map = {}
-
-    if lock.acquire():
-        for project, buffer in metric_buffer.items():
-            if project not in project_data_map:
-                project_data_map[project] = []
-
-            buffer_times = []
-            for timestamp in buffer['times']:
-                if int(timestamp) >= clear_time:
-                    buffer_times.append(timestamp)
-                else:
-                    buffer_dict_time = buffer['buffer_dict'].pop(timestamp)
-                    buffer_values = list(buffer_dict_time.values())
-                    project_data_map[project].extend(buffer_values)
-            # reset times
-            buffer['times'] = buffer_times
-        lock.release()
-
-    # send data
-    for project, buffer in project_data_map.items():
-        # check project name first
-        if not c_config['testing']:
-            check_success = check_project_exist(logger, if_config_vars, project)
-            if not check_success:
-                time.sleep(1)
-                sys.exit(1)
-
-        track = {'current_row': [], 'line_count': 0}
-        for row in buffer:
-            track['current_row'].append(row)
-            track['line_count'] += 1
-            if get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
-                logger.debug('Sending buffer chunk')
-                send_data_to_if(logger, c_config, if_config_vars, track, track['current_row'], project)
-                reset_track(track)
-
-        # last chunk
-        if len(track['current_row']) > 0:
-            logger.debug('Sending last chunk')
-            send_data_to_if(logger, c_config, if_config_vars, track, track['current_row'], project)
-            reset_track(track)
 
 
 def get_agent_config_vars(logger, config_ini, if_config_vars):
