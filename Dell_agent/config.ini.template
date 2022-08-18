@@ -1,7 +1,13 @@
 [agent]
-# API. Can also set API from multiple fields which separated by commas. eg: http://localhost:8080,http://localhost:8000
-api_url =
+# API. Can also set API from multiple fields which separated by commas. eg: http://localhost:8080,http://localhost:8000. required
+api_urls =
 
+# request mode. eg: get,post. required
+request_method =
+
+#project name
+project_field =
+project_whitelist =
 # Metric names, multiple fields are separated by commas. A field can be named with the syntax `<metric_name>::<metric_value>`, where `<metric_name>` and `<metric_value>` can each be either a field name in message. Ex: metric1,metric_field::metric_value_field.
 metric_fields =
 # metrics_whitelist is a regex string used to define which metrics will be filtered.
@@ -18,8 +24,6 @@ component_field =
 instance_field =
 # instance_whitelist is a regex string used to define which instances will be filtered.
 instance_whitelist =
-# Field name of device. Can also set device name from multiple fields which separated by commas. Ex: device_name_part1,device_name_part2.
-device_field =
 # multiple of sampling_interval witch buffered the metric data. Default is 2 multiple
 buffer_sampling_interval_multiple = 2
 
