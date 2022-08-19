@@ -11,12 +11,20 @@ import http.client
 import shlex
 import traceback
 import signal
-import pandas as pd
-import numpy as np
 import pytz
 import arrow
 import requests
 import threading
+import regex
+from optparse import OptionParser
+
+
+threadLock = threading.Lock()
+messages = []
+
+
+def abs_path_from_cur(filename=''):
+    return os.path.abspath(os.path.join(__file__, os.pardir, filename))
 
 
 def get_cli_config_vars():
@@ -247,15 +255,12 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
 
         # fields
         project_field = project_field.strip() if project_field.strip() else None
-        metric_fields = [x.strip() for x in metric_fields.split(',') if x.strip()]
-        timestamp_fields = [x.strip() for x in timestamp_field.split(',') if x.strip()]
-        instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
         buffer_sampling_interval_multiple = int(
             buffer_sampling_interval_multiple.strip()) if buffer_sampling_interval_multiple.strip() else 2
 
-        if len(timestamp_fields) == 0:
+        if len(timestamp_field) == 0:
             return config_error(logger, 'timestamp_field')
-        if len(instance_fields) == 0:
+        if len(instance_field) == 0:
             return config_error(logger, 'instance_field')
 
         # proxies
@@ -274,10 +279,10 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             'metric_whitelist_regex': metric_whitelist_regex,
             'metric_fields': metric_fields,
             'timezone': timezone,
-            'timestamp_field': timestamp_fields,
+            'timestamp_field': timestamp_field,
             'target_timestamp_timezone': target_timestamp_timezone,
             'component_field': component_field,
-            'instance_field': instance_fields,
+            'instance_field': instance_field,
             "instance_whitelist_regex": instance_whitelist_regex,
             'buffer_sampling_interval_multiple': buffer_sampling_interval_multiple,
             'proxies': agent_proxies,
@@ -300,39 +305,104 @@ def print_summary_info(logger, if_config_vars, agent_config_vars):
     logger.debug(agent_data_block)
 
 
-def process_get_data(log_queue, cli_config_vars, method, url, messages):
-    logger = logging.getLogger('worker')
-    logger.info('Started data consumer process ......')
+def yield_message(message):
+    for metric in message:
+        yield metric
 
+
+def process_get_data(log_queue, cli_config_vars, method, url):
+    # logger = logging.getLogger('worker')
+    # logger.info('Started data consumer process ......')
+    global messages
     req = requests.get
     if method.upper() == 'POST':
         req = requests.post
-    response = req(url)
+    response = req(url, headers=headers)
     if response.status_code == http.client.OK:
-        message = response.json()
-        messages.put(message)
+        message = response.text.splitlines()
+        print(message)
+        message = [json.loads(metric_data) for metric_data in message]
+        threadLock.acquire()
+        messages.extend(message)
+        threadLock.release()
     else:
+        print('failtttttt')
         logger.warn('Fail')
-        logger.info('Response Code: {}\nTEXT: {}'.format(
-            response.status_code, response.text))
+        # logger.info('Response Code: {}\nTEXT: {}'.format(
+        #     response.status_code, response.text))
 
-    logger.info('Closed data process......')
+    # logger.info('Closed data process......')
 
 
-class myThread (threading.Thread):
-    def __init__(self, logger, cli_config_vars, method, url, messages):
+class myThread(threading.Thread):
+    def __init__(self, logger, cli_config_vars, method, url):
         threading.Thread.__init__(self)
         self.cli_config_vars = cli_config_vars
         self.method = method
         self.url = url
-        self.messages = messages
         self.logger = logger
 
     def run(self):
-        process_get_data(self.logger, self.cli_config_vars, self.method, self.url, self.messages)
+        process_get_data(self.logger, self.cli_config_vars, self.method, self.url)
+
+
+def process_parse_data(log_queue, cli_config_vars, agent_config_vars, messages):
+    messages = [metric for metric in messages if metric[agent_config_vars['instance_field']]]
+    timestamps = []
+    for metric in yield_message(messages):
+        if metric[agent_config_vars['timestamp_field']] not in timestamps:
+            timestamps.append(metric[agent_config_vars['timestamp_field']])
+
+    for timestamp in timestamps:
+        to_post_data = [message for message in messages if int(message[agent_config_vars['timestamp_field']]) == int(timestamp)]
+        send_data(to_post_data)
+
+def send_data(cli_config_vars, metric_data):
+    """ Sends parsed metric data to InsightFinder """
+    send_data_time = time.time()
+    # prepare data for metric streaming agent
+    to_send_data_dict = {"metricData": json.dumps(metric_data),
+                         "licenseKey": cli_config_vars['license_key'],
+                         "projectName": cli_config_vars['project_name'],
+                         "userName": cli_config_vars['user_name'],
+                         "agentType": "MetricFileReplay"}
+    to_send_data_json = json.dumps(to_send_data_dict)
+
+    # send the data
+    post_url = config_vars['server_url'] + "/customprojectrawdata"
+    send_data_to_receiver(post_url, to_send_data_json, len(log_data))
+    print("--- Send data time: %s seconds ---" + str(time.time() - send_data_time))
+
+
+def send_data_to_receiver(post_url, to_send_data, num_of_message):
+    attempts = 0
+    while attempts < MAX_RETRY_NUM:
+        if sys.getsizeof(to_send_data) > MAX_PACKET_SIZE:
+            print("Packet size too large %s.  Dropping packet." + str(sys.getsizeof(to_send_data)))
+            break
+        response_code = -1
+        attempts += 1
+        try:
+            response = requests.post(post_url, data=json.loads(to_send_data), proxies=config_vars['proxies'], verify=False)
+            response_code = response.status_code
+        except:
+            print("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
+                attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
+            time.sleep(RETRY_WAIT_TIME_IN_SEC)
+            continue
+        if response_code == 200:
+            print("Data send successfully. Number of events: %d" % num_of_message)
+            break
+        else:
+            print("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
+                attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
+            time.sleep(RETRY_WAIT_TIME_IN_SEC)
+    if attempts == MAX_RETRY_NUM:
+        sys.exit(1)
 
 
 def main():
+    global messages
     # get config
     cli_config_vars = get_cli_config_vars()
 
@@ -340,15 +410,14 @@ def main():
     cli_data_block = '\nCLI settings:'
     for kk, kv in sorted(cli_config_vars.items()):
         cli_data_block += '\n\t{}: {}'.format(kk, kv)
-    logger.info(cli_data_block)
-
+    # logger.info(cli_data_block)
+    logger = logging.getLogger()
     # get config file
     config_file = os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))
-    logger.info("Process start with config: {}".format(config_file))
+    # logger.info("Process start with config: {}".format(config_file))
 
     if_config_vars = get_if_config_vars(logger, config_file)
     if not if_config_vars:
-        time.sleep(1)
         sys.exit(1)
     agent_config_vars = get_agent_config_vars(logger, config_file, if_config_vars)
     if not agent_config_vars:
@@ -357,35 +426,18 @@ def main():
     print_summary_info(logger, if_config_vars, agent_config_vars)
 
     # consumer process
-    messages = pd.dataframe()
+
+    threads = []
     for url in agent_config_vars['api_urls']:
-        d = Process(target=process_get_data,
-                    args=(log_queue, cli_config_vars, agent_config_vars['request_method'], url, messages))
-        d.daemon = True
-        d.start()
-        processes.append(d)
+        thread = myThread(logging, cli_config_vars, agent_config_vars['request_method'], url)
+        threads.append(thread)
+        thread.start()
 
-    # parser process
-    for x in range(multiprocessing.cpu_count()):
-        d = Process(target=process_parse_messages,
-                    args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, datas))
-        d.daemon = True
-        d.start()
-        processes.append(d)
+    for thread in threads:
+        thread.join()
 
-    def term(sig_num, addtion):
-        try:
-            for p in processes:
-                logger.info('process %d terminate' % p.pid)
-                p.terminate()
+    #parse data
+    process_parse_data(logging, cli_config_vars, agent_config_vars, messages)
 
-            logger.info("Process is done with config: {}".format(config_file))
-            time.sleep(1)
-            sys.exit(1)
-        except Exception as e:
-            logger.error(str(e))
-
-    signal.signal(signal.SIGTERM, term)
-
-    # build buffer and send data
-    process_build_buffer(logger, cli_config_vars, if_config_vars, agent_config_vars, datas)
+if __name__ == "__main__":
+    main()
