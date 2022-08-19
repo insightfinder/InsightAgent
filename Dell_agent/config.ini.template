@@ -5,27 +5,17 @@ api_urls =
 # request mode. eg: get,post. required
 request_method =
 
-#project name
-project_field =
-project_whitelist =
-# Metric names, multiple fields are separated by commas. A field can be named with the syntax `<metric_name>::<metric_value>`, where `<metric_name>` and `<metric_value>` can each be either a field name in message. Ex: metric1,metric_field::metric_value_field.
-metric_fields =
-# metrics_whitelist is a regex string used to define which metrics will be filtered.
-metrics_whitelist =
-
 ## message parsing
 # timezone, as per pytz
 timezone =
 timestamp_field =
 # Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
 target_timestamp_timezone = UTC
-component_field =
+
 # if no instance given, will set to 'Application'. Can also set instance name from multiple fields which separated by commas. Ex: instance_name_part1,instance_name_part2.
 instance_field =
 # instance_whitelist is a regex string used to define which instances will be filtered.
 instance_whitelist =
-# multiple of sampling_interval witch buffered the metric data. Default is 2 multiple
-buffer_sampling_interval_multiple = 2
 
 ## proxy
 agent_http_proxy =
@@ -41,12 +31,7 @@ project_name =
 system_name =
 # metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
 project_type = metric
-# Set to `YES` if project is container.
-containerize = no
-sampling_interval = 5
-run_interval = 5
-# what size to limit chunks sent to IF to, as kb
-chunk_size_kb = 2048
+
 if_url = https://app.insightfinder.com
 if_http_proxy =
 if_https_proxy =
