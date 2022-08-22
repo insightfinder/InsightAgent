@@ -26,6 +26,7 @@ MAX_RETRY_NUM = 10
 RETRY_WAIT_TIME_IN_SEC = 30
 # chunk size is 2Mb
 CHUNK_SIZE = 2 * 1024 * 1024
+MAX_PACKET_SIZE = 5000000
 
 
 def config_error(logger, setting=''):
@@ -268,6 +269,7 @@ def yield_message(message):
 def process_get_data(log_queue, cli_config_vars, method, url):
     # logger = logging.getLogger('worker')
     # logger.info('Started data consumer process ......')
+    print('start:{}'.format(int(time.time())))
     global messages
     req = requests.get
     if method.upper() == 'POST':
@@ -279,6 +281,7 @@ def process_get_data(log_queue, cli_config_vars, method, url):
         threadLock.acquire()
         messages.extend(message)
         threadLock.release()
+        print('end: {}'.format(int(time.time())))
     else:
         print('failtttttt')
         logger.warn('Fail')
@@ -321,24 +324,25 @@ def process_parse_data(log_queue, cli_config_vars, agent_config_vars):
     return parse_data
 
 
-def send_data(cli_config_vars, metric_data):
+def send_data(if_config_vars, metric_data):
     """ Sends parsed metric data to InsightFinder """
     send_data_time = time.time()
     # prepare data for metric streaming agent
     to_send_data_dict = dict()
     # for backend so this is the camel case in to_send_data_dict
     to_send_data_dict["metricData"] = json.dumps(metric_data)
-    to_send_data_dict["licenseKey"] = cli_config_vars['license_key']
-    to_send_data_dict["projectName"] = cli_config_vars['project_name']
-    to_send_data_dict["userName"] = cli_config_vars['user_name']
+    to_send_data_dict["licenseKey"] = if_config_vars['license_key']
+    to_send_data_dict["projectName"] = if_config_vars['project_name']
+    to_send_data_dict["userName"] = if_config_vars['user_name']
     to_send_data_dict["agentType"] = "MetricFileReplay"
 
     to_send_data_json = json.dumps(to_send_data_dict)
 
     # send the data
-    post_url = config_vars['server_url'] + "/customprojectrawdata"
+    post_url = if_config_vars['if_url'] + "/customprojectrawdata"
     send_data_to_receiver(post_url, to_send_data_json, len(metric_data))
-    print("--- Send data time: %s seconds ---" + str(time.time() - send_data_time))
+    print("--- Send data time: %s seconds ---" %
+          str(time.time() - send_data_time))
 
 
 def send_data_to_receiver(post_url, to_send_data, num_of_message):
@@ -350,7 +354,7 @@ def send_data_to_receiver(post_url, to_send_data, num_of_message):
         response_code = -1
         attempts += 1
         try:
-            response = requests.post(post_url, data=json.loads(to_send_data), proxies=config_vars['proxies'], verify=False)
+            response = requests.post(post_url, data=json.loads(to_send_data), verify=False)
             response_code = response.status_code
         except:
             print("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
@@ -411,7 +415,7 @@ def main():
         data = []
         for instance, metric_list in value.items():
             data.extend(metric_list)
-        send_data(cli_config_vars, data)
+        send_data(if_config_vars, data)
 
 if __name__ == "__main__":
     main()
