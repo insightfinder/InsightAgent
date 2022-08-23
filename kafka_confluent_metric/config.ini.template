@@ -6,6 +6,9 @@ kafka_connect_file =
 # Custom project mapping relationship, multiple fields are separated by commas. Ex: 1234::Customer-Project-1::System1, 4567::Customer-Project-2
 project_map_id =
 
+# Custom project separator. EX: |, ;, :
+project_separator =
+
 # Optional preprocessing filter (regex) to eliminate raw data from being parsed. Data must match filter to be parsed if set
 initial_filter =
 

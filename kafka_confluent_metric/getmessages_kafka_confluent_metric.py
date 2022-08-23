@@ -138,7 +138,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                 if agent_config_vars['project_whitelist_regex'] \
                         and not agent_config_vars['project_whitelist_regex'].match(project):
                     continue
-                project = make_safe_project_string(project, project_mapping_dict)
+                project = make_safe_project_string(project, project_mapping_dict, agent_config_vars['project_separator'])
 
             # instance name
             instance = 'Application'
@@ -439,6 +439,8 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
 
             project_field = config_parser.get('agent', 'project_field')
             project_whitelist = config_parser.get('agent', 'project_whitelist')
+            project_map_id = config_parser.get('agent', 'project_map_id')
+            project_separator = config_parser.get('agent', 'project_separator')
 
             metric_fields = config_parser.get('agent', 'metric_fields')
             metrics_whitelist = config_parser.get('agent', 'metrics_whitelist')
@@ -509,6 +511,9 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
         if len(metric_fields) == 0:
             return config_error(logger, 'metric_fields')
 
+        if len(project_separator) == 0:
+            return config_error(logger, 'project_separator')
+
         # fields
         project_field = project_field.strip() if project_field.strip() else None
         metric_fields = [x.strip() for x in metric_fields.split(',') if x.strip()]
@@ -517,7 +522,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
         device_fields = [x.strip() for x in device_field.split(',') if x.strip()]
         buffer_sampling_interval_multiple = int(
             buffer_sampling_interval_multiple.strip()) if buffer_sampling_interval_multiple.strip() else 2
-        project_map_id = config_parser.get('agent', 'project_map_id')
 
         if len(timestamp_fields) == 0:
             return config_error(logger, 'timestamp_field')
@@ -543,6 +547,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             'raw_regex': raw_regex,
             'project_field': project_field,
             'project_whitelist_regex': project_whitelist_regex,
+            'project_separator': project_separator,
             'metric_whitelist_regex': metric_whitelist_regex,
             'metric_fields': metric_fields,
             'project_map_id': project_map_id,
@@ -734,12 +739,12 @@ def get_json_size_bytes(json_data):
     return getsizeof(json.dumps(json_data))
 
 
-def make_safe_project_string(project, project_mapping_dict):
+def make_safe_project_string(project, project_mapping_dict, project_separator):
     """ make a safe project name string """
     # strip underscores
     # project = PIPE.sub('', project)
     # project = PROJECT_ALNUM.sub('-', project)
-    project_list = project.split('|')[1:-1]
+    project_list = project.split(project_separator)[1:-1]
     project_dict = dict()
     for every_project in project_list:
         if every_project in project_mapping_dict:
