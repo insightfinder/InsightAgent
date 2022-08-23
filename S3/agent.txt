@@ -1,2 +1,2 @@
-name = Dell_agent
+name = S3
 script_name = getmessages_kafka_confluent_metric.py
