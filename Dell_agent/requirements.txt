@@ -2,5 +2,3 @@ arrow==1.2.2
 pytz==2020.1
 regex>=2020.2.18
 requests==2.27.1
-pandas
-

@@ -18,9 +18,10 @@ import threading
 import regex
 from optparse import OptionParser
 from logging.handlers import QueueHandler
+from sys import getsizeof
+from queue import Queue
 import multiprocessing
 from multiprocessing import Process, Queue
-from sys import getsizeof
 
 
 threadLock = threading.Lock()
@@ -28,6 +29,8 @@ messages = []
 
 MAX_RETRY_NUM = 10
 RETRY_WAIT_TIME_IN_SEC = 30
+UNDERSCORE = regex.compile(r"\_+")
+COLONS = regex.compile(r"\:+")
 # chunk size is 2Mb
 CHUNK_SIZE = 2 * 1024 * 1024
 MAX_PACKET_SIZE = 5000000
@@ -99,9 +102,6 @@ def get_if_config_vars(logger, config_ini):
             project_name = config_parser.get('insightfinder', 'project_name')
             system_name = config_parser.get('insightfinder', 'system_name')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
-            containerize = config_parser.get('insightfinder', 'containerize').upper()
-            sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
-            run_interval = config_parser.get('insightfinder', 'run_interval')
             if_url = config_parser.get('insightfinder', 'if_url')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
@@ -136,26 +136,6 @@ def get_if_config_vars(logger, config_ini):
             return config_error(logger, 'project_type')
         is_replay = 'REPLAY' in project_type
 
-        if len(sampling_interval) == 0:
-            if 'METRIC' in project_type:
-                return config_error(logger, 'sampling_interval')
-            else:
-                # set default for non-metric
-                sampling_interval = 10
-
-        if sampling_interval.endswith('s'):
-            sampling_interval = int(sampling_interval[:-1])
-        else:
-            sampling_interval = int(sampling_interval) * 60
-
-        if len(run_interval) == 0:
-            return config_error(logger, 'run_interval')
-
-        if run_interval.endswith('s'):
-            run_interval = int(run_interval[:-1])
-        else:
-            run_interval = int(run_interval) * 60
-
         # defaults
         if len(if_url) == 0:
             if_url = 'https://app.insightfinder.com'
@@ -174,8 +154,6 @@ def get_if_config_vars(logger, config_ini):
             'project_name': project_name,
             'system_name': system_name,
             'project_type': project_type,
-            'containerize': True if containerize == 'YES' else False,
-            'run_interval': int(run_interval),  # as seconds
             'if_url': if_url,
             'if_proxies': if_proxies,
             'is_replay': is_replay
@@ -292,9 +270,7 @@ def yield_message(message):
         yield metric
 
 
-def process_get_data(log_queue, cli_config_vars, method, url):
-    worker_configurer(log_queue, cli_config_vars['log_level'])
-    logger = logging.getLogger('worker')
+def process_get_data(logger, cli_config_vars, method, url):
     logger.info('start to request data')
     global messages
     req = requests.get
@@ -314,29 +290,27 @@ def process_get_data(log_queue, cli_config_vars, method, url):
 
 
 class myThread(threading.Thread):
-    def __init__(self, log_queue, cli_config_vars, method, url):
+    def __init__(self, logger, cli_config_vars, method, url):
         threading.Thread.__init__(self)
         self.cli_config_vars = cli_config_vars
         self.method = method
         self.url = url
-        self.log_queue = log_queue
+        self.logger = logger
 
     def run(self):
-        process_get_data(self.log_queue, self.cli_config_vars, self.method, self.url)
+        process_get_data(self.logger, self.cli_config_vars, self.method, self.url)
 
 
-def process_parse_data(log_queue, cli_config_vars, agent_config_vars):
-    worker_configurer(log_queue, cli_config_vars['log_level'])
-    logger = logging.getLogger('worker')
+def process_parse_data(logger, cli_config_vars, agent_config_vars):
     logger.info('start to parse data...')
     global messages
     messages = [metric for metric in messages if metric[agent_config_vars['instance_field']]]
-    timestamp = agent_config_vars['timestamp_field']
+    timestamp_field = agent_config_vars['timestamp_field']
     instance = agent_config_vars['instance_field']
     metric_fields = agent_config_vars['metric_fields']
-    # {"ts1": {'instance1': [metric1, metric2], 'instance2': [metric1, metric2]}, 'ts2': {'instance1': [metric1, metric2], 'instance2': [metric1, metric2]}}
+    # {"ts1": {'instance1': {'ts': 23,'metric1': value},}
     parse_data = {}
-    all_timestamps = []
+    # all_timestamps = []
     for metric in yield_message(messages):
         if metric_fields and len(metric_fields) > 0:
             for field in metric_fields:
@@ -353,19 +327,20 @@ def process_parse_data(log_queue, cli_config_vars, agent_config_vars):
                 if agent_config_vars['metric_whitelist_regex'] and not agent_config_vars['metric_whitelist_regex'].match(data_field):
                     logger.debug('metric_whitelist has no matching data')
                     continue
-
-                metric_key = '{}[{}]'.format(data_field, metric[instance])
-                all_timestamps.append(metric[timestamp])
-                if metric[timestamp] not in parse_data:
-                    parse_data[metric[timestamp]] = {}
-                if metric[instance] not in parse_data[metric[timestamp]]:
-                    parse_data[metric[timestamp]][instance] = []
-                parse_data[metric[timestamp]][instance].append({'timestamp': int(metric[timestamp]) * 1000, metric_key: data_value})
+                full_instance = make_safe_instance_string(metric[instance])
+                metric_key = '{}[{}]'.format(data_field, full_instance)
+                # all_timestamps.append(metric[timestamp_field])
+                if metric[timestamp_field] not in parse_data:
+                    parse_data[metric[timestamp_field]] = {}
+                timestamp = int(metric[timestamp_field]) if len(str(int(metric[timestamp_field]))) > 10 else int(metric[timestamp_field]) * 1000
+                if metric[instance] not in parse_data[metric[timestamp_field]]:
+                    parse_data[metric[timestamp_field]][instance] = {'timestamp': timestamp}
+                parse_data[metric[timestamp_field]][instance][metric_key] =  data_value
 
     return parse_data
 
 
-def send_data(if_config_vars, metric_data):
+def send_data(logger, if_config_vars, metric_data):
     """ Sends parsed metric data to InsightFinder """
     send_data_time = time.time()
     # prepare data for metric streaming agent
@@ -381,16 +356,16 @@ def send_data(if_config_vars, metric_data):
 
     # send the data
     post_url = if_config_vars['if_url'] + "/customprojectrawdata"
-    send_data_to_receiver(post_url, to_send_data_json, len(metric_data))
-    print("--- Send data time: %s seconds ---" %
+    send_data_to_receiver(logger, post_url, to_send_data_json, len(metric_data))
+    logger.info("--- Send data time: %s seconds ---" %
           str(time.time() - send_data_time))
 
 
-def send_data_to_receiver(post_url, to_send_data, num_of_message):
+def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
     attempts = 0
     while attempts < MAX_RETRY_NUM:
         if sys.getsizeof(to_send_data) > MAX_PACKET_SIZE:
-            print("Packet size too large %s.  Dropping packet." + str(sys.getsizeof(to_send_data)))
+            logger.error("Packet size too large %s.  Dropping packet." + str(sys.getsizeof(to_send_data)))
             break
         response_code = -1
         attempts += 1
@@ -398,40 +373,30 @@ def send_data_to_receiver(post_url, to_send_data, num_of_message):
             response = requests.post(post_url, data=json.loads(to_send_data), verify=False)
             response_code = response.status_code
         except:
-            print("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
+            logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
                 attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
             continue
         if response_code == 200:
-            print("Data send successfully. Number of events: %d" % num_of_message)
+            logger.info("Data send successfully. Number of events: %d" % num_of_message)
             break
         else:
-            print("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
+            logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
                 attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
     if attempts == MAX_RETRY_NUM:
         sys.exit(1)
 
 
-def listener_process(q, c_config):
-    listener_configurer()
-    while True:
-        while not q.empty():
-            record = q.get()
-            if record.name == 'worker':
-                logger = logging.getLogger(record.name)
-                logger.handle(record)
-        time.sleep(1)
 
+def make_safe_instance_string(instance):
+    """ make a safe instance name string, concatenated with device if appropriate """
+    # strip underscores
+    instance = UNDERSCORE.sub('.', str(instance))
+    instance = COLONS.sub('-', str(instance))
+    return instance
 
-def worker_configurer(q, level):
-    h = QueueHandler(q)  # Just the one handler needed
-    root = logging.getLogger()
-    root.addHandler(h)
-    root.setLevel(level)
-
-
-def listener_configurer():
+def logger_control(user, level):
     """ set up logging according to the defined log level """
     # create a logging format
     formatter = logging.Formatter(
@@ -446,7 +411,7 @@ def listener_configurer():
         ISO8601[0])
 
     # Get the root logger
-    root = logging.getLogger()
+    root = logging.getLogger(user)
     # No level or filter logic applied - just do it!
     # root.setLevel(level)
 
@@ -460,6 +425,9 @@ def listener_configurer():
     logging_handler_err.setLevel(logging.WARNING)
     logging_handler_err.setFormatter(formatter)
     root.addHandler(logging_handler_err)
+    root.setLevel(level)
+    return root
+
 
 
 def main():
@@ -471,16 +439,9 @@ def main():
     cli_data_block = '\nCLI settings:'
     for kk, kv in sorted(cli_config_vars.items()):
         cli_data_block += '\n\t{}: {}'.format(kk, kv)
-    # logger.info(cli_data_block)
-    m = multiprocessing.Manager()
-    log_queue = m.Queue()
-    listener = Process(target=listener_process, args=(log_queue, cli_config_vars))
-    listener.daemon = True
-    listener.start()
 
     # set logger
-    worker_configurer(log_queue, cli_config_vars['log_level'])
-    logger = logging.getLogger('worker')
+    logger = logger_control('worker', cli_config_vars['log_level'])
     # get config file
     config_file = os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))
     # logger.info("Process start with config: {}".format(config_file))
@@ -498,7 +459,7 @@ def main():
 
     threads = []
     for url in agent_config_vars['api_urls']:
-        thread = myThread(log_queue, cli_config_vars, agent_config_vars['request_method'], url)
+        thread = myThread(logger, cli_config_vars, agent_config_vars['request_method'], url)
         threads.append(thread)
         thread.start()
 
@@ -506,19 +467,25 @@ def main():
         thread.join()
 
     #parse data
-    print('0-0-0-00--0-0')
-    parse_data = process_parse_data(log_queue, cli_config_vars, agent_config_vars)
-
+    parse_data = process_parse_data(logger, cli_config_vars, agent_config_vars)
+    logger.info('Parsing data completed...')
     # send data
+    data = []
     for key, value in parse_data.items():
-        data = []
-        for instance, metric_list in value.items():
-            data.extend(metric_list)
-            if get_json_size_bytes(data) >= CHUNK_SIZE:
-                send_data(if_config_vars, data)
+        data.extend(list(value.values()))
         if get_json_size_bytes(data) >= CHUNK_SIZE:
-            print(data,'-=-=-=-=-=')
-            send_data(if_config_vars, data)
+            logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+            if cli_config_vars['testing']:
+                data = []
+                continue
+            send_data(logger, if_config_vars, data)
+            data = []
+    if len(data) > 0:
+        if cli_config_vars['testing']:
+            logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+            return
+        logger.debug('send data {} to IF.'.format(data))
+        send_data(logger, if_config_vars, data)
 
 
 if __name__ == "__main__":

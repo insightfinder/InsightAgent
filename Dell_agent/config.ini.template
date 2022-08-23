@@ -20,7 +20,7 @@ instance_whitelist =
 # Metric names, multiple fields are separated by commas. A field can be named with the syntax `<metric_name>::<metric_value>`, where `<metric_name>` and `<metric_value>` can each be either a field name in message. Ex: metric1,metric_field::metric_value_field.
 metric_fields =
 # metrics_whitelist is a regex string used to define which metrics will be filtered.
-metrics_whitelist =
+metric_whitelist =
 
 ## proxy
 agent_http_proxy =
