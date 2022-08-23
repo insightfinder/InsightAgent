@@ -17,6 +17,10 @@ import requests
 import threading
 import regex
 from optparse import OptionParser
+from logging.handlers import QueueHandler
+import multiprocessing
+from multiprocessing import Process, Queue
+from sys import getsizeof
 
 
 threadLock = threading.Lock()
@@ -27,7 +31,13 @@ RETRY_WAIT_TIME_IN_SEC = 30
 # chunk size is 2Mb
 CHUNK_SIZE = 2 * 1024 * 1024
 MAX_PACKET_SIZE = 5000000
+ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 
+
+def get_json_size_bytes(json_data):
+    """ get size of json object in bytes """
+    # return len(bytearray(json.dumps(json_data)))
+    return getsizeof(json.dumps(json_data))
 
 def config_error(logger, setting=''):
     info = ' ({})'.format(setting) if setting else ''
@@ -204,6 +214,8 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             timestamp_field = config_parser.get('agent', 'timestamp_field', raw=True) or 'timestamp'
             target_timestamp_timezone = config_parser.get('agent', 'target_timestamp_timezone', raw=True) or 'UTC'
             instance_field = config_parser.get('agent', 'instance_field')
+            metric_fields = config_parser.get('agent', 'metric_fields')
+            metric_whitelist = config_parser.get('agent', 'metric_whitelist')
 
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
@@ -226,12 +238,24 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
         if len(timestamp_field) == 0:
             return config_error(logger, 'timestamp_field')
 
+        if len(metric_whitelist) != 0:
+            try:
+                metric_whitelist_regex = regex.compile(metrics_whitelist)
+            except Exception as e:
+                logger.error(e)
+                return config_error(logger, 'metrics_whitelist')
+
+        if len(metric_fields) == 0:
+            return config_error(logger, 'metric_fields')
+
         # proxies
         agent_proxies = dict()
         if len(agent_http_proxy) > 0:
             agent_proxies['http'] = agent_http_proxy
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
+
+        metric_fields = [x.strip() for x in metric_fields.split(',') if x.strip()]
 
         # add parsed variables to a global
         config_vars = {
@@ -240,6 +264,8 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             'timezone': timezone,
             'timestamp_field': timestamp_field,
             'instance_field': instance_field,
+            'metric_fields': metric_fields,
+            'metric_whitelist_regex': metric_whitelist,
             'target_timestamp_timezone': target_timestamp_timezone,
             'proxies': agent_proxies,
         }
@@ -267,9 +293,9 @@ def yield_message(message):
 
 
 def process_get_data(log_queue, cli_config_vars, method, url):
-    # logger = logging.getLogger('worker')
-    # logger.info('Started data consumer process ......')
-    print('start:{}'.format(int(time.time())))
+    worker_configurer(log_queue, cli_config_vars['log_level'])
+    logger = logging.getLogger('worker')
+    logger.info('start to request data')
     global messages
     req = requests.get
     if method.upper() == 'POST':
@@ -281,45 +307,60 @@ def process_get_data(log_queue, cli_config_vars, method, url):
         threadLock.acquire()
         messages.extend(message)
         threadLock.release()
-        print('end: {}'.format(int(time.time())))
     else:
-        print('failtttttt')
-        logger.warn('Fail')
-        # logger.info('Response Code: {}\nTEXT: {}'.format(
-        #     response.status_code, response.text))
+        logger.error('{} failed to get data'.format(url))
 
-    # logger.info('Closed data process......')
+    logger.info('Closed data process......')
 
 
 class myThread(threading.Thread):
-    def __init__(self, logger, cli_config_vars, method, url):
+    def __init__(self, log_queue, cli_config_vars, method, url):
         threading.Thread.__init__(self)
         self.cli_config_vars = cli_config_vars
         self.method = method
         self.url = url
-        self.logger = logger
+        self.log_queue = log_queue
 
     def run(self):
-        process_get_data(self.logger, self.cli_config_vars, self.method, self.url)
+        process_get_data(self.log_queue, self.cli_config_vars, self.method, self.url)
 
 
 def process_parse_data(log_queue, cli_config_vars, agent_config_vars):
+    worker_configurer(log_queue, cli_config_vars['log_level'])
+    logger = logging.getLogger('worker')
+    logger.info('start to parse data...')
     global messages
     messages = [metric for metric in messages if metric[agent_config_vars['instance_field']]]
-    # print(messages)
-    print(agent_config_vars)
     timestamp = agent_config_vars['timestamp_field']
     instance = agent_config_vars['instance_field']
+    metric_fields = agent_config_vars['metric_fields']
     # {"ts1": {'instance1': [metric1, metric2], 'instance2': [metric1, metric2]}, 'ts2': {'instance1': [metric1, metric2], 'instance2': [metric1, metric2]}}
     parse_data = {}
     all_timestamps = []
     for metric in yield_message(messages):
-        all_timestamps.append(metric[timestamp])
-        if metric[timestamp] not in parse_data:
-            parse_data[metric[timestamp]] = {}
-        if metric[instance] not in parse_data[metric[timestamp]]:
-            parse_data[metric[timestamp]][instance] = []
-        parse_data[metric[timestamp]][instance].append(metric)
+        if metric_fields and len(metric_fields) > 0:
+            for field in metric_fields:
+                data_field = field
+                data_value = metric.get(field)
+                if field.find('::') != -1:
+                    metric_name, metric_value = field.split('::')
+                    data_field = metric.get(metric_name)
+                    data_value = metric.get(metric_value)
+                if not data_field:
+                    continue
+
+                # filter by metric whitelist
+                if agent_config_vars['metric_whitelist_regex'] and not agent_config_vars['metric_whitelist_regex'].match(data_field):
+                    logger.debug('metric_whitelist has no matching data')
+                    continue
+
+                metric_key = '{}[{}]'.format(data_field, metric[instance])
+                all_timestamps.append(metric[timestamp])
+                if metric[timestamp] not in parse_data:
+                    parse_data[metric[timestamp]] = {}
+                if metric[instance] not in parse_data[metric[timestamp]]:
+                    parse_data[metric[timestamp]][instance] = []
+                parse_data[metric[timestamp]][instance].append({'timestamp': int(metric[timestamp]) * 1000, metric_key: data_value})
 
     return parse_data
 
@@ -372,6 +413,55 @@ def send_data_to_receiver(post_url, to_send_data, num_of_message):
         sys.exit(1)
 
 
+def listener_process(q, c_config):
+    listener_configurer()
+    while True:
+        while not q.empty():
+            record = q.get()
+            if record.name == 'worker':
+                logger = logging.getLogger(record.name)
+                logger.handle(record)
+        time.sleep(1)
+
+
+def worker_configurer(q, level):
+    h = QueueHandler(q)  # Just the one handler needed
+    root = logging.getLogger()
+    root.addHandler(h)
+    root.setLevel(level)
+
+
+def listener_configurer():
+    """ set up logging according to the defined log level """
+    # create a logging format
+    formatter = logging.Formatter(
+        '{ts} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
+            ts='%(asctime)s',
+            pid='%(process)d',
+            lvl='%(levelname)-8s',
+            mod='%(module)s',
+            func='%(funcName)s',
+            line='%(lineno)d',
+            msg='%(message)s'),
+        ISO8601[0])
+
+    # Get the root logger
+    root = logging.getLogger()
+    # No level or filter logic applied - just do it!
+    # root.setLevel(level)
+
+    # route INFO and DEBUG logging to stdout from stderr
+    logging_handler_out = logging.StreamHandler(sys.stdout)
+    logging_handler_out.setLevel(logging.DEBUG)
+    logging_handler_out.setFormatter(formatter)
+    root.addHandler(logging_handler_out)
+
+    logging_handler_err = logging.StreamHandler(sys.stderr)
+    logging_handler_err.setLevel(logging.WARNING)
+    logging_handler_err.setFormatter(formatter)
+    root.addHandler(logging_handler_err)
+
+
 def main():
     global messages
     # get config
@@ -382,7 +472,15 @@ def main():
     for kk, kv in sorted(cli_config_vars.items()):
         cli_data_block += '\n\t{}: {}'.format(kk, kv)
     # logger.info(cli_data_block)
-    logger = logging.getLogger()
+    m = multiprocessing.Manager()
+    log_queue = m.Queue()
+    listener = Process(target=listener_process, args=(log_queue, cli_config_vars))
+    listener.daemon = True
+    listener.start()
+
+    # set logger
+    worker_configurer(log_queue, cli_config_vars['log_level'])
+    logger = logging.getLogger('worker')
     # get config file
     config_file = os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))
     # logger.info("Process start with config: {}".format(config_file))
@@ -400,7 +498,7 @@ def main():
 
     threads = []
     for url in agent_config_vars['api_urls']:
-        thread = myThread(logging, cli_config_vars, agent_config_vars['request_method'], url)
+        thread = myThread(log_queue, cli_config_vars, agent_config_vars['request_method'], url)
         threads.append(thread)
         thread.start()
 
@@ -408,14 +506,20 @@ def main():
         thread.join()
 
     #parse data
-    parse_data = process_parse_data(logging, cli_config_vars, agent_config_vars)
+    print('0-0-0-00--0-0')
+    parse_data = process_parse_data(log_queue, cli_config_vars, agent_config_vars)
 
     # send data
     for key, value in parse_data.items():
         data = []
         for instance, metric_list in value.items():
             data.extend(metric_list)
-        send_data(if_config_vars, data)
+            if get_json_size_bytes(data) >= CHUNK_SIZE:
+                send_data(if_config_vars, data)
+        if get_json_size_bytes(data) >= CHUNK_SIZE:
+            print(data,'-=-=-=-=-=')
+            send_data(if_config_vars, data)
+
 
 if __name__ == "__main__":
     main()
