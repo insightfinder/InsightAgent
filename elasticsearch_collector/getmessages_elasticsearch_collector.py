@@ -764,9 +764,15 @@ def safe_get_data(dct, keys):
         named_key = key.split('::')
         try:
             if len(named_key) > 1:
-                data[named_key[0]] = dct[named_key[1]]
+                try:
+                    data[named_key[0]] = json.loads(dct[named_key[1]])
+                except ValueError:
+                    data[named_key[0]] = dct[named_key[1]]
             else:
-                data[named_key[0]] = dct[named_key[0]]
+                try:
+                    data[named_key[0]] = json.loads(dct[named_key[0]])
+                except ValueError:
+                    data[named_key[0]] = dct[named_key[0]]
         except KeyError:
             return None
     return data
