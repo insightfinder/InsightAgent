@@ -334,8 +334,8 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                     parse_data[metric[timestamp_field]] = {}
                 timestamp = int(metric[timestamp_field]) if len(str(int(metric[timestamp_field]))) > 10 else int(metric[timestamp_field]) * 1000
                 if metric[instance] not in parse_data[metric[timestamp_field]]:
-                    parse_data[metric[timestamp_field]][instance] = {'timestamp': timestamp}
-                parse_data[metric[timestamp_field]][instance][metric_key] =  data_value
+                    parse_data[metric[timestamp_field]][instance] = {'timestamp': str(timestamp)}
+                parse_data[metric[timestamp_field]][instance][metric_key] = str(data_value)
 
     return parse_data
 
