@@ -744,7 +744,10 @@ def make_safe_project_string(project, project_mapping_dict, project_separator):
     # strip underscores
     # project = PIPE.sub('', project)
     # project = PROJECT_ALNUM.sub('-', project)
-    project_list = project.split(project_separator)[1:-1]
+    if len(project_separator) > 0:
+        project_list = project.split(project_separator)[1:-1]
+    else:
+        project_list = [project]
     project_dict = dict()
     for every_project in project_list:
         if every_project in project_mapping_dict:
