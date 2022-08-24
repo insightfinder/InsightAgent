@@ -511,9 +511,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
         if len(metric_fields) == 0:
             return config_error(logger, 'metric_fields')
 
-        if len(project_separator) == 0:
-            return config_error(logger, 'project_separator')
-
         # fields
         project_field = project_field.strip() if project_field.strip() else None
         metric_fields = [x.strip() for x in metric_fields.split(',') if x.strip()]
