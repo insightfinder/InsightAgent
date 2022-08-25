@@ -1,34 +1,7 @@
 [agent]
 ## kafka info
-# Comma separated list of kafka boostrap servers (eg: 192.168.1.1:9092,192.168.1.2:9092) - Required 
-bootstrap_servers =
-# Comma separated list of kafka topics to subscribe to - Required
-topics =
-# Kafka Group ID - Required
-group_id =
-client_id =
-
-## SSL
-# set to SSL to use SSL
-security_protocol =
-ssl_context =
-# true or false
-ssl_check_hostname =
-ssl_cafile =
-ssl_certfile =
-ssl_keyfile =
-ssl_password =
-ssl_crlfile =
-ssl_ciphers =
-
-## SASL
-# valid options are PLAIN GSSAPI OAUTHBEARER
-sasl_mechanism =
-sasl_plain_username =
-sasl_plain_password =
-sasl_kerberos_service_name =
-sasl_kerberos_domain_name =
-sasl_oauth_token_provider =
+# kafka connect file. Multiple fields are separated by commas. eg: kafka_config1.ini,kafka_config2.ini
+kafka_connect_file =
 
 # Optional preprocessing filter (regex) to eliminate raw data from being parsed. Data must match filter to be parsed if set
 initial_filter =
@@ -40,6 +13,10 @@ raw_regex =
 project_field =
 # project_whitelist is a regex string used to define which projects form project_field will be filtered.
 project_whitelist =
+# Custom project mapping relationship, multiple fields are separated by commas. Ex: 1234::Customer-Project-1::System1, 4567::Customer-Project-2
+project_map_id =
+# Custom project separator. EX: |, ;, :
+project_separator =
 
 # Metric names, multiple fields are separated by commas. A field can be named with the syntax `<metric_name>::<metric_value>`, where `<metric_name>` and `<metric_value>` can each be either a field name in message. Ex: metric1,metric_field::metric_value_field.
 metric_fields =
