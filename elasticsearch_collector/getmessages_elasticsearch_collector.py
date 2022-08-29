@@ -766,12 +766,12 @@ def safe_get_data(dct, keys):
             if len(named_key) > 1:
                 try:
                     data[named_key[0]] = json.loads(dct[named_key[1]])
-                except ValueError:
+                except:
                     data[named_key[0]] = dct[named_key[1]]
             else:
                 try:
                     data[named_key[0]] = json.loads(dct[named_key[0]])
-                except ValueError:
+                except:
                     data[named_key[0]] = dct[named_key[0]]
         except KeyError:
             return None
