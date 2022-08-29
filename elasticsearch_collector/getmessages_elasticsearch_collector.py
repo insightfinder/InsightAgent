@@ -365,7 +365,7 @@ def process_build_buffer(args):
                     if project not in meta_info['projects']:
                         check_success = check_project_exist(logger, if_config_vars, project)
                         if not check_success:
-                            sys.exit(1)
+                            os.kill(os.getpid(), signal.SIGINT)
                         meta_info['projects'][project] = True
 
             if project not in project_tracks.keys():
