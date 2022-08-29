@@ -106,7 +106,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
     logger.info('Closed data process......')
 
 
-def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, datas):
+def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, project_mapping_dict, datas):
     worker_configurer(log_queue, cli_config_vars['log_level'])
     logger = logging.getLogger('worker')
     logger.info('Started data parse process ......')
@@ -129,6 +129,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
 
             # get project
             project = if_config_vars['project_name']
+            system_name = if_config_vars['system_name']
             if agent_config_vars['project_field']:
                 project = message.get(agent_config_vars['project_field'])
                 if not project:
@@ -137,7 +138,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                 if agent_config_vars['project_whitelist_regex'] \
                         and not agent_config_vars['project_whitelist_regex'].match(project):
                     continue
-                project = make_safe_project_string(project)
+                project = make_safe_project_string(project, project_mapping_dict, agent_config_vars['project_separator'])
 
             # instance name
             instance = 'Application'
@@ -182,14 +183,25 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                     continue
 
                 metric_key = '{}[{}]'.format(data_field, full_instance)
-                datas.put({
-                    'project': project,
-                    'timestamp': timestamp,
-                    'full_instance': full_instance,
-                    'metric_key': metric_key,
-                    'value': str(data_value)
-                })
-
+                if isinstance(project, dict):
+                    for key, value in project.items():
+                        datas.put({
+                            'project': value['custom_project'],
+                            'system_name': value['custom_system'] or system_name,
+                            'timestamp': timestamp,
+                            'full_instance': full_instance,
+                            'metric_key': metric_key,
+                            'value': str(data_value)
+                        })
+                else:
+                    datas.put({
+                        'project': project,
+                        'system_name': system_name,
+                        'timestamp': timestamp,
+                        'full_instance': full_instance,
+                        'metric_key': metric_key,
+                        'value': str(data_value)
+                    })
         except Exception as e:
             logger.warn('Error when parsing message')
             logger.warn(e)
@@ -217,6 +229,7 @@ def process_build_buffer(logger, c_config, if_config_vars, agent_config_vars, da
         try:
             message = datas.get()
             project = message['project']
+            system_name = message['system_name']
             timestamp = message['timestamp']
             full_instance = message['full_instance']
             metric_key = message['metric_key']
@@ -231,6 +244,7 @@ def process_build_buffer(logger, c_config, if_config_vars, agent_config_vars, da
                 if full_instance not in metric_buffer[project]['buffer_dict'][timestamp]:
                     metric_buffer[project]['buffer_dict'][timestamp][full_instance] = {"timestamp": timestamp}
                 metric_buffer[project]['buffer_dict'][timestamp][full_instance][metric_key] = value
+                metric_buffer[project]['buffer_dict'][timestamp][full_instance]['system_name'] = system_name
                 lock.release()
 
         except Exception as e:
@@ -282,7 +296,9 @@ def check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_co
     for project, buffer in project_data_map.items():
         # check project name first
         if not c_config['testing']:
-            check_success = check_project_exist(logger, if_config_vars, project)
+            if len(buffer) <= 0:
+                continue
+            check_success = check_project_exist(logger, if_config_vars, project, buffer[0]['system_name'])
             if not check_success:
                 time.sleep(1)
                 sys.exit(1)
@@ -303,21 +319,16 @@ def check_buffer(lock, metric_buffer, logger, c_config, if_config_vars, agent_co
             reset_track(track)
 
 
-def get_agent_config_vars(logger, config_ini, if_config_vars):
-    """ Read and parse config.ini """
-    """ get config.ini vars """
-    if not os.path.exists(config_ini):
+def get_multiple_kafka_info(logger, kafka_config, if_config_vars):
+    if not os.path.exists(kafka_config):
         logger.error('No config file found. Exiting...')
         return False
-    with open(config_ini) as fp:
+    with open(kafka_config) as fp:
         config_parser = configparser.ConfigParser()
         config_parser.read_file(fp)
 
         kafka_kwargs = {}
         topics = []
-        project_whitelist_regex = None
-        metric_whitelist_regex = None
-        instance_whitelist_regex = None
         try:
             # agent settings
             kafka_config = {
@@ -402,13 +413,34 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
                 topics = [x.strip() for x in config_parser.get('agent', 'topics').split(',') if x.strip()]
             else:
                 return config_error(logger, 'topics')
+            partitions = config_parser.get('agent', 'partitions') or multiprocessing.cpu_count()
+            return {'kafka_kwargs': kafka_kwargs, 'topics': topics, 'partitions': partitions}
+        except configparser.NoOptionError as cp_noe:
+            logger.error(cp_noe)
+            return config_error(logger)
 
+def get_agent_config_vars(logger, config_ini, if_config_vars):
+    """ Read and parse config.ini """
+    """ get config.ini vars """
+    if not os.path.exists(config_ini):
+        logger.error('No config file found. Exiting...')
+        return False
+    with open(config_ini) as fp:
+        config_parser = configparser.ConfigParser()
+        config_parser.read_file(fp)
+
+        project_whitelist_regex = None
+        metric_whitelist_regex = None
+        instance_whitelist_regex = None
+        try:
             # metrics
             initial_filter = config_parser.get('agent', 'initial_filter')
             raw_regex = config_parser.get('agent', 'raw_regex')
 
             project_field = config_parser.get('agent', 'project_field')
             project_whitelist = config_parser.get('agent', 'project_whitelist')
+            project_map_id = config_parser.get('agent', 'project_map_id')
+            project_separator = config_parser.get('agent', 'project_separator')
 
             metric_fields = config_parser.get('agent', 'metric_fields')
             metrics_whitelist = config_parser.get('agent', 'metrics_whitelist')
@@ -500,16 +532,22 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
 
+        # kafka config file
+        kafka_connect_file = config_parser.get('agent', 'kafka_connect_file').split(',')
+
         # add parsed variables to a global
         config_vars = {
-            'kafka_kwargs': kafka_kwargs,
-            'topics': topics,
+            'kafka_connect_file': kafka_connect_file,
+            'kafka_kwargs': '',
+            'topics': '',
             'initial_filter': initial_filter,
             'raw_regex': raw_regex,
             'project_field': project_field,
             'project_whitelist_regex': project_whitelist_regex,
+            'project_separator': project_separator,
             'metric_whitelist_regex': metric_whitelist_regex,
             'metric_fields': metric_fields,
+            'project_map_id': project_map_id,
             'timezone': timezone,
             'timestamp_field': timestamp_fields,
             'target_timestamp_timezone': target_timestamp_timezone,
@@ -698,12 +736,23 @@ def get_json_size_bytes(json_data):
     return getsizeof(json.dumps(json_data))
 
 
-def make_safe_project_string(project):
+def make_safe_project_string(project, project_mapping_dict, project_separator):
     """ make a safe project name string """
     # strip underscores
-    project = PIPE.sub('', project)
-    project = PROJECT_ALNUM.sub('-', project)
-    return project
+    # project = PIPE.sub('', project)
+    # project = PROJECT_ALNUM.sub('-', project)
+    if len(project_separator) > 0:
+        project_list = project.split(project_separator)[1:-1]
+    else:
+        project_list = [project]
+    project_dict = dict()
+    for every_project in project_list:
+        if every_project in project_mapping_dict:
+            project_dict[every_project] = {'custom_project': project_mapping_dict[every_project]['custom_project'],
+                                           'custom_system': project_mapping_dict[every_project]['custom_system']}
+        else:
+            project_dict[every_project] = {'custom_project': every_project, 'custom_system': ''}
+    return project_dict
 
 
 def make_safe_instance_string(instance, device=''):
@@ -900,7 +949,7 @@ def initialize_api_post_data(logger, if_config_vars, project):
     return to_send_data_dict
 
 
-def check_project_exist(logger, if_config_vars, project):
+def check_project_exist(logger, if_config_vars, project, system_name):
     is_project_exist = False
     try:
         logger.info('Starting check project: ' + if_config_vars['project_name'])
@@ -913,14 +962,14 @@ def check_project_exist(logger, if_config_vars, project):
         url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
         response = send_request(logger, url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
         if response == -1:
-            logger.error('Check project error: ' + if_config_vars['project_name'])
+            logger.error('Check project error: ' + params['projectName'])
         else:
             result = response.json()
             if result['success'] is False or result['isProjectExist'] is False:
-                logger.error('Check project error: ' + if_config_vars['project_name'])
+                logger.error('Check project error: ' + params['projectName'])
             else:
                 is_project_exist = True
-                logger.info('Check project success: ' + if_config_vars['project_name'])
+                logger.info('Check project success: '  + params['projectName'])
 
     except Exception as e:
         logger.error(e)
@@ -935,7 +984,7 @@ def check_project_exist(logger, if_config_vars, project):
                 'userName': if_config_vars['user_name'],
                 'licenseKey': if_config_vars['license_key'],
                 'projectName': project or if_config_vars['project_name'],
-                'systemName': if_config_vars['system_name'] or project or if_config_vars['project_name'],
+                'systemName': system_name or if_config_vars['system_name'] or project or if_config_vars['project_name'],
                 'instanceType': 'PrivateCloud',
                 'projectCloudType': 'PrivateCloud',
                 'dataType': get_data_type_from_project_type(if_config_vars),
@@ -1040,6 +1089,24 @@ def worker_configurer(q, level):
     root.setLevel(level)
 
 
+
+# project mapping
+def project_mapping(agent_config_vars):
+    project_map_id = agent_config_vars['project_map_id']
+    project_mapping_dict = dict()
+    if len(project_map_id) > 0:
+        project_mapping_list = project_map_id.split(',')
+        for project in project_mapping_list:
+            project_info_list = project.split('::')
+            if len(project_info_list) == 2:
+                project_mapping_dict[project_info_list[0]] = {"custom_project": project_info_list[1],
+                                                              "custom_system": ''}
+            if len(project_info_list) == 3:
+                project_mapping_dict[project_info_list[0]] = {"custom_project": project_info_list[1],
+                                                              "custom_system": project_info_list[2]}
+    return project_mapping_dict
+
+
 def main():
     # get config
     cli_config_vars = get_cli_config_vars()
@@ -1074,6 +1141,7 @@ def main():
     if not agent_config_vars:
         time.sleep(1)
         sys.exit(1)
+
     print_summary_info(logger, if_config_vars, agent_config_vars)
 
     # start run
@@ -1083,19 +1151,23 @@ def main():
     datas = Queue()
     # all processes
     processes = []
+    for kafka_connect in agent_config_vars['kafka_connect_file']:
+        kafka_info = get_multiple_kafka_info(logger, kafka_connect, if_config_vars)
+        agent_config_vars.update(kafka_kwargs=kafka_info['kafka_kwargs'], topics=kafka_info['topics'])
+        partitions = kafka_info['partitions']
+        # consumer process
+        for x in range(int(partitions)):
+            d = Process(target=process_get_data,
+                        args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages))
+            d.daemon = True
+            d.start()
+            processes.append(d)
 
-    # consumer process
-    for x in range(multiprocessing.cpu_count()):
-        d = Process(target=process_get_data,
-                    args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages))
-        d.daemon = True
-        d.start()
-        processes.append(d)
-
+    project_mapping_dict = project_mapping(agent_config_vars)
     # parser process
     for x in range(multiprocessing.cpu_count()):
         d = Process(target=process_parse_messages,
-                    args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, datas))
+                    args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, project_mapping_dict, datas))
         d.daemon = True
         d.start()
         processes.append(d)
