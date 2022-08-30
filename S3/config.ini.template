@@ -1,0 +1,42 @@
+[agent]
+# API. Can also set API from multiple fields which separated by commas. eg: http://localhost:8080,http://localhost:8000. required
+api_urls =
+
+# request mode. eg: get,post. required
+request_method =
+
+## message parsing
+# timezone, as per pytz
+timezone =
+timestamp_field =
+# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+target_timestamp_timezone = UTC
+
+# if no instance given, will set to 'Application'. Can also set instance name from multiple fields which separated by commas. Ex: instance_name_part1,instance_name_part2.
+instance_field =
+# instance_whitelist is a regex string used to define which instances will be filtered.
+instance_whitelist =
+
+# Metric names, multiple fields are separated by commas. A field can be named with the syntax `<metric_name>::<metric_value>`, where `<metric_name>` and `<metric_value>` can each be either a field name in message. Ex: metric1,metric_field::metric_value_field.
+metric_fields =
+# metrics_whitelist is a regex string used to define which metrics will be filtered.
+metric_whitelist =
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
+[insightfinder]
+user_name =
+license_key =
+token =
+# Name of the project created in the InsightFinder UI. If this project does not exist, agent will create it automatically.
+project_name =
+# Name of system owned by project. If project_name does not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name =
+# metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
+project_type = metric
+
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
