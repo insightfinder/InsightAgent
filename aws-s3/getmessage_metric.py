@@ -1,28 +1,21 @@
 #!/usr/bin/env python
 import configparser
+import io
 import json
 import logging
-import os
-import socket
-import sys
-import time
-import urllib.parse
-import http.client
-import shlex
-import traceback
-import signal
-import pytz
-import arrow
-import requests
-import threading
-import regex
-from optparse import OptionParser
-from logging.handlers import QueueHandler
-from sys import getsizeof
-from queue import Queue
 import multiprocessing
-from multiprocessing import Process, Queue
+import os
+import sys
+import threading
+import time
+from optparse import OptionParser
+from sys import getsizeof
 
+import arrow
+import boto3
+import pytz
+import regex
+import requests
 
 threadLock = threading.Lock()
 messages = []
@@ -35,17 +28,18 @@ COLONS = regex.compile(r"\:+")
 CHUNK_SIZE = 2 * 1024 * 1024
 MAX_PACKET_SIZE = 5000000
 ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
+RUNNING_INDEX_FILE = 'running_index.txt'
+MAX_THREAD_COUNT = multiprocessing.cpu_count() + 1
 
 
 def get_json_size_bytes(json_data):
     """ get size of json object in bytes """
-    # return len(bytearray(json.dumps(json_data)))
     return getsizeof(json.dumps(json_data))
+
 
 def config_error(logger, setting=''):
     info = ' ({})'.format(setting) if setting else ''
-    logger.error('Agent not correctly configured{}. Check config file.'.format(
-        info))
+    logger.error('Agent not correctly configured{}. Check config file.'.format(info))
     return False
 
 
@@ -92,6 +86,7 @@ def get_if_config_vars(logger, config_ini):
     if not os.path.exists(config_ini):
         logger.error('No config file found. Exiting...')
         return False
+
     with open(config_ini) as fp:
         config_parser = configparser.ConfigParser()
         config_parser.read_file(fp)
@@ -168,24 +163,25 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
     if not os.path.exists(config_ini):
         logger.error('No config file found. Exiting...')
         return False
+
     with open(config_ini) as fp:
         config_parser = configparser.ConfigParser()
         config_parser.read_file(fp)
 
         try:
-            # api settings
-            api_urls = config_parser.get('agent', 'api_urls')
-            request_method = config_parser.get('agent', 'request_method')
+            # aws s3 options
+            aws_access_key_id = config_parser.get('agent', 'aws_access_key_id')
+            aws_secret_access_key = config_parser.get('agent', 'aws_secret_access_key')
+            aws_region = config_parser.get('agent', 'aws_region') or None
+            aws_s3_bucket_name = config_parser.get('agent', 'aws_s3_bucket_name')
+            aws_s3_object_prefix = config_parser.get('agent', 'aws_s3_object_prefix') or ''
 
-            # handle required arrays
-            # api_urls
-            if api_urls:
-                api_urls = api_urls.split(',')
-            else:
-                return config_error(logger, 'api_urls')
-
-            if not request_method:
-                return config_error(logger, 'request_method')
+            if not aws_access_key_id:
+                return config_error(logger, 'aws_access_key_id')
+            if not aws_secret_access_key:
+                return config_error(logger, 'aws_secret_access_key')
+            if not aws_s3_bucket_name:
+                return config_error(logger, 'aws_s3_bucket_name')
 
             # message parsing
             timezone = config_parser.get('agent', 'timezone') or 'UTC'
@@ -208,6 +204,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
                 return config_error(logger, 'timezone')
             else:
                 timezone = pytz.timezone(timezone)
+
         if len(target_timestamp_timezone) != 0:
             target_timestamp_timezone = int(arrow.now(target_timestamp_timezone).utcoffset().total_seconds())
         else:
@@ -216,9 +213,10 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
         if len(timestamp_field) == 0:
             return config_error(logger, 'timestamp_field')
 
+        metric_whitelist_regex = None
         if len(metric_whitelist) != 0:
             try:
-                metric_whitelist_regex = regex.compile(metrics_whitelist)
+                metric_whitelist_regex = regex.compile(metric_whitelist)
             except Exception as e:
                 logger.error(e)
                 return config_error(logger, 'metrics_whitelist')
@@ -237,13 +235,16 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
 
         # add parsed variables to a global
         config_vars = {
-            'api_urls': api_urls,
-            'request_method': request_method,
+            'aws_access_key_id': aws_access_key_id,
+            'aws_secret_access_key': aws_secret_access_key,
+            'aws_region': aws_region,
+            'aws_s3_bucket_name': aws_s3_bucket_name,
+            'aws_s3_object_prefix': aws_s3_object_prefix,
             'timezone': timezone,
             'timestamp_field': timestamp_field,
             'instance_field': instance_field,
             'metric_fields': metric_fields,
-            'metric_whitelist_regex': metric_whitelist,
+            'metric_whitelist_regex': metric_whitelist_regex,
             'target_timestamp_timezone': target_timestamp_timezone,
             'proxies': agent_proxies,
         }
@@ -270,35 +271,36 @@ def yield_message(message):
         yield metric
 
 
-def process_get_data(logger, cli_config_vars, method, url):
-    logger.info('start to request data')
+def process_get_data(logger, cli_config_vars, bucket, object_key):
+    logger.info('start to process data from file: {}'.format(object_key))
     global messages
-    req = requests.get
-    if method.upper() == 'POST':
-        req = requests.post
-    response = req(url)
-    if response.status_code == http.client.OK:
-        message = response.text.splitlines()
-        message = [json.loads(metric_data) for metric_data in message]
-        threadLock.acquire()
-        messages.extend(message)
-        threadLock.release()
-    else:
-        logger.error('{} failed to get data'.format(url))
 
-    logger.info('Closed data process......')
+    buf = io.BytesIO()
+    logger.info('downloading file: {}'.format(object_key))
+
+    bucket.download_fileobj(object_key, buf)
+    content = buf.getvalue()
+    logger.info('download {} bytes from file: {}'.format(len(content), object_key))
+
+    lines = content.splitlines()
+    message = [json.loads(metric_data) for metric_data in lines]
+    threadLock.acquire()
+    messages.extend(message)
+    threadLock.release()
+
+    logger.info('finish proces data from file: {}'.format(object_key))
 
 
-class myThread(threading.Thread):
-    def __init__(self, logger, cli_config_vars, method, url):
+class MyThread(threading.Thread):
+    def __init__(self, logger, cli_config_vars, bucket, object_key):
         threading.Thread.__init__(self)
         self.cli_config_vars = cli_config_vars
-        self.method = method
-        self.url = url
+        self.bucket = bucket
+        self.object_key = object_key
         self.logger = logger
 
     def run(self):
-        process_get_data(self.logger, self.cli_config_vars, self.method, self.url)
+        process_get_data(self.logger, self.cli_config_vars, self.bucket, self.object_key)
 
 
 def process_parse_data(logger, cli_config_vars, agent_config_vars):
@@ -324,7 +326,8 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                     continue
 
                 # filter by metric whitelist
-                if agent_config_vars['metric_whitelist_regex'] and not agent_config_vars['metric_whitelist_regex'].match(data_field):
+                if agent_config_vars['metric_whitelist_regex'] and not agent_config_vars[
+                    'metric_whitelist_regex'].match(data_field):
                     logger.debug('metric_whitelist has no matching data')
                     continue
                 full_instance = make_safe_instance_string(metric[instance])
@@ -332,7 +335,8 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                 # all_timestamps.append(metric[timestamp_field])
                 if metric[timestamp_field] not in parse_data:
                     parse_data[metric[timestamp_field]] = {}
-                timestamp = int(metric[timestamp_field]) if len(str(int(metric[timestamp_field]))) > 10 else int(metric[timestamp_field]) * 1000
+                timestamp = int(metric[timestamp_field]) if len(str(int(metric[timestamp_field]))) > 10 else int(
+                    metric[timestamp_field]) * 1000
                 if metric[instance] not in parse_data[metric[timestamp_field]]:
                     parse_data[metric[timestamp_field]][instance] = {'timestamp': str(timestamp)}
                 parse_data[metric[timestamp_field]][instance][metric_key] = str(data_value)
@@ -358,7 +362,7 @@ def send_data(logger, if_config_vars, metric_data):
     post_url = if_config_vars['if_url'] + "/customprojectrawdata"
     send_data_to_receiver(logger, post_url, to_send_data_json, len(metric_data))
     logger.info("--- Send data time: %s seconds ---" %
-          str(time.time() - send_data_time))
+                str(time.time() - send_data_time))
 
 
 def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
@@ -388,13 +392,13 @@ def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
         sys.exit(1)
 
 
-
 def make_safe_instance_string(instance):
     """ make a safe instance name string, concatenated with device if appropriate """
     # strip underscores
     instance = UNDERSCORE.sub('.', str(instance))
     instance = COLONS.sub('-', str(instance))
     return instance
+
 
 def logger_control(user, level):
     """ set up logging according to the defined log level """
@@ -429,9 +433,9 @@ def logger_control(user, level):
     return root
 
 
-
 def main():
     global messages
+
     # get config
     cli_config_vars = get_cli_config_vars()
 
@@ -449,43 +453,99 @@ def main():
     if_config_vars = get_if_config_vars(logger, config_file)
     if not if_config_vars:
         sys.exit(1)
+
     agent_config_vars = get_agent_config_vars(logger, config_file, if_config_vars)
     if not agent_config_vars:
         time.sleep(1)
         sys.exit(1)
+
     print_summary_info(logger, if_config_vars, agent_config_vars)
 
-    # consumer process
+    # read the previous processed file from the running index file
+    last_object_key = None
+    if os.path.exists(RUNNING_INDEX_FILE):
+        try:
+            with open(RUNNING_INDEX_FILE, 'r') as fp:
+                last_object_key = (fp.readline() or '').strip() or None
+                logger.info('Got last object key {}'.format(last_object_key))
+        except Exception as e:
+            logger.error('Failed to read index file: {}\n {}'.format(RUNNING_INDEX_FILE, e))
+            sys.exit()
 
-    threads = []
-    for url in agent_config_vars['api_urls']:
-        thread = myThread(logger, cli_config_vars, agent_config_vars['request_method'], url)
-        threads.append(thread)
-        thread.start()
+    region_name = agent_config_vars['aws_region']
+    bucket_name = agent_config_vars['aws_s3_bucket_name']
+    object_prefix = agent_config_vars['aws_s3_object_prefix']
 
-    for thread in threads:
-        thread.join()
+    s3 = boto3.resource('s3',
+                        aws_access_key_id=agent_config_vars['aws_access_key_id'],
+                        aws_secret_access_key=agent_config_vars['aws_secret_access_key'],
+                        region_name=region_name)
+    bucket = s3.Bucket(bucket_name)
+    logger.info('Connect to s3 bucket, region: {}, bucket: {}'.format(region_name, bucket_name))
 
-    #parse data
-    parse_data = process_parse_data(logger, cli_config_vars, agent_config_vars)
-    logger.info('Parsing data completed...')
-    # send data
-    data = []
-    for key, value in parse_data.items():
-        data.extend(list(value.values()))
-        if get_json_size_bytes(data) >= CHUNK_SIZE:
-            logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+    objects_keys = [x.key for x in bucket.objects.filter(Prefix=object_prefix)]
+    logger.info('Found {} files in the bucket with prefix {}'.format(len(objects_keys), object_prefix))
+
+    new_object_keys = objects_keys
+    if last_object_key:
+        try:
+            idx = objects_keys.index(last_object_key)
+            # no new objects
+            if idx == len(objects_keys) - 1:
+                new_object_keys = []
+            else:
+                new_object_keys = objects_keys[idx + 1:]
+        except ValueError:
+            # not found, start from first one
+            pass
+    logger.info('Found {} new files after {}'.format(len(new_object_keys), last_object_key))
+
+    while len(new_object_keys) > 0:
+        keys = new_object_keys[0:MAX_THREAD_COUNT]
+
+        threads = []
+        for obj_key in keys:
+            thread = MyThread(logger, cli_config_vars, bucket, obj_key)
+            threads.append(thread)
+            thread.start()
+
+        for thread in threads:
+            thread.join()
+
+        # parse data
+        parse_data = process_parse_data(logger, cli_config_vars, agent_config_vars)
+        logger.info('Parsing data completed...')
+
+        # send data
+        data = []
+        for key, value in parse_data.items():
+            data.extend(list(value.values()))
+            if get_json_size_bytes(data) >= CHUNK_SIZE:
+                logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+                if cli_config_vars['testing']:
+                    data = []
+                else:
+                    send_data(logger, if_config_vars, data)
+                    data = []
+
+        if len(data) > 0:
             if cli_config_vars['testing']:
-                data = []
-                continue
-            send_data(logger, if_config_vars, data)
-            data = []
-    if len(data) > 0:
-        if cli_config_vars['testing']:
-            logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
-            return
-        logger.debug('send data {} to IF.'.format(data))
-        send_data(logger, if_config_vars, data)
+                logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+            else:
+                logger.debug('send data {} to IF.'.format(data))
+                send_data(logger, if_config_vars, data)
+
+        # move to next batch
+        new_object_keys = new_object_keys[MAX_THREAD_COUNT:]
+
+        # Write running index file
+        if len(keys) > 0:
+            new_last_object_key = keys[-1]
+            try:
+                with open(RUNNING_INDEX_FILE, 'w') as fp:
+                    fp.writelines([new_last_object_key])
+            except Exception as e:
+                logger.warning('Failed to update running index file with file: {}\n'.format(new_last_object_key, e))
 
 
 if __name__ == "__main__":
