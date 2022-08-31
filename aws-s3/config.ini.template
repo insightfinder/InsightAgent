@@ -1,9 +1,18 @@
 [agent]
-# API. Can also set API from multiple fields which separated by commas. eg: http://localhost:8080,http://localhost:8000. required
-api_urls =
+# AWS access key
+aws_access_key_id =
 
-# request mode. eg: get,post. required
-request_method =
+# AWS secret
+aws_secret_access_key =
+
+# AWS region name
+aws_region =
+
+# AWS S3 bucket name
+aws_s3_bucket_name =
+
+# prefix for AWS s3 objects
+aws_s3_object_prefix =
 
 ## message parsing
 # timezone, as per pytz
