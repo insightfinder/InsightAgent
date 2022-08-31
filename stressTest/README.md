@@ -3,9 +3,11 @@
 ### stressTest Details
 These scripts have been developed to stress the usage of a system. They have been built to minimize any external depencies to maintain support for legacy systems.
 
-Currently, we have support for two metric stressors: 
+Currently, we have support for four metric stressors: 
 1. CPU
-1. Memory 
+2. Memory
+3. Disk 
+4. Network
 
 To run these scripts, download the stressTest.tar.gz package and extract the scripts to a local directory on the target system. The required command line script arguments are documented below. 
 
@@ -44,3 +46,42 @@ Sample command:
 python ./stress_memory.py --size 200 --unit MB --multiplier 10 --duration 60 --interval 5
 ```
 This Command will increase the memory up to 2000 MB over the course of 60 seconds, increasing the memory used by 400 MB every 12 seconds. 
+
+
+### Disk Stress Test
+This script writes to a file, consuming 60% of the total free space on the target path, then deletes the file. 
+
+NOTE: This script requires python3.x
+NOTE: This script should be run as ROOT or as a user with ROOT level permissions
+
+Required Arguments:
+* --path <path>: The path where the file will be written.
+
+Sample Command:
+```
+python3 stress_disk.py --path "/"
+```
+This will write the file to the root directory, stressing the default drive.
+
+### Network Stress Test
+This test uses the iperf utility. It requires two seperate systems to perform, both with iperf utility installed. 
+
+On the test server:
+  Install the iperf3 utility: 
+    ```sudo yum install iperf3-3.1.7-2.el7.x86_64.rpm```
+  Open firewall port 5102: 
+    ```firewall-cmd --permanent --add-port=5201/udp```
+    ```firewall-cmd --permanent --add-port=5201/tcp```
+    ```firewall-cmd --reload```
+  Start the iperf3 server
+    ```iperf3 -s```
+
+On a different server that can reach the test server
+  Install the iperf3 utility: 
+    ```sudo yum install iperf3-3.1.7-2.el7.x86_64.rpm```
+  Run the iperf3 command
+    ```iperf3 -c <IPADDRESS-OF-TEST-SERVER> -P 8 -t 30 -w 32768```
+      -c 192.168.1.200 – IP address of the iPerf server
+      -w 32768 – increase the TCP window size
+      -t 30 – is the time in seconds for the test to be done (by default, it is 10 seconds)
+      -P 8 – is the number of parallel threads (streams) to get the maximum channel load
