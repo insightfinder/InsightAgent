@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import configparser
+import http
 import io
 import json
 import logging
@@ -8,6 +9,7 @@ import os
 import sys
 import threading
 import time
+import urllib
 from optparse import OptionParser
 from sys import getsizeof
 
@@ -30,6 +32,7 @@ MAX_PACKET_SIZE = 5000000
 ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 RUNNING_INDEX_FILE = 'running_index.txt'
 MAX_THREAD_COUNT = multiprocessing.cpu_count() + 1
+ATTEMPTS = 3
 
 
 def get_json_size_bytes(json_data):
@@ -97,6 +100,8 @@ def get_if_config_vars(logger, config_ini):
             project_name = config_parser.get('insightfinder', 'project_name')
             system_name = config_parser.get('insightfinder', 'system_name')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
+            sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
+            run_interval = config_parser.get('insightfinder', 'run_interval')
             if_url = config_parser.get('insightfinder', 'if_url')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
@@ -129,7 +134,28 @@ def get_if_config_vars(logger, config_ini):
             'TRAVEREPLAY'
         }:
             return config_error(logger, 'project_type')
+
         is_replay = 'REPLAY' in project_type
+
+        if len(sampling_interval) == 0:
+            if 'METRIC' in project_type:
+                return config_error(logger, 'sampling_interval')
+            else:
+                # set default for non-metric
+                sampling_interval = 10
+
+        if sampling_interval.endswith('s'):
+            sampling_interval = int(sampling_interval[:-1])
+        else:
+            sampling_interval = int(sampling_interval) * 60
+
+        if len(run_interval) == 0:
+            return config_error(logger, 'run_interval')
+
+        if run_interval.endswith('s'):
+            run_interval = int(run_interval[:-1])
+        else:
+            run_interval = int(run_interval) * 60
 
         # defaults
         if len(if_url) == 0:
@@ -149,6 +175,8 @@ def get_if_config_vars(logger, config_ini):
             'project_name': project_name,
             'system_name': system_name,
             'project_type': project_type,
+            'sampling_interval': int(sampling_interval),  # as seconds
+            'run_interval': int(run_interval),  # as seconds
             'if_url': if_url,
             'if_proxies': if_proxies,
             'is_replay': is_replay
@@ -264,6 +292,168 @@ def print_summary_info(logger, if_config_vars, agent_config_vars):
     for jk, jv in sorted(agent_config_vars.items()):
         agent_data_block += '\n\t{}: {}'.format(jk, jv)
     logger.debug(agent_data_block)
+
+
+def send_request(logger, url, mode='GET', failure_message='Failure!', success_message='Success!',
+                 **request_passthrough):
+    """ sends a request to the given url """
+    # determine if post or get (default)
+    requests.packages.urllib3.disable_warnings()
+    req = requests.get
+    if mode.upper() == 'POST':
+        req = requests.post
+
+    req_num = 0
+    for req_num in range(ATTEMPTS):
+        try:
+            response = req(url, **request_passthrough)
+            if response.status_code == http.client.OK:
+                return response
+            else:
+                logger.warn(failure_message)
+                logger.info('Response Code: {}\nTEXT: {}'.format(
+                    response.status_code, response.text))
+        # handle various exceptions
+        except requests.exceptions.Timeout:
+            logger.exception('Timed out. Reattempting...')
+            continue
+        except requests.exceptions.TooManyRedirects:
+            logger.exception('Too many redirects.')
+            break
+        except requests.exceptions.RequestException as e:
+            logger.exception('Exception ' + str(e))
+            break
+
+    logger.error('Failed! Gave up after {} attempts.'.format(req_num + 1))
+    return -1
+
+
+def get_insight_agent_type_from_project_type(if_config_vars):
+    if 'containerize' in if_config_vars and if_config_vars['containerize']:
+        if 'METRIC' in if_config_vars['project_type']:
+            if if_config_vars['is_replay']:
+                return 'containerReplay'
+            else:
+                return 'containerStreaming'
+        else:
+            if if_config_vars['is_replay']:
+                return 'ContainerHistorical'
+            else:
+                return 'ContainerCustom'
+    elif if_config_vars['is_replay']:
+        if 'METRIC' in if_config_vars['project_type']:
+            return 'MetricFile'
+        else:
+            return 'LogFile'
+    else:
+        return 'Custom'
+
+
+def get_data_type_from_project_type(if_config_vars):
+    """ use project type to determine data type """
+    if 'METRIC' in if_config_vars['project_type']:
+        return 'Metric'
+    elif 'ALERT' in if_config_vars['project_type']:
+        return 'Alert'
+    elif 'INCIDENT' in if_config_vars['project_type']:
+        return 'Incident'
+    elif 'DEPLOYMENT' in if_config_vars['project_type']:
+        return 'Deployment'
+    elif 'TRACE' in if_config_vars['project_type']:
+        return 'Trace'
+    else:  # LOG
+        return 'Log'
+
+
+def check_project_exist(logger, if_config_vars):
+    is_project_exist = False
+    try:
+        logger.info('Starting check project: ' + if_config_vars['project_name'])
+        params = {
+            'operation': 'check',
+            'userName': if_config_vars['user_name'],
+            'licenseKey': if_config_vars['license_key'],
+            'projectName': if_config_vars['project_name'],
+        }
+        url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
+        response = send_request(logger, url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
+        if response == -1:
+            logger.error('Check project error: ' + if_config_vars['project_name'])
+        else:
+            result = response.json()
+            if result['success'] is False or result['isProjectExist'] is False:
+                logger.error('Check project error: ' + if_config_vars['project_name'])
+            else:
+                is_project_exist = True
+                logger.info('Check project success: ' + if_config_vars['project_name'])
+
+    except Exception as e:
+        logger.error(e)
+        logger.error('Check project error: ' + if_config_vars['project_name'])
+
+    create_project_sucess = False
+    if not is_project_exist:
+        try:
+            logger.info('Starting add project: ' + if_config_vars['project_name'])
+            params = {
+                'operation': 'create',
+                'userName': if_config_vars['user_name'],
+                'licenseKey': if_config_vars['license_key'],
+                'projectName': if_config_vars['project_name'],
+                'systemName': if_config_vars['system_name'] or if_config_vars['project_name'],
+                'instanceType': 'AWS-S3',
+                'projectCloudType': 'AWS-S3',
+                'dataType': get_data_type_from_project_type(if_config_vars),
+                'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
+                'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
+                'samplingIntervalInSeconds': if_config_vars['sampling_interval'],
+            }
+            url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
+            response = send_request(logger, url, 'POST', data=params, verify=False,
+                                    proxies=if_config_vars['if_proxies'])
+            if response == -1:
+                logger.error('Add project error: ' + if_config_vars['project_name'])
+            else:
+                result = response.json()
+                if result['success'] is False:
+                    logger.error('Add project error: ' + if_config_vars['project_name'])
+                else:
+                    create_project_sucess = True
+                    logger.info('Add project success: ' + if_config_vars['project_name'])
+
+        except Exception as e:
+            logger.error(e)
+            logger.error('Add project error: ' + if_config_vars['project_name'])
+
+    if create_project_sucess:
+        # if create project is success, sleep 10s and check again
+        time.sleep(10)
+        try:
+            logger.info('Starting check project: ' + if_config_vars['project_name'])
+            params = {
+                'operation': 'check',
+                'userName': if_config_vars['user_name'],
+                'licenseKey': if_config_vars['license_key'],
+                'projectName': if_config_vars['project_name'],
+            }
+            url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
+            response = send_request(logger, url, 'POST', data=params, verify=False,
+                                    proxies=if_config_vars['if_proxies'])
+            if response == -1:
+                logger.error('Check project error: ' + if_config_vars['project_name'])
+            else:
+                result = response.json()
+                if result['success'] is False or result['isProjectExist'] is False:
+                    logger.error('Check project error: ' + if_config_vars['project_name'])
+                else:
+                    is_project_exist = True
+                    logger.info('Check project success: ' + if_config_vars['project_name'])
+
+        except Exception as e:
+            logger.error(e)
+            logger.error('Check project error: ' + if_config_vars['project_name'])
+
+    return is_project_exist
 
 
 def yield_message(message):
@@ -460,6 +650,12 @@ def main():
         sys.exit(1)
 
     print_summary_info(logger, if_config_vars, agent_config_vars)
+
+    if not cli_config_vars['testing']:
+        # check project name first
+        check_success = check_project_exist(logger, if_config_vars)
+        if not check_success:
+            return
 
     # read the previous processed file from the running index file
     last_object_key = None
