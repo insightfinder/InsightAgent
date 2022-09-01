@@ -521,8 +521,8 @@ def main():
         for key, value in parse_data.items():
             data.extend(list(value.values()))
             if get_json_size_bytes(data) >= CHUNK_SIZE:
-                logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
                 if cli_config_vars['testing']:
+                    logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
                     data = []
                 else:
                     send_data(logger, if_config_vars, data)
