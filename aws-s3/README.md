@@ -9,9 +9,6 @@ This agent collects data from AWS S3 and sends it to Insightfinder.
 1. Python == 3.7
 1. Pip3
 
-TODO:
-Successfully installed boto3-1.24.62 botocore-1.27.62 jmespath-1.0.1 python-dateutil-2.8.2 s3transfer-0.6.0 urllib3-1.26.12
-
 ###### Installation Steps:
 
 1. Download the aws-s3_metric.tar.gz package
