@@ -1,2 +1,0 @@
-name = S3
-script_name = getmessages_metric.py
