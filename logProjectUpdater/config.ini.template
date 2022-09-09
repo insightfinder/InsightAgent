@@ -1,0 +1,25 @@
+[Insightfinder]
+
+# Insightfinder login Fields, All fields need a value
+url= https://app.insightfinder.com
+login_user= 
+login_pass= 
+
+[Sensitivity]
+# Log Anomaly Detection sensitivity settings, All fields need a value
+# update_sensitivity: This field will determine whether or not to update sensitivity settings. True to update settings, false to not update settings
+update_sensitivity= true
+# Similarity_degree: Matches up with the same field in an insightfinder log project 
+# Examples:low, mediumLow, medium, mediumHigh, High
+similarity_degree= 
+# pvalue variable, this field lines up with the Sensitivity field
+# Examples: Low = 0.99, Medium Low = 0.95, Medium = 0.9, Medium High = 0.75, 0.5
+sensitivity= 
+
+[Keywords]
+# Detection keyword variables, All fields need a value
+# update_keywords: This field will determine whether or not to update keyword settings. True to update settings, false to not update settings
+update_keywords= true
+# Can receive multiple inputs, seperated by a comma. 
+# Example: {"type":"fieldName","keyword":"AGENTID=error","isCritical":false},{"type":"content","keyword":"PROTOCOL=15672","isCritical":true}
+keywords= 
