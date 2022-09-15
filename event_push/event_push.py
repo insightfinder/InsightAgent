@@ -758,9 +758,7 @@ def worker_process(args):
                 if project_edge_data.get("noResult"):
                     continue
                 try:
-                    transfer_data = project_edge_data.get("transferData")
-                    transfer_data = json.loads(transfer_data)
-                    params.append((logger, c_config, main_vars, transfer_data))
+                    params.append((logger, c_config, main_vars, project_edge_data))
                 except Exception as e:
                     logger.error(f'Parse project: {project_edge_data.get("projectName")} transfer_data error.')
                     logger.error(e)
