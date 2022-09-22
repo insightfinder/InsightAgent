@@ -525,12 +525,11 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                 ts = metric[timestamp_field]
                 full_instance = make_safe_instance_string(inst_name)
                 metric_key = '{}[{}]'.format(data_field, full_instance)
-                timestamp = int(ts) if len(str(int(ts))) > 10 else int(ts) * 1000
 
                 if ts not in parse_data:
                     parse_data[ts] = {}
                 if inst_name not in parse_data[ts]:
-                    parse_data[ts][inst_name] = {'timestamp': str(timestamp)}
+                    parse_data[ts][inst_name] = {}
                 parse_data[ts][inst_name][metric_key] = str(data_value)
 
     return parse_data
@@ -717,7 +716,12 @@ def main():
         # send data
         data = []
         for key, value in parse_data.items():
-            data.extend(list(value.values()))
+            timestamp = int(key) if len(str(int(key))) > 10 else int(key) * 1000
+            line = {'timestamp': str(timestamp)}
+            for d in value.values():
+                line.update(d)
+            data.append(line)
+
             if get_json_size_bytes(data) >= CHUNK_SIZE:
                 if cli_config_vars['testing']:
                     logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
