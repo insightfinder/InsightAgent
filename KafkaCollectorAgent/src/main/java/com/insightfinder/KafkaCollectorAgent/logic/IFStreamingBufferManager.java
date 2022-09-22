@@ -56,6 +56,7 @@ public class IFStreamingBufferManager {
     private ExecutorService executorService = Executors.newFixedThreadPool(5);
     private Map<Long, ThreadBuffer> threadBufferMap = new HashMap<>();
     private ConcurrentHashMap<String, Set<IFStreamingBuffer>> collectingDataMap = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, Set<IFStreamingBuffer>> sendingBufferMap = new ConcurrentHashMap<>();
     BloomFilter<String> filter = BloomFilter.create(
             Funnels.stringFunnel(Charset.defaultCharset()),
             100000000);
@@ -182,24 +183,36 @@ public class IFStreamingBufferManager {
     }
 
     public void mergeDataAndSendToIF(Map<String, Set<IFStreamingBuffer>> collectingDataMap){
-        Map<String, IFSendingBuffer> sendingBufferMap = new HashMap<>();
-        synchronized (collectingDataMap){
-            for(String key : collectingDataMap.keySet()){
-                if (filter.mightContain(key)){
-                    continue;
-                }
-                filter.put(key);
-                IFStreamingBuffer ifStreamingBuffer = merge(collectingDataMap.get(key));
-                if (!sendingBufferMap.containsKey(ifStreamingBuffer.getProject())){
-                    sendingBufferMap.put(ifStreamingBuffer.getProject(), new IFSendingBuffer(ifStreamingBuffer));
-                }else {
-                    sendingBufferMap.get(ifStreamingBuffer.getProject()).addData(ifStreamingBuffer);
+        Map<String, IFSendingBuffer> readyToSendDataMap = new HashMap<>();
+        synchronized (sendingBufferMap){
+            for (String key : sendingBufferMap.keySet()){
+                if (!collectingDataMap.keySet().contains(key)){
+                    if (filter.mightContain(key)){
+                        continue;
+                    }
+                    filter.put(key);
+                    IFStreamingBuffer ifStreamingBuffer = merge(sendingBufferMap.get(key));
+                    if (!readyToSendDataMap.containsKey(ifStreamingBuffer.getProject())){
+                        readyToSendDataMap.put(ifStreamingBuffer.getProject(), new IFSendingBuffer(ifStreamingBuffer));
+                    }else {
+                        readyToSendDataMap.get(ifStreamingBuffer.getProject()).addData(ifStreamingBuffer);
+                    }
+                    sendingBufferMap.remove(key);
                 }
             }
-            collectingDataMap.clear();
+
+            synchronized (collectingDataMap){
+                for(String key : collectingDataMap.keySet()){
+                    if (!sendingBufferMap.contains(key)){
+                        sendingBufferMap.put(key, ConcurrentHashMap.newKeySet());
+                    }
+                    sendingBufferMap.get(key).addAll(collectingDataMap.get(key));
+                }
+                collectingDataMap.clear();
+            }
         }
 
-        for (IFSendingBuffer ifSendingBuffer : sendingBufferMap.values()){
+        for (IFSendingBuffer ifSendingBuffer : readyToSendDataMap.values()){
             sendToIF(ifSendingBuffer.getJsonObjectList(), ifSendingBuffer.getProject(), 0);
         }
     }
@@ -216,6 +229,7 @@ public class IFStreamingBufferManager {
             bodyValues.add("userName", ifConfig.getUserName());
             bodyValues.add("metricData", new Gson().toJson(list));
             bodyValues.add("agentType", ifConfig.getAgentType());
+            System.out.println(new Gson().toJson(list).getBytes(StandardCharsets.UTF_8).length/1024 + "KB");
             webClient.post()
                     .uri(ifConfig.getServerUri())
                     .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
