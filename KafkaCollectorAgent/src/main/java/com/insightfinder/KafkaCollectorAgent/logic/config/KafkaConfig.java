@@ -1,51 +1,46 @@
 package com.insightfinder.KafkaCollectorAgent.logic.config;
 
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.*;
+import org.springframework.stereotype.Component;
 
-import java.util.List;
+import java.util.*;
+import java.util.stream.StreamSupport;
 
-@Configuration
-@ConfigurationProperties(prefix = "kafka")
+@Component
 public class KafkaConfig {
+    @Autowired
+    private Environment env;
 
-    private List<String> bootstrapAddress;
-    private List<String> groupId;
-    private List<String> topic;
-    private List<Integer> concurrency;
+    private int clusterNum;
 
     public KafkaConfig() {
     }
 
-    public List<String> getBootstrapAddress() {
-        return bootstrapAddress;
+    public Map<String , Map<String, String>> getKafkaClusterInfo(){
+        Map<String , Map<String, String>> info = new HashMap<>();
+        MutablePropertySources propSrcs = ((AbstractEnvironment) env).getPropertySources();
+        StreamSupport.stream(propSrcs.spliterator(), false)
+                .filter(ps -> ps instanceof EnumerablePropertySource)
+                .map(ps -> ((EnumerablePropertySource) ps).getPropertyNames())
+                .flatMap(Arrays::<String>stream)
+                .forEach(propName -> {
+                    if (propName.startsWith("kafka")){
+                        String[] splitPropNames = propName.split("\\.", 2);
+                        if (!info.containsKey(splitPropNames[0])){
+                            info.put(splitPropNames[0], new HashMap<>());
+                        }
+                        info.get(splitPropNames[0]).put(splitPropNames[1], env.getProperty(propName));
+                    }
+                });
+        return info;
     }
 
-    public void setBootstrapAddress(List<String> bootstrapAddress) {
-        this.bootstrapAddress = bootstrapAddress;
+    public int getClusterNum() {
+        return clusterNum;
     }
 
-    public List<String> getGroupId() {
-        return groupId;
-    }
-
-    public void setGroupId(List<String> groupId) {
-        this.groupId = groupId;
-    }
-
-    public List<String> getTopic() {
-        return topic;
-    }
-
-    public void setTopic(List<String> topic) {
-        this.topic = topic;
-    }
-
-    public List<Integer> getConcurrency() {
-        return concurrency;
-    }
-
-    public void setConcurrency(List<Integer> concurrency) {
-        this.concurrency = concurrency;
+    public void setClusterNum(int clusterNum) {
+        this.clusterNum = clusterNum;
     }
 }

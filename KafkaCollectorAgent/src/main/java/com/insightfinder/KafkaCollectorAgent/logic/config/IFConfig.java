@@ -1,8 +1,12 @@
 package com.insightfinder.KafkaCollectorAgent.logic.config;
 
+import com.google.gson.reflect.TypeToken;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+import java.lang.reflect.Type;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Configuration
@@ -14,13 +18,12 @@ public class IFConfig {
     private String checkAndCreateUri;
     private String licenseKey;
     private int samplingIntervalInSeconds;
-    private String systemName;
     private String projectKey;
     private String instanceKey;
     private String timestampKey;
     private String metricKey;
     private String valueKey;
-    private Set<String> projectList;
+    private String projectList;
     private Set<String>instanceList;
     private String  metricRegex;
     private String dataFormat;
@@ -77,14 +80,6 @@ public class IFConfig {
         this.samplingIntervalInSeconds = samplingIntervalInSeconds;
     }
 
-    public String getSystemName() {
-        return systemName;
-    }
-
-    public void setSystemName(String systemName) {
-        this.systemName = systemName;
-    }
-
     public String getInstanceKey() {
         return instanceKey;
     }
@@ -101,11 +96,13 @@ public class IFConfig {
         this.timestampKey = timestampKey;
     }
 
-    public Set<String> getProjectList() {
+
+
+    public String getProjectList() {
         return projectList;
     }
 
-    public void setProjectList(Set<String> projectList) {
+    public void setProjectList(String projectList) {
         this.projectList = projectList;
     }
     public Set<String> getInstanceList() {

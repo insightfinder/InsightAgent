@@ -36,21 +36,21 @@ public class IFProjectManager {
         projects = new HashSet<>();
     }
 
-    boolean checkAndCreateProject(String projectName){
+    boolean checkAndCreateProject(String projectName, String systemName){
         if (projects.contains(projectName)){
             return true;
         }
-        if (checkProject(projectName)){
+        if (checkProject(projectName, systemName)){
             projects.add(projectName);
         }else {
-            if (createProject(projectName)){
+            if (createProject(projectName, systemName)){
                 projects.add(projectName);
             }
         }
         return projects.contains(projectName);
     }
 
-    boolean checkProject(String projectName){
+    boolean checkProject(String projectName, String systemName){
         MultiValueMap<String, String> bodyValues = new LinkedMultiValueMap<>();
         bodyValues.add("userName", ifConfig.getUserName());
         bodyValues.add("licenseKey", ifConfig.getLicenseKey());
@@ -70,7 +70,7 @@ public class IFProjectManager {
         return false;
     }
 
-    boolean createProject(String projectName){
+    boolean createProject(String projectName, String systemName){
         MultiValueMap<String, String> bodyValues = new LinkedMultiValueMap<>();
         bodyValues.add("userName", ifConfig.getUserName());
         bodyValues.add("licenseKey", ifConfig.getLicenseKey());
@@ -80,7 +80,7 @@ public class IFProjectManager {
         bodyValues.add("projectCloudType", "PrivateCloud");
         bodyValues.add("samplingInterval", String.valueOf(ifConfig.getSamplingIntervalInSeconds()/60));
         bodyValues.add("samplingIntervalInSeconds", String.valueOf(ifConfig.getSamplingIntervalInSeconds()));
-        bodyValues.add("systemName", ifConfig.getSystemName());
+        bodyValues.add("systemName", systemName);
         bodyValues.add("dataType", "Metric");
         bodyValues.add("insightAgentType", ifConfig.getAgentType());
         String res = webClient.post()

@@ -107,29 +107,28 @@ public class KafkaConsumerManager {
 
     @PostConstruct
     public void init(){
-        int clusterNum = kafkaConfig.getBootstrapAddress().size();
-        for (int i = 0; i < clusterNum; i++){
-            ConsumerFactory consumerFactory = consumerFactory(kafkaConfig.getBootstrapAddress().get(i), kafkaConfig.getGroupId().get(i));
+        Map<String , Map<String, String>> clusterInfo = kafkaConfig.getKafkaClusterInfo();
+        int clusterIndex = 0;
+        for (Map<String, String> cluster : clusterInfo.values()){
+            ConsumerFactory consumerFactory = consumerFactory(cluster);
             ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
             factory.setBatchListener(false);
             factory.setConsumerFactory(consumerFactory);
-            IFKafkaListenerEndpoint ifKafkaListenerEndpoint = new IFKafkaListenerEndpoint(kafkaConfig.getTopic().get(i), kafkaConfig.getGroupId().get(i), kafkaConfig.getConcurrency().get(i));
+            IFKafkaListenerEndpoint ifKafkaListenerEndpoint = new IFKafkaListenerEndpoint(cluster.get("topic"), cluster.get("group.id"), Integer.valueOf(cluster.get("concurrency")));
             ConcurrentMessageListenerContainer<String, String> container = factory.createListenerContainer(ifKafkaListenerEndpoint);
             container.setupMessageListener((MessageListener<Integer, String>) record -> {
-                ifStreamingBufferManager.parseString(record.value().toString(), System.currentTimeMillis());
+                ifStreamingBufferManager.parseString(record.value(), System.currentTimeMillis());
             });
-            applicationContext.registerBeanDefinition("ConcurrentMessageListenerContainer" + i, BeanDefinitionBuilder.genericBeanDefinition(ConcurrentMessageListenerContainer.class,()->{return container;}).getBeanDefinition());
+            applicationContext.registerBeanDefinition("ConcurrentMessageListenerContainer" + clusterIndex, BeanDefinitionBuilder.genericBeanDefinition(ConcurrentMessageListenerContainer.class,()->{return container;}).getBeanDefinition());
+            clusterIndex++;
         }
     }
 
-    public ConsumerFactory<String, String> consumerFactory(String bootstrapAddress, String groupId) {
+    public ConsumerFactory<String, String> consumerFactory(Map<String, String> cluster) {
         Map<String, Object> props = new HashMap<>();
-        props.put(
-                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                bootstrapAddress);
-        props.put(
-                ConsumerConfig.GROUP_ID_CONFIG,
-                groupId);
+        for (Map.Entry entry : cluster.entrySet()){
+            props.put(entry.getKey().toString() , entry.getValue());
+        }
         props.put(
                 ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
                 StringDeserializer.class);

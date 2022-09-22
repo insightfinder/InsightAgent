@@ -4,6 +4,7 @@ import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.google.gson.reflect.TypeToken;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -19,6 +20,7 @@ import reactor.util.retry.Retry;
 import javax.annotation.PostConstruct;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Type;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -35,7 +37,10 @@ import java.util.regex.Pattern;
 @Component
 public class IFStreamingBufferManager {
     private Logger logger = Logger.getLogger(IFStreamingBufferManager.class.getName());
+    public static Type MAP_MAP_TYPE = new TypeToken<Map<String, Map<String, String>>>() {}.getType();
 
+    @Autowired
+    private Gson gson;
     @Autowired
     private IFConfig ifConfig;
     @Autowired
@@ -45,7 +50,7 @@ public class IFStreamingBufferManager {
     private boolean isJSON;
     private Pattern dataFormatPattern;
     private Map<String, Integer> namedGroups;
-    private Set<String> projectList;
+    private Map<String, Map<String, String>> projectList;
     private Set<String> instanceList;
     private Pattern metricPattern;
     private ExecutorService executorService = Executors.newFixedThreadPool(5);
@@ -74,7 +79,7 @@ public class IFStreamingBufferManager {
             metricPattern = Pattern.compile(ifConfig.getMetricRegex());
         }
 
-        projectList = ifConfig.getProjectList();
+        projectList = getProjectMapping(ifConfig.getProjectList());
         instanceList = ifConfig.getInstanceList();
         //timer thread
         executorService.execute(()->{
@@ -109,6 +114,13 @@ public class IFStreamingBufferManager {
             }
         });
     }
+    public Map<String, Map<String, String>> getProjectMapping(String projectList){
+        Map<String, Map<String, String>> mapping = new HashMap<>();
+        mapping = gson.fromJson(projectList, MAP_MAP_TYPE);
+        return mapping;
+    }
+
+
 
     synchronized public void addThreadBuffer(long threadId){
         if (!threadBufferMap.containsKey(threadId)){
@@ -121,14 +133,17 @@ public class IFStreamingBufferManager {
         if (isJSON){
             //to do
         }else {
-            Matcher matcher = dataFormatPattern.matcher(content);
+            if (content.startsWith("\"") && content.endsWith("\"")){
+                content = content.substring(1, content.length() - 1);
+            }
+            Matcher matcher = dataFormatPattern.matcher(content.trim());
             if (matcher.matches() && namedGroups != null){
                 jsonObject = new JsonObject();
                 String projectName = null, instanceName = null, timeStamp = null;
                 for (String key : namedGroups.keySet()){
                     if (key.equalsIgnoreCase(ifConfig.getProjectKey())){
                         projectName = String.valueOf(matcher.group(key));
-                        if (!projectList.contains(projectName)){
+                        if (!projectList.keySet().contains(projectName)){
                             return;
                         }
                     } else if (key.equalsIgnoreCase(ifConfig.getInstanceKey())){
@@ -190,11 +205,14 @@ public class IFStreamingBufferManager {
     }
 
     public void sendToIF(List<JsonObject> list, String projectName, int retry){
-        if (projectManager.checkAndCreateProject(projectName)){
+        Map<String, String> ifProjectInfo = projectList.get(projectName);
+        String ifProjectName = ifProjectInfo.get("project");
+        String ifSystemName = ifProjectInfo.get("system");
+        if (projectManager.checkAndCreateProject(ifProjectName, ifSystemName)){
             UUID uuid = UUID.randomUUID();
             MultiValueMap<String, String> bodyValues = new LinkedMultiValueMap<>();
             bodyValues.add("licenseKey", ifConfig.getLicenseKey());
-            bodyValues.add("projectName", projectName);
+            bodyValues.add("projectName", ifProjectName);
             bodyValues.add("userName", ifConfig.getUserName());
             bodyValues.add("metricData", new Gson().toJson(list));
             bodyValues.add("agentType", ifConfig.getAgentType());
