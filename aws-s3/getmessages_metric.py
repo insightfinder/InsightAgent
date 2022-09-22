@@ -520,16 +520,17 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                     'metric_whitelist_regex'].match(data_field):
                     logger.debug('metric_whitelist has no matching data')
                     continue
-                full_instance = make_safe_instance_string(metric[instance])
+
+                inst_name = metric[instance]
+                ts = metric[timestamp_field]
+                full_instance = make_safe_instance_string(inst_name)
                 metric_key = '{}[{}]'.format(data_field, full_instance)
-                # all_timestamps.append(metric[timestamp_field])
-                if metric[timestamp_field] not in parse_data:
-                    parse_data[metric[timestamp_field]] = {}
-                timestamp = int(metric[timestamp_field]) if len(str(int(metric[timestamp_field]))) > 10 else int(
-                    metric[timestamp_field]) * 1000
-                if metric[instance] not in parse_data[metric[timestamp_field]]:
-                    parse_data[metric[timestamp_field]][instance] = {'timestamp': str(timestamp)}
-                parse_data[metric[timestamp_field]][instance][metric_key] = str(data_value)
+
+                if ts not in parse_data:
+                    parse_data[ts] = {}
+                if inst_name not in parse_data[ts]:
+                    parse_data[ts][inst_name] = {}
+                parse_data[ts][inst_name][metric_key] = str(data_value)
 
     return parse_data
 
@@ -715,7 +716,12 @@ def main():
         # send data
         data = []
         for key, value in parse_data.items():
-            data.extend(list(value.values()))
+            timestamp = int(key) if len(str(int(key))) > 10 else int(key) * 1000
+            line = {'timestamp': str(timestamp)}
+            for d in value.values():
+                line.update(d)
+            data.append(line)
+
             if get_json_size_bytes(data) >= CHUNK_SIZE:
                 if cli_config_vars['testing']:
                     logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
