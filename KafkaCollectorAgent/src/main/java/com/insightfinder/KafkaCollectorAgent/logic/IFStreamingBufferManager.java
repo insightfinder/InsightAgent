@@ -25,10 +25,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -56,7 +53,8 @@ public class IFStreamingBufferManager {
     private ExecutorService executorService = Executors.newFixedThreadPool(5);
     private Map<Long, ThreadBuffer> threadBufferMap = new HashMap<>();
     private ConcurrentHashMap<String, Set<IFStreamingBuffer>> collectingDataMap = new ConcurrentHashMap<>();
-    private ConcurrentHashMap<String, Set<IFStreamingBuffer>> sendingBufferMap = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, Set<IFStreamingBuffer>> collectedBufferMap = new ConcurrentHashMap<>();
+    private Queue<IFSendingBuffer> retryQueue = new LinkedBlockingQueue<>();
     BloomFilter<String> filter = BloomFilter.create(
             Funnels.stringFunnel(Charset.defaultCharset()),
             100000000);
@@ -183,36 +181,41 @@ public class IFStreamingBufferManager {
     }
 
     public void mergeDataAndSendToIF(Map<String, Set<IFStreamingBuffer>> collectingDataMap){
-        Map<String, IFSendingBuffer> readyToSendDataMap = new HashMap<>();
-        synchronized (sendingBufferMap){
-            for (String key : sendingBufferMap.keySet()){
+        Map<String, IFSendingBuffer> sendingBufferMap = new HashMap<>();
+        synchronized (collectedBufferMap){
+            for (String key : collectedBufferMap.keySet()){
                 if (!collectingDataMap.keySet().contains(key)){
                     if (filter.mightContain(key)){
                         continue;
                     }
                     filter.put(key);
-                    IFStreamingBuffer ifStreamingBuffer = merge(sendingBufferMap.get(key));
-                    if (!readyToSendDataMap.containsKey(ifStreamingBuffer.getProject())){
-                        readyToSendDataMap.put(ifStreamingBuffer.getProject(), new IFSendingBuffer(ifStreamingBuffer));
+                    IFStreamingBuffer ifStreamingBuffer = merge(collectedBufferMap.get(key));
+                    if (!sendingBufferMap.containsKey(ifStreamingBuffer.getProject())){
+                        sendingBufferMap.put(ifStreamingBuffer.getProject(), new IFSendingBuffer(ifStreamingBuffer));
                     }else {
-                        readyToSendDataMap.get(ifStreamingBuffer.getProject()).addData(ifStreamingBuffer);
+                        sendingBufferMap.get(ifStreamingBuffer.getProject()).addData(ifStreamingBuffer);
                     }
-                    sendingBufferMap.remove(key);
+                    collectedBufferMap.remove(key);
                 }
             }
 
             synchronized (collectingDataMap){
                 for(String key : collectingDataMap.keySet()){
-                    if (!sendingBufferMap.contains(key)){
-                        sendingBufferMap.put(key, ConcurrentHashMap.newKeySet());
+                    if (!collectedBufferMap.contains(key)){
+                        collectedBufferMap.put(key, ConcurrentHashMap.newKeySet());
                     }
-                    sendingBufferMap.get(key).addAll(collectingDataMap.get(key));
+                    collectedBufferMap.get(key).addAll(collectingDataMap.get(key));
                 }
                 collectingDataMap.clear();
             }
         }
 
-        for (IFSendingBuffer ifSendingBuffer : readyToSendDataMap.values()){
+        while (!retryQueue.isEmpty()){
+            IFSendingBuffer ifSendingBuffer = retryQueue.poll();
+            sendToIF(ifSendingBuffer.getJsonObjectList(), ifSendingBuffer.getProject(), 2);
+        }
+
+        for (IFSendingBuffer ifSendingBuffer : sendingBufferMap.values()){
             sendToIF(ifSendingBuffer.getJsonObjectList(), ifSendingBuffer.getProject(), 0);
         }
     }
@@ -245,7 +248,11 @@ public class IFStreamingBufferManager {
                             sendToIF(list.subList(0, list.size()/2), projectName, retry + 1);
                             sendToIF(list.subList(list.size()/2, list.size()), projectName, retry + 1);
                         }else {
-                            logger.log(Level.INFO,  "request id: " + uuid.toString() + " " + res);
+                            if (res.equalsIgnoreCase("RETRY")){
+                                retryQueue.add(new IFSendingBuffer(projectName, list));
+                            }else {
+                                logger.log(Level.INFO,  "request id: " + uuid.toString() + " " + res);
+                            }
                         }
                     });
         }

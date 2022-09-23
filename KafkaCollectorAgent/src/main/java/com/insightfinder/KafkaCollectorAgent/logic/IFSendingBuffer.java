@@ -9,6 +9,11 @@ public class IFSendingBuffer {
     private List<JsonObject> jsonObjectList;
     private int size;
 
+    public IFSendingBuffer(String project,  List<JsonObject> jsonObjectList){
+        this.project = project;
+        this.jsonObjectList = jsonObjectList;
+    }
+
     public IFSendingBuffer(IFStreamingBuffer ifStreamingBuffer) {
         jsonObjectList = new ArrayList<>();
         project = ifStreamingBuffer.getProject();
