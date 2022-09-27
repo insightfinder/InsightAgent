@@ -112,7 +112,7 @@ public class KafkaConsumerManager {
         for (Map<String, String> cluster : clusterInfo.values()){
             ConsumerFactory consumerFactory = consumerFactory(cluster);
             ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
-            factory.setBatchListener(false);
+            factory.setBatchListener(true);
             factory.setConsumerFactory(consumerFactory);
             IFKafkaListenerEndpoint ifKafkaListenerEndpoint = new IFKafkaListenerEndpoint(cluster.get("topic"), cluster.get("group.id"), Integer.valueOf(cluster.get("concurrency")));
             ConcurrentMessageListenerContainer<String, String> container = factory.createListenerContainer(ifKafkaListenerEndpoint);

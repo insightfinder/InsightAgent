@@ -232,7 +232,6 @@ public class IFStreamingBufferManager {
             bodyValues.add("userName", ifConfig.getUserName());
             bodyValues.add("metricData", new Gson().toJson(list));
             bodyValues.add("agentType", ifConfig.getAgentType());
-            System.out.println(new Gson().toJson(list).getBytes(StandardCharsets.UTF_8).length/1024 + "KB");
             webClient.post()
                     .uri(ifConfig.getServerUri())
                     .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
