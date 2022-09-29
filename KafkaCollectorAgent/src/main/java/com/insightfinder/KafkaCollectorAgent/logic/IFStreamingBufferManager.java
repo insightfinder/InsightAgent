@@ -137,17 +137,25 @@ public class IFStreamingBufferManager {
             }
             Matcher matcher = dataFormatPattern.matcher(content.trim());
             if (matcher.matches() && namedGroups != null){
+                List<String> projects = new ArrayList<>();
                 jsonObject = new JsonObject();
-                String projectName = null, instanceName = null, timeStamp = null;
+                String projectNameStr = null, instanceName = null, timeStamp = null;
                 for (String key : namedGroups.keySet()){
                     if (key.equalsIgnoreCase(ifConfig.getProjectKey())){
-                        projectName = String.valueOf(matcher.group(key));
-                        if (!projectList.keySet().contains(projectName)){
-                            return;
+                        projectNameStr = String.valueOf(matcher.group(key));
+                        String[] projectNames = projectNameStr.split(ifConfig.getProjectDelimiter());
+                        for (String projectName : projectNames){
+                            if (!projectList.keySet().contains(projectName)){
+                                logger.log(Level.INFO, projectName + " not in the projectList ");
+                            }else {
+                                projects.add(projectName);
+                            }
                         }
+
                     } else if (key.equalsIgnoreCase(ifConfig.getInstanceKey())){
                         instanceName = String.valueOf(matcher.group(key));
                         if (!instanceList.contains(instanceName)){
+                            logger.log(Level.INFO, instanceName + " not in the instanceList ");
                             return;
                         }
                     } else if (key.equalsIgnoreCase(ifConfig.getTimestampKey())){
@@ -157,16 +165,22 @@ public class IFStreamingBufferManager {
                         if (metricMatcher.matches()){
                             jsonObject.addProperty(matcher.group(key), matcher.group(ifConfig.getValueKey()));
                         }else {
+                            logger.log(Level.INFO, "Not match the metric regex " + content);
                             return;
                         }
                     }
                 }
-                if (projectName != null && instanceName != null && timeStamp != null){
+                if (projects.size() > 0 && instanceName != null && timeStamp != null){
+                    logger.log(Level.INFO, "Parse success " + content);
                     ThreadBuffer threadBuffer = threadBufferMap.get(Thread.currentThread().getId());
                     if (threadBuffer != null){
-                        threadBuffer.addBuffer(projectName, instanceName, timeStamp, jsonObject, receiveTime);
+                        for (String projectName : projects){
+                            threadBuffer.addBuffer(projectName, instanceName, timeStamp, jsonObject, receiveTime);
+                        }
                     }
                 }
+            }else {
+                logger.log(Level.INFO, " Parse failed, not match the regex " + content);
             }
         }
     }

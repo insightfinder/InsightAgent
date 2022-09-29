@@ -31,6 +31,7 @@ public class IFConfig {
     private String  agentType;
     private int  collectingTime;
     private int  bufferSize=100000;
+    private String projectDelimiter;
 
     public String getUserName() {
         return userName;
@@ -183,5 +184,13 @@ public class IFConfig {
 
     public void setValueKey(String valueKey) {
         this.valueKey = valueKey;
+    }
+
+    public String getProjectDelimiter() {
+        return projectDelimiter;
+    }
+
+    public void setProjectDelimiter(String projectDelimiter) {
+        this.projectDelimiter = projectDelimiter;
     }
 }
