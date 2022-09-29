@@ -14,6 +14,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import javax.annotation.PostConstruct;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 @Component
@@ -92,8 +93,10 @@ public class IFProjectManager {
                 .block();
         JsonObject resObject = new Gson().fromJson(res, JsonObject.class);
         if (resObject.has("success")&&resObject.get("success").getAsBoolean()){
+            logger.log(Level.INFO, "Success to create project " + projectName);
             return true;
         }
+        logger.log(Level.INFO, "Failed to create project " + projectName);
         return false;
     }
 
