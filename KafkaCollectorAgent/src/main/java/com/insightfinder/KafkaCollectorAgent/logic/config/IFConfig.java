@@ -32,6 +32,7 @@ public class IFConfig {
     private int  collectingTime;
     private int  bufferSize=100000;
     private String projectDelimiter;
+    private boolean logParsingInfo;
 
     public String getUserName() {
         return userName;
@@ -192,5 +193,13 @@ public class IFConfig {
 
     public void setProjectDelimiter(String projectDelimiter) {
         this.projectDelimiter = projectDelimiter;
+    }
+
+    public boolean isLogParsingInfo() {
+        return logParsingInfo;
+    }
+
+    public void setLogParsingInfo(boolean logParsingInfo) {
+        this.logParsingInfo = logParsingInfo;
     }
 }

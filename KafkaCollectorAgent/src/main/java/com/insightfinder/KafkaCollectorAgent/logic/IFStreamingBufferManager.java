@@ -146,7 +146,9 @@ public class IFStreamingBufferManager {
                         String[] projectNames = projectNameStr.split(ifConfig.getProjectDelimiter());
                         for (String projectName : projectNames){
                             if (!projectList.keySet().contains(projectName)){
-                                logger.log(Level.INFO, projectName + " not in the projectList ");
+                                if (ifConfig.isLogParsingInfo()) {
+                                    logger.log(Level.INFO, projectName + " not in the projectList ");
+                                }
                             }else {
                                 projects.add(projectName);
                             }
@@ -155,7 +157,9 @@ public class IFStreamingBufferManager {
                     } else if (key.equalsIgnoreCase(ifConfig.getInstanceKey())){
                         instanceName = String.valueOf(matcher.group(key));
                         if (!instanceList.contains(instanceName)){
-                            logger.log(Level.INFO, instanceName + " not in the instanceList ");
+                            if (ifConfig.isLogParsingInfo()) {
+                                logger.log(Level.INFO, instanceName + " not in the instanceList ");
+                            }
                             return;
                         }
                     } else if (key.equalsIgnoreCase(ifConfig.getTimestampKey())){
@@ -165,13 +169,17 @@ public class IFStreamingBufferManager {
                         if (metricMatcher.matches()){
                             jsonObject.addProperty(matcher.group(key), matcher.group(ifConfig.getValueKey()));
                         }else {
-                            logger.log(Level.INFO, "Not match the metric regex " + content);
+                            if (ifConfig.isLogParsingInfo()) {
+                                logger.log(Level.INFO, "Not match the metric regex " + content);
+                            }
                             return;
                         }
                     }
                 }
                 if (projects.size() > 0 && instanceName != null && timeStamp != null){
-                    logger.log(Level.INFO, "Parse success " + content);
+                    if (ifConfig.isLogParsingInfo()) {
+                        logger.log(Level.INFO, "Parse success " + content);
+                    }
                     ThreadBuffer threadBuffer = threadBufferMap.get(Thread.currentThread().getId());
                     if (threadBuffer != null){
                         for (String projectName : projects){
@@ -180,7 +188,9 @@ public class IFStreamingBufferManager {
                     }
                 }
             }else {
-                logger.log(Level.INFO, " Parse failed, not match the regex " + content);
+                if (ifConfig.isLogParsingInfo()){
+                    logger.log(Level.INFO, " Parse failed, not match the regex " + content);
+                }
             }
         }
     }

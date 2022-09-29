@@ -99,6 +99,4 @@ public class IFProjectManager {
         logger.log(Level.INFO, "Failed to create project " + projectName);
         return false;
     }
-
-
 }
