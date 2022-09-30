@@ -116,7 +116,16 @@ public class IFStreamingBufferManager {
     public Map<String, Map<String, String>> getProjectMapping(String projectList){
         Map<String, Map<String, String>> mapping = new HashMap<>();
         mapping = gson.fromJson(projectList, MAP_MAP_TYPE);
-        return mapping;
+
+        Map<String, Map<String, String>> resultMapping = new HashMap<>();
+        for (String projectKey : mapping.keySet()){
+            String[] keys = projectKey.split(ifConfig.getProjectDelimiter());
+            for (String key : keys){
+                resultMapping.put(key, mapping.get(key));
+            }
+        }
+
+        return resultMapping;
     }
 
 
@@ -209,9 +218,17 @@ public class IFStreamingBufferManager {
         synchronized (collectedBufferMap){
             for (String key : collectedBufferMap.keySet()){
                 if (!collectingDataMap.keySet().contains(key)){
-                    if (filter.mightContain(key)){
-                        continue;
+                    if (ifConfig.isLogSendingData()){
+                        if (filter.mightContain(key)){
+                            StringBuilder stringBuilder = new StringBuilder();
+                            collectedBufferMap.get(key).forEach(ifStreamingBuffer -> {
+                                stringBuilder.append(ifStreamingBuffer.getData().toString()).append("\n");
+                            });
+                            logger.log(Level.INFO, key + " data: "+ stringBuilder.toString());
+                            continue;
+                        }
                     }
+
                     filter.put(key);
                     IFStreamingBuffer ifStreamingBuffer = merge(collectedBufferMap.get(key));
                     if (!sendingBufferMap.containsKey(ifStreamingBuffer.getProject())){

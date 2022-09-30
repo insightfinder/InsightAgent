@@ -33,6 +33,7 @@ public class IFConfig {
     private int  bufferSize=100000;
     private String projectDelimiter;
     private boolean logParsingInfo;
+    private boolean logSendingData;
 
     public String getUserName() {
         return userName;
@@ -201,5 +202,13 @@ public class IFConfig {
 
     public void setLogParsingInfo(boolean logParsingInfo) {
         this.logParsingInfo = logParsingInfo;
+    }
+
+    public boolean isLogSendingData() {
+        return logSendingData;
+    }
+
+    public void setLogSendingData(boolean logSendingData) {
+        this.logSendingData = logSendingData;
     }
 }
