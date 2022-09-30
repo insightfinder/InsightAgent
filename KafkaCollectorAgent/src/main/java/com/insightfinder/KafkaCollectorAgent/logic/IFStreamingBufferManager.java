@@ -121,7 +121,7 @@ public class IFStreamingBufferManager {
         for (String projectKey : mapping.keySet()){
             String[] keys = projectKey.split(ifConfig.getProjectDelimiter());
             for (String key : keys){
-                resultMapping.put(key, mapping.get(key));
+                resultMapping.put(key, mapping.get(projectKey));
             }
         }
 
