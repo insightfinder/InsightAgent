@@ -218,17 +218,16 @@ public class IFStreamingBufferManager {
         synchronized (collectedBufferMap){
             for (String key : collectedBufferMap.keySet()){
                 if (!collectingDataMap.keySet().contains(key)){
-                    if (ifConfig.isLogSendingData()){
-                        if (filter.mightContain(key)){
+                    if (filter.mightContain(key)){
+                        if (ifConfig.isLogSendingData()) {
                             StringBuilder stringBuilder = new StringBuilder();
                             collectedBufferMap.get(key).forEach(ifStreamingBuffer -> {
                                 stringBuilder.append(ifStreamingBuffer.getData().toString()).append("\n");
                             });
-                            logger.log(Level.INFO, key + " data: "+ stringBuilder.toString());
-                            continue;
+                            logger.log(Level.INFO, key + " data: " + stringBuilder.toString());
                         }
+                        continue;
                     }
-
                     filter.put(key);
                     IFStreamingBuffer ifStreamingBuffer = merge(collectedBufferMap.get(key));
                     if (!sendingBufferMap.containsKey(ifStreamingBuffer.getProject())){
