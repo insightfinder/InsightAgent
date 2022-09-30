@@ -252,7 +252,7 @@ public class IFStreamingBufferManager {
 
         while (!retryQueue.isEmpty()){
             IFSendingBuffer ifSendingBuffer = retryQueue.poll();
-            sendToIF(ifSendingBuffer.getJsonObjectList(), ifSendingBuffer.getProject(), 2);
+            sendToIF(ifSendingBuffer.getJsonObjectList(), ifSendingBuffer.getProject(), 3);
         }
 
         for (IFSendingBuffer ifSendingBuffer : sendingBufferMap.values()){
@@ -283,11 +283,11 @@ public class IFStreamingBufferManager {
                         return Mono.just("RETRY");
                     })
                     .subscribe(res->{
-                        if (res.equalsIgnoreCase("RETRY") && retry < 2){
+                        if (res.equalsIgnoreCase("RETRY") && retry < 2){//retry 1 2
                             sendToIF(list.subList(0, list.size()/2), projectName, retry + 1);
                             sendToIF(list.subList(list.size()/2, list.size()), projectName, retry + 1);
                         }else {
-                            if (res.equalsIgnoreCase("RETRY")){
+                            if (res.equalsIgnoreCase("RETRY") && retry == 2){// retry 3
                                 retryQueue.add(new IFSendingBuffer(projectName, list));
                             }else {
                                 logger.log(Level.INFO,  "request id: " + uuid.toString() + " " + res);
