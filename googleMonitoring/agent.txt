@@ -1,2 +1,0 @@
-name = googleMonitoring
-script_name = GoogleMonitoring.py
