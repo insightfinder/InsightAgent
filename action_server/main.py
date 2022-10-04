@@ -13,7 +13,7 @@ def readConfigFile(fileName):
 def writeConfigFile(serverid):
     config['DEFAULT']['serverid'] = str(serverid)
     config['DEFAULT']['reboot'] = str(datetime.now())
-    with open('config.ini', 'w') as configfile:
+    with open('asconfig.ini', 'w') as configfile:
         config.write(configfile)
 
 def verify():
@@ -31,4 +31,4 @@ def verify():
 if __name__ == '__main__':
     config = readConfigFile('asconfig.ini')
     verify()
-    system("python3 -m flask run --host=0.0.0.0 --port=" + config['DEFAULT']['serverport'])
+    system("python3 -m flask run --cert=cert.pem --key=key.pem --host=0.0.0.0 --port=" + config['DEFAULT']['serverport'])
