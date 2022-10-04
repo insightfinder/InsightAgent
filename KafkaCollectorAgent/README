@@ -1,0 +1,3 @@
+mvn package
+java -jar <appname>.jar --spring.config.location=file:<config file dir>
+
