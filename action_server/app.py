@@ -27,18 +27,10 @@ class ScriptFail(Exception):
 
 def runCommand(command):
     logger.debug(command)
-    proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    (out, err) = proc.communicate()
-    exit_code = proc.returncode
-    logger.debug("Exit Code: {}".format(exit_code))
-    logger.debug(out)
-    if exit_code != 0:
-        raise ScriptFailWithCode(exit_code, err)
-        return make_response("failed to run command ", exit_code)
-    if "no hosts" in str(out.lower()) or len(str(out)) == 0 and (
-            "failed" in str(err).lower() or "error" in str(err).lower() or "no such" in str(err).lower()):
-        raise ScriptFail(err)
-        return make_response("failed to run command " + err, 422)
+    result = subprocess.run(command, shell=True)
+    if result.returncode != 0:
+        raise ScriptFailWithCode(result.returncode)
+        return make_response("failed to run command ", result.returncode)
     return make_response("Success ", 200)
 
 class LessThanFilter(logging.Filter):
@@ -70,12 +62,25 @@ config = configparser.ConfigParser()
 config.read("asconfig.ini")
 logger = setloggerConfig()
 
+@app.route('/run', methods=['Get'])
+def hello_get():
+    return "hello"
+
 @app.route('/run', methods=['POST'])
 def hello_post():
     serverId = request.form.get('serverId')
-    if (serverId == config['DEFAULT']['serverid']):
+    if serverId == config['DEFAULT']['serverid']:
         cmd = request.form.get('cmd')
-        return runCommand(cmd)
+        if config['DEFAULT']['cmds'].find(cmd):
+            isTargetAll = request.form.get('isTargetAll')
+            instance = request.form.get('instance')
+            return runCommand(cmd)
+        else:
+            msg = f'CMD not in whitelist!'
+            return make_response(msg, 422)
     else:
         msg = f'Fail!'
         return make_response(msg, 422)
+
+if __name__ == "__main__":
+    app.run(ssl_context=('cert.pem', 'key.pem'))
