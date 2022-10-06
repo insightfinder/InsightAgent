@@ -88,7 +88,7 @@ public class UtilsBeans {
         ClientHttpConnector connector = new ReactorClientHttpConnector(client);
         return WebClient.builder()
                 .baseUrl(ifConfig.getServerUrl())
-                .clientConnector(new ReactorClientHttpConnector(HttpClient.newConnection().compress(true).wiretap(true)))
+                .clientConnector(connector)
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(20 * 1024 * 1024))
                 .build();
     }
