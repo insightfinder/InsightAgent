@@ -30,7 +30,7 @@ def runCommand(command):
     logger.debug(command)
     result = subprocess.run(command, shell=True)
     if result.returncode != 0:
-        raise ScriptFailWithCode(result.returncode)
+        raise ScriptFailWithCode(result.returncode, "failed to run script")
         return make_response("failed to run command ", result.returncode)
     return make_response("Success ", 200)
 
@@ -73,7 +73,7 @@ def hello_post():
     serverId = request.form.get('serverId')
     if serverId == config['DEFAULT']['serverid']:
         cmd = request.form.get('cmd')
-        if cmdsJson.find(cmd):
+        if cmdsJson[cmd]:
             isTargetAll = request.form.get('isTargetAll')
             instance = request.form.get('instance')
             return runCommand(cmdsJson[cmd] + " " + isTargetAll + " " + instance)
