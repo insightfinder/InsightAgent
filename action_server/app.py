@@ -1,4 +1,5 @@
 import configparser
+import json
 import logging
 import subprocess
 import sys
@@ -60,6 +61,7 @@ def setloggerConfig():
 app = Flask(__name__)
 config = configparser.ConfigParser()
 config.read("asconfig.ini")
+cmdsJson = json.loads(config['DEFAULT']['cmds'])
 logger = setloggerConfig()
 
 @app.route('/run', methods=['Get'])
@@ -71,10 +73,10 @@ def hello_post():
     serverId = request.form.get('serverId')
     if serverId == config['DEFAULT']['serverid']:
         cmd = request.form.get('cmd')
-        if config['DEFAULT']['cmds'].find(cmd):
+        if cmdsJson.find(cmd):
             isTargetAll = request.form.get('isTargetAll')
             instance = request.form.get('instance')
-            return runCommand(cmd)
+            return runCommand(cmdsJson[cmd] + " " + isTargetAll + " " + instance)
         else:
             msg = f'CMD not in whitelist!'
             return make_response(msg, 422)
