@@ -34,6 +34,10 @@ public class IFConfig {
     private String projectDelimiter;
     private boolean logParsingInfo;
     private boolean logSendingData;
+    private String keystoreFile;
+    private String keystorePassword;
+    private String truststoreFile;
+    private String truststorePassword;
 
     public String getUserName() {
         return userName;
@@ -210,5 +214,37 @@ public class IFConfig {
 
     public void setLogSendingData(boolean logSendingData) {
         this.logSendingData = logSendingData;
+    }
+
+    public String getKeystoreFile() {
+        return keystoreFile;
+    }
+
+    public void setKeystoreFile(String keystoreFile) {
+        this.keystoreFile = keystoreFile;
+    }
+
+    public String getKeystorePassword() {
+        return keystorePassword;
+    }
+
+    public void setKeystorePassword(String keystorePassword) {
+        this.keystorePassword = keystorePassword;
+    }
+
+    public String getTruststoreFile() {
+        return truststoreFile;
+    }
+
+    public void setTruststoreFile(String truststoreFile) {
+        this.truststoreFile = truststoreFile;
+    }
+
+    public String getTruststorePassword() {
+        return truststorePassword;
+    }
+
+    public void setTruststorePassword(String truststorePassword) {
+        this.truststorePassword = truststorePassword;
     }
 }
