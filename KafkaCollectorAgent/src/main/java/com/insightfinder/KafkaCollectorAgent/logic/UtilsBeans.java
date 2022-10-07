@@ -51,7 +51,7 @@ public class UtilsBeans {
                 keyStore.load(new FileInputStream(ResourceUtils.getFile(ifConfig.getKeystoreFile())), ifConfig.getKeystorePassword().toCharArray());
                 KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
                 keyManagerFactory.init(keyStore, ifConfig.getKeystorePassword().toCharArray());
-                sslContextBuilder.keyManager(keyManagerFactory);
+                sslContextBuilder = sslContextBuilder.keyManager(keyManagerFactory);
             }
 
             if (ifConfig.getTruststoreFile() != null && ifConfig.getTruststorePassword() != null){
@@ -64,7 +64,7 @@ public class UtilsBeans {
                 trustStore.load(new FileInputStream((ResourceUtils.getFile(ifConfig.getTruststoreFile()))), ifConfig.getTruststorePassword().toCharArray());
                 TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
                 trustManagerFactory.init(trustStore);
-                sslContextBuilder.trustManager(trustManagerFactory);
+                sslContextBuilder = sslContextBuilder.trustManager(trustManagerFactory);
             }
             if (loadKeys){
                 return sslContextBuilder.build();
@@ -83,7 +83,7 @@ public class UtilsBeans {
         HttpClient client = HttpClient.create().compress(true).wiretap(true);
         SslContext sslContext = createSSLContext();
         if (sslContext!= null){
-            client.secure(spec -> spec.sslContext(sslContext));
+            client = client.secure(spec -> spec.sslContext(sslContext));
         }
         ClientHttpConnector connector = new ReactorClientHttpConnector(client);
         return WebClient.builder()
