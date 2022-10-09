@@ -1,0 +1,39 @@
+[agent]
+# AWS access key
+aws_access_key_id =
+
+# AWS secret
+aws_secret_access_key =
+
+# AWS region name
+aws_region =
+
+# AWS S3 bucket name
+aws_s3_bucket_name =
+
+# prefix for AWS s3 objects
+aws_s3_object_prefix =
+
+## message parsing
+instance_field =
+grouping_field =
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
+[insightfinder]
+user_name =
+license_key =
+token =
+# Name of the project created in the InsightFinder UI. If this project does not exist, agent will create it automatically.
+project_name =
+# Name of system owned by project. If project_name does not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name =
+# for metadata, only metric type is supported
+project_type = metric
+run_interval = 5
+
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
