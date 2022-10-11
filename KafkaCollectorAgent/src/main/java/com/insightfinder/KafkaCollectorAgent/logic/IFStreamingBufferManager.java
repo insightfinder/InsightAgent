@@ -54,6 +54,7 @@ public class IFStreamingBufferManager {
     private Map<Long, ThreadBuffer> threadBufferMap = new HashMap<>();
     private ConcurrentHashMap<String, Set<IFStreamingBuffer>> collectingDataMap = new ConcurrentHashMap<>();
     private ConcurrentHashMap<String, Set<IFStreamingBuffer>> collectedBufferMap = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, Integer> sendingStatistics = new ConcurrentHashMap<>();
     private Queue<IFSendingBuffer> retryQueue = new LinkedBlockingQueue<>();
     BloomFilter<String> filter = BloomFilter.create(
             Funnels.stringFunnel(Charset.defaultCharset()),
@@ -83,7 +84,7 @@ public class IFStreamingBufferManager {
         //timer thread
         executorService.execute(()->{
             int collectingTimer = ifConfig.getCollectingTime();
-            int sentTimer = ifConfig.getSamplingIntervalInSeconds();
+            int sentTimer = ifConfig.getBufferingTime();
             while (true){
                 if (collectingTimer <= 0){
                     collectingTimer = ifConfig.getCollectingTime();
@@ -96,7 +97,7 @@ public class IFStreamingBufferManager {
                     });
                 }
                 if (sentTimer <= 0){
-                    sentTimer = ifConfig.getSamplingIntervalInSeconds();
+                    sentTimer = ifConfig.getBufferingTime();
                     //sending data thread
                     executorService.execute(()->{
                         mergeDataAndSendToIF(collectingDataMap);
@@ -220,12 +221,15 @@ public class IFStreamingBufferManager {
                 if (!collectingDataMap.keySet().contains(key)){
                     if (filter.mightContain(key)){
                         if (ifConfig.isLogSendingData()) {
-                            StringBuilder stringBuilder = new StringBuilder();
-                            collectedBufferMap.get(key).forEach(ifStreamingBuffer -> {
-                                stringBuilder.append(ifStreamingBuffer.getData().toString()).append("\n");
-                            });
-                            logger.log(Level.INFO, key + " data: " + stringBuilder.toString());
+                            if (sendingStatistics.containsKey(key)){
+                                String dropStr = String.format("at %s drop data / total: %d / %d", key,collectedBufferMap.get(key).size(), collectedBufferMap.get(key).size() + sendingStatistics.get(key));
+                                logger.log(Level.INFO, dropStr);
+                            }else {
+                                String dropStr = String.format("at %s drop data %d", key,collectedBufferMap.get(key).size());
+                                logger.log(Level.INFO, dropStr);
+                            }
                         }
+                        collectedBufferMap.remove(key);
                         continue;
                     }
                     filter.put(key);
@@ -234,6 +238,9 @@ public class IFStreamingBufferManager {
                         sendingBufferMap.put(ifStreamingBuffer.getProject(), new IFSendingBuffer(ifStreamingBuffer));
                     }else {
                         sendingBufferMap.get(ifStreamingBuffer.getProject()).addData(ifStreamingBuffer);
+                    }
+                    if (ifConfig.isLogSendingData()) {
+                        sendingStatistics.put(key, sendingStatistics.getOrDefault(key, 0) + (ifStreamingBuffer.getData().size() - 1));
                     }
                     collectedBufferMap.remove(key);
                 }

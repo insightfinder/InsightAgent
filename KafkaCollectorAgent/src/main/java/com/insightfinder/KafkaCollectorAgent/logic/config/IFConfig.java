@@ -38,6 +38,7 @@ public class IFConfig {
     private String keystorePassword;
     private String truststoreFile;
     private String truststorePassword;
+    private int bufferingTime;
 
     public String getUserName() {
         return userName;
@@ -246,5 +247,13 @@ public class IFConfig {
 
     public void setTruststorePassword(String truststorePassword) {
         this.truststorePassword = truststorePassword;
+    }
+
+    public int getBufferingTime() {
+        return bufferingTime;
+    }
+
+    public void setBufferingTime(int bufferingTime) {
+        this.bufferingTime = bufferingTime;
     }
 }

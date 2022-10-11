@@ -104,7 +104,6 @@ public class ThreadBuffer {
 
     public void poll(Map<String, Set<IFStreamingBuffer>> collectingDataMap, long timestamp){
         synchronized (this) {
-            long start = System.currentTimeMillis();
             if (!threadBufferKeySet.isEmpty()){
                 while (!threadBufferKeySet.isEmpty()){
                     if (threadBufferKeySet.first().receiveTime <= timestamp){
@@ -120,7 +119,6 @@ public class ThreadBuffer {
                     }
                 }
             }
-            long endTime = System.currentTimeMillis();
         }
     }
 
