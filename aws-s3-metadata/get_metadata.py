@@ -5,7 +5,6 @@ import io
 import json
 import logging
 import os
-import socket
 import sys
 import time
 import urllib
@@ -155,7 +154,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
 
             # message parsing
             instance_field = config_parser.get('agent', 'instance_field')
-            grouping_field = config_parser.get('agent', 'grouping_field')
+            component_field = config_parser.get('agent', 'component_field')
 
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
@@ -177,7 +176,7 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
                        'aws_region': aws_region, 'aws_s3_bucket_name': aws_s3_bucket_name,
                        'aws_s3_object_prefix': aws_s3_object_prefix,
                        'instance_field': instance_field,
-                       'grouping_field': grouping_field,
+                       'component_field': component_field,
                        'proxies': agent_proxies, }
 
         return config_vars
@@ -308,41 +307,25 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
     global messages
 
     instance_field = agent_config_vars['instance_field']
-    grouping_field = agent_config_vars['grouping_field']
+    component_field = agent_config_vars['component_field']
 
-    grouping_dict = {}
-    for row in messages:
-        group_name = row[grouping_field]
-        instance_name = row[instance_field]
-        if group_name not in grouping_dict:
-            grouping_dict[group_name] = ""
-            grouping_dict[group_name] = grouping_dict[group_name] + instance_name
-        else:
-            grouping_dict[group_name] = grouping_dict[group_name] + "," + instance_name
-    return grouping_dict
+    return [{'instanceName': m[instance_field], 'metricInstanceName': m[instance_field],
+             'componentName': m[component_field]} for m in messages]
 
 
 def send_data(logger, if_config_vars, data):
     """ Sends parsed metric data to InsightFinder """
     send_data_time = time.time()
-    # prepare data for metric streaming agent
-    to_send_data_dict = dict()
 
-    # for backend so this is the camel case in to_send_data_dict
-    to_send_data_dict["licenseKey"] = if_config_vars['license_key']
-    to_send_data_dict["userName"] = if_config_vars['user_name']
-
-    to_send_data_dict["projectName"] = if_config_vars['project_name']
-    to_send_data_dict["instanceName"] = socket.gethostname()
-    to_send_data_dict["isMetricAgent"] = "true"
-    to_send_data_dict["fileType"] = "grouping"
-    to_send_data_dict["groupingData"] = json.dumps(data)
-
-    to_send_data_json = json.dumps(to_send_data_dict)
+    params = dict()
+    params["licenseKey"] = if_config_vars['license_key']
+    params["userName"] = if_config_vars['user_name']
+    params["projectName"] = if_config_vars['project_name']
+    params["override"] = "true"
 
     # send the data
-    post_url = if_config_vars['if_url'] + "/api/v1/customgrouping"
-    send_data_to_receiver(logger, post_url, to_send_data_json)
+    post_url = if_config_vars['if_url'] + "/api/v1/agent-upload-instancemetadata?" + urllib.parse.urlencode(params)
+    send_data_to_receiver(logger, post_url, data)
     logger.info("--- Send data time: %s seconds ---" % str(time.time() - send_data_time))
 
 
@@ -355,11 +338,11 @@ def send_data_to_receiver(logger, post_url, to_send_data):
         response_code = -1
         attempts += 1
         try:
-            response = requests.post(post_url, data=json.loads(to_send_data), verify=False)
+            response = requests.post(post_url, data=json.dumps(to_send_data), verify=False)
             response_code = response.status_code
-        except:
-            logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
-                attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
+        except Exception as ex:
+            logger.error("Attempts: %d. Fail to send data, response code: %d, %s, wait %d sec to resend." % (
+                attempts, response_code, ex, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
             continue
         if response_code == 200:
