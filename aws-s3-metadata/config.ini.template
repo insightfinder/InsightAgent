@@ -16,7 +16,7 @@ aws_s3_object_prefix =
 
 ## message parsing
 instance_field =
-grouping_field =
+component_field =
 
 ## proxy
 agent_http_proxy =
