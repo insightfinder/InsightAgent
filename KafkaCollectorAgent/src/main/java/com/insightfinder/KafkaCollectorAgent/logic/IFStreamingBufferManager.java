@@ -149,7 +149,7 @@ public class IFStreamingBufferManager {
             if (matcher.matches() && namedGroups != null){
                 List<String> projects = new ArrayList<>();
                 jsonObject = new JsonObject();
-                String projectNameStr = null, instanceName = null, timeStamp = null;
+                String projectNameStr = null, instanceName = null, timeStamp = null, metricName = null;
                 for (String key : namedGroups.keySet()){
                     if (key.equalsIgnoreCase(ifConfig.getProjectKey())){
                         projectNameStr = String.valueOf(matcher.group(key));
@@ -177,6 +177,7 @@ public class IFStreamingBufferManager {
                     }else if (key.equalsIgnoreCase(ifConfig.getMetricKey())){
                         Matcher metricMatcher = metricPattern.matcher(matcher.group(key));
                         if (metricMatcher.matches()){
+                            metricName = matcher.group(key);
                             jsonObject.addProperty(matcher.group(key), matcher.group(ifConfig.getValueKey()));
                         }else {
                             if (ifConfig.isLogParsingInfo()) {
@@ -186,10 +187,15 @@ public class IFStreamingBufferManager {
                         }
                     }
                 }
-                if (projects.size() > 0 && instanceName != null && timeStamp != null){
+                if (projects.size() > 0 && instanceName != null && metricName != null && timeStamp != null){
                     if (ifConfig.isLogParsingInfo()) {
                         logger.log(Level.INFO, "Parse success " + content);
                     }
+
+                    if (ifConfig.getMetricNameFilter() != null &&  ifConfig.getMetricNameFilter().equalsIgnoreCase(metricName)){
+                        logger.log(Level.INFO, String.format("%s %s %s", instanceName, metricName, timeStamp));
+                    }
+
                     ThreadBuffer threadBuffer = threadBufferMap.get(Thread.currentThread().getId());
                     if (threadBuffer != null){
                         for (String projectName : projects){
