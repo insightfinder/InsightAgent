@@ -43,5 +43,6 @@ insight-finder.collectingTime=1
 insight-finder.bufferSize=100000
 insight-finder.logParsingInfo=false
 insight-finder.logSendingData=true
+insight-finder.metricNameFilter=memory.memory.free
 
 
