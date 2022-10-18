@@ -6,7 +6,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
-import com.insightfinder.KafkaCollectorAgent.MetricHeaderEntity;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -14,11 +13,10 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
-import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
-import reactor.util.retry.Retry;
+
 import javax.annotation.PostConstruct;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -52,9 +50,9 @@ public class IFStreamingBufferManager {
     private Set<String> instanceList;
     private Pattern metricPattern;
     private ExecutorService executorService = Executors.newFixedThreadPool(5);
-    private ConcurrentHashMap<String, IFStreamingBuffer> collectingDataMap = new ConcurrentHashMap<>();
-    private ConcurrentHashMap<String, IFStreamingBuffer> collectedBufferMap = new ConcurrentHashMap<>();
-    private ConcurrentHashMap<String, Integer> sendingStatistics = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, IFStreamingBuffer> collectingDataMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, IFStreamingBuffer> collectedBufferMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Integer> sendingStatistics = new ConcurrentHashMap<>();
     BloomFilter<String> filter = BloomFilter.create(
             Funnels.stringFunnel(Charset.defaultCharset()),
             100000000);
@@ -230,15 +228,11 @@ public class IFStreamingBufferManager {
         }
 
         for (IFStreamingBuffer ifSendingBuffer : sendingDataList){
-            List<String> datas = convertBackToOldFormat(ifSendingBuffer.getAllInstanceDataMap(), ifSendingBuffer.getProject(), 1000);
-            for (String data : datas){
-                sendToIF(data, ifSendingBuffer.getProject(), ifSendingBuffer.getSystem());
-            }
+            convertBackToOldFormat(ifSendingBuffer.getAllInstanceDataMap(), ifSendingBuffer.getProject(), ifSendingBuffer.getSystem(), 10000);
         }
     }
 
-    public List<String> convertBackToOldFormat(Map<String, InstanceData> instanceDataMap, String project, int splitNum) {
-        JsonArray ret = new JsonArray();
+    public void convertBackToOldFormat(Map<String, InstanceData> instanceDataMap, String project, String system,int splitNum) {
         List<String> stringList = new ArrayList<>();
         List<Map<Long, JsonObject>> sortByTimestampMaps = new ArrayList<>();
         Map<Long, JsonObject> sortByTimestampMap = new HashMap<>();
@@ -274,7 +268,7 @@ public class IFStreamingBufferManager {
                 if (total - metricDataPointSet.size() < 0){
                     total = splitNum;
                     if (!sortByTimestampMap.isEmpty()){
-                        sortByTimestampMaps.add(sortByTimestampMap);
+                        sendToIF(sortByTimestampMap, project, system);
                         sortByTimestampMap = new HashMap<>();
                     }
                 }
@@ -291,17 +285,16 @@ public class IFStreamingBufferManager {
             }
         }
         if (!sortByTimestampMap.isEmpty()){
-            sortByTimestampMaps.add(sortByTimestampMap);
+            sendToIF(sortByTimestampMap, project, system);
         }
+    }
 
-        for (Map<Long, JsonObject> timestampMap : sortByTimestampMaps){
-            for (JsonObject jsonObject : sortByTimestampMap.values()) {
-                ret.add(jsonObject);
-            }
-            stringList.add(ret.toString());
+    public void sendToIF(Map<Long, JsonObject> sortByTimestampMap, String project, String system){
+        JsonArray ret = new JsonArray();
+        for (JsonObject jsonObject : sortByTimestampMap.values()) {
+            ret.add(jsonObject);
         }
-
-        return stringList;
+        sendToIF(ret.toString(), project, system);
     }
 
     public void sendToIF(String data, String ifProjectName, String ifSystemName){
