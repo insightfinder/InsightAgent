@@ -2,26 +2,26 @@ package com.insightfinder.KafkaCollectorAgent.logic;
 
 import com.google.gson.JsonObject;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 public class IFStreamingBuffer {
     private Logger logger = Logger.getLogger(IFStreamingBuffer.class.getName());
     private String project;
+    private String system;
 
     private ConcurrentHashMap<String, InstanceData> allInstanceDataMap;
 
-    public IFStreamingBuffer(String projectName) {
+    public IFStreamingBuffer(String projectName, String systemName) {
         this.project = projectName;
+        this.system = systemName;
         this.allInstanceDataMap = new ConcurrentHashMap<>();
     }
 
     public void addData(String instanceName , long timestamp ,String metricName, double value){
         if (!allInstanceDataMap.containsKey(instanceName)){
-            allInstanceDataMap.put(instanceName, new InstanceData(instanceName));
+            allInstanceDataMap.put(instanceName, new InstanceData(this.project, instanceName));
         }
         allInstanceDataMap.get(instanceName).addData(metricName, timestamp, value);
     }
@@ -31,7 +31,7 @@ public class IFStreamingBuffer {
     }
 
     public IFStreamingBuffer mergeDataAndGetSendingData(IFStreamingBuffer ifStreamingBuffer){
-        IFStreamingBuffer result = new IFStreamingBuffer(ifStreamingBuffer.getProject());
+        IFStreamingBuffer result = new IFStreamingBuffer(ifStreamingBuffer.getProject(), ifStreamingBuffer.getSystem());
         for (String key : allInstanceDataMap.keySet()){
             InstanceData instanceData = null;
             if (ifStreamingBuffer.allInstanceDataMap.containsKey(key)){
@@ -64,6 +64,13 @@ public class IFStreamingBuffer {
         this.project = project;
     }
 
+    public String getSystem() {
+        return system;
+    }
+
+    public void setSystem(String system) {
+        this.system = system;
+    }
 
     @Override
     public boolean equals(Object o) {

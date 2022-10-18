@@ -181,11 +181,13 @@ public class IFStreamingBufferManager {
 
                     for (String projectName : projects){
                         long start = System.currentTimeMillis();
-                        String key = projectName;
-                        if (!collectingDataMap.containsKey(key)){
-                            collectingDataMap.put(key, new IFStreamingBuffer(projectName));
+                        Map<String, String> ifProjectInfo = projectList.get(projectName);
+                        String ifProjectName = ifProjectInfo.get("project");
+                        String ifSystemName = ifProjectInfo.get("system");
+                        if (!collectingDataMap.containsKey(ifProjectName)){
+                            collectingDataMap.put(ifProjectName, new IFStreamingBuffer(ifProjectName, ifSystemName));
                         }
-                        collectingDataMap.get(key).addData(instanceName, Long.parseLong(timeStamp), metricName, metricValue);
+                        collectingDataMap.get(ifProjectName).addData(instanceName, Long.parseLong(timeStamp), metricName, metricValue);
                         long end = System.currentTimeMillis();
                         if (end - start > 1000){
                             logger.log(Level.INFO, "add use " + ((end - start)/1000) + " size"+ collectingDataMap.size());
@@ -228,17 +230,19 @@ public class IFStreamingBufferManager {
         }
 
         for (IFStreamingBuffer ifSendingBuffer : sendingDataList){
-            List<String> datas = convertBackToOldFormat(ifSendingBuffer.getAllInstanceDataMap(), ifSendingBuffer.getProject());
+            List<String> datas = convertBackToOldFormat(ifSendingBuffer.getAllInstanceDataMap(), ifSendingBuffer.getProject(), 1000);
             for (String data : datas){
-                sendToIF(data, ifSendingBuffer.getProject(), 0);
+                sendToIF(data, ifSendingBuffer.getProject(), ifSendingBuffer.getSystem());
             }
         }
     }
 
-    public List<String> convertBackToOldFormat(Map<String, InstanceData> instanceDataMap, String project) {
+    public List<String> convertBackToOldFormat(Map<String, InstanceData> instanceDataMap, String project, int splitNum) {
         JsonArray ret = new JsonArray();
         List<String> stringList = new ArrayList<>();
+        List<Map<Long, JsonObject>> sortByTimestampMaps = new ArrayList<>();
         Map<Long, JsonObject> sortByTimestampMap = new HashMap<>();
+        int total = splitNum;
         for (String instanceName : instanceDataMap.keySet()) {
             InstanceData instanceData = instanceDataMap.get(instanceName);
             Map<Long, DataInTimestamp> dataInTimestampMap = instanceData.getDataInTimestampMap();
@@ -267,6 +271,13 @@ public class IFStreamingBufferManager {
                 }
                 Set<MetricDataPoint> metricDataPointSet = dataInTimestampMap.get(timestamp)
                         .getMetricDataPointSet();
+                if (total - metricDataPointSet.size() < 0){
+                    total = splitNum;
+                    if (!sortByTimestampMap.isEmpty()){
+                        sortByTimestampMaps.add(sortByTimestampMap);
+                        sortByTimestampMap = new HashMap<>();
+                    }
+                }
                 for (MetricDataPoint metricDataPoint : metricDataPointSet) {
                     String metricName = metricDataPoint.getMetricName();
                     double value = metricDataPoint.getValue();
@@ -275,75 +286,26 @@ public class IFStreamingBufferManager {
                     String header = metricHeaderEntity.generateHeader(false);
                     thisTimestampObj.addProperty(header, String.valueOf(value));
                 }
+                total -= metricDataPointSet.size();
                 sortByTimestampMap.put(timestamp, thisTimestampObj);
             }
         }
-        for (JsonObject jsonObject : sortByTimestampMap.values()) {
-            if (ret.size() >= 100){
-                stringList.add(ret.toString());
-                ret = new JsonArray();
-            }
-            ret.add(jsonObject);
+        if (!sortByTimestampMap.isEmpty()){
+            sortByTimestampMaps.add(sortByTimestampMap);
         }
-        if (!ret.isEmpty()){
+
+        for (Map<Long, JsonObject> timestampMap : sortByTimestampMaps){
+            for (JsonObject jsonObject : sortByTimestampMap.values()) {
+                ret.add(jsonObject);
+            }
             stringList.add(ret.toString());
         }
+
         return stringList;
     }
 
-    public void mergeDataAndSendToIF(Map<String, IFStreamingBuffer> collectingDataMap){
-        List<IFStreamingBuffer> sendingDataList = new ArrayList<>();
-        synchronized (collectedBufferMap){
-            for (String key : collectedBufferMap.keySet()){
-                if (!collectingDataMap.keySet().contains(key)){
-                    if (filter.mightContain(key)){
-                        if (ifConfig.isLogSendingData()) {
-                            if (sendingStatistics.containsKey(key)){
-//                                String dropStr = String.format("at %s drop data / total: %d / %d", key,collectedBufferMap.get(key).getData().size(), collectedBufferMap.get(key).getData().size() + sendingStatistics.get(key));
-//                                logger.log(Level.INFO, dropStr);
-                            }else {
-//                                String dropStr = String.format("at %s drop data %d", key,collectedBufferMap.get(key).getData().size());
-//                                logger.log(Level.INFO, dropStr);
-                            }
-                        }
-                        collectedBufferMap.remove(key);
-                        continue;
-                    }
-                    filter.put(key);
-                    IFStreamingBuffer ifStreamingBuffer = collectedBufferMap.get(key);
-                    if (ifConfig.isLogSendingData()) {
-//                        sendingStatistics.put(key, sendingStatistics.getOrDefault(key, 0) + (ifStreamingBuffer.getData().size() - 1));
-                    }
-                    collectedBufferMap.remove(key);
-                }
-            }
+    public void sendToIF(String data, String ifProjectName, String ifSystemName){
 
-            synchronized (collectingDataMap){
-                for(String key : collectingDataMap.keySet()){
-                    if (!collectedBufferMap.contains(key)){
-                        collectedBufferMap.put(key, collectingDataMap.get(key));
-                    }else {
-//                        collectedBufferMap.get(key).merge(collectingDataMap.get(key));
-                    }
-                }
-                collectingDataMap.clear();
-            }
-        }
-
-//        while (!retryQueue.isEmpty()){
-//            IFSendingBuffer ifSendingBuffer = retryQueue.poll();
-//            sendToIF(ifSendingBuffer.getJsonObjectList(), ifSendingBuffer.getProject(), 3);
-//        }
-//
-//        for (IFSendingBuffer ifSendingBuffer : sendingBufferMap.values()){
-//            //sendToIF(ifSendingBuffer.getJsonObjectList(), ifSendingBuffer.getProject(), 0);
-//        }
-    }
-
-    public void sendToIF(String data, String projectName, int retry){
-        Map<String, String> ifProjectInfo = projectList.get(projectName);
-        String ifProjectName = ifProjectInfo.get("project");
-        String ifSystemName = ifProjectInfo.get("system");
         if (projectManager.checkAndCreateProject(ifProjectName, ifSystemName)){
             UUID uuid = UUID.randomUUID();
             MultiValueMap<String, String> bodyValues = new LinkedMultiValueMap<>();
