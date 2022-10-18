@@ -1,27 +1,39 @@
 package com.insightfinder.KafkaCollectorAgent;
 
-import com.insightfinder.KafkaCollectorAgent.logic.ThreadBuffer;
 import org.junit.jupiter.api.Test;
+import org.mapdb.DB;
+import org.mapdb.DBMaker;
 
-import java.util.TreeMap;
-
-import static org.junit.jupiter.api.Assertions.*;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.ConcurrentMap;
 
 class KafkaCollectorAgentApplicationTest {
     @Test
     public void test(){
-        ThreadBuffer.ThreadBufferKeySet threadBufferKeySet = new ThreadBuffer.ThreadBufferKeySet();
-        ThreadBuffer.ThreadBufferKey threadBuffer0 = new ThreadBuffer.ThreadBufferKey(10, "threadBuffer1");
-
-        ThreadBuffer.ThreadBufferKey threadBuffer1 = new ThreadBuffer.ThreadBufferKey(100, "threadBuffer");
-        ThreadBuffer.ThreadBufferKey threadBuffer2 = new ThreadBuffer.ThreadBufferKey(101, "threadBuffer");
-        ThreadBuffer.ThreadBufferKey threadBuffer3 = new ThreadBuffer.ThreadBufferKey(8, "threadBuffer");
-        threadBufferKeySet.add(threadBuffer0);
-        threadBufferKeySet.add(threadBuffer1);
-        threadBufferKeySet.add(threadBuffer2);
-        threadBufferKeySet.add(threadBuffer3);
-//        System.out.println(keyTreeMap.firstKey().getReceiveTime());
-
-        System.out.println(threadBufferKeySet.first().getReceiveTime());
+        DB db = DBMaker.fileDB("file.db").make();
+        ConcurrentMap map = db.hashMap("map").createOrOpen();
+        Set<String> stringSet = new HashSet<>();
+        stringSet.add("here");
+        map.put("something", stringSet);
+        if (map.containsKey("something")){
+            stringSet = (Set<String>) map.get("something");
+            if (stringSet.contains("here")){
+                System.out.println("here");
+            }
+        }
+        System.out.println(db.isThreadSafe());
+        db.close();
     }
+
+    @Test
+    public void test2(){
+
+    }
+
+
+
+
+
+
 }

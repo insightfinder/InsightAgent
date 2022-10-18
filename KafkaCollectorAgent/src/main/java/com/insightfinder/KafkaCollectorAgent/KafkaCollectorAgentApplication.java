@@ -13,20 +13,6 @@ import org.springframework.context.annotation.Configuration;
 
 @SpringBootApplication
 public class KafkaCollectorAgentApplication {
-	@Autowired
-	private IFStreamingBufferManager ifStreamingBufferManager;
-
-	@Bean
-	CommandLineRunner getCommandLineRunner(ApplicationContext ctx){
-		return (ars)->{
-			for (Thread t : ThreadUtils.getAllThreads()) {
-				if (t.getName().startsWith("ConcurrentMessageListenerContainer")){
-					ifStreamingBufferManager.addThreadBuffer(t.getId());
-				}
-			}
-		};
-	}
-
 	public static void main(String[] args) {
 		SpringApplication app = new SpringApplication(KafkaCollectorAgentApplication.class);
 		app.setWebApplicationType(WebApplicationType.NONE);
