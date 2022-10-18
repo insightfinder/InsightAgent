@@ -4,10 +4,12 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class InstanceData {
+    private final String projectName;
     private final String instanceName;
     private final ConcurrentHashMap<Long, DataInTimestamp> dataInTimestampMap;
 
-    public InstanceData(String instanceName) {
+    public InstanceData(String projectName ,String instanceName) {
+        this.projectName = projectName;
         this.instanceName = instanceName;
         this.dataInTimestampMap = new ConcurrentHashMap<>();
     }
@@ -19,13 +21,16 @@ public class InstanceData {
         dataInTimestampMap.put(timestamp, dataInTimestamp);
     }
 
+    public String getProjectName() {
+        return projectName;
+    }
 
     public String getInstanceName() {
         return instanceName;
     }
 
     public InstanceData  mergeDataAndGetSendingData(InstanceData instanceData){
-        InstanceData result = new InstanceData(instanceData.getInstanceName());
+        InstanceData result = new InstanceData(instanceData.getProjectName() ,instanceData.getInstanceName());
         for (Long key : dataInTimestampMap.keySet()){
             if (!instanceData.dataInTimestampMap.containsKey(key)){
                 result.dataInTimestampMap.put(key, dataInTimestampMap.remove(key));
