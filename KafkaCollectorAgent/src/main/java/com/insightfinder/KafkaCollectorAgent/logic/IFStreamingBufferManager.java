@@ -3,8 +3,10 @@ package com.insightfinder.KafkaCollectorAgent.logic;
 import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
+import com.insightfinder.KafkaCollectorAgent.MetricHeaderEntity;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -35,7 +37,6 @@ import java.util.regex.Pattern;
 public class IFStreamingBufferManager {
     private Logger logger = Logger.getLogger(IFStreamingBufferManager.class.getName());
     public static Type MAP_MAP_TYPE = new TypeToken<Map<String, Map<String, String>>>() {}.getType();
-
     @Autowired
     private Gson gson;
     @Autowired
@@ -51,11 +52,9 @@ public class IFStreamingBufferManager {
     private Set<String> instanceList;
     private Pattern metricPattern;
     private ExecutorService executorService = Executors.newFixedThreadPool(5);
-    private Map<Long, ThreadBuffer> threadBufferMap = new HashMap<>();
-    private ConcurrentHashMap<String, Set<IFStreamingBuffer>> collectingDataMap = new ConcurrentHashMap<>();
-    private ConcurrentHashMap<String, Set<IFStreamingBuffer>> collectedBufferMap = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, IFStreamingBuffer> collectingDataMap = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, IFStreamingBuffer> collectedBufferMap = new ConcurrentHashMap<>();
     private ConcurrentHashMap<String, Integer> sendingStatistics = new ConcurrentHashMap<>();
-    private Queue<IFSendingBuffer> retryQueue = new LinkedBlockingQueue<>();
     BloomFilter<String> filter = BloomFilter.create(
             Funnels.stringFunnel(Charset.defaultCharset()),
             100000000);
@@ -86,21 +85,11 @@ public class IFStreamingBufferManager {
             int collectingTimer = ifConfig.getCollectingTime();
             int sentTimer = ifConfig.getBufferingTime();
             while (true){
-                if (collectingTimer <= 0){
-                    collectingTimer = ifConfig.getCollectingTime();
-                    //collecting data thread
-                    executorService.execute(()->{
-                        long timestamp = System.currentTimeMillis() - ifConfig.getCollectingTime()*1000;
-                        threadBufferMap.entrySet().forEach(entry -> {
-                            entry.getValue().poll(collectingDataMap, timestamp);
-                        });
-                    });
-                }
                 if (sentTimer <= 0){
                     sentTimer = ifConfig.getBufferingTime();
                     //sending data thread
                     executorService.execute(()->{
-                        mergeDataAndSendToIF(collectingDataMap);
+                        mergeDataAndSendToIF2(collectingDataMap);
                     });
                 }
 
@@ -130,13 +119,6 @@ public class IFStreamingBufferManager {
     }
 
 
-
-    synchronized public void addThreadBuffer(long threadId){
-        if (!threadBufferMap.containsKey(threadId)){
-            threadBufferMap.put(threadId, new ThreadBuffer());
-        }
-    }
-
     public void parseString(String content, long receiveTime){
         JsonObject jsonObject = null;
         if (isJSON){
@@ -150,6 +132,7 @@ public class IFStreamingBufferManager {
                 List<String> projects = new ArrayList<>();
                 jsonObject = new JsonObject();
                 String projectNameStr = null, instanceName = null, timeStamp = null, metricName = null;
+                long metricValue = 0;
                 for (String key : namedGroups.keySet()){
                     if (key.equalsIgnoreCase(ifConfig.getProjectKey())){
                         projectNameStr = String.valueOf(matcher.group(key));
@@ -178,7 +161,7 @@ public class IFStreamingBufferManager {
                         Matcher metricMatcher = metricPattern.matcher(matcher.group(key));
                         if (metricMatcher.matches()){
                             metricName = matcher.group(key);
-                            jsonObject.addProperty(matcher.group(key), matcher.group(ifConfig.getValueKey()));
+                            metricValue = Long.parseLong(matcher.group(ifConfig.getValueKey()));
                         }else {
                             if (ifConfig.isLogParsingInfo()) {
                                 logger.log(Level.INFO, "Not match the metric regex " + content);
@@ -196,10 +179,16 @@ public class IFStreamingBufferManager {
                         logger.log(Level.INFO, String.format("%s %s %s", instanceName, metricName, timeStamp));
                     }
 
-                    ThreadBuffer threadBuffer = threadBufferMap.get(Thread.currentThread().getId());
-                    if (threadBuffer != null){
-                        for (String projectName : projects){
-                            threadBuffer.addBuffer(projectName, instanceName, timeStamp, jsonObject, receiveTime);
+                    for (String projectName : projects){
+                        long start = System.currentTimeMillis();
+                        String key = projectName;
+                        if (!collectingDataMap.containsKey(key)){
+                            collectingDataMap.put(key, new IFStreamingBuffer(projectName));
+                        }
+                        collectingDataMap.get(key).addData(instanceName, Long.parseLong(timeStamp), metricName, metricValue);
+                        long end = System.currentTimeMillis();
+                        if (end - start > 1000){
+                            logger.log(Level.INFO, "add use " + ((end - start)/1000) + " size"+ collectingDataMap.size());
                         }
                     }
                 }
@@ -220,33 +209,110 @@ public class IFStreamingBufferManager {
         return stringBuilder.toString();
     }
 
-    public void mergeDataAndSendToIF(Map<String, Set<IFStreamingBuffer>> collectingDataMap){
-        Map<String, IFSendingBuffer> sendingBufferMap = new HashMap<>();
+    public void mergeDataAndSendToIF2(Map<String, IFStreamingBuffer> collectingDataMap){
+        List<IFStreamingBuffer> sendingDataList = new ArrayList<>();
+        for (String key : collectedBufferMap.keySet()){
+            if (collectingDataMap.containsKey(key)){
+                IFStreamingBuffer ifStreamingBuffer = collectedBufferMap.get(key).mergeDataAndGetSendingData(collectingDataMap.get(key));
+                sendingDataList.add(ifStreamingBuffer);
+            }else {
+                IFStreamingBuffer ifStreamingBuffer = collectedBufferMap.remove(key);
+                sendingDataList.add(ifStreamingBuffer);
+            }
+        }
+
+        for (String key : collectingDataMap.keySet()){
+            if (!collectedBufferMap.containsKey(key)){
+                collectedBufferMap.put(key, collectingDataMap.remove(key));
+            }
+        }
+
+        for (IFStreamingBuffer ifSendingBuffer : sendingDataList){
+            List<String> datas = convertBackToOldFormat(ifSendingBuffer.getAllInstanceDataMap(), ifSendingBuffer.getProject());
+            for (String data : datas){
+                sendToIF(data, ifSendingBuffer.getProject(), 0);
+            }
+        }
+    }
+
+    public List<String> convertBackToOldFormat(Map<String, InstanceData> instanceDataMap, String project) {
+        JsonArray ret = new JsonArray();
+        List<String> stringList = new ArrayList<>();
+        Map<Long, JsonObject> sortByTimestampMap = new HashMap<>();
+        for (String instanceName : instanceDataMap.keySet()) {
+            InstanceData instanceData = instanceDataMap.get(instanceName);
+            Map<Long, DataInTimestamp> dataInTimestampMap = instanceData.getDataInTimestampMap();
+            for (Long timestamp : dataInTimestampMap.keySet()) {
+                String key = String.format("%s-%s-%d", project, instanceName, timestamp);
+                if (filter.mightContain(key)){
+                    if (ifConfig.isLogSendingData()) {
+                        if (sendingStatistics.containsKey(key)){
+                                String dropStr = String.format("At %s drop data / total: %d / %d", key,dataInTimestampMap.get(timestamp).getMetricDataPointSet().size(), dataInTimestampMap.get(timestamp).getMetricDataPointSet().size() + sendingStatistics.get(key));
+                                logger.log(Level.INFO, dropStr);
+                        }else {
+                                String dropStr = String.format("At %s drop data %d", key,dataInTimestampMap.get(timestamp).getMetricDataPointSet().size());
+                                logger.log(Level.INFO, dropStr);
+                        }
+                    }
+                    continue;
+                }
+                filter.put(key);
+                if (ifConfig.isLogSendingData()) {
+                        sendingStatistics.put(key, sendingStatistics.getOrDefault(key, 0) + (dataInTimestampMap.get(timestamp).getMetricDataPointSet().size()));
+                }
+
+                JsonObject thisTimestampObj = sortByTimestampMap.getOrDefault(timestamp, new JsonObject());
+                if (!thisTimestampObj.has("timestamp")) {
+                    thisTimestampObj.addProperty("timestamp", timestamp.toString());
+                }
+                Set<MetricDataPoint> metricDataPointSet = dataInTimestampMap.get(timestamp)
+                        .getMetricDataPointSet();
+                for (MetricDataPoint metricDataPoint : metricDataPointSet) {
+                    String metricName = metricDataPoint.getMetricName();
+                    double value = metricDataPoint.getValue();
+                    MetricHeaderEntity metricHeaderEntity = new MetricHeaderEntity(metricName, instanceName,
+                            null);
+                    String header = metricHeaderEntity.generateHeader(false);
+                    thisTimestampObj.addProperty(header, String.valueOf(value));
+                }
+                sortByTimestampMap.put(timestamp, thisTimestampObj);
+            }
+        }
+        for (JsonObject jsonObject : sortByTimestampMap.values()) {
+            if (ret.size() >= 100){
+                stringList.add(ret.toString());
+                ret = new JsonArray();
+            }
+            ret.add(jsonObject);
+        }
+        if (!ret.isEmpty()){
+            stringList.add(ret.toString());
+        }
+        return stringList;
+    }
+
+    public void mergeDataAndSendToIF(Map<String, IFStreamingBuffer> collectingDataMap){
+        List<IFStreamingBuffer> sendingDataList = new ArrayList<>();
         synchronized (collectedBufferMap){
             for (String key : collectedBufferMap.keySet()){
                 if (!collectingDataMap.keySet().contains(key)){
                     if (filter.mightContain(key)){
                         if (ifConfig.isLogSendingData()) {
                             if (sendingStatistics.containsKey(key)){
-                                String dropStr = String.format("at %s drop data / total: %d / %d", key,collectedBufferMap.get(key).size(), collectedBufferMap.get(key).size() + sendingStatistics.get(key));
-                                logger.log(Level.INFO, dropStr);
+//                                String dropStr = String.format("at %s drop data / total: %d / %d", key,collectedBufferMap.get(key).getData().size(), collectedBufferMap.get(key).getData().size() + sendingStatistics.get(key));
+//                                logger.log(Level.INFO, dropStr);
                             }else {
-                                String dropStr = String.format("at %s drop data %d", key,collectedBufferMap.get(key).size());
-                                logger.log(Level.INFO, dropStr);
+//                                String dropStr = String.format("at %s drop data %d", key,collectedBufferMap.get(key).getData().size());
+//                                logger.log(Level.INFO, dropStr);
                             }
                         }
                         collectedBufferMap.remove(key);
                         continue;
                     }
                     filter.put(key);
-                    IFStreamingBuffer ifStreamingBuffer = merge(collectedBufferMap.get(key));
-                    if (!sendingBufferMap.containsKey(ifStreamingBuffer.getProject())){
-                        sendingBufferMap.put(ifStreamingBuffer.getProject(), new IFSendingBuffer(ifStreamingBuffer));
-                    }else {
-                        sendingBufferMap.get(ifStreamingBuffer.getProject()).addData(ifStreamingBuffer);
-                    }
+                    IFStreamingBuffer ifStreamingBuffer = collectedBufferMap.get(key);
                     if (ifConfig.isLogSendingData()) {
-                        sendingStatistics.put(key, sendingStatistics.getOrDefault(key, 0) + (ifStreamingBuffer.getData().size() - 1));
+//                        sendingStatistics.put(key, sendingStatistics.getOrDefault(key, 0) + (ifStreamingBuffer.getData().size() - 1));
                     }
                     collectedBufferMap.remove(key);
                 }
@@ -255,25 +321,26 @@ public class IFStreamingBufferManager {
             synchronized (collectingDataMap){
                 for(String key : collectingDataMap.keySet()){
                     if (!collectedBufferMap.contains(key)){
-                        collectedBufferMap.put(key, ConcurrentHashMap.newKeySet());
+                        collectedBufferMap.put(key, collectingDataMap.get(key));
+                    }else {
+//                        collectedBufferMap.get(key).merge(collectingDataMap.get(key));
                     }
-                    collectedBufferMap.get(key).addAll(collectingDataMap.get(key));
                 }
                 collectingDataMap.clear();
             }
         }
 
-        while (!retryQueue.isEmpty()){
-            IFSendingBuffer ifSendingBuffer = retryQueue.poll();
-            sendToIF(ifSendingBuffer.getJsonObjectList(), ifSendingBuffer.getProject(), 3);
-        }
-
-        for (IFSendingBuffer ifSendingBuffer : sendingBufferMap.values()){
-            sendToIF(ifSendingBuffer.getJsonObjectList(), ifSendingBuffer.getProject(), 0);
-        }
+//        while (!retryQueue.isEmpty()){
+//            IFSendingBuffer ifSendingBuffer = retryQueue.poll();
+//            sendToIF(ifSendingBuffer.getJsonObjectList(), ifSendingBuffer.getProject(), 3);
+//        }
+//
+//        for (IFSendingBuffer ifSendingBuffer : sendingBufferMap.values()){
+//            //sendToIF(ifSendingBuffer.getJsonObjectList(), ifSendingBuffer.getProject(), 0);
+//        }
     }
 
-    public void sendToIF(List<JsonObject> list, String projectName, int retry){
+    public void sendToIF(String data, String projectName, int retry){
         Map<String, String> ifProjectInfo = projectList.get(projectName);
         String ifProjectName = ifProjectInfo.get("project");
         String ifSystemName = ifProjectInfo.get("system");
@@ -283,28 +350,24 @@ public class IFStreamingBufferManager {
             bodyValues.add("licenseKey", ifConfig.getLicenseKey());
             bodyValues.add("projectName", ifProjectName);
             bodyValues.add("userName", ifConfig.getUserName());
-            bodyValues.add("metricData", new Gson().toJson(list));
+            bodyValues.add("metricData", data);
             bodyValues.add("agentType", ifConfig.getAgentType());
+            int dataSize = data.getBytes(StandardCharsets.UTF_8).length/1024;
             webClient.post()
                     .uri(ifConfig.getServerUri())
                     .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                     .body(BodyInserters.fromFormData(bodyValues))
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(Duration.ofMillis(20000))
+                    .timeout(Duration.ofMillis(100000))
                     .onErrorResume(throwable -> {
                         return Mono.just("RETRY");
                     })
                     .subscribe(res->{
-                        if (res.equalsIgnoreCase("RETRY") && retry < 2){//retry 1 2
-                            sendToIF(list.subList(0, list.size()/2), projectName, retry + 1);
-                            sendToIF(list.subList(list.size()/2, list.size()), projectName, retry + 1);
+                        if (res.equalsIgnoreCase("RETRY")){//retry 1 2
+                            logger.log(Level.INFO,  "request id: " + uuid.toString() + " data size: " +  dataSize + " kb code: "+res);
                         }else {
-                            if (res.equalsIgnoreCase("RETRY") && retry == 2){// retry 3
-                                retryQueue.add(new IFSendingBuffer(projectName, list));
-                            }else {
-                                logger.log(Level.INFO,  "request id: " + uuid.toString() + " " + res);
-                            }
+                            logger.log(Level.INFO,  "request id: " + uuid.toString() + " data size: " +  dataSize + " kb code: "+res);
                         }
                     });
         }
@@ -329,9 +392,4 @@ public class IFStreamingBufferManager {
         return Collections.unmodifiableMap(namedGroups);
     }
 
-    public static IFStreamingBuffer merge(Collection<IFStreamingBuffer> collection){
-        return collection.stream().reduce((ib1, ib2)->{
-            return ib1.merge(ib2);
-        }).get();
-    }
 }
