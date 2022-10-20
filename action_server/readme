@@ -1,3 +1,19 @@
-chmod 777 /etc/sudoers
-%sudo   ALL=(ALL:ALL) NOPASSWD:ALL
-chmod 0755 /etc/sudoers
+1. git clone https://github.com/insightfinder/InsightAgent.git
+2. cd action_server
+3. check setup.sh, install python3, pip3 and openssl
+4. check gen_ssl.sh and generate ssl certs
+5. check asconfig.ini
+config examples:
+[DEFAULT]
+username =****User
+license = b19c**********************99c912c942dc2389a606
+project = TD_*****ployment
+instancename = TD_*****ployment_name
+serverip = stg.insightfinder.com
+serverport = 9092
+serverid = <leave it blank>
+cmds = {"action name" : "python demo_co*****r.py -l b19ca0a1ca6*****89a606 -u demoUser -s https://stg.insightfinder.com -d normal"}
+if_server_url = https://stg.insightfinder.com
+reboot = <leave it blank>
+
+6. check and run start.sh
