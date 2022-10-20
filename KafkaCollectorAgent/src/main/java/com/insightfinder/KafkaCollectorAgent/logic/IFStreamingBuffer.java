@@ -2,51 +2,50 @@ package com.insightfinder.KafkaCollectorAgent.logic;
 
 import com.google.gson.JsonObject;
 
-import java.util.Objects;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 public class IFStreamingBuffer {
     private Logger logger = Logger.getLogger(IFStreamingBuffer.class.getName());
     private String project;
-    private String timestamp;
-    private String instanceName;
-    private JsonObject data;
+    private String system;
 
-    public IFStreamingBuffer() {
-        data = new JsonObject();
-    }
-    public IFStreamingBuffer(IFStreamingBuffer ifStreamingBuffer) {
-        this.project = ifStreamingBuffer.getProject();
-        this.timestamp = ifStreamingBuffer.getTimestamp();
-        this.instanceName = ifStreamingBuffer.getInstanceName();
-        this.data = new JsonObject();
-        this.data.addProperty("timestamp", this.timestamp);
-    }
+    private ConcurrentHashMap<String, InstanceData> allInstanceDataMap;
 
-    public IFStreamingBuffer(String projectName, String instanceName, String timestamp, JsonObject jsonObject) {
+    public IFStreamingBuffer(String projectName, String systemName) {
         this.project = projectName;
-        this.timestamp = timestamp;
-        this.instanceName = instanceName;
-        this.data = new JsonObject();
-        this.data.addProperty("timestamp", this.timestamp);
-        parseAndUpdate(jsonObject);
+        this.system = systemName;
+        this.allInstanceDataMap = new ConcurrentHashMap<>();
     }
 
-    public void parseAndUpdate(JsonObject jsonObject){
-        for (String key : jsonObject.keySet()){
-            data.addProperty(key+"["+instanceName+"]", jsonObject.get(key).getAsString().trim());
+    public void addData(String instanceName , long timestamp ,String metricName, double value){
+        if (!allInstanceDataMap.containsKey(instanceName)){
+            allInstanceDataMap.put(instanceName, new InstanceData(this.project, instanceName));
         }
+        allInstanceDataMap.get(instanceName).addData(metricName, timestamp, value);
     }
 
-    public IFStreamingBuffer merge(IFStreamingBuffer ifStreamingBuffer){
-        if (this.project.equalsIgnoreCase(ifStreamingBuffer.project)
-                && this.instanceName.equalsIgnoreCase(ifStreamingBuffer.instanceName)
-                && this.timestamp.equalsIgnoreCase(ifStreamingBuffer.timestamp)){
-            for (String key : ifStreamingBuffer.data.keySet()){
-                this.data.addProperty(key, ifStreamingBuffer.data.get(key).getAsString().trim());
+    public void clear(){
+        this.allInstanceDataMap.clear();
+    }
+
+    public IFStreamingBuffer mergeDataAndGetSendingData(IFStreamingBuffer ifStreamingBuffer){
+        IFStreamingBuffer result = new IFStreamingBuffer(ifStreamingBuffer.getProject(), ifStreamingBuffer.getSystem());
+        for (String key : allInstanceDataMap.keySet()){
+            InstanceData instanceData = null;
+            if (ifStreamingBuffer.allInstanceDataMap.containsKey(key)){
+                instanceData = allInstanceDataMap.get(key).mergeDataAndGetSendingData(ifStreamingBuffer.allInstanceDataMap.remove(key));
+            }else {
+                instanceData = allInstanceDataMap.remove(key);
             }
+            result.allInstanceDataMap.put(key, instanceData);
         }
-        return this;
+        return result;
+    }
+
+    public Map<String, InstanceData> getAllInstanceDataMap() {
+        return allInstanceDataMap;
     }
 
     public Logger getLogger() {
@@ -65,28 +64,12 @@ public class IFStreamingBuffer {
         this.project = project;
     }
 
-    public String getTimestamp() {
-        return timestamp;
+    public String getSystem() {
+        return system;
     }
 
-    public void setTimestamp(String timestamp) {
-        this.timestamp = timestamp;
-    }
-
-    public String getInstanceName() {
-        return instanceName;
-    }
-
-    public void setInstanceName(String instanceName) {
-        this.instanceName = instanceName;
-    }
-
-    public JsonObject getData() {
-        return data;
-    }
-
-    public void setData(JsonObject data) {
-        this.data = data;
+    public void setSystem(String system) {
+        this.system = system;
     }
 
     @Override
@@ -94,11 +77,11 @@ public class IFStreamingBuffer {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         IFStreamingBuffer that = (IFStreamingBuffer) o;
-        return Objects.equals(logger, that.logger) && Objects.equals(project, that.project) && Objects.equals(timestamp, that.timestamp) && Objects.equals(instanceName, that.instanceName) && Objects.equals(data, that.data);
+        return Objects.equals(logger, that.logger) && Objects.equals(project, that.project);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(logger, project, timestamp, instanceName, data);
+        return Objects.hash(logger, project);
     }
 }
