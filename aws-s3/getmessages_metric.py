@@ -20,7 +20,7 @@ import regex
 import requests
 
 threadLock = threading.Lock()
-messages = []
+messages_dict = {}
 
 MAX_RETRY_NUM = 10
 RETRY_WAIT_TIME_IN_SEC = 30
@@ -463,7 +463,7 @@ def yield_message(message):
 
 def process_get_data(logger, cli_config_vars, bucket, object_key):
     logger.info('start to process data from file: {}'.format(object_key))
-    global messages
+    global messages_dict
 
     buf = io.BytesIO()
     logger.info('downloading file: {}'.format(object_key))
@@ -475,7 +475,7 @@ def process_get_data(logger, cli_config_vars, bucket, object_key):
     lines = content.splitlines()
     message = [json.loads(metric_data) for metric_data in lines]
     threadLock.acquire()
-    messages.extend(message)
+    messages_dict[object_key] = message
     threadLock.release()
 
     logger.info('finish proces data from file: {}'.format(object_key))
@@ -495,42 +495,67 @@ class MyThread(threading.Thread):
 
 def process_parse_data(logger, cli_config_vars, agent_config_vars):
     logger.info('start to parse data...')
-    global messages
-    messages = [metric for metric in messages if metric[agent_config_vars['instance_field']]]
+
     timestamp_field = agent_config_vars['timestamp_field']
     instance = agent_config_vars['instance_field']
     metric_fields = agent_config_vars['metric_fields']
-    # {"ts1": {'instance1': {'ts': 23,'metric1': value},}
+
+    global messages_dict
     parse_data = {}
-    # all_timestamps = []
-    for metric in yield_message(messages):
-        if metric_fields and len(metric_fields) > 0:
-            for field in metric_fields:
-                data_field = field
-                data_value = metric.get(field)
-                if field.find('::') != -1:
-                    metric_name, metric_value = field.split('::')
-                    data_field = metric.get(metric_name)
-                    data_value = metric.get(metric_value)
-                if not data_field:
-                    continue
 
-                # filter by metric whitelist
-                if agent_config_vars['metric_whitelist_regex'] and not agent_config_vars[
-                    'metric_whitelist_regex'].match(data_field):
-                    logger.debug('metric_whitelist has no matching data')
-                    continue
+    for file_name in sorted(messages_dict.keys()):
 
-                inst_name = metric[instance]
-                ts = metric[timestamp_field]
-                full_instance = make_safe_instance_string(inst_name)
-                metric_key = '{}[{}]'.format(data_field, full_instance)
+        messages = messages_dict[file_name]
+        stats = {}
 
-                if ts not in parse_data:
-                    parse_data[ts] = {}
-                if inst_name not in parse_data[ts]:
-                    parse_data[ts][inst_name] = {}
-                parse_data[ts][inst_name][metric_key] = str(data_value)
+        # ignore messages without instance field
+        messages = [metric for metric in messages if metric[instance]]
+
+        for metric in yield_message(messages):
+            if metric_fields and len(metric_fields) > 0:
+                for field in metric_fields:
+                    data_field = field
+                    data_value = metric.get(field)
+                    if field.find('::') != -1:
+                        metric_name, metric_value = field.split('::')
+                        data_field = metric.get(metric_name)
+                        data_value = metric.get(metric_value)
+                    if not data_field:
+                        continue
+
+                    # filter by metric whitelist
+                    if agent_config_vars['metric_whitelist_regex'] and not agent_config_vars[
+                        'metric_whitelist_regex'].match(data_field):
+                        logger.debug('metric_whitelist has no matching data')
+                        continue
+
+                    inst_name = metric[instance]
+                    ts = metric[timestamp_field]
+                    full_instance = make_safe_instance_string(inst_name)
+                    metric_key = '{}[{}]'.format(data_field, full_instance)
+
+                    if ts not in parse_data:
+                        parse_data[ts] = {}
+                    if inst_name not in parse_data[ts]:
+                        parse_data[ts][inst_name] = {}
+                    parse_data[ts][inst_name][metric_key] = str(data_value)
+
+                    # count stats by instance and metric
+                    if inst_name not in stats:
+                        stats[inst_name] = {}
+                    if data_field not in stats[inst_name]:
+                        stats[inst_name][data_field] = 0
+                    stats[inst_name][data_field] += 1
+
+        # sort parse data by ts
+        ts_range = sorted(parse_data.keys())
+        total_count = len(ts_range)
+        if total_count > 0:
+            print('stats of file {}, time {}-{} total {}'.format(
+                file_name, ts_range[0], ts_range[total_count - 1], total_count))
+            for i, metric_dict in stats.items():
+                for m, v in metric_dict.items():
+                    print('{0: <30} {1: <30} {2:.2%}'.format(i, m, stats[i][m] / total_count))
 
     return parse_data
 
@@ -625,7 +650,7 @@ def logger_control(user, level):
 
 
 def main():
-    global messages
+    global messages_dict
 
     # get config
     cli_config_vars = get_cli_config_vars()
@@ -715,7 +740,8 @@ def main():
 
         # send data
         data = []
-        for key, value in parse_data.items():
+        for key in sorted(parse_data.keys()):
+            value = parse_data[key]
             timestamp = int(key) if len(str(int(key))) > 10 else int(key) * 1000
             line = {'timestamp': str(timestamp)}
             for d in value.values():
