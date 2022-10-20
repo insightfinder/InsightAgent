@@ -245,7 +245,8 @@ public class IFStreamingBufferManager {
                 if (filter.mightContain(key)){
                     if (ifConfig.isLogSendingData()) {
                         if (sendingStatistics.containsKey(key)){
-                                String dropStr = String.format("At %s drop data / total: %d / %d", key,dataInTimestampMap.get(timestamp).getMetricDataPointSet().size(), dataInTimestampMap.get(timestamp).getMetricDataPointSet().size() + sendingStatistics.get(key));
+                                float percent = dataInTimestampMap.get(timestamp).getMetricDataPointSet().size() / sendingStatistics.get(key);
+                                String dropStr = String.format("At %s drop data / sent data: %f%", key, percent*100);
                                 logger.log(Level.INFO, dropStr);
                         }else {
                                 String dropStr = String.format("At %s drop data %d", key,dataInTimestampMap.get(timestamp).getMetricDataPointSet().size());
@@ -256,7 +257,7 @@ public class IFStreamingBufferManager {
                 }
                 filter.put(key);
                 if (ifConfig.isLogSendingData()) {
-                        sendingStatistics.put(key, sendingStatistics.getOrDefault(key, 0) + (dataInTimestampMap.get(timestamp).getMetricDataPointSet().size()));
+                        sendingStatistics.put(key, dataInTimestampMap.get(timestamp).getMetricDataPointSet().size());
                 }
 
                 JsonObject thisTimestampObj = sortByTimestampMap.getOrDefault(timestamp, new JsonObject());
