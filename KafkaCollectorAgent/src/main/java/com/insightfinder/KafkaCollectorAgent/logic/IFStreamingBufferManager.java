@@ -130,7 +130,7 @@ public class IFStreamingBufferManager {
                 List<String> projects = new ArrayList<>();
                 jsonObject = new JsonObject();
                 String projectNameStr = null, instanceName = null, timeStamp = null, metricName = null;
-                long metricValue = 0;
+                double metricValue = 0.0;
                 for (String key : namedGroups.keySet()){
                     if (key.equalsIgnoreCase(ifConfig.getProjectKey())){
                         projectNameStr = String.valueOf(matcher.group(key));
@@ -159,7 +159,7 @@ public class IFStreamingBufferManager {
                         Matcher metricMatcher = metricPattern.matcher(matcher.group(key));
                         if (metricMatcher.matches()){
                             metricName = matcher.group(key);
-                            metricValue = Long.parseLong(matcher.group(ifConfig.getValueKey()));
+                            metricValue = Double.parseDouble(matcher.group(ifConfig.getValueKey()));
                         }else {
                             if (ifConfig.isLogParsingInfo()) {
                                 logger.log(Level.INFO, "Not match the metric regex " + content);
