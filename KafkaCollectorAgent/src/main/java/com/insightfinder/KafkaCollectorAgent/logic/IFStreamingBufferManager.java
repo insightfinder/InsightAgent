@@ -246,7 +246,7 @@ public class IFStreamingBufferManager {
                     if (ifConfig.isLogSendingData()) {
                         if (sendingStatistics.containsKey(key)){
                                 float percent = dataInTimestampMap.get(timestamp).getMetricDataPointSet().size() / sendingStatistics.get(key);
-                                String dropStr = String.format("At %s drop data / sent data: %f%", key, percent*100);
+                                String dropStr = String.format("At %s drop data / sent data: %f", key, percent*100);
                                 logger.log(Level.INFO, dropStr);
                         }else {
                                 String dropStr = String.format("At %s drop data %d", key,dataInTimestampMap.get(timestamp).getMetricDataPointSet().size());
