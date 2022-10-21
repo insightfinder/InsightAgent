@@ -1,0 +1,29 @@
+1. git clone https://github.com/insightfinder/InsightAgent.git
+2. cd action_server
+3. check setup.sh, install python3, pip3 and openssl
+4. check gen_ssl.sh and generate ssl certs
+5. check asconfig.ini
+config examples:
+[DEFAULT]
+#IF Name
+username =****User
+#IF license
+license = b19c**********************99c912c942dc2389a606
+#IF Project Name
+project = TD_*****ployment
+#Action Server Name
+instancename = TD_*****ployment_name
+#Action Server Public Ip or domain name
+serverip = stg.insightfinder.com
+# Action Server port
+serverport = 9092
+# Get serverid from IF
+serverid = <leave it blank>
+# actionName-> action script
+cmds = {"action name" : "python demo_co*****r.py -l b19ca0a1ca6*****89a606 -u demoUser -s https://stg.insightfinder.com -d normal"}
+# IF Server
+if_server_url = https://stg.insightfinder.com
+# reboot time
+reboot = <leave it blank>
+
+6. check and run start.sh
