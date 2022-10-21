@@ -45,8 +45,6 @@ Once you have finished configuring the config.ini file, you can test the agent t
 
 This will connect to the Prometheus instance, but it will not send any data to InsightFinder. This allows you to verify that you are getting data from Prometheus and that there are no failing exceptions in the agent configuration.
 
-User `-p` to define max processes, use `--timeout` to define max timeout.
-
 ```bash
 ./setup/test_agent.sh
 ```
@@ -62,7 +60,7 @@ nohup venv/bin/python3 cron.py &
 Once the cron is running, you can stop the agent by kill the `cron.py` process.
 
 ```bash
-# get pid of backgroud jobs
+# get pid of background jobs
 jobs -l
 # kill the cron process
 kill -9 PID
@@ -95,6 +93,8 @@ kill -9 PID
 * `device_field`: Field name for the device/container for containerized projects. Can also set device name from multiple fields which separated by commas. Ex: device_name_part1,device_name_part2.
 * `instance_connector`: The connector for build `instance_field` or `device_field` from multiple fields. Default is `-`.
 * `thread_pool`: Number of thread to used in the pool, default is 20.
+* `processes`: Number of processes to run
+* `timeout`: Minutes of timeout for all processes
 * `agent_http_proxy`: HTTP proxy used to connect to the agent.
 * `agent_https_proxy`: As above, but HTTPS.
 * **`user_name`**: User name in InsightFinder

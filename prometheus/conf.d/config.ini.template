@@ -55,8 +55,12 @@ instance_whitelist =
 device_field =
 # The connector for build `instance_field` or `device_field` from multiple fields. Default is `-`.
 instance_connector =
-## number of thread to used in the pool, default is 20
+# number of thread to used in the pool, default is 20
 thread_pool = 20
+# number of the worker processes, default is count_of_cpu * 4
+processes =
+# minutes the main process wait for workers to finish, default is 5
+timeout = 5
 
 ## proxy
 agent_http_proxy =
