@@ -367,6 +367,8 @@ def get_agent_config_vars(logger, config_ini):
             timezone = config_parser.get('prometheus', 'timezone') or 'UTC'
             instance_connector = config_parser.get('prometheus', 'instance_connector') or '-'
             thread_pool = config_parser.get('prometheus', 'thread_pool', raw=True)
+            processes = config_parser.get('prometheus', 'processes', raw=True)
+            timeout = config_parser.get('prometheus', 'timeout', raw=True)
 
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
@@ -424,6 +426,16 @@ def get_agent_config_vars(logger, config_ini):
         else:
             thread_pool = 20
 
+        if len(processes) != 0:
+            processes = int(processes)
+        else:
+            processes = multiprocessing.cpu_count() * 4
+
+        if len(timeout) != 0:
+            timeout = int(timeout) * 60
+        else:
+            timeout = 5 * 60
+
         # proxies
         agent_proxies = dict()
         if len(agent_http_proxy) > 0:
@@ -459,6 +471,8 @@ def get_agent_config_vars(logger, config_ini):
             'timestamp_format': timestamp_format,
             'instance_connector': instance_connector,
             'thread_pool': thread_pool,
+            'processes': processes,
+            'timeout': timeout,
         }
 
         return config_vars
@@ -490,8 +504,8 @@ def get_cli_config_vars():
     """
     parser.add_option('-c', '--config', action='store', dest='config', default=abs_path_from_cur('conf.d'),
                       help='Path to the config files to use. Defaults to {}'.format(abs_path_from_cur('conf.d')))
-    parser.add_option('-p', '--processes', action='store', dest='processes', default=multiprocessing.cpu_count() * 4,
-                      help='Number of processes to run')
+    # parser.add_option('-p', '--processes', action='store', dest='processes', default=multiprocessing.cpu_count() * 4,
+    #                   help='Number of processes to run')
     parser.add_option('-q', '--quiet', action='store_true', dest='quiet', default=False,
                       help='Only display warning and error log messages')
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose', default=False,
@@ -499,16 +513,16 @@ def get_cli_config_vars():
     parser.add_option('-t', '--testing', action='store_true', dest='testing', default=False,
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
-    parser.add_option('--timeout', action='store', dest='timeout', default=5,
-                      help='Minutes of timeout for all processes')
+    # parser.add_option('--timeout', action='store', dest='timeout', default=5,
+    #                   help='Minutes of timeout for all processes')
     (options, args) = parser.parse_args()
 
     config_vars = {
         'config': options.config if os.path.isdir(options.config) else abs_path_from_cur('conf.d'),
-        'processes': int(options.processes),
+        # 'processes': int(options.processes),
         'testing': False,
         'log_level': logging.INFO,
-        'timeout': int(options.timeout) * 60,
+        # 'timeout': int(options.timeout) * 60,
     }
 
     if options.testing:
@@ -1112,19 +1126,22 @@ if __name__ == "__main__":
     files_path = os.path.join(cli_config_vars['config'], "*.ini")
     config_files = glob.glob(files_path)
 
+    # get agent config from first config
+    agent_config_vars = get_agent_config_vars(main_logger, config_files[0])
+
     # get args
     utc_time_now = int(arrow.utcnow().float_timestamp)
     arg_list = [(f, cli_config_vars, utc_time_now, queue) for f in config_files]
 
     # start sub process by pool
-    pool = Pool(cli_config_vars['processes'])
+    pool = Pool(agent_config_vars['processes'])
     pool_result = pool.map_async(worker_process, arg_list)
     pool.close()
 
     # wait 5 minutes for every worker to finish
-    need_timeout = cli_config_vars['timeout'] > 0
+    need_timeout = agent_config_vars['timeout'] > 0
     if need_timeout:
-        pool_result.wait(timeout=cli_config_vars['timeout'])
+        pool_result.wait(timeout=agent_config_vars['timeout'])
 
     try:
         results = pool_result.get(timeout=1 if need_timeout else None)
