@@ -76,7 +76,10 @@ def hello_post():
         if cmdsJson[cmd]:
             isTargetAll = request.form.get('isTargetAll')
             instance = request.form.get('instance')
-            return runCommand(cmdsJson[cmd] + " " + isTargetAll + " " + instance)
+            if instance:
+                return runCommand(cmdsJson[cmd] + " --limit " + instance)
+            else:
+                return runCommand(cmdsJson[cmd])
         else:
             msg = f'CMD not in whitelist!'
             return make_response(msg, 422)
