@@ -307,7 +307,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
             if agent_config_vars['device_field_regex']:
                 matches = agent_config_vars['device_field_regex'].match(device)
                 if not matches or 'device' not in matches.groupdict().keys():
-                    logger.debug('Parse message failed with device_field_regex: {}'.format(device))
+                    logger.warning('Parse message failed with device_field_regex: {}'.format(device))
                     continue
                 device = matches.group('device')
             full_instance = make_safe_instance_string(instance, device)
@@ -328,7 +328,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
         except Exception as e:
             logger.warning('Error when parsing message')
             logger.warning(e)
-            logger.debug(traceback.format_exc())
+            logger.warning(traceback.format_exc())
             continue
 
         count += 1
