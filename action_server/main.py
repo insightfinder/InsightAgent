@@ -5,8 +5,15 @@ import requests
 import json
 from datetime import datetime
 from os import system
-
+import argparse
 from app import ScriptFailWithCode
+
+def get_args():
+    parser = argparse.ArgumentParser(description="Flip a switch by setting a flag")
+    parser.add_argument('-start', action='store_true')
+    parser.add_argument('-stop', action='store_true')
+    args = parser.parse_args()
+    return args
 
 
 def readConfigFile(fileName):
@@ -41,5 +48,11 @@ def runCommand(command):
 
 if __name__ == '__main__':
     config = readConfigFile('asconfig.ini')
-    verify()
-    system("python3 -m flask run --cert=cert.pem --key=key.pem --host=0.0.0.0 --port=" + config['DEFAULT']['serverport'] + "&")
+    serverPort = config['DEFAULT']['serverport']
+    args = get_args()
+    if args.stop:
+        system("kill -9 $(lsof -t -i:" + serverPort + ")")
+
+    if args.start:
+        verify()
+        system("python3 -m flask run --cert=cert.pem --key=key.pem --host=0.0.0.0 --port=" + serverPort + " &")

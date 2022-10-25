@@ -27,3 +27,4 @@ if_server_url = https://stg.insightfinder.com
 reboot = <leave it blank>
 
 6. check and run start.sh
+7. run stop.sh when stop the server
