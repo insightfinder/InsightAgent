@@ -10,7 +10,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 
 
 def run_job(python_cmp, file_agent, config_ini, file_agent_log):
-    subprocess.run(f"{python_cmp} {file_agent} -c {config_ini} > {file_agent_log} 2>&1", shell=True)
+    subprocess.run(f"{python_cmp} {file_agent} -c {config_ini}", shell=True)
 
 
 def get_cron_params(interval_seconds):

@@ -20,10 +20,11 @@ from sys import getsizeof
 from optparse import OptionParser
 import threading
 from threading import Lock
-from logging.handlers import QueueHandler
+from logging.handlers import QueueHandler, TimedRotatingFileHandler
 import multiprocessing
 from multiprocessing.pool import ThreadPool
 from multiprocessing import Process, Queue
+from pathlib import Path
 
 from elasticsearch import Elasticsearch
 
@@ -56,12 +57,14 @@ RETRY_WAIT_TIME_IN_SEC = 30
 BUFFER_CHECK_COUNT = 1000
 CLOSED_MESSAGE = "CLOSED_MESSAGE"
 SESSION = requests.Session()
+LOG_DIR = "logs"
+AGENT_LOG_FILE = "./logs/agent.log"
 
 
 def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, worker_process):
     worker_configurer(log_queue, cli_config_vars['log_level'])
     logger = logging.getLogger('worker')
-    logger.info('Started data consumer process ......')
+    logger.debug('Started data consumer process ......')
 
     # get conn
     es_conn = get_es_connection(logger, agent_config_vars)
@@ -155,7 +158,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
     for i in range(0, worker_process):
         messages.put(CLOSED_MESSAGE)
     messages.close()
-    logger.info('Closed......')
+    logger.debug('Closed......')
 
 
 def get_es_connection(logger, agent_config_vars):
@@ -247,14 +250,14 @@ def query_messages_elasticsearch(logger, if_config_vars, agent_config_vars, es_c
 def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, datas):
     worker_configurer(log_queue, cli_config_vars['log_level'])
     logger = logging.getLogger('worker')
-    logger.info('Started data parse process ......')
+    logger.debug('Started data parse process ......')
 
     count = 0
     while True:
         try:
             message = messages.get()
             if message == CLOSED_MESSAGE:
-                logger.info('All logs parsed.')
+                logger.debug('All logs parsed.')
                 break
 
             logger.debug(message)
@@ -330,10 +333,10 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
 
         count += 1
         if count % 1000 == 0:
-            logger.info('Parse {0} messages'.format(count))
+            logger.debug('Parse {0} messages'.format(count))
 
     datas.put(CLOSED_MESSAGE)
-    logger.info('Parse {0} messages'.format(count))
+    logger.info('Finish parsing {0} messages'.format(count))
 
 
 def process_build_buffer(args):
@@ -380,6 +383,7 @@ def process_build_buffer(args):
                 logger.debug(f'Sending buffer chunk: {project_tracks[project]["data_size"]}')
                 send_data_to_if(logger, c_config, if_config_vars, project_tracks[project],
                                 project_tracks[project]['current_row'], project)
+                logger.info(f'Finish sending chunk to agent, size: {project_tracks[project]["data_size"]}')
                 reset_track(project_tracks[project])
 
         except Exception as e:
@@ -958,7 +962,7 @@ def send_request(logger, url, mode='GET', failure_message='Failure!', success_me
                 return response
             else:
                 logger.warn(failure_message)
-                logger.info('Response Code: {}\nTEXT: {}'.format(
+                logger.debug('Response Code: {}\nTEXT: {}'.format(
                     response.status_code, response.text))
         # handle various exceptions
         except requests.exceptions.Timeout:
@@ -1157,39 +1161,33 @@ def check_project_exist(logger, if_config_vars, project):
     return is_project_exist
 
 
-def listener_configurer():
+def listener_configurer(cli_config_vars):
     """ set up logging according to the defined log level """
     # create a logging format
     formatter = logging.Formatter(
-        '{ts} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
+        '{ts} [pid {pid}] {lvl} {func}():{line} {msg}'.format(
             ts='%(asctime)s',
             pid='%(process)d',
             lvl='%(levelname)-8s',
-            mod='%(module)s',
             func='%(funcName)s',
             line='%(lineno)d',
             msg='%(message)s'),
         ISO8601[0])
 
     # Get the root logger
+    log_level = cli_config_vars['log_level']
     root = logging.getLogger()
-    # No level or filter logic applied - just do it!
-    # root.setLevel(level)
+    root.setLevel(log_level)
 
-    # route INFO and DEBUG logging to stdout from stderr
-    logging_handler_out = logging.StreamHandler(sys.stdout)
-    logging_handler_out.setLevel(logging.DEBUG)
-    logging_handler_out.setFormatter(formatter)
-    root.addHandler(logging_handler_out)
-
-    logging_handler_err = logging.StreamHandler(sys.stderr)
-    logging_handler_err.setLevel(logging.WARNING)
-    logging_handler_err.setFormatter(formatter)
-    root.addHandler(logging_handler_err)
+    # create log output folder if not exists
+    Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
+    handler = TimedRotatingFileHandler(AGENT_LOG_FILE, when='MIDNIGHT', backupCount=14)
+    handler.setFormatter(formatter)
+    root.addHandler(handler)
 
 
-def listener_process(q, c_config):
-    listener_configurer()
+def listener_process(q, cli_config_vars):
+    listener_configurer(cli_config_vars)
     while True:
         while not q.empty():
             record = q.get()
@@ -1224,6 +1222,13 @@ def main():
     listener = Process(target=listener_process, args=(log_queue, cli_config_vars))
     listener.daemon = True
     listener.start()
+
+    # capture warnings to logging system
+    logging.captureWarnings(True)
+
+    # change elasticsearch logger level
+    es_logger = logging.getLogger('elasticsearch')
+    es_logger.setLevel(logging.WARNING)
 
     # set logger
     worker_configurer(log_queue, cli_config_vars['log_level'])
