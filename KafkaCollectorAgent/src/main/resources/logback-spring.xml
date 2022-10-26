@@ -25,11 +25,11 @@
         <rollingPolicy
                 class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
             <!-- rollover hourly and when the file reaches 10 MegaBytes -->
-            <fileNamePattern>${LOGS}/kafka-agent-loggerbydate-%d{yyyy-MM-dd-HH}.%i.log
+            <fileNamePattern>${LOGS}/kafka-agent-loggerbydate-%d{yyyy-MM-dd}.%i.log
             </fileNamePattern>
             <timeBasedFileNamingAndTriggeringPolicy
                     class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
-                <maxFileSize>1000MB</maxFileSize>
+                <maxFileSize>100MB</maxFileSize>
             </timeBasedFileNamingAndTriggeringPolicy>
         </rollingPolicy>
     </appender>
