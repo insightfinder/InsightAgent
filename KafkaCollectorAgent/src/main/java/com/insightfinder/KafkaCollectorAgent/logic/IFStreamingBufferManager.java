@@ -7,7 +7,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -33,8 +36,19 @@ import java.util.regex.Pattern;
 
 @Component
 public class IFStreamingBufferManager {
+    private static Set<String> metricFilterSet = new HashSet<>();
+    static {
+        metricFilterSet.add("kafka.consumer.fetch.manager.records.lag");
+        metricFilterSet.add("kafka.consumer.fetch.manager.records.lag.max");
+        metricFilterSet.add("kafka.consumer.fetch.manager.bytes.consumed.rate");
+        metricFilterSet.add("kafka.consumer.fetch.manager.records.consumed.rate");
+        metricFilterSet.add("kafka.consumer.fetch.manager.fetch.rate");
+    }
+
     private Logger logger = Logger.getLogger(IFStreamingBufferManager.class.getName());
     public static Type MAP_MAP_TYPE = new TypeToken<Map<String, Map<String, String>>>() {}.getType();
+    @Autowired
+    private MeterRegistry registry;
     @Autowired
     private Gson gson;
     @Autowired
@@ -80,7 +94,7 @@ public class IFStreamingBufferManager {
         instanceList = ifConfig.getInstanceList();
         //timer thread
         executorService.execute(()->{
-            int collectingTimer = ifConfig.getCollectingTime();
+            int printMetricsTimer = 3600;
             int sentTimer = ifConfig.getBufferingTime();
             while (true){
                 if (sentTimer <= 0){
@@ -91,9 +105,20 @@ public class IFStreamingBufferManager {
                     });
                 }
 
+                if (printMetricsTimer <= 0){
+                    printMetricsTimer = 3600;
+                    registry.getMeters().forEach(meter -> {
+                        if (metricFilterSet.contains(meter.getId().getName())){
+                            meter.measure().forEach(measurement -> {
+                                logger.log(Level.INFO, String.format("%s %s : %f",meter.getId().getTag("client.id"), meter.getId().getName(), measurement.getValue()));
+                            });
+                        }
+                    });
+                }
+
                 try {
                     Thread.sleep(1000);
-                    collectingTimer--;
+                    printMetricsTimer--;
                     sentTimer--;
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
