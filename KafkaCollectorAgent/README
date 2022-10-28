@@ -2,6 +2,7 @@ mvn package
 java -jar <appname>.jar --spring.config.location=file:<config file dir>
 
 ALL CONFIG SAMPLE
+logging.config=file:<File Dir>/logback.xml
 #kafka cluster one,two
 #kafka1 cluster one
 kafka1.sasl.mechanism=PLAIN
