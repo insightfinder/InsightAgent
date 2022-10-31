@@ -9,7 +9,7 @@
               class="ch.qos.logback.core.ConsoleAppender">
         <layout class="ch.qos.logback.classic.PatternLayout">
             <Pattern>
-                %black(%d{ISO8601}) %highlight(%-5level) [%blue(%t)] %yellow(%C{1.}): %msg%n%throwable
+                %d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n
             </Pattern>
         </layout>
     </appender>
@@ -19,7 +19,7 @@
         <file>${LOGS}/kafka-agent-loggerbyate.log</file>
         <encoder
                 class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
-            <Pattern>%d %p %C{1.} [%t] %m%n</Pattern>
+            <Pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</Pattern>
         </encoder>
 
         <rollingPolicy
@@ -35,7 +35,7 @@
     </appender>
 
     <!-- LOG everything at error level -->
-    <root level="DEBUG">
+    <root level="INFO">
         <appender-ref ref="RollingFileByDate" />
         <appender-ref ref="Console" />
     </root>
