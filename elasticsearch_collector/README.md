@@ -90,6 +90,7 @@ kill -9 PID
 * `target_timestamp_timezone`: Timezone of the timestamp data to be sent and stored in InsightFinder. Default value is UTC. Only if you wish to store data with a time zone other than UTC, this field should be specified to be the desired time zone.
 * `component_field`: Field name for the component name.
 * `instance_field`: Field name for the instance name. If no instance given, the elasticsearch's server name will be used.
+* `instance_field_regex`: Field name and regex for the instance name.
 * `instance_whitelist`: This field is a regex string used to define which instances will be filtered.
 * `device_field`: Field name for the device/container for containerized projects. This can also use a priority list, field names can be given: `device1,device2`.
 * **`data_fields`**: Comma-delimited list of field names to use as data fields. If not set, all fields will be reported. Each data field can either be a field name (`name`) or a labeled field (`<name>::<value>`.
@@ -105,7 +106,9 @@ kill -9 PID
 * `enable_holistic_model`: Enable holistic model when auto create project. Default is `false`.
 * **`sampling_interval`**: How frequently (in Minutes) data is collected. Should match the interval used in project settings.
 * **`frequency_sampling_interval`**: How frequently (in Minutes) the hot event detected.
+* **`log_compression_interval`**: How frequently (in Minutes) the log message be compressed.
 * **`run_interval`**: How frequently (in Minutes) the agent is ran. Should match the interval used in cron.
+* **`worker_timeout`**: Timeout (in Minutes) for the worker process. Default to the same as run_interval.
 * `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
 * `if_url`: URL for InsightFinder. Default is `https://app.insightfinder.com`.
 * `if_http_proxy`: HTTP proxy used to connect to InsightFinder.

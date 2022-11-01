@@ -1,32 +1,33 @@
 #!/usr/bin/env python
 import configparser
+import http.client
 import json
 import logging
+import multiprocessing
 import os
-import regex
-import socket
-import sys
-import time
-import pytz
-import arrow
-import urllib.parse
-import http.client
-import requests
 import shlex
 import signal
-import traceback
-from time import sleep
-from sys import getsizeof
-from optparse import OptionParser
+import socket
+import sys
 import threading
-from threading import Lock
-from logging.handlers import QueueHandler, TimedRotatingFileHandler
-import multiprocessing
-from multiprocessing.pool import ThreadPool
+import time
+import traceback
+import urllib.parse
+from logging.handlers import QueueHandler
 from multiprocessing import Process, Queue
-from pathlib import Path
+from multiprocessing.pool import ThreadPool
+from optparse import OptionParser
+from sys import getsizeof
+from threading import Lock
+from time import sleep
 
+import arrow
+import pytz
+import regex
+import requests
 from elasticsearch import Elasticsearch
+from urllib3.exceptions import InsecureRequestWarning
+from pprint import pformat
 
 """
 This script gathers data to send to Insightfinder
@@ -55,25 +56,44 @@ CSV_DELIM = r",|\t"
 ATTEMPTS = 3
 RETRY_WAIT_TIME_IN_SEC = 30
 BUFFER_CHECK_COUNT = 1000
+PARSE_DATA_LOG_COUNT = 5000
 CLOSED_MESSAGE = "CLOSED_MESSAGE"
 SESSION = requests.Session()
-LOG_DIR = "logs"
-AGENT_LOG_FILE = "./logs/agent.log"
+
+logCompressState = {}
 
 
 def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, worker_process):
     worker_configurer(log_queue, cli_config_vars['log_level'])
     logger = logging.getLogger('worker')
-    logger.debug('Started data consumer process ......')
+    logger.info('Starting get data from ElasticSearch')
 
     # get conn
     es_conn = get_es_connection(logger, agent_config_vars)
     if not es_conn:
-        return config_error(logger, 'ElasticSearch connection error')
+        config_error(logger, 'ElasticSearch connection error')
+        # # send close single for each worker
+        for i in range(0, worker_process):
+            messages.put(CLOSED_MESSAGE)
+        messages.close()
+        logger.error("Failed to get data from ElasticSearch caused by connection issue.")
+        time.sleep(1)
+        return False
 
     # pit used
-    pit_response = es_conn.open_point_in_time(index=agent_config_vars['indeces'], keep_alive="1m")
-    pit = pit_response['id']
+    pit = None
+    try:
+        pit_response = es_conn.open_point_in_time(index=agent_config_vars['indeces'], keep_alive="1m")
+        pit = pit_response['id']
+    except Exception as ex:
+        logger.error("ElasticSearch open PIT failed. \n{}".format(str(ex)))
+        # send close single for each worker
+        for i in range(0, worker_process):
+            messages.put(CLOSED_MESSAGE)
+        messages.close()
+        logger.error("Failed to get data from ElasticSearch")
+        sleep(1)
+        return False
 
     # time query
     timestamp_field = agent_config_vars['timestamp_field']
@@ -116,7 +136,8 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
                 merge(agent_config_vars['query_json'], query_body)
 
             # build query with chunk
-            query_messages_elasticsearch(logger, if_config_vars, agent_config_vars, es_conn, query_body, messages)
+            query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn,
+                                         query_body, messages)
 
     else:
         logger.debug('Using current time for streaming data')
@@ -152,13 +173,15 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
             merge(agent_config_vars['query_json'], query_body)
 
         # build query with chunk
-        query_messages_elasticsearch(logger, if_config_vars, agent_config_vars, es_conn, query_body, messages)
+        query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn, query_body,
+                                     messages)
 
     # send close single for each worker
     for i in range(0, worker_process):
         messages.put(CLOSED_MESSAGE)
     messages.close()
-    logger.debug('Closed......')
+
+    logger.info('Finish getting data from ElasticSearch')
 
 
 def get_es_connection(logger, agent_config_vars):
@@ -195,8 +218,9 @@ def build_es_connection_hosts(logger, agent_config_vars):
     return hosts
 
 
-def query_messages_elasticsearch(logger, if_config_vars, agent_config_vars, es_conn, query_body, messages):
-    logger.info('Starting query server es')
+def query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn, query_body,
+                                 messages):
+    logger.debug('Starting query server es')
 
     # get total number of messages
     response = es_conn.search(
@@ -224,7 +248,7 @@ def query_messages_elasticsearch(logger, if_config_vars, agent_config_vars, es_c
             query_body['pit']['id'] = pit
             response = es_conn.search(
                 body=query_body,
-                ignore_unavailable=False
+                ignore_unavailable=False,
             )
 
             if 'error' in response:
@@ -242,8 +266,7 @@ def query_messages_elasticsearch(logger, if_config_vars, agent_config_vars, es_c
                 pit = response.get('pit_id')
 
         except Exception as e:
-            logger.error(e)
-            logger.error('Query log error.')
+            logger.error('Query log error.\n{}'.format(str(e)))
             return
 
 
@@ -252,15 +275,23 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
     logger = logging.getLogger('worker')
     logger.debug('Started data parse process ......')
 
+    log_compression_interval = if_config_vars['log_compression_interval']
+
     count = 0
     while True:
+        current_time = time.time()
         try:
             message = messages.get()
             if message == CLOSED_MESSAGE:
                 logger.debug('All logs parsed.')
                 break
 
-            logger.debug(message)
+            last_log_time = logCompressState.get('_parse_messages')
+            needs_log_data = False
+            if cli_config_vars['testing'] and (not last_log_time or current_time - last_log_time > log_compression_interval):
+                needs_log_data = True
+                logCompressState['_parse_messages'] = current_time
+                logger.info('Raw data:\n' + pformat(message))
 
             # get source
             message = message.get('_source', {})
@@ -288,10 +319,29 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
             timestamp = str(timestamp)
 
             # get instance name
-            instance_field = agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
-                agent_config_vars['instance_field']) > 0 else 'agent.hostname'
-            instance_field = instance_field.split('.')
-            instance = safe_get(message, instance_field)
+            instance = None
+            # If the instance_field_regex is set, then grab the first capture group to match and set as instance
+            # syntax:  <field1 >::<regex1>,<field2>::<regex2>
+            instance_field_regex = agent_config_vars['instance_field_regex']
+            if instance_field_regex:
+                field_regex_list = instance_field_regex.split(',')
+                for field_regex in field_regex_list:
+                    field_regex_vals = field_regex.split('::')
+                    if len(field_regex_vals) > 1:
+                        field_val = safe_get(message, field_regex_vals[0].split('.'))
+                        if field_val and field_regex_vals[1]:
+                            re = regex.compile(field_regex_vals[1])
+                            matches = re.search(field_val)
+                            if matches:
+                                instance = matches.groups()[0]
+                                break
+
+            if not instance:
+                instance_field = agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
+                    agent_config_vars['instance_field']) > 0 else 'agent.hostname'
+                instance_field = instance_field.split('.')
+                instance = safe_get(message, instance_field)
+
             # filter by instance whitelist
             if agent_config_vars['instance_whitelist_regex'] \
                     and not agent_config_vars['instance_whitelist_regex'].match(instance):
@@ -307,7 +357,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
             if agent_config_vars['device_field_regex']:
                 matches = agent_config_vars['device_field_regex'].match(device)
                 if not matches or 'device' not in matches.groupdict().keys():
-                    logger.warning('Parse message failed with device_field_regex: {}'.format(device))
+                    logger.debug('Parse message failed with device_field_regex: {}'.format(device))
                     continue
                 device = matches.group('device')
             full_instance = make_safe_instance_string(instance, device)
@@ -315,24 +365,31 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
             # get data
             data_fields = agent_config_vars['data_fields'] if agent_config_vars['data_fields'] and len(
                 agent_config_vars['data_fields']) > 0 else ['message']
-            data = safe_get_data(message, data_fields)
+            data = safe_get_data(message, data_fields, logger)
 
             # build log entry
             log_entry = prepare_log_entry(if_config_vars, str(int(timestamp)), data, full_instance)
             log_entry['project'] = project
 
             log_entry['data_size'] = getsizeof(str(data))
+            if needs_log_data:
+                logger.info('Parsed data:\n' + pformat(log_entry))
 
             datas.put(log_entry)
 
         except Exception as e:
-            logger.warning('Error when parsing message')
-            logger.warning(e)
-            logger.warning(traceback.format_exc())
+            msg = str(e)
+            current_time = time.time()
+            last_log_time = logCompressState.get(msg)
+            if not last_log_time or current_time - last_log_time > log_compression_interval:
+                logCompressState[msg] = current_time
+                logger.warning('Error when parsing message, error:\n' + msg)
+                logger.warning(traceback.format_exc())
+
             continue
 
         count += 1
-        if count % 1000 == 0:
+        if count % PARSE_DATA_LOG_COUNT == 0:
             logger.debug('Parse {0} messages'.format(count))
 
     datas.put(CLOSED_MESSAGE)
@@ -341,10 +398,11 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
 
 def process_build_buffer(args):
     logger, c_config, if_config_vars, datas, meta_info, project_create_lock = args
-    logger.info(f'Start to send data in thread {threading.current_thread().ident}')
+    logger.info(f'Starting send messages to IF server in thread {threading.current_thread().ident}')
 
     # build buffer
     project_tracks = {}
+    total_sent = 0
     while True:
         try:
             message = datas.get()
@@ -368,7 +426,7 @@ def process_build_buffer(args):
                     if project not in meta_info['projects']:
                         check_success = check_project_exist(logger, if_config_vars, project)
                         if not check_success:
-                            os.kill(os.getpid(), signal.SIGINT)
+                            sys.exit(1)
                         meta_info['projects'][project] = True
 
             if project not in project_tracks.keys():
@@ -383,16 +441,16 @@ def process_build_buffer(args):
                 logger.debug(f'Sending buffer chunk: {project_tracks[project]["data_size"]}')
                 send_data_to_if(logger, c_config, if_config_vars, project_tracks[project],
                                 project_tracks[project]['current_row'], project)
-                logger.info(f'Finish sending chunk to agent, size: {project_tracks[project]["data_size"]}')
                 reset_track(project_tracks[project])
 
+            total_sent += 1
+
         except Exception as e:
-            logger.warn('Error when build buffer message')
-            logger.warn(e)
+            logger.warn('Failed to send data for IF server.\n{}'.format(e))
             logger.debug(traceback.format_exc())
             continue
 
-    logger.info(f'End of send data in thread {threading.current_thread().ident}')
+    logger.info(f'Finish sending {total_sent} messages to IF server in thread {threading.current_thread().ident}')
 
 
 def get_agent_config_vars(logger, config_ini):
@@ -470,6 +528,7 @@ def get_agent_config_vars(logger, config_ini):
             # message parsing
             component_field = config_parser.get('elasticsearch', 'component_field', raw=True)
             instance_field = config_parser.get('elasticsearch', 'instance_field', raw=True)
+            instance_field_regex = config_parser.get('elasticsearch', 'instance_field_regex', raw=True)
             instance_whitelist = config_parser.get('elasticsearch', 'instance_whitelist')
             device_field = config_parser.get('elasticsearch', 'device_field', raw=True)
             device_field_regex = config_parser.get('elasticsearch', 'device_field_regex', raw=True)
@@ -552,6 +611,15 @@ def get_agent_config_vars(logger, config_ini):
             if timestamp_field in data_fields:
                 data_fields.pop(data_fields.index(timestamp_field))
 
+        if len(instance_field_regex) != 0:
+            try:
+                for field_regex in instance_field_regex.split(','):
+                    re = field_regex.split('::')[1]
+                    regex.compile(re)
+            except Exception as e:
+                logger.error(e)
+                return config_error(logger, 'instance_field_regex')
+
         if len(device_field_regex) != 0:
             try:
                 device_field_regex = regex.compile(device_field_regex)
@@ -566,14 +634,13 @@ def get_agent_config_vars(logger, config_ini):
             'query_json': query_json,
             'query_chunk_size': query_chunk_size,
             'indeces': indeces,
-
             'his_time_range': his_time_range,
             'project_field': project_field,
             'project_whitelist_regex': project_whitelist_regex,
-
             'component_field': component_field,
             'instance_field': instance_fields,
-            "instance_whitelist_regex": instance_whitelist_regex,
+            'instance_field_regex': instance_field_regex,
+            'instance_whitelist_regex': instance_whitelist_regex,
             'device_field': device_fields,
             'device_field_regex': device_field_regex,
             'data_fields': data_fields,
@@ -610,6 +677,7 @@ def get_if_config_vars(logger, config_ini, agent_config_vars):
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             frequency_sampling_interval = config_parser.get('insightfinder', 'frequency_sampling_interval')
             run_interval = config_parser.get('insightfinder', 'run_interval')
+            log_compression_interval = config_parser.get('insightfinder', 'log_compression_interval')
             chunk_size_kb = config_parser.get('insightfinder', 'chunk_size_kb')
             if_url = config_parser.get('insightfinder', 'if_url')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
@@ -661,6 +729,14 @@ def get_if_config_vars(logger, config_ini, agent_config_vars):
         else:
             frequency_sampling_interval = int(frequency_sampling_interval) * 60
 
+        if len(log_compression_interval) == 0:
+            return config_error(logger, 'log_compression_interval')
+
+        if log_compression_interval.endswith('s'):
+            log_compression_interval = int(log_compression_interval[:-1])
+        else:
+            log_compression_interval = int(log_compression_interval) * 60
+
         if len(run_interval) == 0:
             return config_error(logger, 'run_interval')
 
@@ -693,6 +769,7 @@ def get_if_config_vars(logger, config_ini, agent_config_vars):
             'enable_holistic_model': True if enable_holistic_model == 'TRUE' else False,
             'sampling_interval': int(sampling_interval),  # as seconds
             'frequency_sampling_interval': int(frequency_sampling_interval),  # as seconds
+            'log_compression_interval': int(log_compression_interval),  # as seconds
             'run_interval': int(run_interval),  # as seconds
             'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
             'if_url': if_url,
@@ -727,12 +804,18 @@ def get_cli_config_vars():
     parser.add_option('-t', '--testing', action='store_true', dest='testing', default=False,
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
+    parser.add_option('-p', '--process', action='store', dest='process', default=2,
+                      help='Number of processes for each agent to use for multithreading')
+    parser.add_option('--timeout', action='store', dest='timeout', default=5 * 60,
+                      help='Seconds of timeout for all worker processes')
     (options, args) = parser.parse_args()
 
     config_vars = {
         'config': options.config if os.path.isfile(options.config) else abs_path_from_cur('conf.d/config.ini'),
         'testing': False,
         'log_level': logging.INFO,
+        'process': int(options.process),
+        'timeout': int(options.timeout)
     }
 
     if options.testing:
@@ -762,7 +845,7 @@ def safe_get(dct, keys):
     return dct
 
 
-def safe_get_data(dct, keys):
+def safe_get_data(dct, keys, logger):
     data = {}
     for key in keys:
         named_key = key.split('::')
@@ -778,6 +861,7 @@ def safe_get_data(dct, keys):
                 except:
                     data[named_key[0]] = dct[named_key[0]]
         except KeyError:
+            logger.debug('safe_get_data key error, key={}'.format(key))
             return None
     return data
 
@@ -811,6 +895,9 @@ def make_safe_project_string(project):
 
 def make_safe_instance_string(instance, device=''):
     """ make a safe instance name string, concatenated with device if appropriate """
+    if not instance:
+        instance = 'unknown'
+
     # strip underscores
     instance = UNDERSCORE.sub('.', instance)
     instance = COLONS.sub('-', instance)
@@ -931,8 +1018,8 @@ def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data, 
 
     logger.debug('First:\n' + str(chunk_metric_data[0]))
     logger.debug('Last:\n' + str(chunk_metric_data[-1]))
-    logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
-    logger.info('Total Lines: ' + str(track['line_count']))
+    logger.debug('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
+    logger.debug('Total Lines: ' + str(track['line_count']))
 
     # do not send if only testing
     if c_config['testing']:
@@ -943,7 +1030,7 @@ def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data, 
     send_request(logger, post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
                  data=data_to_post, verify=False, proxies=if_config_vars['if_proxies'])
-    logger.info('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
+    logger.debug('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
 
 
 def send_request(logger, url, mode='GET', failure_message='Failure!', success_message='Success!',
@@ -962,7 +1049,7 @@ def send_request(logger, url, mode='GET', failure_message='Failure!', success_me
                 return response
             else:
                 logger.warn(failure_message)
-                logger.debug('Response Code: {}\nTEXT: {}'.format(
+                logger.info('Response Code: {}\nTEXT: {}'.format(
                     response.status_code, response.text))
         # handle various exceptions
         except requests.exceptions.Timeout:
@@ -1161,33 +1248,42 @@ def check_project_exist(logger, if_config_vars, project):
     return is_project_exist
 
 
-def listener_configurer(cli_config_vars):
-    """ set up logging according to the defined log level """
+def listener_configurer(c_config):
+    # Get config file name
+    config_name = os.path.basename(c_config['config'])
+    level = c_config['log_level']
+
     # create a logging format
     formatter = logging.Formatter(
-        '{ts} [pid {pid}] {lvl} {func}():{line} {msg}'.format(
+        '{ts} [{cfg}] [pid {pid}] {lvl} {mod}.{func}():{line} | {msg}'.format(
             ts='%(asctime)s',
+            cfg=config_name,
             pid='%(process)d',
             lvl='%(levelname)-8s',
+            mod='%(module)s',
             func='%(funcName)s',
             line='%(lineno)d',
             msg='%(message)s'),
         ISO8601[0])
 
     # Get the root logger
-    log_level = cli_config_vars['log_level']
     root = logging.getLogger()
-    root.setLevel(log_level)
+    root.setLevel(level)
 
-    # create log output folder if not exists
-    Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
-    handler = TimedRotatingFileHandler(AGENT_LOG_FILE, when='MIDNIGHT', backupCount=14)
-    handler.setFormatter(formatter)
-    root.addHandler(handler)
+    # route INFO and DEBUG logging to stdout from stderr
+    logging_handler_out = logging.StreamHandler(sys.stdout)
+    logging_handler_out.setLevel(logging.DEBUG)
+    logging_handler_out.setFormatter(formatter)
+    root.addHandler(logging_handler_out)
+
+    logging_handler_err = logging.StreamHandler(sys.stderr)
+    logging_handler_err.setLevel(logging.WARNING)
+    logging_handler_err.setFormatter(formatter)
+    root.addHandler(logging_handler_err)
 
 
-def listener_process(q, cli_config_vars):
-    listener_configurer(cli_config_vars)
+def listener_process(q, c_config):
+    listener_configurer(c_config)
     while True:
         while not q.empty():
             record = q.get()
@@ -1211,10 +1307,15 @@ def worker_configurer(q, level):
 
 
 def main():
+    requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
     timer = arrow.utcnow().float_timestamp
 
     # get config
     cli_config_vars = get_cli_config_vars()
+
+    # change elasticsearch logger level
+    es_logger = logging.getLogger('elasticsearch')
+    es_logger.setLevel(logging.WARNING)
 
     # logger queue, must use Manager().Queue() because agent may use pool create process
     m = multiprocessing.Manager()
@@ -1222,13 +1323,6 @@ def main():
     listener = Process(target=listener_process, args=(log_queue, cli_config_vars))
     listener.daemon = True
     listener.start()
-
-    # capture warnings to logging system
-    logging.captureWarnings(True)
-
-    # change elasticsearch logger level
-    es_logger = logging.getLogger('elasticsearch')
-    es_logger.setLevel(logging.WARNING)
 
     # set logger
     worker_configurer(log_queue, cli_config_vars['log_level'])
@@ -1261,7 +1355,8 @@ def main():
     datas = Queue()
     # all processes
     processes = []
-    worker_process = multiprocessing.cpu_count()
+    worker_process = cli_config_vars['process']
+    worker_timeout = cli_config_vars['timeout'] if cli_config_vars['timeout'] > 0 else None
 
     # consumer process
     d = Process(target=process_get_data,
@@ -1304,8 +1399,11 @@ def main():
 
     # clear all process
     for p in processes:
-        p.join()
+        logger.debug("Wait for worker {} to finish.".format(p.pid))
+        p.join(timeout=worker_timeout)
 
+    # Set logging to INFO to print end of agent
+    logger.setLevel(logging.INFO)
     logger.info("Agent completed in {} seconds".format(arrow.utcnow().float_timestamp - timer))
 
     # send kill signal
