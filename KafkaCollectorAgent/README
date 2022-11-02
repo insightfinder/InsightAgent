@@ -1,0 +1,49 @@
+mvn package
+java -jar <appname>.jar --spring.config.location=file:<config file dir>
+
+ALL CONFIG SAMPLE
+logging.config=file:<File Dir>/logback.xml
+#kafka cluster one,two
+#kafka1 cluster one
+kafka1.sasl.mechanism=PLAIN
+kafka1.bootstrap.servers=
+kafka1.sasl.jaas.config=
+kafka1.security.protocol=
+kafka1.group.id=
+kafka1.auto.offset.reset=
+kafka1.session.timeout.ms=
+kafka1.topic=
+kafka1.concurrency=
+#insight finder
+insight-finder.userName=
+insight-finder.serverUrl=
+insight-finder.serverUri=
+insight-finder.checkAndCreateUri=
+insight-finder.licenseKey=
+insight-finder.samplingIntervalInSeconds=300
+insight-finder.projectKey=project
+insight-finder.instanceKey=instance
+insight-finder.timestampKey=timestamp
+insight-finder.metricKey=metric
+insight-finder.valueKey=value
+insight-finder.projectDelimiter=\\|
+insight-finder.projectList={'100|200': {'project': 'StressTestProject2','system': 'StressTestSystem'}}
+insight-finder.instanceList=server-0,server-1,server-2,server-3,server-4,server-5,server-6,server-7,server-8,server-9
+insight-finder.metricRegex=.*
+#dataFormat JSON or String, if it is string need to set dataFormatRegex
+insight-finder.dataFormat=String
+insight-finder.dataFormatRegex=^cs\\.\\|(?<project>\\w+)\\|\\.\\w+\\.\\w+\\.\\w+\\.(?<instance>\\w+\\-\\w+)\.(?<metric>.*) (?<value>[-\\d\\.]+) (?<timestamp>\\d+)
+insight-finder.agentType=Streaming
+# in second
+#insight-finder.keystoreFile=
+#insight-finder.keystorePassword=
+#insight-finder.truststoreFile=
+#insight-finder.truststorePassword=
+insight-finder.bufferingTime=2
+insight-finder.collectingTime=1
+insight-finder.bufferSize=100000
+insight-finder.logParsingInfo=false
+insight-finder.logSendingData=true
+insight-finder.metricNameFilter=memory.memory.free
+
+
