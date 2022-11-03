@@ -10,9 +10,11 @@ aws_region =
 
 # AWS S3 bucket name
 aws_s3_bucket_name =
+aws_s3_metadata_bucket_name =
 
 # prefix for AWS s3 objects
 aws_s3_object_prefix =
+aws_s3_metadata_object_prefix =
 
 ## message parsing
 # timezone, as per pytz
@@ -25,6 +27,11 @@ target_timestamp_timezone = UTC
 instance_field =
 # instance_whitelist is a regex string used to define which instances will be filtered.
 instance_whitelist =
+
+component_field =
+
+## metadata project mapping
+project_component_mapping =
 
 # Metric names, multiple fields are separated by commas. A field can be named with the syntax `<metric_name>::<metric_value>`, where `<metric_name>` and `<metric_value>` can each be either a field name in message. Ex: metric1,metric_field::metric_value_field.
 metric_fields =

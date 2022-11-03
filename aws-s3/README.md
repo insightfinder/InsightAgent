@@ -108,7 +108,9 @@ sudo kill <Processs ID>
 * `aws_region`: AWS region name
 * `raw_regex`: Regex used to parse raw data. Must use named capture groups `(?<name>...)` corresponding to fields
 * `aws_s3_bucket_name`: AWS S3 bucket name to read the files.
+* `aws_s3_metadata_bucket_name`: AWS S3 bucket name to read the metadata files.
 * `aws_s3_object_prefix`: AWS S3 object prefix to filter the files.
+* `aws_s3_metadata_object_prefix`: AWS S3 object prefix to filter the metadata files.
 * `project_field`: Field name for the project name. If this field is empty, agent will use project_name in insightfinder
   section.
 * `project_whitelist`: project_whitelist is a regex string used to define which projects form project_field will be
