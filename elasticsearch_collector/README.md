@@ -107,6 +107,8 @@ kill -9 PID
 * **`sampling_interval`**: How frequently (in Minutes) data is collected. Should match the interval used in project settings.
 * **`frequency_sampling_interval`**: How frequently (in Minutes) the hot event detected.
 * **`log_compression_interval`**: How frequently (in Minutes) the log message be compressed.
+* **`enable_log_rotation`**: Enable log rotation daily.
+* **`log_backup_count`**: The number of the log files to keep when `enable_log_rotation` is `true`.
 * **`run_interval`**: How frequently (in Minutes) the agent is ran. Should match the interval used in cron.
 * **`worker_timeout`**: Timeout (in Minutes) for the worker process. Default to the same as run_interval.
 * `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.

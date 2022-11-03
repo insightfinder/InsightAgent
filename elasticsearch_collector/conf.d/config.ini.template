@@ -99,6 +99,8 @@ enable_holistic_model = false
 sampling_interval = 1
 frequency_sampling_interval = 10
 log_compression_interval = 1
+enable_log_rotation = false
+log_backup_count = 14
 run_interval = 1
 worker_timeout =
 # what size to limit chunks sent to IF to, as kb

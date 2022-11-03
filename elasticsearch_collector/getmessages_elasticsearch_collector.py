@@ -13,7 +13,7 @@ import threading
 import time
 import traceback
 import urllib.parse
-from logging.handlers import QueueHandler
+from logging.handlers import QueueHandler, TimedRotatingFileHandler
 from multiprocessing import Process, Queue
 from multiprocessing.pool import ThreadPool
 from optparse import OptionParser
@@ -28,6 +28,7 @@ import requests
 from elasticsearch import Elasticsearch
 from urllib3.exceptions import InsecureRequestWarning
 from pprint import pformat
+from pathlib import Path
 
 """
 This script gathers data to send to Insightfinder
@@ -59,6 +60,8 @@ BUFFER_CHECK_COUNT = 1000
 PARSE_DATA_LOG_COUNT = 5000
 CLOSED_MESSAGE = "CLOSED_MESSAGE"
 SESSION = requests.Session()
+LOG_DIR = "logs"
+AGENT_LOG_FILE = "./logs/agent.log"
 
 logCompressState = {}
 
@@ -677,6 +680,8 @@ def get_if_config_vars(logger, config_ini, agent_config_vars):
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             frequency_sampling_interval = config_parser.get('insightfinder', 'frequency_sampling_interval')
             run_interval = config_parser.get('insightfinder', 'run_interval')
+            enable_log_rotation = config_parser.get('insightfinder', 'enable_log_rotation')
+            log_backup_count = config_parser.get('insightfinder', 'log_compression_interval')
             log_compression_interval = config_parser.get('insightfinder', 'log_compression_interval')
             chunk_size_kb = config_parser.get('insightfinder', 'chunk_size_kb')
             if_url = config_parser.get('insightfinder', 'if_url')
@@ -737,6 +742,16 @@ def get_if_config_vars(logger, config_ini, agent_config_vars):
         else:
             log_compression_interval = int(log_compression_interval) * 60
 
+        if enable_log_rotation and enable_log_rotation.lower() == 'true':
+            enable_log_rotation = True
+        else:
+            enable_log_rotation = False
+
+        if log_backup_count:
+            log_backup_count = int(log_backup_count)
+        else:
+            log_backup_count = 0
+
         if len(run_interval) == 0:
             return config_error(logger, 'run_interval')
 
@@ -770,6 +785,8 @@ def get_if_config_vars(logger, config_ini, agent_config_vars):
             'sampling_interval': int(sampling_interval),  # as seconds
             'frequency_sampling_interval': int(frequency_sampling_interval),  # as seconds
             'log_compression_interval': int(log_compression_interval),  # as seconds
+            'enable_log_rotation': enable_log_rotation,
+            'log_backup_count': log_backup_count,
             'run_interval': int(run_interval),  # as seconds
             'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
             'if_url': if_url,
@@ -1248,10 +1265,12 @@ def check_project_exist(logger, if_config_vars, project):
     return is_project_exist
 
 
-def listener_configurer(c_config):
+def listener_configurer(c_config, if_config_vars):
     # Get config file name
     config_name = os.path.basename(c_config['config'])
     level = c_config['log_level']
+    enable_log_rotation = if_config_vars.get('enable_log_rotation')
+    log_backup_count = if_config_vars.get('log_backup_count')
 
     # create a logging format
     formatter = logging.Formatter(
@@ -1270,20 +1289,27 @@ def listener_configurer(c_config):
     root = logging.getLogger()
     root.setLevel(level)
 
-    # route INFO and DEBUG logging to stdout from stderr
-    logging_handler_out = logging.StreamHandler(sys.stdout)
-    logging_handler_out.setLevel(logging.DEBUG)
-    logging_handler_out.setFormatter(formatter)
-    root.addHandler(logging_handler_out)
+    if enable_log_rotation:
+        # create log output folder if not exists
+        Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
+        handler = TimedRotatingFileHandler(AGENT_LOG_FILE, when='MIDNIGHT', backupCount=log_backup_count)
+        handler.setFormatter(formatter)
+        root.addHandler(handler)
+    else:
+        # route INFO and DEBUG logging to stdout from stderr
+        logging_handler_out = logging.StreamHandler(sys.stdout)
+        logging_handler_out.setLevel(logging.DEBUG)
+        logging_handler_out.setFormatter(formatter)
+        root.addHandler(logging_handler_out)
 
-    logging_handler_err = logging.StreamHandler(sys.stderr)
-    logging_handler_err.setLevel(logging.WARNING)
-    logging_handler_err.setFormatter(formatter)
-    root.addHandler(logging_handler_err)
+        logging_handler_err = logging.StreamHandler(sys.stderr)
+        logging_handler_err.setLevel(logging.WARNING)
+        logging_handler_err.setFormatter(formatter)
+        root.addHandler(logging_handler_err)
 
 
-def listener_process(q, c_config):
-    listener_configurer(c_config)
+def listener_process(q, c_config, if_config_vars):
+    listener_configurer(c_config, if_config_vars)
     while True:
         while not q.empty():
             record = q.get()
@@ -1313,6 +1339,9 @@ def main():
     # get config
     cli_config_vars = get_cli_config_vars()
 
+    # capture warnings to logging system
+    logging.captureWarnings(True)
+
     # change elasticsearch logger level
     es_logger = logging.getLogger('elasticsearch')
     es_logger.setLevel(logging.WARNING)
@@ -1320,9 +1349,6 @@ def main():
     # logger queue, must use Manager().Queue() because agent may use pool create process
     m = multiprocessing.Manager()
     log_queue = m.Queue()
-    listener = Process(target=listener_process, args=(log_queue, cli_config_vars))
-    listener.daemon = True
-    listener.start()
 
     # set logger
     worker_configurer(log_queue, cli_config_vars['log_level'])
@@ -1332,20 +1358,25 @@ def main():
     cli_data_block = '\nCLI settings:'
     for kk, kv in sorted(cli_config_vars.items()):
         cli_data_block += '\n\t{}: {}'.format(kk, kv)
-    logger.info(cli_data_block)
 
     # get config file
     config_file = config_ini_path(cli_config_vars)
-    logger.info("Process start with config: {}".format(config_file))
-
     agent_config_vars = get_agent_config_vars(logger, config_file)
     if not agent_config_vars:
         time.sleep(1)
         sys.exit(1)
+
     if_config_vars = get_if_config_vars(logger, config_file, agent_config_vars)
     if not if_config_vars:
         time.sleep(1)
         sys.exit(1)
+
+    listener = Process(target=listener_process, args=(log_queue, cli_config_vars, if_config_vars))
+    listener.daemon = True
+    listener.start()
+
+    logger.info(cli_data_block)
+    logger.info("Process start with config: {}".format(config_file))
     print_summary_info(logger, if_config_vars, agent_config_vars)
 
     # start run
