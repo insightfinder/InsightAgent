@@ -203,6 +203,8 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             aws_region = config_parser.get('agent', 'aws_region') or None
             aws_s3_bucket_name = config_parser.get('agent', 'aws_s3_bucket_name')
             aws_s3_object_prefix = config_parser.get('agent', 'aws_s3_object_prefix') or ''
+            aws_s3_metadata_bucket_name = config_parser.get('agent', 'aws_s3_metadata_bucket_name')
+            aws_s3_metadata_object_prefix = config_parser.get('agent', 'aws_s3_metadata_object_prefix') or ''
 
             if not aws_access_key_id:
                 return config_error(logger, 'aws_access_key_id')
@@ -218,6 +220,8 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             instance_field = config_parser.get('agent', 'instance_field')
             metric_fields = config_parser.get('agent', 'metric_fields')
             metric_whitelist = config_parser.get('agent', 'metric_whitelist')
+            component_field = config_parser.get('agent', 'component_field')
+            project_component_mapping = config_parser.get('agent', 'project_component_mapping')
 
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
@@ -268,11 +272,15 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             'aws_region': aws_region,
             'aws_s3_bucket_name': aws_s3_bucket_name,
             'aws_s3_object_prefix': aws_s3_object_prefix,
+            'aws_s3_metadata_bucket_name': aws_s3_metadata_bucket_name,
+            'aws_s3_metadata_object_prefix': aws_s3_metadata_object_prefix,
             'timezone': timezone,
             'timestamp_field': timestamp_field,
             'instance_field': instance_field,
             'metric_fields': metric_fields,
             'metric_whitelist_regex': metric_whitelist_regex,
+            'component_field': component_field,
+            'project_component_mapping': project_component_mapping,
             'target_timestamp_timezone': target_timestamp_timezone,
             'proxies': agent_proxies,
         }
