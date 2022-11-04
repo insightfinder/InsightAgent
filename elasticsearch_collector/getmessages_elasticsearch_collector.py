@@ -880,11 +880,9 @@ def safe_get_data(dct, keys, logger):
                     data[named_key[0]] = dct[named_key[0]]
         except KeyError:
             logger.debug('safe_get_data key error, key={}'.format(key))
-            if len(keys) == 1:
-                return ""
             no_value_ct += 1
             continue
-        
+
     # If all keys don't have data
     if no_value_ct == len(keys):
         return ""
