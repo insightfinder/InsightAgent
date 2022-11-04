@@ -21,6 +21,8 @@ import requests
 
 threadLock = threading.Lock()
 messages_dict = {}
+metadata_dict = {}
+instance_project_dict = {}
 
 MAX_RETRY_NUM = 10
 RETRY_WAIT_TIME_IN_SEC = 30
@@ -31,8 +33,10 @@ CHUNK_SIZE = 2 * 1024 * 1024
 MAX_PACKET_SIZE = 5000000
 ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 RUNNING_INDEX_FILE = 'running_index.txt'
+RUNNING_INDEX_METADATA_FILE = 'running_index_metadata.txt'
 MAX_THREAD_COUNT = multiprocessing.cpu_count() + 1
 ATTEMPTS = 3
+FAKE_PROJECT_NAME = '__fake_project_name__'
 
 
 def get_json_size_bytes(json_data):
@@ -226,8 +230,9 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             instance_field = config_parser.get('agent', 'instance_field')
             metric_fields = config_parser.get('agent', 'metric_fields')
             metric_whitelist = config_parser.get('agent', 'metric_whitelist')
-            component_field = config_parser.get('agent', 'component_field')
-            project_component_mapping = config_parser.get('agent', 'project_component_mapping')
+            metadata_instance_field = config_parser.get('agent', 'metadata_instance_field')
+            metadata_component_field = config_parser.get('agent', 'metadata_component_field')
+            project_component_mapping_val = config_parser.get('agent', 'project_component_mapping')
 
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
@@ -271,6 +276,21 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
 
         metric_fields = [x.strip() for x in metric_fields.split(',') if x.strip()]
 
+        project_component_mapping = {}
+        if len(project_component_mapping_val) > 0:
+            # the mapping syntax: project_name1:component_name1,component_name2;project_name2:component_nameA
+            try:
+                for mapping in project_component_mapping_val.split(';'):
+                    if mapping and mapping.strip():
+                        parts = mapping.split(':')
+                        project_name = parts[0].strip()
+                        for comp in parts[1].split(','):
+                            if comp:
+                                project_component_mapping[comp] = project_name
+            except Exception as e:
+                logger.error(e)
+                return config_error(logger, 'project_component_mapping')
+
         # add parsed variables to a global
         config_vars = {
             'aws_access_key_id': aws_access_key_id,
@@ -285,7 +305,8 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             'instance_field': instance_field,
             'metric_fields': metric_fields,
             'metric_whitelist_regex': metric_whitelist_regex,
-            'component_field': component_field,
+            'metadata_instance_field': metadata_instance_field,
+            'metadata_component_field': metadata_component_field,
             'project_component_mapping': project_component_mapping,
             'target_timestamp_timezone': target_timestamp_timezone,
             'proxies': agent_proxies,
@@ -515,13 +536,13 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
     metric_fields = agent_config_vars['metric_fields']
 
     global messages_dict
-    parse_data = {}
+    global metadata_dict
+    global instance_project_dict
 
+    parse_data = {}
     for file_name in sorted(messages_dict.keys()):
 
         messages = messages_dict[file_name]
-        stats = {}
-
         # ignore messages without instance field
         messages = [metric for metric in messages if metric[instance]]
 
@@ -544,45 +565,39 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                         continue
 
                     inst_name = metric[instance]
+                    project_name = instance_project_dict.get(inst_name)
+                    if not project_name:
+                        project_name = FAKE_PROJECT_NAME
+
                     ts = metric[timestamp_field]
                     full_instance = make_safe_instance_string(inst_name)
                     metric_key = '{}[{}]'.format(data_field, full_instance)
 
-                    if ts not in parse_data:
-                        parse_data[ts] = {}
-                    if inst_name not in parse_data[ts]:
-                        parse_data[ts][inst_name] = {}
-                    parse_data[ts][inst_name][metric_key] = str(data_value)
+                    if project_name not in parse_data:
+                        parse_data[project_name] = {}
 
-                    # count stats by instance and metric
-                    if inst_name not in stats:
-                        stats[inst_name] = {}
-                    if data_field not in stats[inst_name]:
-                        stats[inst_name][data_field] = 0
-                    stats[inst_name][data_field] += 1
-
-        # sort parse data by ts
-        ts_range = sorted(parse_data.keys())
-        total_count = len(ts_range)
-        if total_count > 0:
-            print('stats of file {}, time {}-{} total {}'.format(
-                file_name, ts_range[0], ts_range[total_count - 1], total_count))
-            for i, metric_dict in stats.items():
-                for m, v in metric_dict.items():
-                    print('{0: <30} {1: <30} {2:.2%}'.format(i, m, stats[i][m] / total_count))
+                    if ts not in parse_data[project_name]:
+                        parse_data[project_name][ts] = {}
+                    if inst_name not in parse_data[project_name][ts]:
+                        parse_data[project_name][ts][inst_name] = {}
+                    parse_data[project_name][ts][inst_name][metric_key] = str(data_value)
 
     return parse_data
 
 
-def send_data(logger, if_config_vars, metric_data):
+def send_data(logger, project_name, if_config_vars, metric_data):
     """ Sends parsed metric data to InsightFinder """
+    project_name_list = if_config_vars['project_name']
+    if not project_name or project_name == FAKE_PROJECT_NAME:
+        project_name = project_name_list.split(';')[0]
+
     send_data_time = time.time()
     # prepare data for metric streaming agent
     to_send_data_dict = dict()
     # for backend so this is the camel case in to_send_data_dict
     to_send_data_dict["metricData"] = json.dumps(metric_data)
     to_send_data_dict["licenseKey"] = if_config_vars['license_key']
-    to_send_data_dict["projectName"] = if_config_vars['project_name']
+    to_send_data_dict["projectName"] = project_name
     to_send_data_dict["userName"] = if_config_vars['user_name']
     to_send_data_dict["agentType"] = "MetricFileReplay"
 
@@ -606,13 +621,14 @@ def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
         try:
             response = requests.post(post_url, data=json.loads(to_send_data), verify=False)
             response_code = response.status_code
-        except:
-            logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
-                attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
+        except Exception as ex:
+            logger.error("Attempts: %d. Fail to send data, response code: %d, %s, wait %d sec to resend." % (
+                attempts, response_code, ex, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
             continue
         if response_code == 200:
-            logger.info("Data send successfully. Number of events: %d" % num_of_message)
+            if num_of_message:
+                logger.info("Data send successfully. Number of events: %d" % num_of_message)
             break
         else:
             logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
@@ -663,6 +679,233 @@ def logger_control(user, level):
     return root
 
 
+def read_s3_objects(is_metadata, logger, cli_config_vars, agent_config_vars, if_config_vars):
+    if is_metadata:
+        index_file = RUNNING_INDEX_METADATA_FILE
+        bucket_name = agent_config_vars['aws_s3_metadata_bucket_name']
+        object_prefix = agent_config_vars['aws_s3_metadata_object_prefix']
+    else:
+        index_file = RUNNING_INDEX_FILE
+        bucket_name = agent_config_vars['aws_s3_bucket_name']
+        object_prefix = agent_config_vars['aws_s3_object_prefix']
+
+    # read the previous processed file from the running index file
+    last_object_key = None
+    if os.path.exists(index_file):
+        try:
+            with open(index_file, 'r') as fp:
+                last_object_key = (fp.readline() or '').strip() or None
+                logger.info('Got last object key {}'.format(last_object_key))
+        except Exception as e:
+            logger.error('Failed to read index file: {}\n {}'.format(index_file, e))
+            sys.exit()
+
+    region_name = agent_config_vars['aws_region']
+    s3 = boto3.resource('s3',
+                        aws_access_key_id=agent_config_vars['aws_access_key_id'],
+                        aws_secret_access_key=agent_config_vars['aws_secret_access_key'],
+                        region_name=region_name)
+    bucket = s3.Bucket(bucket_name)
+    logger.info('Connect to s3 bucket, region: {}, bucket: {}'.format(region_name, bucket_name))
+
+    objects_keys = [x.key for x in bucket.objects.filter(Prefix=object_prefix)]
+    logger.info('Found {} files in the bucket with prefix {}'.format(len(objects_keys), object_prefix))
+
+    new_object_keys = objects_keys
+    if last_object_key:
+        try:
+            idx = objects_keys.index(last_object_key)
+            # no new objects
+            if idx == len(objects_keys) - 1:
+                new_object_keys = []
+            else:
+                new_object_keys = objects_keys[idx + 1:]
+        except ValueError:
+            # not found, start from first one
+            pass
+    logger.info('Found {} new files after {}'.format(len(new_object_keys), last_object_key))
+    return new_object_keys, last_object_key, bucket
+
+
+def retrieve_s3_metadata(logger, cli_config_vars, bucket, object_key):
+    logger.info('start to retrieve metadata from file: {}'.format(object_key))
+
+    buf = io.BytesIO()
+    logger.info('downloading file: {}'.format(object_key))
+
+    bucket.download_fileobj(object_key, buf)
+    content = buf.getvalue()
+    logger.info('download {} bytes from file: {}'.format(len(content), object_key))
+
+    msgs = json.loads(content)
+    logger.info('finish retrieve metadata from file: {}'.format(object_key))
+    return msgs
+
+
+def send_metadata_to_receiver(logger, post_url, to_send_data):
+    attempts = 0
+    while attempts < MAX_RETRY_NUM:
+        if sys.getsizeof(to_send_data) > MAX_PACKET_SIZE:
+            logger.error("Packet size too large %s.  Dropping packet." + str(sys.getsizeof(to_send_data)))
+            break
+        response_code = -1
+        attempts += 1
+        try:
+            response = requests.post(post_url, data=json.dumps(to_send_data), verify=False)
+            response_code = response.status_code
+        except Exception as ex:
+            logger.error("Attempts: %d. Fail to send data, response code: %d, %s, wait %d sec to resend." % (
+                attempts, response_code, ex, RETRY_WAIT_TIME_IN_SEC))
+            time.sleep(RETRY_WAIT_TIME_IN_SEC)
+            continue
+        if response_code == 200:
+            break
+        else:
+            logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
+                attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
+            time.sleep(RETRY_WAIT_TIME_IN_SEC)
+    if attempts == MAX_RETRY_NUM:
+        sys.exit(1)
+
+
+def send_metadata(logger, project_name, if_config_vars, data):
+    """ Sends parsed metric data to InsightFinder """
+    project_name_list = if_config_vars['project_name']
+    if not project_name or project_name == FAKE_PROJECT_NAME:
+        project_name = project_name_list.split(';')[0]
+
+    send_data_time = time.time()
+
+    params = dict()
+    params["licenseKey"] = if_config_vars['license_key']
+    params["userName"] = if_config_vars['user_name']
+    params["projectName"] = project_name
+    params["override"] = "true"
+
+    # send the data
+    post_url = if_config_vars['if_url'] + "/api/v1/agent-upload-instancemetadata?" + urllib.parse.urlencode(params)
+    send_metadata_to_receiver(logger, post_url, data)
+    logger.info("--- Send data time: %s seconds ---" % str(time.time() - send_data_time))
+
+
+def process_s3_metadata(logger, cli_config_vars, agent_config_vars, if_config_vars):
+    (new_object_keys, last_object_key, bucket) = read_s3_objects(True, logger, cli_config_vars, agent_config_vars,
+                                                                 if_config_vars)
+
+    # If now new metadata, use the last one
+    if not new_object_keys and last_object_key and bucket:
+        new_object_keys = [last_object_key]
+
+    messages = []
+    for obj_key in new_object_keys:
+        msgs = retrieve_s3_metadata(logger, cli_config_vars, bucket, obj_key)
+        messages.extend(msgs)
+        logger.info('Parsing metadata completed...')
+
+    instance_field = agent_config_vars['metadata_instance_field']
+    component_field = agent_config_vars['metadata_component_field']
+    project_component_mapping = agent_config_vars['project_component_mapping']
+
+    global metadata_dict
+    global instance_project_dict
+
+    for m in messages:
+        if m:
+            instance_name = m.get(instance_field)
+            component_name = m.get(component_field)
+            if instance_name and component_name:
+                project_name = project_component_mapping.get(component_name)
+                if not project_name:
+                    project_name = FAKE_PROJECT_NAME
+
+                component_mapping = metadata_dict.get(project_name)
+                if not component_mapping:
+                    metadata_dict[project_name] = {}
+
+                if not metadata_dict[project_name].get(component_name):
+                    metadata_dict[project_name][component_name] = {}
+
+                if not metadata_dict[project_name][component_name].get(instance_name):
+                    instance_project_dict[instance_name] = project_name
+                    metadata_dict[project_name][component_name][instance_name] = True
+
+    # Send metadata
+    for project_name in metadata_dict.keys():
+        data = []
+        for component_name in metadata_dict[project_name].keys():
+            for instance_name in metadata_dict[project_name][component_name].keys():
+                data.append({'instanceName': instance_name, 'metricInstanceName': instance_name,
+                             'componentName': component_name})
+        send_metadata(logger, project_name, if_config_vars, data)
+
+    if len(new_object_keys) > 0:
+        new_last_object_key = new_object_keys[-1]
+        try:
+            with open(RUNNING_INDEX_METADATA_FILE, 'w') as fp:
+                fp.writelines([new_last_object_key])
+        except Exception as e:
+            logger.warning('Failed to update running index file with file: {}\n'.format(new_last_object_key, e))
+
+
+def process_s3_data(logger, cli_config_vars, agent_config_vars, if_config_vars):
+    (new_object_keys, last_object_key, bucket) = read_s3_objects(False, logger, cli_config_vars, agent_config_vars,
+                                                                 if_config_vars)
+
+    while len(new_object_keys) > 0:
+        keys = new_object_keys[0:MAX_THREAD_COUNT]
+
+        threads = []
+        for obj_key in keys:
+            thread = MyThread(logger, cli_config_vars, bucket, obj_key)
+            threads.append(thread)
+            thread.start()
+
+        for thread in threads:
+            thread.join()
+
+        # parse data
+        parse_data = process_parse_data(logger, cli_config_vars, agent_config_vars)
+        logger.info('Parsing data completed...')
+
+        # send data
+        for project_name in parse_data.keys():
+            data = []
+            for key in sorted(parse_data[project_name].keys()):
+                value = parse_data[project_name][key]
+                timestamp = int(key) if len(str(int(key))) > 10 else int(key) * 1000
+                line = {'timestamp': str(timestamp)}
+                for d in value.values():
+                    line.update(d)
+                data.append(line)
+
+                if get_json_size_bytes(data) >= CHUNK_SIZE:
+                    if cli_config_vars['testing']:
+                        logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+                        data = []
+                    else:
+                        send_data(logger, project_name, if_config_vars, data)
+                        data = []
+
+            if len(data) > 0:
+                if cli_config_vars['testing']:
+                    logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+                else:
+                    logger.debug('send data {} to IF.'.format(data))
+                    send_data(logger, project_name, if_config_vars, data)
+
+        # move to next batch
+        new_object_keys = new_object_keys[MAX_THREAD_COUNT:]
+
+        # Update running index file
+        if len(keys) > 0:
+            new_last_object_key = keys[-1]
+            try:
+                with open(RUNNING_INDEX_FILE, 'w') as fp:
+                    fp.writelines([new_last_object_key])
+            except Exception as e:
+                logger.warning('Failed to update running index file with file: {}\n'.format(new_last_object_key, e))
+
+
 def main():
     global messages_dict
 
@@ -699,97 +942,11 @@ def main():
             if not check_success:
                 return
 
-    # read the previous processed file from the running index file
-    last_object_key = None
-    if os.path.exists(RUNNING_INDEX_FILE):
-        try:
-            with open(RUNNING_INDEX_FILE, 'r') as fp:
-                last_object_key = (fp.readline() or '').strip() or None
-                logger.info('Got last object key {}'.format(last_object_key))
-        except Exception as e:
-            logger.error('Failed to read index file: {}\n {}'.format(RUNNING_INDEX_FILE, e))
-            sys.exit()
+    logger.info("Process metadata files from s3 bucket")
+    process_s3_metadata(logger, cli_config_vars, agent_config_vars, if_config_vars)
 
-    region_name = agent_config_vars['aws_region']
-    bucket_name = agent_config_vars['aws_s3_bucket_name']
-    object_prefix = agent_config_vars['aws_s3_object_prefix']
-
-    s3 = boto3.resource('s3',
-                        aws_access_key_id=agent_config_vars['aws_access_key_id'],
-                        aws_secret_access_key=agent_config_vars['aws_secret_access_key'],
-                        region_name=region_name)
-    bucket = s3.Bucket(bucket_name)
-    logger.info('Connect to s3 bucket, region: {}, bucket: {}'.format(region_name, bucket_name))
-
-    objects_keys = [x.key for x in bucket.objects.filter(Prefix=object_prefix)]
-    logger.info('Found {} files in the bucket with prefix {}'.format(len(objects_keys), object_prefix))
-
-    new_object_keys = objects_keys
-    if last_object_key:
-        try:
-            idx = objects_keys.index(last_object_key)
-            # no new objects
-            if idx == len(objects_keys) - 1:
-                new_object_keys = []
-            else:
-                new_object_keys = objects_keys[idx + 1:]
-        except ValueError:
-            # not found, start from first one
-            pass
-    logger.info('Found {} new files after {}'.format(len(new_object_keys), last_object_key))
-
-    while len(new_object_keys) > 0:
-        keys = new_object_keys[0:MAX_THREAD_COUNT]
-
-        threads = []
-        for obj_key in keys:
-            thread = MyThread(logger, cli_config_vars, bucket, obj_key)
-            threads.append(thread)
-            thread.start()
-
-        for thread in threads:
-            thread.join()
-
-        # parse data
-        parse_data = process_parse_data(logger, cli_config_vars, agent_config_vars)
-        logger.info('Parsing data completed...')
-
-        # send data
-        data = []
-        for key in sorted(parse_data.keys()):
-            value = parse_data[key]
-            timestamp = int(key) if len(str(int(key))) > 10 else int(key) * 1000
-            line = {'timestamp': str(timestamp)}
-            for d in value.values():
-                line.update(d)
-            data.append(line)
-
-            if get_json_size_bytes(data) >= CHUNK_SIZE:
-                if cli_config_vars['testing']:
-                    logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
-                    data = []
-                else:
-                    send_data(logger, if_config_vars, data)
-                    data = []
-
-        if len(data) > 0:
-            if cli_config_vars['testing']:
-                logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
-            else:
-                logger.debug('send data {} to IF.'.format(data))
-                send_data(logger, if_config_vars, data)
-
-        # move to next batch
-        new_object_keys = new_object_keys[MAX_THREAD_COUNT:]
-
-        # Write running index file
-        if len(keys) > 0:
-            new_last_object_key = keys[-1]
-            try:
-                with open(RUNNING_INDEX_FILE, 'w') as fp:
-                    fp.writelines([new_last_object_key])
-            except Exception as e:
-                logger.warning('Failed to update running index file with file: {}\n'.format(new_last_object_key, e))
+    logger.info("Process data files from s3 bucket")
+    process_s3_data(logger, cli_config_vars, agent_config_vars, if_config_vars)
 
 
 if __name__ == "__main__":

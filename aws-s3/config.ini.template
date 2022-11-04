@@ -28,7 +28,8 @@ instance_field =
 # instance_whitelist is a regex string used to define which instances will be filtered.
 instance_whitelist =
 
-component_field =
+metadata_instance_field =
+metadata_component_field =
 
 ## metadata project mapping, the format is like: project_name1:component_name1,component_name2;
 project_component_mapping =
