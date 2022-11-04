@@ -114,8 +114,8 @@ def get_if_config_vars(logger, config_ini):
             return config_error(logger, 'user_name')
         if len(license_key) == 0:
             return config_error(logger, 'license_key')
-        # if len(project_name) == 0:
-        #     return config_error(logger, 'project_name')
+        if len(project_name) == 0:
+            return config_error(logger, 'project_name')
         if len(project_type) == 0:
             return config_error(logger, 'project_type')
 
@@ -212,6 +212,12 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
                 return config_error(logger, 'aws_secret_access_key')
             if not aws_s3_bucket_name:
                 return config_error(logger, 'aws_s3_bucket_name')
+            if not aws_s3_object_prefix:
+                return config_error(logger, 'aws_s3_object_prefix')
+            if not aws_s3_metadata_bucket_name:
+                return config_error(logger, 'aws_s3_metadata_bucket_name')
+            if not aws_s3_metadata_object_prefix:
+                return config_error(logger, 'aws_s3_metadata_object_prefix')
 
             # message parsing
             timezone = config_parser.get('agent', 'timezone') or 'UTC'
@@ -373,42 +379,42 @@ def get_data_type_from_project_type(if_config_vars):
         return 'Log'
 
 
-def check_project_exist(logger, if_config_vars):
+def check_project_exist(logger, if_config_vars, project_name):
     is_project_exist = False
     try:
-        logger.info('Starting check project: ' + if_config_vars['project_name'])
+        logger.info('Starting check project: ' + project_name)
         params = {
             'operation': 'check',
             'userName': if_config_vars['user_name'],
             'licenseKey': if_config_vars['license_key'],
-            'projectName': if_config_vars['project_name'],
+            'projectName': project_name,
         }
         url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
         response = send_request(logger, url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
         if response == -1:
-            logger.error('Check project error: ' + if_config_vars['project_name'])
+            logger.error('Check project error: ' + project_name)
         else:
             result = response.json()
             if result['success'] is False or result['isProjectExist'] is False:
-                logger.error('Check project error: ' + if_config_vars['project_name'])
+                logger.error('Check project error: ' + project_name)
             else:
                 is_project_exist = True
-                logger.info('Check project success: ' + if_config_vars['project_name'])
+                logger.info('Check project success: ' + project_name)
 
     except Exception as e:
         logger.error(e)
-        logger.error('Check project error: ' + if_config_vars['project_name'])
+        logger.error('Check project error: ' + project_name)
 
     create_project_sucess = False
     if not is_project_exist:
         try:
-            logger.info('Starting add project: ' + if_config_vars['project_name'])
+            logger.info('Starting add project: ' + project_name)
             params = {
                 'operation': 'create',
                 'userName': if_config_vars['user_name'],
                 'licenseKey': if_config_vars['license_key'],
-                'projectName': if_config_vars['project_name'],
-                'systemName': if_config_vars['system_name'] or if_config_vars['project_name'],
+                'projectName': project_name,
+                'systemName': if_config_vars['system_name'] or project_name,
                 'instanceType': 'AmazonS3',
                 'projectCloudType': 'AmazonS3',
                 'dataType': get_data_type_from_project_type(if_config_vars),
@@ -420,46 +426,46 @@ def check_project_exist(logger, if_config_vars):
             response = send_request(logger, url, 'POST', data=params, verify=False,
                                     proxies=if_config_vars['if_proxies'])
             if response == -1:
-                logger.error('Add project error: ' + if_config_vars['project_name'])
+                logger.error('Add project error: ' + project_name)
             else:
                 result = response.json()
                 if result['success'] is False:
-                    logger.error('Add project error: ' + if_config_vars['project_name'])
+                    logger.error('Add project error: ' + project_name)
                 else:
                     create_project_sucess = True
-                    logger.info('Add project success: ' + if_config_vars['project_name'])
+                    logger.info('Add project success: ' + project_name)
 
         except Exception as e:
             logger.error(e)
-            logger.error('Add project error: ' + if_config_vars['project_name'])
+            logger.error('Add project error: ' + project_name)
 
     if create_project_sucess:
         # if create project is success, sleep 10s and check again
         time.sleep(10)
         try:
-            logger.info('Starting check project: ' + if_config_vars['project_name'])
+            logger.info('Starting check project: ' + project_name)
             params = {
                 'operation': 'check',
                 'userName': if_config_vars['user_name'],
                 'licenseKey': if_config_vars['license_key'],
-                'projectName': if_config_vars['project_name'],
+                'projectName': project_name,
             }
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
             response = send_request(logger, url, 'POST', data=params, verify=False,
                                     proxies=if_config_vars['if_proxies'])
             if response == -1:
-                logger.error('Check project error: ' + if_config_vars['project_name'])
+                logger.error('Check project error: ' + project_name)
             else:
                 result = response.json()
                 if result['success'] is False or result['isProjectExist'] is False:
-                    logger.error('Check project error: ' + if_config_vars['project_name'])
+                    logger.error('Check project error: ' + project_name)
                 else:
                     is_project_exist = True
-                    logger.info('Check project success: ' + if_config_vars['project_name'])
+                    logger.info('Check project success: ' + project_name)
 
         except Exception as e:
             logger.error(e)
-            logger.error('Check project error: ' + if_config_vars['project_name'])
+            logger.error('Check project error: ' + project_name)
 
     return is_project_exist
 
@@ -687,9 +693,11 @@ def main():
 
     if not cli_config_vars['testing']:
         # check project name first
-        check_success = check_project_exist(logger, if_config_vars)
-        if not check_success:
-            return
+        project_name_val = if_config_vars['project_name']
+        for project_name in project_name_val.split(';'):
+            check_success = check_project_exist(logger, if_config_vars, project_name)
+            if not check_success:
+                return
 
     # read the previous processed file from the running index file
     last_object_key = None
