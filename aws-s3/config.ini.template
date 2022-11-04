@@ -30,7 +30,7 @@ instance_whitelist =
 
 component_field =
 
-## metadata project mapping
+## metadata project mapping, the format is like: project_name1:component_name1,component_name2;
 project_component_mapping =
 
 # Metric names, multiple fields are separated by commas. A field can be named with the syntax `<metric_name>::<metric_value>`, where `<metric_name>` and `<metric_value>` can each be either a field name in message. Ex: metric1,metric_field::metric_value_field.
@@ -46,7 +46,7 @@ agent_https_proxy =
 user_name =
 license_key =
 token =
-# Name of the project created in the InsightFinder UI. If this project does not exist, agent will create it automatically.
+# Name of the project created in the InsightFinder UI. If this project does not exist, agent will create it automatically. If multiple projects, seperate project names by `;`, like project_1;project_2
 project_name =
 # Name of system owned by project. If project_name does not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
 system_name =
