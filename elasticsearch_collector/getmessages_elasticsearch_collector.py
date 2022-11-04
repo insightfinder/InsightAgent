@@ -864,6 +864,7 @@ def safe_get(dct, keys):
 
 def safe_get_data(dct, keys, logger):
     data = {}
+    no_value_ct = 0 # count of empty values
     for key in keys:
         named_key = key.split('::')
         try:
@@ -879,7 +880,15 @@ def safe_get_data(dct, keys, logger):
                     data[named_key[0]] = dct[named_key[0]]
         except KeyError:
             logger.debug('safe_get_data key error, key={}'.format(key))
-            return None
+            if len(keys) == 1:
+                return ""
+            no_value_ct += 1
+            continue
+        
+    # If all keys don't have data
+    if no_value_ct == len(keys):
+        return ""
+
     return data
 
 
