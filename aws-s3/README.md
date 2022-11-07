@@ -125,7 +125,8 @@ sudo kill <Processs ID>
 * `target_timestamp_timezone`: Timezone of the timestamp data to be sent and stored in InsightFinder. Default value is
   UTC. Only if you wish to store data with a time zone other than UTC, this field should be specified to be the desired
   time zone.
-* `component_field`: Field name for the component name.
+* `metadata_instance_field`: Field name for the instance name in the metadata file.
+* `metadata_component_field`: Field name for the component name in the metadata file.
 * `instance_field`: Field name for the instance name. If not set or the field is not found, the instance name is
   the `Application`. Can also set instance name from multiple fields which separated by commas. Ex:
   instance_name_part1,instance_name_part2.
@@ -143,6 +144,7 @@ sudo kill <Processs ID>
   create it automatically.
 * `system_name`: Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new
   system automatically from this field or project_name.
+* `project_name_prefix`: Prefix of the project name, the rest of the project name will be used as the system name
 * **`project_type`**: Type of the project - one
   of `metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay`
   .
