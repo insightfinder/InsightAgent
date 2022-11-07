@@ -103,6 +103,7 @@ def get_if_config_vars(logger, config_ini):
             token = config_parser.get('insightfinder', 'token')
             project_name = config_parser.get('insightfinder', 'project_name')
             system_name = config_parser.get('insightfinder', 'system_name')
+            project_name_prefix = config_parser.get('insightfinder', 'project_name_prefix')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             run_interval = config_parser.get('insightfinder', 'run_interval')
@@ -178,6 +179,7 @@ def get_if_config_vars(logger, config_ini):
             'token': token,
             'project_name': project_name,
             'system_name': system_name,
+            'project_name_prefix': project_name_prefix,
             'project_type': project_type,
             'sampling_interval': int(sampling_interval),  # as seconds
             'run_interval': int(run_interval),  # as seconds
@@ -400,8 +402,11 @@ def get_data_type_from_project_type(if_config_vars):
         return 'Log'
 
 
-def check_project_exist(logger, if_config_vars, project_name):
+def check_project_exist(logger, if_config_vars, project_name, system_name):
     is_project_exist = False
+    if not system_name:
+        system_name = if_config_vars['system_name']
+
     try:
         logger.info('Starting check project: ' + project_name)
         params = {
@@ -435,7 +440,7 @@ def check_project_exist(logger, if_config_vars, project_name):
                 'userName': if_config_vars['user_name'],
                 'licenseKey': if_config_vars['license_key'],
                 'projectName': project_name,
-                'systemName': if_config_vars['system_name'] or project_name,
+                'systemName': system_name or project_name,
                 'instanceType': 'AmazonS3',
                 'projectCloudType': 'AmazonS3',
                 'dataType': get_data_type_from_project_type(if_config_vars),
@@ -937,10 +942,19 @@ def main():
     if not cli_config_vars['testing']:
         # check project name first
         project_name_val = if_config_vars['project_name']
+        project_name_prefix = if_config_vars['project_name_prefix']
+
         for project_name in project_name_val.split(';'):
-            check_success = check_project_exist(logger, if_config_vars, project_name)
-            if not check_success:
-                return
+            system_name = None
+            if project_name_prefix and project_name:
+                if project_name.startswith(project_name_prefix):
+                    idx = len(project_name_prefix)
+                    system_name = project_name[idx:]
+
+            if project_name:
+                check_success = check_project_exist(logger, if_config_vars, project_name, system_name)
+                if not check_success:
+                    return
 
     logger.info("Process metadata files from s3 bucket")
     process_s3_metadata(logger, cli_config_vars, agent_config_vars, if_config_vars)
