@@ -144,7 +144,7 @@ sudo kill <Processs ID>
   create it automatically.
 * `system_name`: Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new
   system automatically from this field or project_name.
-* `project_name_prefix`: Prefix of the project name, the rest of the project name will be used as the system name
+* `project_name_prefix`: Prefix of the project name. This combines with the component in the metadata to build the project name.
 * **`project_type`**: Type of the project - one
   of `metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay`
   .
