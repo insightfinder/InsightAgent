@@ -3,8 +3,10 @@ package com.insightfinder.KafkaCollectorAgent.logic;
 import com.insightfinder.KafkaCollectorAgent.logic.config.KafkaConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
+import org.springframework.boot.autoconfigure.kafka.DefaultKafkaConsumerFactoryCustomizer;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.kafka.annotation.EnableKafka;
@@ -100,6 +102,8 @@ public class KafkaConsumerManager {
     private GenericApplicationContext applicationContext;
     @Autowired
     private IFStreamingBufferManager ifStreamingBufferManager;
+    @Autowired
+    private ObjectProvider<DefaultKafkaConsumerFactoryCustomizer> customizers;
 
     public KafkaConsumerManager() {
 
@@ -111,6 +115,7 @@ public class KafkaConsumerManager {
         int clusterIndex = 0;
         for (Map<String, String> cluster : clusterInfo.values()){
             ConsumerFactory consumerFactory = consumerFactory(cluster);
+            customizers.orderedStream().forEach(customizer -> customizer.customize((DefaultKafkaConsumerFactory<?, ?>) consumerFactory));
             ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
             factory.setBatchListener(true);
             factory.setConsumerFactory(consumerFactory);

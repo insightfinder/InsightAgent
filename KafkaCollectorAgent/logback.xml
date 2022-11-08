@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- All log files located in logs file of the project -->
+    <property name="LOGS" value="./logs" />
+
+    <!-- Define the console log format -->
+    <appender name="Console"
+              class="ch.qos.logback.core.ConsoleAppender">
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <Pattern>
+                %d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n
+            </Pattern>
+        </layout>
+    </appender>
+
+    <appender name="RollingFileByDate"
+              class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOGS}/kafka-agent-loggerbyate.log</file>
+        <encoder
+                class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <Pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</Pattern>
+        </encoder>
+
+        <rollingPolicy
+                class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- rollover hourly and when the file reaches 10 MegaBytes -->
+            <fileNamePattern>${LOGS}/kafka-agent-loggerbydate-%d{yyyy-MM-dd}.%i.log
+            </fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy
+                    class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>100MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+        </rollingPolicy>
+    </appender>
+
+    <!-- LOG everything at error level -->
+    <root level="INFO">
+        <appender-ref ref="RollingFileByDate" />
+        <appender-ref ref="Console" />
+    </root>
+</configuration>
