@@ -108,7 +108,9 @@ sudo kill <Processs ID>
 * `aws_region`: AWS region name
 * `raw_regex`: Regex used to parse raw data. Must use named capture groups `(?<name>...)` corresponding to fields
 * `aws_s3_bucket_name`: AWS S3 bucket name to read the files.
+* `aws_s3_metadata_bucket_name`: AWS S3 bucket name to read the metadata files.
 * `aws_s3_object_prefix`: AWS S3 object prefix to filter the files.
+* `aws_s3_metadata_object_prefix`: AWS S3 object prefix to filter the metadata files.
 * `project_field`: Field name for the project name. If this field is empty, agent will use project_name in insightfinder
   section.
 * `project_whitelist`: project_whitelist is a regex string used to define which projects form project_field will be
@@ -123,7 +125,8 @@ sudo kill <Processs ID>
 * `target_timestamp_timezone`: Timezone of the timestamp data to be sent and stored in InsightFinder. Default value is
   UTC. Only if you wish to store data with a time zone other than UTC, this field should be specified to be the desired
   time zone.
-* `component_field`: Field name for the component name.
+* `metadata_instance_field`: Field name for the instance name in the metadata file.
+* `metadata_component_field`: Field name for the component name in the metadata file.
 * `instance_field`: Field name for the instance name. If not set or the field is not found, the instance name is
   the `Application`. Can also set instance name from multiple fields which separated by commas. Ex:
   instance_name_part1,instance_name_part2.
@@ -141,6 +144,7 @@ sudo kill <Processs ID>
   create it automatically.
 * `system_name`: Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new
   system automatically from this field or project_name.
+* `project_name_prefix`: Prefix of the project name. This combines with the component in the metadata to build the project name.
 * **`project_type`**: Type of the project - one
   of `metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay`
   .
