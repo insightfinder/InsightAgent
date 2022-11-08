@@ -22,7 +22,7 @@ import requests
 threadLock = threading.Lock()
 messages_dict = {}
 metadata_dict = {}
-instance_project_dict = {}
+instance_dict = {}
 
 MAX_RETRY_NUM = 10
 RETRY_WAIT_TIME_IN_SEC = 30
@@ -36,7 +36,7 @@ RUNNING_INDEX_FILE = 'running_index.txt'
 RUNNING_INDEX_METADATA_FILE = 'running_index_metadata.txt'
 MAX_THREAD_COUNT = multiprocessing.cpu_count() + 1
 ATTEMPTS = 3
-FAKE_PROJECT_NAME = '__fake_project_name__'
+NOT_EXIST_COMPONENT_NAME = '__not_exist_component_name__'
 
 
 def get_json_size_bytes(json_data):
@@ -119,10 +119,13 @@ def get_if_config_vars(logger, config_ini):
             return config_error(logger, 'user_name')
         if len(license_key) == 0:
             return config_error(logger, 'license_key')
-        if len(project_name) == 0:
-            return config_error(logger, 'project_name')
+        if len(project_name) == 0 and len(project_name_prefix) == 0:
+            logger.error('Agent not correctly configured. Check config file with project_name or project_name_prefix.')
+            return False
         if len(project_type) == 0:
             return config_error(logger, 'project_type')
+        if len(project_name_prefix) > 0 and not project_name_prefix.endswith('-'):
+            project_name_prefix = project_name_prefix + '-'
 
         if project_type not in {
             'METRIC',
@@ -234,7 +237,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             metric_whitelist = config_parser.get('agent', 'metric_whitelist')
             metadata_instance_field = config_parser.get('agent', 'metadata_instance_field')
             metadata_component_field = config_parser.get('agent', 'metadata_component_field')
-            project_component_mapping_val = config_parser.get('agent', 'project_component_mapping')
 
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
@@ -278,21 +280,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
 
         metric_fields = [x.strip() for x in metric_fields.split(',') if x.strip()]
 
-        project_component_mapping = {}
-        if len(project_component_mapping_val) > 0:
-            # the mapping syntax: project_name1:component_name1,component_name2;project_name2:component_nameA
-            try:
-                for mapping in project_component_mapping_val.split(';'):
-                    if mapping and mapping.strip():
-                        parts = mapping.split(':')
-                        project_name = parts[0].strip()
-                        for comp in parts[1].split(','):
-                            if comp:
-                                project_component_mapping[comp] = project_name
-            except Exception as e:
-                logger.error(e)
-                return config_error(logger, 'project_component_mapping')
-
         # add parsed variables to a global
         config_vars = {
             'aws_access_key_id': aws_access_key_id,
@@ -309,7 +296,6 @@ def get_agent_config_vars(logger, config_ini, if_config_vars):
             'metric_whitelist_regex': metric_whitelist_regex,
             'metadata_instance_field': metadata_instance_field,
             'metadata_component_field': metadata_component_field,
-            'project_component_mapping': project_component_mapping,
             'target_timestamp_timezone': target_timestamp_timezone,
             'proxies': agent_proxies,
         }
@@ -541,8 +527,7 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
     metric_fields = agent_config_vars['metric_fields']
 
     global messages_dict
-    global metadata_dict
-    global instance_project_dict
+    global instance_dict
 
     parse_data = {}
     for file_name in sorted(messages_dict.keys()):
@@ -570,31 +555,35 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                         continue
 
                     inst_name = metric[instance]
-                    project_name = instance_project_dict.get(inst_name)
-                    if not project_name:
-                        project_name = FAKE_PROJECT_NAME
+                    component_name = instance_dict.get(inst_name)
+                    if not component_name:
+                        component_name = NOT_EXIST_COMPONENT_NAME
 
                     ts = metric[timestamp_field]
                     full_instance = make_safe_instance_string(inst_name)
                     metric_key = '{}[{}]'.format(data_field, full_instance)
 
-                    if project_name not in parse_data:
-                        parse_data[project_name] = {}
+                    if component_name not in parse_data:
+                        parse_data[component_name] = {}
 
-                    if ts not in parse_data[project_name]:
-                        parse_data[project_name][ts] = {}
-                    if inst_name not in parse_data[project_name][ts]:
-                        parse_data[project_name][ts][inst_name] = {}
-                    parse_data[project_name][ts][inst_name][metric_key] = str(data_value)
+                    if ts not in parse_data[component_name]:
+                        parse_data[component_name][ts] = {}
+                    if inst_name not in parse_data[component_name][ts]:
+                        parse_data[component_name][ts][inst_name] = {}
+                    parse_data[component_name][ts][inst_name][metric_key] = str(data_value)
 
     return parse_data
 
 
-def send_data(logger, project_name, if_config_vars, metric_data):
+def send_data(logger, component_name, if_config_vars, metric_data):
     """ Sends parsed metric data to InsightFinder """
-    project_name_list = if_config_vars['project_name']
-    if not project_name or project_name == FAKE_PROJECT_NAME:
-        project_name = project_name_list.split(';')[0]
+    project_name = if_config_vars['project_name']
+    if component_name != NOT_EXIST_COMPONENT_NAME and if_config_vars['project_name_prefix']:
+        project_name = if_config_vars['project_name_prefix'] + component_name
+
+    if not project_name:
+        logger.error('Cannot find project name to receive data')
+        return
 
     send_data_time = time.time()
     # prepare data for metric streaming agent
@@ -611,8 +600,7 @@ def send_data(logger, project_name, if_config_vars, metric_data):
     # send the data
     post_url = if_config_vars['if_url'] + "/customprojectrawdata"
     send_data_to_receiver(logger, post_url, to_send_data_json, len(metric_data))
-    logger.info("--- Send data time: %s seconds ---" %
-                str(time.time() - send_data_time))
+    logger.info("--- Send data to {}, time: {} seconds ---".format(project_name, str(time.time() - send_data_time)))
 
 
 def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
@@ -773,11 +761,10 @@ def send_metadata_to_receiver(logger, post_url, to_send_data):
         sys.exit(1)
 
 
-def send_metadata(logger, project_name, if_config_vars, data):
-    """ Sends parsed metric data to InsightFinder """
-    project_name_list = if_config_vars['project_name']
-    if not project_name or project_name == FAKE_PROJECT_NAME:
-        project_name = project_name_list.split(';')[0]
+def send_metadata(logger, component_name, if_config_vars, data):
+    project_name = if_config_vars['project_name']
+    if component_name != NOT_EXIST_COMPONENT_NAME and if_config_vars['project_name_prefix']:
+        project_name = if_config_vars['project_name_prefix'] + component_name
 
     send_data_time = time.time()
 
@@ -790,7 +777,7 @@ def send_metadata(logger, project_name, if_config_vars, data):
     # send the data
     post_url = if_config_vars['if_url'] + "/api/v1/agent-upload-instancemetadata?" + urllib.parse.urlencode(params)
     send_metadata_to_receiver(logger, post_url, data)
-    logger.info("--- Send data time: %s seconds ---" % str(time.time() - send_data_time))
+    logger.info("Send metadata to {}, time: {} seconds ---".format(project_name, (time.time() - send_data_time)))
 
 
 def process_s3_metadata(logger, cli_config_vars, agent_config_vars, if_config_vars):
@@ -809,45 +796,45 @@ def process_s3_metadata(logger, cli_config_vars, agent_config_vars, if_config_va
 
     instance_field = agent_config_vars['metadata_instance_field']
     component_field = agent_config_vars['metadata_component_field']
-    project_component_mapping = agent_config_vars['project_component_mapping']
+    project_name_prefix = if_config_vars['project_name_prefix']
 
     global metadata_dict
-    global instance_project_dict
+    global instance_dict
 
     for m in messages:
         if m:
             instance_name = m.get(instance_field)
             component_name = m.get(component_field)
             if instance_name and component_name:
-                project_name = project_component_mapping.get(component_name)
-                if not project_name:
-                    project_name = FAKE_PROJECT_NAME
+                if not metadata_dict.get(component_name):
+                    metadata_dict[component_name] = []
+                metadata_dict[component_name].append(instance_name)
+                instance_dict[instance_name] = component_name
 
-                component_mapping = metadata_dict.get(project_name)
-                if not component_mapping:
-                    metadata_dict[project_name] = {}
-
-                if not metadata_dict[project_name].get(component_name):
-                    metadata_dict[project_name][component_name] = {}
-
-                if not metadata_dict[project_name][component_name].get(instance_name):
-                    instance_project_dict[instance_name] = project_name
-                    metadata_dict[project_name][component_name][instance_name] = True
+    # Create project if we use project_name_prefix option
+    if not cli_config_vars['testing'] and project_name_prefix:
+        for component_name in metadata_dict.keys():
+            project_name = project_name_prefix + component_name
+            system_name = component_name
+            check_success = check_project_exist(logger, if_config_vars, project_name, system_name)
+            if not check_success:
+                return
 
     # Send metadata
-    for project_name in metadata_dict.keys():
-        data = []
-        for component_name in metadata_dict[project_name].keys():
-            for instance_name in metadata_dict[project_name][component_name].keys():
+    if not cli_config_vars['testing']:
+        for component_name in metadata_dict.keys():
+            data = []
+            for instance_name in metadata_dict[component_name]:
                 data.append({'instanceName': instance_name, 'metricInstanceName': instance_name,
                              'componentName': component_name})
-        send_metadata(logger, project_name, if_config_vars, data)
+            send_metadata(logger, component_name, if_config_vars, data)
 
     if len(new_object_keys) > 0:
         new_last_object_key = new_object_keys[-1]
         try:
             with open(RUNNING_INDEX_METADATA_FILE, 'w') as fp:
                 fp.writelines([new_last_object_key])
+                logger.info('Update metadata index file to file: {}'.format(new_last_object_key))
         except Exception as e:
             logger.warning('Failed to update running index file with file: {}\n'.format(new_last_object_key, e))
 
@@ -873,10 +860,10 @@ def process_s3_data(logger, cli_config_vars, agent_config_vars, if_config_vars):
         logger.info('Parsing data completed...')
 
         # send data
-        for project_name in parse_data.keys():
+        for component_name in parse_data.keys():
             data = []
-            for key in sorted(parse_data[project_name].keys()):
-                value = parse_data[project_name][key]
+            for key in sorted(parse_data[component_name].keys()):
+                value = parse_data[component_name][key]
                 timestamp = int(key) if len(str(int(key))) > 10 else int(key) * 1000
                 line = {'timestamp': str(timestamp)}
                 for d in value.values():
@@ -888,7 +875,7 @@ def process_s3_data(logger, cli_config_vars, agent_config_vars, if_config_vars):
                         logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
                         data = []
                     else:
-                        send_data(logger, project_name, if_config_vars, data)
+                        send_data(logger, component_name, if_config_vars, data)
                         data = []
 
             if len(data) > 0:
@@ -896,7 +883,7 @@ def process_s3_data(logger, cli_config_vars, agent_config_vars, if_config_vars):
                     logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
                 else:
                     logger.debug('send data {} to IF.'.format(data))
-                    send_data(logger, project_name, if_config_vars, data)
+                    send_data(logger, component_name, if_config_vars, data)
 
         # move to next batch
         new_object_keys = new_object_keys[MAX_THREAD_COUNT:]
@@ -907,6 +894,7 @@ def process_s3_data(logger, cli_config_vars, agent_config_vars, if_config_vars):
             try:
                 with open(RUNNING_INDEX_FILE, 'w') as fp:
                     fp.writelines([new_last_object_key])
+                logger.info('Update index file to file: {}'.format(new_last_object_key))
             except Exception as e:
                 logger.warning('Failed to update running index file with file: {}\n'.format(new_last_object_key, e))
 
@@ -940,21 +928,12 @@ def main():
     print_summary_info(logger, if_config_vars, agent_config_vars)
 
     if not cli_config_vars['testing']:
-        # check project name first
-        project_name_val = if_config_vars['project_name']
-        project_name_prefix = if_config_vars['project_name_prefix']
-
-        for project_name in project_name_val.split(';'):
-            system_name = None
-            if project_name_prefix and project_name:
-                if project_name.startswith(project_name_prefix):
-                    idx = len(project_name_prefix)
-                    system_name = project_name[idx:]
-
-            if project_name:
-                check_success = check_project_exist(logger, if_config_vars, project_name, system_name)
-                if not check_success:
-                    return
+        # check project name first if project_name is set
+        project_name = if_config_vars['project_name']
+        if project_name:
+            check_success = check_project_exist(logger, if_config_vars, project_name, None)
+            if not check_success:
+                return
 
     logger.info("Process metadata files from s3 bucket")
     process_s3_metadata(logger, cli_config_vars, agent_config_vars, if_config_vars)
