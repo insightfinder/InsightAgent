@@ -593,7 +593,7 @@ def send_data(logger, component_name, if_config_vars, metric_data):
     to_send_data_dict["licenseKey"] = if_config_vars['license_key']
     to_send_data_dict["projectName"] = project_name
     to_send_data_dict["userName"] = if_config_vars['user_name']
-    to_send_data_dict["agentType"] = "MetricFileReplay"
+    to_send_data_dict["agentType"] = "streaming"
 
     to_send_data_json = json.dumps(to_send_data_dict)
 
