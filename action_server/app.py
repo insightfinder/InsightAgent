@@ -3,7 +3,7 @@ import json
 import logging
 import subprocess
 import sys
-from os import system
+import ssl
 from flask import Flask, make_response, request
 
 class ScriptFailWithCode(Exception):
@@ -88,4 +88,13 @@ def hello_post():
         return make_response(msg, 422)
 
 if __name__ == "__main__":
-    app.run(ssl_context=('cert.pem', 'key.pem'))
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    ciphers = (
+        'ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+HIGH:'
+        'DH+HIGH:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+HIGH:RSA+3DES:ECDH+RC4:'
+        'DH+RC4:RSA+RC4:!aNULL:!eNULL:!MD5'
+    )
+    context.set_ciphers(ciphers)
+    context.load_cert_chain('cert.pem', 'key.pem')
+    app.run(ssl_context=context)
