@@ -106,6 +106,7 @@ def get_if_config_vars(logger, config_ini):
             system_name = config_parser.get('insightfinder', 'system_name')
             project_name_prefix = config_parser.get('insightfinder', 'project_name_prefix')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
+            metadata_max_instances = config_parser.get('insightfinder', 'metadata_max_instances', fallback=None)
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             run_interval = config_parser.get('insightfinder', 'run_interval')
             if_url = config_parser.get('insightfinder', 'if_url')
@@ -166,6 +167,9 @@ def get_if_config_vars(logger, config_ini):
         else:
             run_interval = int(run_interval) * 60
 
+        if metadata_max_instances and len(metadata_max_instances) > 0:
+            metadata_max_instances = int(metadata_max_instances)
+
         # defaults
         if len(if_url) == 0:
             if_url = 'https://app.insightfinder.com'
@@ -185,6 +189,7 @@ def get_if_config_vars(logger, config_ini):
             'system_name': system_name,
             'project_name_prefix': project_name_prefix,
             'project_type': project_type,
+            'metadata_max_instances': metadata_max_instances,
             'sampling_interval': int(sampling_interval),  # as seconds
             'run_interval': int(run_interval),  # as seconds
             'if_url': if_url,
@@ -607,7 +612,8 @@ def send_data(logger, component_name, if_config_vars, metric_data):
 def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
     attempts = 0
     while attempts < MAX_RETRY_NUM:
-        if sys.getsizeof(to_send_data) > MAX_PACKET_SIZE:
+        data_size = sys.getsizeof(to_send_data)
+        if data_size > MAX_PACKET_SIZE:
             logger.error("Packet size too large %s.  Dropping packet." + str(sys.getsizeof(to_send_data)))
             break
         response_code = -1
@@ -622,7 +628,9 @@ def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
             continue
         if response_code == 200:
             if num_of_message:
-                logger.info("Data send successfully. Number of events: %d" % num_of_message)
+                logger.info("Data send successfully. Number of events: {}, bytes: {}".format(num_of_message, data_size))
+            else:
+                logger.info("Data send successfully. Bytes: {}".format(data_size))
             break
         else:
             logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
@@ -759,7 +767,8 @@ def retrieve_s3_metadata(logger, cli_config_vars, bucket, object_key):
 def send_metadata_to_receiver(logger, post_url, to_send_data):
     attempts = 0
     while attempts < MAX_RETRY_NUM:
-        if sys.getsizeof(to_send_data) > MAX_PACKET_SIZE:
+        data_size = sys.getsizeof(to_send_data)
+        if data_size > MAX_PACKET_SIZE:
             logger.error("Packet size too large %s.  Dropping packet." + str(sys.getsizeof(to_send_data)))
             break
         response_code = -1
@@ -773,6 +782,7 @@ def send_metadata_to_receiver(logger, post_url, to_send_data):
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
             continue
         if response_code == 200:
+            logger.info("Data send successfully. Bytes: {}".format(data_size))
             break
         else:
             logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
@@ -795,12 +805,30 @@ def send_metadata(logger, component_name, if_config_vars, data):
     params["userName"] = if_config_vars['user_name']
     params["projectName"] = project_name
     params["override"] = "true"
+    post_url = if_config_vars['if_url'] + "/api/v1/agent-upload-instancemetadata?" + urllib.parse.urlencode(params)
 
     # send the data
-    post_url = if_config_vars['if_url'] + "/api/v1/agent-upload-instancemetadata?" + urllib.parse.urlencode(params)
-    send_metadata_to_receiver(logger, post_url, data)
-    logger.info("Send metadata {} to {}, time: {} seconds ---".format(component_name, project_name,
-                                                                      (time.time() - send_data_time)))
+    metadata_max_instances = if_config_vars['metadata_max_instances']
+    if metadata_max_instances:
+        count = 0
+        buf = []
+        for d in data:
+            count += 1
+            buf.append(d)
+            if count == metadata_max_instances:
+                send_metadata_to_receiver(logger, post_url, buf)
+                logger.info(
+                    "Send metadata {} to {}, time: {} seconds ---".format(component_name or '', project_name,
+                                                                          (time.time() - send_data_time)))
+                buf = []
+        if len(buf) > 0:
+            send_metadata_to_receiver(logger, post_url, buf)
+            logger.info("Send metadata {} to {}, time: {} seconds ---".format(component_name or '', project_name,
+                                                                              (time.time() - send_data_time)))
+    else:
+        send_metadata_to_receiver(logger, post_url, data)
+        logger.info("Send metadata {} to {}, time: {} seconds ---".format(component_name or '', project_name,
+                                                                          (time.time() - send_data_time)))
 
 
 def process_s3_metadata(logger, cli_config_vars, agent_config_vars, if_config_vars):
