@@ -6,6 +6,7 @@ import json
 import logging
 import multiprocessing
 import os
+import re
 import sys
 import threading
 import time
@@ -105,6 +106,7 @@ def get_if_config_vars(logger, config_ini):
             system_name = config_parser.get('insightfinder', 'system_name')
             project_name_prefix = config_parser.get('insightfinder', 'project_name_prefix')
             project_type = config_parser.get('insightfinder', 'project_type').upper()
+            metadata_max_instances = config_parser.get('insightfinder', 'metadata_max_instances', fallback=None)
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             run_interval = config_parser.get('insightfinder', 'run_interval')
             if_url = config_parser.get('insightfinder', 'if_url')
@@ -165,6 +167,9 @@ def get_if_config_vars(logger, config_ini):
         else:
             run_interval = int(run_interval) * 60
 
+        if metadata_max_instances and len(metadata_max_instances) > 0:
+            metadata_max_instances = int(metadata_max_instances)
+
         # defaults
         if len(if_url) == 0:
             if_url = 'https://app.insightfinder.com'
@@ -184,6 +189,7 @@ def get_if_config_vars(logger, config_ini):
             'system_name': system_name,
             'project_name_prefix': project_name_prefix,
             'project_type': project_type,
+            'metadata_max_instances': metadata_max_instances,
             'sampling_interval': int(sampling_interval),  # as seconds
             'run_interval': int(run_interval),  # as seconds
             'if_url': if_url,
@@ -420,7 +426,7 @@ def check_project_exist(logger, if_config_vars, project_name, system_name):
     create_project_sucess = False
     if not is_project_exist:
         try:
-            logger.info('Starting add project: ' + project_name)
+            logger.info('Starting add project: {}/{}'.format(system_name, project_name))
             params = {
                 'operation': 'create',
                 'userName': if_config_vars['user_name'],
@@ -442,14 +448,14 @@ def check_project_exist(logger, if_config_vars, project_name, system_name):
             else:
                 result = response.json()
                 if result['success'] is False:
-                    logger.error('Add project error: ' + project_name)
+                    logger.error('Add project error: {}/{}'.format(system_name, project_name))
                 else:
                     create_project_sucess = True
-                    logger.info('Add project success: ' + project_name)
+                    logger.info('Add project success: {}/{}'.format(system_name, project_name))
 
         except Exception as e:
             logger.error(e)
-            logger.error('Add project error: ' + project_name)
+            logger.error('Add project error: {}/{}'.format(system_name, project_name))
 
     if create_project_sucess:
         # if create project is success, sleep 10s and check again
@@ -593,7 +599,7 @@ def send_data(logger, component_name, if_config_vars, metric_data):
     to_send_data_dict["licenseKey"] = if_config_vars['license_key']
     to_send_data_dict["projectName"] = project_name
     to_send_data_dict["userName"] = if_config_vars['user_name']
-    to_send_data_dict["agentType"] = "MetricFileReplay"
+    to_send_data_dict["agentType"] = "streaming"
 
     to_send_data_json = json.dumps(to_send_data_dict)
 
@@ -606,7 +612,8 @@ def send_data(logger, component_name, if_config_vars, metric_data):
 def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
     attempts = 0
     while attempts < MAX_RETRY_NUM:
-        if sys.getsizeof(to_send_data) > MAX_PACKET_SIZE:
+        data_size = sys.getsizeof(to_send_data)
+        if data_size > MAX_PACKET_SIZE:
             logger.error("Packet size too large %s.  Dropping packet." + str(sys.getsizeof(to_send_data)))
             break
         response_code = -1
@@ -621,14 +628,17 @@ def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
             continue
         if response_code == 200:
             if num_of_message:
-                logger.info("Data send successfully. Number of events: %d" % num_of_message)
+                logger.info("Data send successfully. Number of events: {}, bytes: {}".format(num_of_message, data_size))
+            else:
+                logger.info("Data send successfully. Bytes: {}".format(data_size))
             break
         else:
             logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
                 attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
+
     if attempts == MAX_RETRY_NUM:
-        sys.exit(1)
+        logger.error("Fail to send data with max retry {}, ignore it.".format(MAX_RETRY_NUM))
 
 
 def make_safe_instance_string(instance):
@@ -690,8 +700,7 @@ def read_s3_objects(is_metadata, logger, cli_config_vars, agent_config_vars, if_
                 last_object_key = (fp.readline() or '').strip() or None
                 logger.info('Got last object key {}'.format(last_object_key))
         except Exception as e:
-            logger.error('Failed to read index file: {}\n {}'.format(index_file, e))
-            sys.exit()
+            logger.error('Failed to read index file: {}, start from the beginning\n {}'.format(index_file, e))
 
     region_name = agent_config_vars['aws_region']
     s3 = boto3.resource('s3',
@@ -702,21 +711,41 @@ def read_s3_objects(is_metadata, logger, cli_config_vars, agent_config_vars, if_
     logger.info('Connect to s3 bucket, region: {}, bucket: {}'.format(region_name, bucket_name))
 
     objects_keys = [x.key for x in bucket.objects.filter(Prefix=object_prefix)]
-    logger.info('Found {} files in the bucket with prefix {}'.format(len(objects_keys), object_prefix))
+    logger.info('Found {} files in the bucket with prefix {}:\n{}'.format(len(objects_keys), object_prefix,
+                                                                          '\n'.join(objects_keys)))
 
     new_object_keys = objects_keys
     if last_object_key:
-        try:
-            idx = objects_keys.index(last_object_key)
-            # no new objects
-            if idx == len(objects_keys) - 1:
-                new_object_keys = []
-            else:
+        found = False
+
+        # first, whole string match, if found, start from the next item
+        for idx, val in enumerate(objects_keys):
+            if val and val == last_object_key:
+                found = True
                 new_object_keys = objects_keys[idx + 1:]
-        except ValueError:
-            # not found, start from first one
-            pass
-    logger.info('Found {} new files after {}'.format(len(new_object_keys), last_object_key))
+
+        if not found:
+            # try to find based on date
+            match = re.search(r'\d{4}-\d{2}-\d{2}', last_object_key)
+            if match:
+                last_date = arrow.get(match.group(), 'YYYY-MM-DD')
+
+                for index, val in enumerate(objects_keys):
+                    if val:
+                        val_match = re.search(r'\d{4}-\d{2}-\d{2}', val)
+                        if match:
+                            val_date = arrow.get(val_match.group(), 'YYYY-MM-DD')
+                            if val_date >= last_date:
+                                new_object_keys = objects_keys[idx:]
+                                last_object_key = val
+                                found = True
+                                break
+        if not found:
+            new_object_keys = []
+
+    logger.info(
+        'Found {} new files after {}:\n{}'.format(len(new_object_keys), last_object_key, '\n'.join(new_object_keys)))
+
     return new_object_keys, last_object_key, bucket
 
 
@@ -738,7 +767,8 @@ def retrieve_s3_metadata(logger, cli_config_vars, bucket, object_key):
 def send_metadata_to_receiver(logger, post_url, to_send_data):
     attempts = 0
     while attempts < MAX_RETRY_NUM:
-        if sys.getsizeof(to_send_data) > MAX_PACKET_SIZE:
+        data_size = sys.getsizeof(to_send_data)
+        if data_size > MAX_PACKET_SIZE:
             logger.error("Packet size too large %s.  Dropping packet." + str(sys.getsizeof(to_send_data)))
             break
         response_code = -1
@@ -752,13 +782,15 @@ def send_metadata_to_receiver(logger, post_url, to_send_data):
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
             continue
         if response_code == 200:
+            logger.info("Data send successfully. Bytes: {}".format(data_size))
             break
         else:
             logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
                 attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
+
     if attempts == MAX_RETRY_NUM:
-        sys.exit(1)
+        logger.error("Fail to send metadata with max retry {}, ignore it.".format(MAX_RETRY_NUM))
 
 
 def send_metadata(logger, component_name, if_config_vars, data):
@@ -773,11 +805,30 @@ def send_metadata(logger, component_name, if_config_vars, data):
     params["userName"] = if_config_vars['user_name']
     params["projectName"] = project_name
     params["override"] = "true"
+    post_url = if_config_vars['if_url'] + "/api/v1/agent-upload-instancemetadata?" + urllib.parse.urlencode(params)
 
     # send the data
-    post_url = if_config_vars['if_url'] + "/api/v1/agent-upload-instancemetadata?" + urllib.parse.urlencode(params)
-    send_metadata_to_receiver(logger, post_url, data)
-    logger.info("Send metadata to {}, time: {} seconds ---".format(project_name, (time.time() - send_data_time)))
+    metadata_max_instances = if_config_vars['metadata_max_instances']
+    if metadata_max_instances:
+        count = 0
+        buf = []
+        for d in data:
+            count += 1
+            buf.append(d)
+            if count == metadata_max_instances:
+                send_metadata_to_receiver(logger, post_url, buf)
+                logger.info(
+                    "Send metadata {} to {}, time: {} seconds ---".format(component_name or '', project_name,
+                                                                          (time.time() - send_data_time)))
+                buf = []
+        if len(buf) > 0:
+            send_metadata_to_receiver(logger, post_url, buf)
+            logger.info("Send metadata {} to {}, time: {} seconds ---".format(component_name or '', project_name,
+                                                                              (time.time() - send_data_time)))
+    else:
+        send_metadata_to_receiver(logger, post_url, data)
+        logger.info("Send metadata {} to {}, time: {} seconds ---".format(component_name or '', project_name,
+                                                                          (time.time() - send_data_time)))
 
 
 def process_s3_metadata(logger, cli_config_vars, agent_config_vars, if_config_vars):
@@ -822,12 +873,21 @@ def process_s3_metadata(logger, cli_config_vars, agent_config_vars, if_config_va
 
     # Send metadata
     if not cli_config_vars['testing']:
-        for component_name in metadata_dict.keys():
+        if project_name_prefix:
+            # send metadata by component
+            for component_name in metadata_dict.keys():
+                data = []
+                for instance_name in metadata_dict[component_name]:
+                    data.append({'instanceName': instance_name, 'metricInstanceName': instance_name,
+                                 'componentName': component_name})
+                send_metadata(logger, component_name, if_config_vars, data)
+        else:
             data = []
-            for instance_name in metadata_dict[component_name]:
-                data.append({'instanceName': instance_name, 'metricInstanceName': instance_name,
-                             'componentName': component_name})
-            send_metadata(logger, component_name, if_config_vars, data)
+            for component_name in metadata_dict.keys():
+                for instance_name in metadata_dict[component_name]:
+                    data.append({'instanceName': instance_name, 'metricInstanceName': instance_name,
+                                 'componentName': component_name})
+            send_metadata(logger, None, if_config_vars, data)
 
     if len(new_object_keys) > 0:
         new_last_object_key = new_object_keys[-1]
@@ -900,8 +960,6 @@ def process_s3_data(logger, cli_config_vars, agent_config_vars, if_config_vars):
 
 
 def main():
-    global messages_dict
-
     # get config
     cli_config_vars = get_cli_config_vars()
 
@@ -912,9 +970,10 @@ def main():
 
     # set logger
     logger = logger_control('worker', cli_config_vars['log_level'])
+
     # get config file
     config_file = os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))
-    # logger.info("Process start with config: {}".format(config_file))
+    logger.info("Process start with config: {}".format(config_file))
 
     if_config_vars = get_if_config_vars(logger, config_file)
     if not if_config_vars:
@@ -922,13 +981,12 @@ def main():
 
     agent_config_vars = get_agent_config_vars(logger, config_file, if_config_vars)
     if not agent_config_vars:
-        time.sleep(1)
         sys.exit(1)
 
     print_summary_info(logger, if_config_vars, agent_config_vars)
 
     if not cli_config_vars['testing']:
-        # check project name first if project_name is set
+        # check project first if project_name is set
         project_name = if_config_vars['project_name']
         if project_name:
             check_success = check_project_exist(logger, if_config_vars, project_name, None)
