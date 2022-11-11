@@ -51,6 +51,10 @@ system_name =
 # Prefix of the project name. This combines with the component in the metadata to build the project name.
 project_name_prefix =
 # metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
+
+# the max number of instances to send in a metadata message
+metadata_max_instances =
+
 project_type = metric
 sampling_interval = 5
 run_interval = 5
