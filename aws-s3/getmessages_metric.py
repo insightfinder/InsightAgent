@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import configparser
+import glob
 import http
 import io
 import json
@@ -11,7 +12,9 @@ import sys
 import threading
 import time
 import urllib
+from logging.handlers import QueueHandler
 from optparse import OptionParser
+from pathlib import Path
 from sys import getsizeof
 
 import arrow
@@ -33,8 +36,8 @@ COLONS = regex.compile(r"\:+")
 CHUNK_SIZE = 2 * 1024 * 1024
 MAX_PACKET_SIZE = 5000000
 ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
-RUNNING_INDEX_FILE = 'running_index.txt'
-RUNNING_INDEX_METADATA_FILE = 'running_index_metadata.txt'
+RUNNING_INDEX = 'running_index-{}.txt'
+RUNNING_INDEX_METADATA = 'running_index_metadata-{}.txt'
 MAX_THREAD_COUNT = multiprocessing.cpu_count() + 1
 ATTEMPTS = 3
 NOT_EXIST_COMPONENT_NAME = '__not_exist_component_name__'
@@ -70,6 +73,8 @@ def get_cli_config_vars():
     parser.add_option('-t', '--testing', action='store_true', dest='testing', default=False,
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
+    parser.add_option('--timeout', action='store', dest='timeout',
+                      help='Minutes of timeout for all processes')
     (options, args) = parser.parse_args()
 
     config_vars = {
@@ -85,6 +90,8 @@ def get_cli_config_vars():
         config_vars['log_level'] = logging.DEBUG
     elif options.quiet:
         config_vars['log_level'] = logging.WARNING
+
+    config_vars['timeout'] = int(options.timeout) * 60 if options.timeout else 0
 
     return config_vars
 
@@ -200,7 +207,7 @@ def get_if_config_vars(logger, config_ini):
         return config_vars
 
 
-def get_agent_config_vars(logger, config_ini, if_config_vars):
+def get_agent_config_vars(logger, config_ini):
     """ Read and parse config.ini """
     """ get config.ini vars """
     if not os.path.exists(config_ini):
@@ -649,46 +656,13 @@ def make_safe_instance_string(instance):
     return instance
 
 
-def logger_control(user, level):
-    """ set up logging according to the defined log level """
-    # create a logging format
-    formatter = logging.Formatter(
-        '{ts} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
-            ts='%(asctime)s',
-            pid='%(process)d',
-            lvl='%(levelname)-8s',
-            mod='%(module)s',
-            func='%(funcName)s',
-            line='%(lineno)d',
-            msg='%(message)s'),
-        ISO8601[0])
-
-    # Get the root logger
-    root = logging.getLogger(user)
-    # No level or filter logic applied - just do it!
-    # root.setLevel(level)
-
-    # route INFO and DEBUG logging to stdout from stderr
-    logging_handler_out = logging.StreamHandler(sys.stdout)
-    logging_handler_out.setLevel(logging.DEBUG)
-    logging_handler_out.setFormatter(formatter)
-    root.addHandler(logging_handler_out)
-
-    logging_handler_err = logging.StreamHandler(sys.stderr)
-    logging_handler_err.setLevel(logging.WARNING)
-    logging_handler_err.setFormatter(formatter)
-    root.addHandler(logging_handler_err)
-    root.setLevel(level)
-    return root
-
-
-def read_s3_objects(is_metadata, logger, cli_config_vars, agent_config_vars, if_config_vars):
+def read_s3_objects(is_metadata, logger, config_name, cli_config_vars, agent_config_vars, if_config_vars):
     if is_metadata:
-        index_file = RUNNING_INDEX_METADATA_FILE
+        index_file = RUNNING_INDEX_METADATA.format(config_name)
         bucket_name = agent_config_vars['aws_s3_metadata_bucket_name']
         object_prefix = agent_config_vars['aws_s3_metadata_object_prefix']
     else:
-        index_file = RUNNING_INDEX_FILE
+        index_file = RUNNING_INDEX.format(config_name)
         bucket_name = agent_config_vars['aws_s3_bucket_name']
         object_prefix = agent_config_vars['aws_s3_object_prefix']
 
@@ -832,9 +806,9 @@ def send_metadata(logger, component_name, if_config_vars, data):
                                                                           (time.time() - send_data_time)))
 
 
-def process_s3_metadata(logger, cli_config_vars, agent_config_vars, if_config_vars):
-    (new_object_keys, last_object_key, bucket) = read_s3_objects(True, logger, cli_config_vars, agent_config_vars,
-                                                                 if_config_vars)
+def process_s3_metadata(logger, config_name, cli_config_vars, agent_config_vars, if_config_vars):
+    (new_object_keys, last_object_key, bucket) = read_s3_objects(True, logger, config_name, cli_config_vars,
+                                                                 agent_config_vars, if_config_vars)
 
     # If now new metadata, use the last one
     if not new_object_keys and last_object_key and bucket:
@@ -892,7 +866,7 @@ def process_s3_metadata(logger, cli_config_vars, agent_config_vars, if_config_va
 
     if len(new_object_keys) > 0:
         new_last_object_key = new_object_keys[-1]
-        index_file = os.path.abspath(os.path.join(__file__, os.pardir, RUNNING_INDEX_METADATA_FILE))
+        index_file = os.path.abspath(os.path.join(__file__, os.pardir, RUNNING_INDEX_METADATA.format(config_name)))
         try:
             with open(index_file, 'w') as fp:
                 fp.writelines([new_last_object_key])
@@ -901,9 +875,9 @@ def process_s3_metadata(logger, cli_config_vars, agent_config_vars, if_config_va
             logger.warning('Failed to update running index file with file: {}\n'.format(new_last_object_key, e))
 
 
-def process_s3_data(logger, cli_config_vars, agent_config_vars, if_config_vars):
-    (new_object_keys, last_object_key, bucket) = read_s3_objects(False, logger, cli_config_vars, agent_config_vars,
-                                                                 if_config_vars)
+def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_config_vars):
+    (new_object_keys, last_object_key, bucket) = read_s3_objects(False, logger, config_name, cli_config_vars,
+                                                                 agent_config_vars, if_config_vars)
 
     while len(new_object_keys) > 0:
         keys = new_object_keys[0:MAX_THREAD_COUNT]
@@ -953,7 +927,7 @@ def process_s3_data(logger, cli_config_vars, agent_config_vars, if_config_vars):
         # Update running index file
         if len(keys) > 0:
             new_last_object_key = keys[-1]
-            index_file = os.path.abspath(os.path.join(__file__, os.pardir, RUNNING_INDEX_FILE))
+            index_file = os.path.abspath(os.path.join(__file__, os.pardir, RUNNING_INDEX.format(config_name)))
             try:
                 with open(index_file, 'w') as fp:
                     fp.writelines([new_last_object_key])
@@ -962,33 +936,81 @@ def process_s3_data(logger, cli_config_vars, agent_config_vars, if_config_vars):
                 logger.warning('Failed to update running index file with file: {}\n'.format(new_last_object_key, e))
 
 
-def main():
-    # get config
-    cli_config_vars = get_cli_config_vars()
+def listener_configurer():
+    """ set up logging according to the defined log level """
+    # create a logging format
+    formatter = logging.Formatter(
+        '{ts} {name} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
+            ts='%(asctime)s',
+            name='%(name)s',
+            pid='%(process)d',
+            lvl='%(levelname)-8s',
+            mod='%(module)s',
+            func='%(funcName)s',
+            line='%(lineno)d',
+            msg='%(message)s'),
+        ISO8601[0])
 
-    # variables from cli config
-    cli_data_block = '\nCLI settings:'
-    for kk, kv in sorted(cli_config_vars.items()):
-        cli_data_block += '\n\t{}: {}'.format(kk, kv)
+    # Get the root logger
+    root = logging.getLogger()
 
-    # set logger
-    logger = logger_control('worker', cli_config_vars['log_level'])
+    # route INFO and DEBUG logging to stdout from stderr
+    logging_handler_out = logging.StreamHandler(sys.stdout)
+    logging_handler_out.setLevel(logging.DEBUG)
+    logging_handler_out.setFormatter(formatter)
+    root.addHandler(logging_handler_out)
 
-    # get config file
-    config_file = os.path.abspath(os.path.join(__file__, os.pardir, 'config.ini'))
+    logging_handler_err = logging.StreamHandler(sys.stderr)
+    logging_handler_err.setLevel(logging.WARNING)
+    logging_handler_err.setFormatter(formatter)
+    root.addHandler(logging_handler_err)
+
+
+def listener_process(q, c_config):
+    listener_configurer()
+    while True:
+        while not q.empty():
+            record = q.get()
+
+            if not record or record.name == 'KILL':
+                return
+
+            logger = logging.getLogger(record.name)
+            logger.handle(record)
+        time.sleep(1)
+
+
+def queue_configurer(q):
+    h = QueueHandler(q)  # Just the one handler needed
+    root = logging.getLogger()
+    root.addHandler(h)
+    # Default log level to info
+    root.setLevel(logging.INFO)
+
+
+def worker_process(args):
+    (config_file, c_config, time_now, q) = args
+
+    config_name = Path(config_file).stem
+    level = c_config['log_level']
+
+    # start sub process
+    logger = logging.getLogger('worker.' + config_name)
+    logger.setLevel(level)
+
+    logger.info("Setup logger in PID {}".format(os.getpid()))
     logger.info("Process start with config: {}".format(config_file))
 
     if_config_vars = get_if_config_vars(logger, config_file)
     if not if_config_vars:
-        sys.exit(1)
+        return
 
-    agent_config_vars = get_agent_config_vars(logger, config_file, if_config_vars)
+    agent_config_vars = get_agent_config_vars(logger, config_file)
     if not agent_config_vars:
-        sys.exit(1)
+        return
 
     print_summary_info(logger, if_config_vars, agent_config_vars)
-
-    if not cli_config_vars['testing']:
+    if not c_config['testing']:
         # check project first if project_name is set
         project_name = if_config_vars['project_name']
         if project_name:
@@ -997,10 +1019,74 @@ def main():
                 return
 
     logger.info("Process metadata files from s3 bucket")
-    process_s3_metadata(logger, cli_config_vars, agent_config_vars, if_config_vars)
+    process_s3_metadata(logger, config_name, c_config, agent_config_vars, if_config_vars)
 
     logger.info("Process data files from s3 bucket")
-    process_s3_data(logger, cli_config_vars, agent_config_vars, if_config_vars)
+    process_s3_data(logger, config_name, c_config, agent_config_vars, if_config_vars)
+
+    time.sleep(10)
+
+
+def main():
+    # capture warnings to logging system
+    logging.captureWarnings(True)
+
+    # get config
+    cli_config_vars = get_cli_config_vars()
+
+    # get all config file
+    files_path = os.path.join(cli_config_vars['config'], "*.ini")
+    config_files = glob.glob(files_path)
+
+    if len(config_files) == 0:
+        logging.error("Config files not found")
+        sys.exit(1)
+
+    # logger
+    m = multiprocessing.Manager()
+    queue = m.Queue()
+    listener = multiprocessing.Process(target=listener_process, args=(queue, cli_config_vars))
+    listener.start()
+
+    # set up main logger following example from work_process
+    queue_configurer(queue)
+    main_logger = logging.getLogger('main')
+
+    # variables from cli config
+    cli_data_block = '\nCLI settings:'
+    for kk, kv in sorted(cli_config_vars.items()):
+        cli_data_block += '\n\t{}: {}'.format(kk, kv)
+    main_logger.info(cli_data_block)
+
+    # get args
+    utc_time_now = int(arrow.utcnow().float_timestamp)
+    arg_list = [(f, cli_config_vars, utc_time_now, queue) for f in config_files]
+
+    # start sub process by pool
+    pool = multiprocessing.Pool(len(arg_list))
+    pool_result = pool.map_async(worker_process, arg_list)
+    pool.close()
+
+    timeout = cli_config_vars['timeout']
+    need_timeout = timeout > 0
+    if need_timeout:
+        pool_result.wait(timeout=timeout)
+
+    try:
+        pool_result.get(timeout=1 if need_timeout else None)
+        pool.join()
+    except TimeoutError:
+        main_logger.error("We lacked patience and got a multiprocessing.TimeoutError")
+        pool.terminate()
+
+    # end
+    main_logger.info("Now the pool is closed and no longer available")
+
+    # send kill signal
+    time.sleep(1)
+    kill_logger = logging.getLogger('KILL')
+    kill_logger.info('KILL')
+    listener.join()
 
 
 if __name__ == "__main__":
