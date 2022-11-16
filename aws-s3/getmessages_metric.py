@@ -694,6 +694,7 @@ def read_s3_objects(is_metadata, logger, cli_config_vars, agent_config_vars, if_
 
     # read the previous processed file from the running index file
     last_object_key = None
+    index_file = os.path.abspath(os.path.join(__file__, os.pardir, index_file))
     if os.path.exists(index_file):
         try:
             with open(index_file, 'r') as fp:
@@ -891,8 +892,9 @@ def process_s3_metadata(logger, cli_config_vars, agent_config_vars, if_config_va
 
     if len(new_object_keys) > 0:
         new_last_object_key = new_object_keys[-1]
+        index_file = os.path.abspath(os.path.join(__file__, os.pardir, RUNNING_INDEX_METADATA_FILE))
         try:
-            with open(RUNNING_INDEX_METADATA_FILE, 'w') as fp:
+            with open(index_file, 'w') as fp:
                 fp.writelines([new_last_object_key])
                 logger.info('Update metadata index file to file: {}'.format(new_last_object_key))
         except Exception as e:
@@ -951,8 +953,9 @@ def process_s3_data(logger, cli_config_vars, agent_config_vars, if_config_vars):
         # Update running index file
         if len(keys) > 0:
             new_last_object_key = keys[-1]
+            index_file = os.path.abspath(os.path.join(__file__, os.pardir, RUNNING_INDEX_FILE))
             try:
-                with open(RUNNING_INDEX_FILE, 'w') as fp:
+                with open(index_file, 'w') as fp:
                     fp.writelines([new_last_object_key])
                 logger.info('Update index file to file: {}'.format(new_last_object_key))
             except Exception as e:
