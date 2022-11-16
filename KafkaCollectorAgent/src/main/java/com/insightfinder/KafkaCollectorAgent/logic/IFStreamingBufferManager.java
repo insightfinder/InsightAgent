@@ -94,7 +94,7 @@ public class IFStreamingBufferManager {
         instanceList = ifConfig.getInstanceList();
         //timer thread
         executorService.execute(()->{
-            int printMetricsTimer = 3600;
+            int printMetricsTimer = ifConfig.getKafkaMetricLogInterval();
             int sentTimer = ifConfig.getBufferingTime();
             while (true){
                 if (sentTimer <= 0){
@@ -106,7 +106,7 @@ public class IFStreamingBufferManager {
                 }
 
                 if (printMetricsTimer <= 0){
-                    printMetricsTimer = 3600;
+                    printMetricsTimer = ifConfig.getKafkaMetricLogInterval();
                     registry.getMeters().forEach(meter -> {
                         if (metricFilterSet.contains(meter.getId().getName())){
                             meter.measure().forEach(measurement -> {

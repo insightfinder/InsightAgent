@@ -40,6 +40,7 @@ public class IFConfig {
     private String truststorePassword;
     private int bufferingTime;
     private String metricNameFilter;
+    private int kafkaMetricLogInterval;
 
     public String getUserName() {
         return userName;
@@ -264,5 +265,13 @@ public class IFConfig {
 
     public void setMetricNameFilter(String metricNameFilter) {
         this.metricNameFilter = metricNameFilter;
+    }
+
+    public int getKafkaMetricLogInterval() {
+        return kafkaMetricLogInterval;
+    }
+
+    public void setKafkaMetricLogInterval(int kafkaMetricLogInterval) {
+        this.kafkaMetricLogInterval = kafkaMetricLogInterval;
     }
 }
