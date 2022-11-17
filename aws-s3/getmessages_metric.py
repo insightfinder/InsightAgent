@@ -38,13 +38,27 @@ MAX_PACKET_SIZE = 5000000
 ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 RUNNING_INDEX = 'running_index-{}.txt'
 RUNNING_INDEX_METADATA = 'running_index_metadata-{}.txt'
-MAX_THREAD_COUNT = multiprocessing.cpu_count() + 1
+# MAX_THREAD_COUNT = multiprocessing.cpu_count() + 1
+MAX_THREAD_COUNT = 1
 ATTEMPTS = 3
 NOT_EXIST_COMPONENT_NAME = '__not_exist_component_name__'
 
 
 def format_timestamp(ts):
     return arrow.get(int(ts) / 1000).format('YYYY-MM-DD HH:mm:ssZZ') if ts else ""
+
+
+def file_time_diff(logger, file_name, ts):
+    ret = ''
+    match = re.search(r'\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}', file_name)
+    if match:
+        file_time = arrow.get(match.group(), 'YYYY-MM-DD_HH-mm-ss')
+        if file_time and ts:
+            logger.info(file_time)
+            data_time = arrow.get(int(ts) / 1000)
+            ret = str(file_time - data_time)
+
+    return ret
 
 
 def get_json_size_bytes(json_data):
@@ -594,7 +608,11 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                     parse_data[component_name][ts][inst_name][metric_key] = str(data_value)
 
         if last_ts:
-            logger.info("In file {}, the last timestamp: {}, {}".format(file_name, format_timestamp(last_ts), last_ts))
+            logger.info(
+                "In file {} the last timestamp is {} {}, time diff: {}".format(file_name, format_timestamp(last_ts),
+                                                                               last_ts,
+                                                                               file_time_diff(logger, file_name,
+                                                                                              last_ts)))
 
     return parse_data
 
