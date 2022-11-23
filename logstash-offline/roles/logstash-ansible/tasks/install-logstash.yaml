@@ -18,9 +18,16 @@
     dest: /etc/temp/
     remote_src: true
 
+- name: check if dir exists
+  become: yes
+  stat:
+    path: /etc/logstash
+  register: logstashdir
+
 - name: move unpacked package
   become: yes
   command: mv /etc/temp/logstash-7.17.1 /etc/logstash
+  when: not logstashdir.stat.exists
 
 - name: Create conf.d
   become: yes
