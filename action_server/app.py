@@ -76,7 +76,10 @@ def hello_post():
         if cmdsJson[cmd]:
             isTargetAll = request.form.get('isTargetAll')
             instance = request.form.get('instance')
-            if instance:
+            ip = request.form.get('ip')
+            if ip:
+                return runCommand(cmdsJson[cmd] + " --limit " + ip)
+            elif instance:
                 return runCommand(cmdsJson[cmd] + " --limit " + instance)
             else:
                 return runCommand(cmdsJson[cmd])
