@@ -72,9 +72,12 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
                           cache_cur, time_now):
     logger.info('Started......')
 
+    query_in_batch = agent_config_vars['query_in_batch']
+    is_batch_mode = len(query_in_batch) > 0
+
     # get metrics
     metrics = []
-    if len(agent_config_vars['metrics']) == 0:
+    if len(agent_config_vars['metrics']) == 0 and not is_batch_mode:
         url = urllib.parse.urljoin(agent_config_vars['api_url'], 'label/__name__/values')
         response = send_request(logger, url, params={}, proxies=agent_config_vars['proxies'],
                                 **agent_config_vars['auth_kwargs'], **agent_config_vars['ssl_kwargs'])
@@ -104,7 +107,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     if agent_config_vars['metrics_to_ignore'] and len(agent_config_vars['metrics_to_ignore']) > 0:
         metrics = [x for x in metrics if x not in agent_config_vars['metrics_to_ignore']]
 
-    if len(metrics) == 0:
+    if not is_batch_mode and len(metrics) == 0:
         logger.error('Metric list is empty')
         return
 
@@ -123,10 +126,17 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
         for timestamp in range(agent_config_vars['his_time_range'][0],
                                agent_config_vars['his_time_range'][1],
                                if_config_vars['sampling_interval']):
-            params = [(logger, if_config_vars, agent_config_vars, m, {
-                'query': get_query_uri(m),
-                'time': timestamp,
-            }) for m in metrics]
+            if query_in_batch:
+                params = [(logger, if_config_vars, agent_config_vars, None, {
+                    'query': query_in_batch,
+                    'time': timestamp,
+                })]
+            else:
+                params = [(logger, if_config_vars, agent_config_vars, m, {
+                    'query': get_query_uri(m),
+                    'time': timestamp,
+                }) for m in metrics]
+
             results = thread_pool.map(query_messages_prometheus, params)
             result_list = list(chain(*results))
             parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
@@ -137,10 +147,16 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
     else:
         logger.debug('Using current time for streaming data')
-        params = [(logger, if_config_vars, agent_config_vars, m, {
-            'query': get_query_uri(m),
-            'time': time_now,
-        }) for m in metrics]
+        if query_in_batch:
+            params = [(logger, if_config_vars, agent_config_vars, None, {
+                'query': query_in_batch,
+                'time': time_now,
+            })]
+        else:
+            params = [(logger, if_config_vars, agent_config_vars, m, {
+                'query': get_query_uri(m),
+                'time': time_now,
+            }) for m in metrics]
         results = thread_pool.map(query_messages_prometheus, params)
         result_list = list(chain(*results))
         parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con, cache_cur,
@@ -153,7 +169,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
 
 def query_messages_prometheus(args):
     logger, if_config_vars, agent_config_vars, metric, params = args
-    logger.info('Starting query metric: ' + metric)
+    logger.info('Starting query metric: metric={}, query=\n{}'.format(metric, params))
 
     data = []
     try:
@@ -162,19 +178,19 @@ def query_messages_prometheus(args):
         response = send_request(logger, url, params=params, proxies=agent_config_vars['proxies'],
                                 **agent_config_vars['auth_kwargs'], **agent_config_vars['ssl_kwargs'])
         if response == -1:
-            logger.error('Query metric error: ' + metric)
+            logger.error('Query metric error metric={}, query=\n{}'.format(metric, params))
         else:
             result = response.json()
             if result['status'] != 'success':
-                logger.error('Query metric error: ' + metric)
+                logger.error('Query metric error metric={}, query=\n{}'.format(metric, params))
             else:
                 data = result.get('data').get('result', [])
 
     except Exception as e:
         logger.error(e)
-        logger.error('Query metric error: ' + metric)
+        logger.error('Query metric error metric={}, query=\n{}'.format(metric, params))
 
-    # add metric name in the value
+    # add metric name in the value. In batch mode, the metric is None, it will later read from metrics_name_field
     data = [{**item, 'metric_name': metric} for item in data]
 
     return data
@@ -182,6 +198,9 @@ def query_messages_prometheus(args):
 
 def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con, cache_cur,
                               result):
+    query_in_batch = agent_config_vars['query_in_batch']
+    is_batch_mode = len(query_in_batch) > 0
+
     count = 0
     logger.info('Reading {} messages'.format(len(result)))
 
@@ -189,12 +208,15 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
         try:
             logger.debug(message)
 
-            # date_field = message.get('metric').get('__name__')
             date_field = message.get('metric_name')
 
-            # get metric name from `metrics_name_field`
-            if agent_config_vars['metrics_name_field']:
-                name_fields = [message.get('metric').get(f) for f in agent_config_vars['metrics_name_field'] or []]
+            # get metric name from `metrics_name_field`, use the default name __name__ if not set.
+            metrics_name_field = agent_config_vars['metrics_name_field']
+            if is_batch_mode and len(metrics_name_field) == 0:
+                metrics_name_field = ['__name__']
+
+            if metrics_name_field:
+                name_fields = [message.get('metric').get(f) for f in metrics_name_field or []]
                 name_fields = [f for f in name_fields if f]
                 if len(name_fields) > 0:
                     date_field = '_'.join(name_fields)
@@ -339,6 +361,7 @@ def get_agent_config_vars(logger, config_ini):
                 return config_error(logger, 'prometheus_uri')
 
             # metrics
+            query_in_batch = config_parser.get('prometheus', 'query_in_batch') or ''
             metrics = config_parser.get('prometheus', 'metrics')
             metrics_whitelist = config_parser.get('prometheus', 'metrics_whitelist')
             metrics_to_ignore = config_parser.get('prometheus', 'metrics_to_ignore')
@@ -452,6 +475,7 @@ def get_agent_config_vars(logger, config_ini):
             'metrics': metrics,
             'metrics_whitelist': metrics_whitelist,
             'metrics_to_ignore': metrics_to_ignore,
+            'query_in_batch': query_in_batch,
             'query_label_selector': query_label_selector,
             'query_with_function': query_with_function,
             'metrics_whitelist_with_function': metrics_whitelist_with_function,
