@@ -1,25 +1,25 @@
 #!/usr/bin/env python
 import configparser
+import glob
+import http.client
 import json
 import logging
+import multiprocessing
 import os
+import shlex
 import socket
+import sqlite3
 import sys
 import time
-import urllib.parse
-import http.client
-import shlex
 import traceback
-import glob
-import sqlite3
-from time import sleep
-from sys import getsizeof
+import urllib.parse
 from itertools import chain
-from optparse import OptionParser
 from logging.handlers import QueueHandler
-import multiprocessing
-from multiprocessing.pool import ThreadPool
 from multiprocessing import Pool, TimeoutError
+from multiprocessing.pool import ThreadPool
+from optparse import OptionParser
+from sys import getsizeof
+from time import sleep
 
 import arrow
 import pytz
@@ -72,50 +72,8 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
                           cache_cur, time_now):
     logger.info('Started......')
 
-    # get metrics
-    metrics = []
-    if len(agent_config_vars['metrics']) == 0:
-        url = urllib.parse.urljoin(agent_config_vars['api_url'], 'label/__name__/values')
-        response = send_request(logger, url, params={}, proxies=agent_config_vars['proxies'],
-                                **agent_config_vars['auth_kwargs'], **agent_config_vars['ssl_kwargs'])
-        if response != -1:
-            result = response.json()
-            if result['status'] == 'success':
-                metrics = result['data']
-    else:
-        metrics = agent_config_vars['metrics']
+    prometheus_query = agent_config_vars['prometheus_query']
 
-    if agent_config_vars['metrics_whitelist']:
-        try:
-            db_regex = regex.compile(agent_config_vars['metrics_whitelist'])
-            metrics = list(filter(db_regex.match, metrics))
-        except Exception as e:
-            logger.error(e)
-
-    metrics_with_function = []
-    if agent_config_vars['metrics_whitelist_with_function']:
-        try:
-            db_regex = regex.compile(agent_config_vars['metrics_whitelist_with_function'])
-            metrics_with_function = list(filter(db_regex.match, metrics))
-        except Exception as e:
-            logger.error(e)
-
-    # filter metrics
-    if agent_config_vars['metrics_to_ignore'] and len(agent_config_vars['metrics_to_ignore']) > 0:
-        metrics = [x for x in metrics if x not in agent_config_vars['metrics_to_ignore']]
-
-    if len(metrics) == 0:
-        logger.error('Metric list is empty')
-        return
-
-    def get_query_uri(m):
-        query = '{}{}'.format(m, agent_config_vars['query_label_selector'])
-        if not agent_config_vars['metrics_whitelist_with_function'] or m in metrics_with_function:
-            if agent_config_vars['query_with_function'] == 'increase':
-                query = 'increase({}[{}s])'.format(query, if_config_vars['sampling_interval'])
-        return query
-
-    # parse sql string by params
     thread_pool = ThreadPool(agent_config_vars['thread_pool'])
     logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
     if agent_config_vars['his_time_range']:
@@ -123,10 +81,11 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
         for timestamp in range(agent_config_vars['his_time_range'][0],
                                agent_config_vars['his_time_range'][1],
                                if_config_vars['sampling_interval']):
-            params = [(logger, if_config_vars, agent_config_vars, m, {
-                'query': get_query_uri(m),
+            params = [(logger, if_config_vars, agent_config_vars, None, {
+                'query': prometheus_query,
                 'time': timestamp,
-            }) for m in metrics]
+            })]
+
             results = thread_pool.map(query_messages_prometheus, params)
             result_list = list(chain(*results))
             parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
@@ -137,10 +96,10 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
     else:
         logger.debug('Using current time for streaming data')
-        params = [(logger, if_config_vars, agent_config_vars, m, {
-            'query': get_query_uri(m),
+        params = [(logger, if_config_vars, agent_config_vars, None, {
+            'query': prometheus_query,
             'time': time_now,
-        }) for m in metrics]
+        })]
         results = thread_pool.map(query_messages_prometheus, params)
         result_list = list(chain(*results))
         parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con, cache_cur,
@@ -153,7 +112,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
 
 def query_messages_prometheus(args):
     logger, if_config_vars, agent_config_vars, metric, params = args
-    logger.info('Starting query metric: ' + metric)
+    logger.info('Starting query: {}'.format(params))
 
     data = []
     try:
@@ -162,19 +121,18 @@ def query_messages_prometheus(args):
         response = send_request(logger, url, params=params, proxies=agent_config_vars['proxies'],
                                 **agent_config_vars['auth_kwargs'], **agent_config_vars['ssl_kwargs'])
         if response == -1:
-            logger.error('Query metric error: ' + metric)
+            logger.error('Query error: {}'.format(params))
         else:
             result = response.json()
             if result['status'] != 'success':
-                logger.error('Query metric error: ' + metric)
+                logger.error('Query error: {}'.format(params))
             else:
                 data = result.get('data').get('result', [])
-
     except Exception as e:
         logger.error(e)
-        logger.error('Query metric error: ' + metric)
+        logger.error('Query error: {}'.format(params))
 
-    # add metric name in the value
+    # add metric name in the value. In batch mode, the metric is None, it will later read from metrics_name_field
     data = [{**item, 'metric_name': metric} for item in data]
 
     return data
@@ -182,6 +140,9 @@ def query_messages_prometheus(args):
 
 def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con, cache_cur,
                               result):
+    prometheus_query = agent_config_vars['prometheus_query']
+    is_batch_mode = len(prometheus_query) > 0
+
     count = 0
     logger.info('Reading {} messages'.format(len(result)))
 
@@ -189,12 +150,15 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
         try:
             logger.debug(message)
 
-            # date_field = message.get('metric').get('__name__')
             date_field = message.get('metric_name')
 
-            # get metric name from `metrics_name_field`
-            if agent_config_vars['metrics_name_field']:
-                name_fields = [message.get('metric').get(f) for f in agent_config_vars['metrics_name_field'] or []]
+            # get metric name from `metrics_name_field`, use the default name __name__ if not set.
+            metrics_name_field = agent_config_vars['metrics_name_field']
+            if is_batch_mode and len(metrics_name_field) == 0:
+                metrics_name_field = ['__name__']
+
+            if metrics_name_field:
+                name_fields = [message.get('metric').get(f) for f in metrics_name_field or []]
                 name_fields = [f for f in name_fields if f]
                 if len(name_fields) > 0:
                     date_field = '_'.join(name_fields)
@@ -289,12 +253,6 @@ def get_agent_config_vars(logger, config_ini):
         auth_kwargs = {}
         ssl_kwargs = {}
         api_url = ''
-        metrics = None
-        metrics_whitelist = None
-        metrics_to_ignore = None
-        query_label_selector = ''
-        query_with_function = ''
-        metrics_whitelist_with_function = None
         metrics_name_field = None
         instance_whitelist = ''
         instance_whitelist_regex = None
@@ -339,12 +297,7 @@ def get_agent_config_vars(logger, config_ini):
                 return config_error(logger, 'prometheus_uri')
 
             # metrics
-            metrics = config_parser.get('prometheus', 'metrics')
-            metrics_whitelist = config_parser.get('prometheus', 'metrics_whitelist')
-            metrics_to_ignore = config_parser.get('prometheus', 'metrics_to_ignore')
-            query_label_selector = config_parser.get('prometheus', 'query_label_selector') or ''
-            query_with_function = config_parser.get('prometheus', 'query_with_function')
-            metrics_whitelist_with_function = config_parser.get('prometheus', 'metrics_whitelist_with_function')
+            prometheus_query = config_parser.get('prometheus', 'prometheus_query') or '{__name__=~".+"}'
             metrics_name_field = config_parser.get('prometheus', 'metrics_name_field')
 
             # time range
@@ -375,14 +328,6 @@ def get_agent_config_vars(logger, config_ini):
             return config_error(logger)
 
         # metrics
-        if len(metrics) != 0:
-            metrics = [x.strip() for x in metrics.split(';') if x.strip()]
-        if len(metrics_to_ignore) != 0:
-            metrics_to_ignore = [x.strip() for x in metrics_to_ignore.split(',') if x.strip()]
-
-        if len(query_with_function) != 0 and query_with_function not in ['increase']:
-            return config_error(logger, 'target_timestamp_timezone')
-
         if len(instance_whitelist) != 0:
             try:
                 instance_whitelist_regex = regex.compile(instance_whitelist)
@@ -449,12 +394,7 @@ def get_agent_config_vars(logger, config_ini):
             'auth_kwargs': auth_kwargs,
             'ssl_kwargs': ssl_kwargs,
             'api_url': api_url,
-            'metrics': metrics,
-            'metrics_whitelist': metrics_whitelist,
-            'metrics_to_ignore': metrics_to_ignore,
-            'query_label_selector': query_label_selector,
-            'query_with_function': query_with_function,
-            'metrics_whitelist_with_function': metrics_whitelist_with_function,
+            'prometheus_query': prometheus_query,
             'metrics_name_field': metrics_name_field,
             'his_time_range': his_time_range,
 

@@ -15,21 +15,10 @@ client_cert =
 client_key =
 
 ## metrics
-# Metrics to query for. Multiple fields are separated by `;`. If none specified, all metrics returned from /api/v1/label/__names__/values will be used
-metrics =
-# metrics_whitelist is a regex string used to define which metrics will be filtered.
-metrics_whitelist =
-# metrics to not report
-metrics_to_ignore = ALERTS,ALERTS_FOR_STATE
-# label selector to use when querying for metrics, ie {namespace="monitoring"}
-query_label_selector =
-# label function to calculate the metric's value, now only support functions: increase. Example: query_with_function = increase
-query_with_function =
-# metrics_whitelist_with_function is a regex string used to define which metrics will be calculate with query_with_function. Example: metrics_whitelist_with_function = total_mem_.*
-metrics_whitelist_with_function =
+# Prometheus query used to query all the needed metrics. If not set, it will use `{__name__=~".+"}` to query all metrics.
+prometheus_query =
 # metric's name field, Multiple fields are separated by commas. EX: __name__, job, the metric name =  {__name__}_{job}
 metrics_name_field =
-
 # history data time config. If these options is set, the agent will query results by time range
 # time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
 his_time_range =
