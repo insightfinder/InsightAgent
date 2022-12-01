@@ -743,7 +743,8 @@ def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data):
     send_request(logger, post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
                  data=data_to_post, verify=False, proxies=if_config_vars['if_proxies'])
-    logger.info('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
+    logger.info('--- Send data to project: %s, time: %s seconds ---' % (
+        if_config_vars['project_name'], round(time.time() - send_data_time, 2)))
 
 
 def send_request(logger, url, mode='GET', failure_message='Failure!', success_message='Success!',
@@ -962,8 +963,9 @@ def listener_configurer():
     """ set up logging according to the defined log level """
     # create a logging format
     formatter = logging.Formatter(
-        '{ts} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
+        '{ts} [{cfg}] [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
             ts='%(asctime)s',
+            cfg='%(name)s',
             pid='%(process)d',
             lvl='%(levelname)-8s',
             mod='%(module)s',
@@ -1013,11 +1015,14 @@ def worker_configurer(q, level):
 def worker_process(args):
     (config_file, c_config, time_now, q) = args
 
+    # Get config file name
+    config_name = os.path.basename(config_file)
+
     # start sub process
     worker_configurer(q, c_config['log_level'])
-    logger = logging.getLogger('worker')
+    logger = logging.getLogger(config_name)
     logger.info("Setup logger in PID {}".format(os.getpid()))
-    logger.info("Process start with config: {}".format(config_file))
+    logger.info("Process start with config: {}".format(config_name))
 
     if_config_vars = get_if_config_vars(logger, config_file)
     if not if_config_vars:
@@ -1036,7 +1041,7 @@ def worker_process(args):
     # start run
     initialize_data_gathering(logger, c_config, if_config_vars, agent_config_vars, time_now)
 
-    logger.info("Process is done with config: {}".format(config_file))
+    logger.info("Process is done with config: {}".format(config_name))
     return True
 
 
