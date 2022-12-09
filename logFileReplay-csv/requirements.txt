@@ -1,5 +1,5 @@
 arrow==1.1.1
-certifi==2021.5.30
+certifi==2022.12.7
 charset-normalizer==2.0.5
 idna==3.2
 python-dateutil==2.8.2
