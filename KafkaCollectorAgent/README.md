@@ -101,7 +101,7 @@ kafka1.max.poll.records
 
 Ref to: 
 
-[Consumer Configs]: https://docs.confluent.io/platform/current/installation/configuration/consumer-configs.html
+https://docs.confluent.io/platform/current/installation/configuration/consumer-configs.html
 
 
 
