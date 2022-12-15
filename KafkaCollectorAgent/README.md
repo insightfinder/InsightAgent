@@ -88,15 +88,16 @@ kafka1.concurrency=
 # can set it to latest, earliest, none,
 #earliest: automatically reset the offset to the earliest 
 #latest: automatically reset the offset to the latest
+#none: 
 kafka1.auto.offset.reset=
 #The timeout used to detect client failures 
 kafka1.session.timeout.ms=
 #If true the consumer’s offset will be periodically committed in the background. Default is true
 kafka1.enable.auto.commit=
 #The maximum delay between invocations of poll, default is 300000 (5 minutes)
-kafka1.max.poll.interval.ms
+kafka1.max.poll.interval.ms =
 #The maximum number of records returned in a single call to poll, default is 500
-kafka1.max.poll.records
+kafka1.max.poll.records =
 ```
 
 Ref to: 
