@@ -79,16 +79,15 @@ logback.xml exmple:
 kafka1.bootstrap.servers=
 #security.protocol, provided by kafka cluster team
 kafka1.security.protocol=
-# consumer group id.
-kafka1.group.id=
+# consumer group id, unique for consumer group, allowing multiple consumer groups get data from the same topic
+kafka1.groupId=
 #topic name, provided by kafka cluster team
 kafka1.topic=
-#consumer numbers, better set it to partition number
+#number of consumers, by default shoud set it to the number of partitions
 kafka1.concurrency=
 # can set it to latest, earliest, none,
 #earliest: automatically reset the offset to the earliest 
 #latest: automatically reset the offset to the latest
-#none: 
 kafka1.auto.offset.reset=
 #The timeout used to detect client failures 
 kafka1.session.timeout.ms=
@@ -106,20 +105,20 @@ https://docs.confluent.io/platform/current/installation/configuration/consumer-c
 
 
 
-##### Insight Finder config:
+##### InsightFinder config:
 
 ```
-#user name for IF
+#user name for InsightFinder
 insight-finder.userName=
-#IF URL, example: https://stg.insightfinder.com
+#IF URL, example: https://app.insightfinder.com
 insight-finder.serverUrl=
 #URI, the data was sent to IF, example: /api/v1/customprojectrawdata
 insight-finder.serverUri=
-#AUTO CREATE IF project URI, example: /api/v1/check-and-add-custom-project
+#AUTO CREATE InsightFinder project URI, example: /api/v1/check-and-add-custom-project
 insight-finder.checkAndCreateUri=
-#IF license key
+#InsightFinder license key
 insight-finder.licenseKey=
-#IF project sample interval
+#InsightFinder project sample interval
 insight-finder.samplingIntervalInSeconds=300
 # the key to locate project name in dataFormatRegex
 insight-finder.projectKey=project
@@ -148,7 +147,7 @@ insight-finder.dataFormatRegex=^cs\\.\\|(?<project>\\w+)\\|\\.\\w+\\.\\w+\\.\\w+
 # the agent type
 insight-finder.agentType=Streaming
 
-#IF if site need ssl config, set below ssl files
+#If InsightFinder site needs ssl config, set below ssl files
 insight-finder.keystoreFile=
 insight-finder.keystorePassword=
 insight-finder.truststoreFile=
