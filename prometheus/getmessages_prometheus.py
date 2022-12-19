@@ -323,16 +323,18 @@ def get_agent_config_vars(logger, config_ini):
             processes = config_parser.get('prometheus', 'processes', raw=True)
             timeout = config_parser.get('prometheus', 'timeout', raw=True)
 
-        except configparser.NoOptionError as cp_noe:
-            logger.error(cp_noe)
+        except Exception as ex:
+            logger.error(ex)
             return config_error(logger)
 
         # metrics
         if len(instance_whitelist) != 0:
             try:
                 instance_whitelist_regex = regex.compile(instance_whitelist)
-            except Exception:
+            except Exception as ex:
+                logger.error(ex)
                 return config_error(logger, 'instance_whitelist')
+
         if len(metrics_name_field) != 0:
             metrics_name_field = [x.strip() for x in metrics_name_field.split(',') if x.strip()]
 
@@ -365,6 +367,9 @@ def get_agent_config_vars(logger, config_ini):
         instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
         device_fields = [x.strip() for x in device_field.split(',') if x.strip()]
         timestamp_fields = timestamp_field.split(',')
+
+        if not instance_connector:
+            return config_error(logger, 'instance_connector')
 
         if len(thread_pool) != 0:
             thread_pool = int(thread_pool)
@@ -1073,30 +1078,32 @@ if __name__ == "__main__":
 
     # get agent config from first config
     agent_config_vars = get_agent_config_vars(main_logger, config_files[0])
+    if not agent_config_vars:
+        main_logger.error('Failed to get agent config')
+    else:
+        # get args
+        utc_time_now = int(arrow.utcnow().float_timestamp)
+        arg_list = [(f, cli_config_vars, utc_time_now, queue) for f in config_files]
 
-    # get args
-    utc_time_now = int(arrow.utcnow().float_timestamp)
-    arg_list = [(f, cli_config_vars, utc_time_now, queue) for f in config_files]
+        # start sub process by pool
+        pool = Pool(agent_config_vars['processes'])
+        pool_result = pool.map_async(worker_process, arg_list)
+        pool.close()
 
-    # start sub process by pool
-    pool = Pool(agent_config_vars['processes'])
-    pool_result = pool.map_async(worker_process, arg_list)
-    pool.close()
+        # wait 5 minutes for every worker to finish
+        need_timeout = agent_config_vars['timeout'] > 0
+        if need_timeout:
+            pool_result.wait(timeout=agent_config_vars['timeout'])
 
-    # wait 5 minutes for every worker to finish
-    need_timeout = agent_config_vars['timeout'] > 0
-    if need_timeout:
-        pool_result.wait(timeout=agent_config_vars['timeout'])
+        try:
+            results = pool_result.get(timeout=1 if need_timeout else None)
+            pool.join()
+        except TimeoutError:
+            main_logger.error("We lacked patience and got a multiprocessing.TimeoutError")
+            pool.terminate()
 
-    try:
-        results = pool_result.get(timeout=1 if need_timeout else None)
-        pool.join()
-    except TimeoutError:
-        main_logger.error("We lacked patience and got a multiprocessing.TimeoutError")
-        pool.terminate()
-
-    # end
-    main_logger.info("Now the pool is closed and no longer available")
+        # end
+        main_logger.info("Now the pool is closed and no longer available")
 
     # send kill signal
     time.sleep(1)
