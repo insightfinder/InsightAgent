@@ -74,7 +74,7 @@ kill -9 PID
 * `ca_certs`: Path to CA bundle.
 * `client_cert`: Path to certificate.
 * `client_key`: Path to client.
-* `prometheus_query`: Prometheus query used to query all the needed metrics. If not set, it will use `{__name__=~".+"}` to query all metrics. Format example: {instance="<instance-name>",__name__=~"<regex-for-metrics>"}
+* `prometheus_query`: Prometheus query used to query all the needed metrics. If not set, it will use `{__name__=~".+"}` to query all metrics. Format example: {instance="$instance-name",__name__=~"$regex-for-metrics"}
 * `metrics_name_field`: This field is used to get metric's name from response data field. Multiple fields are separated by commas. EX: `__name__, job`, the `metric name` =  `{__name__}_{job}`.  If none specified, agent will use the metric name from config var `metrics`.
 * `his_time_range`: History data time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00. If this option is set, the agent will query metric values by time range.
 * **`data_format`**: The format of the data to parse: RAW, RAWTAIL, CSV, CSVTAIL, XLS, XLSX, JSON, JSONTAIL, AVRO, or XML. \*TAIL formats keep track of the current file being read & the position in the file.
