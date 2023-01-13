@@ -34,15 +34,15 @@ UNDERSCORE = regex.compile(r"\_+")
 COLONS = regex.compile(r"\:+")
 # chunk size is 2Mb
 CHUNK_SIZE = 2 * 1024 * 1024
-MAX_PACKET_SIZE = 5000000
+MAX_PACKET_SIZE = 10000000
 ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 RUNNING_INDEX = 'running_index-{}.txt'
 RUNNING_INDEX_METADATA = 'running_index_metadata-{}.txt'
 # MAX_THREAD_COUNT = multiprocessing.cpu_count() + 1
-MAX_THREAD_COUNT = 1
+MAX_THREAD_COUNT = 2
 ATTEMPTS = 3
 NOT_EXIST_COMPONENT_NAME = '__not_exist_component_name__'
-
+DEFAULT_MATADATE_MAX_INSTANCE = 1500
 
 def format_timestamp(ts):
     return arrow.get(int(ts) / 1000).format('YYYY-MM-DD HH:mm:ssZZ') if ts else ""
@@ -54,7 +54,6 @@ def file_time_diff(logger, file_name, ts):
     if match:
         file_time = arrow.get(match.group(), 'YYYY-MM-DD_HH-mm-ss')
         if file_time and ts:
-            logger.info(file_time)
             data_time = arrow.get(int(ts) / 1000)
             ret = str(file_time - data_time)
 
@@ -194,6 +193,8 @@ def get_if_config_vars(logger, config_ini):
 
         if metadata_max_instances and len(metadata_max_instances) > 0:
             metadata_max_instances = int(metadata_max_instances)
+        if not metadata_max_instances or metadata_max_instances >= DEFAULT_MATADATE_MAX_INSTANCE:
+            metadata_max_instances = DEFAULT_MATADATE_MAX_INSTANCE
 
         # defaults
         if len(if_url) == 0:
@@ -519,11 +520,10 @@ def yield_message(message):
 
 
 def process_get_data(logger, cli_config_vars, bucket, object_key):
-    logger.info('start to process data from file: {}'.format(object_key))
+    logger.info('start downloading file: {}'.format(object_key))
     global messages_dict
 
     buf = io.BytesIO()
-    logger.info('downloading file: {}'.format(object_key))
 
     bucket.download_fileobj(object_key, buf)
     content = buf.getvalue()
@@ -535,7 +535,7 @@ def process_get_data(logger, cli_config_vars, bucket, object_key):
     messages_dict[object_key] = message
     threadLock.release()
 
-    logger.info('finish proces data from file: {}'.format(object_key))
+    logger.info('finish read data from file: {}'.format(object_key))
 
 
 class MyThread(threading.Thread):
@@ -613,7 +613,6 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                                                                                last_ts,
                                                                                file_time_diff(logger, file_name,
                                                                                               last_ts)))
-
     return parse_data
 
 
@@ -624,7 +623,7 @@ def send_data(logger, component_name, if_config_vars, metric_data):
         project_name = if_config_vars['project_name_prefix'] + component_name
 
     if not project_name:
-        logger.error('Cannot find project name to receive data')
+        logger.error('Cannot find project name to receive data for:' + component_name)
         return
 
     send_data_time = time.time()
@@ -656,9 +655,9 @@ def send_data(logger, component_name, if_config_vars, metric_data):
 def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
     attempts = 0
     while attempts < MAX_RETRY_NUM:
-        data_size = sys.getsizeof(to_send_data)
+        data_size = get_json_size_bytes(to_send_data)
         if data_size > MAX_PACKET_SIZE:
-            logger.error("Packet size too large %s.  Dropping packet." + str(sys.getsizeof(to_send_data)))
+            logger.error("Packet size {} too large, dropping packet.".format(data_size))
             break
         response_code = -1
         attempts += 1
@@ -666,8 +665,8 @@ def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
             response = requests.post(post_url, data=json.loads(to_send_data), verify=False)
             response_code = response.status_code
         except Exception as ex:
-            logger.error("Attempts: %d. Fail to send data, response code: %d, %s, wait %d sec to resend." % (
-                attempts, response_code, ex, RETRY_WAIT_TIME_IN_SEC))
+            logger.error("Attempts: %d. Fail to send %d data to %s, response code: %d, %s, wait %d sec to resend." % (
+                attempts, data_size, '/customprojectrawdata', response_code, ex, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
             continue
         if response_code == 200:
@@ -677,12 +676,13 @@ def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
                 logger.info("Data send successfully. Bytes: {}".format(data_size))
             break
         else:
-            logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
-                attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
+            logger.error("Attempts: %d. Fail to send %d data to %s, response code: %d wait %d sec to resend." % (
+                attempts, data_size, '/customprojectrawdata', response_code, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
 
     if attempts == MAX_RETRY_NUM:
-        logger.error("Fail to send data with max retry {}, ignore it.".format(MAX_RETRY_NUM))
+        logger.error(
+            "Fail to send data to {} with max retry {}, ignore it.".format('/customprojectrawdata', MAX_RETRY_NUM))
 
 
 def make_safe_instance_string(instance):
@@ -723,8 +723,10 @@ def read_s3_objects(is_metadata, logger, config_name, cli_config_vars, agent_con
     logger.info('Connect to s3 bucket, region: {}, bucket: {}'.format(region_name, bucket_name))
 
     objects_keys = [x.key for x in bucket.objects.filter(Prefix=object_prefix)]
-    logger.info('Found {} files in the bucket with prefix {}:\n{}'.format(len(objects_keys), object_prefix,
-                                                                          '\n'.join(objects_keys)))
+    logger.info('Found {} files in the bucket with prefix {}, last file: {}'.format(len(objects_keys), object_prefix,
+                                                                                    objects_keys[0] + '...' +
+                                                                                    objects_keys[-1] if len(
+                                                                                        objects_keys) > 0 else ""))
 
     new_object_keys = objects_keys
     if last_object_key:
@@ -748,7 +750,7 @@ def read_s3_objects(is_metadata, logger, config_name, cli_config_vars, agent_con
                         if match:
                             val_date = arrow.get(val_match.group(), 'YYYY-MM-DD')
                             if val_date >= last_date:
-                                new_object_keys = objects_keys[idx:]
+                                new_object_keys = objects_keys[index:]
                                 last_object_key = val
                                 found = True
                                 break
@@ -756,7 +758,10 @@ def read_s3_objects(is_metadata, logger, config_name, cli_config_vars, agent_con
             new_object_keys = []
 
     logger.info(
-        'Found {} new files after {}:\n{}'.format(len(new_object_keys), last_object_key, '\n'.join(new_object_keys)))
+        'Found {} new files after {}:\n{}'.format(len(new_object_keys), last_object_key,
+                                                  new_object_keys[0] + '...' +
+                                                  new_object_keys[-1] if len(
+                                                      new_object_keys) > 0 else ""))
 
     return new_object_keys, last_object_key, bucket
 
@@ -779,9 +784,9 @@ def retrieve_s3_metadata(logger, cli_config_vars, bucket, object_key):
 def send_metadata_to_receiver(logger, post_url, to_send_data):
     attempts = 0
     while attempts < MAX_RETRY_NUM:
-        data_size = sys.getsizeof(to_send_data)
+        data_size = get_json_size_bytes(to_send_data)
         if data_size > MAX_PACKET_SIZE:
-            logger.error("Packet size too large %s.  Dropping packet." + str(sys.getsizeof(to_send_data)))
+            logger.error("Packet size {} is too large, dropping packet.".format(data_size))
             break
         response_code = -1
         attempts += 1
@@ -789,20 +794,22 @@ def send_metadata_to_receiver(logger, post_url, to_send_data):
             response = requests.post(post_url, data=json.dumps(to_send_data), verify=False)
             response_code = response.status_code
         except Exception as ex:
-            logger.error("Attempts: %d. Fail to send data, response code: %d, %s, wait %d sec to resend." % (
-                attempts, response_code, ex, RETRY_WAIT_TIME_IN_SEC))
+            logger.error("Attempts: %d. Fail to send %d metadata to %s, response code: %d, %s, wait %d sec to resend." % (
+                attempts, data_size, '/v1/agent-upload-instancemetadata', response_code, ex, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
             continue
         if response_code == 200:
-            logger.info("Data send successfully. Bytes: {}".format(data_size))
+            logger.info("Metadata send successfully. Bytes: {}".format(data_size))
             break
         else:
-            logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
-                attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
+            logger.error("Attempts: %d. Fail to send %d metadata to %s, response code: %d wait %d sec to resend." % (
+                attempts, data_size, '/v1/agent-upload-instancemetadata', response_code, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
 
     if attempts == MAX_RETRY_NUM:
-        logger.error("Fail to send metadata with max retry {}, ignore it.".format(MAX_RETRY_NUM))
+        logger.error(
+            "Fail to send metadata to {} with max retry {}, ignore it.".format('/v1/agent-upload-instancemetadata',
+                                                                               MAX_RETRY_NUM))
 
 
 def send_metadata(logger, component_name, if_config_vars, data):
@@ -855,7 +862,6 @@ def process_s3_metadata(logger, config_name, cli_config_vars, agent_config_vars,
     for obj_key in new_object_keys:
         msgs = retrieve_s3_metadata(logger, cli_config_vars, bucket, obj_key)
         messages.extend(msgs)
-        logger.info('Parsing metadata completed...')
 
     instance_field = agent_config_vars['metadata_instance_field']
     component_field = agent_config_vars['metadata_component_field']
@@ -873,6 +879,8 @@ def process_s3_metadata(logger, config_name, cli_config_vars, agent_config_vars,
                     metadata_dict[component_name] = []
                 metadata_dict[component_name].append(instance_name)
                 instance_dict[instance_name] = component_name
+    logger.info('parsing metadata completed, total {} instances and {} components'.format(len(instance_dict.keys()),
+                                                                                          len(metadata_dict.keys())))
 
     # Create project if we use project_name_prefix option
     if not cli_config_vars['testing'] and project_name_prefix:
@@ -907,9 +915,9 @@ def process_s3_metadata(logger, config_name, cli_config_vars, agent_config_vars,
         try:
             with open(index_file, 'w') as fp:
                 fp.writelines([new_last_object_key])
-                logger.info('Update metadata index file to file: {}'.format(new_last_object_key))
+                logger.info('Update metadata index to: {}'.format(new_last_object_key))
         except Exception as e:
-            logger.warning('Failed to update running index file with file: {}\n'.format(new_last_object_key, e))
+            logger.warning('Failed to update metadata index to: {}\n{}'.format(new_last_object_key, e))
 
 
 def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_config_vars):
@@ -928,9 +936,11 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
         for thread in threads:
             thread.join()
 
-        # parse data
+        # parse data and reset received messages
         parse_data = process_parse_data(logger, cli_config_vars, agent_config_vars)
-        logger.info('Parsing data completed...')
+        global messages_dict
+        messages_dict = {}
+        logger.info('parsing data completed for ' + ','.join(keys))
 
         # send data
         for component_name in parse_data.keys():
@@ -968,21 +978,20 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
             try:
                 with open(index_file, 'w') as fp:
                     fp.writelines([new_last_object_key])
-                logger.info('Update index file to file: {}'.format(new_last_object_key))
+                logger.info('Update index file to: {}'.format(new_last_object_key))
             except Exception as e:
-                logger.warning('Failed to update running index file with file: {}\n'.format(new_last_object_key, e))
+                logger.warning('Failed to update index file to: {}\n{}'.format(new_last_object_key, e))
 
 
 def listener_configurer():
     """ set up logging according to the defined log level """
     # create a logging format
     formatter = logging.Formatter(
-        '{ts} {name} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
+        '{ts} {name} [pid {pid}] {lvl} {func}:{line} {msg}'.format(
             ts='%(asctime)s',
             name='%(name)s',
             pid='%(process)d',
             lvl='%(levelname)-8s',
-            mod='%(module)s',
             func='%(funcName)s',
             line='%(lineno)d',
             msg='%(message)s'),
