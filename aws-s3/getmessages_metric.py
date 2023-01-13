@@ -666,8 +666,8 @@ def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
             response = requests.post(post_url, data=json.loads(to_send_data), verify=False)
             response_code = response.status_code
         except Exception as ex:
-            logger.error("Attempts: %d. Fail to send data to %s, response code: %d, %s, wait %d sec to resend." % (
-                attempts, '/customprojectrawdata', response_code, ex, RETRY_WAIT_TIME_IN_SEC))
+            logger.error("Attempts: %d. Fail to send %d data to %s, response code: %d, %s, wait %d sec to resend." % (
+                attempts, data_size, '/customprojectrawdata', response_code, ex, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
             continue
         if response_code == 200:
@@ -677,8 +677,8 @@ def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
                 logger.info("Data send successfully. Bytes: {}".format(data_size))
             break
         else:
-            logger.error("Attempts: %d. Fail to send data to %s, response code: %d wait %d sec to resend." % (
-                attempts, '/customprojectrawdata', response_code, RETRY_WAIT_TIME_IN_SEC))
+            logger.error("Attempts: %d. Fail to send %d data to %s, response code: %d wait %d sec to resend." % (
+                attempts, data_size, '/customprojectrawdata', response_code, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
 
     if attempts == MAX_RETRY_NUM:
@@ -789,16 +789,16 @@ def send_metadata_to_receiver(logger, post_url, to_send_data):
             response = requests.post(post_url, data=json.dumps(to_send_data), verify=False)
             response_code = response.status_code
         except Exception as ex:
-            logger.error("Attempts: %d. Fail to send data to %s, response code: %d, %s, wait %d sec to resend." % (
-                attempts, '/v1/agent-upload-instancemetadata', response_code, ex, RETRY_WAIT_TIME_IN_SEC))
+            logger.error("Attempts: %d. Fail to send %d data to %s, response code: %d, %s, wait %d sec to resend." % (
+                attempts, data_size, '/v1/agent-upload-instancemetadata', response_code, ex, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
             continue
         if response_code == 200:
             logger.info("Data send successfully. Bytes: {}".format(data_size))
             break
         else:
-            logger.error("Attempts: %d. Fail to send data to %s, response code: %d wait %d sec to resend." % (
-                attempts, '/v1/agent-upload-instancemetadata', response_code, RETRY_WAIT_TIME_IN_SEC))
+            logger.error("Attempts: %d. Fail to send %d data to %s, response code: %d wait %d sec to resend." % (
+                attempts, data_size, '/v1/agent-upload-instancemetadata', response_code, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
 
     if attempts == MAX_RETRY_NUM:
