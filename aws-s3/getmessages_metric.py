@@ -38,8 +38,8 @@ MAX_PACKET_SIZE = 5000000
 ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 RUNNING_INDEX = 'running_index-{}.txt'
 RUNNING_INDEX_METADATA = 'running_index_metadata-{}.txt'
-MAX_THREAD_COUNT = multiprocessing.cpu_count() + 1
-# MAX_THREAD_COUNT = 1
+# MAX_THREAD_COUNT = multiprocessing.cpu_count() + 1
+MAX_THREAD_COUNT = 2
 ATTEMPTS = 3
 NOT_EXIST_COMPONENT_NAME = '__not_exist_component_name__'
 
@@ -54,7 +54,6 @@ def file_time_diff(logger, file_name, ts):
     if match:
         file_time = arrow.get(match.group(), 'YYYY-MM-DD_HH-mm-ss')
         if file_time and ts:
-            logger.info(file_time)
             data_time = arrow.get(int(ts) / 1000)
             ret = str(file_time - data_time)
 
@@ -519,11 +518,10 @@ def yield_message(message):
 
 
 def process_get_data(logger, cli_config_vars, bucket, object_key):
-    logger.info('start to process data from file: {}'.format(object_key))
+    logger.info('start downloading file: {}'.format(object_key))
     global messages_dict
 
     buf = io.BytesIO()
-    logger.info('downloading file: {}'.format(object_key))
 
     bucket.download_fileobj(object_key, buf)
     content = buf.getvalue()
@@ -535,7 +533,7 @@ def process_get_data(logger, cli_config_vars, bucket, object_key):
     messages_dict[object_key] = message
     threadLock.release()
 
-    logger.info('finish proces data from file: {}'.format(object_key))
+    logger.info('finish read data from file: {}'.format(object_key))
 
 
 class MyThread(threading.Thread):
@@ -613,7 +611,6 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                                                                                last_ts,
                                                                                file_time_diff(logger, file_name,
                                                                                               last_ts)))
-
     return parse_data
 
 
@@ -682,7 +679,8 @@ def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
 
     if attempts == MAX_RETRY_NUM:
-        logger.error("Fail to send data to {} with max retry {}, ignore it.".format('/customprojectrawdata', MAX_RETRY_NUM))
+        logger.error(
+            "Fail to send data to {} with max retry {}, ignore it.".format('/customprojectrawdata', MAX_RETRY_NUM))
 
 
 def make_safe_instance_string(instance):
@@ -723,8 +721,10 @@ def read_s3_objects(is_metadata, logger, config_name, cli_config_vars, agent_con
     logger.info('Connect to s3 bucket, region: {}, bucket: {}'.format(region_name, bucket_name))
 
     objects_keys = [x.key for x in bucket.objects.filter(Prefix=object_prefix)]
-    logger.info('Found {} files in the bucket with prefix {}:\n{}'.format(len(objects_keys), object_prefix,
-                                                                          '\n'.join(objects_keys)))
+    logger.info('Found {} files in the bucket with prefix {}, last file: {}'.format(len(objects_keys), object_prefix,
+                                                                                    objects_keys[0] + '...' +
+                                                                                    objects_keys[-1] if len(
+                                                                                        objects_keys) > 0 else ""))
 
     new_object_keys = objects_keys
     if last_object_key:
@@ -756,7 +756,10 @@ def read_s3_objects(is_metadata, logger, config_name, cli_config_vars, agent_con
             new_object_keys = []
 
     logger.info(
-        'Found {} new files after {}:\n{}'.format(len(new_object_keys), last_object_key, '\n'.join(new_object_keys)))
+        'Found {} new files after {}:\n{}'.format(len(new_object_keys), last_object_key,
+                                                  new_object_keys[0] + '...' +
+                                                  new_object_keys[-1] if len(
+                                                      new_object_keys) > 0 else ""))
 
     return new_object_keys, last_object_key, bucket
 
@@ -802,7 +805,9 @@ def send_metadata_to_receiver(logger, post_url, to_send_data):
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
 
     if attempts == MAX_RETRY_NUM:
-        logger.error("Fail to send metadata to {} with max retry {}, ignore it.".format('/v1/agent-upload-instancemetadata', MAX_RETRY_NUM))
+        logger.error(
+            "Fail to send metadata to {} with max retry {}, ignore it.".format('/v1/agent-upload-instancemetadata',
+                                                                               MAX_RETRY_NUM))
 
 
 def send_metadata(logger, component_name, if_config_vars, data):
@@ -855,7 +860,6 @@ def process_s3_metadata(logger, config_name, cli_config_vars, agent_config_vars,
     for obj_key in new_object_keys:
         msgs = retrieve_s3_metadata(logger, cli_config_vars, bucket, obj_key)
         messages.extend(msgs)
-        logger.info('Parsing metadata completed...')
 
     instance_field = agent_config_vars['metadata_instance_field']
     component_field = agent_config_vars['metadata_component_field']
@@ -873,6 +877,8 @@ def process_s3_metadata(logger, config_name, cli_config_vars, agent_config_vars,
                     metadata_dict[component_name] = []
                 metadata_dict[component_name].append(instance_name)
                 instance_dict[instance_name] = component_name
+    logger.info('parsing metadata completed, total {} instances and {} components'.format(len(instance_dict.keys()),
+                                                                                          len(metadata_dict.keys())))
 
     # Create project if we use project_name_prefix option
     if not cli_config_vars['testing'] and project_name_prefix:
@@ -907,9 +913,9 @@ def process_s3_metadata(logger, config_name, cli_config_vars, agent_config_vars,
         try:
             with open(index_file, 'w') as fp:
                 fp.writelines([new_last_object_key])
-                logger.info('Update metadata index file to file: {}'.format(new_last_object_key))
+                logger.info('Update metadata index to: {}'.format(new_last_object_key))
         except Exception as e:
-            logger.warning('Failed to update running index file with file: {}\n'.format(new_last_object_key, e))
+            logger.warning('Failed to update metadata index to: {}\n{}'.format(new_last_object_key, e))
 
 
 def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_config_vars):
@@ -928,9 +934,11 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
         for thread in threads:
             thread.join()
 
-        # parse data
+        # parse data and reset received messages
         parse_data = process_parse_data(logger, cli_config_vars, agent_config_vars)
-        logger.info('Parsing data completed...')
+        global messages_dict
+        messages_dict = {}
+        logger.info('parsing data completed for ' + ','.join(keys))
 
         # send data
         for component_name in parse_data.keys():
@@ -968,21 +976,20 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
             try:
                 with open(index_file, 'w') as fp:
                     fp.writelines([new_last_object_key])
-                logger.info('Update index file to file: {}'.format(new_last_object_key))
+                logger.info('Update index file to: {}'.format(new_last_object_key))
             except Exception as e:
-                logger.warning('Failed to update running index file with file: {}\n'.format(new_last_object_key, e))
+                logger.warning('Failed to update index file to: {}\n{}'.format(new_last_object_key, e))
 
 
 def listener_configurer():
     """ set up logging according to the defined log level """
     # create a logging format
     formatter = logging.Formatter(
-        '{ts} {name} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
+        '{ts} {name} [pid {pid}] {lvl} {func}:{line} {msg}'.format(
             ts='%(asctime)s',
             name='%(name)s',
             pid='%(process)d',
             lvl='%(levelname)-8s',
-            mod='%(module)s',
             func='%(funcName)s',
             line='%(lineno)d',
             msg='%(message)s'),
