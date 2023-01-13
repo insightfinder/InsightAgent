@@ -38,8 +38,8 @@ MAX_PACKET_SIZE = 5000000
 ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 RUNNING_INDEX = 'running_index-{}.txt'
 RUNNING_INDEX_METADATA = 'running_index_metadata-{}.txt'
-# MAX_THREAD_COUNT = multiprocessing.cpu_count() + 1
-MAX_THREAD_COUNT = 1
+MAX_THREAD_COUNT = multiprocessing.cpu_count() + 1
+# MAX_THREAD_COUNT = 1
 ATTEMPTS = 3
 NOT_EXIST_COMPONENT_NAME = '__not_exist_component_name__'
 
@@ -624,7 +624,7 @@ def send_data(logger, component_name, if_config_vars, metric_data):
         project_name = if_config_vars['project_name_prefix'] + component_name
 
     if not project_name:
-        logger.error('Cannot find project name to receive data')
+        logger.error('Cannot find project name to receive data for:' + component_name)
         return
 
     send_data_time = time.time()
@@ -666,8 +666,8 @@ def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
             response = requests.post(post_url, data=json.loads(to_send_data), verify=False)
             response_code = response.status_code
         except Exception as ex:
-            logger.error("Attempts: %d. Fail to send data, response code: %d, %s, wait %d sec to resend." % (
-                attempts, response_code, ex, RETRY_WAIT_TIME_IN_SEC))
+            logger.error("Attempts: %d. Fail to send data to %s, response code: %d, %s, wait %d sec to resend." % (
+                attempts, '/customprojectrawdata', response_code, ex, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
             continue
         if response_code == 200:
@@ -677,12 +677,12 @@ def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
                 logger.info("Data send successfully. Bytes: {}".format(data_size))
             break
         else:
-            logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
-                attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
+            logger.error("Attempts: %d. Fail to send data to %s, response code: %d wait %d sec to resend." % (
+                attempts, '/customprojectrawdata', response_code, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
 
     if attempts == MAX_RETRY_NUM:
-        logger.error("Fail to send data with max retry {}, ignore it.".format(MAX_RETRY_NUM))
+        logger.error("Fail to send data to {} with max retry {}, ignore it.".format('/customprojectrawdata', MAX_RETRY_NUM))
 
 
 def make_safe_instance_string(instance):
@@ -748,7 +748,7 @@ def read_s3_objects(is_metadata, logger, config_name, cli_config_vars, agent_con
                         if match:
                             val_date = arrow.get(val_match.group(), 'YYYY-MM-DD')
                             if val_date >= last_date:
-                                new_object_keys = objects_keys[idx:]
+                                new_object_keys = objects_keys[index:]
                                 last_object_key = val
                                 found = True
                                 break
@@ -789,20 +789,20 @@ def send_metadata_to_receiver(logger, post_url, to_send_data):
             response = requests.post(post_url, data=json.dumps(to_send_data), verify=False)
             response_code = response.status_code
         except Exception as ex:
-            logger.error("Attempts: %d. Fail to send data, response code: %d, %s, wait %d sec to resend." % (
-                attempts, response_code, ex, RETRY_WAIT_TIME_IN_SEC))
+            logger.error("Attempts: %d. Fail to send data to %s, response code: %d, %s, wait %d sec to resend." % (
+                attempts, '/v1/agent-upload-instancemetadata', response_code, ex, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
             continue
         if response_code == 200:
             logger.info("Data send successfully. Bytes: {}".format(data_size))
             break
         else:
-            logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
-                attempts, response_code, RETRY_WAIT_TIME_IN_SEC))
+            logger.error("Attempts: %d. Fail to send data to %s, response code: %d wait %d sec to resend." % (
+                attempts, '/v1/agent-upload-instancemetadata', response_code, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
 
     if attempts == MAX_RETRY_NUM:
-        logger.error("Fail to send metadata with max retry {}, ignore it.".format(MAX_RETRY_NUM))
+        logger.error("Fail to send metadata to {} with max retry {}, ignore it.".format('/v1/agent-upload-instancemetadata', MAX_RETRY_NUM))
 
 
 def send_metadata(logger, component_name, if_config_vars, data):
