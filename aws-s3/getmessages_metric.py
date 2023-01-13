@@ -34,7 +34,7 @@ UNDERSCORE = regex.compile(r"\_+")
 COLONS = regex.compile(r"\:+")
 # chunk size is 2Mb
 CHUNK_SIZE = 2 * 1024 * 1024
-MAX_PACKET_SIZE = 5000000
+MAX_PACKET_SIZE = 10000000
 ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 RUNNING_INDEX = 'running_index-{}.txt'
 RUNNING_INDEX_METADATA = 'running_index_metadata-{}.txt'
@@ -42,7 +42,7 @@ RUNNING_INDEX_METADATA = 'running_index_metadata-{}.txt'
 MAX_THREAD_COUNT = 2
 ATTEMPTS = 3
 NOT_EXIST_COMPONENT_NAME = '__not_exist_component_name__'
-
+DEFAULT_MATADATE_MAX_INSTANCE = 1500
 
 def format_timestamp(ts):
     return arrow.get(int(ts) / 1000).format('YYYY-MM-DD HH:mm:ssZZ') if ts else ""
@@ -193,6 +193,8 @@ def get_if_config_vars(logger, config_ini):
 
         if metadata_max_instances and len(metadata_max_instances) > 0:
             metadata_max_instances = int(metadata_max_instances)
+        if not metadata_max_instances or metadata_max_instances >= DEFAULT_MATADATE_MAX_INSTANCE:
+            metadata_max_instances = DEFAULT_MATADATE_MAX_INSTANCE
 
         # defaults
         if len(if_url) == 0:
@@ -653,9 +655,9 @@ def send_data(logger, component_name, if_config_vars, metric_data):
 def send_data_to_receiver(logger, post_url, to_send_data, num_of_message):
     attempts = 0
     while attempts < MAX_RETRY_NUM:
-        data_size = sys.getsizeof(to_send_data)
+        data_size = get_json_size_bytes(to_send_data)
         if data_size > MAX_PACKET_SIZE:
-            logger.error("Packet size too large %s.  Dropping packet." + str(sys.getsizeof(to_send_data)))
+            logger.error("Packet size {} too large, dropping packet.".format(data_size))
             break
         response_code = -1
         attempts += 1
@@ -782,9 +784,9 @@ def retrieve_s3_metadata(logger, cli_config_vars, bucket, object_key):
 def send_metadata_to_receiver(logger, post_url, to_send_data):
     attempts = 0
     while attempts < MAX_RETRY_NUM:
-        data_size = sys.getsizeof(to_send_data)
+        data_size = get_json_size_bytes(to_send_data)
         if data_size > MAX_PACKET_SIZE:
-            logger.error("Packet size too large %s.  Dropping packet." + str(sys.getsizeof(to_send_data)))
+            logger.error("Packet size {} is too large, dropping packet.".format(data_size))
             break
         response_code = -1
         attempts += 1
@@ -792,15 +794,15 @@ def send_metadata_to_receiver(logger, post_url, to_send_data):
             response = requests.post(post_url, data=json.dumps(to_send_data), verify=False)
             response_code = response.status_code
         except Exception as ex:
-            logger.error("Attempts: %d. Fail to send %d data to %s, response code: %d, %s, wait %d sec to resend." % (
+            logger.error("Attempts: %d. Fail to send %d metadata to %s, response code: %d, %s, wait %d sec to resend." % (
                 attempts, data_size, '/v1/agent-upload-instancemetadata', response_code, ex, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
             continue
         if response_code == 200:
-            logger.info("Data send successfully. Bytes: {}".format(data_size))
+            logger.info("Metadata send successfully. Bytes: {}".format(data_size))
             break
         else:
-            logger.error("Attempts: %d. Fail to send %d data to %s, response code: %d wait %d sec to resend." % (
+            logger.error("Attempts: %d. Fail to send %d metadata to %s, response code: %d wait %d sec to resend." % (
                 attempts, data_size, '/v1/agent-upload-instancemetadata', response_code, RETRY_WAIT_TIME_IN_SEC))
             time.sleep(RETRY_WAIT_TIME_IN_SEC)
 
