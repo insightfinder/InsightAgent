@@ -1,0 +1,47 @@
+---
+- name: Online install required packages
+  package:
+    name: "{{ item }}"
+    state: present
+  with_items: "{{ required_packages }}"
+  register: online_install
+  ignore_errors: yes
+
+- name: Local install
+  block:
+    - name: Copy local packages to remote
+      copy:
+        src: "{{ item }}"
+        dest: /tmp/
+      with_items: "{{ local_packages }}"
+
+    - name: Find all rpm files on remote
+      find:
+        paths: "/tmp"
+        patterns: "*.rpm"
+      register: rpm_files
+
+    - set_fact:
+        rpm_list: "{{ rpm_files.files | map(attribute='path') | list }}"
+
+- name: Create agent directory
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  with_items:
+    - "{{ agent_path }}"
+    - "{{ log_path }}"
+    - "{{ data_path }}"
+
+- name: Copy reporting_config.json
+  copy:
+    src: reporting_config.json
+    dest: "{{ install_path }}/"
+    mode: '0644'
+
+- name: Copy agent file
+  copy:
+    src: "{{ agent_file }}"
+    dest: "{{ agent_path }}/"
+    mode: '0755'

@@ -1,0 +1,6 @@
+---
+- name: Start service
+  service:
+    name: collectd
+    state: started
+    enabled: yes
