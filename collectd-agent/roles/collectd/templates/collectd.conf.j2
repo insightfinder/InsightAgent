@@ -500,38 +500,11 @@ LoadPlugin processes
 #	ValuesPercentage false
 #</Plugin>
 
-#<Plugin df>
-#       Device "/^[hs]d[a-f][0-9]?$/"
-#       Device "192.168.0.2:/mnt/nfs"
-#       MountPoint "/home"
-#       FSType "ext3"
-
-        # ignore rootfs; else, the root file-system would appear twice, causing
-        # one of the updates to fail and spam the log
-#        FSType rootfs
-        # ignore the usual virtual / temporary file-systems
-#        FSType sysfs
-#        FSType proc
-#        FSType devtmpfs
-#        FSType devpts
-#        FSType tmpfs
-#        FSType fusectl
-#        FSType cgroup
-#        IgnoreSelected true
-
-#        ReportByDevice true
-#        ReportInodes false
-
-#        ValuesAbsolute true
-#        ValuesPercentage true
-#</Plugin>
-
 <Plugin df>
-  Device "*"
-  DataSource "disk_used" "disk_free"
+  MountPoint "/*/"
   ValuesAbsolute true
   ReportByDevice false
-  IgnoreSelected true
+  ReportReserved false
 </Plugin>
 
 #<Plugin disk>
