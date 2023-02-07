@@ -1,13 +1,14 @@
 # List all target machines here.
-ec2-34-227-92-96.compute-1.amazonaws.com ansible_ssh_user=centos ansible_ssh_private_key_file=/home/yash/awskeys/shared1.pem
-127.0.0.1 ansible_ssh_user=vagrant ansible_ssh_private_key_file=home/yash/.ssh/id_rsa ansible_port=2222
+
 [all:vars]
 #ansible_user=
 #ansible_ssh_private_key_file=/home/{{ansible_user}}/.ssh/id_rsa
 
 # ifagent settings
-report_url= http://stg.insightfinder.com
-project_name= stgyash
-user_name= yash_insightfinder.com
-license_key= d1b2f04a85c6b266e031a0588f77b5b7d4eef484
+report_url= 
+project_name= 
+user_name= 
+license_key= 
 sampling_interval= 5
+# if the following disks are not found all disks will be taken as default.
+data_disks=
