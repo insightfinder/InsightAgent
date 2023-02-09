@@ -34,12 +34,6 @@
     - "{{ log_path }}"
     - "{{ data_path }}"
 
-- name: Copy reporting_config.json
-  copy:
-    src: reporting_config.json
-    dest: "{{ install_path }}/"
-    mode: '0644'
-
 - name: Copy agent file
   copy:
     src: "{{ agent_file }}"

@@ -70,6 +70,23 @@ def set_logger_config(level):
     logger_obj.addHandler(logging_handler_err)
     return logger_obj
 
+# This function is needed to modify the values input in the configuration by the user in the form of "/dev/data0" to dev-data0 which is used for df plugin
+def preprocessing_Data_Disk(data_disks_input_string):
+    data_disk_df_form = []
+    data_disks_input = data_disks_input_string.split(',')
+
+    # Assume root disk usage when input is empty
+    if data_disks_input == ['']:
+        return ["root"]
+    else:
+        for disk in data_disks_input:
+            if disk == "/":
+                data_disk_df_form.append("root")
+            else:
+                stripped_diskname = disk.strip("/")
+                split_disknames = stripped_diskname.split("/")
+                data_disk_df_form.append("-".join(split_disknames))
+    return data_disk_df_form
 
 def set_info_from_config_ini_file():
     config_vars = {}
@@ -80,6 +97,8 @@ def set_info_from_config_ini_file():
             config_vars['license_key'] = parser.get('insightfinder', 'license_key')
             config_vars['project_name'] = parser.get('insightfinder', 'project_name')
             config_vars['user_name'] = parser.get('insightfinder', 'user_name')
+            data_disks_input = parser.get('insightfinder', 'data_disks')
+            config_vars['data_disks'] = preprocessing_Data_Disk(data_disks_input)
 
             if len(config_vars['license_key']) == 0 or len(config_vars['project_name']) == 0 or len(
                     config_vars['user_name']) == 0:
@@ -90,6 +109,8 @@ def set_info_from_config_ini_file():
             os.environ["INSIGHTFINDER_LICENSE_KEY"] = config_vars['license_key']
             os.environ["INSIGHTFINDER_PROJECT_NAME"] = config_vars['project_name']
             os.environ["INSIGHTFINDER_USER_NAME"] = config_vars['user_name']
+            # cannot set list hence it needs to be a string
+            os.environ["INSIGHTFINDER_DATA_DISKS"] = data_disks_input
 
         except IOError:
             logger.error("Agent not correctly configured. Check config file.")
@@ -104,9 +125,20 @@ def set_info_from_config_ini_file():
 def set_from_reporting_config_json():
     # global hostname, hostnameShort
     report_file_name = "reporting_config.json"
+    report_file_path = os.path.join(home_path, report_file_name)
+    if not os.path.exists(report_file_path):
+        logger.info("No previous reporting file was presented so creating a new one.")
+        reporting_config_initial_data = {
+            "keep_file_days": "5",
+            "prev_endtime": "0",
+            "reporting_interval": "1",
+            "delta_fields": ["CPU", "DiskRead", "DiskWrite", "NetworkIn", "NetworkOut", "InOctets", "OutOctets", "InErrors", "OutErrors", "InDiscards", "OutDiscards"]
+        }
 
+        with open(report_file_path, 'w') as report_file:
+            json.dump(reporting_config_initial_data, report_file, indent = 4)
     # reading file form reporting_config.json
-    with open(os.path.join(home_path, report_file_name), 'r') as f:
+    with open(report_file_path, 'r') as f:
         config = json.load(f)
 
     reporting_interval_string = config['reporting_interval']
@@ -356,7 +388,7 @@ def calculate_avg_cpu_values(all_latest_timestamps, each_file, filenames, new_pr
         all_latest_timestamps.append(new_prev_endtime_epoch_l)
 
     except IOError:
-        print ""
+        logger.error("IOError caught during calculation of average cpu value")
     return new_prev_endtime_epoch_l
 
 def calculate_df_disk_used_free_bytes(all_latest_timestamps, each_file, filenames, new_prev_endtime_epoch_l, raw_data_l, start_time_epoch_l, date_l):
@@ -416,6 +448,7 @@ def calculate_disk_load_values(all_latest_timestamps, each_file, filenames, new_
         pass
     return new_prev_endtime_epoch_l
 
+# checks if the given string my_str is present in the keys of the dictionary my_dict
 def is_str_in_keys(my_dict, my_str):
     for key in my_dict.keys():
         if my_str in key:
@@ -474,10 +507,19 @@ def get_new_object_from_disk_and_network_details(data, delta_fields, disk_read, 
                 if "NetworkOut" in each_data:
                     network_out = float(data[each_data])
                 if "DiskUsed" in each_data:
-                    disk_used += float(data[each_data])
-                    disk_total += float(data[each_data])
+                    if agent_config_vars['data_disks'] is not None:
+                        if each_data[:-9] in agent_config_vars['data_disks']:
+                            disk_used += float(data[each_data])
+                            disk_total += float(data[each_data])
+                    else:
+                        disk_used += float(data[each_data])
+                        disk_total += float(data[each_data])
                 if "DiskFree" in each_data:
-                    disk_total += float(data[each_data])
+                    if agent_config_vars['data_disks'] is not None:
+                        if each_data[:-9] in agent_config_vars['data_disks']:
+                            disk_total += float(data[each_data])
+                    else:
+                        disk_total += float(data[each_data])
 
         if (not is_str_in_keys(data, each_metric)) and each_metric != "DiskRead" and each_metric != "DiskWrite" \
                 and each_metric != "NetworkIn" and each_metric != "NetworkOut" and each_metric != "DiskUsed":
