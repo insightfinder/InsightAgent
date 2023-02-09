@@ -10,5 +10,6 @@ project_name=
 user_name= 
 license_key= 
 sampling_interval= 5
-# if the following disks are not found all disks will be taken as default.
-data_disks=
+# if data_disks is empty root disk usage will be reported
+# format: data_disks=["/", "/run", "/sys/fs/cgroup"]
+data_disks=["/", "/run"]
