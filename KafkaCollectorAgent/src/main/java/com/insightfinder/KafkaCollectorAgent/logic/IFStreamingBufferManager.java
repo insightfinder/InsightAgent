@@ -67,6 +67,7 @@ public class IFStreamingBufferManager {
     private final ConcurrentHashMap<String, IFStreamingBuffer> collectingDataMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, IFStreamingBuffer> collectedBufferMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> sendingStatistics = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> sendingTimeStatistics = new ConcurrentHashMap<>();
     BloomFilter<String> filter = BloomFilter.create(
             Funnels.stringFunnel(Charset.defaultCharset()),
             100000000);
@@ -271,7 +272,8 @@ public class IFStreamingBufferManager {
                     if (ifConfig.isLogSendingData()) {
                         if (sendingStatistics.containsKey(key)){
                                 float percent = dataInTimestampMap.get(timestamp).getMetricDataPointSet().size() / sendingStatistics.get(key);
-                                String dropStr = String.format("At %s drop data / sent data: %f", key, percent*100);
+                                long gapSeconds = (System.currentTimeMillis() - sendingTimeStatistics.get(key)) / 1000;
+                                String dropStr = String.format("At %s drop data / sent data: %f, time gap: %d seconds", key, percent*100, gapSeconds);
                                 logger.log(Level.INFO, dropStr);
                         }else {
                                 String dropStr = String.format("At %s drop data %d", key,dataInTimestampMap.get(timestamp).getMetricDataPointSet().size());
@@ -283,6 +285,7 @@ public class IFStreamingBufferManager {
                 filter.put(key);
                 if (ifConfig.isLogSendingData()) {
                         sendingStatistics.put(key, dataInTimestampMap.get(timestamp).getMetricDataPointSet().size());
+                        sendingTimeStatistics.put(key, System.currentTimeMillis());
                 }
 
                 JsonObject thisTimestampObj = sortByTimestampMap.getOrDefault(timestamp, new JsonObject());
