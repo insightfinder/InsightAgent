@@ -1,0 +1,7 @@
+{{ ansible_managed | comment }}
+[insightfinder]
+license_key={{ license_key }}
+project_name={{ project_name }}
+user_name={{ user_name }}
+sampling_interval={{ sampling_interval }}
+data_disks={{ data_disks | join(",") }}
