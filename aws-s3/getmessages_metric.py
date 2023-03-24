@@ -273,6 +273,7 @@ def get_agent_config_vars(logger, config_ini):
             instance_field = config_parser.get('agent', 'instance_field')
             metric_fields = config_parser.get('agent', 'metric_fields')
             metric_whitelist = config_parser.get('agent', 'metric_whitelist')
+            log_data_field = config_parser.get('agent', 'log_data_field')
             metadata_instance_field = config_parser.get('agent', 'metadata_instance_field')
             metadata_component_field = config_parser.get('agent', 'metadata_component_field')
 
@@ -331,6 +332,7 @@ def get_agent_config_vars(logger, config_ini):
             'timestamp_field': timestamp_field,
             'instance_field': instance_field,
             'metric_fields': metric_fields,
+            'log_data_field': log_data_field,
             'metric_whitelist_regex': metric_whitelist_regex,
             'metadata_instance_field': metadata_instance_field,
             'metadata_component_field': metadata_component_field,
@@ -562,6 +564,7 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
     timestamp_field = agent_config_vars['timestamp_field']
     instance = agent_config_vars['instance_field']
     metric_fields = agent_config_vars['metric_fields']
+    log_data_field = agent_config_vars['log_data_field']
 
     global messages_dict
     global instance_dict
@@ -571,6 +574,9 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
 
         last_ts = None
         messages = messages_dict[file_name]
+
+        # TODO: add code to read log data with log_data_field
+
         # ignore messages without instance field
         messages = [metric for metric in messages if metric[instance]]
 

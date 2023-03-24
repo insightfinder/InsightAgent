@@ -35,6 +35,8 @@ metadata_component_field =
 metric_fields =
 # metrics_whitelist is a regex string used to define which metrics will be filtered.
 metric_whitelist =
+# log data field, use . for nested object, ex: item_data.EventData; if it's empty, use the whole data
+log_data_field =
 
 ## proxy
 agent_http_proxy =
