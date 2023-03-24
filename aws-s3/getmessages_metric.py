@@ -22,6 +22,7 @@ import boto3
 import pytz
 import regex
 import requests
+from functools import reduce
 
 threadLock = threading.Lock()
 messages_dict = {}
@@ -43,6 +44,11 @@ MAX_THREAD_COUNT = 2
 ATTEMPTS = 3
 NOT_EXIST_COMPONENT_NAME = '__not_exist_component_name__'
 DEFAULT_MATADATE_MAX_INSTANCE = 1500
+
+
+def deep_get(dictionary, keys, default=None):
+    return reduce(lambda d, key: d.get(key, default) if isinstance(d, dict) else default, keys.split("."), dictionary)
+
 
 def format_timestamp(ts):
     return arrow.get(int(ts) / 1000).format('YYYY-MM-DD HH:mm:ssZZ') if ts else ""
@@ -572,11 +578,11 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
             if metric_fields and len(metric_fields) > 0:
                 for field in metric_fields:
                     data_field = field
-                    data_value = metric.get(field)
+                    data_value = deep_get(metric, field)
                     if field.find('::') != -1:
                         metric_name, metric_value = field.split('::')
-                        data_field = metric.get(metric_name)
-                        data_value = metric.get(metric_value)
+                        data_field = deep_get(metric, metric_name)
+                        data_value = deep_get(metric, metric_value)
                     if not data_field:
                         continue
 
@@ -586,12 +592,12 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                         logger.debug('metric_whitelist has no matching data')
                         continue
 
-                    inst_name = metric[instance]
+                    inst_name = deep_get(metric, instance)
                     component_name = instance_dict.get(inst_name)
                     if not component_name:
                         component_name = NOT_EXIST_COMPONENT_NAME
 
-                    ts = metric[timestamp_field]
+                    ts = deep_get(metric, timestamp_field)
                     full_instance = make_safe_instance_string(inst_name)
                     metric_key = '{}[{}]'.format(data_field, full_instance)
 
