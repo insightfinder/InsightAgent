@@ -574,8 +574,23 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
 
         last_ts = None
         messages = messages_dict[file_name]
+        log_messages= messages_dict[file_name]
+        log_directory = 'logs'
 
-        # TODO: add code to read log data with log_data_field
+        # Read log data.
+        for log in yield_message(log_messages):
+            identifier = "_".join([deep_get(log, "item_id"), deep_get(log, "item_name"), deep_get(log, "item_time")])
+            if log_directory not in parse_data:
+                parse_data[log_directory] = {}
+            if not log_data_field or len(log_data_field) < 0:
+                parse_data[log_data_field][identifier] = log
+                logger.info("There's no log data field specified. Full message will be used as log.")
+            else:
+                log_data = deep_get(log,log_data_field)
+                if log_data:
+                    parse_data[log_data_field][identifier] = log_data
+                else:
+                    logger.debug('Can not find the log data field. Please check the log_data_field in config.ini or input data.')
 
         # ignore messages without instance field
         messages = [metric for metric in messages if metric[instance]]
