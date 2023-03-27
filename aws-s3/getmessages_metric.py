@@ -565,6 +565,7 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
     instance = agent_config_vars['instance_field']
     metric_fields = agent_config_vars['metric_fields']
     log_data_field = agent_config_vars['log_data_field']
+    project_type = agent_config_vars['project_type']
 
     global messages_dict
     global instance_dict
@@ -574,69 +575,69 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
 
         last_ts = None
         messages = messages_dict[file_name]
-        log_messages= messages_dict[file_name]
-        log_directory = 'logs'
-
-        # Read log data.
-        for log in yield_message(log_messages):
-            identifier = "_".join([deep_get(log, "item_id"), deep_get(log, "item_name"), deep_get(log, "item_time")])
-            if log_directory not in parse_data:
-                parse_data[log_directory] = {}
-            if not log_data_field or len(log_data_field) < 0:
-                parse_data[log_data_field][identifier] = log
-                logger.info("There's no log data field specified. Full message will be used as log.")
-            else:
-                log_data = deep_get(log,log_data_field)
-                if log_data:
-                    parse_data[log_data_field][identifier] = log_data
+        
+        if project_type == 'log':
+            log_directory = 'logs'
+            for log in yield_message(messages):
+                identifier = "_".join([deep_get(log, "item_id"), deep_get(log, "item_name"), deep_get(log, "item_time")])
+                if log_directory not in parse_data:
+                    parse_data[log_directory] = {}
+                if not log_data_field or len(log_data_field) < 0:
+                    parse_data[log_data_field][identifier] = log
+                    logger.info("There's no log data field specified. Full message will be used as log.")
                 else:
-                    logger.debug('Can not find the log data field. Please check the log_data_field in config.ini or input data.')
+                    log_data = deep_get(log,log_data_field)
+                    if log_data:
+                        parse_data[log_data_field][identifier] = log_data
+                    else:
+                        logger.debug('Can not find the log data field. Please check the log_data_field in config.ini or input data.')
+        else:
+            # ignore messages without instance field
 
-        # ignore messages without instance field
-        messages = [metric for metric in messages if metric[instance]]
+            messages = [metric for metric in messages if metric[instance]]
 
-        for metric in yield_message(messages):
-            if metric_fields and len(metric_fields) > 0:
-                for field in metric_fields:
-                    data_field = field
-                    data_value = deep_get(metric, field)
-                    if field.find('::') != -1:
-                        metric_name, metric_value = field.split('::')
-                        data_field = deep_get(metric, metric_name)
-                        data_value = deep_get(metric, metric_value)
-                    if not data_field:
-                        continue
+            for metric in yield_message(messages):
+                if metric_fields and len(metric_fields) > 0:
+                    for field in metric_fields:
+                        data_field = field
+                        data_value = deep_get(metric, field)
+                        if field.find('::') != -1:
+                            metric_name, metric_value = field.split('::')
+                            data_field = deep_get(metric, metric_name)
+                            data_value = deep_get(metric, metric_value)
+                        if not data_field:
+                            continue
 
-                    # filter by metric whitelist
-                    if agent_config_vars['metric_whitelist_regex'] and not agent_config_vars[
-                        'metric_whitelist_regex'].match(data_field):
-                        logger.debug('metric_whitelist has no matching data')
-                        continue
+                        # filter by metric whitelist
+                        if agent_config_vars['metric_whitelist_regex'] and not agent_config_vars[
+                            'metric_whitelist_regex'].match(data_field):
+                            logger.debug('metric_whitelist has no matching data')
+                            continue
 
-                    inst_name = deep_get(metric, instance)
-                    component_name = instance_dict.get(inst_name)
-                    if not component_name:
-                        component_name = NOT_EXIST_COMPONENT_NAME
+                        inst_name = deep_get(metric, instance)
+                        component_name = instance_dict.get(inst_name)
+                        if not component_name:
+                            component_name = NOT_EXIST_COMPONENT_NAME
 
-                    ts = deep_get(metric, timestamp_field)
-                    full_instance = make_safe_instance_string(inst_name)
-                    metric_key = '{}[{}]'.format(data_field, full_instance)
+                        ts = deep_get(metric, timestamp_field)
+                        full_instance = make_safe_instance_string(inst_name)
+                        metric_key = '{}[{}]'.format(data_field, full_instance)
 
-                    if component_name not in parse_data:
-                        parse_data[component_name] = {}
+                        if component_name not in parse_data:
+                            parse_data[component_name] = {}
 
-                    if ts not in parse_data[component_name]:
-                        timestamp = int(ts) if len(str(int(ts))) > 10 else int(ts) * 1000
-                        if not last_ts or timestamp > last_ts:
-                            last_ts = timestamp
-                        parse_data[component_name][ts] = {}
-                    if inst_name not in parse_data[component_name][ts]:
-                        parse_data[component_name][ts][inst_name] = {}
-                    parse_data[component_name][ts][inst_name][metric_key] = str(data_value)
+                        if ts not in parse_data[component_name]:
+                            timestamp = int(ts) if len(str(int(ts))) > 10 else int(ts) * 1000
+                            if not last_ts or timestamp > last_ts:
+                                last_ts = timestamp
+                            parse_data[component_name][ts] = {}
+                        if inst_name not in parse_data[component_name][ts]:
+                            parse_data[component_name][ts][inst_name] = {}
+                        parse_data[component_name][ts][inst_name][metric_key] = str(data_value)
 
-        if last_ts:
-            logger.info(
-                "In file {} the last timestamp is {} {}, time diff: {}".format(file_name, format_timestamp(last_ts),
+            if last_ts:
+                logger.info(
+                    "In file {} the last timestamp is {} {}, time diff: {}".format(file_name, format_timestamp(last_ts),
                                                                                last_ts,
                                                                                file_time_diff(logger, file_name,
                                                                                               last_ts)))
