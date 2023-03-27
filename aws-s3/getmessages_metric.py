@@ -606,7 +606,6 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                         logger.debug('Can not find the log data field. Please check the log_data_field in config.ini or input data.')
         else:
             # ignore messages without instance field
-
             messages = [metric for metric in messages if metric[instance]]
 
             for metric in yield_message(messages):
@@ -653,9 +652,8 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                                                                                               last_ts)))
     return parse_data
 
-# update the send data logic
-def send_data(logger, component_name, if_config_vars, metric_data):
-    """ Sends parsed metric data to InsightFinder """
+def send_data(logger, component_name, if_config_vars, agent_config_vars, data):
+    """ Sends parsed data to InsightFinder """
     project_name = if_config_vars['project_name']
     if component_name != NOT_EXIST_COMPONENT_NAME and if_config_vars['project_name_prefix']:
         project_name = if_config_vars['project_name_prefix'] + component_name
@@ -663,25 +661,43 @@ def send_data(logger, component_name, if_config_vars, metric_data):
     if not project_name:
         logger.error('Cannot find project name to receive data for:' + component_name)
         return
+    project_type = agent_config_vars['project_type']
+    if not project_type:
+        logger.error('Cannot find project type to receive data for:' + component_name)
+        return
 
     send_data_time = time.time()
-    # prepare data for metric streaming agent
     to_send_data_dict = dict()
-    # for backend so this is the camel case in to_send_data_dict
-    to_send_data_dict["metricData"] = json.dumps(metric_data)
-    to_send_data_dict["licenseKey"] = if_config_vars['license_key']
-    to_send_data_dict["projectName"] = project_name
-    to_send_data_dict["userName"] = if_config_vars['user_name']
-    to_send_data_dict["agentType"] = "streaming"
+    if project_type == 'metric':
+        # prepare data for metric streaming agent
+        to_send_data_dict = dict()
+        # for backend so this is the camel case in to_send_data_dict
+        to_send_data_dict["metricData"] = json.dumps(data)
+        to_send_data_dict["licenseKey"] = if_config_vars['license_key']
+        to_send_data_dict["projectName"] = project_name
+        to_send_data_dict["userName"] = if_config_vars['user_name']
+        to_send_data_dict["agentType"] = "streaming"
+    elif project_name == 'log':
+        timestamp_field = agent_config_vars['timestamp_field']
+        if not timestamp_field:
+            logger.error('Cannot find timestamp in the config.ini file. Please check your configuration.')
+            return
+        instance = agent_config_vars['instance_field']
+        if not instance:
+            logger.error('Cannot find instance in the config.ini file. Please check your configuration.')
+            return
+        to_send_data_dict["eventId"] = timestamp_field
+        to_send_data_dict["tag"] = instance
+        to_send_data_dict["data"] = json.dumps(data)
 
     to_send_data_json = json.dumps(to_send_data_dict)
 
     # send the data
     post_url = if_config_vars['if_url'] + "/customprojectrawdata"
-    send_data_to_receiver(logger, post_url, to_send_data_json, len(metric_data))
+    send_data_to_receiver(logger, post_url, to_send_data_json, len(data))
     last_ts = None
-    if len(metric_data):
-        last_ts = metric_data[-1].get('timestamp', None)
+    if len(data):
+        last_ts = data[-1].get('timestamp', None)
 
     logger.info(
         "--- Send data to {}, last timestamp: {}, {}, use: {} seconds ---".format(project_name,
@@ -996,7 +1012,7 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
                         logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
                         data = []
                     else:
-                        send_data(logger, component_name, if_config_vars, data)
+                        send_data(logger, component_name, if_config_vars, agent_config_vars, data)
                         data = []
 
             if len(data) > 0:
@@ -1004,7 +1020,7 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
                     logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
                 else:
                     logger.debug('send data {} to IF.'.format(data))
-                    send_data(logger, component_name, if_config_vars, data)
+                    send_data(logger, component_name, if_config_vars, agent_config_vars, data)
 
         # move to next batch
         new_object_keys = new_object_keys[MAX_THREAD_COUNT:]
