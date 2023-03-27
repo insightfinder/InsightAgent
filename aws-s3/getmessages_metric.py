@@ -575,20 +575,33 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
 
         last_ts = None
         messages = messages_dict[file_name]
+        component_name = instance_dict.get(inst_name)
+        if not component_name:
+            component_name = NOT_EXIST_COMPONENT_NAME
         
         if project_type == 'log':
-            log_directory = 'logs'
             for log in yield_message(messages):
-                identifier = "_".join([deep_get(log, "item_id"), deep_get(log, "item_name"), deep_get(log, "item_time")])
-                if log_directory not in parse_data:
-                    parse_data[log_directory] = {}
+                inst_name = deep_get(log, instance)
+                ts = deep_get(log, timestamp_field)
+                full_instance = make_safe_instance_string(inst_name)
+                if component_name not in parse_data:
+                    parse_data[component_name] = {}
+
+                if ts not in parse_data[component_name]:
+                    timestamp = int(ts) if len(str(int(ts))) > 10 else int(ts) * 1000
+                    if not last_ts or timestamp > last_ts:
+                        last_ts = timestamp
+                    parse_data[component_name][ts] = {}
+                if inst_name not in parse_data[component_name][ts]:
+                    parse_data[component_name][ts][inst_name] = {}
+                
                 if not log_data_field or len(log_data_field) < 0:
-                    parse_data[log_data_field][identifier] = log
+                    parse_data[component_name][ts][inst_name] = log
                     logger.info("There's no log data field specified. Full message will be used as log.")
                 else:
                     log_data = deep_get(log,log_data_field)
                     if log_data:
-                        parse_data[log_data_field][identifier] = log_data
+                        parse_data[component_name][ts][inst_name] = log_data
                     else:
                         logger.debug('Can not find the log data field. Please check the log_data_field in config.ini or input data.')
         else:
@@ -615,9 +628,6 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                             continue
 
                         inst_name = deep_get(metric, instance)
-                        component_name = instance_dict.get(inst_name)
-                        if not component_name:
-                            component_name = NOT_EXIST_COMPONENT_NAME
 
                         ts = deep_get(metric, timestamp_field)
                         full_instance = make_safe_instance_string(inst_name)
@@ -643,7 +653,7 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                                                                                               last_ts)))
     return parse_data
 
-
+# update the send data logic
 def send_data(logger, component_name, if_config_vars, metric_data):
     """ Sends parsed metric data to InsightFinder """
     project_name = if_config_vars['project_name']
