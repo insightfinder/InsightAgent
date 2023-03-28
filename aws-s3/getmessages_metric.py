@@ -600,11 +600,16 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                     parse_data[component_name][ts][inst_name].append(log)
                     logger.info("There's no log data field specified. Full message will be used as log.")
                 else:
-                    log_data = deep_get(log,log_data_field)
-                    if log_data:
-                        parse_data[component_name][ts][inst_name].append(log_data)
-                    else:
-                        logger.debug('Can not find the log data field. Please check the log_data_field in config.ini or input data.')
+                    log_entries = log_data_field.split(',') if log_data_field.find(',') != -1 else [log_data_field]
+                    log_data = {}
+                    for entry in log_entries:
+                        current_entry = deep_get(log,log_data_field)
+                        if current_entry:
+                            log_data[entry] = current_entry
+                        else:
+                            log_data[entry] = ""
+                            logger.info(f"Can't find log data field {entry}. Please check your config.ini")
+                    parse_data[component_name][ts][inst_name].append(log_data)
         else:
             # ignore messages without instance field
             messages = [metric for metric in messages if metric[instance]]
@@ -679,17 +684,7 @@ def send_data(logger, component_name, if_config_vars, agent_config_vars, data):
         to_send_data_dict["userName"] = if_config_vars['user_name']
         to_send_data_dict["agentType"] = "streaming"
     elif project_name == 'log':
-        timestamp_field = agent_config_vars['timestamp_field']
-        if not timestamp_field:
-            logger.error('Cannot find timestamp in the config.ini file. Please check your configuration.')
-            return
-        instance = agent_config_vars['instance_field']
-        if not instance:
-            logger.error('Cannot find instance in the config.ini file. Please check your configuration.')
-            return
-        to_send_data_dict["eventId"] = timestamp_field
-        to_send_data_dict["tag"] = instance
-        to_send_data_dict["data"] = json.dumps(data)
+        to_send_data_dict = data
 
     to_send_data_json = json.dumps(to_send_data_dict)
 
@@ -1028,26 +1023,28 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
                 data = []
                 for timestamp in sorted(parse_data[component_name].keys()):
                     ts = format_timestamp(timestamp)
-                    line = {'timestamp': str(ts)}
                     for inst in parse_data[component_name][timestamp].keys():
                         logs = parse_data[component_name][timestamp][inst]
                         for log in logs:
-                            data.append(log)
+                            data.append({
+                                'eventId': ts,
+                                'tag': inst,
+                                'data':  log
+                            })
 
-                    if get_json_size_bytes(data) >= CHUNK_SIZE:
-                        if cli_config_vars['testing']:
-                            logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
-                            data = []
-                        else:
-                            send_data(logger, component_name, if_config_vars, agent_config_vars, data)
-                            data = []
-
-                if len(data) > 0:
-                    if cli_config_vars['testing']:
-                        logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
-                    else:
-                        logger.debug('send data {} to IF.'.format(data))
-                        send_data(logger, component_name, if_config_vars, agent_config_vars, data)
+                            if get_json_size_bytes(data) >= CHUNK_SIZE:
+                                if cli_config_vars['testing']:
+                                    logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+                                    data = []
+                                else:
+                                    send_data(logger, component_name, if_config_vars, agent_config_vars, data)
+                                    data = []
+                        if len(data) > 0:
+                            if cli_config_vars['testing']:
+                                logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+                            else:
+                                logger.debug('send data {} to IF.'.format(data))
+                                send_data(logger, component_name, if_config_vars, agent_config_vars, data)
 
         # move to next batch
         new_object_keys = new_object_keys[MAX_THREAD_COUNT:]
