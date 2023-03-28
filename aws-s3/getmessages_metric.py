@@ -589,8 +589,7 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                     parse_data[component_name] = {}
 
                 if ts not in parse_data[component_name]:
-                    arrow_ts = arrow.get(ts)
-                    timestamp = arrow_ts.timestamp()
+                    timestamp = format_timestamp(ts)
                     if not last_ts or timestamp > last_ts:
                         last_ts = timestamp
                     parse_data[component_name][ts] = {}
@@ -997,32 +996,58 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
         global messages_dict
         messages_dict = {}
         logger.info('parsing data completed for ' + ','.join(keys))
+        if agent_config_vars['project_type'] == 'metric':
+        # send metric data
+            for component_name in parse_data.keys():
+                data = []
+                for key in sorted(parse_data[component_name].keys()):
+                    value = parse_data[component_name][key]
+                    timestamp = int(key) if len(str(int(key))) > 10 else int(key) * 1000
+                    line = {'timestamp': str(timestamp)}
+                    for d in value.values():
+                        line.update(d)
+                    data.append(line)
 
-        # send data
-        for component_name in parse_data.keys():
-            data = []
-            for key in sorted(parse_data[component_name].keys()):
-                value = parse_data[component_name][key]
-                timestamp = int(key) if len(str(int(key))) > 10 else int(key) * 1000
-                line = {'timestamp': str(timestamp)}
-                for d in value.values():
-                    line.update(d)
-                data.append(line)
+                    if get_json_size_bytes(data) >= CHUNK_SIZE:
+                        if cli_config_vars['testing']:
+                            logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+                            data = []
+                        else:
+                            send_data(logger, component_name, if_config_vars, agent_config_vars, data)
+                            data = []
 
-                if get_json_size_bytes(data) >= CHUNK_SIZE:
+                if len(data) > 0:
                     if cli_config_vars['testing']:
                         logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
-                        data = []
                     else:
+                        logger.debug('send data {} to IF.'.format(data))
                         send_data(logger, component_name, if_config_vars, agent_config_vars, data)
-                        data = []
+        else:
+            # send log data
+            for component_name in parse_data.keys():
+                data = []
+                for timestamp in sorted(parse_data[component_name].keys()):
+                    ts = format_timestamp(timestamp)
+                    line = {'timestamp': str(ts)}
+                    for inst in parse_data[component_name][timestamp].keys():
+                        logs = parse_data[component_name][timestamp][inst]
+                        for log in logs:
+                            data.append(log)
 
-            if len(data) > 0:
-                if cli_config_vars['testing']:
-                    logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
-                else:
-                    logger.debug('send data {} to IF.'.format(data))
-                    send_data(logger, component_name, if_config_vars, agent_config_vars, data)
+                    if get_json_size_bytes(data) >= CHUNK_SIZE:
+                        if cli_config_vars['testing']:
+                            logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+                            data = []
+                        else:
+                            send_data(logger, component_name, if_config_vars, agent_config_vars, data)
+                            data = []
+
+                if len(data) > 0:
+                    if cli_config_vars['testing']:
+                        logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+                    else:
+                        logger.debug('send data {} to IF.'.format(data))
+                        send_data(logger, component_name, if_config_vars, agent_config_vars, data)
 
         # move to next batch
         new_object_keys = new_object_keys[MAX_THREAD_COUNT:]
