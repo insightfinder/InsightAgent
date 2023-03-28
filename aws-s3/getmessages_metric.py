@@ -426,7 +426,7 @@ def get_data_type_from_project_type(if_config_vars):
     elif 'TRACE' in if_config_vars['project_type']:
         return 'Trace'
     else:  # LOG
-        return 'Log'
+        return 'LOG'
 
 
 def check_project_exist(logger, if_config_vars, project_name, system_name):
@@ -576,13 +576,14 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
 
         last_ts = None
         messages = messages_dict[file_name]
-        component_name = instance_dict.get(inst_name)
-        if not component_name:
-            component_name = NOT_EXIST_COMPONENT_NAME
         
-        if project_type == 'log':
+        if project_type == 'LOG':
             for log in yield_message(messages):
                 inst_name = deep_get(log, instance)
+                component_name = instance_dict.get(inst_name)
+                if not component_name:
+                    component_name = NOT_EXIST_COMPONENT_NAME
+                
                 ts = deep_get(log, timestamp_field)
                 full_instance = make_safe_instance_string(inst_name)
                 if component_name not in parse_data:
@@ -633,6 +634,9 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                             continue
 
                         inst_name = deep_get(metric, instance)
+                        component_name = instance_dict.get(inst_name)
+                        if not component_name:
+                            component_name = NOT_EXIST_COMPONENT_NAME
 
                         ts = deep_get(metric, timestamp_field)
                         full_instance = make_safe_instance_string(inst_name)
@@ -674,7 +678,7 @@ def send_data(logger, component_name, if_config_vars, data):
 
     send_data_time = time.time()
     to_send_data_dict = dict()
-    if project_type == 'metric':
+    if project_type == 'METRIC':
         # prepare data for metric streaming agent
         to_send_data_dict = dict()
         # for backend so this is the camel case in to_send_data_dict
@@ -991,7 +995,7 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
         global messages_dict
         messages_dict = {}
         logger.info('parsing data completed for ' + ','.join(keys))
-        if if_config_vars['project_type'] == 'metric':
+        if if_config_vars['project_type'] == 'METRIC':
         # send metric data
             for component_name in parse_data.keys():
                 data = []
