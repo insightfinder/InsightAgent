@@ -585,12 +585,15 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                     component_name = NOT_EXIST_COMPONENT_NAME
                 
                 ts = deep_get(log, timestamp_field)
+                if not ts:
+                    logger.info("current log missing  timestamp info. It will use current time as its timestamp")
+                    ts = arrow.now().format('YYYY-MM-DD HH:mm:ssZZ')
                 full_instance = make_safe_instance_string(inst_name)
                 if component_name not in parse_data:
                     parse_data[component_name] = {}
 
                 if ts not in parse_data[component_name]:
-                    timestamp = format_timestamp(ts)
+                    timestamp = arrow.get(ts).format('YYYY-MM-DD HH:mm:ssZZ')
                     if not last_ts or timestamp > last_ts:
                         last_ts = timestamp
                     parse_data[component_name][ts] = {}
@@ -604,7 +607,8 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                     log_entries = log_data_field.split(',') if log_data_field.find(',') != -1 else [log_data_field]
                     log_data = {}
                     for entry in log_entries:
-                        current_entry = deep_get(log,log_data_field)
+                        entry = entry.strip()
+                        current_entry = deep_get(log, entry)
                         if current_entry:
                             log_data[entry] = current_entry
                         else:
@@ -1026,7 +1030,7 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
             for component_name in parse_data.keys():
                 data = []
                 for timestamp in sorted(parse_data[component_name].keys()):
-                    ts = format_timestamp(timestamp)
+                    ts = arrow.get(timestamp).format('YYYY-MM-DD HH:mm:ssZZ')
                     for inst in parse_data[component_name][timestamp].keys():
                         logs = parse_data[component_name][timestamp][inst]
                         for log in logs:
