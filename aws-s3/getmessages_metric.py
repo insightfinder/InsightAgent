@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import urllib
+import arrow
 from logging.handlers import QueueHandler
 from optparse import OptionParser
 from pathlib import Path
@@ -588,20 +589,21 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                     parse_data[component_name] = {}
 
                 if ts not in parse_data[component_name]:
-                    timestamp = int(ts) if len(str(int(ts))) > 10 else int(ts) * 1000
+                    arrow_ts = arrow.get(ts)
+                    timestamp = arrow_ts.timestamp()
                     if not last_ts or timestamp > last_ts:
                         last_ts = timestamp
                     parse_data[component_name][ts] = {}
                 if inst_name not in parse_data[component_name][ts]:
-                    parse_data[component_name][ts][inst_name] = {}
+                    parse_data[component_name][ts][inst_name] = list()
                 
                 if not log_data_field or len(log_data_field) < 0:
-                    parse_data[component_name][ts][inst_name] = log
+                    parse_data[component_name][ts][inst_name].append(log)
                     logger.info("There's no log data field specified. Full message will be used as log.")
                 else:
                     log_data = deep_get(log,log_data_field)
                     if log_data:
-                        parse_data[component_name][ts][inst_name] = log_data
+                        parse_data[component_name][ts][inst_name].append(log_data)
                     else:
                         logger.debug('Can not find the log data field. Please check the log_data_field in config.ini or input data.')
         else:
