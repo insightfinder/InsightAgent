@@ -559,14 +559,14 @@ class MyThread(threading.Thread):
         process_get_data(self.logger, self.cli_config_vars, self.bucket, self.object_key)
 
 
-def process_parse_data(logger, cli_config_vars, agent_config_vars):
+def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_vars):
     logger.info('start to parse data...')
 
     timestamp_field = agent_config_vars['timestamp_field']
     instance = agent_config_vars['instance_field']
     metric_fields = agent_config_vars['metric_fields']
     log_data_field = agent_config_vars['log_data_field']
-    project_type = agent_config_vars['project_type']
+    project_type = if_config_vars['project_type']
 
     global messages_dict
     global instance_dict
@@ -658,7 +658,7 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
                                                                                               last_ts)))
     return parse_data
 
-def send_data(logger, component_name, if_config_vars, agent_config_vars, data):
+def send_data(logger, component_name, if_config_vars, data):
     """ Sends parsed data to InsightFinder """
     project_name = if_config_vars['project_name']
     if component_name != NOT_EXIST_COMPONENT_NAME and if_config_vars['project_name_prefix']:
@@ -667,7 +667,7 @@ def send_data(logger, component_name, if_config_vars, agent_config_vars, data):
     if not project_name:
         logger.error('Cannot find project name to receive data for:' + component_name)
         return
-    project_type = agent_config_vars['project_type']
+    project_type = if_config_vars['project_type']
     if not project_type:
         logger.error('Cannot find project type to receive data for:' + component_name)
         return
@@ -987,11 +987,11 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
             thread.join()
 
         # parse data and reset received messages
-        parse_data = process_parse_data(logger, cli_config_vars, agent_config_vars)
+        parse_data = process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_vars)
         global messages_dict
         messages_dict = {}
         logger.info('parsing data completed for ' + ','.join(keys))
-        if agent_config_vars['project_type'] == 'metric':
+        if if_config_vars['project_type'] == 'metric':
         # send metric data
             for component_name in parse_data.keys():
                 data = []
@@ -1008,7 +1008,7 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
                             logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
                             data = []
                         else:
-                            send_data(logger, component_name, if_config_vars, agent_config_vars, data)
+                            send_data(logger, component_name, if_config_vars, data)
                             data = []
 
                 if len(data) > 0:
@@ -1016,7 +1016,7 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
                         logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
                     else:
                         logger.debug('send data {} to IF.'.format(data))
-                        send_data(logger, component_name, if_config_vars, agent_config_vars, data)
+                        send_data(logger, component_name, if_config_vars, data)
         else:
             # send log data
             for component_name in parse_data.keys():
@@ -1037,14 +1037,14 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
                                     logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
                                     data = []
                                 else:
-                                    send_data(logger, component_name, if_config_vars, agent_config_vars, data)
+                                    send_data(logger, component_name, if_config_vars, data)
                                     data = []
                         if len(data) > 0:
                             if cli_config_vars['testing']:
                                 logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
                             else:
                                 logger.debug('send data {} to IF.'.format(data))
-                                send_data(logger, component_name, if_config_vars, agent_config_vars, data)
+                                send_data(logger, component_name, if_config_vars, data)
 
         # move to next batch
         new_object_keys = new_object_keys[MAX_THREAD_COUNT:]
