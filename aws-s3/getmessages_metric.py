@@ -54,6 +54,9 @@ def deep_get(dictionary, keys, default=None):
 def format_timestamp(ts):
     return arrow.get(int(ts) / 1000).format('YYYY-MM-DD HH:mm:ssZZ') if ts else ""
 
+def format_timestamp_log_data(ts):
+    # form the timestamp into epoch millisecond format
+    return int(arrow.get(ts).timestamp()*1000) + int(arrow.get(ts).format("SSS"))
 
 def file_time_diff(logger, file_name, ts):
     ret = ''
@@ -586,14 +589,14 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                 
                 ts = deep_get(log, timestamp_field)
                 if not ts:
-                    logger.info("current log missing  timestamp info. It will use current time as its timestamp")
-                    ts = arrow.now().format('YYYY-MM-DD HH:mm:ssZZ')
+                    logger.info("current log missing timestamp info. It will use current time as its timestamp.")
+                    ts =format_timestamp_log_data(arrow.now())
                 full_instance = make_safe_instance_string(inst_name)
                 if component_name not in parse_data:
                     parse_data[component_name] = {}
 
                 if ts not in parse_data[component_name]:
-                    timestamp = arrow.get(ts).format('YYYY-MM-DD HH:mm:ssZZ')
+                    timestamp = format_timestamp_log_data(ts)
                     if not last_ts or timestamp > last_ts:
                         last_ts = timestamp
                     parse_data[component_name][ts] = {}
@@ -1028,12 +1031,11 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
             for component_name in parse_data.keys():
                 data = []
                 for timestamp in sorted(parse_data[component_name].keys()):
-                    ts = arrow.get(timestamp)
                     for inst in parse_data[component_name][timestamp].keys():
                         logs = parse_data[component_name][timestamp][inst]
                         for log in logs:
                             data.append({
-                                'eventId': int(ts.timestamp() *1000) + int(ts.format("SSS")),
+                                'eventId': format_timestamp_log_data(timestamp),
                                 'tag': inst,
                                 'data':  log
                             })
