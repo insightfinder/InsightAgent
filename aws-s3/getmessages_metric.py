@@ -682,17 +682,15 @@ def send_data(logger, component_name, if_config_vars, data):
 
     send_data_time = time.time()
     to_send_data_dict = dict()
+    to_send_data_dict["metricData"] = json.dumps(data)
+    to_send_data_dict["licenseKey"] = if_config_vars['license_key']
+    to_send_data_dict["projectName"] = project_name
+    to_send_data_dict["userName"] = if_config_vars['user_name']
     if project_type == 'METRIC':
         # prepare data for metric streaming agent
-        to_send_data_dict = dict()
-        # for backend so this is the camel case in to_send_data_dict
-        to_send_data_dict["metricData"] = json.dumps(data)
-        to_send_data_dict["licenseKey"] = if_config_vars['license_key']
-        to_send_data_dict["projectName"] = project_name
-        to_send_data_dict["userName"] = if_config_vars['user_name']
         to_send_data_dict["agentType"] = "streaming"
-    elif project_name == 'log':
-        to_send_data_dict = data
+    elif project_type == 'LOG':
+        to_send_data_dict["agentType"] = "LogStreaming"
 
     to_send_data_json = json.dumps(to_send_data_dict)
 
@@ -1030,12 +1028,12 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
             for component_name in parse_data.keys():
                 data = []
                 for timestamp in sorted(parse_data[component_name].keys()):
-                    ts = arrow.get(timestamp).format('YYYY-MM-DD HH:mm:ssZZ')
+                    ts = arrow.get(timestamp)
                     for inst in parse_data[component_name][timestamp].keys():
                         logs = parse_data[component_name][timestamp][inst]
                         for log in logs:
                             data.append({
-                                'eventId': ts,
+                                'eventId': int(ts.timestamp() *1000) + int(ts.format("SSS")),
                                 'tag': inst,
                                 'data':  log
                             })
