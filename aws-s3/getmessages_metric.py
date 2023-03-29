@@ -56,7 +56,8 @@ def format_timestamp(ts):
 
 def format_timestamp_log_data(ts):
     # form the timestamp into epoch millisecond format
-    return int(arrow.get(ts).timestamp()*1000) + int(arrow.get(ts).format("SSS"))
+    if ts:
+        return int(arrow.get(ts).timestamp()*1000) + int(arrow.get(ts).format("SSS"))
 
 def remove_non_numeric(input):
     # Remove the non-numeric character in a string.
@@ -592,7 +593,7 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                 if not component_name:
                     component_name = NOT_EXIST_COMPONENT_NAME
                 
-                ts = deep_get(log, timestamp_field)
+                ts = format_timestamp_log_data(deep_get(log, timestamp_field))
                 if not ts:
                     logger.info("current log missing timestamp info. It will use current time as its timestamp.")
                     ts =format_timestamp_log_data(arrow.now())
@@ -601,9 +602,8 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                     parse_data[component_name] = {}
 
                 if ts not in parse_data[component_name]:
-                    timestamp = format_timestamp_log_data(ts)
-                    if not last_ts or timestamp > last_ts:
-                        last_ts = timestamp
+                    if not last_ts or ts > last_ts:
+                        last_ts = ts
                     parse_data[component_name][ts] = {}
                 if inst_name not in parse_data[component_name][ts]:
                     parse_data[component_name][ts][inst_name] = list()
@@ -617,10 +617,17 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                     for entry in log_entries:
                         entry = entry.strip()
                         current_entry = deep_get(log, entry)
+                        nested_entries = entry.split('.')
+                        cur_log = log_data
+                        while len(nested_entries) > 1:
+                            cur = nested_entries.pop(0)
+                            if not cur_log.get(cur):
+                                cur_log[cur] = {}
+                            cur_log = cur_log[cur]
                         if current_entry:
-                            log_data[entry] = current_entry
+                            cur_log[nested_entries[-1]] = current_entry
                         else:
-                            log_data[entry] = ""
+                            cur_log[nested_entries[-1]] = ""
                             logger.info(f"Can't find log data field {entry}. Please check your config.ini")
                     parse_data[component_name][ts][inst_name].append(log_data)
         else:
