@@ -58,6 +58,11 @@ def format_timestamp_log_data(ts):
     # form the timestamp into epoch millisecond format
     return int(arrow.get(ts).timestamp()*1000) + int(arrow.get(ts).format("SSS"))
 
+def remove_non_numeric(input):
+    # Remove the non-numeric character in a string.
+    if input:
+        return int(re.sub('[^0-9]','', str(input)))
+
 def file_time_diff(logger, file_name, ts):
     ret = ''
     match = re.search(r'\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}', file_name)
@@ -620,17 +625,18 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                     parse_data[component_name][ts][inst_name].append(log_data)
         else:
             # ignore messages without instance field
-            messages = [metric for metric in messages if metric[instance]]
+            messages = [metric for metric in messages if deep_get(metric, instance)]
 
             for metric in yield_message(messages):
                 if metric_fields and len(metric_fields) > 0:
                     for field in metric_fields:
-                        data_field = field
-                        data_value = deep_get(metric, field)
+                        # If it's a nested field, only keep the deepest one as the field for IF.
+                        data_field = field if len(field.split('.')) == 1 else field.split('.')[-1]
+                        data_value = remove_non_numeric(deep_get(metric, metric_value))
                         if field.find('::') != -1:
                             metric_name, metric_value = field.split('::')
                             data_field = deep_get(metric, metric_name)
-                            data_value = deep_get(metric, metric_value)
+                            data_value = remove_non_numeric(deep_get(metric, metric_value))
                         if not data_field:
                             continue
 
@@ -644,7 +650,8 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                         component_name = instance_dict.get(inst_name)
                         if not component_name:
                             component_name = NOT_EXIST_COMPONENT_NAME
-
+                        if not ts:
+                            continue
                         ts = deep_get(metric, timestamp_field)
                         full_instance = make_safe_instance_string(inst_name)
                         metric_key = '{}[{}]'.format(data_field, full_instance)
@@ -653,7 +660,7 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                             parse_data[component_name] = {}
 
                         if ts not in parse_data[component_name]:
-                            timestamp = int(ts) if len(str(int(ts))) > 10 else int(ts) * 1000
+                            timestamp = format_timestamp_log_data(ts)
                             if not last_ts or timestamp > last_ts:
                                 last_ts = timestamp
                             parse_data[component_name][ts] = {}
@@ -1006,7 +1013,7 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
                 data = []
                 for key in sorted(parse_data[component_name].keys()):
                     value = parse_data[component_name][key]
-                    timestamp = int(key) if len(str(int(key))) > 10 else int(key) * 1000
+                    timestamp = format_timestamp_log_data(key)
                     line = {'timestamp': str(timestamp)}
                     for d in value.values():
                         line.update(d)
