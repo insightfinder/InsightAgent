@@ -54,7 +54,7 @@ def deep_get(dictionary, keys, default=None):
 def format_timestamp(ts):
     return arrow.get(int(ts) / 1000).format('YYYY-MM-DD HH:mm:ssZZ') if ts else ""
 
-def format_timestamp_log_data(ts):
+def to_epoch_time_format(ts):
     # form the timestamp into epoch millisecond format
     if ts:
         return int(arrow.get(ts).timestamp()*1000) + int(arrow.get(ts).format("SSS"))
@@ -593,10 +593,9 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                 if not component_name:
                     component_name = NOT_EXIST_COMPONENT_NAME
                 
-                ts = format_timestamp_log_data(deep_get(log, timestamp_field))
+                ts = to_epoch_time_format(deep_get(log, timestamp_field))
                 if not ts:
-                    logger.info("current log missing timestamp info. It will use current time as its timestamp.")
-                    ts =format_timestamp_log_data(arrow.now())
+                    continue
                 full_instance = make_safe_instance_string(inst_name)
                 if component_name not in parse_data:
                     parse_data[component_name] = {}
@@ -619,6 +618,7 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                         current_entry = deep_get(log, entry)
                         nested_entries = entry.split('.')
                         cur_log = log_data
+                        # Form the exact nested json structure in the original data.
                         while len(nested_entries) > 1:
                             cur = nested_entries.pop(0)
                             if not cur_log.get(cur):
@@ -657,9 +657,9 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                         component_name = instance_dict.get(inst_name)
                         if not component_name:
                             component_name = NOT_EXIST_COMPONENT_NAME
+                        ts = deep_get(metric, timestamp_field)
                         if not ts:
                             continue
-                        ts = deep_get(metric, timestamp_field)
                         full_instance = make_safe_instance_string(inst_name)
                         metric_key = '{}[{}]'.format(data_field, full_instance)
 
@@ -667,7 +667,7 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                             parse_data[component_name] = {}
 
                         if ts not in parse_data[component_name]:
-                            timestamp = format_timestamp_log_data(ts)
+                            timestamp = to_epoch_time_format(ts)
                             if not last_ts or timestamp > last_ts:
                                 last_ts = timestamp
                             parse_data[component_name][ts] = {}
@@ -1020,7 +1020,7 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
                 data = []
                 for key in sorted(parse_data[component_name].keys()):
                     value = parse_data[component_name][key]
-                    timestamp = format_timestamp_log_data(key)
+                    timestamp = to_epoch_time_format(key)
                     line = {'timestamp': str(timestamp)}
                     for d in value.values():
                         line.update(d)
@@ -1049,11 +1049,10 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
                         logs = parse_data[component_name][timestamp][inst]
                         for log in logs:
                             data.append({
-                                'eventId': format_timestamp_log_data(timestamp),
+                                'eventId': to_epoch_time_format(timestamp),
                                 'tag': inst,
                                 'data':  log
                             })
-
                             if get_json_size_bytes(data) >= CHUNK_SIZE:
                                 if cli_config_vars['testing']:
                                     logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
@@ -1061,12 +1060,12 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
                                 else:
                                     send_data(logger, component_name, if_config_vars, data)
                                     data = []
-                        if len(data) > 0:
-                            if cli_config_vars['testing']:
-                                logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
-                            else:
-                                logger.debug('send data {} to IF.'.format(data))
-                                send_data(logger, component_name, if_config_vars, data)
+                if len(data) > 0:
+                    if cli_config_vars['testing']:
+                        logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+                    else:
+                        logger.debug('send data {} to IF.'.format(data))
+                        send_data(logger, component_name, if_config_vars, data)
 
         # move to next batch
         new_object_keys = new_object_keys[MAX_THREAD_COUNT:]
