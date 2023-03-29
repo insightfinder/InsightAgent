@@ -426,7 +426,7 @@ def get_data_type_from_project_type(if_config_vars):
     elif 'TRACE' in if_config_vars['project_type']:
         return 'Trace'
     else:  # LOG
-        return 'LOG'
+        return 'Log'
 
 
 def check_project_exist(logger, if_config_vars, project_name, system_name):
