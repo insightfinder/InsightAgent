@@ -609,7 +609,6 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                 
                 if not log_data_field or len(log_data_field) < 0:
                     parse_data[component_name][ts][inst_name].append(log)
-                    logger.info("There's no log data field specified. Full message will be used as log.")
                 else:
                     log_entries = log_data_field.split(',') if log_data_field.find(',') != -1 else [log_data_field]
                     log_data = {}
@@ -848,8 +847,10 @@ def retrieve_s3_metadata(logger, cli_config_vars, bucket, object_key):
     bucket.download_fileobj(object_key, buf)
     content = buf.getvalue()
     logger.info('download {} bytes from file: {}'.format(len(content), object_key))
-
-    msgs = json.loads(content)
+    msgs = list()
+    for item in content.decode().split('\n'):
+        if item:
+            msgs.append(json.loads(item))
     logger.info('finish retrieve metadata from file: {}'.format(object_key))
     return msgs
 
