@@ -1,4 +1,4 @@
-# kafka
+# AWS-S3
 
 This agent collects data from AWS S3 and sends it to Insightfinder.
 
