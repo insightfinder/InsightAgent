@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import urllib
+import arrow
 from logging.handlers import QueueHandler
 from optparse import OptionParser
 from pathlib import Path
@@ -22,6 +23,7 @@ import boto3
 import pytz
 import regex
 import requests
+from functools import reduce
 
 threadLock = threading.Lock()
 messages_dict = {}
@@ -44,9 +46,23 @@ ATTEMPTS = 3
 NOT_EXIST_COMPONENT_NAME = '__not_exist_component_name__'
 DEFAULT_MATADATE_MAX_INSTANCE = 1500
 
+
+def deep_get(dictionary, keys, default=None):
+    return reduce(lambda d, key: d.get(key, default) if isinstance(d, dict) else default, keys.split("."), dictionary)
+
+
 def format_timestamp(ts):
     return arrow.get(int(ts) / 1000).format('YYYY-MM-DD HH:mm:ssZZ') if ts else ""
 
+def to_epoch_time_format(ts):
+    # form the timestamp into epoch millisecond format
+    if ts:
+        return int(arrow.get(ts).timestamp()*1000) + int(arrow.get(ts).format("SSS"))
+
+def remove_non_numeric(input):
+    # Remove the non-numeric character in a string.
+    if input:
+        return int(re.sub('[^0-9]','', str(input)))
 
 def file_time_diff(logger, file_name, ts):
     ret = ''
@@ -267,6 +283,7 @@ def get_agent_config_vars(logger, config_ini):
             instance_field = config_parser.get('agent', 'instance_field')
             metric_fields = config_parser.get('agent', 'metric_fields')
             metric_whitelist = config_parser.get('agent', 'metric_whitelist')
+            log_data_field = config_parser.get('agent', 'log_data_field')
             metadata_instance_field = config_parser.get('agent', 'metadata_instance_field')
             metadata_component_field = config_parser.get('agent', 'metadata_component_field')
 
@@ -325,6 +342,7 @@ def get_agent_config_vars(logger, config_ini):
             'timestamp_field': timestamp_field,
             'instance_field': instance_field,
             'metric_fields': metric_fields,
+            'log_data_field': log_data_field,
             'metric_whitelist_regex': metric_whitelist_regex,
             'metadata_instance_field': metadata_instance_field,
             'metadata_component_field': metadata_component_field,
@@ -550,12 +568,14 @@ class MyThread(threading.Thread):
         process_get_data(self.logger, self.cli_config_vars, self.bucket, self.object_key)
 
 
-def process_parse_data(logger, cli_config_vars, agent_config_vars):
+def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_vars):
     logger.info('start to parse data...')
 
     timestamp_field = agent_config_vars['timestamp_field']
     instance = agent_config_vars['instance_field']
     metric_fields = agent_config_vars['metric_fields']
+    log_data_field = agent_config_vars['log_data_field']
+    project_type = if_config_vars['project_type']
 
     global messages_dict
     global instance_dict
@@ -565,59 +585,105 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars):
 
         last_ts = None
         messages = messages_dict[file_name]
-        # ignore messages without instance field
-        messages = [metric for metric in messages if metric[instance]]
+        
+        if project_type == 'LOG':
+            for log in yield_message(messages):
+                inst_name = deep_get(log, instance)
+                component_name = instance_dict.get(inst_name)
+                if not component_name:
+                    component_name = NOT_EXIST_COMPONENT_NAME
+                
+                ts = to_epoch_time_format(deep_get(log, timestamp_field))
+                if not ts:
+                    continue
+                full_instance = make_safe_instance_string(inst_name)
+                if component_name not in parse_data:
+                    parse_data[component_name] = {}
 
-        for metric in yield_message(messages):
-            if metric_fields and len(metric_fields) > 0:
-                for field in metric_fields:
-                    data_field = field
-                    data_value = metric.get(field)
-                    if field.find('::') != -1:
-                        metric_name, metric_value = field.split('::')
-                        data_field = metric.get(metric_name)
-                        data_value = metric.get(metric_value)
-                    if not data_field:
-                        continue
+                if ts not in parse_data[component_name]:
+                    if not last_ts or ts > last_ts:
+                        last_ts = ts
+                    parse_data[component_name][ts] = {}
+                if inst_name not in parse_data[component_name][ts]:
+                    parse_data[component_name][ts][inst_name] = list()
+                
+                if not log_data_field or len(log_data_field) < 0:
+                    parse_data[component_name][ts][inst_name].append(log)
+                else:
+                    log_entries = log_data_field.split(',') if log_data_field.find(',') != -1 else [log_data_field]
+                    log_data = {}
+                    for entry in log_entries:
+                        entry = entry.strip()
+                        current_entry = deep_get(log, entry)
+                        nested_entries = entry.split('.')
+                        cur_log = log_data
+                        # Form the exact nested json structure in the original data.
+                        while len(nested_entries) > 1:
+                            cur = nested_entries.pop(0)
+                            if not cur_log.get(cur):
+                                cur_log[cur] = {}
+                            cur_log = cur_log[cur]
+                        if current_entry:
+                            cur_log[nested_entries[-1]] = current_entry
+                        else:
+                            cur_log[nested_entries[-1]] = ""
+                            logger.info(f"Can't find log data field {entry}. Please check your config.ini")
+                    parse_data[component_name][ts][inst_name].append(log_data)
+        else:
+            # ignore messages without instance field
+            messages = [metric for metric in messages if deep_get(metric, instance)]
 
-                    # filter by metric whitelist
-                    if agent_config_vars['metric_whitelist_regex'] and not agent_config_vars[
-                        'metric_whitelist_regex'].match(data_field):
-                        logger.debug('metric_whitelist has no matching data')
-                        continue
+            for metric in yield_message(messages):
+                if metric_fields and len(metric_fields) > 0:
+                    for field in metric_fields:
+                        # If it's a nested field, only keep the deepest one as the field for IF.
+                        data_field = field if len(field.split('.')) == 1 else field.split('.')[-1]
+                        data_value = remove_non_numeric(deep_get(metric, metric_value))
+                        if field.find('::') != -1:
+                            metric_name, metric_value = field.split('::')
+                            data_field = deep_get(metric, metric_name)
+                            data_value = remove_non_numeric(deep_get(metric, metric_value))
+                        if not data_field:
+                            continue
 
-                    inst_name = metric[instance]
-                    component_name = instance_dict.get(inst_name)
-                    if not component_name:
-                        component_name = NOT_EXIST_COMPONENT_NAME
+                        # filter by metric whitelist
+                        if agent_config_vars['metric_whitelist_regex'] and not agent_config_vars[
+                            'metric_whitelist_regex'].match(data_field):
+                            logger.debug('metric_whitelist has no matching data')
+                            continue
 
-                    ts = metric[timestamp_field]
-                    full_instance = make_safe_instance_string(inst_name)
-                    metric_key = '{}[{}]'.format(data_field, full_instance)
+                        inst_name = deep_get(metric, instance)
+                        component_name = instance_dict.get(inst_name)
+                        if not component_name:
+                            component_name = NOT_EXIST_COMPONENT_NAME
+                        ts = deep_get(metric, timestamp_field)
+                        if not ts:
+                            continue
+                        full_instance = make_safe_instance_string(inst_name)
+                        metric_key = '{}[{}]'.format(data_field, full_instance)
 
-                    if component_name not in parse_data:
-                        parse_data[component_name] = {}
+                        if component_name not in parse_data:
+                            parse_data[component_name] = {}
 
-                    if ts not in parse_data[component_name]:
-                        timestamp = int(ts) if len(str(int(ts))) > 10 else int(ts) * 1000
-                        if not last_ts or timestamp > last_ts:
-                            last_ts = timestamp
-                        parse_data[component_name][ts] = {}
-                    if inst_name not in parse_data[component_name][ts]:
-                        parse_data[component_name][ts][inst_name] = {}
-                    parse_data[component_name][ts][inst_name][metric_key] = str(data_value)
+                        if ts not in parse_data[component_name]:
+                            timestamp = to_epoch_time_format(ts)
+                            if not last_ts or timestamp > last_ts:
+                                last_ts = timestamp
+                            parse_data[component_name][ts] = {}
+                        if inst_name not in parse_data[component_name][ts]:
+                            parse_data[component_name][ts][inst_name] = {}
+                        parse_data[component_name][ts][inst_name][metric_key] = str(data_value)
 
-        if last_ts:
-            logger.info(
-                "In file {} the last timestamp is {} {}, time diff: {}".format(file_name, format_timestamp(last_ts),
+            if last_ts:
+                logger.info(
+                    "In file {} the last timestamp is {} {}, time diff: {}".format(file_name, format_timestamp(last_ts),
                                                                                last_ts,
                                                                                file_time_diff(logger, file_name,
                                                                                               last_ts)))
     return parse_data
 
-
-def send_data(logger, component_name, if_config_vars, metric_data):
-    """ Sends parsed metric data to InsightFinder """
+def send_data(logger, component_name, if_config_vars, data):
+    """ Sends parsed data to InsightFinder """
     project_name = if_config_vars['project_name']
     if component_name != NOT_EXIST_COMPONENT_NAME and if_config_vars['project_name_prefix']:
         project_name = if_config_vars['project_name_prefix'] + component_name
@@ -625,25 +691,31 @@ def send_data(logger, component_name, if_config_vars, metric_data):
     if not project_name:
         logger.error('Cannot find project name to receive data for:' + component_name)
         return
+    project_type = if_config_vars['project_type']
+    if not project_type:
+        logger.error('Cannot find project type to receive data for:' + component_name)
+        return
 
     send_data_time = time.time()
-    # prepare data for metric streaming agent
     to_send_data_dict = dict()
-    # for backend so this is the camel case in to_send_data_dict
-    to_send_data_dict["metricData"] = json.dumps(metric_data)
+    to_send_data_dict["metricData"] = json.dumps(data)
     to_send_data_dict["licenseKey"] = if_config_vars['license_key']
     to_send_data_dict["projectName"] = project_name
     to_send_data_dict["userName"] = if_config_vars['user_name']
-    to_send_data_dict["agentType"] = "streaming"
+    if project_type == 'METRIC':
+        # prepare data for metric streaming agent
+        to_send_data_dict["agentType"] = "streaming"
+    elif project_type == 'LOG':
+        to_send_data_dict["agentType"] = "LogStreaming"
 
     to_send_data_json = json.dumps(to_send_data_dict)
 
     # send the data
     post_url = if_config_vars['if_url'] + "/customprojectrawdata"
-    send_data_to_receiver(logger, post_url, to_send_data_json, len(metric_data))
+    send_data_to_receiver(logger, post_url, to_send_data_json, len(data))
     last_ts = None
-    if len(metric_data):
-        last_ts = metric_data[-1].get('timestamp', None)
+    if len(data):
+        last_ts = data[-1].get('timestamp', None)
 
     logger.info(
         "--- Send data to {}, last timestamp: {}, {}, use: {} seconds ---".format(project_name,
@@ -775,8 +847,10 @@ def retrieve_s3_metadata(logger, cli_config_vars, bucket, object_key):
     bucket.download_fileobj(object_key, buf)
     content = buf.getvalue()
     logger.info('download {} bytes from file: {}'.format(len(content), object_key))
-
-    msgs = json.loads(content)
+    msgs = list()
+    for item in content.decode().split('\n'):
+        if item:
+            msgs.append(json.loads(item))
     logger.info('finish retrieve metadata from file: {}'.format(object_key))
     return msgs
 
@@ -937,36 +1011,62 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
             thread.join()
 
         # parse data and reset received messages
-        parse_data = process_parse_data(logger, cli_config_vars, agent_config_vars)
+        parse_data = process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_vars)
         global messages_dict
         messages_dict = {}
         logger.info('parsing data completed for ' + ','.join(keys))
+        if if_config_vars['project_type'] == 'METRIC':
+        # send metric data
+            for component_name in parse_data.keys():
+                data = []
+                for key in sorted(parse_data[component_name].keys()):
+                    value = parse_data[component_name][key]
+                    timestamp = to_epoch_time_format(key)
+                    line = {'timestamp': str(timestamp)}
+                    for d in value.values():
+                        line.update(d)
+                    data.append(line)
 
-        # send data
-        for component_name in parse_data.keys():
-            data = []
-            for key in sorted(parse_data[component_name].keys()):
-                value = parse_data[component_name][key]
-                timestamp = int(key) if len(str(int(key))) > 10 else int(key) * 1000
-                line = {'timestamp': str(timestamp)}
-                for d in value.values():
-                    line.update(d)
-                data.append(line)
+                    if get_json_size_bytes(data) >= CHUNK_SIZE:
+                        if cli_config_vars['testing']:
+                            logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+                            data = []
+                        else:
+                            send_data(logger, component_name, if_config_vars, data)
+                            data = []
 
-                if get_json_size_bytes(data) >= CHUNK_SIZE:
+                if len(data) > 0:
                     if cli_config_vars['testing']:
                         logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
-                        data = []
                     else:
+                        logger.debug('send data {} to IF.'.format(data))
                         send_data(logger, component_name, if_config_vars, data)
-                        data = []
-
-            if len(data) > 0:
-                if cli_config_vars['testing']:
-                    logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
-                else:
-                    logger.debug('send data {} to IF.'.format(data))
-                    send_data(logger, component_name, if_config_vars, data)
+        else:
+            # send log data
+            for component_name in parse_data.keys():
+                data = []
+                for timestamp in sorted(parse_data[component_name].keys()):
+                    for inst in parse_data[component_name][timestamp].keys():
+                        logs = parse_data[component_name][timestamp][inst]
+                        for log in logs:
+                            data.append({
+                                'eventId': to_epoch_time_format(timestamp),
+                                'tag': inst,
+                                'data':  log
+                            })
+                            if get_json_size_bytes(data) >= CHUNK_SIZE:
+                                if cli_config_vars['testing']:
+                                    logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+                                    data = []
+                                else:
+                                    send_data(logger, component_name, if_config_vars, data)
+                                    data = []
+                if len(data) > 0:
+                    if cli_config_vars['testing']:
+                        logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
+                    else:
+                        logger.debug('send data {} to IF.'.format(data))
+                        send_data(logger, component_name, if_config_vars, data)
 
         # move to next batch
         new_object_keys = new_object_keys[MAX_THREAD_COUNT:]
