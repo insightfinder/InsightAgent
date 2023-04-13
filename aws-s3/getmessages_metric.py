@@ -62,7 +62,7 @@ def to_epoch_time_format(ts):
 def remove_non_numeric(input):
     # Remove the non-numeric character in a string.
     if input:
-        return int(re.sub('[^0-9]','', str(input)))
+        return float(re.sub('[^\d.]+','', str(input)))
 
 def file_time_diff(logger, file_name, ts):
     ret = ''
