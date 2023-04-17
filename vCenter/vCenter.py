@@ -317,15 +317,17 @@ def send_metric_data(metric_data):
     logger.info("Sending the performance metrics to InsightFinder.")
     data_chunk = []
     count = 0
+    cur_data_size = 0
     for _, row in metric_data.iterrows():
         entry = dict(list(zip(row.index, row)))
         data_chunk.append(entry)
         count += 1
-
-        if len(bytearray(json.dumps(data_chunk), 'utf8')) >= agent_vars['chunk_size']:
+        cur_data_size += len(bytearray(json.dumps(entry), 'utf8'))
+        if cur_data_size >= agent_vars['chunk_size']:
             logger.debug("Sending a data chunk.")
             send_data_chunk(data_chunk)
             data_chunk = []
+            cur_data_size = 0
     if len(data_chunk) != 0:
         logger.debug("Sending last data chunk.")
         send_data_chunk(data_chunk)
