@@ -62,7 +62,7 @@ def to_epoch_time_format(ts):
 def remove_non_numeric(input):
     # Remove the non-numeric character in a string.
     if input:
-        return int(re.sub('[^0-9]','', str(input)))
+        return float(re.sub('[^\d.]+','', str(input)))
 
 def file_time_diff(logger, file_name, ts):
     ret = ''
@@ -286,10 +286,14 @@ def get_agent_config_vars(logger, config_ini):
             log_data_field = config_parser.get('agent', 'log_data_field')
             metadata_instance_field = config_parser.get('agent', 'metadata_instance_field')
             metadata_component_field = config_parser.get('agent', 'metadata_component_field')
+            time_span = config_parser.get('agent', 'time_span')
 
             # proxies
             agent_http_proxy = config_parser.get('agent', 'agent_http_proxy')
             agent_https_proxy = config_parser.get('agent', 'agent_https_proxy')
+
+            # read the IF config for project type
+            project_type = config_parser.get('insightfinder', 'project_type')
 
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
@@ -317,8 +321,11 @@ def get_agent_config_vars(logger, config_ini):
                 logger.error(e)
                 return config_error(logger, 'metrics_whitelist')
 
-        if len(metric_fields) == 0:
+        if len(metric_fields) == 0 and "METRIC" in project_type:
             return config_error(logger, 'metric_fields')
+        
+        if len(log_data_field) ==0 and "METRIC" not in project_type:
+            return config_error(logger, 'log_data_fields')
 
         # proxies
         agent_proxies = dict()
@@ -348,6 +355,7 @@ def get_agent_config_vars(logger, config_ini):
             'metadata_component_field': metadata_component_field,
             'target_timestamp_timezone': target_timestamp_timezone,
             'proxies': agent_proxies,
+            'time_span':time_span
         }
 
         return config_vars
@@ -576,26 +584,30 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
     metric_fields = agent_config_vars['metric_fields']
     log_data_field = agent_config_vars['log_data_field']
     project_type = if_config_vars['project_type']
+    time_span = agent_config_vars['time_span']
 
     global messages_dict
     global instance_dict
-
+    if time_span:
+        start_time = to_epoch_time_format(int(time_span.split('-')[0].strip()))
+        end_time = to_epoch_time_format(int(time_span.split('-')[1].strip()))
     parse_data = {}
     for file_name in sorted(messages_dict.keys()):
 
         last_ts = None
         messages = messages_dict[file_name]
         
-        if project_type == 'LOG':
+        if project_type == 'LOG' or project_type == 'INCIDENT':
             for log in yield_message(messages):
+                ts = to_epoch_time_format(deep_get(log, timestamp_field))
+                if not ts or (time_span and (start_time >= ts or end_time < ts)):
+                    continue
+
                 inst_name = deep_get(log, instance)
                 component_name = instance_dict.get(inst_name)
                 if not component_name:
                     component_name = NOT_EXIST_COMPONENT_NAME
                 
-                ts = to_epoch_time_format(deep_get(log, timestamp_field))
-                if not ts:
-                    continue
                 full_instance = make_safe_instance_string(inst_name)
                 if component_name not in parse_data:
                     parse_data[component_name] = {}
@@ -635,10 +647,13 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
 
             for metric in yield_message(messages):
                 if metric_fields and len(metric_fields) > 0:
+                    ts = deep_get(metric, timestamp_field)
+                    if not ts or (time_span and (start_time >= ts or end_time < ts)):
+                        continue
                     for field in metric_fields:
                         # If it's a nested field, only keep the deepest one as the field for IF.
+                        data_value = remove_non_numeric(deep_get(metric, field))
                         data_field = field if len(field.split('.')) == 1 else field.split('.')[-1]
-                        data_value = remove_non_numeric(deep_get(metric, metric_value))
                         if field.find('::') != -1:
                             metric_name, metric_value = field.split('::')
                             data_field = deep_get(metric, metric_name)
@@ -656,9 +671,7 @@ def process_parse_data(logger, cli_config_vars, agent_config_vars, if_config_var
                         component_name = instance_dict.get(inst_name)
                         if not component_name:
                             component_name = NOT_EXIST_COMPONENT_NAME
-                        ts = deep_get(metric, timestamp_field)
-                        if not ts:
-                            continue
+                        
                         full_instance = make_safe_instance_string(inst_name)
                         metric_key = '{}[{}]'.format(data_field, full_instance)
 
@@ -705,7 +718,7 @@ def send_data(logger, component_name, if_config_vars, data):
     if project_type == 'METRIC':
         # prepare data for metric streaming agent
         to_send_data_dict["agentType"] = "streaming"
-    elif project_type == 'LOG':
+    elif project_type == 'LOG' or project_type == 'INCIDENT':
         to_send_data_dict["agentType"] = "LogStreaming"
 
     to_send_data_json = json.dumps(to_send_data_dict)
@@ -1015,6 +1028,7 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
         global messages_dict
         messages_dict = {}
         logger.info('parsing data completed for ' + ','.join(keys))
+        total_size = 0
         if if_config_vars['project_type'] == 'METRIC':
         # send metric data
             for component_name in parse_data.keys():
@@ -1026,14 +1040,16 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
                     for d in value.values():
                         line.update(d)
                     data.append(line)
-
-                    if get_json_size_bytes(data) >= CHUNK_SIZE:
+                    total_size += get_json_size_bytes(line)
+                    if  total_size >= CHUNK_SIZE:
                         if cli_config_vars['testing']:
                             logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
                             data = []
+                            total_size = 0
                         else:
                             send_data(logger, component_name, if_config_vars, data)
                             data = []
+                            total_size = 0
 
                 if len(data) > 0:
                     if cli_config_vars['testing']:
@@ -1041,7 +1057,7 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
                     else:
                         logger.debug('send data {} to IF.'.format(data))
                         send_data(logger, component_name, if_config_vars, data)
-        else:
+        elif if_config_vars['project_type'] == 'INCIDENT' or if_config_vars['project_type'] == 'LOG':
             # send log data
             for component_name in parse_data.keys():
                 data = []
@@ -1054,13 +1070,16 @@ def process_s3_data(logger, config_name, cli_config_vars, agent_config_vars, if_
                                 'tag': inst,
                                 'data':  log
                             })
-                            if get_json_size_bytes(data) >= CHUNK_SIZE:
+                            total_size += get_json_size_bytes(log)
+                            if total_size >= CHUNK_SIZE:
                                 if cli_config_vars['testing']:
                                     logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
                                     data = []
+                                    total_size = 0
                                 else:
                                     send_data(logger, component_name, if_config_vars, data)
                                     data = []
+                                    total_size = 0
                 if len(data) > 0:
                     if cli_config_vars['testing']:
                         logger.info('testing!!! do not sent data to IF. Data: {}'.format(data))
