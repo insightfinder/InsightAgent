@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import glob
+import multiprocessing
 import os
 import sys
 import requests
@@ -101,8 +103,8 @@ def get_cli_config_vars():
     """ get CLI options. use of these options should be rare """
     usage = 'Usage: %prog [options]'
     parser = OptionParser(usage=usage)
-    parser.add_option('-c', '--config', action='store', dest='config', default=abs_path_from_cur('config.ini'),
-                      help='Path to the config file to use. Defaults to {}'.format(abs_path_from_cur('config.ini')))
+    parser.add_option('-c', '--config', action='store', dest='config', default=abs_path_from_cur('conf.d'),
+                      help='Path to the config file to use. Defaults to {}'.format(abs_path_from_cur('conf.d')))
     parser.add_option('-q', '--quiet', action='store_true', dest='quiet', default=False,
                       help='Only display warning and error log messages')
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose', default=False,
@@ -113,7 +115,7 @@ def get_cli_config_vars():
     (options, args) = parser.parse_args()
 
     config_vars = {
-        'config': options.config if os.path.isfile(options.config) else abs_path_from_cur('config.ini'),
+        'config': options.config if os.path.isfile(options.config) else abs_path_from_cur('conf.d'),
         'testing': False,
         'log_level': logging.INFO
     }
@@ -128,7 +130,7 @@ def get_cli_config_vars():
 
     return config_vars
 
-def collect_metric_data():
+def collect_metric_data(vCenter_vars, agent_vars):
     '''
     Collect metric data from VMware vSphere using their pyVmomi Python SDK
     '''
@@ -309,7 +311,7 @@ def get_metric_id(counter_info, metric):
                 )
     return metric_id
 
-def send_metric_data(metric_data):
+def send_metric_data(metric_data, if_vars, agent_vars):
     '''
     Send the collected metric data to InsightFinder
     '''
@@ -325,16 +327,16 @@ def send_metric_data(metric_data):
         cur_data_size += len(bytearray(json.dumps(entry), 'utf8'))
         if cur_data_size >= agent_vars['chunk_size']:
             logger.debug("Sending a data chunk.")
-            send_data_chunk(data_chunk)
+            send_data_chunk(data_chunk, if_vars)
             data_chunk = []
             cur_data_size = 0
     if len(data_chunk) != 0:
         logger.debug("Sending last data chunk.")
-        send_data_chunk(data_chunk)
+        send_data_chunk(data_chunk, if_vars)
 
     logger.info("Sent a total of {} metric rows to IF.".format(count))
 
-def send_data_chunk(data_chunk):
+def send_data_chunk(data_chunk, if_vars):
     '''
     Send a single data chunk to IF
     '''
@@ -374,18 +376,37 @@ def send_data_chunk(data_chunk):
                 response.status_code, response.text))
         sys.exit(1)
 
+def worker_process(path):
+    if_vars, vCenter_vars, agent_vars = get_config_vars(path)
+    try:
+        metric_data = collect_metric_data(vCenter_vars, agent_vars)
+        if not cli_config_vars['testing']:
+            send_metric_data(metric_data, if_vars, agent_vars)
+    except Exception as e:
+        logger.error(e, exc_info=True)
+
+
 if __name__ == '__main__':
     execution_time = datetime.now(pytz.timezone('UTC'))
 
     cli_config_vars = get_cli_config_vars()
+    files_path = os.path.join(cli_config_vars['config'], "*.ini")
+    config_files = glob.glob(files_path)
+
+    if len(config_files) == 0:
+        logging.error("Config files not found")
+        sys.exit(1)
 
     logger = set_logger_config()
-    
-    if_vars, vCenter_vars, agent_vars = get_config_vars(cli_config_vars['config'])
+
+    pool = multiprocessing.Pool(len(config_files))
+    pool_result = pool.map_async(worker_process, config_files)
+    pool.close()
 
     try:
-        metric_data = collect_metric_data()
-        if not cli_config_vars['testing']:
-            send_metric_data(metric_data)
-    except Exception as e:
-        logger.error(e, exc_info=True)
+        pool_result.get(None)
+        pool.join()
+    except TimeoutError:
+        logger.error("We lacked patience and got a multiprocessing.TimeoutError")
+        pool.terminate()
+    logger.info("Now the pool is closed and no longer available")
