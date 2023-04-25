@@ -2,6 +2,8 @@
 # coding: utf-8
 
 import glob
+import http
+import urllib
 import multiprocessing
 import os
 import sys
@@ -30,6 +32,10 @@ warnings.filterwarnings('ignore')
 This script gets metric data from VMware vSphere and ingests it into an IF metric project
 '''
 
+RETRY_WAIT_TIME_IN_SEC = 30
+SESSION = requests.Session()
+ATTEMPTS = 3
+
 def set_logger_config():
     '''
     Configure logger object
@@ -53,6 +59,41 @@ def set_logger_config():
     logger.addHandler(logging_handler_out)
     return logger
 
+def get_insight_agent_type_from_project_type(if_config_vars):
+    if 'containerize' in if_config_vars and if_config_vars['containerize']:
+        if 'METRIC' in if_config_vars['project_type']:
+            if if_config_vars['is_replay']:
+                return 'containerReplay'
+            else:
+                return 'containerStreaming'
+        else:
+            if if_config_vars['is_replay']:
+                return 'ContainerHistorical'
+            else:
+                return 'ContainerCustom'
+    elif if_config_vars['is_replay']:
+        if 'METRIC' in if_config_vars['project_type']:
+            return 'MetricFile'
+        else:
+            return 'LogFile'
+    else:
+        return 'Custom'
+
+def get_data_type_from_project_type(if_config_vars):
+    """ use project type to determine data type """
+    if 'METRIC' in if_config_vars['project_type']:
+        return 'Metric'
+    elif 'ALERT' in if_config_vars['project_type']:
+        return 'Alert'
+    elif 'INCIDENT' in if_config_vars['project_type']:
+        return 'Incident'
+    elif 'DEPLOYMENT' in if_config_vars['project_type']:
+        return 'Deployment'
+    elif 'TRACE' in if_config_vars['project_type']:
+        return 'Trace'
+    else:  # LOG
+        return 'Log'
+
 def get_config_vars(config_path):
     '''
     Get config variables from the config file
@@ -70,16 +111,23 @@ def get_config_vars(config_path):
     if_vars['host_url'] = config.get('insightFinder_vars', 'host_url')
     if_vars['http_proxy'] = config.get('insightFinder_vars', 'http_proxy')
     if_vars['https_proxy'] = config.get('insightFinder_vars', 'https_proxy')
-    if_vars['licenseKey'] = config.get('insightFinder_vars', 'licenseKey')
+    if_vars['license_key'] = config.get('insightFinder_vars', 'license_key')
     if_vars['project_name'] = config.get('insightFinder_vars', 'project_name')
-    if_vars['username'] = config.get('insightFinder_vars', 'username')
+    if_vars['system_name'] = config.get('insightFinder_vars', 'system_name')
+    if_vars['user_name'] = config.get('insightFinder_vars', 'user_name')
+    if_vars['project_type'] = config.get('insightFinder_vars', 'project_type').upper()
     if_vars['retries'] = config.getint('insightFinder_vars', 'retries')
     if_vars['sleep_seconds'] = config.getint('insightFinder_vars', 'sleep_seconds')
+    if_vars['sampling_interval'] = config.getint('insightFinder_vars', 'sampling_interval')
+    if_vars['is_replay'] = False
+
+    if_proxies = dict()
+    if_vars['if_proxies'] = if_proxies
 
     vCenter_vars = {}
     vCenter_vars['host'] = config.get('vCenter_vars', 'host')
     vCenter_vars['http_proxy'] = config.get('vCenter_vars', 'http_proxy')
-    vCenter_vars['username'] = config.get('vCenter_vars', 'username')
+    vCenter_vars['user_name'] = config.get('vCenter_vars', 'user_name')
     vCenter_vars['password'] = config.get('vCenter_vars', 'password')
     vCenter_vars['virtual_machines_list'] = config.get('vCenter_vars', 'virtual_machines_list')
     vCenter_vars['virtual_machines_regex'] = config.get('vCenter_vars', 'virtual_machines_regex')
@@ -137,7 +185,7 @@ def collect_metric_data(vCenter_vars, agent_vars):
     
     logger.info("Connecting to vCenter.")
     try:
-        connection = connect_vmomi()
+        connection = connect_vmomi(vCenter_vars)
         content = connection.RetrieveContent()
     except:
         logger.error('Could not connect to vCenter. Check the credentials/server state.')
@@ -197,7 +245,7 @@ def collect_metric_data(vCenter_vars, agent_vars):
     #metric_data.to_csv('sample data.csv')
     return metric_data
 
-def connect_vmomi():
+def connect_vmomi(vCenter_vars):
     '''
     Connect to the specified VMOMI ServiceInstance
     '''
@@ -223,7 +271,7 @@ def connect_vmomi():
     connection = vim.ServiceInstance("ServiceInstance", soapStub)
     session_manager = connection.content.sessionManager
     if not session_manager.currentSession:
-        connection.content.sessionManager.Login(vCenter_vars['username'], decode(vCenter_vars['password']))
+        connection.content.sessionManager.Login(vCenter_vars['user_name'], decode(vCenter_vars['password']))
     
     return connection
 
@@ -345,9 +393,9 @@ def send_data_chunk(data_chunk, if_vars):
     url = if_vars['host_url'] + '/customprojectrawdata'
     data = {
         'metricData': json.dumps(data_chunk),
-        'licenseKey': if_vars['licenseKey'],
+        'licenseKey': if_vars['license_key'],
         'projectName': if_vars['project_name'],
-        'userName': if_vars['username'],
+        'userName': if_vars['user_name'],
         'agentType': 'CUSTOM'
     }
 
@@ -376,8 +424,141 @@ def send_data_chunk(data_chunk, if_vars):
                 response.status_code, response.text))
         sys.exit(1)
 
+def send_request(logger, url, mode='GET', failure_message='Failure!', success_message='Success!',
+                 **request_passthrough):
+    """ sends a request to the given url """
+    # determine if post or get (default)
+    req = SESSION.get
+    if mode.upper() == 'POST':
+        req = SESSION.post
+
+    req_num = 0
+    for req_num in range(ATTEMPTS):
+        try:
+            response = req(url, **request_passthrough)
+            if response.status_code == http.client.OK:
+                return response
+            else:
+                logger.warn(failure_message)
+                logger.info('Response Code: {}\nTEXT: {}'.format(
+                    response.status_code, response.text))
+        # handle various exceptions
+        except requests.exceptions.Timeout:
+            logger.exception('Timed out. Reattempting...')
+            continue
+        except requests.exceptions.TooManyRedirects:
+            logger.exception('Too many redirects.')
+            break
+        except requests.exceptions.RequestException as e:
+            logger.exception('Exception ' + str(e))
+            break
+
+        # retry after sleep
+        time.sleep(RETRY_WAIT_TIME_IN_SEC)
+
+    logger.error('Failed! Gave up after {} attempts.'.format(req_num + 1))
+    return -1
+
+def check_project_exist(if_config_vars, project_name, system_name):
+    is_project_exist = False
+    if not system_name:
+        system_name = if_config_vars['system_name']
+
+    try:
+        logger.info('Starting check project: ' + project_name)
+        params = {
+            'operation': 'check',
+            'userName': if_config_vars['user_name'],
+            'licenseKey': if_config_vars['license_key'],
+            'projectName': project_name,
+        }
+        url = urllib.parse.urljoin(if_config_vars['host_url'], 'api/v1/check-and-add-custom-project')
+        response = send_request(logger, url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
+        if response == -1:
+            logger.error('Check project error: ' + project_name)
+        else:
+            result = response.json()
+            if result['success'] is False or result['isProjectExist'] is False:
+                logger.error('Check project error: ' + project_name)
+            else:
+                is_project_exist = True
+                logger.info('Check project success: ' + project_name)
+
+    except Exception as e:
+        logger.error(e)
+        logger.error('Check project error: ' + project_name)
+
+    create_project_sucess = False
+    if not is_project_exist:
+        try:
+            logger.info('Starting add project: {}/{}'.format(system_name, project_name))
+            params = {
+                'operation': 'create',
+                'userName': if_config_vars['user_name'],
+                'licenseKey': if_config_vars['license_key'],
+                'projectName': project_name,
+                'systemName': system_name or project_name,
+                'instanceType': 'PrivateCloud',
+                'projectCloudType': 'PrivateCloud',
+                'dataType': get_data_type_from_project_type(if_config_vars),
+                'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
+                'samplingInterval': if_config_vars['sampling_interval'],
+                'samplingIntervalInSeconds': int(if_config_vars['sampling_interval'] * 60),
+            }
+            url = urllib.parse.urljoin(if_config_vars['host_url'], 'api/v1/check-and-add-custom-project')
+            response = send_request(logger, url, 'POST', data=params, verify=False,
+                                    proxies=if_config_vars['if_proxies'])
+            if response == -1:
+                logger.error('Add project error: ' + project_name)
+            else:
+                result = response.json()
+                if result['success'] is False:
+                    logger.error('Add project error: {}/{}'.format(system_name, project_name))
+                else:
+                    create_project_sucess = True
+                    logger.info('Add project success: {}/{}'.format(system_name, project_name))
+
+        except Exception as e:
+            logger.error(e)
+            logger.error('Add project error: {}/{}'.format(system_name, project_name))
+
+    if create_project_sucess:
+        # if create project is success, sleep 10s and check again
+        time.sleep(10)
+        try:
+            logger.info('Starting check project: ' + project_name)
+            params = {
+                'operation': 'check',
+                'userName': if_config_vars['user_name'],
+                'licenseKey': if_config_vars['license_key'],
+                'projectName': project_name,
+            }
+            url = urllib.parse.urljoin(if_config_vars['host_url'], 'api/v1/check-and-add-custom-project')
+            response = send_request(logger, url, 'POST', data=params, verify=False,
+                                    proxies=if_config_vars['if_proxies'])
+            if response == -1:
+                logger.error('Check project error: ' + project_name)
+            else:
+                result = response.json()
+                if result['success'] is False or result['isProjectExist'] is False:
+                    logger.error('Check project error: ' + project_name)
+                else:
+                    is_project_exist = True
+                    logger.info('Check project success: ' + project_name)
+
+        except Exception as e:
+            logger.error(e)
+            logger.error('Check project error: ' + project_name)
+
+    return is_project_exist
+
 def worker_process(path):
     if_vars, vCenter_vars, agent_vars = get_config_vars(path)
+    project_name = if_vars['project_name']
+    if project_name:
+        check_success = check_project_exist(if_vars, project_name, None)
+        if not check_success:
+            return
     try:
         metric_data = collect_metric_data(vCenter_vars, agent_vars)
         if not cli_config_vars['testing']:
