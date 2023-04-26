@@ -14,7 +14,6 @@ retries =
 # time between retries
 sleep_seconds = 
 
-
 [vCenter_vars]
 # skip the protocol prefix in the host and proxy URLs; only http protocol is supported currently
 # e.g., use "localhost:80" instead of "http://localhost:80"
