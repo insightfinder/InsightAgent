@@ -1,0 +1,44 @@
+[powerFlex]
+# instance type in the Dell PowerFlex.  PowerFlex API doc: https://developer.dell.com/apis/4008/versions/3.5.1/PowerFlex_3.5.1_API.json
+instanceType = ProtectionDomain 
+
+# use "," to input different metric names. The metrics itself must be number. If the input key is an object, all the metrics within its structure will be collected.
+# metricFields DID NOT support specidied nested field
+metricFields = id,designation,name
+
+# ----------------------------------- the connection setting ---------------------------------------------
+# The main host URL.
+connectionUrl = https://dummy.restapiexample.com
+
+# These 2 endpoints don't need to be changed if using the API from PowerFlex Doc
+dataEndPoint = /api/instances/{$instanceType}::{$id}/relationships/Statistics
+idEndPoint = /api/types/{$instanceType}/instances
+
+# timeStamp will be using the current time
+timezone = UTC
+# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+target_timestamp_timezone = UTC
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
+[insightfinder]
+user_name =
+license_key =
+token =
+# Name of the project created in the InsightFinder UI. If this project does not exist, agent will create it automatically. If multiple projects, seperate project names by `;`, like project_1;project_2
+project_name = 
+# Prefix of the project name, the rest of the project name will be used as the system name
+project_name_prefix =
+# Name of system owned by project. If project_name does not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name = 
+# metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
+project_type = metric
+sampling_interval = 10
+run_interval = 5
+
+if_url = https://stg.insightfinder.com
+if_http_proxy =
+if_https_proxy =
+metadata_max_instances = 
