@@ -1,0 +1,28 @@
+---
+# defaults file for vCenter-ifagent
+
+agent_package: vCenter.tar.gz
+
+local_packages: "{{ lookup('fileglob', 'CentOS-7/*').split(',') }}"
+
+required_packages:
+  - certifi
+  - charset_normalizer
+  - idna
+  - numpy
+  - pandas
+  - python_dateutil
+  - pyvmomi
+  - pytz
+  - regex
+  - requests
+  - six
+  - urllib3
+
+base_path: /opt
+install_path: "{{ base_path }}/vCenter-ifagent"
+log_path: "{{ install_path }}/vCenter/log"
+data_path: "{{ install_path }}/vCenter/data"
+venv_path: "{{ install_path }}/vCenter/venv"
+config_path: "{{ install_path }}/vCenter/conf.d/"
+agent_file: vCenter.py
