@@ -2,9 +2,9 @@
 # instance type in the Dell PowerFlex.  PowerFlex API doc: https://developer.dell.com/apis/4008/versions/3.5.1/PowerFlex_3.5.1_API.json
 instanceType = ProtectionDomain 
 
-# use "," to input different metric names. The metrics itself must be number. If the input key is an object, all the metrics within its structure will be collected.
-# metricFields DID NOT support specidied nested field
-metricFields = id,designation,name
+# Specify the metrics file(list all the needed metrics there) in this section. It should be located inside conf.d directory.
+# The metrics info in the txt file should be one metric per line. NESTED STRCUTURE IS NOT SUPPORTED.
+metricPath = sampleMetricListFile.txt
 
 # ----------------------------------- the connection setting ---------------------------------------------
 # The main host URL.

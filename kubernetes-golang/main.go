@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -16,29 +17,29 @@ import (
 )
 
 var DEFAULT_MATADATE_MAX_INSTANCE = 1500
-var projectEndpoint = "api/v1/check-and-add-custom-project"
-var IFSectionName = "insightfinder"
+var PROJECT_END_POINT = "api/v1/check-and-add-custom-project"
+var IF_SECTION_NAME = "insightfinder"
 
 func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 
 	// Required parameters
-	var userName = GetConfigValue(p, IFSectionName, "user_name", true).(string)
-	var licenseKey = GetConfigValue(p, IFSectionName, "license_key", true).(string)
-	var projectName = GetConfigValue(p, IFSectionName, "project_name", true).(string)
+	var userName = ToString(GetConfigValue(p, IF_SECTION_NAME, "user_name", true))
+	var licenseKey = ToString(GetConfigValue(p, IF_SECTION_NAME, "license_key", true))
+	var projectName = ToString(GetConfigValue(p, IF_SECTION_NAME, "project_name", true))
 	// We use uppercase for project log type.
-	var projectType = strings.ToUpper(GetConfigValue(p, IFSectionName, "project_type", true).(string))
-	var runInterval = GetConfigValue(p, IFSectionName, "run_interval", true).(string)
+	var projectType = strings.ToUpper(ToString(GetConfigValue(p, IF_SECTION_NAME, "project_type", true)))
+	var runInterval = ToString(GetConfigValue(p, IF_SECTION_NAME, "run_interval", true))
 
 	// Optional parameters
-	var token = GetConfigValue(p, IFSectionName, "token", false).(string)
-	var systemName = GetConfigValue(p, IFSectionName, "system_name", false).(string)
-	var projectNamePrefix = GetConfigValue(p, IFSectionName, "project_name_prefix", false).(string)
-	var metaDataMaxInstance = GetConfigValue(p, IFSectionName, "metadata_max_instances", false).(string)
-	var samplingInterval = GetConfigValue(p, IFSectionName, "sampling_interval", false).(string)
-	var ifURL = GetConfigValue(p, IFSectionName, "if_url", false).(string)
-	var httpProxy = GetConfigValue(p, IFSectionName, "if_http_proxy", false).(string)
-	var httpsProxy = GetConfigValue(p, IFSectionName, "if_https_proxy", false).(string)
-	var isReplay = GetConfigValue(p, IFSectionName, "isReplay", false).(string)
+	var token = ToString(GetConfigValue(p, IF_SECTION_NAME, "token", false))
+	var systemName = ToString(GetConfigValue(p, IF_SECTION_NAME, "system_name", false))
+	var projectNamePrefix = ToString(GetConfigValue(p, IF_SECTION_NAME, "project_name_prefix", false))
+	var metaDataMaxInstance = ToString(GetConfigValue(p, IF_SECTION_NAME, "metadata_max_instances", false))
+	var samplingInterval = ToString(GetConfigValue(p, IF_SECTION_NAME, "sampling_interval", false))
+	var ifURL = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_url", false))
+	var httpProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_http_proxy", false))
+	var httpsProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_https_proxy", false))
+	var isReplay = ToString(GetConfigValue(p, IF_SECTION_NAME, "isReplay", false))
 
 	if len(projectNamePrefix) > 0 && !strings.HasSuffix(projectNamePrefix, "-") {
 		projectNamePrefix = projectNamePrefix + "-"
@@ -131,7 +132,7 @@ func getConfigFiles(configRelativePath string) []string {
 }
 
 func checkProject(IFconfig map[string]interface{}) {
-	projectName := IFconfig["projectName"].(string)
+	projectName := ToString(IFconfig["projectName"])
 	if len(projectName) > 0 {
 		if !isProjectExist(IFconfig) {
 			log.Output(1, fmt.Sprintf("Didn't find the project named %s. Start creating project in the InsightFinder.", projectName))
@@ -149,44 +150,45 @@ func checkProject(IFconfig map[string]interface{}) {
 }
 
 func isProjectExist(IFconfig map[string]interface{}) bool {
-	projectName := IFconfig["projectName"].(string)
+	projectName := ToString(IFconfig["projectName"])
 	log.Output(1, fmt.Sprintf("Check if the project named %s exists in the InsightFinder.", projectName))
 	form := url.Values{}
 	form.Add("operation", "check")
-	form.Add("userName", IFconfig["userName"].(string))
-	form.Add("licenseKey", IFconfig["licenseKey"].(string))
+	form.Add("userName", ToString(IFconfig["userName"]))
+	form.Add("licenseKey", ToString(IFconfig["licenseKey"]))
 	form.Add("projectName", projectName)
 	headers := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
 	response := SendRequest(
-		"POST",
-		FormCompleteURL(IFconfig["ifURL"].(string), projectEndpoint),
+		http.MethodPost,
+		FormCompleteURL(ToString(IFconfig["ifURL"]), PROJECT_END_POINT),
 		strings.NewReader(form.Encode()),
 		headers,
 	)
 	println(string(response))
 	var result map[string]interface{}
 	json.Unmarshal(response, &result)
-	if !result["success"].(bool) {
-		log.Fatal("Check project exist failed. Please check your parameters.")
+	if !ToBool(result["success"]) {
+		log.Fatal("[ERROR] Check project exist failed. Please check your parameters.")
 	}
 
-	return result["isProjectExist"].(bool)
+	return ToBool(result["isProjectExist"])
 }
 
 func createProject(IFconfig map[string]interface{}) {
-	projectName := IFconfig["projectName"].(string)
+	projectName := ToString(IFconfig["projectName"])
+
 	log.Output(1, fmt.Sprintf("Check if the project named %s exists in the InsightFinder.", projectName))
 	form := url.Values{}
 
 	form.Add("operation", "create")
-	form.Add("userName", IFconfig["userName"].(string))
-	form.Add("licenseKey", IFconfig["licenseKey"].(string))
+	form.Add("userName", ToString(IFconfig["userName"]))
+	form.Add("licenseKey", ToString(IFconfig["licenseKey"]))
 	form.Add("projectName", projectName)
 
 	if IFconfig["systemName"] != nil {
-		form.Add("systemName", IFconfig["systemName"].(string))
+		form.Add("systemName", ToString(IFconfig["systemName"]))
 	} else {
 		form.Add("systemName", projectName)
 	}
@@ -194,8 +196,8 @@ func createProject(IFconfig map[string]interface{}) {
 	form.Add("projectCloudType", "PrivateCloud")
 	form.Add("dataType", ProjectTypeToDataType(projectName))
 	form.Add("insightAgentType", ProjectTypeToAgentType(projectName, false))
-	form.Add("samplingInterval", IFconfig["samplingInterval"].(string))
-	samplingIntervalINT, err := strconv.Atoi(IFconfig["samplingInterval"].(string))
+	form.Add("samplingInterval", ToString(IFconfig["samplingInterval"]))
+	samplingIntervalINT, err := strconv.Atoi(ToString(IFconfig["samplingInterval"]))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -204,23 +206,23 @@ func createProject(IFconfig map[string]interface{}) {
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
 	response := SendRequest(
-		"POST",
-		FormCompleteURL(IFconfig["ifURL"].(string), projectEndpoint),
+		http.MethodPost,
+		FormCompleteURL(ToString(IFconfig["ifURL"]), PROJECT_END_POINT),
 		strings.NewReader(form.Encode()),
 		headers,
 	)
 	var result map[string]interface{}
 	json.Unmarshal(response, &result)
-	log.Output(1, result["message"].(string))
+	log.Output(1, ToString(result["message"]))
 }
 
-func getInputSectionData(p *configparser.ConfigParser) interface{} {
+func getInputSectionData(p *configparser.ConfigParser, IFconfig map[string]interface{}) []MetricDataReceivePayload {
 	allSections := p.Sections()
-	var data interface{}
+	var data []MetricDataReceivePayload
 	for i := 0; i < len(allSections); i++ {
 		switch allSections[i] {
 		case "powerFlex":
-			data = PowerFlexDataStream(p)
+			data = append(data, PowerFlexDataStream(p, IFconfig))
 		}
 	}
 	return data
@@ -235,8 +237,14 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 	}
 	var IFconfig = getIFConfigsSection(p)
 	checkProject(IFconfig)
-	data := getInputSectionData(p)
-	SendMetricDataToIF(data, IFconfig)
+	data := getInputSectionData(p, IFconfig)
+	projectType := ToString(IFconfig["projectType"])
+	switch projectType {
+	case "METRIC", "METRICREPLAY":
+		for i := 0; i < len(data); i++ {
+			SendMetricDataToIF(data[i], IFconfig)
+		}
+	}
 }
 
 func main() {
