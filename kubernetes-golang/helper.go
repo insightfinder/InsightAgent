@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -14,39 +18,37 @@ import (
 	"github.com/bigkevmcd/go-configparser"
 )
 
-func GetConfigValue(p *configparser.ConfigParser, section string, param string, required bool) interface{} {
-	result, err := p.Get(section, param)
-	if err != nil && required {
-		log.Fatal(err)
-	}
-	if result == "" && required {
-		log.Fatal("[ERROR] InsightFinder configuration [", param, "] is required!")
-	}
-	return result
-}
+var METRIC_DATA_API = "/api/v2/metric-data-receive"
 
-func FormCompleteURL(link string, endpoint string) string {
-	postUrl, err := url.Parse(link)
+func SendMetricDataToIF(data MetricDataReceivePayload, config map[string]interface{}) {
+	log.Output(1, "-------- Sending data to InsightFinder --------")
+
+	request := MetricPostRequestPayload{
+		LicenseKey: ToString(config["licenseKey"]),
+		UserName:   ToString(config["userName"]),
+		Data:       data,
+	}
+	jData, err := json.Marshal(request)
 	if err != nil {
-		log.Output(1, "[ERROR] Fail to pares the URL. Please check your config.")
 		log.Fatal(err)
 	}
-	postUrl.Path = path.Join(postUrl.Path, endpoint)
-	return postUrl.String()
-}
-
-func IsString(inputVar interface{}) bool {
-	mtype := reflect.TypeOf(inputVar)
-	return fmt.Sprint(mtype) == "string"
-}
-
-func IsInterface(inputVar interface{}) bool {
-	mtype := reflect.TypeOf(inputVar)
-	return fmt.Sprint(mtype) == "interface"
-}
-
-func SendMetricDataToIF(data interface{}, config map[string]interface{}) {
-	println("send Data to IF")
+	var response []byte
+	headers := map[string]string{
+		"Content-Type": "application/json",
+	}
+	response = SendRequest(
+		http.MethodPost,
+		FormCompleteURL(ToString(config["ifURL"]), METRIC_DATA_API),
+		bytes.NewBuffer(jData),
+		headers,
+	)
+	var result map[string]interface{}
+	json.Unmarshal(response, &result)
+	if ToBool(result["success"]) {
+		log.Output(1, "[LOG] Sending data to the InsightFinder successfully.")
+	} else {
+		log.Output(1, "[ERROR] Failed to send data to the InsightFinder.")
+	}
 }
 
 func SendRequest(operation string, endpoint string, form io.Reader, headers map[string]string) []byte {
@@ -85,6 +87,66 @@ func AbsFilePath(filename string) string {
 	}
 	return absFilePath
 }
+
+func ReadLines(path string) ([]string, error) {
+	log.Output(1, "Reading the lines from file "+AbsFilePath(path))
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	return lines, scanner.Err()
+}
+
+func GetConfigValue(p *configparser.ConfigParser, section string, param string, required bool) interface{} {
+	result, err := p.Get(section, param)
+	if err != nil && required {
+		log.Fatal(err)
+	}
+	if result == "" && required {
+		log.Fatal("[ERROR] InsightFinder configuration [", param, "] is required!")
+	}
+	return result
+}
+
+func FormCompleteURL(link string, endpoint string) string {
+	postUrl, err := url.Parse(link)
+	if err != nil {
+		log.Output(1, "[ERROR] Fail to pares the URL. Please check your config.")
+		log.Fatal(err)
+	}
+	postUrl.Path = path.Join(postUrl.Path, endpoint)
+	return postUrl.String()
+}
+
+func ToString(inputVar interface{}) string {
+	mtype := reflect.TypeOf(inputVar)
+	if fmt.Sprint(mtype) == "string" {
+		return inputVar.(string)
+	}
+	log.Fatal("[ERROR] Wrong input type. Can not convert current input to string.")
+	return ""
+}
+
+func ToBool(inputVar interface{}) bool {
+	if inputVar == nil {
+		return false
+	}
+	mtype := reflect.TypeOf(inputVar)
+	if fmt.Sprint(mtype) == "bool" {
+		return inputVar.(bool)
+	}
+	log.Fatal("[ERROR] Wrong input type. Can not convert current input to boolean.")
+	return false
+}
+
+// ------------------ Project Type transformation ------------------------
 
 func ProjectTypeToAgentType(projectType string, isReplay bool) string {
 	if isReplay {
@@ -136,12 +198,11 @@ func ProjectTypeToDataType(projectType string) string {
 	}
 }
 
+// -------------------- The stack type data structure ---------------------
 type MetricStack struct {
 	Metric interface{}
 	Prefix string
 }
-
-// -------------------- The stack type data structure ---------------------
 
 type Stack []MetricStack
 

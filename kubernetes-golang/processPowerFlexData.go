@@ -2,8 +2,8 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -18,15 +18,15 @@ var powerFlexSectionName = "powerFlex"
 var instanceTypeRegex = `{\$instanceType}`
 var idRegex = `{\$id}`
 
-func getConfig(p *configparser.ConfigParser) map[string]interface{} {
+func getConfig(p *configparser.ConfigParser) map[string]string {
 	// required fields
-	var instanceType = GetConfigValue(p, powerFlexSectionName, "instanceType", true).(string)
-	var metricFields = GetConfigValue(p, powerFlexSectionName, "metricFields", true)
-	var dataEndPoint = GetConfigValue(p, powerFlexSectionName, "dataEndPoint", true).(string)
-	var idEndPoint = GetConfigValue(p, powerFlexSectionName, "idEndPoint", true).(string)
-	var connectionUrl = GetConfigValue(p, powerFlexSectionName, "connectionUrl", true).(string)
+	var instanceType = ToString(GetConfigValue(p, powerFlexSectionName, "instanceType", true))
+	var metricPath = ToString(GetConfigValue(p, powerFlexSectionName, "metricPath", true))
+	var dataEndPoint = ToString(GetConfigValue(p, powerFlexSectionName, "dataEndPoint", true))
+	var idEndPoint = ToString(GetConfigValue(p, powerFlexSectionName, "idEndPoint", true))
+	var connectionUrl = ToString(GetConfigValue(p, powerFlexSectionName, "connectionUrl", true))
 	// optional fields
-	var metricWhitelist = GetConfigValue(p, powerFlexSectionName, "metricWhitelist", false).(string)
+	var metricWhitelist = ToString(GetConfigValue(p, powerFlexSectionName, "metricWhitelist", false))
 
 	// ----------------- Process the configuration ------------------
 
@@ -34,9 +34,9 @@ func getConfig(p *configparser.ConfigParser) map[string]interface{} {
 	dataEndPoint = string(re.ReplaceAll([]byte(dataEndPoint), []byte(instanceType)))
 	idEndPoint = string(re.ReplaceAll([]byte(idEndPoint), []byte(instanceType)))
 
-	config := map[string]interface{}{
+	config := map[string]string{
 		"instanceType":    instanceType,
-		"metricFields":    metricFields,
+		"metricPath":      metricPath,
 		"metricWhitelist": metricWhitelist,
 		"dataEndPoint":    dataEndPoint,
 		"idEndPoint":      idEndPoint,
@@ -45,15 +45,15 @@ func getConfig(p *configparser.ConfigParser) map[string]interface{} {
 	return config
 }
 
-func getInstanceList(config map[string]interface{}) []string {
+func getInstanceList(config map[string]string) []string {
 	form := url.Values{}
 	getInstanceEndpoint := FormCompleteURL(
-		config["connectionUrl"].(string), config["idEndPoint"].(string),
+		config["connectionUrl"], config["idEndPoint"],
 	)
-	// Header currently left empty
+	// TODO: Headers currently left empty
 	var headers map[string]string
 	res := SendRequest(
-		"GET",
+		http.MethodGet,
 		getInstanceEndpoint,
 		strings.NewReader(form.Encode()),
 		headers,
@@ -62,17 +62,22 @@ func getInstanceList(config map[string]interface{}) []string {
 	var result []interface{}
 	json.Unmarshal(res, &result)
 	instanceList := make([]string, len(result))
+
 	for _, x := range result {
-		instanceList = append(instanceList, x.(map[string]interface{})["id"].(string))
+		dict, ok := x.(map[string]interface{})
+		if !ok {
+			log.Fatal("[ERROR] Can't convert the result instance to map.")
+		}
+		instanceList = append(instanceList, ToString(dict["id"]))
 	}
 	// Fake data
-	// instances := []string{"1", "2", "3", "4", "5"}
-	// return instances
+	// instanceList = []string{"instance1", "instance12", "instance13", "instance14", "instance15"}
+
 	return instanceList
 }
 
 func formMetricDataPoint(metric string, value interface{}) MetricDataPoint {
-	intVar, err := strconv.ParseFloat(value.(string), 64)
+	intVar, err := strconv.ParseFloat(ToString(value), 64)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -83,15 +88,15 @@ func formMetricDataPoint(metric string, value interface{}) MetricDataPoint {
 	return metricDP
 }
 
-func processDataFromInstances(instance string, config map[string]interface{}, data *[]map[string]interface{}, pfWG *sync.WaitGroup) map[string]interface{} {
+func processDataFromInstances(instance string, config map[string]string, metrics []string, data *MetricDataReceivePayload, pfWG *sync.WaitGroup) {
 	defer pfWG.Done()
 	re := regexp.MustCompile(idRegex)
-	endPoint := string(re.ReplaceAll([]byte(config["dataEndPoint"].(string)), []byte(instance)))
+	endPoint := string(re.ReplaceAll([]byte(config["dataEndPoint"]), []byte(instance)))
 	var headers map[string]string
 	form := url.Values{}
 	res := SendRequest(
-		"GET",
-		FormCompleteURL(config["connectionUrl"].(string), endPoint),
+		http.MethodGet,
+		FormCompleteURL(config["connectionUrl"], endPoint),
 		strings.NewReader(form.Encode()),
 		headers,
 	)
@@ -109,15 +114,18 @@ func processDataFromInstances(instance string, config map[string]interface{}, da
 
 	var result map[string]interface{}
 	json.Unmarshal([]byte(res), &result)
-	prasedData := parseData(result, timeStamp, config)
-	*data = append(*data, result)
-	println(prasedData)
-	return result
+	prasedData := parseData(result, timeStamp, metrics)
+
+	instanceData := InstanceData{
+		InstanceName:       instance,
+		ComponentName:      "NO_COMPONENT_NAME",
+		DataInTimestampMap: make(map[int64]DataInTimestamp),
+	}
+	instanceData.DataInTimestampMap[timeStamp] = prasedData
+	data.InstanceDataMap[instance] = instanceData
 }
 
-func parseData(data map[string]interface{}, timeStamp int64, config map[string]interface{}) string {
-	// Split the metric fields by "," and trim the whitespace
-	metrics := strings.Split(strings.ReplaceAll(config["metricFields"].(string), " ", ""), ",")
+func parseData(data map[string]interface{}, timeStamp int64, metrics []string) DataInTimestamp {
 	dataInTs := DataInTimestamp{
 		TimeStamp:        timeStamp,
 		MetricDataPoints: make([]MetricDataPoint, 0),
@@ -152,30 +160,32 @@ func parseData(data map[string]interface{}, timeStamp int64, config map[string]i
 			}
 
 		default:
-			log.Fatal("Wrong type input from the data")
+			log.Fatal("[ERROR] Wrong type input from the data")
 		}
 	}
-	instanceData := InstanceData{
-		InstanceName:       "333",
-		ComponentName:      "tttt",
-		DataInTimestampMap: make(map[int64]DataInTimestamp),
-	}
-	instanceData.DataInTimestampMap[timeStamp] = dataInTs
-	jData, _ := json.Marshal(instanceData)
-	fmt.Println(string(jData))
-	return "res"
+	return dataInTs
 }
 
-func PowerFlexDataStream(p *configparser.ConfigParser) interface{} {
+func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {
 	config := getConfig(p)
 
 	instances := getInstanceList(config)
 	pfWG := new(sync.WaitGroup)
 	numOfInst := len(instances)
 	pfWG.Add(numOfInst)
-	var data []map[string]interface{}
+	projectName := ToString(IFconfig["projectName"])
+	userName := ToString(IFconfig["userName"])
+	data := MetricDataReceivePayload{
+		ProjectName:     projectName,
+		UserName:        userName,
+		InstanceDataMap: make(map[string]InstanceData),
+	}
+	metrics, err := ReadLines("conf.d/" + config["metricPath"])
+	if err != nil {
+		log.Fatal(err)
+	}
 	for i := 0; i < numOfInst; i++ {
-		processDataFromInstances(instances[i], config, &data, pfWG)
+		go processDataFromInstances(instances[i], config, metrics, &data, pfWG)
 	}
 	pfWG.Wait()
 	return data

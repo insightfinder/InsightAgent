@@ -27,21 +27,8 @@ type MetricDataReceivePayload struct {
 	SamplingInterval string                  `json:"si,omitempty"`
 }
 
-// MetricDataReceivePayload
-// String projectName, String userName, long minTimestamp,
-//       long maxTimestamp, String insightAgentType, String samplingInterval,
-//       Map<String, InstanceData> instanceDataMap, MetricReplayStatusModel metricReplayStatus
-// @SerializedName(value = "i", alternate = {"isTimestampConverted"})
-//   private final boolean isTimestampConverted = false;
-//   @SerializedName(value = "mi", alternate = {"minTimestamp"})
-//   private final long minTimestamp;
-//   @SerializedName(value = "ma", alternate = {"maxTimestamp"})
-//   private final long maxTimestamp;
-//   @SerializedName(value = "iat", alternate = {"insightAgentType"})
-//   private final String insightAgentType;
-//   @SerializedName(value = "si", alternate = {"samplingInterval"})
-//   private final String samplingInterval;
-//   @SerializedName(value = "idm", alternate = {"instanceDataMap"})
-//   private Map<String, InstanceData> instanceDataMap;
-//   @SerializedName(value = "mrs", alternate = {"metricReplayStatus"})
-//   private final MetricReplayStatusModel metricReplayStatus;
+type MetricPostRequestPayload struct {
+	LicenseKey string                   `json:"licenseKey" validate:"required"`
+	UserName   string                   `json:"userName" validate:"required"`
+	Data       MetricDataReceivePayload `json:"data" validate:"required"`
+}
