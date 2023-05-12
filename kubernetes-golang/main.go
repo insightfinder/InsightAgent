@@ -216,13 +216,13 @@ func createProject(IFconfig map[string]interface{}) {
 	log.Output(1, ToString(result["message"]))
 }
 
-func getInputSectionData(p *configparser.ConfigParser, IFconfig map[string]interface{}) []MetricDataReceivePayload {
+func getInputSectionData(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {
 	allSections := p.Sections()
-	var data []MetricDataReceivePayload
+	var data MetricDataReceivePayload
 	for i := 0; i < len(allSections); i++ {
 		switch allSections[i] {
 		case "powerFlex":
-			data = append(data, PowerFlexDataStream(p, IFconfig))
+			data = PowerFlexDataStream(p, IFconfig)
 		}
 	}
 	return data
@@ -238,13 +238,7 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 	var IFconfig = getIFConfigsSection(p)
 	checkProject(IFconfig)
 	data := getInputSectionData(p, IFconfig)
-	projectType := ToString(IFconfig["projectType"])
-	switch projectType {
-	case "METRIC", "METRICREPLAY":
-		for i := 0; i < len(data); i++ {
-			SendMetricDataToIF(data[i], IFconfig)
-		}
-	}
+	ProcessMetricData(data, IFconfig)
 }
 
 func main() {
