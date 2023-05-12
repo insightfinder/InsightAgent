@@ -19,6 +19,56 @@ import (
 )
 
 var METRIC_DATA_API = "/api/v2/metric-data-receive"
+var CHUNK_SIZE = 2 * 1024 * 1024
+var MAX_PACKET_SIZE = 10000000
+
+func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interface{}) {
+	curTotal := 0
+	var newPayload = MetricDataReceivePayload{
+		ProjectName:     data.ProjectName,
+		UserName:        data.UserName,
+		InstanceDataMap: make(map[string]InstanceData),
+	}
+	for instanceName, istData := range data.InstanceDataMap {
+		instanceData, ok := newPayload.InstanceDataMap[instanceName]
+		if !ok {
+			// Current Instance didn't exist
+			instanceData = InstanceData{
+				InstanceName:       istData.InstanceName,
+				ComponentName:      istData.InstanceName,
+				DataInTimestampMap: make(map[int64]DataInTimestamp),
+			}
+			newPayload.InstanceDataMap[instanceName] = instanceData
+		}
+		for timeStamp, tsData := range istData.DataInTimestampMap {
+			// Need to send out the data in the same timestamp in one payload
+			dataBytes, err := json.Marshal(tsData)
+			if err != nil {
+				log.Fatal("[ERORR] There's issue form json data for DataInTimestampMap.")
+			}
+			// Add the data into the payload
+			instanceData.DataInTimestampMap[timeStamp] = tsData
+			// The json.Marshal transform the data into bytes so the length will be the actual size.
+			curTotal += len(dataBytes)
+			if curTotal > CHUNK_SIZE {
+				SendMetricDataToIF(newPayload, IFconfig)
+				curTotal = 0
+				newPayload = MetricDataReceivePayload{
+					ProjectName:     data.ProjectName,
+					UserName:        data.UserName,
+					InstanceDataMap: make(map[string]InstanceData),
+				}
+				newPayload.InstanceDataMap[instanceName] = InstanceData{
+					InstanceName:       istData.InstanceName,
+					ComponentName:      istData.InstanceName,
+					DataInTimestampMap: make(map[int64]DataInTimestamp),
+				}
+			}
+		}
+
+	}
+	SendMetricDataToIF(newPayload, IFconfig)
+}
 
 func SendMetricDataToIF(data MetricDataReceivePayload, config map[string]interface{}) {
 	log.Output(1, "-------- Sending data to InsightFinder --------")
@@ -31,6 +81,9 @@ func SendMetricDataToIF(data MetricDataReceivePayload, config map[string]interfa
 	jData, err := json.Marshal(request)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if len(jData) > MAX_PACKET_SIZE {
+		log.Fatal("[ERROR]The packet size is too large.")
 	}
 	var response []byte
 	headers := map[string]string{
