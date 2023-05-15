@@ -178,6 +178,7 @@ func isProjectExist(IFconfig map[string]interface{}) bool {
 
 func createProject(IFconfig map[string]interface{}) {
 	projectName := ToString(IFconfig["projectName"])
+	projectType := ToString(IFconfig["projectType"])
 
 	log.Output(1, fmt.Sprintf("Check if the project named %s exists in the InsightFinder.", projectName))
 	form := url.Values{}
@@ -194,8 +195,8 @@ func createProject(IFconfig map[string]interface{}) {
 	}
 	form.Add("instanceType", "PrivateCloud")
 	form.Add("projectCloudType", "PrivateCloud")
-	form.Add("dataType", ProjectTypeToDataType(projectName))
-	form.Add("insightAgentType", ProjectTypeToAgentType(projectName, false))
+	form.Add("dataType", ProjectTypeToDataType(projectType))
+	form.Add("insightAgentType", ProjectTypeToAgentType(projectType, false))
 	form.Add("samplingInterval", ToString(IFconfig["samplingInterval"]))
 	samplingIntervalINT, err := strconv.Atoi(ToString(IFconfig["samplingInterval"]))
 	if err != nil {
@@ -250,4 +251,5 @@ func main() {
 		go workerProcess(allConfigs[i], wg)
 	}
 	wg.Wait()
+	log.Output(1, "[LOG] All workers have finsihed. The agent will terminate by itself.")
 }

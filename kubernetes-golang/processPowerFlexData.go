@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bigkevmcd/go-configparser"
@@ -71,7 +70,7 @@ func getInstanceList(config map[string]string) []string {
 		instanceList = append(instanceList, ToString(dict["id"]))
 	}
 	// Fake data
-	// instanceList = []string{"instance1", "instance12", "instance13", "instance14", "instance15"}
+	// instanceList = []string{"instance1", "instance2", "instance3", "instance4", "instance5"}
 
 	return instanceList
 }
@@ -88,8 +87,7 @@ func formMetricDataPoint(metric string, value interface{}) MetricDataPoint {
 	return metricDP
 }
 
-func processDataFromInstances(instance string, config map[string]string, metrics []string, data *MetricDataReceivePayload, pfWG *sync.WaitGroup) {
-	defer pfWG.Done()
+func processDataFromInstances(instance string, config map[string]string, metrics []string, data *MetricDataReceivePayload) {
 	re := regexp.MustCompile(idRegex)
 	endPoint := string(re.ReplaceAll([]byte(config["dataEndPoint"]), []byte(instance)))
 	var headers map[string]string
@@ -103,14 +101,54 @@ func processDataFromInstances(instance string, config map[string]string, metrics
 	timeStamp := time.Now().UnixMilli()
 
 	// Fake data for testing
-	// res := []byte(`{
-	// 			"id": "1",
-	// 			"name": "6444",
+	// var res []byte
+	// switch instance {
+	// case "instance1":
+	// 	res = []byte(`{
+	// 		"id": "1",
+	// 		"name": "6444",
+	// 		"department": "shopping",
+	// 		"designation": {
+	// 			"test": "1"
+	// 		}
+	// 		}`)
+	// case "instance2":
+	// 	res = []byte(`{
+	// 			"id": "2",
+	// 			"name": "27",
 	// 			"department": "shopping",
 	// 			"designation": {
-	// 				"test": "1"
+	// 				"test": "2.555"
 	// 			}
 	// 			}`)
+	// case "instance3":
+	// 	res = []byte(`{
+	// 				"id": "3",
+	// 				"name": "36",
+	// 				"department": "shopping",
+	// 				"designation": {
+	// 					"test": "0.35"
+	// 				}
+	// 				}`)
+	// case "instance4":
+	// 	res = []byte(`{
+	// 					"id": "4",
+	// 					"name": "48000",
+	// 					"department": "shopping",
+	// 					"designation": {
+	// 						"test": "490000"
+	// 					}
+	// 					}`)
+	// case "instance5":
+	// 	res = []byte(`{
+	// 						"id": "5",
+	// 						"name": "527",
+	// 						"department": "shopping",
+	// 						"designation": {
+	// 							"test": "5"
+	// 						}
+	// 						}`)
+	// }
 
 	var result map[string]interface{}
 	json.Unmarshal([]byte(res), &result)
@@ -170,9 +208,7 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 	config := getConfig(p)
 
 	instances := getInstanceList(config)
-	pfWG := new(sync.WaitGroup)
 	numOfInst := len(instances)
-	pfWG.Add(numOfInst)
 	projectName := ToString(IFconfig["projectName"])
 	userName := ToString(IFconfig["userName"])
 	data := MetricDataReceivePayload{
@@ -185,8 +221,7 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 		log.Fatal(err)
 	}
 	for i := 0; i < numOfInst; i++ {
-		go processDataFromInstances(instances[i], config, metrics, &data, pfWG)
+		processDataFromInstances(instances[i], config, metrics, &data)
 	}
-	pfWG.Wait()
 	return data
 }
