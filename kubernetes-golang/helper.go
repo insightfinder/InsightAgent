@@ -28,6 +28,7 @@ func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interf
 		ProjectName:     data.ProjectName,
 		UserName:        data.UserName,
 		InstanceDataMap: make(map[string]InstanceData),
+		SystemName:      ToString(IFconfig["systemName"]),
 	}
 	for instanceName, istData := range data.InstanceDataMap {
 		instanceData, ok := newPayload.InstanceDataMap[instanceName]
@@ -57,6 +58,7 @@ func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interf
 					ProjectName:     data.ProjectName,
 					UserName:        data.UserName,
 					InstanceDataMap: make(map[string]InstanceData),
+					SystemName:      ToString(IFconfig["systemName"]),
 				}
 				newPayload.InstanceDataMap[instanceName] = InstanceData{
 					InstanceName:       istData.InstanceName,

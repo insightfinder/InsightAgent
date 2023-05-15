@@ -21,6 +21,7 @@ type MetricDataReceivePayload struct {
 	ProjectName      string                  `json:"projectName" validate:"required"`
 	UserName         string                  `json:"userName" validate:"required"`
 	InstanceDataMap  map[string]InstanceData `json:"idm" validate:"required"`
+	SystemName       string                  `json:"systemName,omitempty"`
 	MinTimestamp     int64                   `json:"mi,omitempty"`
 	MaxTimestamp     int64                   `json:"ma,omitempty"`
 	InsightAgentType string                  `json:"iat,omitempty"`
