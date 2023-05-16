@@ -52,6 +52,7 @@ func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interf
 			// The json.Marshal transform the data into bytes so the length will be the actual size.
 			curTotal += len(dataBytes)
 			if curTotal > CHUNK_SIZE {
+				log.Output(2, "[LOG] Prepare to send out "+fmt.Sprint(curTotal)+" bytes data to IF.")
 				SendMetricDataToIF(newPayload, IFconfig)
 				curTotal = 0
 				newPayload = MetricDataReceivePayload{

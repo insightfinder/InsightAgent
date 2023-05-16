@@ -40,6 +40,7 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	var httpProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_http_proxy", false))
 	var httpsProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_https_proxy", false))
 	var isReplay = ToString(GetConfigValue(p, IF_SECTION_NAME, "isReplay", false))
+	var samplingIntervalInSeconds string
 
 	if len(projectNamePrefix) > 0 && !strings.HasSuffix(projectNamePrefix, "-") {
 		projectNamePrefix = projectNamePrefix + "-"
@@ -55,17 +56,23 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 		} else {
 			// Set default for non-metric project
 			samplingInterval = "10"
+			samplingIntervalInSeconds = "600"
 		}
 	}
 
 	if strings.HasSuffix(samplingInterval, "s") {
-		samplingInterval = samplingInterval[:len(samplingInterval)-1]
+		samplingIntervalInSeconds = samplingInterval[:len(samplingInterval)-1]
+		samplingIntervalInt, err := strconv.Atoi(samplingInterval)
+		if err != nil {
+			log.Fatal(err)
+		}
+		samplingInterval = fmt.Sprint(samplingIntervalInt / 60.0)
 	} else {
 		samplingIntervalInt, err := strconv.Atoi(samplingInterval)
 		if err != nil {
 			log.Fatal(err)
 		}
-		samplingInterval = string(rune(samplingIntervalInt * 60))
+		samplingIntervalInSeconds = fmt.Sprint(int64(samplingIntervalInt * 60))
 	}
 
 	isReplay = strconv.FormatBool(strings.Contains(projectType, "REPLAY"))
@@ -97,19 +104,20 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	}
 
 	configIF := map[string]interface{}{
-		"userName":            userName,
-		"licenseKey":          licenseKey,
-		"token":               token,
-		"projectName":         projectName,
-		"systemName":          systemName,
-		"projectNamePrefix":   projectNamePrefix,
-		"projectType":         projectType,
-		"metaDataMaxInstance": metaDataMaxInstance,
-		"samplingInterval":    samplingInterval,
-		"runInterval":         runInterval,
-		"ifURL":               ifURL,
-		"ifProxies":           ifProxies,
-		"isReplay":            isReplay,
+		"userName":                  userName,
+		"licenseKey":                licenseKey,
+		"token":                     token,
+		"projectName":               projectName,
+		"systemName":                systemName,
+		"projectNamePrefix":         projectNamePrefix,
+		"projectType":               projectType,
+		"metaDataMaxInstance":       metaDataMaxInstance,
+		"samplingInterval":          samplingInterval,
+		"samplingIntervalInSeconds": samplingIntervalInSeconds,
+		"runInterval":               runInterval,
+		"ifURL":                     ifURL,
+		"ifProxies":                 ifProxies,
+		"isReplay":                  isReplay,
 	}
 	return configIF
 }
@@ -180,7 +188,7 @@ func createProject(IFconfig map[string]interface{}) {
 	projectName := ToString(IFconfig["projectName"])
 	projectType := ToString(IFconfig["projectType"])
 
-	log.Output(1, fmt.Sprintf("Check if the project named %s exists in the InsightFinder.", projectName))
+	log.Output(1, fmt.Sprintf("[LOG]Creating the project named %s in the InsightFinder.", projectName))
 	form := url.Values{}
 
 	form.Add("operation", "create")
@@ -198,6 +206,7 @@ func createProject(IFconfig map[string]interface{}) {
 	form.Add("dataType", ProjectTypeToDataType(projectType))
 	form.Add("insightAgentType", ProjectTypeToAgentType(projectType, false))
 	form.Add("samplingInterval", ToString(IFconfig["samplingInterval"]))
+	form.Add("samplingIntervalInSeconds", ToString(IFconfig["samplingInterval"]))
 	samplingIntervalINT, err := strconv.Atoi(ToString(IFconfig["samplingInterval"]))
 	if err != nil {
 		log.Fatal(err)
