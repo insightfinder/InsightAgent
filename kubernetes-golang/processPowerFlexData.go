@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -70,7 +71,7 @@ func getInstanceList(config map[string]string) []string {
 		instanceList = append(instanceList, ToString(dict["id"]))
 	}
 	// Fake data
-	// instanceList = []string{"instance1", "instance2", "instance3", "instance4", "instance5"}
+	// instanceList = GetInstList()
 
 	return instanceList
 }
@@ -98,69 +99,26 @@ func processDataFromInstances(instance string, config map[string]string, metrics
 		strings.NewReader(form.Encode()),
 		headers,
 	)
+
 	timeStamp := time.Now().UnixMilli()
 
 	// Fake data for testing
-	// var res []byte
-	// switch instance {
-	// case "instance1":
-	// 	res = []byte(`{
-	// 		"id": "1",
-	// 		"name": "6444",
-	// 		"department": "shopping",
-	// 		"designation": {
-	// 			"test": "1"
-	// 		}
-	// 		}`)
-	// case "instance2":
-	// 	res = []byte(`{
-	// 			"id": "2",
-	// 			"name": "27",
-	// 			"department": "shopping",
-	// 			"designation": {
-	// 				"test": "2.555"
-	// 			}
-	// 			}`)
-	// case "instance3":
-	// 	res = []byte(`{
-	// 				"id": "3",
-	// 				"name": "36",
-	// 				"department": "shopping",
-	// 				"designation": {
-	// 					"test": "0.35"
-	// 				}
-	// 				}`)
-	// case "instance4":
-	// 	res = []byte(`{
-	// 					"id": "4",
-	// 					"name": "48000",
-	// 					"department": "shopping",
-	// 					"designation": {
-	// 						"test": "490000"
-	// 					}
-	// 					}`)
-	// case "instance5":
-	// 	res = []byte(`{
-	// 						"id": "5",
-	// 						"name": "527",
-	// 						"department": "shopping",
-	// 						"designation": {
-	// 							"test": "5"
-	// 						}
-	// 						}`)
-	// }
-
+	// res := GetFakeMetricData()
 	var result map[string]interface{}
 	json.Unmarshal([]byte(res), &result)
 	prasedData := parseData(result, timeStamp, metrics)
 
-	instanceData := InstanceData{
-		InstanceName:       instance,
-		ComponentName:      "NO_COMPONENT_NAME",
-		DataInTimestampMap: make(map[int64]DataInTimestamp),
+	instanceData, ok := data.InstanceDataMap[instance]
+	if !ok {
+		// Current Instance didn't exist
+		instanceData = InstanceData{
+			InstanceName:       instance,
+			ComponentName:      instance,
+			DataInTimestampMap: make(map[int64]DataInTimestamp),
+		}
+		data.InstanceDataMap[instance] = instanceData
 	}
 	instanceData.DataInTimestampMap[timeStamp] = prasedData
-	data.InstanceDataMap[instance] = instanceData
 }
 
 func parseData(data map[string]interface{}, timeStamp int64, metrics []string) DataInTimestamp {
@@ -170,6 +128,7 @@ func parseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 	}
 	var stack Stack
 	for _, metric := range metrics {
+		metric = strings.ReplaceAll(metric, " ", "")
 		stack.Push(MetricStack{
 			Metric: data[metric],
 			Prefix: metric,
@@ -185,6 +144,8 @@ func parseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 		switch curVal.(type) {
 		case string:
 			dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, formMetricDataPoint(curPrefix, curVal))
+		case float64, int64:
+			dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, formMetricDataPoint(curPrefix, fmt.Sprint(curVal)))
 		case interface{}:
 			curMetricMap, success := curVal.(map[string]interface{})
 			if !success {
@@ -196,7 +157,6 @@ func parseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 					Prefix: curPrefix + "." + k,
 				})
 			}
-
 		default:
 			log.Fatal("[ERROR] Wrong type input from the data")
 		}
