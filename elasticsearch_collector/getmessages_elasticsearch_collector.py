@@ -333,6 +333,8 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                     if len(field_regex_vals) > 1:
                         field_val = safe_get(message, field_regex_vals[0].split('.'))
                         if field_val and field_regex_vals[1]:
+                            if not isinstance(field_val, str):
+                                field_val = str(field_val)
                             re = regex.compile(field_regex_vals[1])
                             matches = re.search(field_val)
                             if matches:

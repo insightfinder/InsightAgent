@@ -35,6 +35,11 @@ metadata_component_field =
 metric_fields =
 # metrics_whitelist is a regex string used to define which metrics will be filtered.
 metric_whitelist =
+# log data field, use . for nested object, ex: item_data.EventData; if it's empty, use the whole data
+log_data_field =
+# use epoch timestamp and a "-" between to specify the time span, for example, xxxxxxxxxx-xxxxxxxxx.
+# Agent will only load the time within this time span. If left empty, there won't be any filter applied.
+time_span = 
 
 ## proxy
 agent_http_proxy =
