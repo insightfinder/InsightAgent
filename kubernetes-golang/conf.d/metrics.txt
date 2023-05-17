@@ -1,0 +1,5 @@
+unusedCapacityInKb
+totalReadBwc
+persistentChecksumCapacityInKb
+numOfVolumes
+currentTickerValue
