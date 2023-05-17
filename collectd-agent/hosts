@@ -1,0 +1,15 @@
+# List all target machines here.
+
+[all:vars]
+#ansible_user=
+#ansible_ssh_private_key_file=/home/{{ansible_user}}/.ssh/id_rsa
+
+# ifagent settings
+report_url= 
+project_name= 
+user_name= 
+license_key= 
+sampling_interval= 5
+# if data_disks is empty root disk usage will be reported
+# format: data_disks=["/", "/run", "/sys/fs/cgroup"]
+data_disks=["/"]

@@ -1,0 +1,32 @@
+---
+- name: Create agent dir
+  file:
+    path: "{{ install_path }}"
+    state: directory
+    mode: 0755
+
+- name: Create log dir
+  file: 
+    path: "{{ log_path }}"
+    state: directory
+    mode: 0755
+
+- name: Upload Agent Package
+  copy:
+    src: "{{ agent_package }}"
+    dest: "{{ install_path }}/{{ agent_package }}"
+    mode: '0755'
+
+- name: Unpackage Agent
+  unarchive:
+    src: '{{ install_path }}/{{ agent_package }}'
+    dest: '{{ install_path }}'
+    mode: 0755
+    remote_src: yes
+
+- name: Create venv and update pip
+  shell: 'python3 -m venv {{ venv_path }}; source {{ venv_path }}/bin/activate; python3 -m pip install --upgrade pip; deactivate;'
+
+- name: Configure Python
+  shell: 'cd {{ install_path }}/vCenter/; sudo ./setup/configure_python.sh;'
+  

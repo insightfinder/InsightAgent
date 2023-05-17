@@ -1,0 +1,13 @@
+---
+- name: Create config.ini
+  template:
+    src: config.ini.j2
+    dest: "{{ config_path }}/config.ini"
+
+- name: Create cron job
+  cron:
+    name: "{{ project_name }}"
+    minute: "*/{{ sampling_interval }}"
+    user: root
+    cron_file: "{{ project_name }}"
+    job: "{{ venv_path }}/bin/python3 {{ install_path }}/vCenter/vCenter.py 2>{{ log_path }}/reporting.err 1>{{ log_path }}/reporting.out"

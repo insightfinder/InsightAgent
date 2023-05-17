@@ -1,0 +1,4 @@
+---
+# defaults file for collectd
+
+local_packages: "{{ lookup('fileglob', 'CentOS-7/*.rpm').split(',') }}"
