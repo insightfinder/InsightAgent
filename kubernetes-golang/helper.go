@@ -97,6 +97,7 @@ func SendMetricDataToIF(data MetricDataReceivePayload, config map[string]interfa
 		FormCompleteURL(ToString(config["ifURL"]), METRIC_DATA_API),
 		bytes.NewBuffer(jData),
 		headers,
+		AuthRequest{},
 	)
 	var result map[string]interface{}
 	json.Unmarshal(response, &result)
@@ -107,12 +108,15 @@ func SendMetricDataToIF(data MetricDataReceivePayload, config map[string]interfa
 	}
 }
 
-func SendRequest(operation string, endpoint string, form io.Reader, headers map[string]string) []byte {
+func SendRequest(operation string, endpoint string, form io.Reader, headers map[string]string, auth AuthRequest) []byte {
 	newRequest, err := http.NewRequest(
 		operation,
 		endpoint,
 		form,
 	)
+	if auth.Password != "" {
+		newRequest.SetBasicAuth(auth.UserName, auth.Password)
+	}
 	if err != nil {
 		log.Fatal(err)
 	}

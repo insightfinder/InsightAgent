@@ -1,9 +1,8 @@
 package main
 
 type AuthRequest struct {
-	Domain   string `json:"domain" validate:"required"`
 	Password string `json:"password" validate:"required"`
-	UserName string `json:"userName" validate:"required"`
+	UserName string `json:"userName"`
 }
 
 type AuthResponse struct {

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -14,24 +12,22 @@ import (
 	"time"
 
 	"github.com/bigkevmcd/go-configparser"
-	"github.com/spacemonkeygo/openssl"
 )
 
 var powerFlexSectionName = "powerFlex"
 var instanceTypeRegex = `{\$instanceType}`
 var idRegex = `{\$id}`
-var AUTHAPI = "/Api/V1/Authenticate"
+var AUTHAPI = "/api/login"
 
-func getConfig(p *configparser.ConfigParser) map[string]string {
+func getPFConfig(p *configparser.ConfigParser) map[string]string {
 	// required fields
+	var userName = ToString(GetConfigValue(p, powerFlexSectionName, "userName", true))
+	var password = ToString(GetConfigValue(p, powerFlexSectionName, "password", true))
 	var instanceType = ToString(GetConfigValue(p, powerFlexSectionName, "instanceType", true))
 	var metricPath = ToString(GetConfigValue(p, powerFlexSectionName, "metricPath", true))
 	var dataEndPoint = ToString(GetConfigValue(p, powerFlexSectionName, "dataEndPoint", true))
 	var idEndPoint = ToString(GetConfigValue(p, powerFlexSectionName, "idEndPoint", true))
 	var connectionUrl = ToString(GetConfigValue(p, powerFlexSectionName, "connectionUrl", true))
-	var domain = ToString(GetConfigValue(p, powerFlexSectionName, "dataEndPoint", true))
-	var password = ToString(GetConfigValue(p, powerFlexSectionName, "idEndPoint", true))
-	var userName = ToString(GetConfigValue(p, powerFlexSectionName, "connectionUrl", true))
 	// optional fields
 	var metricWhitelist = ToString(GetConfigValue(p, powerFlexSectionName, "metricWhitelist", false))
 
@@ -42,15 +38,14 @@ func getConfig(p *configparser.ConfigParser) map[string]string {
 	idEndPoint = string(re.ReplaceAll([]byte(idEndPoint), []byte(instanceType)))
 
 	config := map[string]string{
+		"userName":        userName,
+		"password":        password,
 		"instanceType":    instanceType,
 		"metricPath":      metricPath,
 		"metricWhitelist": metricWhitelist,
 		"dataEndPoint":    dataEndPoint,
 		"idEndPoint":      idEndPoint,
 		"connectionUrl":   connectionUrl,
-		"domain":          domain,
-		"password":        password,
-		"userName":        userName,
 	}
 	return config
 }
@@ -67,6 +62,9 @@ func getInstanceList(config map[string]string) []string {
 		getInstanceEndpoint,
 		strings.NewReader(form.Encode()),
 		headers,
+		AuthRequest{
+			Password: config["token"],
+		},
 	)
 
 	var result []interface{}
@@ -108,6 +106,9 @@ func processDataFromInstances(instance string, config map[string]string, metrics
 		FormCompleteURL(config["connectionUrl"], endPoint),
 		strings.NewReader(form.Encode()),
 		headers,
+		AuthRequest{
+			Password: config["token"],
+		},
 	)
 
 	timeStamp := time.Now().UnixMilli()
@@ -174,54 +175,31 @@ func parseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 	return dataInTs
 }
 
-func authenticationPF(config map[string]string) {
-	endPoint := FormCompleteURL(
+func getToken(config map[string]string) string {
+	authEndPoint := FormCompleteURL(
 		config["connectionUrl"], AUTHAPI,
 	)
-	headers := map[string]string{
-		"Content-Type": "application/json",
-		"Accept":       "application/json",
-	}
-	authRequest := AuthRequest{
-		Domain:   config["domain"],
-		UserName: config["userName"],
-		Password: config["password"],
-	}
-	bytesPayload, _ := json.Marshal(authRequest)
-	res := SendRequest(
-		http.MethodPost,
-		FormCompleteURL(config["connectionUrl"], endPoint),
-		bytes.NewBuffer(bytesPayload),
+	form := url.Values{}
+	var headers map[string]string
+
+	token := string(SendRequest(
+		http.MethodGet,
+		authEndPoint,
+		strings.NewReader(form.Encode()),
 		headers,
-	)
-	var result AuthResponse
-	json.Unmarshal(res, &result)
-	apiKey := result.ApiKey
-	apiSecret := result.ApiSecret
-	timestamp := fmt.Sprint(time.Now().UnixMilli())
-	requestStringList := []string{apiKey, http.MethodPost, "/Api/V1/Log", "if-golang/0.1/golang", timestamp}
-	requestString := strings.Join(requestStringList, ":")
+		AuthRequest{
+			UserName: config["userName"],
+			Password: config["password"],
+		},
+	))
 
-	hmac, err := openssl.NewHMAC([]byte(apiSecret), openssl.EVP_SHA256)
-	if err != nil {
-		log.Fatal(err)
-	}
-	hmac.Write([]byte(requestString))
-	hashBytes, _ := hmac.Final()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	signature := base64.StdEncoding.EncodeToString(hashBytes)
-	var resHeader map[string]string
-	resHeader["x-dell-auth-key"] = apiKey
-	resHeader["x-dell-auth-signature"] = signature
-	resHeader["x-dell-auth-timestamp"] = timestamp
+	return token
 }
 
 func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {
-	config := getConfig(p)
-	authenticationPF(config)
+	config := getPFConfig(p)
+	token := getToken(config)
+	config["token"] = token
 	instances := getInstanceList(config)
 	numOfInst := len(instances)
 	projectName := ToString(IFconfig["projectName"])
