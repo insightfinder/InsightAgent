@@ -1,4 +1,6 @@
 [powerFlex]
+userName = 
+password = 
 # instance type in the Dell PowerFlex.  PowerFlex API doc: https://developer.dell.com/apis/4008/versions/3.5.1/PowerFlex_3.5.1_API.json
 instanceType = ProtectionDomain 
 
@@ -8,7 +10,7 @@ metricPath = sampleMetricListFile.txt
 
 # ----------------------------------- the connection setting ---------------------------------------------
 # The main host URL.
-connectionUrl = https://dummy.restapiexample.com
+connectionUrl = 
 
 # These 2 endpoints don't need to be changed if using the API from PowerFlex Doc
 dataEndPoint = /api/instances/{$instanceType}::{$id}/relationships/Statistics

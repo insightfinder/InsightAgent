@@ -4,7 +4,6 @@ go 1.18
 
 require (
 	github.com/bigkevmcd/go-configparser v0.0.0-20230107085059-7f3eb70e40ed
-	github.com/spacemonkeygo/openssl v0.0.0-20181017203307-c2dcc5cca94a
 )
 
 require (

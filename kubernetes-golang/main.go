@@ -173,6 +173,7 @@ func isProjectExist(IFconfig map[string]interface{}) bool {
 		FormCompleteURL(ToString(IFconfig["ifURL"]), PROJECT_END_POINT),
 		strings.NewReader(form.Encode()),
 		headers,
+		AuthRequest{},
 	)
 	println(string(response))
 	var result map[string]interface{}
@@ -220,6 +221,7 @@ func createProject(IFconfig map[string]interface{}) {
 		FormCompleteURL(ToString(IFconfig["ifURL"]), PROJECT_END_POINT),
 		strings.NewReader(form.Encode()),
 		headers,
+		AuthRequest{},
 	)
 	var result map[string]interface{}
 	json.Unmarshal(response, &result)
