@@ -63,6 +63,7 @@ func getInstanceList(config map[string]string) []string {
 		strings.NewReader(form.Encode()),
 		headers,
 		AuthRequest{
+			UserName: "",
 			Password: config["token"],
 		},
 	)
@@ -70,9 +71,10 @@ func getInstanceList(config map[string]string) []string {
 	var result []interface{}
 	json.Unmarshal(res, &result)
 	instanceList := make([]string, len(result))
-	log.Output(1, string(res))
+
 	log.Output(1, "[LOG] Getting instances")
-	log.Output(1, "[LOG] There are total "+fmt.Sprint(len(result))+"instances")
+	log.Output(1, string(res))
+	log.Output(1, "[LOG] There are total "+fmt.Sprint(len(result))+" instances")
 
 	for _, x := range result {
 		dict, ok := x.(map[string]interface{})
@@ -110,9 +112,13 @@ func processDataFromInstances(instance string, config map[string]string, metrics
 		strings.NewReader(form.Encode()),
 		headers,
 		AuthRequest{
+			UserName: "",
 			Password: config["token"],
 		},
 	)
+
+	log.Output(1, "[LOG] Getting instances data")
+	log.Output(1, string(res))
 
 	timeStamp := time.Now().UnixMilli()
 
