@@ -146,9 +146,9 @@ func AbsFilePath(filename string) string {
 	if filename == "" {
 		filename = ""
 	}
-	mydir, err := os.Getwd()
+	mydir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 	}
 	absFilePath := filepath.Join(mydir, filename)
 	return absFilePath
