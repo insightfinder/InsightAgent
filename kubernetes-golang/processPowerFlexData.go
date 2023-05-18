@@ -71,7 +71,7 @@ func getInstanceList(config map[string]string) []string {
 
 	var result []interface{}
 	json.Unmarshal(res, &result)
-	instanceList := make([]string, len(result))
+	instanceList := make([]string, 0)
 
 	log.Output(1, "[LOG] Getting instances")
 	log.Output(1, string(res))
