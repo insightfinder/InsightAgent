@@ -51,36 +51,43 @@ func getPFConfig(p *configparser.ConfigParser) map[string]string {
 }
 
 func getInstanceList(config map[string]string) []string {
-	// form := url.Values{}
-	// getInstanceEndpoint := FormCompleteURL(
-	// 	config["connectionUrl"], config["idEndPoint"],
-	// )
-	// // TODO: Headers currently left empty
-	// var headers map[string]string
-	// res := SendRequest(
-	// 	http.MethodGet,
-	// 	getInstanceEndpoint,
-	// 	strings.NewReader(form.Encode()),
-	// 	headers,
-	// 	AuthRequest{
-	// 		Password: config["token"],
-	// 	},
-	// )
+	form := url.Values{}
+	getInstanceEndpoint := FormCompleteURL(
+		config["connectionUrl"], config["idEndPoint"],
+	)
+	// TODO: Headers currently left empty
+	var headers map[string]string
+	log.Output(1, "the token used in instance HTTP call: "+config["token"])
+	res := SendRequest(
+		http.MethodGet,
+		getInstanceEndpoint,
+		strings.NewReader(form.Encode()),
+		headers,
+		AuthRequest{
+			UserName: "",
+			Password: config["token"],
+		},
+	)
 
-	// var result []interface{}
-	// json.Unmarshal(res, &result)
-	// instanceList := make([]string, len(result))
+	var result []interface{}
+	json.Unmarshal(res, &result)
+	instanceList := make([]string, 0)
 
-	// for _, x := range result {
-	// 	dict, ok := x.(map[string]interface{})
-	// 	if !ok {
-	// 		log.Fatal("[ERROR] Can't convert the result instance to map.")
-	// 	}
-	// 	instanceList = append(instanceList, ToString(dict["id"]))
-	// }
+	log.Output(1, "[LOG] Getting instances")
+	log.Output(1, string(res))
+	log.Output(1, "[LOG] There are total "+fmt.Sprint(len(result))+" instances")
+
+	for _, x := range result {
+		dict, ok := x.(map[string]interface{})
+		log.Output(1, "[LOG] The instance id: "+ToString(dict["id"]))
+		if !ok {
+			log.Fatal("[ERROR] Can't convert the result instance to map.")
+		}
+		instanceList = append(instanceList, ToString(dict["id"]))
+	}
 	// Fake data
-	instanceList := GetInstList()
-
+	// instanceList = GetInstList()
+	log.Output(1, "total instance returned "+fmt.Sprint(len(instanceList)))
 	return instanceList
 }
 
@@ -96,38 +103,44 @@ func formMetricDataPoint(metric string, value interface{}) MetricDataPoint {
 	return metricDP
 }
 
-func processDataFromInstances(curTime int64, fakeData interface{}, instance string, config map[string]string, metrics []string, data *MetricDataReceivePayload) {
-	// re := regexp.MustCompile(idRegex)
-	// endPoint := string(re.ReplaceAll([]byte(config["dataEndPoint"]), []byte(instance)))
-	// var headers map[string]string
-	// form := url.Values{}
-	// res := SendRequest(
-	// 	http.MethodGet,
-	// 	FormCompleteURL(config["connectionUrl"], endPoint),
-	// 	strings.NewReader(form.Encode()),
-	// 	headers,
-	// 	AuthRequest{
-	// 		Password: config["token"],
-	// 	},
-	// )
+func processDataFromInstances(instance string, config map[string]string, metrics []string, data *MetricDataReceivePayload) {
+	re := regexp.MustCompile(idRegex)
+	endPoint := string(re.ReplaceAll([]byte(config["dataEndPoint"]), []byte(instance)))
+	var headers map[string]string
+	form := url.Values{}
+	res := SendRequest(
+		http.MethodGet,
+		FormCompleteURL(config["connectionUrl"], endPoint),
+		strings.NewReader(form.Encode()),
+		headers,
+		AuthRequest{
+			UserName: "",
+			Password: config["token"],
+		},
+	)
 
-	// timeStamp := time.Now().UnixMilli()
+	log.Output(1, "[LOG] Getting instances data")
+	log.Output(1, string(res))
+
+	timeStamp := time.Now().UnixMilli()
 
 	// Fake data for testing
-
-	prasedData := parseData(fakeData.(map[string]interface{}), curTime, metrics)
+	// res := GetFakeMetricData()
+	var result map[string]interface{}
+	json.Unmarshal([]byte(res), &result)
+	prasedData := parseData(result, timeStamp, metrics)
 
 	instanceData, ok := data.InstanceDataMap[instance]
 	if !ok {
 		// Current Instance didn't exist
 		instanceData = InstanceData{
 			InstanceName:       instance,
-			ComponentName:      "System",
+			ComponentName:      instance,
 			DataInTimestampMap: make(map[int64]DataInTimestamp),
 		}
 		data.InstanceDataMap[instance] = instanceData
 	}
-	instanceData.DataInTimestampMap[curTime] = prasedData
+	instanceData.DataInTimestampMap[timeStamp] = prasedData
 }
 
 func parseData(data map[string]interface{}, timeStamp int64, metrics []string) DataInTimestamp {
@@ -196,9 +209,8 @@ func getToken(config map[string]string) string {
 
 func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {
 	config := getPFConfig(p)
-	// token := getToken(config)
-	// fake data
-	token := "test"
+	token := getToken(config)
+	token = strings.ReplaceAll(token, "\"", "")
 	log.Output(1, "[LOG] Successful get the token from Gateway API")
 	log.Output(1, "[LOG] token: "+token)
 	config["token"] = token
@@ -215,73 +227,9 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 	if err != nil {
 		log.Fatal(err)
 	}
-	res := []byte(`
-	[{
-        "unusedCapacityInKb": 26177490944,
-        "currentTickerValue": 65806799,
-        "persistentChecksumCapacityInKb": 18309120,
-        "numOfVolumes": 15,
-        "totalReadBwc": {
-            "numSeconds": 0,
-            "totalWeightInKb": 0,
-            "numOccured": 0
-        }
-},
-{
-        "unusedCapacityInKb": 26177488896,
-        "currentTickerValue": 65806865,
-        "persistentChecksumCapacityInKb": 18309120,
-        "numOfVolumes": 15,
-        "totalReadBwc": {
-            "numSeconds": 5,
-            "totalWeightInKb": 36,
-            "numOccured": 7
-        }
-},
-{
-        "unusedCapacityInKb": 26177488896,
-        "currentTickerValue": 65806925,
-        "persistentChecksumCapacityInKb": 18309120,
-        "numOfVolumes": 15,
-        "totalReadBwc": {
-            "numSeconds": 0,
-            "totalWeightInKb": 0,
-            "numOccured": 0
-        }
-},
-{
-        "unusedCapacityInKb": 26177488896,
-        "currentTickerValue": 65806963,
-        "persistentChecksumCapacityInKb": 18309120,
-        "numOfVolumes": 15,
-        "totalReadBwc": {
-            "numSeconds": 5,
-            "totalWeightInKb": 2687,
-            "numOccured": 87
-        }
-
-},
-{
-
-        "unusedCapacityInKb": 26177488896,
-        "currentTickerValue": 65807252,
-        "persistentChecksumCapacityInKb": 18309120,
-        "numOfVolumes": 15,
-        "totalReadBwc": {
-            "numSeconds": 0,
-            "totalWeightInKb": 0,
-            "numOccured": 0
-        }
-
-}]
-	`)
-	var result []interface{}
-	json.Unmarshal(res, &result)
-	timeStamp := time.Now().UnixMilli()
-	for i := 0; i < 5; i++ {
-		timeStamp += +300000
-		processDataFromInstances(timeStamp, result[i], instances[i], config, metrics, &data)
-		// time.Sleep(time.Second * 5)
+	for _, inst := range instances {
+		log.Output(2, "[LOG] Getting data from instance: ["+inst+"] now.")
+		processDataFromInstances(inst, config, metrics, &data)
 	}
 	return data
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/rand"
 )
 
@@ -81,8 +82,8 @@ func GetFakeMetricData() []byte {
 
 func GetInstList() []string {
 	var res []string
-	for i := 0; i < 5; i++ {
-		res = append(res, "08a9c0c351862e0f")
+	for i := 0; i < 50; i++ {
+		res = append(res, "instance"+fmt.Sprint(i))
 	}
 	return res
 }
