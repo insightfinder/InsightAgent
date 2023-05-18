@@ -79,6 +79,7 @@ func getInstanceList(config map[string]string) []string {
 
 	for _, x := range result {
 		dict, ok := x.(map[string]interface{})
+		log.Output(1, "[LOG] The instance id: "+ToString(dict["id"])+"----------------")
 		if !ok {
 			log.Fatal("[ERROR] Can't convert the result instance to map.")
 		}
@@ -118,7 +119,7 @@ func processDataFromInstances(instance string, config map[string]string, metrics
 		},
 	)
 
-	log.Output(1, "[LOG] Getting instances data")
+	log.Output(1, "[LOG] Getting instances data/n")
 	log.Output(1, string(res))
 
 	timeStamp := time.Now().UnixMilli()
