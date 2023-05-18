@@ -57,6 +57,7 @@ func getInstanceList(config map[string]string) []string {
 	)
 	// TODO: Headers currently left empty
 	var headers map[string]string
+	log.Output(1, "the token used in instance HTTP call: "+config["token"])
 	res := SendRequest(
 		http.MethodGet,
 		getInstanceEndpoint,
@@ -208,6 +209,7 @@ func getToken(config map[string]string) string {
 func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {
 	config := getPFConfig(p)
 	token := getToken(config)
+	token = strings.ReplaceAll(token, "\"", "")
 	log.Output(1, "[LOG] Successful get the token from Gateway API")
 	log.Output(1, "[LOG] token: "+token)
 	config["token"] = token
