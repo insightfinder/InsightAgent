@@ -70,6 +70,7 @@ func getInstanceList(config map[string]string) []string {
 	var result []interface{}
 	json.Unmarshal(res, &result)
 	instanceList := make([]string, len(result))
+	log.Output(1, "[LOG] There are total "+fmt.Sprint(len(result))+"instances")
 
 	for _, x := range result {
 		dict, ok := x.(map[string]interface{})
@@ -200,6 +201,7 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 	config := getPFConfig(p)
 	token := getToken(config)
 	log.Output(1, "[LOG] Successful get the token from Gateway API")
+	log.Output(1, "[LOG] token: "+token)
 	config["token"] = token
 	instances := getInstanceList(config)
 	numOfInst := len(instances)
