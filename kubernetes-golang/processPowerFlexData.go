@@ -215,6 +215,7 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 		log.Fatal(err)
 	}
 	for i := 0; i < numOfInst; i++ {
+		log.Output(2, "[LOG] Getting data from instance: ["+instances[i]+"] now.")
 		processDataFromInstances(instances[i], config, metrics, &data)
 	}
 	return data
