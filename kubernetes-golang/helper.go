@@ -146,10 +146,11 @@ func AbsFilePath(filename string) string {
 	if filename == "" {
 		filename = ""
 	}
-	absFilePath, err := filepath.Abs(filename)
+	mydir, err := os.Getwd()
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
 	}
+	absFilePath := filepath.Join(mydir, filename)
 	return absFilePath
 }
 
