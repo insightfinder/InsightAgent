@@ -21,7 +21,6 @@ var PROJECT_END_POINT = "api/v1/check-and-add-custom-project"
 var IF_SECTION_NAME = "insightfinder"
 
 func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
-
 	// Required parameters
 	var userName = ToString(GetConfigValue(p, IF_SECTION_NAME, "user_name", true))
 	var licenseKey = ToString(GetConfigValue(p, IF_SECTION_NAME, "license_key", true))

@@ -1,6 +1,6 @@
+# Build the golang package using CGO_ENABLED=0 go build
+
 [powerFlex]
-userName = 
-password = 
 # instance type in the Dell PowerFlex.  PowerFlex API doc: https://developer.dell.com/apis/4008/versions/3.5.1/PowerFlex_3.5.1_API.json
 instanceType = ProtectionDomain 
 
@@ -9,6 +9,8 @@ instanceType = ProtectionDomain
 metricPath = sampleMetricListFile.txt
 
 # ----------------------------------- the connection setting ---------------------------------------------
+userName = 
+password = 
 # The main host URL.
 connectionUrl = 
 
@@ -40,7 +42,7 @@ project_type = metric
 sampling_interval = 10
 run_interval = 5
 
-if_url = https://stg.insightfinder.com
+if_url = https://app.insightfinder.com
 if_http_proxy =
 if_https_proxy =
 metadata_max_instances = 
