@@ -79,7 +79,7 @@ func getInstanceList(config map[string]string) []string {
 
 	for _, x := range result {
 		dict, ok := x.(map[string]interface{})
-		log.Output(1, "[LOG] The instance id: "+ToString(dict["id"])+"----------------")
+		log.Output(1, "[LOG] The instance id: "+ToString(dict["id"]))
 		if !ok {
 			log.Fatal("[ERROR] Can't convert the result instance to map.")
 		}
@@ -87,7 +87,7 @@ func getInstanceList(config map[string]string) []string {
 	}
 	// Fake data
 	// instanceList = GetInstList()
-
+	log.Output(1, "total instance returned "+fmt.Sprint(len(instanceList)))
 	return instanceList
 }
 
@@ -119,7 +119,7 @@ func processDataFromInstances(instance string, config map[string]string, metrics
 		},
 	)
 
-	log.Output(1, "[LOG] Getting instances data/n")
+	log.Output(1, "[LOG] Getting instances data")
 	log.Output(1, string(res))
 
 	timeStamp := time.Now().UnixMilli()
@@ -209,13 +209,14 @@ func getToken(config map[string]string) string {
 
 func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {
 	config := getPFConfig(p)
-	token := getToken(config)
+	// token := getToken(config)
+	token := "tests"
 	token = strings.ReplaceAll(token, "\"", "")
 	log.Output(1, "[LOG] Successful get the token from Gateway API")
 	log.Output(1, "[LOG] token: "+token)
 	config["token"] = token
 	instances := getInstanceList(config)
-	numOfInst := len(instances)
+
 	projectName := ToString(IFconfig["projectName"])
 	userName := ToString(IFconfig["userName"])
 	data := MetricDataReceivePayload{
@@ -227,9 +228,9 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 	if err != nil {
 		log.Fatal(err)
 	}
-	for i := 0; i < numOfInst; i++ {
-		log.Output(2, "[LOG] Getting data from instance: ["+instances[i]+"] now.")
-		processDataFromInstances(instances[i], config, metrics, &data)
+	for _, inst := range instances {
+		log.Output(2, "[LOG] Getting data from instance: ["+inst+"] now.")
+		processDataFromInstances(inst, config, metrics, &data)
 	}
 	return data
 }
