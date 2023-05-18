@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -125,7 +126,11 @@ func SendRequest(operation string, endpoint string, form io.Reader, headers map[
 		newRequest.Header.Add(k, headers[k])
 	}
 
-	client := &http.Client{}
+	// Skip certificate verification.
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
 	res, err := client.Do(newRequest)
 	if err != nil {
 		log.Fatal(err)
