@@ -223,7 +223,7 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 		UserName:        userName,
 		InstanceDataMap: make(map[string]InstanceData),
 	}
-	metrics, err := ReadLines("conf.d/" + config["metricPath"])
+	metrics, err := ReadLines(AbsFilePath("conf.d/" + config["metricPath"]))
 	if err != nil {
 		log.Fatal(err)
 	}
