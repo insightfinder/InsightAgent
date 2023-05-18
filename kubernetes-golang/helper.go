@@ -71,6 +71,7 @@ func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interf
 		}
 
 	}
+	log.Output(2, "[LOG] Prepare to send out "+fmt.Sprint(curTotal)+" bytes data to IF.")
 	SendMetricDataToIF(newPayload, IFconfig)
 }
 
