@@ -209,8 +209,7 @@ func getToken(config map[string]string) string {
 
 func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {
 	config := getPFConfig(p)
-	// token := getToken(config)
-	token := "tests"
+	token := getToken(config)
 	token = strings.ReplaceAll(token, "\"", "")
 	log.Output(1, "[LOG] Successful get the token from Gateway API")
 	log.Output(1, "[LOG] token: "+token)
