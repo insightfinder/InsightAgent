@@ -1,5 +1,4 @@
 [{
-    "System": {
         "unusedCapacityInKb": 26177490944,
         "currentTickerValue": 65806799,
         "persistentChecksumCapacityInKb": 18309120,
@@ -9,10 +8,8 @@
             "totalWeightInKb": 0,
             "numOccured": 0
         }
-    }
 },
 {
-    "System": {
         "unusedCapacityInKb": 26177488896,
         "currentTickerValue": 65806865,
         "persistentChecksumCapacityInKb": 18309120,
@@ -22,10 +19,8 @@
             "totalWeightInKb": 36,
             "numOccured": 7
         }
-    }
 },
 {
-    "System": {
         "unusedCapacityInKb": 26177488896,
         "currentTickerValue": 65806925,
         "persistentChecksumCapacityInKb": 18309120,
@@ -35,10 +30,8 @@
             "totalWeightInKb": 0,
             "numOccured": 0
         }
-    }
 },
 {
-    "System": {
         "unusedCapacityInKb": 26177488896,
         "currentTickerValue": 65806963,
         "persistentChecksumCapacityInKb": 18309120,
@@ -48,10 +41,10 @@
             "totalWeightInKb": 2687,
             "numOccured": 87
         }
-    }
+
 },
 {
-    "System": {
+
         "unusedCapacityInKb": 26177488896,
         "currentTickerValue": 65807252,
         "persistentChecksumCapacityInKb": 18309120,
@@ -61,5 +54,5 @@
             "totalWeightInKb": 0,
             "numOccured": 0
         }
-    }
+
 }]
