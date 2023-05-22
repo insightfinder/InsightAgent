@@ -80,8 +80,10 @@ module Fluent
     def write(chunk)
       data = []
       chunk.msgpack_each do |(tag, time, record)|
-      	#time_hash = {:timestamp => time, :data => temp_hash_for_record["data"]}
-      	time_hash = {"tag" => tag.to_s, "timestamp" => (time*1000).to_s, "data" => record["data"]}
+        if @instanceName.to_s.empty?
+          time_hash = {"tag" => tag.to_s, "timestamp" => (time*1000).to_s, "data" => record}
+        else
+          time_hash = {"tag" => @instanceName, "timestamp" => (time*1000).to_s, "data" => record}
         data << time_hash
         if $maxtimestamp == 0
           $maxtimestamp = time
