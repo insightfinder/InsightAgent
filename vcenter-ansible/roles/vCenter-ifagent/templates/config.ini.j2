@@ -1,0 +1,56 @@
+{{ ansible_managed | comment }}
+[insightFinder_vars]
+# https://app.insightfinder.com
+host_url = {{ if_host_url }}
+http_proxy = {{ if_http_proxy }}
+https_proxy = {{ if_https_proxy }}
+
+user_name = {{ if_user_name }}
+license_key = {{ license_key }}
+system_name = {{ system_name }}
+project_name = {{ project_name }}
+sampling_interval = {{ sampling_interval }}
+# number of retries for http requests in case of failure
+retries = {{ retries | default(3) }} 
+# time between retries
+sleep_seconds = {{ sleep_seconds | default(5) }}
+project_type = {{ project_type | default('metric') }} 
+
+[vCenter_vars]
+# skip the protocol prefix in the host and proxy URLs; only http protocol is supported currently
+# e.g., use "localhost:80" instead of "http://localhost:80"
+host = {{ host_url }}
+http_proxy = {{ http_proxy }}
+user_name = {{ vcenter_user_name }}
+# do not enter the password here; instead, enter the obfuscated password (run 'ifobfuscate.py')
+password = {{ password }}
+# enter a list of virtual machine names separated by comma(,) or a regex to match from all available virtual machine names
+# if list and regex are both provided, the list is given precedence and the regex param will be ignored
+# if both are missing, no virtual machines will be processed (set regex to < .* > to select all virtual machines)
+virtual_machines_list = {{ vm_list | default('') }}
+virtual_machines_regex = {{ vm_regex  | default('') }}
+# enter a list of host system names separated by comma(,) or a regex to match from all available host system names
+# if list and regex are both provided, the list is given precedence and the regex param will be ignored
+# if both are missing, no host systems will be processed (set regex to < .* > to select all host systems)
+# NOTE: the selected hosts are also used to filter/whitelist virtual machines
+hosts_list = {{ hosts_list  | default('') }}
+hosts_regex = {{ hosts_regex  | default('') }}
+# enter a list of datastore names separated by comma(,) or a regex to match from all available datastore names
+# if list and regex are both provided, the list is given precedence and the regex param will be ignored
+# if both are missing, no datastores will be processed (set regex to < .* > to select all datastores)
+datastores_list = {{ datastores_list  | default('') }}
+datastores_regex = {{ datastores_regex  | default('') }}
+# enter a list of performance metrics separated by comma(,) or a regex to match from all available metrics
+# if list and regex are both provided, the list is given precedence and the regex param will be ignored
+# if both are missing, no metrics will be processed (set regex to < .* > to select all metrics)
+# Metrics should follow the format: <counter.groupInfo.key>.<counter.nameInfo.key>.<counter.unitInfo.key>.<counter.rollupType>
+# where, counter is a vim.PerformanceManager.CounterInfo object
+# e.g., cpu.usage.percent.average, mem.shared.kiloBytes.maximum, disk.maxTotalLatency.millisecond.latest, net.usage.kiloBytesPerSecond.minimum
+metrics_list = {{ metrics_list  | default('') }}
+metrics_regex = {{ metrics_regex  | default('') }}
+
+[agent_vars]
+# number of threads to be used in the multiprocessing pool
+thread_pool = {{ thread_pool | default(1) }}
+# Maximum size of a data chunk to be sent to IF, in kilobytes
+chunk_size_kb = {{ chunk_size_kb | default(2048) }}
