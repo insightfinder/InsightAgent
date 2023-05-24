@@ -41,6 +41,7 @@ public class IFConfig {
     private int bufferingTime;
     private String metricNameFilter;
     private int kafkaMetricLogInterval;
+    private boolean fastRecovery;
 
     public String getUserName() {
         return userName;
@@ -273,5 +274,13 @@ public class IFConfig {
 
     public void setKafkaMetricLogInterval(int kafkaMetricLogInterval) {
         this.kafkaMetricLogInterval = kafkaMetricLogInterval;
+    }
+
+    public boolean isFastRecovery() {
+        return fastRecovery;
+    }
+
+    public void setFastRecovery(boolean fastRecovery) {
+        this.fastRecovery = fastRecovery;
     }
 }

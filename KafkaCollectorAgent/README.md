@@ -163,5 +163,7 @@ insight-finder.logSendingData=true
 insight-finder.metricNameFilter=memory.memory.free
 # print the kafka consumer metrics, in second
 insight-finder.kafkaMetricLogInterval=3600
+# true seek to latest offset, false continue commited offset
+insight-finder.fastRecovery=true
 ```
 
