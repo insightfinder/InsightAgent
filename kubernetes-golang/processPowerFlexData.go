@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -87,18 +86,6 @@ func getInstanceList(config map[string]string) []string {
 	return instanceList
 }
 
-func formMetricDataPoint(metric string, value interface{}) MetricDataPoint {
-	intVar, err := strconv.ParseFloat(ToString(value), 64)
-	if err != nil {
-		log.Fatal(err)
-	}
-	metricDP := MetricDataPoint{
-		MetricName: metric,
-		Value:      intVar,
-	}
-	return metricDP
-}
-
 func processDataFromInstances(instance string, config map[string]string, endpoint string, metrics []string, data *MetricDataReceivePayload) {
 	IdRE := regexp.MustCompile(idRegex)
 	InstanceRe := regexp.MustCompile(instanceTypeRegex)
@@ -126,7 +113,7 @@ func processDataFromInstances(instance string, config map[string]string, endpoin
 	// res := GetFakeMetricData()
 	var result map[string]interface{}
 	json.Unmarshal([]byte(res), &result)
-	prasedData := parseData(result, timeStamp, metrics)
+	prasedData := ParseData(result, timeStamp, metrics)
 
 	instanceData, ok := data.InstanceDataMap[instance]
 	if !ok {
@@ -139,49 +126,6 @@ func processDataFromInstances(instance string, config map[string]string, endpoin
 		data.InstanceDataMap[instance] = instanceData
 	}
 	instanceData.DataInTimestampMap[timeStamp] = prasedData
-}
-
-func parseData(data map[string]interface{}, timeStamp int64, metrics []string) DataInTimestamp {
-	dataInTs := DataInTimestamp{
-		TimeStamp:        timeStamp,
-		MetricDataPoints: make([]MetricDataPoint, 0),
-	}
-	var stack Stack
-	for _, metric := range metrics {
-		metric = strings.ReplaceAll(metric, " ", "")
-		stack.Push(MetricStack{
-			Metric: data[metric],
-			Prefix: metric,
-		})
-	}
-	for {
-		if stack.IsEmpty() {
-			break
-		}
-		metricElem, _ := stack.Pop()
-		curVal := metricElem.Metric
-		curPrefix := metricElem.Prefix
-		switch curVal.(type) {
-		case string:
-			dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, formMetricDataPoint(curPrefix, curVal))
-		case float64, int64:
-			dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, formMetricDataPoint(curPrefix, fmt.Sprint(curVal)))
-		case interface{}:
-			curMetricMap, success := curVal.(map[string]interface{})
-			if !success {
-				log.Fatal("[ERROR] Can't parse the metric " + curPrefix)
-			}
-			for k, v := range curMetricMap {
-				stack.Push(MetricStack{
-					Metric: v,
-					Prefix: curPrefix + "." + k,
-				})
-			}
-		default:
-			log.Fatal("[ERROR] Wrong type input from the data")
-		}
-	}
-	return dataInTs
 }
 
 func getToken(config map[string]string) string {
