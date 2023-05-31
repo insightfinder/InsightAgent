@@ -1,3 +1,0 @@
-capacityLimitInKb
-capacityInUseInKb
-thickCapacityInUseInKb

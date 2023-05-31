@@ -1,0 +1,15 @@
+{
+    "/platform/3/statistics/summary/drive":[
+        "drive"
+    ],
+    "/platform/3/statistics/summary/heat":[
+        "heat"
+    ],
+    "/api/instances/{$instanceType}::{$id}/relationships/Statistics":[
+        "unusedCapacityInKb",
+        "totalReadBwc",
+        "persistentChecksumCapacityInKb",
+        "numOfVolumes",
+        "currentTickerValue"
+    ]
+}

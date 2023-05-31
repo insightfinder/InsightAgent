@@ -6,7 +6,7 @@ instanceType = ProtectionDomain
 
 # Specify the metrics file(list all the needed metrics there) in this section. It should be located inside conf.d directory.
 # The metrics info in the txt file should be one metric per line. NESTED STRCUTURE IS NOT SUPPORTED.
-metricPath = sampleMetricListFile.txt
+metricPath = sampleMetricListFile.json
 
 # ----------------------------------- the connection setting ---------------------------------------------
 userName = 
@@ -14,9 +14,49 @@ password =
 # The main host URL.
 connectionUrl = 
 
-# These 2 endpoints don't need to be changed if using the API from PowerFlex Doc
-dataEndPoint = /api/instances/{$instanceType}::{$id}/relationships/Statistics
+# These endpoint doesn't need to be changed if using the API from PowerFlex Doc
 idEndPoint = /api/types/{$instanceType}/instances
+
+# timeStamp will be using the current time
+timezone = UTC
+# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+target_timestamp_timezone = UTC
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
+[powerScale]
+# Specify the metrics file(list all the needed metrics there) in this section. It should be located inside conf.d directory.
+# The metrics info in the txt file should be one metric per line. NESTED STRCUTURE IS NOT SUPPORTED.
+metricPath = sampleMetricListFile.json
+
+# ----------------------------------- the connection setting ---------------------------------------------
+userName = 
+password = 
+# The main host URL.
+connectionUrl = 
+
+# timeStamp will be using the current time
+timezone = UTC
+# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+target_timestamp_timezone = UTC
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
+[powerStore]
+# Specify the API endpoints and the metrics needed from each endpoint in one json file. It should be located inside conf.d directory.
+# Object with the metric name will be read and together with whatever inside that object.
+# NESTED STRCUTURE to sepcify key within each metric object IS NOT SUPPORTED.
+metricPath = sampleMetricListFile.json
+
+# ----------------------------------- the connection setting ---------------------------------------------
+userName = 
+password = 
+# The main host URL.
+connectionUrl = 
 
 # timeStamp will be using the current time
 timezone = UTC
