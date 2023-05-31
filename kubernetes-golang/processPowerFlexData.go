@@ -14,27 +14,24 @@ import (
 	"github.com/bigkevmcd/go-configparser"
 )
 
-var powerFlexSectionName = "powerFlex"
 var instanceTypeRegex = `{\$instanceType}`
 var idRegex = `{\$id}`
 var AUTHAPI = "/api/login"
 
 func getPFConfig(p *configparser.ConfigParser) map[string]string {
 	// required fields
-	var userName = ToString(GetConfigValue(p, powerFlexSectionName, "userName", true))
-	var password = ToString(GetConfigValue(p, powerFlexSectionName, "password", true))
-	var instanceType = ToString(GetConfigValue(p, powerFlexSectionName, "instanceType", true))
-	var metricPath = ToString(GetConfigValue(p, powerFlexSectionName, "metricPath", true))
-	var dataEndPoint = ToString(GetConfigValue(p, powerFlexSectionName, "dataEndPoint", true))
-	var idEndPoint = ToString(GetConfigValue(p, powerFlexSectionName, "idEndPoint", true))
-	var connectionUrl = ToString(GetConfigValue(p, powerFlexSectionName, "connectionUrl", true))
+	var userName = ToString(GetConfigValue(p, PowerFlexSectionName, "userName", true))
+	var password = ToString(GetConfigValue(p, PowerFlexSectionName, "password", true))
+	var instanceType = ToString(GetConfigValue(p, PowerFlexSectionName, "instanceType", true))
+	var metricPath = ToString(GetConfigValue(p, PowerFlexSectionName, "metricPath", true))
+	var idEndPoint = ToString(GetConfigValue(p, PowerFlexSectionName, "idEndPoint", true))
+	var connectionUrl = ToString(GetConfigValue(p, PowerFlexSectionName, "connectionUrl", true))
 	// optional fields
-	var metricWhitelist = ToString(GetConfigValue(p, powerFlexSectionName, "metricWhitelist", false))
+	var metricWhitelist = ToString(GetConfigValue(p, PowerFlexSectionName, "metricWhitelist", false))
 
 	// ----------------- Process the configuration ------------------
 
 	re := regexp.MustCompile(instanceTypeRegex)
-	dataEndPoint = string(re.ReplaceAll([]byte(dataEndPoint), []byte(instanceType)))
 	idEndPoint = string(re.ReplaceAll([]byte(idEndPoint), []byte(instanceType)))
 
 	config := map[string]string{
@@ -43,7 +40,6 @@ func getPFConfig(p *configparser.ConfigParser) map[string]string {
 		"instanceType":    instanceType,
 		"metricPath":      metricPath,
 		"metricWhitelist": metricWhitelist,
-		"dataEndPoint":    dataEndPoint,
 		"idEndPoint":      idEndPoint,
 		"connectionUrl":   connectionUrl,
 	}
@@ -86,7 +82,7 @@ func getInstanceList(config map[string]string) []string {
 		instanceList = append(instanceList, ToString(dict["id"]))
 	}
 	// Fake data
-	// instanceList = GetInstList()
+	// instanceList := GetInstList()
 	log.Output(1, "total instance returned "+fmt.Sprint(len(instanceList)))
 	return instanceList
 }
@@ -103,14 +99,16 @@ func formMetricDataPoint(metric string, value interface{}) MetricDataPoint {
 	return metricDP
 }
 
-func processDataFromInstances(instance string, config map[string]string, metrics []string, data *MetricDataReceivePayload) {
-	re := regexp.MustCompile(idRegex)
-	endPoint := string(re.ReplaceAll([]byte(config["dataEndPoint"]), []byte(instance)))
+func processDataFromInstances(instance string, config map[string]string, endpoint string, metrics []string, data *MetricDataReceivePayload) {
+	IdRE := regexp.MustCompile(idRegex)
+	InstanceRe := regexp.MustCompile(instanceTypeRegex)
+	endpoint = string(IdRE.ReplaceAll([]byte(endpoint), []byte(instance)))
+	endpoint = string(InstanceRe.ReplaceAll([]byte(endpoint), []byte(config["instanceType"])))
 	var headers map[string]string
 	form := url.Values{}
 	res := SendRequest(
 		http.MethodGet,
-		FormCompleteURL(config["connectionUrl"], endPoint),
+		FormCompleteURL(config["connectionUrl"], endpoint),
 		strings.NewReader(form.Encode()),
 		headers,
 		AuthRequest{
@@ -223,13 +221,16 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 		UserName:        userName,
 		InstanceDataMap: make(map[string]InstanceData),
 	}
-	metrics, err := ReadLines(AbsFilePath("conf.d/" + config["metricPath"]))
+
+	endpointMapping, err := GetEndpointMetricMapping(config["metricPath"])
 	if err != nil {
 		log.Fatal(err)
 	}
 	for _, inst := range instances {
 		log.Output(2, "[LOG] Getting data from instance: ["+inst+"] now.")
-		processDataFromInstances(inst, config, metrics, &data)
+		for endpoint, metrics := range endpointMapping {
+			processDataFromInstances(inst, config, endpoint, metrics, &data)
+		}
 	}
 	return data
 }

@@ -20,6 +20,9 @@ var DEFAULT_MATADATE_MAX_INSTANCE = 1500
 var PROJECT_END_POINT = "api/v1/check-and-add-custom-project"
 var IF_SECTION_NAME = "insightfinder"
 
+var PowerFlexSectionName = "powerFlex"
+var PowerScaleSectionName = "powerScale"
+
 func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	// Required parameters
 	var userName = ToString(GetConfigValue(p, IF_SECTION_NAME, "user_name", true))
@@ -232,8 +235,14 @@ func getInputSectionData(p *configparser.ConfigParser, IFconfig map[string]inter
 	var data MetricDataReceivePayload
 	for i := 0; i < len(allSections); i++ {
 		switch allSections[i] {
-		case "powerFlex":
+		case PowerFlexSectionName:
 			data = PowerFlexDataStream(p, IFconfig)
+		case PowerScaleSectionName:
+			data = PowerScaleDataStream(p, IFconfig)
+		case IF_SECTION_NAME:
+			continue
+		default:
+			log.Fatal("No supported agent type found in the config file.")
 		}
 	}
 	return data

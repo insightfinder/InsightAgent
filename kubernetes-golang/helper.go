@@ -1,12 +1,12 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -154,20 +154,18 @@ func AbsFilePath(filename string) string {
 	return absFilePath
 }
 
-func ReadLines(path string) ([]string, error) {
-	log.Output(1, "Reading the lines from file "+AbsFilePath(path))
-	file, err := os.Open(path)
+func GetEndpointMetricMapping(path string) (map[string][]string, error) {
+	jsonFile, err := os.Open(AbsFilePath("conf.d/" + path))
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
+	byteValue, err := ioutil.ReadAll(jsonFile)
+	if err != nil {
+		return nil, err
 	}
-	return lines, scanner.Err()
+	var endPointMapping map[string][]string
+	json.Unmarshal(byteValue, &endPointMapping)
+	return endPointMapping, nil
 }
 
 func GetConfigValue(p *configparser.ConfigParser, section string, param string, required bool) interface{} {
