@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/bigkevmcd/go-configparser"
@@ -23,6 +24,66 @@ var METRIC_DATA_API = "/api/v2/metric-data-receive"
 var CHUNK_SIZE = 2 * 1024 * 1024
 var MAX_PACKET_SIZE = 10000000
 
+func FormMetricDataPoint(metric string, value interface{}) (MetricDataPoint, error) {
+	intVar, err := strconv.ParseFloat(ToString(value), 64)
+	if err != nil {
+		return MetricDataPoint{}, err
+	}
+	metricDP := MetricDataPoint{
+		MetricName: metric,
+		Value:      intVar,
+	}
+	return metricDP, nil
+}
+
+func ParseData(data map[string]interface{}, timeStamp int64, metrics []string) DataInTimestamp {
+	dataInTs := DataInTimestamp{
+		TimeStamp:        timeStamp,
+		MetricDataPoints: make([]MetricDataPoint, 0),
+	}
+	var stack Stack
+	for _, metric := range metrics {
+		metric = strings.ReplaceAll(metric, " ", "")
+		stack.Push(MetricStack{
+			Metric: data[metric],
+			Prefix: metric,
+		})
+	}
+	for {
+		if stack.IsEmpty() {
+			break
+		}
+		metricElem, _ := stack.Pop()
+		curVal := metricElem.Metric
+		curPrefix := metricElem.Prefix
+		switch curVal.(type) {
+		case string:
+			value, err := FormMetricDataPoint(curPrefix, curVal)
+			log.Output(1, err.Error())
+			log.Output(1, "Failed to cast value"+curVal.(string)+"to number")
+			dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, value)
+		case float64, int64:
+			value, err := FormMetricDataPoint(curPrefix, fmt.Sprint(curVal))
+			log.Output(1, err.Error())
+			log.Output(1, "Failed to cast value"+curVal.(string)+"to number")
+			dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, value)
+		case interface{}:
+			curMetricMap, success := curVal.(map[string]interface{})
+			if !success {
+				log.Fatal("[ERROR] Can't parse the metric " + curPrefix)
+			}
+			for k, v := range curMetricMap {
+				stack.Push(MetricStack{
+					Metric: v,
+					Prefix: curPrefix + "." + k,
+				})
+			}
+		default:
+			log.Fatal("[ERROR] Wrong type input from the data")
+		}
+	}
+	return dataInTs
+}
 func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interface{}) {
 	curTotal := 0
 	var newPayload = MetricDataReceivePayload{
