@@ -19,6 +19,7 @@ func getPScaleConfig(p *configparser.ConfigParser) map[string]string {
 	var metricPath = ToString(GetConfigValue(p, PowerScaleSectionName, "metricPath", true))
 	var connectionUrl = ToString(GetConfigValue(p, PowerScaleSectionName, "connectionUrl", true))
 	var instanceNameField = ToString(GetConfigValue(p, PowerScaleSectionName, "instanceNameField", true))
+	var timeStampField = ToString(GetConfigValue(p, PowerScaleSectionName, "timeStampField", true))
 	// optional fields
 	var metricWhitelist = ToString(GetConfigValue(p, PowerScaleSectionName, "metricWhitelist", false))
 
@@ -31,11 +32,12 @@ func getPScaleConfig(p *configparser.ConfigParser) map[string]string {
 		"metricWhitelist":   metricWhitelist,
 		"connectionUrl":     connectionUrl,
 		"instanceNameField": instanceNameField,
+		"timeStampField":    timeStampField,
 	}
 	return config
 }
 
-func getDataFromEndpoint(config map[string]string, endpoint string) (map[string]interface{}, int64) {
+func getDataFromEndpoint(config map[string]string, endpoint string) map[string]interface{} {
 	var headers map[string]string
 	form := url.Values{}
 	res := SendRequest(
@@ -50,15 +52,14 @@ func getDataFromEndpoint(config map[string]string, endpoint string) (map[string]
 	)
 	log.Output(1, "[LOG] Getting data from endpoint"+endpoint)
 	log.Output(1, string(res))
-	timeStamp := time.Now().UnixMilli()
 
 	// The key is the instance name and the
 	var result map[string]interface{}
 	json.Unmarshal([]byte(res), &result)
-	return result, timeStamp
+	return result
 }
 
-func processDataFromEndPoint(result map[string]interface{}, timeStamp int64, instanceNameField string, metricList []string, data *MetricDataReceivePayload) {
+func processDataFromEndPoint(result map[string]interface{}, timeStampField string, instanceNameField string, metricList []string, data *MetricDataReceivePayload) {
 	var objArrary []interface{}
 	// For powerScale, there should only be 1 item in the metricList
 	for _, metric := range metricList {
@@ -78,6 +79,7 @@ func processDataFromEndPoint(result map[string]interface{}, timeStamp int64, ins
 		if !success {
 			log.Fatal("[ERROR] Can't parse the object array with index: " + fmt.Sprint(index))
 		}
+		timeStamp := time.Unix(object[timeStampField].(int64), 0).UnixMilli()
 		prasedData := ParseData(object, timeStamp, make([]string, 0))
 		instance, success := object[instanceNameField].(string)
 		if !success {
@@ -112,8 +114,8 @@ func PowerScaleDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 		log.Fatal(err)
 	}
 	for endpoint, metricList := range mapping {
-		result, timeStamp := getDataFromEndpoint(psConfig, endpoint)
-		processDataFromEndPoint(result, timeStamp, psConfig["instanceNameField"], metricList, &data)
+		result := getDataFromEndpoint(psConfig, endpoint)
+		processDataFromEndPoint(result, psConfig["timeStampField"], psConfig["instanceNameField"], metricList, &data)
 	}
 	return data
 }

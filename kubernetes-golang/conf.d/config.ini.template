@@ -32,6 +32,7 @@ https://developer.dell.com/apis/4088/versions/9.2.0.0/docs/1introduction.md
 # The metrics info in the txt file should be one metric per line. NESTED STRCUTURE IS NOT SUPPORTED.
 metricPath = sampleMetricListFile.json
 instanceNameField = node
+timeStampField = time
 
 # ----------------------------------- the connection setting ---------------------------------------------
 userName = 
