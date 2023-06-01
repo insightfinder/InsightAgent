@@ -1,9 +1,6 @@
 {
-    "/platform/3/statistics/summary/drive":[
-        "drive"
-    ],
-    "/platform/3/statistics/summary/heat":[
-        "heat"
+    "/platform/3/statistics/summary/system":[
+        "system"
     ],
     "/api/instances/{$instanceType}::{$id}/relationships/Statistics":[
         "unusedCapacityInKb",
@@ -11,5 +8,9 @@
         "persistentChecksumCapacityInKb",
         "numOfVolumes",
         "currentTickerValue"
+    ],
+    "API endpoint here":[
+        "metric1",
+        "metric2"
     ]
 }

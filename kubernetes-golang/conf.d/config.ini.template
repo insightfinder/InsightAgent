@@ -27,9 +27,11 @@ agent_http_proxy =
 agent_https_proxy =
 
 [powerScale]
+https://developer.dell.com/apis/4088/versions/9.2.0.0/docs/1introduction.md
 # Specify the metrics file(list all the needed metrics there) in this section. It should be located inside conf.d directory.
 # The metrics info in the txt file should be one metric per line. NESTED STRCUTURE IS NOT SUPPORTED.
 metricPath = sampleMetricListFile.json
+instanceNameField = node
 
 # ----------------------------------- the connection setting ---------------------------------------------
 userName = 

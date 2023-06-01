@@ -42,13 +42,24 @@ func ParseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 		MetricDataPoints: make([]MetricDataPoint, 0),
 	}
 	var stack Stack
-	for _, metric := range metrics {
-		metric = strings.ReplaceAll(metric, " ", "")
-		stack.Push(MetricStack{
-			Metric: data[metric],
-			Prefix: metric,
-		})
+	if len(metrics) == 0 {
+		// if length of the metrics list is 0, get all metrics.
+		for key, value := range data {
+			stack.Push(MetricStack{
+				Metric: value,
+				Prefix: key,
+			})
+		}
+	} else {
+		for _, metric := range metrics {
+			metric = strings.ReplaceAll(metric, " ", "")
+			stack.Push(MetricStack{
+				Metric: data[metric],
+				Prefix: metric,
+			})
+		}
 	}
+
 	for {
 		if stack.IsEmpty() {
 			break
@@ -59,14 +70,20 @@ func ParseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 		switch curVal.(type) {
 		case string:
 			value, err := FormMetricDataPoint(curPrefix, curVal)
-			log.Output(1, err.Error())
-			log.Output(1, "Failed to cast value"+curVal.(string)+"to number")
-			dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, value)
+			if err == nil {
+				dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, value)
+			} else {
+				log.Output(1, err.Error())
+				log.Output(1, "Failed to cast value"+curVal.(string)+"to number")
+			}
 		case float64, int64:
 			value, err := FormMetricDataPoint(curPrefix, fmt.Sprint(curVal))
-			log.Output(1, err.Error())
-			log.Output(1, "Failed to cast value"+curVal.(string)+"to number")
-			dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, value)
+			if err == nil {
+				dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, value)
+			} else {
+				log.Output(1, err.Error())
+				log.Output(1, "Failed to cast value"+curVal.(string)+"to number")
+			}
 		case interface{}:
 			curMetricMap, success := curVal.(map[string]interface{})
 			if !success {
@@ -84,6 +101,7 @@ func ParseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 	}
 	return dataInTs
 }
+
 func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interface{}) {
 	curTotal := 0
 	var newPayload = MetricDataReceivePayload{
