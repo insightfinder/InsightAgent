@@ -28,8 +28,14 @@ type MetricDataReceivePayload struct {
 	SamplingInterval string                  `json:"si,omitempty"`
 }
 
-type MetricPostRequestPayload struct {
+type IFMetricPostRequestPayload struct {
 	LicenseKey string                   `json:"licenseKey" validate:"required"`
 	UserName   string                   `json:"userName" validate:"required"`
 	Data       MetricDataReceivePayload `json:"data" validate:"required"`
+}
+
+type PowerStoreMetricDataRequestPayload struct {
+	Entity    string `json:"entity" validate:"required"`
+	Entity_id string `json:"entity_id" validate:"required"`
+	Interval  string `json:"interval"`
 }

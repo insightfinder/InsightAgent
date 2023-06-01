@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bigkevmcd/go-configparser"
 )
@@ -34,6 +35,39 @@ func FormMetricDataPoint(metric string, value interface{}) (MetricDataPoint, err
 		Value:      intVar,
 	}
 	return metricDP, nil
+}
+
+func ProcessArrayDataFromEndPoint(objArrary []interface{}, timeStampField string, instanceNameField string, data *MetricDataReceivePayload) {
+	// // fake data
+	// bytesData := GetFakeMetricData()
+	// var result map[string]interface{}
+	// json.Unmarshal(bytesData, &result)
+	// objArrary := make([]interface{}, 1)
+	// objArrary[0] = result
+	// timeStamp := time.Now().UnixMilli()
+	for index, obj := range objArrary {
+		object, success := obj.(map[string]interface{})
+		if !success {
+			log.Fatal("[ERROR] Can't parse the object array with index: " + fmt.Sprint(index))
+		}
+		timeStamp := time.Unix(object[timeStampField].(int64), 0).UnixMilli()
+		prasedData := ParseData(object, timeStamp, make([]string, 0))
+		instance, success := object[instanceNameField].(string)
+		if !success {
+			log.Fatal("[ERROR] Failed to get instance name from the field: " + instanceNameField)
+		}
+		instanceData, ok := data.InstanceDataMap[instance]
+		if !ok {
+			// Current Instance didn't exist
+			instanceData = InstanceData{
+				InstanceName:       instance,
+				ComponentName:      instance,
+				DataInTimestampMap: make(map[int64]DataInTimestamp),
+			}
+			data.InstanceDataMap[instance] = instanceData
+		}
+		instanceData.DataInTimestampMap[timeStamp] = prasedData
+	}
 }
 
 func ParseData(data map[string]interface{}, timeStamp int64, metrics []string) DataInTimestamp {
@@ -154,7 +188,7 @@ func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interf
 func SendMetricDataToIF(data MetricDataReceivePayload, config map[string]interface{}) {
 	log.Output(1, "-------- Sending data to InsightFinder --------")
 
-	request := MetricPostRequestPayload{
+	request := IFMetricPostRequestPayload{
 		LicenseKey: ToString(config["licenseKey"]),
 		UserName:   ToString(config["userName"]),
 		Data:       data,

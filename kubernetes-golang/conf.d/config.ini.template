@@ -54,6 +54,12 @@ agent_https_proxy =
 # Object with the metric name will be read and together with whatever inside that object.
 # NESTED STRCUTURE to sepcify key within each metric object IS NOT SUPPORTED.
 metricPath = sampleMetricListFile.json
+timeStampField = timestamp
+instanceType = cluster
+instanceNameField = cluster_id
+# The metric data intervala from server. Choose from: Best_Available,Five_Sec,Twenty_Sec,Five_Mins,One_Hour,One_Day
+metric_interval_from_server = Five_Mins
+
 
 # ----------------------------------- the connection setting ---------------------------------------------
 userName = 
