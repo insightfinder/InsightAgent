@@ -127,7 +127,7 @@ func getPowerStoreMetricData(config map[string]string, objectId string, metricLi
 		config["connectionUrl"], API_PREFIX,
 	)
 	res, _ := SendRequest(
-		http.MethodGet,
+		http.MethodPost,
 		FormCompleteURL(completeURL, endpoint),
 		bytes.NewBuffer(jData),
 		headers,
