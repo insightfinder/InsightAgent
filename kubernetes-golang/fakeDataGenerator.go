@@ -80,6 +80,16 @@ func GetFakeMetricData() []byte {
 	return bytesData
 }
 
+func GetFakeMetricDataRaw() map[string]interface{} {
+	return map[string]interface{}{
+		"CapacityLimitInKb":             rand.Int63n(1000),
+		"CapacityInUseInKb":             rand.Int63n(1000),
+		"UnreachableUnusedCapacityInKb": rand.Int63n(1000),
+		"SnapCapacityInUseOccupiedInKb": rand.Int63n(1000),
+		"RmPendingAllocatedInKb":        rand.Int63n(1000),
+	}
+}
+
 func GetInstList() []string {
 	var res []string
 	for i := 0; i < 50; i++ {
