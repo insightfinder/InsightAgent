@@ -22,6 +22,7 @@ var IF_SECTION_NAME = "insightfinder"
 
 var PowerFlexSectionName = "powerFlex"
 var PowerScaleSectionName = "powerScale"
+var PowerStoreSectionName = "powerStore"
 
 func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	// Required parameters
@@ -170,7 +171,7 @@ func isProjectExist(IFconfig map[string]interface{}) bool {
 	headers := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
-	response := SendRequest(
+	response, _ := SendRequest(
 		http.MethodPost,
 		FormCompleteURL(ToString(IFconfig["ifURL"]), PROJECT_END_POINT),
 		strings.NewReader(form.Encode()),
@@ -218,7 +219,7 @@ func createProject(IFconfig map[string]interface{}) {
 	headers := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
-	response := SendRequest(
+	response, _ := SendRequest(
 		http.MethodPost,
 		FormCompleteURL(ToString(IFconfig["ifURL"]), PROJECT_END_POINT),
 		strings.NewReader(form.Encode()),
@@ -239,6 +240,8 @@ func getInputSectionData(p *configparser.ConfigParser, IFconfig map[string]inter
 			data = PowerFlexDataStream(p, IFconfig)
 		case PowerScaleSectionName:
 			data = PowerScaleDataStream(p, IFconfig)
+		case PowerStoreSectionName:
+			data = PowerStoreDataStream(p, IFconfig)
 		case IF_SECTION_NAME:
 			continue
 		default:
