@@ -2,12 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/bigkevmcd/go-configparser"
 )
@@ -59,46 +57,6 @@ func getDataFromEndpoint(config map[string]string, endpoint string) map[string]i
 	return result
 }
 
-func processDataFromEndPoint(result map[string]interface{}, timeStampField string, instanceNameField string, metricList []string, data *MetricDataReceivePayload) {
-	var objArrary []interface{}
-	// For powerScale, there should only be 1 item in the metricList
-	for _, metric := range metricList {
-		objArrary = result[metric].([]interface{})
-	}
-
-	// // fake data
-	// bytesData := GetFakeMetricData()
-	// var result map[string]interface{}
-	// json.Unmarshal(bytesData, &result)
-	// objArrary := make([]interface{}, 1)
-	// objArrary[0] = result
-	// timeStamp := time.Now().UnixMilli()
-
-	for index, obj := range objArrary {
-		object, success := obj.(map[string]interface{})
-		if !success {
-			log.Fatal("[ERROR] Can't parse the object array with index: " + fmt.Sprint(index))
-		}
-		timeStamp := time.Unix(object[timeStampField].(int64), 0).UnixMilli()
-		prasedData := ParseData(object, timeStamp, make([]string, 0))
-		instance, success := object[instanceNameField].(string)
-		if !success {
-			log.Fatal("[ERROR] Failed to get instance name from the field: " + instanceNameField)
-		}
-		instanceData, ok := data.InstanceDataMap[instance]
-		if !ok {
-			// Current Instance didn't exist
-			instanceData = InstanceData{
-				InstanceName:       instance,
-				ComponentName:      instance,
-				DataInTimestampMap: make(map[int64]DataInTimestamp),
-			}
-			data.InstanceDataMap[instance] = instanceData
-		}
-		instanceData.DataInTimestampMap[timeStamp] = prasedData
-	}
-}
-
 func PowerScaleDataStream(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {
 	psConfig := getPScaleConfig(p)
 	projectName := ToString(IFconfig["projectName"])
@@ -115,7 +73,12 @@ func PowerScaleDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 	}
 	for endpoint, metricList := range mapping {
 		result := getDataFromEndpoint(psConfig, endpoint)
-		processDataFromEndPoint(result, psConfig["timeStampField"], psConfig["instanceNameField"], metricList, &data)
+		var objArray []interface{}
+		// For powerScale, there should only be 1 item in the metricList
+		for _, metric := range metricList {
+			objArray = result[metric].([]interface{})
+		}
+		ProcessArrayDataFromEndPoint(objArray, psConfig["timeStampField"], psConfig["instanceNameField"], &data)
 	}
 	return data
 }

@@ -9,8 +9,7 @@
         "numOfVolumes",
         "currentTickerValue"
     ],
-    "API endpoint here":[
-        "metric1",
-        "metric2"
+    "/metric/generate":[
+        "performance_metrics_by_cluster"
     ]
 }
