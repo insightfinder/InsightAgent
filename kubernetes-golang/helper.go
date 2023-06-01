@@ -172,7 +172,7 @@ func SendMetricDataToIF(data MetricDataReceivePayload, config map[string]interfa
 	}
 	log.Output(2, "[LOG] Prepare to send out "+fmt.Sprint(len(jData))+" bytes data to IF.")
 	log.Output(2, string(jData))
-	response = SendRequest(
+	response, _ = SendRequest(
 		http.MethodPost,
 		FormCompleteURL(ToString(config["ifURL"]), METRIC_DATA_API),
 		bytes.NewBuffer(jData),
@@ -188,7 +188,7 @@ func SendMetricDataToIF(data MetricDataReceivePayload, config map[string]interfa
 	}
 }
 
-func SendRequest(operation string, endpoint string, form io.Reader, headers map[string]string, auth AuthRequest) []byte {
+func SendRequest(operation string, endpoint string, form io.Reader, headers map[string]string, auth AuthRequest) ([]byte, http.Header) {
 	newRequest, err := http.NewRequest(
 		operation,
 		endpoint,
@@ -218,7 +218,7 @@ func SendRequest(operation string, endpoint string, form io.Reader, headers map[
 	defer res.Body.Close()
 	body, _ := io.ReadAll(res.Body)
 
-	return body
+	return body, res.Header
 }
 
 func AbsFilePath(filename string) string {

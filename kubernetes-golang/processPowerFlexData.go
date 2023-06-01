@@ -53,7 +53,7 @@ func getInstanceList(config map[string]string) []string {
 	// TODO: Headers currently left empty
 	var headers map[string]string
 	log.Output(1, "the token used in instance HTTP call: "+config["token"])
-	res := SendRequest(
+	res, _ := SendRequest(
 		http.MethodGet,
 		getInstanceEndpoint,
 		strings.NewReader(form.Encode()),
@@ -93,7 +93,7 @@ func processDataFromInstances(instance string, config map[string]string, endpoin
 	endpoint = string(InstanceRe.ReplaceAll([]byte(endpoint), []byte(config["instanceType"])))
 	var headers map[string]string
 	form := url.Values{}
-	res := SendRequest(
+	res, _ := SendRequest(
 		http.MethodGet,
 		FormCompleteURL(config["connectionUrl"], endpoint),
 		strings.NewReader(form.Encode()),
@@ -135,7 +135,7 @@ func getToken(config map[string]string) string {
 	form := url.Values{}
 	var headers map[string]string
 
-	token := string(SendRequest(
+	token, _ := SendRequest(
 		http.MethodGet,
 		authEndPoint,
 		strings.NewReader(form.Encode()),
@@ -144,9 +144,9 @@ func getToken(config map[string]string) string {
 			UserName: config["userName"],
 			Password: config["password"],
 		},
-	))
+	)
 
-	return token
+	return string(token)
 }
 
 func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {

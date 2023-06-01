@@ -40,7 +40,7 @@ func getPScaleConfig(p *configparser.ConfigParser) map[string]string {
 func getDataFromEndpoint(config map[string]string, endpoint string) map[string]interface{} {
 	var headers map[string]string
 	form := url.Values{}
-	res := SendRequest(
+	res, _ := SendRequest(
 		http.MethodGet,
 		FormCompleteURL(config["connectionUrl"], endpoint),
 		strings.NewReader(form.Encode()),
