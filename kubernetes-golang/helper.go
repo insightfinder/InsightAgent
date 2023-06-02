@@ -136,6 +136,9 @@ func ParseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 	return dataInTs
 }
 
+func ProcessLogData(data LogDataReceivePayload, IFConfig map[string]interface{}) {
+}
+
 func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interface{}) {
 	curTotal := 0
 	var newPayload = MetricDataReceivePayload{
@@ -259,7 +262,8 @@ func AbsFilePath(filename string) string {
 	if filename == "" {
 		filename = ""
 	}
-	mydir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	curdir, err := os.Getwd()
+	mydir, err := filepath.Abs(curdir)
 	if err != nil {
 		log.Fatal(err)
 	}
