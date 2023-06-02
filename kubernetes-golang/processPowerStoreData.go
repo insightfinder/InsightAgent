@@ -75,6 +75,8 @@ func getPowerStoreInstanceList(config map[string]string) []string {
 	)
 	headers := make(map[string]string, 0)
 	headers[token_key] = config["token"]
+	headers["Content-Type"] = "application/json"
+	headers["Accept"] = "application/json"
 
 	log.Output(1, "the token used in HTTP call: "+config["token"])
 	res, _ := SendRequest(
