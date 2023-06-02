@@ -57,7 +57,7 @@ metricPath = sampleMetricListFile.json
 timeStampField = timestamp
 instanceType = cluster
 instanceNameField = cluster_id
-# The metric data intervala from server. Choose from: Best_Available,Five_Sec,Twenty_Sec,Five_Mins,One_Hour,One_Day
+# The metric data interval output from server. Choose from: Best_Available,Five_Sec,Twenty_Sec,Five_Mins,One_Hour,One_Day
 metric_interval_from_server = Five_Mins
 
 
