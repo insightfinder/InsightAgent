@@ -54,7 +54,12 @@ func ProcessArrayDataFromEndPoint(objArrary []interface{}, timeStampField string
 		var tsInInt64 int64
 		switch tsFormat {
 		case "Epoch":
-			tsInInt64 = object[timeStampField].(int64)
+			switch object[timeStampField].(type) {
+			case int64:
+				tsInInt64 = object[timeStampField].(int64)
+			case float64:
+				tsInInt64 = int64(object[timeStampField].(float64))
+			}
 		default:
 			parsedTime, err := time.Parse(tsFormat, object[timeStampField].(string))
 			if err != nil {
