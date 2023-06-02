@@ -22,7 +22,7 @@ func getPStoreConfig(p *configparser.ConfigParser) map[string]string {
 	var metricPath = ToString(GetConfigValue(p, PowerStoreSectionName, "metricPath", true))
 	var connectionUrl = ToString(GetConfigValue(p, PowerStoreSectionName, "connectionUrl", true))
 	var instanceType = ToString(GetConfigValue(p, PowerStoreSectionName, "instanceType", true))
-	var instanceNameField = ToString(GetConfigValue(p, PowerScaleSectionName, "instanceNameField", true))
+	var instanceNameField = ToString(GetConfigValue(p, PowerStoreSectionName, "instanceNameField", true))
 	var timeStampField = ToString(GetConfigValue(p, PowerStoreSectionName, "timeStampField", true))
 	// optional fields
 	var metricWhitelist = ToString(GetConfigValue(p, PowerStoreSectionName, "metricWhitelist", false))
@@ -60,11 +60,11 @@ func getAuthToken(config map[string]string) string {
 		},
 	)
 	log.Output(1, "[LOG] Getting token from endpoint")
-	token := header[token_key]
+	token := header.Get(token_key)
 	if len(token) == 0 {
 		log.Fatal("Can't get the token key. Please check your connection.")
 	}
-	return token[0]
+	return token
 }
 
 func getPowerStoreInstanceList(config map[string]string) []string {
@@ -106,7 +106,7 @@ func getPowerStoreInstanceList(config map[string]string) []string {
 		objectList = append(objectList, ToString(dict["id"]))
 	}
 	// Fake data
-	// instanceList := GetInstList()
+	// objectList = GetInstList()
 	log.Output(1, "total objects returned "+fmt.Sprint(len(objectList)))
 	return objectList
 }
