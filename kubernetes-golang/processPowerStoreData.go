@@ -156,7 +156,7 @@ func PowerStoreDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 		InstanceDataMap: make(map[string]InstanceData),
 	}
 
-	// pStoreConfig["token"] = getAuthToken(pStoreConfig)
+	pStoreConfig["token"] = getAuthToken(pStoreConfig)
 
 	mapping, err := GetEndpointMetricMapping(pStoreConfig["metricPath"])
 	if err != nil {
