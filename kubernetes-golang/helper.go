@@ -37,7 +37,7 @@ func FormMetricDataPoint(metric string, value interface{}) (MetricDataPoint, err
 	return metricDP, nil
 }
 
-func ProcessArrayDataFromEndPoint(objArrary []interface{}, timeStampField string, instanceNameField string, data *MetricDataReceivePayload) {
+func ProcessArrayDataFromEndPoint(objArrary []interface{}, timeStampField string, tsFormat string, instanceNameField string, data *MetricDataReceivePayload) {
 	// // fake data
 	// bytesData := GetFakeMetricData()
 	// var result map[string]interface{}
@@ -50,7 +50,28 @@ func ProcessArrayDataFromEndPoint(objArrary []interface{}, timeStampField string
 		if !success {
 			log.Fatal("[ERROR] Can't parse the object array with index: " + fmt.Sprint(index))
 		}
-		timeStamp := time.Unix(object[timeStampField].(int64), 0).UnixMilli()
+		// Get timeStamp in epoch milli-second format
+		var tsInInt64 int64
+		switch tsFormat {
+		case "Epoch":
+			switch object[timeStampField].(type) {
+			case int64:
+				tsInInt64 = object[timeStampField].(int64)
+			case float64:
+				tsInInt64 = int64(object[timeStampField].(float64))
+			}
+		default:
+			parsedTime, err := time.Parse(tsFormat, object[timeStampField].(string))
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			tsInInt64 = parsedTime.Unix()
+		}
+		if tsInInt64 == 0 {
+			log.Fatal("Can't get timeStamp from timestamp field" + object[timeStampField].(string))
+		}
+		timeStamp := time.Unix(tsInInt64, 0).UnixMilli()
+
 		prasedData := ParseData(object, timeStamp, make([]string, 0))
 		instance, success := object[instanceNameField].(string)
 		if !success {
