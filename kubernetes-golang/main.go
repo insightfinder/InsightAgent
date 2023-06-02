@@ -23,6 +23,7 @@ var IF_SECTION_NAME = "insightfinder"
 var PowerFlexSectionName = "powerFlex"
 var PowerScaleSectionName = "powerScale"
 var PowerStoreSectionName = "powerStore"
+var PowerStoreLogSectionName = "power_store_log"
 
 func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	// Required parameters
@@ -251,17 +252,42 @@ func getInputSectionData(p *configparser.ConfigParser, IFconfig map[string]inter
 	return data
 }
 
+func getInputLogSectionData(p *configparser.ConfigParser, IFConfig map[string]interface{}) LogDataReceivePayload {
+	allSections := p.Sections()
+
+	var data LogDataReceivePayload
+	for i := 0; i < len(allSections); i++ {
+		switch allSections[i] {
+		case PowerStoreLogSectionName:
+			data = PowerStoreLogStream(p, IFConfig)
+		case IF_SECTION_NAME:
+			continue
+		default:
+			log.Fatal("No supported agent type found in the config file.")
+		}
+	}
+	return data
+}
+
 func workerProcess(configPath string, wg *sync.WaitGroup) {
 	defer wg.Done()
-	log.Output(2, "Parsing the config file: "+configPath)
+
+	_ = log.Output(2, "Parsing the config file: "+configPath)
 	p, err := configparser.NewConfigParserFromFile(configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	var IFconfig = getIFConfigsSection(p)
-	checkProject(IFconfig)
-	data := getInputSectionData(p, IFconfig)
-	ProcessMetricData(data, IFconfig)
+
+	var IFConfig = getIFConfigsSection(p)
+	checkProject(IFConfig)
+
+	if IFConfig["projectType"] == "LOG" {
+		data := getInputLogSectionData(p, IFConfig)
+		ProcessLogData(data, IFConfig)
+	} else {
+		data := getInputSectionData(p, IFConfig)
+		ProcessMetricData(data, IFConfig)
+	}
 }
 
 func main() {
