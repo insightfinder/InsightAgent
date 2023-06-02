@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/bigkevmcd/go-configparser"
 )
@@ -155,18 +156,26 @@ func PowerStoreDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 		InstanceDataMap: make(map[string]InstanceData),
 	}
 
-	pStoreConfig["token"] = getAuthToken(pStoreConfig)
+	// pStoreConfig["token"] = getAuthToken(pStoreConfig)
 
 	mapping, err := GetEndpointMetricMapping(pStoreConfig["metricPath"])
 	if err != nil {
 		log.Fatal(err)
 	}
+	var test int64
+	println(test)
+	ts := "2006-01-02T15:04:05Z"
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(t.Unix())
 	objectList := getPowerStoreInstanceList(pStoreConfig)
 	// For powerStore, it should only have 1 endpoint
 	for endpoint, metricList := range mapping {
 		for _, object := range objectList {
 			objectArray := getPowerStoreMetricData(pStoreConfig, object, metricList, endpoint)
-			ProcessArrayDataFromEndPoint(objectArray, pStoreConfig["timeStampField"], pStoreConfig["instanceNameField"], &data)
+			ProcessArrayDataFromEndPoint(objectArray, pStoreConfig["timeStampField"], time.RFC3339, pStoreConfig["instanceNameField"], &data)
 		}
 	}
 	return data
