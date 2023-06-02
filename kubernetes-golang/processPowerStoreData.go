@@ -13,7 +13,7 @@ import (
 	"github.com/bigkevmcd/go-configparser"
 )
 
-var API_PREFIX = "/api/rest"
+var API_PREFIX = "/api/rest/"
 var token_key = "DELL-EMC-TOKEN"
 
 func getPStoreConfig(p *configparser.ConfigParser) map[string]string {
