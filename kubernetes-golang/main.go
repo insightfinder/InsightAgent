@@ -23,7 +23,7 @@ var IF_SECTION_NAME = "insightfinder"
 var PowerFlexSectionName = "powerFlex"
 var PowerScaleSectionName = "powerScale"
 var PowerStoreSectionName = "powerStore"
-var PowerStoreLogSectionName = "power_store_log"
+var PowerFlexManagerSection = "powerFlexManager"
 
 func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	// Required parameters
@@ -232,7 +232,7 @@ func createProject(IFconfig map[string]interface{}) {
 	log.Output(1, ToString(result["message"]))
 }
 
-func getInputSectionData(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {
+func getMetricSectionData(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {
 	allSections := p.Sections()
 	var data MetricDataReceivePayload
 	for i := 0; i < len(allSections); i++ {
@@ -258,8 +258,8 @@ func getInputLogSectionData(p *configparser.ConfigParser, IFConfig map[string]in
 	var data LogDataReceivePayload
 	for i := 0; i < len(allSections); i++ {
 		switch allSections[i] {
-		case PowerStoreLogSectionName:
-			data = PowerStoreLogStream(p, IFConfig)
+		case PowerFlexManagerSection:
+			data = PowerFlexManagerDataStream(p, IFConfig)
 		case IF_SECTION_NAME:
 			continue
 		default:
@@ -285,7 +285,7 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 		data := getInputLogSectionData(p, IFConfig)
 		ProcessLogData(data, IFConfig)
 	} else {
-		data := getInputSectionData(p, IFConfig)
+		data := getMetricSectionData(p, IFConfig)
 		ProcessMetricData(data, IFConfig)
 	}
 }
