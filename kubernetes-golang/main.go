@@ -252,14 +252,14 @@ func getMetricSectionData(p *configparser.ConfigParser, IFconfig map[string]inte
 	return data
 }
 
-func getInputLogSectionData(p *configparser.ConfigParser, IFConfig map[string]interface{}) LogDataReceivePayload {
+func getInputLogSectionData(p *configparser.ConfigParser, IFConfig map[string]interface{}) []LogData {
 	allSections := p.Sections()
 
-	var data LogDataReceivePayload
+	var data []LogData
 	for i := 0; i < len(allSections); i++ {
 		switch allSections[i] {
 		case PowerFlexManagerSection:
-			data = PowerFlexManagerDataStream(p, IFConfig)
+			data = PowerFlexManagerDataStream(p)
 		case IF_SECTION_NAME:
 			continue
 		default:

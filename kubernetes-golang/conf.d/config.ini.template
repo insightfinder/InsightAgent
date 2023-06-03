@@ -59,8 +59,6 @@ instanceType = cluster
 instanceNameField = cluster_id
 # The metric data interval output from server. Choose from: Best_Available,Five_Sec,Twenty_Sec,Five_Mins,One_Hour,One_Day
 metric_interval_from_server = Five_Mins
-
-
 # ----------------------------------- the connection setting ---------------------------------------------
 userName = 
 password = 
@@ -76,19 +74,17 @@ target_timestamp_timezone = UTC
 agent_http_proxy =
 agent_https_proxy =
 
-[power_store_log]
-# Specify the API endpoints and the metrics needed from each endpoint in one json file. It should be located inside conf.d directory.
-# Object with the metric name will be read and together with whatever inside that object.
-# NESTED STRCUTURE to sepcify key within each metric object IS NOT SUPPORTED.
-logPath = audit_event.json
-timeStampField = timestamp
-instanceNameField = server_address
-
+[powerFlexManager]
+apiEndpoint = /Api/V1/Log
+timeStampField = timeStamp
 # ----------------------------------- the connection setting ---------------------------------------------
-userName = aaa
-password = aaa
+userName = 
+password = 
+# Do NOT change this domain
+domain = VXFMLOCAL
 # The main host URL.
-connectionUrl = https://example.com
+userAgent = go version go1.18.1 linux/amd64
+connectionUrl = 
 
 # timeStamp will be using the current time
 timezone = UTC
