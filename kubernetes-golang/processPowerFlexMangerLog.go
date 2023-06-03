@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/bigkevmcd/go-configparser"
-	"github.com/spacemonkeygo/openssl"
+	"github.com/forgoer/openssl"
 )
 
 func getPFMConfig(p *configparser.ConfigParser) map[string]string {
@@ -61,26 +61,19 @@ func authenticationPF(config map[string]string) map[string]string {
 	)
 	var result AuthResponse
 	json.Unmarshal(res, &result)
+
 	userAgent := config["userAgent"]
 	apiKey := result.ApiKey
 	apiSecret := result.ApiSecret
 	timestamp := fmt.Sprint(time.Now().Unix())
+
+	// Generate the signature using Hmac sha256
 	requestStringList := []string{apiKey, http.MethodGet, config["apiEndPoint"], userAgent, timestamp}
 	requestString := strings.Join(requestStringList, ":")
-
-	hmac, err := openssl.NewHMAC([]byte(apiSecret), openssl.EVP_SHA256)
-	if err != nil {
-		log.Fatal(err)
-	}
-	hmac.Write([]byte(requestString))
-	hashBytes, _ := hmac.Final()
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	hashBytes := openssl.HmacSha256(apiSecret, requestString)
 	signature := base64.StdEncoding.EncodeToString(hashBytes)
 
-	var resHeader map[string]string
+	resHeader := make(map[string]string, 0)
 	resHeader["x-dell-auth-key"] = apiKey
 	resHeader["x-dell-auth-signature"] = signature
 	resHeader["x-dell-auth-timestamp"] = timestamp
@@ -88,7 +81,7 @@ func authenticationPF(config map[string]string) map[string]string {
 	return resHeader
 }
 
-func getLogData(reqHeader map[string]string, config map[string]string) []interface{} {
+func getPFMLogData(reqHeader map[string]string, config map[string]string) []interface{} {
 	form := url.Values{}
 	body, _ := SendRequest(
 		http.MethodGet,
@@ -102,16 +95,14 @@ func getLogData(reqHeader map[string]string, config map[string]string) []interfa
 	return result
 }
 
-func processPFMLogData() {
-
+func processPFMLogData(rawData []interface{}) []LogData {
+	return []LogData{}
 }
 
-func PowerFlexManagerDataStream(p *configparser.ConfigParser, IFconfig map[string]interface{}) LogDataReceivePayload {
+func PowerFlexManagerDataStream(p *configparser.ConfigParser) []LogData {
 	config := getPFMConfig(p)
 	authHeaders := authenticationPF(config)
-	logData := getLogData(authHeaders, config)
-	// projectName := ToString(IFconfig["projectName"])
-	// userName := ToString(IFconfig["userName"])
-	println(logData)
-	return LogDataReceivePayload{}
+	logData := getPFMLogData(authHeaders, config)
+	log.Output(1, "The number of log entires being proccessed is: "+fmt.Sprint(len(logData)))
+	return processPFMLogData(logData)
 }
