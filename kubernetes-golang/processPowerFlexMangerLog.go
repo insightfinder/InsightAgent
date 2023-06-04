@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,15 +27,16 @@ func getPFMConfig(p *configparser.ConfigParser) map[string]string {
 	var domain = ToString(GetConfigValue(p, PowerFlexManagerSection, "domain", true))
 
 	// ----------------- Process the configuration ------------------
-
+	var instanceNameField = ToString(GetConfigValue(p, PowerFlexManagerSection, "instanceNameField", false))
 	config := map[string]string{
-		"apiEndPoint":    apiEndPoint,
-		"domain":         domain,
-		"password":       password,
-		"userName":       userName,
-		"connectionUrl":  connectionUrl,
-		"userAgent":      userAgent,
-		"timeStampField": timeStampField,
+		"apiEndPoint":       apiEndPoint,
+		"domain":            domain,
+		"password":          password,
+		"userName":          userName,
+		"connectionUrl":     connectionUrl,
+		"userAgent":         userAgent,
+		"timeStampField":    timeStampField,
+		"instanceNameField": instanceNameField,
 	}
 	return config
 }
@@ -95,8 +97,37 @@ func getPFMLogData(reqHeader map[string]string, config map[string]string) []inte
 	return result
 }
 
-func processPFMLogData(rawData []interface{}) []LogData {
-	return []LogData{}
+func processPFMLogData(rawData []interface{}, config map[string]string) []LogData {
+	processedData := make([]LogData, 0)
+	var instanceName string
+	tsField := config["timeStampField"]
+	instField := config["instanceNameField"]
+	if len(instField) == 0 {
+		log.Output(1, "No instance field value is found. Will use default instance name.")
+		instanceName = "NO_INSTANCE_NAME"
+	}
+	for _, dp := range rawData {
+		logObj, success := dp.(map[string]string)
+		if !success {
+			panic("Can't cast log object to map[string]string. Please check your log input.")
+		}
+
+		ts, err := strconv.ParseInt(logObj[tsField], 10, 64)
+		if err != nil {
+			panic(err.Error())
+		}
+
+		if len(instField) != 0 {
+			instanceName = logObj[instField]
+		}
+
+		processedData = append(processedData, LogData{
+			TimeStamp: ts,
+			Tag:       instanceName,
+			Data:      logObj,
+		})
+	}
+	return processedData
 }
 
 func PowerFlexManagerDataStream(p *configparser.ConfigParser) []LogData {
@@ -104,5 +135,5 @@ func PowerFlexManagerDataStream(p *configparser.ConfigParser) []LogData {
 	authHeaders := authenticationPF(config)
 	logData := getPFMLogData(authHeaders, config)
 	log.Output(1, "The number of log entires being proccessed is: "+fmt.Sprint(len(logData)))
-	return processPFMLogData(logData)
+	return processPFMLogData(logData, config)
 }
