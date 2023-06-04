@@ -38,7 +38,7 @@ func getPScaleConfig(p *configparser.ConfigParser) map[string]string {
 func getDataFromEndpoint(config map[string]string, endpoint string) map[string]interface{} {
 	var headers map[string]string
 	form := url.Values{}
-	res, _ := SendRequest(
+	res, _ := sendRequest(
 		http.MethodGet,
 		FormCompleteURL(config["connectionUrl"], endpoint),
 		strings.NewReader(form.Encode()),
@@ -78,7 +78,7 @@ func PowerScaleDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 		for _, metric := range metricList {
 			objArray = result[metric].([]interface{})
 		}
-		ProcessArrayDataFromEndPoint(objArray, psConfig["timeStampField"], "Epoch", psConfig["instanceNameField"], &data)
+		processArrayDataFromEndPoint(objArray, psConfig["timeStampField"], "Epoch", psConfig["instanceNameField"], &data)
 	}
 	return data
 }

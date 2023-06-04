@@ -53,7 +53,7 @@ func getInstanceList(config map[string]string) []string {
 	// TODO: Headers currently left empty
 	var headers map[string]string
 	log.Output(1, "the token used in instance HTTP call: "+config["token"])
-	res, _ := SendRequest(
+	res, _ := sendRequest(
 		http.MethodGet,
 		getInstanceEndpoint,
 		strings.NewReader(form.Encode()),
@@ -93,7 +93,7 @@ func processDataFromInstances(instance string, config map[string]string, endpoin
 	endpoint = string(InstanceRe.ReplaceAll([]byte(endpoint), []byte(config["instanceType"])))
 	var headers map[string]string
 	form := url.Values{}
-	res, _ := SendRequest(
+	res, _ := sendRequest(
 		http.MethodGet,
 		FormCompleteURL(config["connectionUrl"], endpoint),
 		strings.NewReader(form.Encode()),
@@ -113,7 +113,7 @@ func processDataFromInstances(instance string, config map[string]string, endpoin
 	// res := GetFakeMetricData()
 	var result map[string]interface{}
 	json.Unmarshal([]byte(res), &result)
-	prasedData := ParseData(result, timeStamp, metrics)
+	prasedData := parseData(result, timeStamp, metrics)
 
 	instanceData, ok := data.InstanceDataMap[instance]
 	if !ok {
@@ -135,7 +135,7 @@ func getToken(config map[string]string) string {
 	form := url.Values{}
 	var headers map[string]string
 
-	token, _ := SendRequest(
+	token, _ := sendRequest(
 		http.MethodGet,
 		authEndPoint,
 		strings.NewReader(form.Encode()),

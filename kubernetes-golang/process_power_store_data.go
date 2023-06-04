@@ -50,7 +50,7 @@ func getAuthToken(config map[string]string) string {
 	var headers map[string]string
 	form := url.Values{}
 	// We only need the header
-	_, header := SendRequest(
+	_, header := sendRequest(
 		http.MethodGet,
 		FormCompleteURL(config["connectionUrl"], API_PREFIX),
 		strings.NewReader(form.Encode()),
@@ -79,7 +79,7 @@ func getPowerStoreInstanceList(config map[string]string) []string {
 	headers["Accept"] = "application/json"
 
 	log.Output(1, "the token used in HTTP call: "+config["token"])
-	res, _ := SendRequest(
+	res, _ := sendRequest(
 		http.MethodGet,
 		FormCompleteURL(
 			completeURL, config["instanceType"],
@@ -129,7 +129,7 @@ func getPowerStoreMetricData(config map[string]string, objectId string, metricLi
 	completeURL := FormCompleteURL(
 		config["connectionUrl"], API_PREFIX,
 	)
-	res, _ := SendRequest(
+	res, _ := sendRequest(
 		http.MethodPost,
 		FormCompleteURL(completeURL, endpoint),
 		bytes.NewBuffer(jData),
@@ -177,7 +177,7 @@ func PowerStoreDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 	for endpoint, metricList := range mapping {
 		for _, object := range objectList {
 			objectArray := getPowerStoreMetricData(pStoreConfig, object, metricList, endpoint)
-			ProcessArrayDataFromEndPoint(objectArray, pStoreConfig["timeStampField"], time.RFC3339, pStoreConfig["instanceNameField"], &data)
+			processArrayDataFromEndPoint(objectArray, pStoreConfig["timeStampField"], time.RFC3339, pStoreConfig["instanceNameField"], &data)
 		}
 	}
 	return data
