@@ -54,7 +54,7 @@ func authenticationPF(config map[string]string) map[string]string {
 		Password: config["password"],
 	}
 	bytesPayload, _ := json.Marshal(authRequest)
-	res, _ := SendRequest(
+	res, _ := sendRequest(
 		http.MethodPost,
 		FormCompleteURL(config["connectionUrl"], endPoint),
 		bytes.NewBuffer(bytesPayload),
@@ -85,7 +85,7 @@ func authenticationPF(config map[string]string) map[string]string {
 
 func getPFMLogData(reqHeader map[string]string, config map[string]string) []interface{} {
 	form := url.Values{}
-	body, _ := SendRequest(
+	body, _ := sendRequest(
 		http.MethodGet,
 		FormCompleteURL(config["connectionUrl"], config["apiEndPoint"]),
 		strings.NewReader(form.Encode()),

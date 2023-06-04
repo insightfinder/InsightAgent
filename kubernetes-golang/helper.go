@@ -26,7 +26,7 @@ const LOG_DATA_API = "/customprojectrawdata"
 const CHUNK_SIZE = 2 * 1024 * 1024
 const MAX_PACKET_SIZE = 10000000
 
-func FormMetricDataPoint(metric string, value interface{}) (MetricDataPoint, error) {
+func formMetricDataPoint(metric string, value interface{}) (MetricDataPoint, error) {
 	intVar, err := strconv.ParseFloat(ToString(value), 64)
 	if err != nil {
 		return MetricDataPoint{}, err
@@ -38,7 +38,7 @@ func FormMetricDataPoint(metric string, value interface{}) (MetricDataPoint, err
 	return metricDP, nil
 }
 
-func ProcessArrayDataFromEndPoint(objArrary []interface{}, timeStampField string, tsFormat string, instanceNameField string, data *MetricDataReceivePayload) {
+func processArrayDataFromEndPoint(objArrary []interface{}, timeStampField string, tsFormat string, instanceNameField string, data *MetricDataReceivePayload) {
 	// // fake data
 	// bytesData := GetFakeMetricData()
 	// var result map[string]interface{}
@@ -73,7 +73,7 @@ func ProcessArrayDataFromEndPoint(objArrary []interface{}, timeStampField string
 		}
 		timeStamp := time.Unix(tsInInt64, 0).UnixMilli()
 
-		prasedData := ParseData(object, timeStamp, make([]string, 0))
+		prasedData := parseData(object, timeStamp, make([]string, 0))
 		instance, success := object[instanceNameField].(string)
 		if !success {
 			panic("[ERROR] Failed to get instance name from the field: " + instanceNameField)
@@ -92,7 +92,7 @@ func ProcessArrayDataFromEndPoint(objArrary []interface{}, timeStampField string
 	}
 }
 
-func ParseData(data map[string]interface{}, timeStamp int64, metrics []string) DataInTimestamp {
+func parseData(data map[string]interface{}, timeStamp int64, metrics []string) DataInTimestamp {
 	dataInTs := DataInTimestamp{
 		TimeStamp:        timeStamp,
 		MetricDataPoints: make([]MetricDataPoint, 0),
@@ -125,7 +125,7 @@ func ParseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 		curPrefix := metricElem.Prefix
 		switch curVal.(type) {
 		case string:
-			value, err := FormMetricDataPoint(curPrefix, curVal)
+			value, err := formMetricDataPoint(curPrefix, curVal)
 			if err == nil {
 				dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, value)
 			} else {
@@ -133,7 +133,7 @@ func ParseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 				log.Output(1, "Failed to cast value"+curVal.(string)+"to number")
 			}
 		case float64, int64:
-			value, err := FormMetricDataPoint(curPrefix, fmt.Sprint(curVal))
+			value, err := formMetricDataPoint(curPrefix, fmt.Sprint(curVal))
 			if err == nil {
 				dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, value)
 			} else {
@@ -158,7 +158,7 @@ func ParseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 	return dataInTs
 }
 
-func ProcessLogData(data []LogData, IFConfig map[string]interface{}) {
+func processLogData(data []LogData, IFConfig map[string]interface{}) {
 	curTotal := 0
 	curData := make([]LogData, 0)
 	for _, log := range data {
@@ -176,7 +176,7 @@ func ProcessLogData(data []LogData, IFConfig map[string]interface{}) {
 			if err != nil {
 				panic(err.Error())
 			}
-			SendDataToIF(jData, LOG_DATA_API, IFConfig)
+			sendDataToIF(jData, LOG_DATA_API, IFConfig)
 			curTotal = 0
 			curData = make([]LogData, 0)
 		}
@@ -197,10 +197,10 @@ func ProcessLogData(data []LogData, IFConfig map[string]interface{}) {
 	if err != nil {
 		panic(err.Error())
 	}
-	SendDataToIF(jData, LOG_DATA_API, IFConfig)
+	sendDataToIF(jData, LOG_DATA_API, IFConfig)
 }
 
-func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interface{}) {
+func processMetricData(data MetricDataReceivePayload, IFconfig map[string]interface{}) {
 	curTotal := 0
 	var newPayload = MetricDataReceivePayload{
 		ProjectName:     data.ProjectName,
@@ -239,7 +239,7 @@ func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interf
 				if err != nil {
 					panic(err)
 				}
-				SendDataToIF(jData, METRIC_DATA_API, IFconfig)
+				sendDataToIF(jData, METRIC_DATA_API, IFconfig)
 				curTotal = 0
 				newPayload = MetricDataReceivePayload{
 					ProjectName:     data.ProjectName,
@@ -264,10 +264,10 @@ func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interf
 	if err != nil {
 		panic(err)
 	}
-	SendDataToIF(jData, METRIC_DATA_API, IFconfig)
+	sendDataToIF(jData, METRIC_DATA_API, IFconfig)
 }
 
-func SendDataToIF(data []byte, receiveEndpoint string, config map[string]interface{}) {
+func sendDataToIF(data []byte, receiveEndpoint string, config map[string]interface{}) {
 	log.Output(1, "-------- Sending data to InsightFinder --------")
 
 	if len(data) > MAX_PACKET_SIZE {
@@ -279,7 +279,7 @@ func SendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 	}
 	log.Output(2, "[LOG] Prepare to send out "+fmt.Sprint(len(data))+" bytes data to IF.")
 	log.Output(2, string(data))
-	response, _ = SendRequest(
+	response, _ = sendRequest(
 		http.MethodPost,
 		FormCompleteURL(ToString(config["ifURL"]), receiveEndpoint),
 		bytes.NewBuffer(data),
@@ -295,7 +295,7 @@ func SendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 	}
 }
 
-func SendRequest(operation string, endpoint string, form io.Reader, headers map[string]string, auth AuthRequest) ([]byte, http.Header) {
+func sendRequest(operation string, endpoint string, form io.Reader, headers map[string]string, auth AuthRequest) ([]byte, http.Header) {
 	newRequest, err := http.NewRequest(
 		operation,
 		endpoint,

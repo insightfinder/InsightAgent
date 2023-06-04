@@ -172,7 +172,7 @@ func isProjectExist(IFconfig map[string]interface{}) bool {
 	headers := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
-	response, _ := SendRequest(
+	response, _ := sendRequest(
 		http.MethodPost,
 		FormCompleteURL(ToString(IFconfig["ifURL"]), PROJECT_END_POINT),
 		strings.NewReader(form.Encode()),
@@ -220,7 +220,7 @@ func createProject(IFconfig map[string]interface{}) {
 	headers := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
-	response, _ := SendRequest(
+	response, _ := sendRequest(
 		http.MethodPost,
 		FormCompleteURL(ToString(IFconfig["ifURL"]), PROJECT_END_POINT),
 		strings.NewReader(form.Encode()),
@@ -283,10 +283,10 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 
 	if IFConfig["projectType"] == "LOG" {
 		data := getInputLogSectionData(p, IFConfig)
-		ProcessLogData(data, IFConfig)
+		processLogData(data, IFConfig)
 	} else {
 		data := getMetricSectionData(p, IFConfig)
-		ProcessMetricData(data, IFConfig)
+		processMetricData(data, IFConfig)
 	}
 }
 
