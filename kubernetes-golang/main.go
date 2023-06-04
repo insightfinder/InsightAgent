@@ -16,14 +16,14 @@ import (
 	"github.com/bigkevmcd/go-configparser"
 )
 
-var DEFAULT_MATADATE_MAX_INSTANCE = 1500
-var PROJECT_END_POINT = "api/v1/check-and-add-custom-project"
-var IF_SECTION_NAME = "insightfinder"
+const DEFAULT_MATADATE_MAX_INSTANCE = 1500
+const PROJECT_END_POINT = "api/v1/check-and-add-custom-project"
+const IF_SECTION_NAME = "insightfinder"
 
-var PowerFlexSectionName = "powerFlex"
-var PowerScaleSectionName = "powerScale"
-var PowerStoreSectionName = "powerStore"
-var PowerFlexManagerSection = "powerFlexManager"
+const PowerFlexSectionName = "powerFlex"
+const PowerScaleSectionName = "powerScale"
+const PowerStoreSectionName = "powerStore"
+const PowerFlexManagerSection = "powerFlexManager"
 
 func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	// Required parameters
@@ -51,12 +51,12 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	}
 
 	if !IsValidProjectType(projectType) {
-		log.Fatal("[ERROR] Non-existing project type: " + projectType + "! Please use the supported project types. ")
+		panic("[ERROR] Non-existing project type: " + projectType + "! Please use the supported project types. ")
 	}
 
 	if len(samplingInterval) == 0 {
 		if strings.Contains(projectType, "METRIC") {
-			log.Fatal("[ERROR] InsightFinder configuration [sampling_interval] is required for METRIC project!")
+			panic("[ERROR] InsightFinder configuration [sampling_interval] is required for METRIC project!")
 		} else {
 			// Set default for non-metric project
 			samplingInterval = "10"
@@ -68,13 +68,13 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 		samplingIntervalInSeconds = samplingInterval[:len(samplingInterval)-1]
 		samplingIntervalInt, err := strconv.Atoi(samplingInterval)
 		if err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
 		samplingInterval = fmt.Sprint(samplingIntervalInt / 60.0)
 	} else {
 		samplingIntervalInt, err := strconv.Atoi(samplingInterval)
 		if err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
 		samplingIntervalInSeconds = fmt.Sprint(int64(samplingIntervalInt * 60))
 	}
@@ -135,10 +135,10 @@ func getConfigFiles(configRelativePath string) []string {
 	log.Output(2, "Reading config files from directory: "+configPath)
 	allConfigs, err := filepath.Glob(configPath + "/*.ini")
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	if len(allConfigs) == 0 {
-		log.Fatal("[ERROR] No config file found in", configPath)
+		panic("[ERROR] No config file found in" + configPath)
 	}
 	return allConfigs
 }
@@ -152,7 +152,7 @@ func checkProject(IFconfig map[string]interface{}) {
 			log.Output(1, "Sleep for 5 seconds to wait for project creation and will check the project exisitense again.")
 			time.Sleep(time.Second * 5)
 			if !isProjectExist(IFconfig) {
-				log.Fatal("[ERROR] Fail to create project " + projectName)
+				panic("[ERROR] Fail to create project " + projectName)
 			}
 			log.Output(1, fmt.Sprintf("Create project %s successfully!", projectName))
 		} else {
@@ -183,7 +183,7 @@ func isProjectExist(IFconfig map[string]interface{}) bool {
 	var result map[string]interface{}
 	json.Unmarshal(response, &result)
 	if !ToBool(result["success"]) {
-		log.Fatal("[ERROR] Check project exist failed. Please check your parameters.")
+		panic("[ERROR] Check project exist failed. Please check your parameters.")
 	}
 
 	return ToBool(result["isProjectExist"])
@@ -214,7 +214,7 @@ func createProject(IFconfig map[string]interface{}) {
 	form.Add("samplingIntervalInSeconds", ToString(IFconfig["samplingInterval"]))
 	samplingIntervalINT, err := strconv.Atoi(ToString(IFconfig["samplingInterval"]))
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	form.Add("samplingIntervalInSeconds", fmt.Sprint(samplingIntervalINT*60))
 	headers := map[string]string{
@@ -246,7 +246,7 @@ func getMetricSectionData(p *configparser.ConfigParser, IFconfig map[string]inte
 		case IF_SECTION_NAME:
 			continue
 		default:
-			log.Fatal("No supported agent type found in the config file.")
+			panic("No supported agent type found in the config file.")
 		}
 	}
 	return data
@@ -263,7 +263,7 @@ func getInputLogSectionData(p *configparser.ConfigParser, IFConfig map[string]in
 		case IF_SECTION_NAME:
 			continue
 		default:
-			log.Fatal("No supported agent type found in the config file.")
+			panic("No supported agent type found in the config file.")
 		}
 	}
 	return data
@@ -275,7 +275,7 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 	_ = log.Output(2, "Parsing the config file: "+configPath)
 	p, err := configparser.NewConfigParserFromFile(configPath)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	var IFConfig = getIFConfigsSection(p)

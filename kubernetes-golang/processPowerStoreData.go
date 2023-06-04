@@ -13,8 +13,8 @@ import (
 	"github.com/bigkevmcd/go-configparser"
 )
 
-var API_PREFIX = "/api/rest/"
-var token_key = "DELL-EMC-TOKEN"
+const API_PREFIX = "/api/rest/"
+const token_key = "DELL-EMC-TOKEN"
 
 func getPStoreConfig(p *configparser.ConfigParser) map[string]string {
 	// required fields
@@ -63,7 +63,7 @@ func getAuthToken(config map[string]string) string {
 	log.Output(1, "[LOG] Getting token from endpoint")
 	token := header.Get(token_key)
 	if len(token) == 0 {
-		log.Fatal("Can't get the token key. Please check your connection.")
+		panic("Can't get the token key. Please check your connection.")
 	}
 	return token
 }
@@ -103,7 +103,7 @@ func getPowerStoreInstanceList(config map[string]string) []string {
 	for _, x := range result {
 		dict, ok := x.(map[string]interface{})
 		if !ok {
-			log.Fatal("[ERROR] Can't convert the result instance to map.")
+			panic("[ERROR] Can't convert the result instance to map.")
 		}
 		log.Output(1, "[LOG] The id: "+ToString(dict["id"]))
 		objectList = append(objectList, ToString(dict["id"]))
@@ -124,7 +124,7 @@ func getPowerStoreMetricData(config map[string]string, objectId string, metricLi
 	}
 	jData, err := json.Marshal(payload)
 	if err != nil {
-		log.Fatal(err.Error())
+		panic(err.Error())
 	}
 	completeURL := FormCompleteURL(
 		config["connectionUrl"], API_PREFIX,
@@ -162,7 +162,7 @@ func PowerStoreDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 
 	mapping, err := GetEndpointMetricMapping(pStoreConfig["metricPath"])
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	var test int64
 	println(test)

@@ -13,9 +13,9 @@ import (
 	"github.com/bigkevmcd/go-configparser"
 )
 
-var instanceTypeRegex = `{\$instanceType}`
-var idRegex = `{\$id}`
-var AUTHAPI = "/api/login"
+const instanceTypeRegex = `{\$instanceType}`
+const idRegex = `{\$id}`
+const AUTHAPI = "/api/login"
 
 func getPFConfig(p *configparser.ConfigParser) map[string]string {
 	// required fields
@@ -76,7 +76,7 @@ func getInstanceList(config map[string]string) []string {
 		dict, ok := x.(map[string]interface{})
 		log.Output(1, "[LOG] The instance id: "+ToString(dict["id"]))
 		if !ok {
-			log.Fatal("[ERROR] Can't convert the result instance to map.")
+			panic("[ERROR] Can't convert the result instance to map.")
 		}
 		instanceList = append(instanceList, ToString(dict["id"]))
 	}
@@ -168,7 +168,7 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 
 	endpointMapping, err := GetEndpointMetricMapping(config["metricPath"])
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	for _, inst := range instances {
 		log.Output(2, "[LOG] Getting data from instance: ["+inst+"] now.")
