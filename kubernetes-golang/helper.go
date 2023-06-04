@@ -21,9 +21,10 @@ import (
 	"github.com/bigkevmcd/go-configparser"
 )
 
-var METRIC_DATA_API = "/api/v2/metric-data-receive"
-var CHUNK_SIZE = 2 * 1024 * 1024
-var MAX_PACKET_SIZE = 10000000
+const METRIC_DATA_API = "/api/v2/metric-data-receive"
+const LOG_DATA_API = "/customprojectrawdata"
+const CHUNK_SIZE = 2 * 1024 * 1024
+const MAX_PACKET_SIZE = 10000000
 
 func FormMetricDataPoint(metric string, value interface{}) (MetricDataPoint, error) {
 	intVar, err := strconv.ParseFloat(ToString(value), 64)
@@ -158,6 +159,45 @@ func ParseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 }
 
 func ProcessLogData(data []LogData, IFConfig map[string]interface{}) {
+	curTotal := 0
+	curData := make([]LogData, 0)
+	for _, log := range data {
+		if curTotal > CHUNK_SIZE {
+			jData, err := json.Marshal(
+				LogDataReceivePayload{
+					UserName:         ToString(IFConfig["userName"]),
+					LicenseKey:       ToString(IFConfig["licenseKey"]),
+					ProjectName:      ToString(IFConfig["projectName"]),
+					SystemName:       ToString(IFConfig["systemName"]),
+					InsightAgentType: "LogStreaming",
+					LogDataList:      curData,
+				},
+			)
+			if err != nil {
+				panic(err.Error())
+			}
+			SendDataToIF(jData, LOG_DATA_API, IFConfig)
+			curTotal = 0
+			curData = make([]LogData, 0)
+		}
+		curData = append(curData, log)
+		dataBytes, _ := json.Marshal(log)
+		curTotal += len(dataBytes)
+	}
+	jData, err := json.Marshal(
+		LogDataReceivePayload{
+			UserName:         ToString(IFConfig["userName"]),
+			LicenseKey:       ToString(IFConfig["licenseKey"]),
+			ProjectName:      ToString(IFConfig["projectName"]),
+			SystemName:       ToString(IFConfig["systemName"]),
+			InsightAgentType: "LogStreaming",
+			LogDataList:      curData,
+		},
+	)
+	if err != nil {
+		panic(err.Error())
+	}
+	SendDataToIF(jData, LOG_DATA_API, IFConfig)
 }
 
 func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interface{}) {
@@ -190,7 +230,16 @@ func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interf
 			// The json.Marshal transform the data into bytes so the length will be the actual size.
 			curTotal += len(dataBytes)
 			if curTotal > CHUNK_SIZE {
-				SendMetricDataToIF(newPayload, IFconfig)
+				request := IFMetricPostRequestPayload{
+					LicenseKey: ToString(IFconfig["licenseKey"]),
+					UserName:   ToString(IFconfig["userName"]),
+					Data:       data,
+				}
+				jData, err := json.Marshal(request)
+				if err != nil {
+					log.Fatal(err)
+				}
+				SendDataToIF(jData, METRIC_DATA_API, IFconfig)
 				curTotal = 0
 				newPayload = MetricDataReceivePayload{
 					ProjectName:     data.ProjectName,
@@ -206,34 +255,34 @@ func ProcessMetricData(data MetricDataReceivePayload, IFconfig map[string]interf
 			}
 		}
 	}
-	SendMetricDataToIF(newPayload, IFconfig)
-}
-
-func SendMetricDataToIF(data MetricDataReceivePayload, config map[string]interface{}) {
-	log.Output(1, "-------- Sending data to InsightFinder --------")
-
 	request := IFMetricPostRequestPayload{
-		LicenseKey: ToString(config["licenseKey"]),
-		UserName:   ToString(config["userName"]),
+		LicenseKey: ToString(IFconfig["licenseKey"]),
+		UserName:   ToString(IFconfig["userName"]),
 		Data:       data,
 	}
 	jData, err := json.Marshal(request)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if len(jData) > MAX_PACKET_SIZE {
+	SendDataToIF(jData, METRIC_DATA_API, IFconfig)
+}
+
+func SendDataToIF(data []byte, receiveEndpoint string, config map[string]interface{}) {
+	log.Output(1, "-------- Sending data to InsightFinder --------")
+
+	if len(data) > MAX_PACKET_SIZE {
 		log.Fatal("[ERROR]The packet size is too large.")
 	}
 	var response []byte
 	headers := map[string]string{
 		"Content-Type": "application/json",
 	}
-	log.Output(2, "[LOG] Prepare to send out "+fmt.Sprint(len(jData))+" bytes data to IF.")
-	log.Output(2, string(jData))
+	log.Output(2, "[LOG] Prepare to send out "+fmt.Sprint(len(data))+" bytes data to IF.")
+	log.Output(2, string(data))
 	response, _ = SendRequest(
 		http.MethodPost,
-		FormCompleteURL(ToString(config["ifURL"]), METRIC_DATA_API),
-		bytes.NewBuffer(jData),
+		FormCompleteURL(ToString(config["ifURL"]), receiveEndpoint),
+		bytes.NewBuffer(data),
 		headers,
 		AuthRequest{},
 	)

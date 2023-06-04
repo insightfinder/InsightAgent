@@ -1,9 +1,9 @@
 package main
 
 type LogData struct {
-	TimeStamp int64  `json:"timestamp" validate:"required"`
-	Tag       string `json:"tag" validate:"required"`
-	Data      string `json:"data" validate:"required"`
+	TimeStamp int64       `json:"timestamp" validate:"required"`
+	Tag       string      `json:"tag" validate:"required"`
+	Data      interface{} `json:"data" validate:"required"`
 }
 
 type LogDataReceivePayload struct {
