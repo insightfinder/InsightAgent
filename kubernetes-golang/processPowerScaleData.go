@@ -69,7 +69,7 @@ func PowerScaleDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 
 	mapping, err := GetEndpointMetricMapping(psConfig["metricPath"])
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	for endpoint, metricList := range mapping {
 		result := getDataFromEndpoint(psConfig, endpoint)
