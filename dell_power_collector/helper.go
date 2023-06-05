@@ -166,14 +166,12 @@ func processLogData(data []LogData, IFConfig map[string]interface{}) {
 		if curTotal > CHUNK_SIZE {
 			jData, err := json.Marshal(
 				LogDataReceivePayload{
-					UserName:          ToString(IFConfig["userName"]),
-					LicenseKey:        ToString(IFConfig["licenseKey"]),
-					ProjectName:       ToString(IFConfig["projectName"]),
-					SystemName:        ToString(IFConfig["systemName"]),
-					InsightAgentType:  "LogStreaming",
-					LogDataList:       curData,
-					ChunkSerialNumber: 1,
-					ChunkTotalNumber:  1,
+					UserName:         ToString(IFConfig["userName"]),
+					LicenseKey:       ToString(IFConfig["licenseKey"]),
+					ProjectName:      ToString(IFConfig["projectName"]),
+					SystemName:       ToString(IFConfig["systemName"]),
+					InsightAgentType: "LogStreaming",
+					LogDataList:      curData,
 				},
 			)
 			if err != nil {
@@ -189,14 +187,12 @@ func processLogData(data []LogData, IFConfig map[string]interface{}) {
 	}
 	jData, err := json.Marshal(
 		LogDataReceivePayload{
-			UserName:          ToString(IFConfig["userName"]),
-			LicenseKey:        ToString(IFConfig["licenseKey"]),
-			ProjectName:       ToString(IFConfig["projectName"]),
-			SystemName:        ToString(IFConfig["systemName"]),
-			InsightAgentType:  "LogStreaming",
-			LogDataList:       curData,
-			ChunkSerialNumber: 1,
-			ChunkTotalNumber:  1,
+			UserName:         ToString(IFConfig["userName"]),
+			LicenseKey:       ToString(IFConfig["licenseKey"]),
+			ProjectName:      ToString(IFConfig["projectName"]),
+			SystemName:       ToString(IFConfig["systemName"]),
+			InsightAgentType: "LogStreaming",
+			LogDataList:      curData,
 		},
 	)
 	if err != nil {
