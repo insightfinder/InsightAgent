@@ -273,15 +273,17 @@ func sendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 	if len(data) > MAX_PACKET_SIZE {
 		panic("[ERROR]The packet size is too large.")
 	}
+
+	endpoint := FormCompleteURL(ToString(config["ifURL"]), receiveEndpoint)
 	var response []byte
 	headers := map[string]string{
 		"Content-Type": "application/json",
 	}
-	log.Output(2, "[LOG] Prepare to send out "+fmt.Sprint(len(data))+" bytes data to IF.")
+	log.Output(2, "[LOG] Prepare to send out "+fmt.Sprint(len(data))+" bytes data to IF:"+endpoint)
 	log.Output(2, string(data))
 	response, _ = sendRequest(
 		http.MethodPost,
-		FormCompleteURL(ToString(config["ifURL"]), receiveEndpoint),
+		endpoint,
 		bytes.NewBuffer(data),
 		headers,
 		AuthRequest{},
@@ -291,7 +293,7 @@ func sendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 	if ToBool(result["success"]) {
 		log.Output(1, "[LOG] Sending data to the InsightFinder successfully.")
 	} else {
-		log.Output(1, "[ERROR] Failed to send data to the InsightFinder.")
+		log.Output(1, "[ERROR] Failed to send data to the InsightFinder."+fmt.Sprint(string(response)))
 	}
 }
 

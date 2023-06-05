@@ -139,7 +139,7 @@ func processPFMLogData(rawData []map[string]string, config map[string]string) []
 		})
 	}
 
-	log.Output(2, "Log data processing is done"+fmt.Sprint(processedData))
+	log.Output(2, "Log data processing is done with entries:"+fmt.Sprint(len(processedData)))
 	return processedData
 }
 
