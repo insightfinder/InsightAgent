@@ -1,3 +1,3 @@
-set GOARCH=amd64
+set GOARCH=386
 set GOOS=linux
 go build
