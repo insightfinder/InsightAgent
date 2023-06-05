@@ -168,3 +168,5 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
+## app
+conf.d/*.ini
