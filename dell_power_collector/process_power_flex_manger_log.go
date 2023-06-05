@@ -96,6 +96,8 @@ func getPFMLogData(reqHeader map[string]string, config map[string]string) []map[
 	log.Output(2, "Getting log data from endpoint: "+endpoint)
 
 	form := url.Values{}
+	form.Add("sort", "-"+config["timeStampField"])
+	form.Add("limit", "200")
 	body, _ := sendRequest(
 		http.MethodGet,
 		endpoint,
