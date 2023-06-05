@@ -23,6 +23,7 @@ import (
 
 const METRIC_DATA_API = "/api/v2/metric-data-receive"
 const LOG_DATA_API = "/customprojectrawdata"
+const LOG_DATA_AGENT_TYPE = "Stream"
 const CHUNK_SIZE = 2 * 1024 * 1024
 const MAX_PACKET_SIZE = 10000000
 
@@ -283,8 +284,10 @@ func sendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 	headers := map[string]string{
 		"Content-Type": "application/json",
 	}
+	if receiveEndpoint == LOG_DATA_API {
+		headers["agent-type"] = LOG_DATA_AGENT_TYPE
+	}
 	log.Output(2, "[LOG] Prepare to send out "+fmt.Sprint(len(data))+" bytes data to IF:"+endpoint)
-	log.Output(2, string(data))
 	response, _ = sendRequest(
 		http.MethodPost,
 		endpoint,
