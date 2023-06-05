@@ -1,0 +1,15 @@
+{
+    "/platform/3/statistics/summary/system":[
+        "system"
+    ],
+    "/api/instances/{$instanceType}::{$id}/relationships/Statistics":[
+        "unusedCapacityInKb",
+        "totalReadBwc",
+        "persistentChecksumCapacityInKb",
+        "numOfVolumes",
+        "currentTickerValue"
+    ],
+    "/metric/generate":[
+        "performance_metrics_by_cluster"
+    ]
+}
