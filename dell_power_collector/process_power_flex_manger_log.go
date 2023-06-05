@@ -92,16 +92,15 @@ func authenticationPF(config map[string]string) map[string]string {
 }
 
 func getPFMLogData(reqHeader map[string]string, config map[string]string) []map[string]string {
-	endpoint := FormCompleteURL(config["connectionUrl"], config["apiEndPoint"])
+	params := url.Values{}
+	params.Add("sort", "-"+config["timeStampField"])
+	params.Add("limit", "200")
+	endpoint := FormCompleteURL(config["connectionUrl"], config["apiEndPoint"]) + "?" + params.Encode()
 	log.Output(2, "Getting log data from endpoint: "+endpoint)
-
-	form := url.Values{}
-	form.Add("sort", "-"+config["timeStampField"])
-	form.Add("limit", "200")
 	body, _ := sendRequest(
 		http.MethodGet,
 		endpoint,
-		strings.NewReader(form.Encode()),
+		strings.NewReader(params.Encode()),
 		reqHeader,
 		AuthRequest{},
 	)
