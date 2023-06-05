@@ -13,9 +13,9 @@ import (
 	"github.com/bigkevmcd/go-configparser"
 )
 
-var instanceTypeRegex = `{\$instanceType}`
-var idRegex = `{\$id}`
-var AUTHAPI = "/api/login"
+const instanceTypeRegex = `{\$instanceType}`
+const idRegex = `{\$id}`
+const AUTHAPI = "/api/login"
 
 func getPFConfig(p *configparser.ConfigParser) map[string]string {
 	// required fields
@@ -53,7 +53,7 @@ func getInstanceList(config map[string]string) []string {
 	// TODO: Headers currently left empty
 	var headers map[string]string
 	log.Output(1, "the token used in instance HTTP call: "+config["token"])
-	res, _ := SendRequest(
+	res, _ := sendRequest(
 		http.MethodGet,
 		getInstanceEndpoint,
 		strings.NewReader(form.Encode()),
@@ -76,7 +76,7 @@ func getInstanceList(config map[string]string) []string {
 		dict, ok := x.(map[string]interface{})
 		log.Output(1, "[LOG] The instance id: "+ToString(dict["id"]))
 		if !ok {
-			log.Fatal("[ERROR] Can't convert the result instance to map.")
+			panic("[ERROR] Can't convert the result instance to map.")
 		}
 		instanceList = append(instanceList, ToString(dict["id"]))
 	}
@@ -93,7 +93,7 @@ func processDataFromInstances(instance string, config map[string]string, endpoin
 	endpoint = string(InstanceRe.ReplaceAll([]byte(endpoint), []byte(config["instanceType"])))
 	var headers map[string]string
 	form := url.Values{}
-	res, _ := SendRequest(
+	res, _ := sendRequest(
 		http.MethodGet,
 		FormCompleteURL(config["connectionUrl"], endpoint),
 		strings.NewReader(form.Encode()),
@@ -113,7 +113,7 @@ func processDataFromInstances(instance string, config map[string]string, endpoin
 	// res := GetFakeMetricData()
 	var result map[string]interface{}
 	json.Unmarshal([]byte(res), &result)
-	prasedData := ParseData(result, timeStamp, metrics)
+	prasedData := parseData(result, timeStamp, metrics)
 
 	instanceData, ok := data.InstanceDataMap[instance]
 	if !ok {
@@ -135,7 +135,7 @@ func getToken(config map[string]string) string {
 	form := url.Values{}
 	var headers map[string]string
 
-	token, _ := SendRequest(
+	token, _ := sendRequest(
 		http.MethodGet,
 		authEndPoint,
 		strings.NewReader(form.Encode()),
@@ -168,7 +168,7 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 
 	endpointMapping, err := GetEndpointMetricMapping(config["metricPath"])
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	for _, inst := range instances {
 		log.Output(2, "[LOG] Getting data from instance: ["+inst+"] now.")
