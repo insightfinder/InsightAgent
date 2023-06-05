@@ -8,13 +8,14 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/bigkevmcd/go-configparser"
 	"github.com/forgoer/openssl"
 )
+
+const FLEX_MANAGER_API_PREFIX = "/Api/V1/Authenticate"
 
 func getPFMConfig(p *configparser.ConfigParser) map[string]string {
 	// required fields
@@ -43,24 +44,29 @@ func getPFMConfig(p *configparser.ConfigParser) map[string]string {
 
 func authenticationPF(config map[string]string) map[string]string {
 	endPoint := FormCompleteURL(
-		config["connectionUrl"], AUTHAPI,
+		config["connectionUrl"], FLEX_MANAGER_API_PREFIX,
 	)
 	headers := map[string]string{
 		"Content-Type": "application/json",
 		"Accept":       "application/json",
 	}
-	authRequest := AuthRequest{
+	authRequest := FlexManagerAuthRequest{
 		UserName: config["userName"],
 		Password: config["password"],
+		Domain:   config["domain"],
 	}
+
+	log.Output(2, "Authenticating to endpoint: "+endPoint)
+
 	bytesPayload, _ := json.Marshal(authRequest)
 	res, _ := sendRequest(
 		http.MethodPost,
-		FormCompleteURL(config["connectionUrl"], endPoint),
+		endPoint,
 		bytes.NewBuffer(bytesPayload),
 		headers,
 		AuthRequest{},
 	)
+
 	var result AuthResponse
 	json.Unmarshal(res, &result)
 
@@ -80,39 +86,44 @@ func authenticationPF(config map[string]string) map[string]string {
 	resHeader["x-dell-auth-signature"] = signature
 	resHeader["x-dell-auth-timestamp"] = timestamp
 	resHeader["User-Agent"] = userAgent
+
+	log.Output(2, "Authentication is done")
 	return resHeader
 }
 
-func getPFMLogData(reqHeader map[string]string, config map[string]string) []interface{} {
+func getPFMLogData(reqHeader map[string]string, config map[string]string) []map[string]string {
+	endpoint := FormCompleteURL(config["connectionUrl"], config["apiEndPoint"])
+	log.Output(2, "Getting log data from endpoint: "+endpoint)
+
 	form := url.Values{}
 	body, _ := sendRequest(
 		http.MethodGet,
-		FormCompleteURL(config["connectionUrl"], config["apiEndPoint"]),
+		endpoint,
 		strings.NewReader(form.Encode()),
 		reqHeader,
 		AuthRequest{},
 	)
-	var result []interface{}
+	var result []map[string]string
 	json.Unmarshal(body, &result)
+
 	return result
 }
 
-func processPFMLogData(rawData []interface{}, config map[string]string) []LogData {
+func processPFMLogData(rawData []map[string]string, config map[string]string) []LogData {
 	processedData := make([]LogData, 0)
+
 	var instanceName string
 	tsField := config["timeStampField"]
 	instField := config["instanceNameField"]
+
 	if len(instField) == 0 {
 		log.Output(1, "No instance field value is found. Will use default instance name.")
 		instanceName = "NO_INSTANCE_NAME"
 	}
-	for _, dp := range rawData {
-		logObj, success := dp.(map[string]string)
-		if !success {
-			panic("Can't cast log object to map[string]string. Please check your log input.")
-		}
 
-		ts, err := strconv.ParseInt(logObj[tsField], 10, 64)
+	for _, logObj := range rawData {
+
+		ts, err := time.Parse(time.RFC3339, logObj[tsField])
 		if err != nil {
 			panic(err.Error())
 		}
@@ -122,11 +133,13 @@ func processPFMLogData(rawData []interface{}, config map[string]string) []LogDat
 		}
 
 		processedData = append(processedData, LogData{
-			TimeStamp: ts,
+			TimeStamp: ts.UnixMilli(),
 			Tag:       instanceName,
 			Data:      logObj,
 		})
 	}
+
+	log.Output(2, "Log data processing is done"+fmt.Sprint(processedData))
 	return processedData
 }
 
@@ -134,6 +147,7 @@ func PowerFlexManagerDataStream(p *configparser.ConfigParser) []LogData {
 	config := getPFMConfig(p)
 	authHeaders := authenticationPF(config)
 	logData := getPFMLogData(authHeaders, config)
-	log.Output(1, "The number of log entires being proccessed is: "+fmt.Sprint(len(logData)))
+
+	log.Output(1, "The number of log entries being processed is: "+fmt.Sprint(len(logData)))
 	return processPFMLogData(logData, config)
 }
