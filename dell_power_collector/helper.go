@@ -403,6 +403,17 @@ func ToBool(inputVar interface{}) bool {
 	panic("[ERROR] Wrong input type. Can not convert current input to boolean.")
 }
 
+func ToInt(inputVar interface{}) int {
+	if inputVar == nil {
+		return 0
+	}
+	mtype := reflect.TypeOf(inputVar)
+	if fmt.Sprint(mtype) == "int" {
+		return inputVar.(int)
+	}
+	panic("[ERROR] Wrong input type. Can not convert current input to int.")
+}
+
 // ------------------ Project Type transformation ------------------------
 
 func ProjectTypeToAgentType(projectType string, isReplay bool) string {

@@ -17,7 +17,7 @@ import (
 
 const FLEX_MANAGER_API_PREFIX = "/Api/V1/Authenticate"
 
-func getPFMConfig(p *configparser.ConfigParser) map[string]string {
+func getPFMConfig(p *configparser.ConfigParser) map[string]interface{} {
 	// required fields
 	var connectionUrl = ToString(GetConfigValue(p, PowerFlexManagerSection, "connectionUrl", true))
 	var apiEndPoint = ToString(GetConfigValue(p, PowerFlexManagerSection, "apiEndPoint", true))
@@ -29,7 +29,8 @@ func getPFMConfig(p *configparser.ConfigParser) map[string]string {
 
 	// ----------------- Process the configuration ------------------
 	var instanceNameField = ToString(GetConfigValue(p, PowerFlexManagerSection, "instanceNameField", false))
-	config := map[string]string{
+	var maxFetchCount = ToInt(GetConfigValue(p, PowerFlexManagerSection, "maxFetchCount", false))
+	config := map[string]interface{}{
 		"apiEndPoint":       apiEndPoint,
 		"domain":            domain,
 		"password":          password,
@@ -38,22 +39,23 @@ func getPFMConfig(p *configparser.ConfigParser) map[string]string {
 		"userAgent":         userAgent,
 		"timeStampField":    timeStampField,
 		"instanceNameField": instanceNameField,
+		"maxFetchCount":     maxFetchCount,
 	}
 	return config
 }
 
-func authenticationPF(config map[string]string) map[string]string {
+func authenticationPF(config map[string]interface{}) map[string]string {
 	endPoint := FormCompleteURL(
-		config["connectionUrl"], FLEX_MANAGER_API_PREFIX,
+		config["connectionUrl"].(string), FLEX_MANAGER_API_PREFIX,
 	)
 	headers := map[string]string{
 		"Content-Type": "application/json",
 		"Accept":       "application/json",
 	}
 	authRequest := FlexManagerAuthRequest{
-		UserName: config["userName"],
-		Password: config["password"],
-		Domain:   config["domain"],
+		UserName: config["userName"].(string),
+		Password: config["password"].(string),
+		Domain:   config["domain"].(string),
 	}
 
 	log.Output(2, "Authenticating to endpoint: "+endPoint)
@@ -70,13 +72,13 @@ func authenticationPF(config map[string]string) map[string]string {
 	var result AuthResponse
 	json.Unmarshal(res, &result)
 
-	userAgent := config["userAgent"]
+	userAgent := config["userAgent"].(string)
 	apiKey := result.ApiKey
 	apiSecret := result.ApiSecret
 	timestamp := fmt.Sprint(time.Now().Unix())
 
 	// Generate the signature using Hmac sha256
-	requestStringList := []string{apiKey, http.MethodGet, config["apiEndPoint"], userAgent, timestamp}
+	requestStringList := []string{apiKey, http.MethodGet, config["apiEndPoint"].(string), userAgent, timestamp}
 	requestString := strings.Join(requestStringList, ":")
 	hashBytes := openssl.HmacSha256(apiSecret, requestString)
 	signature := base64.StdEncoding.EncodeToString(hashBytes)
@@ -91,11 +93,12 @@ func authenticationPF(config map[string]string) map[string]string {
 	return resHeader
 }
 
-func getPFMLogData(reqHeader map[string]string, config map[string]string) []map[string]interface{} {
+func getPFMLogData(reqHeader map[string]string, config map[string]interface{}, offset int) []map[string]interface{} {
 	params := url.Values{}
-	params.Add("sort", "-"+config["timeStampField"])
+	//params.Add("sort", "-"+config["timeStampField"])
+	params.Add("offset", fmt.Sprint(offset))
 	params.Add("limit", "200")
-	endpoint := FormCompleteURL(config["connectionUrl"], config["apiEndPoint"]) + "?" + params.Encode()
+	endpoint := FormCompleteURL(config["connectionUrl"].(string), config["apiEndPoint"].(string)) + "?" + params.Encode()
 	log.Output(2, "Getting log data from endpoint: "+endpoint)
 	body, _ := sendRequest(
 		http.MethodGet,
@@ -110,12 +113,12 @@ func getPFMLogData(reqHeader map[string]string, config map[string]string) []map[
 	return result
 }
 
-func processPFMLogData(rawData []map[string]interface{}, config map[string]string) []LogData {
+func processPFMLogData(rawData []map[string]interface{}, config map[string]interface{}) []LogData {
 	processedData := make([]LogData, 0)
 
 	var instanceName string
-	tsField := config["timeStampField"]
-	instField := config["instanceNameField"]
+	tsField := config["timeStampField"].(string)
+	instField := config["instanceNameField"].(string)
 
 	if len(instField) == 0 {
 		log.Output(1, "No instance field value is found. Will use default instance name.")
@@ -145,10 +148,10 @@ func processPFMLogData(rawData []map[string]interface{}, config map[string]strin
 	return processedData
 }
 
-func PowerFlexManagerDataStream(p *configparser.ConfigParser) []LogData {
+func PowerFlexManagerDataStream(p *configparser.ConfigParser, offset int) []LogData {
 	config := getPFMConfig(p)
 	authHeaders := authenticationPF(config)
-	logData := getPFMLogData(authHeaders, config)
+	logData := getPFMLogData(authHeaders, config, offset)
 
 	log.Output(1, "The number of log entries being processed is: "+fmt.Sprint(len(logData)))
 	return processPFMLogData(logData, config)
