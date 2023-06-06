@@ -50,7 +50,8 @@ func processArrayDataFromEndPoint(objArrary []interface{}, timeStampField string
 	for index, obj := range objArrary {
 		object, success := obj.(map[string]interface{})
 		if !success {
-			panic("[ERROR] Can't parse the object array with index: " + fmt.Sprint(index))
+			panic("[ERROR] Can't parse the object array with index: " +
+				fmt.Sprint(index))
 		}
 		// Get timeStamp in epoch milli-second format
 		var tsInInt64 int64
@@ -131,7 +132,7 @@ func parseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 				dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, value)
 			} else {
 				log.Output(1, err.Error())
-				log.Output(1, "Failed to cast value"+curVal.(string)+"to number")
+				log.Output(1, "Failed to cast value"+fmt.Sprint(curVal)+"to number")
 			}
 		case float64, int64:
 			value, err := formMetricDataPoint(curPrefix, fmt.Sprint(curVal))
@@ -153,13 +154,14 @@ func parseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 				})
 			}
 		default:
-			panic("[ERROR] Wrong type input from the data")
+			panic("[ERROR] Wrong type input from the data. Key:" +
+				curPrefix + " ;Value: " + fmt.Sprint(curVal))
 		}
 	}
 	return dataInTs
 }
 
-func processLogData(data []LogData, IFConfig map[string]interface{}) {
+func sendLogData(data []LogData, IFConfig map[string]interface{}) {
 	curTotal := 0
 	curData := make([]LogData, 0)
 	for _, log := range data {
@@ -201,7 +203,7 @@ func processLogData(data []LogData, IFConfig map[string]interface{}) {
 	sendDataToIF(jData, LOG_DATA_API, IFConfig)
 }
 
-func processMetricData(data MetricDataReceivePayload, IFconfig map[string]interface{}) {
+func sendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface{}) {
 	curTotal := 0
 	var newPayload = MetricDataReceivePayload{
 		ProjectName:     data.ProjectName,
@@ -345,8 +347,7 @@ func AbsFilePath(filename string) string {
 	if err != nil {
 		panic(err)
 	}
-	absFilePath := filepath.Join(mydir, filename)
-	return absFilePath
+	return filepath.Join(mydir, filename)
 }
 
 func GetEndpointMetricMapping(path string) (map[string][]string, error) {
