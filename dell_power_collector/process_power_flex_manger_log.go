@@ -91,7 +91,7 @@ func authenticationPF(config map[string]interface{}) map[string]string {
 	return resHeader
 }
 
-func getPFMLogData(reqHeader map[string]string, config map[string]interface{}, offset int) []map[string]interface{} {
+func getPFMLogData(reqHeader map[string]string, config map[string]interface{}, offset int) (result []map[string]interface{}) {
 	params := url.Values{}
 	//params.Add("sort", "-"+config["timeStampField"])
 	params.Add("offset", fmt.Sprint(offset))
@@ -105,15 +105,11 @@ func getPFMLogData(reqHeader map[string]string, config map[string]interface{}, o
 		reqHeader,
 		AuthRequest{},
 	)
-	var result []map[string]interface{}
 	json.Unmarshal(body, &result)
-
-	return result
+	return
 }
 
-func processPFMLogData(rawData []map[string]interface{}, config map[string]interface{}) []LogData {
-	processedData := make([]LogData, 0)
-
+func processPFMLogData(rawData []map[string]interface{}, config map[string]interface{}) (processedData []LogData) {
 	var instanceName string
 	tsField := config["timeStampField"].(string)
 	instField := config["instanceNameField"].(string)
@@ -143,14 +139,14 @@ func processPFMLogData(rawData []map[string]interface{}, config map[string]inter
 	}
 
 	log.Output(2, "Log data processing is done with entries:"+fmt.Sprint(len(processedData)))
-	return processedData
+	return
 }
 
 func PowerFlexManagerDataStream(p *configparser.ConfigParser, offset int) []LogData {
 	config := getPFMConfig(p)
 	authHeaders := authenticationPF(config)
-	logData := getPFMLogData(authHeaders, config, offset)
+	rawLogData := getPFMLogData(authHeaders, config, offset)
 
-	log.Output(1, "The number of log entries being processed is: "+fmt.Sprint(len(logData)))
-	return processPFMLogData(logData, config)
+	log.Output(1, "The number of log entries being processed is: "+fmt.Sprint(len(rawLogData)))
+	return processPFMLogData(rawLogData, config)
 }

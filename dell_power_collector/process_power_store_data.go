@@ -46,7 +46,7 @@ func getPStoreConfig(p *configparser.ConfigParser) map[string]string {
 	return config
 }
 
-func getAuthToken(config map[string]string) string {
+func getAuthToken(config map[string]string) (token string) {
 	var headers map[string]string
 	form := url.Values{}
 	// We only need the header
@@ -61,14 +61,14 @@ func getAuthToken(config map[string]string) string {
 		},
 	)
 	log.Output(1, "[LOG] Getting token from endpoint")
-	token := header.Get(token_key)
+	token = header.Get(token_key)
 	if len(token) == 0 {
 		panic("Can't get the token key. Please check your connection.")
 	}
-	return token
+	return
 }
 
-func getPowerStoreInstanceList(config map[string]string) []string {
+func getPowerStoreInstanceList(config map[string]string) (objectList []string) {
 	form := url.Values{}
 	completeURL := FormCompleteURL(
 		config["connectionUrl"], API_PREFIX,
@@ -94,7 +94,6 @@ func getPowerStoreInstanceList(config map[string]string) []string {
 
 	var result []interface{}
 	json.Unmarshal(res, &result)
-	objectList := make([]string, 0)
 
 	log.Output(1, "[LOG] Getting "+config["instanceType"])
 	log.Output(1, string(res))
@@ -111,10 +110,10 @@ func getPowerStoreInstanceList(config map[string]string) []string {
 	// Fake data
 	// objectList = GetInstList()
 	log.Output(1, "total objects returned "+fmt.Sprint(len(objectList)))
-	return objectList
+	return
 }
 
-func getPowerStoreMetricData(config map[string]string, objectId string, metricList []string, endpoint string) []interface{} {
+func getPowerStoreMetricData(config map[string]string, objectId string, metricList []string, endpoint string) (result []interface{}) {
 	headers := make(map[string]string, 0)
 	headers[token_key] = config["token"]
 	payload := PowerStoreMetricDataRequestPayload{
@@ -143,9 +142,8 @@ func getPowerStoreMetricData(config map[string]string, objectId string, metricLi
 	log.Output(1, string(res))
 
 	// The key is the instance name and the
-	var result []interface{}
 	json.Unmarshal([]byte(res), &result)
-	return result
+	return
 }
 
 func PowerStoreDataStream(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {
