@@ -19,7 +19,6 @@ func getPScaleConfig(p *configparser.ConfigParser) map[string]string {
 	var instanceNameField = ToString(GetConfigValue(p, PowerScaleSectionName, "instanceNameField", true))
 	var timeStampField = ToString(GetConfigValue(p, PowerScaleSectionName, "timeStampField", true))
 	// optional fields
-	var metricWhitelist = ToString(GetConfigValue(p, PowerScaleSectionName, "metricWhitelist", false))
 
 	// ----------------- Process the configuration ------------------
 
@@ -27,7 +26,6 @@ func getPScaleConfig(p *configparser.ConfigParser) map[string]string {
 		"userName":          userName,
 		"password":          password,
 		"metricPath":        metricPath,
-		"metricWhitelist":   metricWhitelist,
 		"connectionUrl":     connectionUrl,
 		"instanceNameField": instanceNameField,
 		"timeStampField":    timeStampField,
