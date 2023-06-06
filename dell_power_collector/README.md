@@ -33,7 +33,6 @@ Run the following commands to build:
 * `domain`: domain used to authenticate to the api endpoint
 * `userAgent`: userAgent used to connect to the api endpoint
 * `connectionUrl`: connection url for the log api endpoint
-* `maxFetchCount`: The maximum number of entries to fetch for each run. Set to 0 if no limit.
 * `timezone`: Timezone of the timestamp data stored in/returned by the DB. Note that if timezone information is not
   included in the data returned by the DB, then this field has to be specified.
 * `target_timestamp_timezone`: Timezone of the timestamp data to be sent and stored in InsightFinder. Default value is

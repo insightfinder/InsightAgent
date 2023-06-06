@@ -29,7 +29,6 @@ func getPFMConfig(p *configparser.ConfigParser) map[string]interface{} {
 
 	// ----------------- Process the configuration ------------------
 	var instanceNameField = ToString(GetConfigValue(p, PowerFlexManagerSection, "instanceNameField", false))
-	var maxFetchCount = ToInt(GetConfigValue(p, PowerFlexManagerSection, "maxFetchCount", false))
 	config := map[string]interface{}{
 		"apiEndPoint":       apiEndPoint,
 		"domain":            domain,
@@ -39,7 +38,6 @@ func getPFMConfig(p *configparser.ConfigParser) map[string]interface{} {
 		"userAgent":         userAgent,
 		"timeStampField":    timeStampField,
 		"instanceNameField": instanceNameField,
-		"maxFetchCount":     maxFetchCount,
 	}
 	return config
 }
@@ -97,7 +95,7 @@ func getPFMLogData(reqHeader map[string]string, config map[string]interface{}, o
 	params := url.Values{}
 	//params.Add("sort", "-"+config["timeStampField"])
 	params.Add("offset", fmt.Sprint(offset))
-	params.Add("limit", "200")
+	params.Add("limit", "1000")
 	endpoint := FormCompleteURL(config["connectionUrl"].(string), config["apiEndPoint"].(string)) + "?" + params.Encode()
 	log.Output(2, "Getting log data from endpoint: "+endpoint)
 	body, _ := sendRequest(

@@ -132,6 +132,7 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 func readIndexFile(indexFileName string) string {
 	cwd, _ := os.Getwd()
 	filePath := filepath.Join(cwd, indexFileName)
+	log.Output(2,"The index file is read from: " + filePath)
 
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -326,7 +327,7 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 
 		fetchNext := true
 		totalCount := 0
-		maxFetchCount := IFConfig["maxFetchCount"].(int)
+		maxFetchCount := 50000
 
 		for fetchNext {
 			data := getInputLogSectionData(p, IFConfig, offset)
