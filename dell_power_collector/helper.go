@@ -386,6 +386,9 @@ func FormCompleteURL(link string, endpoint string) string {
 }
 
 func ToString(inputVar interface{}) string {
+	if inputVar == nil {
+		return ""
+	}
 	mtype := reflect.TypeOf(inputVar)
 	if fmt.Sprint(mtype) == "string" {
 		return inputVar.(string)
