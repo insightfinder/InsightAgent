@@ -91,7 +91,7 @@ func authenticationPF(config map[string]string) map[string]string {
 	return resHeader
 }
 
-func getPFMLogData(reqHeader map[string]string, config map[string]string) []map[string]string {
+func getPFMLogData(reqHeader map[string]string, config map[string]string) []map[string]interface{} {
 	params := url.Values{}
 	params.Add("sort", "-"+config["timeStampField"])
 	params.Add("limit", "200")
@@ -104,13 +104,13 @@ func getPFMLogData(reqHeader map[string]string, config map[string]string) []map[
 		reqHeader,
 		AuthRequest{},
 	)
-	var result []map[string]string
+	var result []map[string]interface{}
 	json.Unmarshal(body, &result)
 
 	return result
 }
 
-func processPFMLogData(rawData []map[string]string, config map[string]string) []LogData {
+func processPFMLogData(rawData []map[string]interface{}, config map[string]string) []LogData {
 	processedData := make([]LogData, 0)
 
 	var instanceName string
@@ -124,13 +124,14 @@ func processPFMLogData(rawData []map[string]string, config map[string]string) []
 
 	for _, logObj := range rawData {
 
-		ts, err := time.Parse(time.RFC3339, logObj[tsField])
+		ts, err := time.Parse(time.RFC3339, logObj[tsField].(string))
 		if err != nil {
-			panic(err.Error())
+			log.Output(2, "Error parsing timestamp: "+fmt.Sprint(logObj[tsField]))
+			continue
 		}
 
 		if len(instField) != 0 {
-			instanceName = logObj[instField]
+			instanceName = logObj[instField].(string)
 		}
 
 		processedData = append(processedData, LogData{
