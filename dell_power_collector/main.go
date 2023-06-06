@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -24,6 +25,8 @@ const PowerFlexSectionName = "powerFlex"
 const PowerScaleSectionName = "powerScale"
 const PowerStoreSectionName = "powerStore"
 const PowerFlexManagerSection = "powerFlexManager"
+
+const RunningIndex = "running_index-%s.txt"
 
 func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	// Required parameters
@@ -124,6 +127,29 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 		"isReplay":                  isReplay,
 	}
 	return configIF
+}
+
+func readIndexFile(indexFileName string) string {
+	cwd, _ := os.Getwd()
+	filePath := filepath.Join(cwd, indexFileName)
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		log.Output(2, "Error reading index file: "+filePath+err.Error())
+		return ""
+	}
+	return strings.TrimSpace(string(content))
+}
+
+func writeIndexFile(indexFileName string, sprint string) {
+	cwd, _ := os.Getwd()
+	filePath := filepath.Join(cwd, indexFileName)
+
+	err := os.WriteFile(filePath, []byte(sprint), 0644)
+	if err != nil {
+		log.Output(2, "Error writing index file: "+filePath+err.Error())
+		panic(err)
+	}
 }
 
 func getConfigFiles(configRelativePath string) []string {
@@ -252,14 +278,14 @@ func getMetricSectionData(p *configparser.ConfigParser, IFconfig map[string]inte
 	return data
 }
 
-func getInputLogSectionData(p *configparser.ConfigParser, IFConfig map[string]interface{}) []LogData {
+func getInputLogSectionData(p *configparser.ConfigParser, IFConfig map[string]interface{}, offset int) []LogData {
 	allSections := p.Sections()
 
 	var data []LogData
 	for i := 0; i < len(allSections); i++ {
 		switch allSections[i] {
 		case PowerFlexManagerSection:
-			data = PowerFlexManagerDataStream(p)
+			data = PowerFlexManagerDataStream(p, offset)
 		case IF_SECTION_NAME:
 			continue
 		default:
@@ -281,9 +307,40 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 	var IFConfig = getIFConfigsSection(p)
 	checkProject(IFConfig)
 
+	configName := path.Base(configPath)
+	configName = configName[:len(configName)-len(path.Ext(configName))] // remove the extension name
+	indexName := fmt.Sprintf(RunningIndex, configName)
+
+	indexContent := readIndexFile(indexName)
+
 	if IFConfig["projectType"] == "LOG" {
-		data := getInputLogSectionData(p, IFConfig)
-		processLogData(data, IFConfig)
+		//
+		offset := 0
+		if indexContent != "" {
+			offset, err = strconv.Atoi(indexContent)
+			if err != nil {
+				panic(err)
+			}
+		}
+		log.Output(2, fmt.Sprintf("[LOG] The offset of the log is: %d", offset))
+
+		fetchNext := true
+		totalCount := 0
+		maxFetchCount := IFConfig["maxFetchCount"].(int)
+
+		for fetchNext {
+			data := getInputLogSectionData(p, IFConfig, offset)
+			count := len(data)
+
+			processLogData(data, IFConfig)
+
+			writeIndexFile(indexName, fmt.Sprint(offset))
+			offset += count
+			totalCount += count
+			if count == 0 || (maxFetchCount > 0 && totalCount >= maxFetchCount) {
+				fetchNext = false
+			}
+		}
 	} else {
 		data := getMetricSectionData(p, IFConfig)
 		processMetricData(data, IFConfig)

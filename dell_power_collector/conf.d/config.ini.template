@@ -78,6 +78,7 @@ agent_https_proxy =
 apiEndpoint = /Api/V1/Log
 timeStampField = timeStamp
 instanceNameField = agentId
+
 # ----------------------------------- the connection setting ---------------------------------------------
 userName = 
 password = 
@@ -86,6 +87,8 @@ domain = VXFMLOCAL
 # The main host URL.
 userAgent = go version go1.18.1 linux/amd64
 connectionUrl = localhost
+
+maxFetchCount = 50000
 
 # timeStamp will be using the current time
 timezone = UTC
