@@ -399,11 +399,7 @@ func ToString(inputVar interface{}) string {
 	if inputVar == nil {
 		return ""
 	}
-	mtype := reflect.TypeOf(inputVar)
-	if fmt.Sprint(mtype) == "string" {
-		return inputVar.(string)
-	}
-	panic("[ERROR] Wrong input type. Can not convert current input to string.")
+	return fmt.Sprint(inputVar)
 }
 
 func ToBool(inputVar interface{}) (boolValue bool) {
