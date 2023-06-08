@@ -26,6 +26,8 @@ const LOG_DATA_API = "/customprojectrawdata"
 const LOG_DATA_AGENT_TYPE = "Stream"
 const CHUNK_SIZE = 2 * 1024 * 1024
 const MAX_PACKET_SIZE = 10000000
+const HTTP_RETRY_TIMES = 10
+const HTTP_RETRY_INTERVAL = 6
 
 func formMetricDataPoint(metric string, value interface{}) (MetricDataPoint, error) {
 	intVar, err := strconv.ParseFloat(ToString(value), 64)
@@ -322,8 +324,18 @@ func sendRequest(operation string, endpoint string, form io.Reader, headers map[
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{Transport: tr}
-	res, err := client.Do(newRequest)
+	var res *http.Response
+	for i := 0; i < HTTP_RETRY_TIMES; i++ {
+		res, err = client.Do(newRequest)
+		if err == nil {
+			break // Request successful, exit the loop
+		}
+		fmt.Printf("Error occurred: %v\n", err)
+		time.Sleep(HTTP_RETRY_INTERVAL * time.Second)
+		fmt.Printf("Sleep for " + fmt.Sprint(HTTP_RETRY_INTERVAL) + " seconds and retry .....")
+	}
 	if err != nil {
+		log.Output(1, "[ERROR] HTTP connection failure after 10 times of retry.")
 		panic(err)
 	}
 
