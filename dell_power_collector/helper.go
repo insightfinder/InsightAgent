@@ -394,17 +394,19 @@ func ToString(inputVar interface{}) string {
 	panic("[ERROR] Wrong input type. Can not convert current input to string.")
 }
 
-func ToBool(inputVar interface{}) bool {
+func ToBool(inputVar interface{}) (boolValue bool) {
 	if inputVar == nil {
 		return false
 	}
-	stringVal, ok := inputVar.(string)
-	if !ok {
-		panic("Failed convert the bool input to string version.")
-	}
-	boolValue, err := strconv.ParseBool(stringVal)
-	if err != nil {
-		panic("[ERROR] Wrong input type. Can not convert current input to boolean.")
+	switch castedVal := inputVar.(type) {
+	case string:
+		var err error
+		boolValue, err = strconv.ParseBool(castedVal)
+		if err != nil {
+			panic("[ERROR] Wrong input type. Can not convert current input to boolean.")
+		}
+	case bool:
+		boolValue = castedVal
 	}
 	return boolValue
 }
