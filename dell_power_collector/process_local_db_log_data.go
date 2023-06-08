@@ -48,7 +48,7 @@ func readDBData(config map[string]string, filePath string, IFConfig map[string]i
 	defer sqliteDatabase.Close()
 	// only select a small amount of data.
 	// use paging
-	rows, err := sqliteDatabase.Query("SELECT * FROM" + tableName + ";")
+	rows, err := sqliteDatabase.Query("SELECT * FROM " + tableName + ";")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -109,8 +109,8 @@ func readDBData(config map[string]string, filePath string, IFConfig map[string]i
 			Tag:       instanceName,
 			Data:      rowData,
 		})
-		sendLogData(res, IFConfig)
 	}
+	sendLogData(res, IFConfig)
 	println("finsih" + filePath)
 }
 
@@ -138,7 +138,7 @@ func LocalLogDataStream(p *configparser.ConfigParser, IFConfig map[string]interf
 		wg.Add(1)
 		go readDBData(config, filePath, IFConfig, &wg)
 	}
-	go func() {
-		wg.Wait()
-	}()
+
+	wg.Wait()
+
 }
