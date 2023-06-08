@@ -48,6 +48,7 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	var httpProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_http_proxy", false))
 	var httpsProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_https_proxy", false))
 	var isReplay = ToString(GetConfigValue(p, IF_SECTION_NAME, "isReplay", false))
+	var indexing = ToBool(GetConfigValue(p, IF_SECTION_NAME, "indexing", false))
 	var samplingIntervalInSeconds string
 
 	if len(projectNamePrefix) > 0 && !strings.HasSuffix(projectNamePrefix, "-") {
@@ -126,6 +127,7 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 		"ifURL":                     ifURL,
 		"ifProxies":                 ifProxies,
 		"isReplay":                  isReplay,
+		"indexing":                  indexing,
 	}
 	return configIF
 }
@@ -288,7 +290,7 @@ func getInputLogSectionData(p *configparser.ConfigParser, IFConfig map[string]in
 		case PowerFlexManagerSection:
 			data = PowerFlexManagerDataStream(p, offset)
 		case LocalFileSection:
-			data = LocalLogDataStream(p)
+			LocalLogDataStream(p, IFConfig)
 		case IF_SECTION_NAME:
 			continue
 		default:
@@ -329,6 +331,7 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 		fetchNext := true
 		totalCount := 0
 		maxFetchCount := 50000
+		indexing := ToBool(IFConfig["indexing"])
 
 		for fetchNext {
 			data := getInputLogSectionData(p, IFConfig, offset)
@@ -339,7 +342,7 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 			writeIndexFile(indexName, fmt.Sprint(offset))
 			offset += count
 			totalCount += count
-			if count == 0 || (maxFetchCount > 0 && totalCount >= maxFetchCount) {
+			if !indexing || count == 0 || (maxFetchCount > 0 && totalCount >= maxFetchCount) {
 				fetchNext = false
 			}
 		}

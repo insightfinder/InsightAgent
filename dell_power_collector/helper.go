@@ -398,11 +398,15 @@ func ToBool(inputVar interface{}) bool {
 	if inputVar == nil {
 		return false
 	}
-	mtype := reflect.TypeOf(inputVar)
-	if fmt.Sprint(mtype) == "bool" {
-		return inputVar.(bool)
+	stringVal, ok := inputVar.(string)
+	if !ok {
+		panic("Failed convert the bool input to string version.")
 	}
-	panic("[ERROR] Wrong input type. Can not convert current input to boolean.")
+	boolValue, err := strconv.ParseBool(stringVal)
+	if err != nil {
+		panic("[ERROR] Wrong input type. Can not convert current input to boolean.")
+	}
+	return boolValue
 }
 
 func ToInt(inputVar interface{}) int {

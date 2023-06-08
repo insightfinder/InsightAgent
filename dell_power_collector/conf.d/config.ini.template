@@ -78,3 +78,5 @@ if_url = https://app.insightfinder.com
 if_http_proxy =
 if_https_proxy =
 metadata_max_instances = 
+#whether we will memorize the index of record for log. It's only effective for Log/Incident project.
+indexing= false
