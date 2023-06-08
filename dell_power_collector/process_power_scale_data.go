@@ -75,7 +75,7 @@ func PowerScaleDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 		for _, metric := range metricList {
 			objArray = result[metric].([]interface{})
 		}
-		processArrayDataFromEndPoint(objArray, psConfig["timeStampField"], "Epoch", psConfig["instanceNameField"], &data)
+		processArrayDataFromEndPoint(objArray, psConfig["timeStampField"], psConfig["instanceNameField"], &data)
 	}
 	return data
 }

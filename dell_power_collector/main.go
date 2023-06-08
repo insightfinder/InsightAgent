@@ -25,6 +25,7 @@ const PowerFlexSectionName = "powerFlex"
 const PowerScaleSectionName = "powerScale"
 const PowerStoreSectionName = "powerStore"
 const PowerFlexManagerSection = "powerFlexManager"
+const LocalFileSection = "localFile"
 
 const RunningIndex = "running_index-%s.txt"
 
@@ -69,7 +70,7 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 
 	if strings.HasSuffix(samplingInterval, "s") {
 		samplingIntervalInSeconds = samplingInterval[:len(samplingInterval)-1]
-		samplingIntervalInt, err := strconv.Atoi(samplingInterval)
+		samplingIntervalInt, err := strconv.ParseFloat(samplingIntervalInSeconds, 32)
 		if err != nil {
 			panic(err)
 		}
@@ -273,27 +274,28 @@ func getMetricSectionData(p *configparser.ConfigParser, IFconfig map[string]inte
 		case IF_SECTION_NAME:
 			continue
 		default:
-			panic("No supported agent type found in the config file.")
+			panic("No supported Metric agent type found in the config file.")
 		}
 	}
 	return data
 }
 
-func getInputLogSectionData(p *configparser.ConfigParser, IFConfig map[string]interface{}, offset int) []LogData {
+func getInputLogSectionData(p *configparser.ConfigParser, IFConfig map[string]interface{}, offset int) (data []LogData) {
 	allSections := p.Sections()
 
-	var data []LogData
 	for i := 0; i < len(allSections); i++ {
 		switch allSections[i] {
 		case PowerFlexManagerSection:
 			data = PowerFlexManagerDataStream(p, offset)
+		case LocalFileSection:
+			data = LocalLogDataStream(p)
 		case IF_SECTION_NAME:
 			continue
 		default:
-			panic("No supported agent type found in the config file.")
+			panic("No supported Log agent type found in the config file.")
 		}
 	}
-	return data
+	return
 }
 
 func workerProcess(configPath string, wg *sync.WaitGroup) {
@@ -315,7 +317,6 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 	indexContent := readIndexFile(indexName)
 
 	if IFConfig["projectType"] == "LOG" {
-		//
 		offset := 0
 		if indexContent != "" {
 			offset, err = strconv.Atoi(indexContent)

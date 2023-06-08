@@ -3,6 +3,8 @@ github.com/bigkevmcd/go-configparser v0.0.0-20230107085059-7f3eb70e40ed/go.mod h
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/forgoer/openssl v1.6.0 h1:IueL+UfH0hKo99xFPojHLlO3QzRBQqFY+Cht0WwtOC0=
 github.com/forgoer/openssl v1.6.0/go.mod h1:9DZ4yOsQmveP0aXC/BpQ++Y5TKaz5yR9+emcxmIZNZs=
+github.com/mattn/go-sqlite3 v1.14.17 h1:mCRHCLDUBXgpKAqIKsaAaAsrAlbkeomtRFKXh2L6YIM=
+github.com/mattn/go-sqlite3 v1.14.17/go.mod h1:2eHXhiwb8IkHr+BDWZGa96P6+rkvnG63S2DGjv9HUNg=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=

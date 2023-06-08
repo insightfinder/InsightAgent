@@ -39,7 +39,7 @@ func formMetricDataPoint(metric string, value interface{}) (MetricDataPoint, err
 	return metricDP, nil
 }
 
-func processArrayDataFromEndPoint(objArrary []interface{}, timeStampField string, tsFormat string, instanceNameField string, data *MetricDataReceivePayload) {
+func processArrayDataFromEndPoint(objArrary []interface{}, timeStampField string, instanceNameField string, data *MetricDataReceivePayload) {
 	// // fake data
 	// bytesData := GetFakeMetricData()
 	// var result map[string]interface{}
@@ -55,21 +55,19 @@ func processArrayDataFromEndPoint(objArrary []interface{}, timeStampField string
 		}
 		// Get timeStamp in epoch milli-second format
 		var tsInInt64 int64
-		switch tsFormat {
-		case "Epoch":
-			switch object[timeStampField].(type) {
-			case int64:
-				tsInInt64 = object[timeStampField].(int64)
-			case float64:
-				tsInInt64 = int64(object[timeStampField].(float64))
-			}
-		default:
-			parsedTime, err := time.Parse(tsFormat, object[timeStampField].(string))
+		switch tsAfterCast := object[timeStampField].(type) {
+		case int64:
+			tsInInt64 = tsAfterCast
+		case float64:
+			tsInInt64 = int64(tsAfterCast)
+		case string:
+			parsedTime, err := time.Parse(tsAfterCast, tsAfterCast)
 			if err != nil {
 				panic(err.Error())
 			}
 			tsInInt64 = parsedTime.Unix()
 		}
+
 		if tsInInt64 == 0 {
 			panic("Can't get timeStamp from timestamp field" + object[timeStampField].(string))
 		}
@@ -416,6 +414,15 @@ func ToInt(inputVar interface{}) int {
 		return inputVar.(int)
 	}
 	panic("[ERROR] Wrong input type. Can not convert current input to int.")
+}
+
+func contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
 }
 
 // ------------------ Project Type transformation ------------------------

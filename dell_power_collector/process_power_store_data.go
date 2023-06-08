@@ -175,7 +175,7 @@ func PowerStoreDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 	for endpoint, metricList := range mapping {
 		for _, object := range objectList {
 			objectArray := getPowerStoreMetricData(pStoreConfig, object, metricList, endpoint)
-			processArrayDataFromEndPoint(objectArray, pStoreConfig["timeStampField"], time.RFC3339, pStoreConfig["instanceNameField"], &data)
+			processArrayDataFromEndPoint(objectArray, pStoreConfig["timeStampField"], pStoreConfig["instanceNameField"], &data)
 		}
 	}
 	return data
