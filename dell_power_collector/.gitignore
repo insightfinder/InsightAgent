@@ -170,4 +170,7 @@ Temporary Items
 
 ## app
 conf.d/*.ini
+## Store the config file we don't want to be affective during the current run
+conf.d/not_affect/
+## The compiled golnag code.
 dell_power_collector

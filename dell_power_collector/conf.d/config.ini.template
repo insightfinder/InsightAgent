@@ -22,6 +22,8 @@ https://developer.dell.com/apis/4088/versions/9.2.0.0/docs/1introduction.md
 metricPath = sampleMetricListFile.json
 instanceNameField = node
 timeStampField = time
+# PowerScale metric return payload has one extra layer to access the metric array. Please fill the key name here.
+firstLayerkey = 
 
 # ----------------------------------- the connection setting ---------------------------------------------
 userName = 
@@ -37,6 +39,7 @@ metricPath = sampleMetricListFile.json
 timeStampField = timestamp
 instanceType = cluster
 instanceNameField = cluster_id
+metricType = performance_metrics_by_cluster
 # The metric data interval output from server. Choose from: Best_Available,Five_Sec,Twenty_Sec,Five_Mins,One_Hour,One_Day
 metric_interval_from_server = Five_Mins
 # ----------------------------------- the connection setting ---------------------------------------------
