@@ -2,7 +2,7 @@
 
 This agent collects metric and log data from Dell Power products and sends it to Insightfinder.
 
-Current supported product: powerflex, powerflex manager, powerstore, powerscale.
+Current supported product: powerflex, powerflex manager, powerstore, powerscale. For metric key, no nested structure is supported. For one specific key, if it has a nested structure, all its children will be collected. The metric collection will only be effective for number type value.
 
 ## Build the Agent
 
@@ -36,12 +36,14 @@ Required field are in **bold**.
 * **`password`**: password used to authenticate to the api endpoint
 * **`metricPath`**: The json file containing the API endpoint and what metrics to collect
 * **`connectionUrl`**: The host url to get the metric data.
+* **`metricType`**: The POST request body key **entity**. The value should correspond to the instance type to obtain the desired metrics.
 
-The API should not be changed and the metric list inside can ONLY contain 1 item. **This metric name MUST pair with the instnace type in the config file** to obtain the desired metric data. Please refer to https://developer.dell.com/apis/3898/versions/3.2.0/reference/openapi.json/paths/~1metrics~1generate/post for detailed documentation.
+The API should not be changed and the metric list inside need to specify the metrics want to be collected. If left empty, it will collect all metrics. **This metric name MUST pair with the instnace type in the config file** to obtain the desired metric data. Please refer to https://developer.dell.com/apis/3898/versions/3.2.0/reference/openapi.json/paths/~1metrics~1generate/post for detailed documentation.
 ```bash
 {
     "/metric/generate":[
-        "performance_metrics_by_cluster"
+        "metrickey1",
+        "metrickey2"
     ]
 }
 ```
@@ -53,16 +55,15 @@ The API should not be changed and the metric list inside can ONLY contain 1 item
 * **`password`**: password used to authenticate to the api endpoint
 * **`metricPath`**: The json file containing the API endpoint and what metrics to collect
 * **`connectionUrl`**: The host url to get the metric data.
+* **`firstLayerkey`**: PowerScale metric return payload key that has the metric arrary in it.
 
-Sample json file for powerScale. It can have multiple endpoints. The metric list should only contain 1 item and from this key (i.e. stystem, drive), it needs to obtain an array of metrics. Refer to https://developer.dell.com/apis/4088/versions/9.4.0.0/9.4.0.0.json/paths/~1platform~13~1statistics~1summary~1drive/get for detailed documentation
+Sample json file for powerScale. The metric list specify the metric needed. If left empty, it will obtain all the metrics. Refer to https://developer.dell.com/apis/4088/versions/9.4.0.0/9.4.0.0.json/paths/~1platform~13~1statistics~1summary~1drive/get for detailed documentation
 ```bash
 {
  "/platform/3/statistics/summary/system":[
-      "system"
-    ],
-  "/platform/3/statistics/summary/drive":[
-      "drive"
-  ]
+      "metrickey1",
+      "metrickey2"
+    ]
 }
 ```
 ### powerFlex section
@@ -74,7 +75,7 @@ Sample json file for powerScale. It can have multiple endpoints. The metric list
 * **`connectionUrl`**: The host url to get the metric data.
 * **`idEndPoint`**: The endpoint to get all instances ids.
 
-Sample json file for powerflex. All the metrics name must exist. The API shouldn't be changed. Update the metrics needed based on different instances input. Refer to https://developer.dell.com/apis/4008/versions/4.0/PowerFlex_REST_API.json/paths/~1api~1instances~1ProtectionDomain::%7Bid%7D~1relationships~1Statistics/get for detailed documentation
+Sample json file for powerflex. All the metrics name must exist.If left empty, it will collect all metrics. **The API shouldn't be changed**. Update the metrics needed based on different instances input. Refer to https://developer.dell.com/apis/4008/versions/4.0/PowerFlex_REST_API.json/paths/~1api~1instances~1ProtectionDomain::%7Bid%7D~1relationships~1Statistics/get for detailed documentation
 ```bash
 {
   "/api/instances/{$instanceType}::{$id}/relationships/Statistics":[
