@@ -45,7 +45,7 @@ func getPFConfig(p *configparser.ConfigParser) map[string]string {
 	return config
 }
 
-func getInstanceList(config map[string]string) []string {
+func getInstanceList(config map[string]string) (instanceList []string) {
 	form := url.Values{}
 	getInstanceEndpoint := FormCompleteURL(
 		config["connectionUrl"], config["idEndPoint"],
@@ -66,7 +66,6 @@ func getInstanceList(config map[string]string) []string {
 
 	var result []interface{}
 	json.Unmarshal(res, &result)
-	instanceList := make([]string, 0)
 
 	log.Output(1, "[LOG] Getting instances")
 	log.Output(1, string(res))
@@ -81,9 +80,9 @@ func getInstanceList(config map[string]string) []string {
 		instanceList = append(instanceList, ToString(dict["id"]))
 	}
 	// Fake data
-	// instanceList := GetInstList()
+	// instanceList = GetInstList()
 	log.Output(1, "total instance returned "+fmt.Sprint(len(instanceList)))
-	return instanceList
+	return
 }
 
 func processDataFromInstances(instance string, config map[string]string, endpoint string, metrics []string, data *MetricDataReceivePayload) {

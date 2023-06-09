@@ -1,5 +1,3 @@
-# Build the golang package for linux using CGO_ENABLED=0 go build
-
 [powerFlex]
 # instance type in the Dell PowerFlex.  PowerFlex API doc: https://developer.dell.com/apis/4008/versions/3.5.1/PowerFlex_3.5.1_API.json
 instanceType = ProtectionDomain 
@@ -17,15 +15,6 @@ connectionUrl =
 # These endpoint doesn't need to be changed if using the API from PowerFlex Doc
 idEndPoint = /api/types/{$instanceType}/instances
 
-# timeStamp will be using the current time
-timezone = UTC
-# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
-target_timestamp_timezone = UTC
-
-## proxy
-agent_http_proxy =
-agent_https_proxy =
-
 [powerScale]
 https://developer.dell.com/apis/4088/versions/9.2.0.0/docs/1introduction.md
 # Specify the metrics file(list all the needed metrics there) in this section. It should be located inside conf.d directory.
@@ -38,16 +27,7 @@ timeStampField = time
 userName = 
 password = 
 # The main host URL.
-connectionUrl = 
-
-# timeStamp will be using the current time
-timezone = UTC
-# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
-target_timestamp_timezone = UTC
-
-## proxy
-agent_http_proxy =
-agent_https_proxy =
+connectionUrl =
 
 [powerStore]
 # Specify the API endpoints and the metrics needed from each endpoint in one json file. It should be located inside conf.d directory.
@@ -65,15 +45,6 @@ password =
 # The main host URL.
 connectionUrl = 
 
-# timeStamp will be using the current time
-timezone = UTC
-# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
-target_timestamp_timezone = UTC
-
-## proxy
-agent_http_proxy =
-agent_https_proxy =
-
 [powerFlexManager]
 apiEndpoint = /Api/V1/Log
 timeStampField = timeStamp
@@ -87,17 +58,6 @@ domain = VXFMLOCAL
 # The main host URL.
 userAgent = go version go1.18.1 linux/amd64
 connectionUrl = localhost
-
-maxFetchCount = 50000
-
-# timeStamp will be using the current time
-timezone = UTC
-# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
-target_timestamp_timezone = UTC
-
-## proxy
-agent_http_proxy =
-agent_https_proxy =
 
 [insightfinder]
 user_name =
