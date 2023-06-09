@@ -19,7 +19,6 @@ func getPScaleConfig(p *configparser.ConfigParser) map[string]string {
 	var instanceNameField = ToString(GetConfigValue(p, PowerScaleSectionName, "instanceNameField", true))
 	var timeStampField = ToString(GetConfigValue(p, PowerScaleSectionName, "timeStampField", true))
 	// optional fields
-	var metricWhitelist = ToString(GetConfigValue(p, PowerScaleSectionName, "metricWhitelist", false))
 
 	// ----------------- Process the configuration ------------------
 
@@ -27,7 +26,6 @@ func getPScaleConfig(p *configparser.ConfigParser) map[string]string {
 		"userName":          userName,
 		"password":          password,
 		"metricPath":        metricPath,
-		"metricWhitelist":   metricWhitelist,
 		"connectionUrl":     connectionUrl,
 		"instanceNameField": instanceNameField,
 		"timeStampField":    timeStampField,
@@ -35,7 +33,7 @@ func getPScaleConfig(p *configparser.ConfigParser) map[string]string {
 	return config
 }
 
-func getDataFromEndpoint(config map[string]string, endpoint string) map[string]interface{} {
+func getDataFromEndpoint(config map[string]string, endpoint string) (result map[string]interface{}) {
 	var headers map[string]string
 	form := url.Values{}
 	res, _ := sendRequest(
@@ -52,9 +50,8 @@ func getDataFromEndpoint(config map[string]string, endpoint string) map[string]i
 	log.Output(1, string(res))
 
 	// The key is the instance name and the
-	var result map[string]interface{}
 	json.Unmarshal([]byte(res), &result)
-	return result
+	return
 }
 
 func PowerScaleDataStream(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {
