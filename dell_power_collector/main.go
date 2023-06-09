@@ -336,8 +336,9 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 		for fetchNext {
 			data := getInputLogSectionData(p, IFConfig, offset)
 			count := len(data)
-
-			sendLogData(data, IFConfig)
+			if count != 0 {
+				sendLogData(data, IFConfig)
+			}
 
 			writeIndexFile(indexName, fmt.Sprint(offset))
 			offset += count

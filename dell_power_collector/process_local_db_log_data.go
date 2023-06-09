@@ -110,8 +110,9 @@ func readDBData(config map[string]string, filePath string, IFConfig map[string]i
 			Data:      rowData,
 		})
 	}
+	log.Output(1, "The count of the record is: "+fmt.Sprint(len(res)))
 	sendLogData(res, IFConfig)
-	println("finsih" + filePath)
+	log.Output(1, "[LOG] Finsihed data loading from: "+filePath)
 }
 
 func LocalLogDataStream(p *configparser.ConfigParser, IFConfig map[string]interface{}) {
@@ -133,12 +134,10 @@ func LocalLogDataStream(p *configparser.ConfigParser, IFConfig map[string]interf
 		}
 		return nil
 	})
-	var wg sync.WaitGroup
+	waitGroup := new(sync.WaitGroup)
 	for _, filePath := range fileList {
-		wg.Add(1)
-		go readDBData(config, filePath, IFConfig, &wg)
+		waitGroup.Add(1)
+		go readDBData(config, filePath, IFConfig, waitGroup)
 	}
-
-	wg.Wait()
-
+	waitGroup.Wait()
 }
