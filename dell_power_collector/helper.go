@@ -26,8 +26,8 @@ const LOG_DATA_API = "/customprojectrawdata"
 const LOG_DATA_AGENT_TYPE = "Stream"
 const CHUNK_SIZE = 2 * 1024 * 1024
 const MAX_PACKET_SIZE = 10000000
-const HTTP_RETRY_TIMES = 10
-const HTTP_RETRY_INTERVAL = 6
+const HTTP_RETRY_TIMES = 15
+const HTTP_RETRY_INTERVAL = 60
 
 func formMetricDataPoint(metric string, value interface{}) (MetricDataPoint, error) {
 	intVar, err := strconv.ParseFloat(ToString(value), 64)
