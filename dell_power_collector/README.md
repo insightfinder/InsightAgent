@@ -57,7 +57,7 @@ The API should not be changed and the metric list inside need to specify the met
 * **`connectionUrl`**: The host url to get the metric data.
 * **`firstLayerkey`**: PowerScale metric return payload key that has the metric arrary in it.
 
-Sample json file for powerScale. The metric list specify the metric needed. If left empty, it will obtain all the metrics. Refer to https://developer.dell.com/apis/4088/versions/9.4.0.0/9.4.0.0.json/paths/~1platform~13~1statistics~1summary~1drive/get for detailed documentation
+Sample json file for powerScale. The metric list specifies the metric names needed. If being left empty, it will obtain all metrics as long as it's in number type. Refer to https://developer.dell.com/apis/4088/versions/9.4.0.0/9.4.0.0.json/paths/~1platform~13~1statistics~1summary~1drive/get for detailed documentation
 ```bash
 {
  "/platform/3/statistics/summary/system":[
@@ -75,7 +75,7 @@ Sample json file for powerScale. The metric list specify the metric needed. If l
 * **`connectionUrl`**: The host url to get the metric data.
 * **`idEndPoint`**: The endpoint to get all instances ids.
 
-Sample json file for powerflex. All the metrics name must exist.If left empty, it will collect all metrics. **The API shouldn't be changed**. Update the metrics needed based on different instances input. Refer to https://developer.dell.com/apis/4008/versions/4.0/PowerFlex_REST_API.json/paths/~1api~1instances~1ProtectionDomain::%7Bid%7D~1relationships~1Statistics/get for detailed documentation
+Sample json file for powerflex. All the metrics name must exist.If being left empty, it will collect all metrics. **The API shouldn't be changed**. Update the metrics needed based on different instances input. Refer to https://developer.dell.com/apis/4008/versions/4.0/PowerFlex_REST_API.json/paths/~1api~1instances~1ProtectionDomain::%7Bid%7D~1relationships~1Statistics/get for detailed documentation
 ```bash
 {
   "/api/instances/{$instanceType}::{$id}/relationships/Statistics":[
