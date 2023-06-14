@@ -1,0 +1,11 @@
+{
+    "/platform/3/statistics/summary/system":[
+        "cpu",
+        "disk_in",
+        "disk_out",
+        "ftp",
+        "http",
+        "net_in",
+        "net_out"
+    ]
+}
