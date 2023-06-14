@@ -172,5 +172,8 @@ Temporary Items
 conf.d/*.ini
 ## Store the config file we don't want to be affective during the current run
 conf.d/not_affect/
-## The compiled golnag code.
+## The compiled dell agent collector code.
 dell_power_collector
+
+## The compiled snmp discovery code
+snmp_discovery/snmp_discovery
