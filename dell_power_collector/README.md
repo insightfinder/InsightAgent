@@ -6,14 +6,14 @@ Current supported products: powerflex, powerflex manager, powerstore, and powers
 
 ## Build the Agent
 
-The agent is written in Go. To build the agent, you need to install Go version 1.13 or later. The build from the following 2 commands should be run in a Linux environment. NOTE: We currently do not support running the application in Windows environments. 
+The agent is written in Go. To build the agent, you need to install Go version 1.13 or later. The application that is built from the following 2 commands should be run in a Linux environment. NOTE: While the application can be built in Windows, we currently do not support running the application in Windows environments. 
 
 Run the following commands to build:
 ```bash
 # build on Linux (Recommend)
 ./build_for_linux_in_linux_env.sh
 
-# build on Windows (Not currently supported)
+# build on Windows
 ./build_for_linux_in_win_env.cmd
 ```
 
