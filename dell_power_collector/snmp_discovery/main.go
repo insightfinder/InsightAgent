@@ -120,7 +120,7 @@ func snmpDiscovery(ipRange string, port int, community string, oid string) {
 			}
 			err := gs.Connect()
 			if err != nil {
-				// fmt.Printf("[ERROR] SNMP connect failed at %s:%v, error: %v\n", host, port, err)
+				fmt.Printf("[ERROR] SNMP connect failed at %s:%v, error: %v\n", host, port, err)
 				return
 			}
 
@@ -130,7 +130,7 @@ func snmpDiscovery(ipRange string, port int, community string, oid string) {
 			log.Output(1, "Processing the host: "+host)
 			err = gs.BulkWalk(oid, handleWalkResult(host, resultChan))
 			if err != nil {
-				// fmt.Printf("[ERROR] SNMP walk failed at %s:%v, error: %v\n", host, port, err)
+				fmt.Printf("[ERROR] SNMP walk failed at %s:%v, error: %v\n", host, port, err)
 				return
 			}
 		}()
