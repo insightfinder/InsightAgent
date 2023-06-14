@@ -1,3 +1,4 @@
+# ----------------------------------- powerflex ---------------------------------------------
 [powerFlex]
 # instance type in the Dell PowerFlex.  PowerFlex API doc: https://developer.dell.com/apis/4008/versions/3.5.1/PowerFlex_3.5.1_API.json
 instanceType = ProtectionDomain 
@@ -6,7 +7,6 @@ instanceType = ProtectionDomain
 # The metrics info in the txt file should be one metric per line. NESTED STRCUTURE IS NOT SUPPORTED.
 metricPath = sampleMetricListFile.json
 
-# ----------------------------------- the connection setting ---------------------------------------------
 userName = 
 password = 
 # The main host URL.
@@ -15,6 +15,7 @@ connectionUrl =
 # These endpoint doesn't need to be changed if using the API from PowerFlex Doc
 idEndPoint = /api/types/{$instanceType}/instances
 
+# ----------------------------------- powerScale ---------------------------------------------
 [powerScale]
 https://developer.dell.com/apis/4088/versions/9.2.0.0/docs/1introduction.md
 # Specify the metrics file(list all the needed metrics there) in this section. It should be located inside conf.d directory.
@@ -25,12 +26,12 @@ timeStampField = time
 # PowerScale metric return payload has one extra layer to access the metric array. Please fill the key name here.
 firstLayerkey = 
 
-# ----------------------------------- the connection setting ---------------------------------------------
 userName = 
 password = 
 # The main host URL.
 connectionUrl =
 
+# ----------------------------------- powerStore ---------------------------------------------
 [powerStore]
 # Specify the API endpoints and the metrics needed from each endpoint in one json file. It should be located inside conf.d directory.
 # Object with the metric name will be read and together with whatever inside that object.
@@ -42,18 +43,17 @@ instanceNameField = cluster_id
 metricType = performance_metrics_by_cluster
 # The metric data interval output from server. Choose from: Best_Available,Five_Sec,Twenty_Sec,Five_Mins,One_Hour,One_Day
 metric_interval_from_server = Five_Mins
-# ----------------------------------- the connection setting ---------------------------------------------
+
 userName = 
 password = 
 # The main host URL.
 connectionUrl = 
-
+# ----------------------------------- powerFlexManager ---------------------------------------------
 [powerFlexManager]
 apiEndpoint = /Api/V1/Log
 timeStampField = timeStamp
 instanceNameField = agentId
 
-# ----------------------------------- the connection setting ---------------------------------------------
 userName = 
 password = 
 # Do NOT change this domain
@@ -62,6 +62,7 @@ domain = VXFMLOCAL
 userAgent = go version go1.18.1 linux/amd64
 connectionUrl = localhost
 
+# ----------------------------------- insightfinder section ---------------------------------------------
 [insightfinder]
 user_name =
 license_key =
