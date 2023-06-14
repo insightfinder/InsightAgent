@@ -1,9 +1,7 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"github.com/Ullaakut/nmap/v3"
 	"github.com/gosnmp/gosnmp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -11,7 +9,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,67 +26,20 @@ func main() {
 	}
 }
 
-type SnmpPort struct {
-	host string
-	port nmap.Port
-}
-
-func nmapScan(ipRange string, port int) []SnmpPort {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	ranges := strings.Split(ipRange, ",")
-	// Set up Nmap scanner
-	scanner, err := nmap.NewScanner(
-		ctx,
-		nmap.WithTargets(ranges...),
-		nmap.WithPorts(strconv.Itoa(port)),
-	)
-	if err != nil {
-		log.Fatalf("Failed to create nmap scanner: %v", err)
-	}
-
-	// Executes asynchronously, allowing results to be streamed in real time.
-	done := make(chan error)
-	result, warnings, err := scanner.Async(done).Run()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Blocks main until the scan has completed.
-	if err := <-done; err != nil {
-		if len(*warnings) > 0 {
-			log.Printf("run finished with warnings: %s\n", *warnings)
-		}
-		log.Fatal(err)
-	}
-
-	var ports []SnmpPort
-
-	for _, host := range result.Hosts {
-		if len(host.Ports) == 0 || len(host.Addresses) == 0 {
-			continue
-		}
-
-		fmt.Printf("Host %q:\n", host.Addresses[0])
-
-		for _, port := range host.Ports {
-			if port.State.State != "open" {
-				fmt.Printf("\tPort %d/%s %s %s\n", port.ID, port.Protocol, port.State, port.Service.Name)
-			} else {
-				ports = append(ports, SnmpPort{host: host.Addresses[0].String(), port: port})
-			}
+func inc(ip net.IP) {
+	for j := len(ip) - 1; j >= 0; j-- {
+		ip[j]++
+		if ip[j] > 0 {
+			break
 		}
 	}
-
-	return ports
 }
 
 func handleWalkResult(host string) gosnmp.WalkFunc {
 	return func(pdu gosnmp.SnmpPDU) error {
 
-		// TODO:
-		fmt.Printf("%s = ", pdu.Name)
+		// TODO: fix the result
+		fmt.Printf("%s\t%s = ", host, pdu.Name)
 
 		switch pdu.Type {
 		case gosnmp.OctetString:
@@ -103,7 +53,23 @@ func handleWalkResult(host string) gosnmp.WalkFunc {
 }
 
 func snmpDiscovery(ipRange string, port int, community string, oid string) {
-	snmpPorts := nmapScan(ipRange, port)
+	// Use nmap to scan the network for hosts with the specified port open
+	//hosts := nmapScan(ipRange, port)
+	ranges := strings.Split(ipRange, " ")
+	hosts := make([]string, 0)
+
+	for _, r := range ranges {
+		if len(strings.TrimSpace(r)) > 0 {
+			_, ipnet, err := net.ParseCIDR(r)
+			if err != nil {
+				log.Printf("Failed to parse CIDR %s, ignored. error: %v", r, err)
+			}
+
+			for ip := ipnet.IP.Mask(ipnet.Mask); ipnet.Contains(ip); inc(ip) {
+				hosts = append(hosts, ip.String())
+			}
+		}
+	}
 
 	var wg sync.WaitGroup
 
@@ -111,24 +77,24 @@ func snmpDiscovery(ipRange string, port int, community string, oid string) {
 	resultChan := make(chan *gosnmp.SnmpPacket)
 
 	// Use the results to print an example output
-	for _, snmpPort := range snmpPorts {
+	for _, host := range hosts {
 
 		wg.Add(1)
-		snmpPort := snmpPort
 
+		host := host
 		go func() {
 			defer wg.Done()
 
 			gs := &gosnmp.GoSNMP{
-				Target:    snmpPort.host,
-				Port:      snmpPort.port.ID,
+				Target:    host,
+				Port:      uint16(port),
 				Community: community,
 				Version:   gosnmp.Version2c,
 				Timeout:   time.Duration(5) * time.Second,
 			}
 			err := gs.Connect()
 			if err != nil {
-				fmt.Printf("snmp connect failed at %s:%v, error: %v\n", snmpPort.host, snmpPort.port.ID, err)
+				fmt.Printf("snmp connect failed at %s:%v, error: %v\n", host, port, err)
 				resultChan <- nil
 				return
 			}
@@ -140,9 +106,9 @@ func snmpDiscovery(ipRange string, port int, community string, oid string) {
 				}
 			}(gs.Conn)
 
-			err = gs.BulkWalk(oid, handleWalkResult(snmpPort.host))
+			err = gs.BulkWalk(oid, handleWalkResult(host))
 			if err != nil {
-				fmt.Printf("snmp walk failed at %s:%v, error: %v\n", snmpPort.host, snmpPort.port.ID, err)
+				//fmt.Printf("snmp walk failed at %s:%v, error: %v\n", host, port, err)
 				resultChan <- nil
 				return
 			}
