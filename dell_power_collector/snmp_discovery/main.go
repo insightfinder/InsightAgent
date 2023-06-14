@@ -2,16 +2,17 @@ package main
 
 import (
 	"fmt"
-	"github.com/gosnmp/gosnmp"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
 	"log"
 	"net"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gosnmp/gosnmp"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -62,7 +63,14 @@ func snmpDiscovery(ipRange string, port int, community string, oid string) {
 		if len(strings.TrimSpace(r)) > 0 {
 			_, ipnet, err := net.ParseCIDR(r)
 			if err != nil {
-				log.Printf("Failed to parse CIDR %s, ignored. error: %v", r, err)
+				log.Printf("Failed to parse CIDR %s, will try to parse the input as IP address. error: %v", r, err)
+
+				ipAddress := net.ParseIP(r)
+				if ipAddress == nil {
+					log.Output(1, "Failed to pass the IP address, ignore.")
+				}
+				hosts = append(hosts, ipAddress.String())
+				continue
 			}
 
 			for ip := ipnet.IP.Mask(ipnet.Mask); ipnet.Contains(ip); inc(ip) {

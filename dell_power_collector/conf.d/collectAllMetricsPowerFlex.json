@@ -1,0 +1,3 @@
+{
+    "/api/instances/{$instanceType}::{$id}/relationships/Statistics":[]
+}
