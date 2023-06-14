@@ -18,6 +18,7 @@ func getPScaleConfig(p *configparser.ConfigParser) map[string]string {
 	var connectionUrl = ToString(GetConfigValue(p, PowerScaleSectionName, "connectionUrl", true))
 	var instanceNameField = ToString(GetConfigValue(p, PowerScaleSectionName, "instanceNameField", true))
 	var timeStampField = ToString(GetConfigValue(p, PowerScaleSectionName, "timeStampField", true))
+	var firstLayerkey = ToString(GetConfigValue(p, PowerScaleSectionName, "firstLayerkey", true))
 	// optional fields
 
 	// ----------------- Process the configuration ------------------
@@ -29,6 +30,7 @@ func getPScaleConfig(p *configparser.ConfigParser) map[string]string {
 		"connectionUrl":     connectionUrl,
 		"instanceNameField": instanceNameField,
 		"timeStampField":    timeStampField,
+		"firstLayerkey":     firstLayerkey,
 	}
 	return config
 }
@@ -70,12 +72,13 @@ func PowerScaleDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 	}
 	for endpoint, metricList := range mapping {
 		result := getDataFromEndpoint(psConfig, endpoint)
-		var objArray []interface{}
-		// For powerScale, there should only be 1 item in the metricList
-		for _, metric := range metricList {
-			objArray = result[metric].([]interface{})
+
+		firstLayerKey := psConfig["firstLayerkey"]
+		objArray, ok := result[firstLayerKey].([]interface{})
+		if !ok {
+			panic("Can't cast the result object to array of interface for PowerScale metric. Please check your firstLayerKey.")
 		}
-		processArrayDataFromEndPoint(objArray, psConfig["timeStampField"], "Epoch", psConfig["instanceNameField"], &data)
+		processArrayDataFromEndPoint(objArray, metricList, psConfig["timeStampField"], "Epoch", psConfig["instanceNameField"], &data)
 	}
 	return data
 }

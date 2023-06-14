@@ -39,7 +39,7 @@ func formMetricDataPoint(metric string, value interface{}) (MetricDataPoint, err
 	return metricDP, nil
 }
 
-func processArrayDataFromEndPoint(objArrary []interface{}, timeStampField string, tsFormat string, instanceNameField string, data *MetricDataReceivePayload) {
+func processArrayDataFromEndPoint(objArrary []interface{}, metricList []string, timeStampField string, tsFormat string, instanceNameField string, data *MetricDataReceivePayload) {
 	// // fake data
 	// bytesData := GetFakeMetricData()
 	// var result map[string]interface{}
@@ -75,7 +75,7 @@ func processArrayDataFromEndPoint(objArrary []interface{}, timeStampField string
 		}
 		timeStamp := time.Unix(tsInInt64, 0).UnixMilli()
 
-		prasedData := parseData(object, timeStamp, make([]string, 0))
+		prasedData := parseData(object, timeStamp, metricList)
 		instance, success := object[instanceNameField].(string)
 		if !success {
 			panic("[ERROR] Failed to get instance name from the field: " + instanceNameField)

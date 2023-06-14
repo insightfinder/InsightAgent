@@ -25,9 +25,9 @@ func getPStoreConfig(p *configparser.ConfigParser) map[string]string {
 	var instanceType = ToString(GetConfigValue(p, PowerStoreSectionName, "instanceType", true))
 	var instanceNameField = ToString(GetConfigValue(p, PowerStoreSectionName, "instanceNameField", true))
 	var timeStampField = ToString(GetConfigValue(p, PowerStoreSectionName, "timeStampField", true))
+	var metricType = ToString(GetConfigValue(p, PowerStoreSectionName, "metricType", true))
 	// optional fields
 	var metricWhitelist = ToString(GetConfigValue(p, PowerStoreSectionName, "metricWhitelist", false))
-
 	var metric_interval_from_server = ToString(GetConfigValue(p, PowerStoreSectionName, "metric_interval_from_server", false))
 
 	// ----------------- Process the configuration ------------------
@@ -40,6 +40,7 @@ func getPStoreConfig(p *configparser.ConfigParser) map[string]string {
 		"connectionUrl":               connectionUrl,
 		"instanceType":                instanceType,
 		"instanceNameField":           instanceNameField,
+		"metricType":                  metricType,
 		"timeStampField":              timeStampField,
 		"metric_interval_from_server": metric_interval_from_server,
 	}
@@ -113,11 +114,11 @@ func getPowerStoreInstanceList(config map[string]string) (objectList []string) {
 	return
 }
 
-func getPowerStoreMetricData(config map[string]string, objectId string, metricList []string, endpoint string) (result []interface{}) {
+func getPowerStoreMetricData(config map[string]string, objectId string, metricType string, endpoint string) (result []interface{}) {
 	headers := make(map[string]string, 0)
 	headers[token_key] = config["token"]
 	payload := PowerStoreMetricDataRequestPayload{
-		Entity:    metricList[0],
+		Entity:    metricType,
 		Entity_id: objectId,
 		Interval:  config["metric_interval_from_server"],
 	}
@@ -171,11 +172,12 @@ func PowerStoreDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 	}
 	fmt.Println(t.Unix())
 	objectList := getPowerStoreInstanceList(pStoreConfig)
+	metricType := pStoreConfig["metricType"]
 	// For powerStore, it should only have 1 endpoint
 	for endpoint, metricList := range mapping {
 		for _, object := range objectList {
-			objectArray := getPowerStoreMetricData(pStoreConfig, object, metricList, endpoint)
-			processArrayDataFromEndPoint(objectArray, pStoreConfig["timeStampField"], time.RFC3339, pStoreConfig["instanceNameField"], &data)
+			objectArray := getPowerStoreMetricData(pStoreConfig, object, metricType, endpoint)
+			processArrayDataFromEndPoint(objectArray, metricList, pStoreConfig["timeStampField"], time.RFC3339, pStoreConfig["instanceNameField"], &data)
 		}
 	}
 	return data
