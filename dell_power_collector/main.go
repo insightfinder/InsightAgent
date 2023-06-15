@@ -299,6 +299,8 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 
 		if strings.Contains(connectionUrl, ",") {
 			connectionUrlList = strings.Split(connectionUrl, ",")
+		} else {
+			connectionUrlList = append(connectionUrlList, connectionUrl)
 		}
 
 		for _, connUrl := range connectionUrlList {
