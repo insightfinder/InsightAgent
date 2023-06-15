@@ -142,8 +142,7 @@ func processPFMLogData(rawData []map[string]interface{}, config map[string]inter
 	return
 }
 
-func PowerFlexManagerDataStream(p *configparser.ConfigParser, offset int) []LogData {
-	config := getPFMConfig(p)
+func PowerFlexManagerDataStream(config map[string]interface{}, offset int) []LogData {
 	authHeaders := authenticationPF(config)
 	rawLogData := getPFMLogData(authHeaders, config, offset)
 

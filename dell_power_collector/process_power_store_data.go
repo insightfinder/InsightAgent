@@ -149,6 +149,7 @@ func getPowerStoreMetricData(config map[string]string, objectId string, metricTy
 
 func PowerStoreDataStream(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {
 	pStoreConfig := getPStoreConfig(p)
+
 	projectName := ToString(IFconfig["projectName"])
 	userName := ToString(IFconfig["userName"])
 	data := MetricDataReceivePayload{
@@ -157,28 +158,31 @@ func PowerStoreDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 		InstanceDataMap: make(map[string]InstanceData),
 	}
 
-	pStoreConfig["token"] = getAuthToken(pStoreConfig)
+	connectionUrl := pStoreConfig["connectionUrl"]
+	connectionUrlList := []string{connectionUrl}
 
-	mapping, err := GetEndpointMetricMapping(pStoreConfig["metricPath"])
-	if err != nil {
-		panic(err)
+	if strings.Contains(connectionUrl, ",") {
+		connectionUrlList = strings.Split(connectionUrl, ",")
 	}
-	var test int64
-	println(test)
-	ts := "2006-01-02T15:04:05Z"
-	t, err := time.Parse(time.RFC3339, ts)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(t.Unix())
-	objectList := getPowerStoreInstanceList(pStoreConfig)
-	metricType := pStoreConfig["metricType"]
-	// For powerStore, it should only have 1 endpoint
-	for endpoint, metricList := range mapping {
-		for _, object := range objectList {
-			objectArray := getPowerStoreMetricData(pStoreConfig, object, metricType, endpoint)
-			processArrayDataFromEndPoint(objectArray, metricList, pStoreConfig["timeStampField"], time.RFC3339, pStoreConfig["instanceNameField"], &data)
+
+	for _, connUrl := range connectionUrlList {
+		config := copyMap(pStoreConfig)
+		config["connectionUrl"] = connUrl
+		config["token"] = getAuthToken(config)
+		mapping, err := GetEndpointMetricMapping(config["metricPath"])
+		if err != nil {
+			panic(err)
+		}
+		objectList := getPowerStoreInstanceList(config)
+		metricType := config["metricType"]
+		// For powerStore, it should only have 1 endpoint
+		for endpoint, metricList := range mapping {
+			for _, object := range objectList {
+				objectArray := getPowerStoreMetricData(config, object, metricType, endpoint)
+				processArrayDataFromEndPoint(objectArray, metricList, config["timeStampField"], time.RFC3339, config["instanceNameField"], &data)
+			}
 		}
 	}
+
 	return data
 }

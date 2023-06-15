@@ -499,3 +499,25 @@ func (s *Stack) Pop() (MetricStack, bool) {
 		return element, true
 	}
 }
+
+func copyMap[K, V comparable](m map[K]V) map[K]V {
+	result := make(map[K]V)
+	for k, v := range m {
+		result[k] = v
+	}
+	return result
+}
+
+func copyAnyMap(m map[string]interface{}) map[string]interface{} {
+	cp := make(map[string]interface{})
+	for k, v := range m {
+		vm, ok := v.(map[string]interface{})
+		if ok {
+			cp[k] = copyAnyMap(vm)
+		} else {
+			cp[k] = v
+		}
+	}
+
+	return cp
+}
