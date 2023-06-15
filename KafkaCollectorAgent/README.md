@@ -105,7 +105,7 @@ https://docs.confluent.io/platform/current/installation/configuration/consumer-c
 
 
 
-##### InsightFinder config:
+##### InsightFinder config for Metric:
 
 ```
 #user name for InsightFinder
@@ -165,5 +165,48 @@ insight-finder.metricNameFilter=memory.memory.free
 insight-finder.kafkaMetricLogInterval=3600
 # true seek to latest offset, false continue commited offset
 insight-finder.fastRecovery=true
+```
+##### InsightFinder config for Log:
+```
+#user name for InsightFinder
+insight-finder.userName=
+#IF URL, example: https://app.insightfinder.com
+insight-finder.serverUrl=
+#URI, the data was sent to IF, example: /api/v1/customprojectrawdata
+insight-finder.serverUri=
+#AUTO CREATE InsightFinder project URI, example: /api/v1/check-and-add-custom-project
+insight-finder.checkAndCreateUri=
+#InsightFinder license key
+insight-finder.licenseKey=
+#InsightFinder project sample interval
+insight-finder.samplingIntervalInSeconds=300
+# the agent type
+insight-finder.agentType=Streaming
+
+#If InsightFinder site needs ssl config, set below ssl files
+insight-finder.keystoreFile=
+insight-finder.keystorePassword=
+insight-finder.truststoreFile=
+insight-finder.truststorePassword=
+#the buffer of every period, in second
+insight-finder.bufferingTime=300
+# print the kafka consumer metrics, in second
+insight-finder.kafkaMetricLogInterval=3600
+# true seek to latest offset, false continue commited offset
+insight-finder.fastRecovery=true
+
+# Project name for InsightFinder
+insight-finder.logProjectName=
+# System name for InsightFinder
+insight-finder.logSystemName=
+# If it is for log, default is true
+insight-finder.logProject=true
+# Timestamp format in log raw data
+insight-finder.logTimestampFormat=yyyy-MM-dd'T'HH:mm:ss
+# Timestamp field in raw data
+insight-finder.logTimestampFieldPathList=item_time,dataset_context_datetime
+# Instance field in raw data
+insight-finder.logInstanceFieldPathList=item_name,dataset_name
+
 ```
 
