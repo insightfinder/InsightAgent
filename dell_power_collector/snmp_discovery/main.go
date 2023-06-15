@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,7 @@ var (
 	POWERSCALETYPE = "1"
 	POWERFLEXTYPE  = "2"
 	CONNECTIONKEY  = "connectionUrl"
+	URLPREFIX      = "https://"
 )
 
 type snmpInfo struct {
@@ -209,6 +211,23 @@ func updateConnectionURL(host string, configPath []string) {
 				// Update the section other than IF.
 				curVal, err := p.Get(sec, CONNECTIONKEY)
 				urls := parseURLList(curVal)
+				var hasPort bool
+				var port string
+				// Check if the original URL uses port number.
+				if len(urls) > 0 {
+					urlElems := strings.Split(urls[0], ":")
+					// If there's a port number, it should be the last element.
+					last := urlElems[len(urlElems)-1]
+					hasPort = regexp.MustCompile(`\d`).MatchString(last)
+					if hasPort {
+						port = last
+					}
+				}
+				host = URLPREFIX + host
+				if hasPort {
+					host = host + ":" + port
+				}
+
 				if contains(urls, host) {
 					break
 				}
