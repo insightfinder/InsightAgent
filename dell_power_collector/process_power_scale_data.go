@@ -71,11 +71,13 @@ func PowerScaleDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 
 	if strings.Contains(connectionUrl, ",") {
 		connectionUrlList = strings.Split(connectionUrl, ",")
+	} else {
+		connectionUrlList = append(connectionUrlList, connectionUrl)
 	}
 
 	for _, connUrl := range connectionUrlList {
 		config := copyMap(psConfig)
-		config["connectionUrl"] = connUrl
+		config["connectionUrl"] = strings.TrimSpace(connUrl)
 		mapping, err := GetEndpointMetricMapping(config["metricPath"])
 		if err != nil {
 			panic(err)

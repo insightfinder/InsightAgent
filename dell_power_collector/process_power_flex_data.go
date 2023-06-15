@@ -165,11 +165,13 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 
 	if strings.Contains(connectionUrl, ",") {
 		connectionUrlList = strings.Split(connectionUrl, ",")
+	} else {
+		connectionUrlList = append(connectionUrlList, connectionUrl)
 	}
 
 	for _, connUrl := range connectionUrlList {
 		cfg := copyMap(config)
-		cfg["connectionUrl"] = connUrl
+		cfg["connectionUrl"] = strings.TrimSpace(connUrl)
 
 		token := getToken(cfg)
 		token = strings.ReplaceAll(token, "\"", "")
