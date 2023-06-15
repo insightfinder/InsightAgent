@@ -66,19 +66,31 @@ func PowerScaleDataStream(p *configparser.ConfigParser, IFconfig map[string]inte
 		InstanceDataMap: make(map[string]InstanceData),
 	}
 
-	mapping, err := GetEndpointMetricMapping(psConfig["metricPath"])
-	if err != nil {
-		panic(err)
-	}
-	for endpoint, metricList := range mapping {
-		result := getDataFromEndpoint(psConfig, endpoint)
+	connectionUrl := psConfig["connectionUrl"]
+	connectionUrlList := []string{connectionUrl}
 
-		firstLayerKey := psConfig["firstLayerkey"]
-		objArray, ok := result[firstLayerKey].([]interface{})
-		if !ok {
-			panic("Can't cast the result object to array of interface for PowerScale metric. Please check your firstLayerKey.")
-		}
-		processArrayDataFromEndPoint(objArray, metricList, psConfig["timeStampField"], "Epoch", psConfig["instanceNameField"], &data)
+	if strings.Contains(connectionUrl, ",") {
+		connectionUrlList = strings.Split(connectionUrl, ",")
 	}
+
+	for _, connUrl := range connectionUrlList {
+		config := copyMap(psConfig)
+		config["connectionUrl"] = connUrl
+		mapping, err := GetEndpointMetricMapping(config["metricPath"])
+		if err != nil {
+			panic(err)
+		}
+		for endpoint, metricList := range mapping {
+			result := getDataFromEndpoint(config, endpoint)
+
+			firstLayerKey := config["firstLayerkey"]
+			objArray, ok := result[firstLayerKey].([]interface{})
+			if !ok {
+				panic("Can't cast the result object to array of interface for PowerScale metric. Please check your firstLayerKey.")
+			}
+			processArrayDataFromEndPoint(objArray, metricList, config["timeStampField"], "Epoch", config["instanceNameField"], &data)
+		}
+	}
+
 	return data
 }
