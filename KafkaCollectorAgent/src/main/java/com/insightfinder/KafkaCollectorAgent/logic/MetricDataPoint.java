@@ -13,13 +13,13 @@ public class MetricDataPoint {
         count = 1;
     }
 
-    public void addData(String metricName, double value){
-        this.value = ((this.value * count) + value)/(count + 1);
+    public void addData(String metricName, double value) {
+        this.value = ((this.value * count) + value) / (count + 1);
         count++;
     }
 
-    public void mergeData(MetricDataPoint metricDataPoint){
-        this.value = ((this.value * count) + metricDataPoint.value * metricDataPoint.count)/(count + metricDataPoint.count);
+    public void mergeData(MetricDataPoint metricDataPoint) {
+        this.value = ((this.value * count) + metricDataPoint.value * metricDataPoint.count) / (count + metricDataPoint.count);
     }
 
 

@@ -1,10 +1,11 @@
 package com.insightfinder.KafkaCollectorAgent.logic;
 
+import javax.annotation.Nullable;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import javax.annotation.Nullable;
+
 public class MetricHeaderEntity {
     public static final String LEFT_PARENTHESIS = "[";
     public static final String RIGHT_PARENTHESIS = "]";
@@ -14,11 +15,13 @@ public class MetricHeaderEntity {
     String metric;
     String instance;
     String group;
+
     public MetricHeaderEntity(String metric, String instance, String group) {
         this.metric = metric;
         this.instance = instance;
         this.group = group;
     }
+
     /**
      * Get the metric name object, include the full metric name, instance name and groupid
      *
@@ -52,19 +55,7 @@ public class MetricHeaderEntity {
      * @param fullMetricName
      * @return
      */
-    /**
-     * Generate valid column name e.g. CPU[ip-172-31-60-25]:-633995270
-     *
-     * @return
-     */
-    public String generateHeader(boolean includeGroup) {
-        if (includeGroup) {
-            return getMetric() +LEFT_PARENTHESIS + getInstance() +
-                    RIGHT_PARENTHESIS + COLON + getGroup();
-        }
-        return getMetric() + LEFT_PARENTHESIS + getInstance() +
-                RIGHT_PARENTHESIS;
-    }
+
     /**
      * For some metric it will contains ":" which will break original
      *
@@ -94,6 +85,7 @@ public class MetricHeaderEntity {
         }
         return arrays;
     }
+
     public static Set<String> parseKeySetForTraining(List<String> columns) {
         Set<String> result = null;
         if (columns != null) {
@@ -107,6 +99,7 @@ public class MetricHeaderEntity {
         }
         return result;
     }
+
     /**
      * Get Log metric name set, using the component name instead of instance name
      *
@@ -127,27 +120,49 @@ public class MetricHeaderEntity {
         }
         return result;
     }
+
+    /**
+     * Generate valid column name e.g. CPU[ip-172-31-60-25]:-633995270
+     *
+     * @return
+     */
+    public String generateHeader(boolean includeGroup) {
+        if (includeGroup) {
+            return getMetric() + LEFT_PARENTHESIS + getInstance() +
+                    RIGHT_PARENTHESIS + COLON + getGroup();
+        }
+        return getMetric() + LEFT_PARENTHESIS + getInstance() +
+                RIGHT_PARENTHESIS;
+    }
+
     public String generateHeaderString() {
         return metric + "[" + instance + "]:" + group;
     }
+
     public String getMetric() {
         return metric;
     }
+
     public void setMetric(String metric) {
         this.metric = metric;
     }
+
     public String getInstance() {
         return instance;
     }
+
     public void setInstance(String instance) {
         this.instance = instance;
     }
+
     public String getGroup() {
         return group;
     }
+
     public void setGroup(String group) {
         this.group = group;
     }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -160,6 +175,7 @@ public class MetricHeaderEntity {
         return Objects.equals(metric, that.metric) &&
                 Objects.equals(instance, that.instance);
     }
+
     @Override
     public int hashCode() {
         return Objects.hash(metric, instance);
