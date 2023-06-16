@@ -185,15 +185,14 @@ func updateConfigBasedOnSNPM(result string) {
 			updateConnectionURL(snmp.Host, powerFlexParser)
 		}
 	case POWERSCALETYPE:
-
+		if len(powerScaleParser) != 0 {
+			updateConnectionURL(snmp.Host, powerScaleParser)
+		}
 	case POWERSTORETYPE:
 		if len(powerStoreParser) != 0 {
 			updateConnectionURL(snmp.Host, powerStoreParser)
 		}
-	default:
-		if len(powerScaleParser) != 0 {
-			updateConnectionURL(snmp.Host, powerScaleParser)
-		}
+
 	}
 }
 
