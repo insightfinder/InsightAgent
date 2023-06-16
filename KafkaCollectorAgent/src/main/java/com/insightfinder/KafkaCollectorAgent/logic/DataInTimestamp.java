@@ -1,11 +1,13 @@
 package com.insightfinder.KafkaCollectorAgent.logic;
 
-import java.util.*;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class DataInTimestamp {
     private final long timestamp;
-    private final ConcurrentHashMap<String ,MetricDataPoint> metricDataPointMap;
+    private final ConcurrentHashMap<String, MetricDataPoint> metricDataPointMap;
 
     public DataInTimestamp(long timestamp) {
         this.timestamp = timestamp;
@@ -21,18 +23,18 @@ public class DataInTimestamp {
     }
 
     public void addData(String metricName, double value) {
-        if (!metricDataPointMap.containsKey(metricName)){
+        if (!metricDataPointMap.containsKey(metricName)) {
             metricDataPointMap.put(metricName, new MetricDataPoint(metricName, value));
-        }else {
+        } else {
             metricDataPointMap.get(metricName).addData(metricName, value);
         }
     }
 
     public void mergeData(DataInTimestamp dataInTimestamp) {
-        for (String key : dataInTimestamp.metricDataPointMap.keySet()){
-            if (!metricDataPointMap.containsKey(key)){
+        for (String key : dataInTimestamp.metricDataPointMap.keySet()) {
+            if (!metricDataPointMap.containsKey(key)) {
                 metricDataPointMap.put(key, dataInTimestamp.metricDataPointMap.get(key));
-            }else {
+            } else {
                 metricDataPointMap.get(key).mergeData(dataInTimestamp.metricDataPointMap.get(key));
             }
         }

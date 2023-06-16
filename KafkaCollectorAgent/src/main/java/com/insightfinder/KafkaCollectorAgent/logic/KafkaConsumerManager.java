@@ -18,7 +18,6 @@ import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.config.KafkaListenerEndpoint;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
-import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
 import org.springframework.kafka.listener.ConsumerSeekAware;
 import org.springframework.kafka.listener.MessageListener;
@@ -26,11 +25,9 @@ import org.springframework.kafka.listener.MessageListenerContainer;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.TopicPartitionOffset;
 import org.springframework.kafka.support.converter.MessageConverter;
+
 import javax.annotation.PostConstruct;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Pattern;
 
 @EnableKafka
@@ -52,10 +49,10 @@ public class KafkaConsumerManager {
     }
 
     @PostConstruct
-    public void init(){
-        Map<String , Map<String, String>> clusterInfo = kafkaConfig.getKafkaClusterInfo();
+    public void init() {
+        Map<String, Map<String, String>> clusterInfo = kafkaConfig.getKafkaClusterInfo();
         int clusterIndex = 0;
-        for (Map<String, String> cluster : clusterInfo.values()){
+        for (Map<String, String> cluster : clusterInfo.values()) {
             ConsumerFactory consumerFactory = consumerFactory(cluster);
             customizers.orderedStream().forEach(customizer -> customizer.customize((DefaultKafkaConsumerFactory<?, ?>) consumerFactory));
             ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
@@ -63,22 +60,24 @@ public class KafkaConsumerManager {
             factory.setConsumerFactory(consumerFactory);
             IFKafkaListenerEndpoint ifKafkaListenerEndpoint = new IFKafkaListenerEndpoint(cluster.get("topic"), cluster.get("group.id"), Integer.valueOf(cluster.get("concurrency")));
             ConcurrentMessageListenerContainer<String, String> container = factory.createListenerContainer(ifKafkaListenerEndpoint);
-            if (ifConfig.isFastRecovery()){
+            if (ifConfig.isFastRecovery()) {
                 container.setupMessageListener(new IFMessageListener(ifStreamingBufferManager));
-            }else {
+            } else {
                 container.setupMessageListener((MessageListener<Integer, String>) record -> {
                     ifStreamingBufferManager.parseString(record.value(), System.currentTimeMillis());
                 });
             }
-            applicationContext.registerBeanDefinition("ConcurrentMessageListenerContainer" + clusterIndex, BeanDefinitionBuilder.genericBeanDefinition(ConcurrentMessageListenerContainer.class,()->{return container;}).getBeanDefinition());
+            applicationContext.registerBeanDefinition("ConcurrentMessageListenerContainer" + clusterIndex, BeanDefinitionBuilder.genericBeanDefinition(ConcurrentMessageListenerContainer.class, () -> {
+                return container;
+            }).getBeanDefinition());
             clusterIndex++;
         }
     }
 
     public ConsumerFactory<String, String> consumerFactory(Map<String, String> cluster) {
         Map<String, Object> props = new HashMap<>();
-        for (Map.Entry entry : cluster.entrySet()){
-            props.put(entry.getKey().toString() , entry.getValue());
+        for (Map.Entry entry : cluster.entrySet()) {
+            props.put(entry.getKey().toString(), entry.getValue());
         }
         props.put(
                 ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
@@ -89,8 +88,9 @@ public class KafkaConsumerManager {
         return new DefaultKafkaConsumerFactory<>(props);
     }
 
-    public static class IFMessageListener implements MessageListener<Integer, String>, ConsumerSeekAware{
-        private IFStreamingBufferManager ifStreamingBufferManager;
+    public static class IFMessageListener implements MessageListener<Integer, String>, ConsumerSeekAware {
+        private final IFStreamingBufferManager ifStreamingBufferManager;
+
         public IFMessageListener(IFStreamingBufferManager ifStreamingBufferManager) {
             this.ifStreamingBufferManager = ifStreamingBufferManager;
         }
@@ -146,19 +146,20 @@ public class KafkaConsumerManager {
         }
     }
 
-    public static class IFKafkaListenerEndpoint implements KafkaListenerEndpoint{
-        private String topic;
-        private String groupId;
-        private Integer concurrency;
+    public static class IFKafkaListenerEndpoint implements KafkaListenerEndpoint {
+        private final String topic;
+        private final String groupId;
+        private final Integer concurrency;
 
         public IFKafkaListenerEndpoint(String topic, String groupId, Integer concurrency) {
             this.topic = topic;
             this.groupId = groupId;
             this.concurrency = concurrency;
         }
+
         @Override
         public Collection<String> getTopics() {
-            return Arrays.asList(topic);
+            return Collections.singletonList(topic);
         }
 
         @Override
