@@ -292,6 +292,7 @@ func sendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 		bytes.NewBuffer(data),
 		headers,
 		AuthRequest{},
+		false,
 	)
 	var result map[string]interface{}
 	json.Unmarshal(response, &result)
@@ -302,7 +303,7 @@ func sendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 	}
 }
 
-func sendRequest(operation string, endpoint string, form io.Reader, headers map[string]string, auth AuthRequest) ([]byte, http.Header) {
+func sendRequest(operation string, endpoint string, form io.Reader, headers map[string]string, auth AuthRequest, skipCertificate bool) ([]byte, http.Header) {
 	newRequest, err := http.NewRequest(
 		operation,
 		endpoint,
@@ -321,7 +322,7 @@ func sendRequest(operation string, endpoint string, form io.Reader, headers map[
 
 	// Skip certificate verification.
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: skipCertificate},
 	}
 	client := &http.Client{Transport: tr}
 	res, err := client.Do(newRequest)

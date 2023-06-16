@@ -205,6 +205,7 @@ func isProjectExist(IFconfig map[string]interface{}) bool {
 		strings.NewReader(form.Encode()),
 		headers,
 		AuthRequest{},
+		false,
 	)
 	println(string(response))
 	var result map[string]interface{}
@@ -253,6 +254,7 @@ func createProject(IFconfig map[string]interface{}) {
 		strings.NewReader(form.Encode()),
 		headers,
 		AuthRequest{},
+		false,
 	)
 	var result map[string]interface{}
 	json.Unmarshal(response, &result)

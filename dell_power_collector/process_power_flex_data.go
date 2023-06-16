@@ -62,6 +62,7 @@ func getInstanceList(config map[string]string) (instanceList []string) {
 			UserName: "",
 			Password: config["token"],
 		},
+		true,
 	)
 
 	var result []interface{}
@@ -101,6 +102,7 @@ func processDataFromInstances(instance string, config map[string]string, endpoin
 			UserName: "",
 			Password: config["token"],
 		},
+		true,
 	)
 
 	log.Output(1, "[LOG] Getting instances data")
@@ -143,6 +145,7 @@ func getToken(config map[string]string) string {
 			UserName: config["userName"],
 			Password: config["password"],
 		},
+		true,
 	)
 
 	return string(token)

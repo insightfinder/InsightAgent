@@ -47,6 +47,7 @@ func getDataFromEndpoint(config map[string]string, endpoint string) (result map[
 			UserName: config["userName"],
 			Password: config["password"],
 		},
+		true,
 	)
 	log.Output(1, "[LOG] Getting data from endpoint"+endpoint)
 	log.Output(1, string(res))
