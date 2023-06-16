@@ -60,6 +60,7 @@ func getAuthToken(config map[string]string) (token string) {
 			UserName: config["userName"],
 			Password: config["password"],
 		},
+		true,
 	)
 	log.Output(1, "[LOG] Getting token from endpoint")
 	token = header.Get(token_key)
@@ -91,6 +92,7 @@ func getPowerStoreInstanceList(config map[string]string) (objectList []string) {
 			UserName: config["userName"],
 			Password: config["password"],
 		},
+		true,
 	)
 
 	var result []interface{}
@@ -138,6 +140,7 @@ func getPowerStoreMetricData(config map[string]string, objectId string, metricTy
 			UserName: config["userName"],
 			Password: config["password"],
 		},
+		true,
 	)
 	log.Output(1, "[LOG] Getting data from endpoint"+endpoint)
 	log.Output(1, string(res))
