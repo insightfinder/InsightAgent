@@ -1,8 +1,11 @@
 package com.insightfinder.KafkaCollectorAgent.logic.config;
 
+import com.google.gson.Gson;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -45,6 +48,8 @@ public class IFConfig {
     private String logTimestampFormat;
     private List<String> logTimestampFieldPathList;
     private List<String> logInstanceFieldPathList;
+
+    private List<String> logComponentFieldPathList;
 
     public String getUserName() {
         return userName;
@@ -333,5 +338,13 @@ public class IFConfig {
 
     public void setLogInstanceFieldPathList(List<String> logInstanceFieldPathList) {
         this.logInstanceFieldPathList = logInstanceFieldPathList;
+    }
+
+    public List<String> getLogComponentFieldPathList() {
+        return logComponentFieldPathList;
+    }
+
+    public void setLogComponentFieldPathList(List<String> logComponentFieldPathList) {
+        this.logComponentFieldPathList = logComponentFieldPathList;
     }
 }

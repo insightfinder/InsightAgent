@@ -208,10 +208,58 @@ public class IFStreamingBufferManager {
             }
             return null;
         }
+
+        List<List<String>> logComponentList = getLogComponentList();
+        if (logComponentList != null && !logComponentList.isEmpty()){
+            String componentName = getComponentName(srcData, logComponentList);
+            if (componentName != null){
+                data.addProperty("componentName", componentName);
+            }
+        }
+
         data.addProperty("timestamp", timestamp.toString());
         data.addProperty("tag", instanceStr);
         data.add("data", srcData);
         return data;
+    }
+
+    private String getComponentName(JsonObject srcData, List<List<String>> logComponentList){
+        String componentName = null;
+        if (logComponentList != null){
+            List<String> subComponents = new ArrayList<>();
+            for (int i = 0; i < logComponentList.size(); i++){
+                List<String> componentPaths = logComponentList.get(i);
+                componentPaths.forEach(componentPath -> {
+                    String value = getKeyFromJson(srcData, Arrays.asList(componentPath));
+                    if (value != null){
+                        subComponents.add(value);
+                    }
+                });
+                if (subComponents.size() == componentPaths.size()){
+                    componentName = String.join("-", subComponents);
+                    return componentName;
+                }else {
+                    subComponents.clear();
+                    continue;
+                }
+            }
+
+        }
+        return componentName;
+    }
+
+    private List<List<String>> getLogComponentList(){
+        List<String> logComponentFieldPathList = ifConfig.getLogComponentFieldPathList();
+        List<List<String>> ans = new ArrayList<>();
+        if (logComponentFieldPathList != null){
+            logComponentFieldPathList.forEach(pathStr->{
+                List<String> pathList = Arrays.asList(pathStr.split("&"));
+                if (pathList != null && pathList.size() > 0){
+                    ans.add(pathList);
+                }
+            });
+        }
+        return ans;
     }
 
     private String getKeyFromJson(JsonObject jsonObject, List<String> paths) {
