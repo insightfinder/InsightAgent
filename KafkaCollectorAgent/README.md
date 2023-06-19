@@ -201,12 +201,15 @@ insight-finder.logProjectName=
 insight-finder.logSystemName=
 # If it is for log, default is true
 insight-finder.logProject=true
-# Timestamp format in log raw data
-insight-finder.logTimestampFormat=yyyy-MM-dd'T'HH:mm:ss
-# Timestamp field in raw data
-insight-finder.logTimestampFieldPathList=item_time,dataset_context_datetime
-# Instance field in raw data
-insight-finder.logInstanceFieldPathList=item_name,dataset_name
+# Timestamp format in log raw data: yyyy-MM-dd'T'HH:mm:ss
+insight-finder.logTimestampFormat=
+# Timestamp field in raw data: item_time,dataset_context_datetime
+insight-finder.logTimestampFieldPathList=
+# Instance field in raw data: item_name,dataset_name
+insight-finder.logInstanceFieldPathList=
+# Component field in raw data: item_data.DeviceCategory&item_data.DeviceName,item_data.DeviceName,item_name, mutiple componentName, if connet with &, 
+# component values will be connected with "-"
+insight-finder.logComponentFieldPathList=
 
 ```
 
