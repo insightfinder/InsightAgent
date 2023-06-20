@@ -319,12 +319,17 @@ func sendRequest(operation string, endpoint string, form io.Reader, headers map[
 	for k := range headers {
 		newRequest.Header.Add(k, headers[k])
 	}
-
-	// Skip certificate verification.
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: skipCertificate},
+	var client *http.Client
+	// If we will kkip certificate verification.
+	if !skipCertificate {
+		client = &http.Client{}
+	} else {
+		tr := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: skipCertificate},
+		}
+		client = &http.Client{Transport: tr}
 	}
-	client := &http.Client{Transport: tr}
+	
 	res, err := client.Do(newRequest)
 	if err != nil {
 		panic(err)
