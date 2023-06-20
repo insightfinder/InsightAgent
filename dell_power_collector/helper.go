@@ -320,7 +320,7 @@ func sendRequest(operation string, endpoint string, form io.Reader, headers map[
 		newRequest.Header.Add(k, headers[k])
 	}
 	var client *http.Client
-	// If we will kkip certificate verification.
+	// If we will skip certificate verification.
 	if !skipCertificate {
 		client = &http.Client{}
 	} else {
@@ -329,7 +329,7 @@ func sendRequest(operation string, endpoint string, form io.Reader, headers map[
 		}
 		client = &http.Client{Transport: tr}
 	}
-	
+
 	res, err := client.Do(newRequest)
 	if err != nil {
 		panic(err)
