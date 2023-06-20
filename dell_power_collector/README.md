@@ -8,7 +8,7 @@ Current supported products: powerflex, powerflex manager, powerstore, and powers
 
 The agent is written in Go. To build the agent, you need to install Go version 1.13 or later. The application that is built from the following 2 commands should be run in a Linux environment. NOTE: While the application can be built in Windows, we currently do not support running the application in Windows environments. 
 
-Run the following commands to build:
+In the same directory with go.mod, run the following commands to build :
 ```bash
 # build on Linux (Recommend)
 ./build_for_linux_in_linux_env.sh
@@ -35,7 +35,7 @@ Required fields are in **bold**.
 * **`userName`**: Username used to authenticate to the api endpoint.
 * **`password`**: Password used to authenticate to the api endpoint.
 * **`metricPath`**: The json file containing the API endpoint and what metrics to collect.
-* **`connectionUrl`**: The host url to get the metric data.
+* **`connectionUrl`**: The host url to get the metric data. There can be multiple URL in this part separated by ",". For example: 127.0.0.1,198.163.0.1
 * **`metricType`**: The POST request body key **entity**. The value should correspond to the instance type to obtain the desired metrics.
 
 The API should not be changed when used, and the metric list inside will need to specify the metrics you would like to be collected. If left empty, it will collect all metrics. **This metric name MUST pair with the instance type in the config file** to obtain the desired metric data. Please refer to https://developer.dell.com/apis/3898/versions/3.2.0/reference/openapi.json/paths/~1metrics~1generate/post for detailed documentation.
@@ -54,7 +54,7 @@ The API should not be changed when used, and the metric list inside will need to
 * **`userName`**: Username used to authenticate to the api endpoint.
 * **`password`**: Password used to authenticate to the api endpoint.
 * **`metricPath`**: The json file containing the API endpoint and what metrics to collect.
-* **`connectionUrl`**: The host url to get the metric data.
+* **`connectionUrl`**: The host url to get the metric data. There can be multiple URL in this part separated by ",". For example: 127.0.0.1,198.163.0.1
 * **`firstLayerkey`**: PowerScale metric return payload key that has the metric arrary in it.
 
 The following is a sample json file for powerScale. The metric list inside will need to specify the metrics you would like to be collected. If left empty, it will collect all metrics. Refer to "https://developer.dell.com/apis/4088/versions/9.4.0.0/9.4.0.0.json/paths/~1platform~13~1statistics~1summary~1drive/get" for detailed documentation.
@@ -72,7 +72,7 @@ The following is a sample json file for powerScale. The metric list inside will 
 * **`userName`**: Username used to authenticate to the api endpoint.
 * **`metricPath`**: The json file containing the API endpoint and what metrics to collect.
 * **`password`**: Password used to authenticate to the api endpoint.
-* **`connectionUrl`**: The host url to get the metric data.
+* **`connectionUrl`**: The host url to get the metric data. There can be multiple URL in this part separated by ",". For example: 127.0.0.1,198.163.0.1
 * **`idEndPoint`**: The endpoint to get all instances ids.
 
 The following is a sample json file for powerflex. All the metrics that are entered in the list must exist. If left empty, it will collect all metrics. **The API should not be changed**. The metrics provided should be based on the  instance. Refer to "https://developer.dell.com/apis/4008/versions/4.0/PowerFlex_REST_API.json/paths/~1api~1instances~1ProtectionDomain::%7Bid%7D~1relationships~1Statistics/get" for detailed documentation.
@@ -97,7 +97,7 @@ The following is a sample json file for powerflex. All the metrics that are ente
 * **`password`**: Password used to authenticate to the api endpoint.
 * **`domain`**: Domain used to authenticate to the api endpoint. Please use the one from the template.
 * **`userAgent`**: userAgent used to connect to the api endpoint.
-* **`connectionUrl`**: Connection url for the log api endpoint.
+* **`connectionUrl`**: Connection url for the log api endpoint. There can be multiple URL in this part separated by ",". For example: 127.0.0.1,198.163.0.1
 
 Refer to "https://developer.dell.com/apis/5468/versions/3.8/PowerFlexManager_REST_API.json/paths/~1Log/get" for documentation.
 
