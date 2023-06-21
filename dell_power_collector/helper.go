@@ -134,7 +134,7 @@ func parseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 				log.Output(1, err.Error())
 				log.Output(1, "Failed to cast value "+fmt.Sprint(curVal)+" to number")
 			}
-		case float64, int64:
+		case uint8, uint16, uint32, uint64, int, int8, int16, int32, int64, float32, float64:
 			value, err := formMetricDataPoint(curPrefix, fmt.Sprint(curVal))
 			if err == nil {
 				dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, value)
@@ -395,11 +395,7 @@ func ToString(inputVar interface{}) string {
 	if inputVar == nil {
 		return ""
 	}
-	mtype := reflect.TypeOf(inputVar)
-	if fmt.Sprint(mtype) == "string" {
-		return inputVar.(string)
-	}
-	panic("[ERROR] Wrong input type. Can not convert current input to string.")
+	return fmt.Sprint(inputVar)
 }
 
 func ToBool(inputVar interface{}) bool {

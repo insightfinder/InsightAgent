@@ -1,8 +1,8 @@
 package main
 
 type MetricDataPoint struct {
-	MetricName string  `json:"m,omitempty" validate:"required"`
-	Value      float64 `json:"v,omitempty" validate:"required"`
+	MetricName string  `json:"m" validate:"required"`
+	Value      float64 `json:"v" validate:"required"`
 	GroupId    string  `json:"g,omitempty"`
 }
 
@@ -13,7 +13,7 @@ type DataInTimestamp struct {
 
 type InstanceData struct {
 	InstanceName       string                    `json:"in" validate:"required"`
-	ComponentName      string                    `json:"cn,omitempty"`
+	ComponentName      string                    `json:"cn"`
 	DataInTimestampMap map[int64]DataInTimestamp `json:"dit" validate:"required"`
 }
 
