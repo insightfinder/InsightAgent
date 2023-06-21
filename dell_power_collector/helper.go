@@ -132,7 +132,7 @@ func parseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 				dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, value)
 			} else {
 				log.Output(1, err.Error())
-				log.Output(1, "Failed to cast value"+fmt.Sprint(curVal)+"to number")
+				log.Output(1, "Failed to cast value "+fmt.Sprint(curVal)+" to number")
 			}
 		case float64, int64:
 			value, err := formMetricDataPoint(curPrefix, fmt.Sprint(curVal))
@@ -140,7 +140,7 @@ func parseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 				dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, value)
 			} else {
 				log.Output(1, err.Error())
-				log.Output(1, "Failed to cast value"+curVal.(string)+"to number")
+				log.Output(1, "Failed to cast value "+curVal.(string)+" to number")
 			}
 		case interface{}:
 			curMetricMap, success := curVal.(map[string]interface{})
