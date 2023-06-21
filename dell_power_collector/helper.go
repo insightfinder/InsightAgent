@@ -145,7 +145,7 @@ func parseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 		case interface{}:
 			curMetricMap, success := curVal.(map[string]interface{})
 			if !success {
-				panic("[ERROR] Can't parse the metric " + curPrefix)
+				log.Output(1, "[ERROR] Can't parse the metric "+curPrefix)
 			}
 			for k, v := range curMetricMap {
 				stack.Push(MetricStack{
@@ -154,8 +154,8 @@ func parseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 				})
 			}
 		default:
-			panic("[ERROR] Wrong type input from the data. Key:" +
-				curPrefix + " ;Value: " + fmt.Sprint(curVal))
+			log.Output(1, "[ERROR] Wrong type input from the data. Key:"+
+				curPrefix+" ;Value: "+fmt.Sprint(curVal))
 		}
 	}
 	return dataInTs
