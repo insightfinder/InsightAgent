@@ -64,7 +64,7 @@ public class KafkaConsumerManager {
                 container.setupMessageListener(new IFMessageListener(ifStreamingBufferManager));
             } else {
                 container.setupMessageListener((MessageListener<Integer, String>) record -> {
-                    ifStreamingBufferManager.parseString(record.value(), System.currentTimeMillis());
+                    ifStreamingBufferManager.parseString(record.topic(), record.value(), System.currentTimeMillis());
                 });
             }
             applicationContext.registerBeanDefinition("ConcurrentMessageListenerContainer" + clusterIndex, BeanDefinitionBuilder.genericBeanDefinition(ConcurrentMessageListenerContainer.class, () -> {
@@ -97,7 +97,7 @@ public class KafkaConsumerManager {
 
         @Override
         public void onMessage(ConsumerRecord<Integer, String> data) {
-            ifStreamingBufferManager.parseString(data.value(), System.currentTimeMillis());
+            ifStreamingBufferManager.parseString(data.topic() ,data.value(), System.currentTimeMillis());
         }
 
         @Override
