@@ -50,6 +50,7 @@ public class IFConfig {
     private List<String> logInstanceFieldPathList;
 
     private List<String> logComponentFieldPathList;
+    private Set<String> logMetadataTopics;
 
     public String getUserName() {
         return userName;
@@ -346,5 +347,13 @@ public class IFConfig {
 
     public void setLogComponentFieldPathList(List<String> logComponentFieldPathList) {
         this.logComponentFieldPathList = logComponentFieldPathList;
+    }
+
+    public Set<String> getLogMetadataTopics() {
+        return logMetadataTopics;
+    }
+
+    public void setLogMetadataTopics(Set<String> logMetadataTopics) {
+        this.logMetadataTopics = logMetadataTopics;
     }
 }

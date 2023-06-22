@@ -51,7 +51,8 @@ public class IFStreamingBufferManager {
     }
 
     private final ConcurrentHashMap<String, IFStreamingBuffer> collectingDataMap = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, JsonArray> collectingLogDataMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Set<JsonObject>> collectingLogDataMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Set<JsonObject>> collectingLogMetadataMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, IFStreamingBuffer> collectedBufferMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> sendingStatistics = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> sendingTimeStatistics = new ConcurrentHashMap<>();
@@ -185,6 +186,26 @@ public class IFStreamingBufferManager {
         }
     }
 
+    private JsonObject processMetadata(JsonObject srcData){
+        JsonObject data = new JsonObject();
+        String instanceStr = getKeyFromJson(srcData, ifConfig.getLogInstanceFieldPathList());
+        if (instanceStr == null) {
+            if (ifConfig.isLogParsingInfo()) {
+                logger.log(Level.INFO, " can not find instance in raw data:" + srcData);
+            }
+            return null;
+        }
+        data.addProperty("instanceName", instanceStr);
+        List<List<String>> logComponentList = getLogComponentList();
+        if (logComponentList != null && !logComponentList.isEmpty()){
+            String componentName = getComponentName(srcData, logComponentList);
+            if (componentName != null){
+                data.addProperty("componentName", componentName);
+            }
+        }
+        return data;
+    }
+
     private JsonObject processLogData(JsonObject srcData) {
         JsonObject data = new JsonObject();
         String timestampStr = getKeyFromJson(srcData, ifConfig.getLogTimestampFieldPathList());
@@ -207,14 +228,6 @@ public class IFStreamingBufferManager {
                 logger.log(Level.INFO, " can not find instance in raw data:" + srcData);
             }
             return null;
-        }
-
-        List<List<String>> logComponentList = getLogComponentList();
-        if (logComponentList != null && !logComponentList.isEmpty()){
-            String componentName = getComponentName(srcData, logComponentList);
-            if (componentName != null){
-                data.addProperty("componentName", componentName);
-            }
         }
 
         data.addProperty("timestamp", timestamp.toString());
@@ -287,18 +300,32 @@ public class IFStreamingBufferManager {
         return null;
     }
 
-    public void parseString(String content, long receiveTime) {
+    public void parseString(String topic ,String content, long receiveTime) {
         JsonObject jsonObject = null;
         if (ifConfig.isLogProject()) {
             jsonObject = gson.fromJson(content, JsonObject.class);
-            JsonObject data = processLogData(jsonObject);
-            if (data != null) {
-                if (!collectingLogDataMap.contains(data.get("tag").getAsString())) {
-                    collectingLogDataMap.put(data.get("tag").getAsString(), new JsonArray());
+
+            if (ifConfig.getLogMetadataTopics() != null && ifConfig.getLogMetadataTopics().contains(topic)){
+                JsonObject data = processMetadata(jsonObject);
+                if (data != null){
+                    if (!collectingLogMetadataMap.containsKey(ifConfig.getLogProjectName())) {
+                        collectingLogMetadataMap.put(ifConfig.getLogProjectName(), ConcurrentHashMap.newKeySet());
+                    }
+                    Set<JsonObject> jsonArray = collectingLogMetadataMap.get(ifConfig.getLogProjectName());
+                    if (jsonArray != null) {
+                        jsonArray.add(data);
+                    }
                 }
-                JsonArray jsonArray = collectingLogDataMap.get(data.get("tag").getAsString());
-                if (jsonArray != null) {
-                    jsonArray.add(data);
+            }else {
+                JsonObject data = processLogData(jsonObject);
+                if (data != null) {
+                    if (!collectingLogDataMap.containsKey(data.get("tag").getAsString())) {
+                        collectingLogDataMap.put(data.get("tag").getAsString(), ConcurrentHashMap.newKeySet());
+                    }
+                    Set<JsonObject> jsonArray = collectingLogDataMap.get(data.get("tag").getAsString());
+                    if (jsonArray != null) {
+                        jsonArray.add(data);
+                    }
                 }
             }
         } else {
@@ -393,10 +420,16 @@ public class IFStreamingBufferManager {
         return stringBuilder.toString();
     }
 
-    public void mergeLogDataAndSendToIF2(Map<String, JsonArray> collectingDataMap) {
+    public void mergeLogDataAndSendToIF2(Map<String, Set<JsonObject>> collectingDataMap) {
         for (String key : collectingDataMap.keySet()) {
-            sendToIF(collectingDataMap.get(key).toString(), ifConfig.getLogProjectName(), ifConfig.getLogSystemName());
+            sendToIF(gson.toJson(collectingDataMap.get(key)), ifConfig.getLogProjectName(), ifConfig.getLogSystemName());
             collectingDataMap.remove(key);
+        }
+        if (!collectingLogMetadataMap.isEmpty()){
+            for (String key : collectingLogMetadataMap.keySet()) {
+                sendMetadataToIF(gson.toJson(collectingLogMetadataMap.get(key)), ifConfig.getLogProjectName(), ifConfig.getLogSystemName());
+                collectingLogMetadataMap.remove(key);
+            }
         }
     }
 
@@ -491,6 +524,37 @@ public class IFStreamingBufferManager {
         sendToIF(ret.toString(), project, system);
     }
 
+    public void sendMetadataToIF(String data, String ifProjectName, String ifSystemName) {
+        String dataType = ifConfig.isLogProject() ? "Log" : "Metric";
+        if (projectManager.checkAndCreateProject(ifProjectName, ifSystemName, dataType)) {
+            UUID uuid = UUID.randomUUID();
+            MultiValueMap<String, String> bodyValues = new LinkedMultiValueMap<>();
+            bodyValues.add("licenseKey", ifConfig.getLicenseKey());
+            bodyValues.add("projectName", ifProjectName);
+            bodyValues.add("userName", ifConfig.getUserName());
+            bodyValues.add("data", data);
+            bodyValues.add("agentType", ifConfig.getAgentType());
+            int dataSize = data.getBytes(StandardCharsets.UTF_8).length / 1024;
+            webClient.post()
+                    .uri("/api/v1/agent-upload-instancemetadata")
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .body(BodyInserters.fromFormData(bodyValues))
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofMillis(100000))
+                    .onErrorResume(throwable -> {
+                        return Mono.just("RETRY");
+                    })
+                    .subscribe(res -> {
+                        if (res.equalsIgnoreCase("RETRY")) {//retry 1 2
+                            logger.log(Level.INFO, "sending metadata: request id : " + uuid + " data size: " + dataSize + " kb code: " + res);
+                        } else {
+                            logger.log(Level.INFO, "sending metadata: request id: " + uuid + " data size: " + dataSize + " kb code: " + res);
+                        }
+                    });
+        }
+    }
+
     public void sendToIF(String data, String ifProjectName, String ifSystemName) {
         String dataType = ifConfig.isLogProject() ? "Log" : "Metric";
         if (projectManager.checkAndCreateProject(ifProjectName, ifSystemName, dataType)) {
@@ -503,7 +567,7 @@ public class IFStreamingBufferManager {
             bodyValues.add("agentType", ifConfig.getAgentType());
             int dataSize = data.getBytes(StandardCharsets.UTF_8).length / 1024;
             webClient.post()
-                    .uri(ifConfig.getServerUri())
+                    .uri("/api/v1/customprojectrawdata")
                     .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                     .body(BodyInserters.fromFormData(bodyValues))
                     .retrieve()
@@ -514,9 +578,9 @@ public class IFStreamingBufferManager {
                     })
                     .subscribe(res -> {
                         if (res.equalsIgnoreCase("RETRY")) {//retry 1 2
-                            logger.log(Level.INFO, "request id: " + uuid + " data size: " + dataSize + " kb code: " + res);
+                            logger.log(Level.INFO, "sending data: request id: " + uuid + " data size: " + dataSize + " kb code: " + res);
                         } else {
-                            logger.log(Level.INFO, "request id: " + uuid + " data size: " + dataSize + " kb code: " + res);
+                            logger.log(Level.INFO, "sending data: request id: " + uuid + " data size: " + dataSize + " kb code: " + res);
                         }
                     });
         }
