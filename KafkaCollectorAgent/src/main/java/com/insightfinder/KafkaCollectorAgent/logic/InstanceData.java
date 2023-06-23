@@ -1,6 +1,7 @@
 package com.insightfinder.KafkaCollectorAgent.logic;
 
-import java.util.*;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class InstanceData {
@@ -8,14 +9,14 @@ public class InstanceData {
     private final String instanceName;
     private final ConcurrentHashMap<Long, DataInTimestamp> dataInTimestampMap;
 
-    public InstanceData(String projectName ,String instanceName) {
+    public InstanceData(String projectName, String instanceName) {
         this.projectName = projectName;
         this.instanceName = instanceName;
         this.dataInTimestampMap = new ConcurrentHashMap<>();
     }
 
     public void addData(String metricName, long timestamp, double value) {
-        timestamp -= timestamp % (60000l);
+        timestamp -= timestamp % (60000L);
         DataInTimestamp dataInTimestamp = dataInTimestampMap.getOrDefault(timestamp, new DataInTimestamp(timestamp));
         dataInTimestamp.addData(metricName, value);
         dataInTimestampMap.put(timestamp, dataInTimestamp);
@@ -29,18 +30,18 @@ public class InstanceData {
         return instanceName;
     }
 
-    public InstanceData  mergeDataAndGetSendingData(InstanceData instanceData){
-        InstanceData result = new InstanceData(instanceData.getProjectName() ,instanceData.getInstanceName());
-        for (Long key : dataInTimestampMap.keySet()){
-            if (!instanceData.dataInTimestampMap.containsKey(key)){
+    public InstanceData mergeDataAndGetSendingData(InstanceData instanceData) {
+        InstanceData result = new InstanceData(instanceData.getProjectName(), instanceData.getInstanceName());
+        for (Long key : dataInTimestampMap.keySet()) {
+            if (!instanceData.dataInTimestampMap.containsKey(key)) {
                 result.dataInTimestampMap.put(key, dataInTimestampMap.remove(key));
             }
         }
 
-        for (Long key : instanceData.dataInTimestampMap.keySet()){
-            if (dataInTimestampMap.containsKey(key)){
+        for (Long key : instanceData.dataInTimestampMap.keySet()) {
+            if (dataInTimestampMap.containsKey(key)) {
                 dataInTimestampMap.get(key).mergeData(instanceData.dataInTimestampMap.remove(key));
-            }else {
+            } else {
                 dataInTimestampMap.put(key, instanceData.dataInTimestampMap.remove(key));
             }
         }
