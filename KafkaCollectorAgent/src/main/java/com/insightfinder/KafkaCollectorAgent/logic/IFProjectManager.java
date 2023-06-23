@@ -11,6 +11,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
+
 import javax.annotation.PostConstruct;
 import java.util.HashSet;
 import java.util.Set;
@@ -19,7 +20,7 @@ import java.util.logging.Logger;
 
 @Component
 public class IFProjectManager {
-    private Logger logger = Logger.getLogger(IFProjectManager.class.getName());
+    private final Logger logger = Logger.getLogger(IFProjectManager.class.getName());
     @Autowired
     private IFConfig ifConfig;
     @Autowired
@@ -37,21 +38,21 @@ public class IFProjectManager {
         projects = new HashSet<>();
     }
 
-    boolean checkAndCreateProject(String projectName, String systemName){
-        if (projects.contains(projectName)){
+    boolean checkAndCreateProject(String projectName, String systemName, String dataType) {
+        if (projects.contains(projectName)) {
             return true;
         }
-        if (checkProject(projectName, systemName)){
+        if (checkProject(projectName, systemName)) {
             projects.add(projectName);
-        }else {
-            if (createProject(projectName, systemName)){
+        } else {
+            if (createProject(projectName, systemName, dataType)) {
                 projects.add(projectName);
             }
         }
         return projects.contains(projectName);
     }
 
-    boolean checkProject(String projectName, String systemName){
+    boolean checkProject(String projectName, String systemName) {
         MultiValueMap<String, String> bodyValues = new LinkedMultiValueMap<>();
         bodyValues.add("userName", ifConfig.getUserName());
         bodyValues.add("licenseKey", ifConfig.getLicenseKey());
@@ -65,13 +66,10 @@ public class IFProjectManager {
                 .bodyToMono(String.class)
                 .block();
         JsonObject resObject = new Gson().fromJson(res, JsonObject.class);
-        if (resObject.has("isProjectExist") && resObject.get("isProjectExist").getAsBoolean()){
-            return true;
-        }
-        return false;
+        return resObject.has("isProjectExist") && resObject.get("isProjectExist").getAsBoolean();
     }
 
-    boolean createProject(String projectName, String systemName){
+    boolean createProject(String projectName, String systemName, String dataType) {
         MultiValueMap<String, String> bodyValues = new LinkedMultiValueMap<>();
         bodyValues.add("userName", ifConfig.getUserName());
         bodyValues.add("licenseKey", ifConfig.getLicenseKey());
@@ -79,10 +77,10 @@ public class IFProjectManager {
         bodyValues.add("operation", "create");
         bodyValues.add("instanceType", "PrivateCloud");
         bodyValues.add("projectCloudType", "PrivateCloud");
-        bodyValues.add("samplingInterval", String.valueOf(ifConfig.getSamplingIntervalInSeconds()/60));
+        bodyValues.add("samplingInterval", String.valueOf(ifConfig.getSamplingIntervalInSeconds() / 60));
         bodyValues.add("samplingIntervalInSeconds", String.valueOf(ifConfig.getSamplingIntervalInSeconds()));
         bodyValues.add("systemName", systemName);
-        bodyValues.add("dataType", "Metric");
+        bodyValues.add("dataType", dataType);
         bodyValues.add("insightAgentType", ifConfig.getAgentType());
         String res = webClient.post()
                 .uri("/api/v1/check-and-add-custom-project")
@@ -92,7 +90,7 @@ public class IFProjectManager {
                 .bodyToMono(String.class)
                 .block();
         JsonObject resObject = new Gson().fromJson(res, JsonObject.class);
-        if (resObject.has("success")&&resObject.get("success").getAsBoolean()){
+        if (resObject.has("success") && resObject.get("success").getAsBoolean()) {
             logger.log(Level.INFO, "Success to create project " + projectName);
             return true;
         }

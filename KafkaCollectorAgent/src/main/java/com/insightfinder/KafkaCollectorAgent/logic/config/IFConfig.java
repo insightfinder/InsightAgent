@@ -1,12 +1,12 @@
 package com.insightfinder.KafkaCollectorAgent.logic.config;
 
-import com.google.gson.reflect.TypeToken;
+import com.google.gson.Gson;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
-import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 @Configuration
@@ -24,13 +24,13 @@ public class IFConfig {
     private String metricKey;
     private String valueKey;
     private String projectList;
-    private Set<String>instanceList;
-    private String  metricRegex;
+    private Set<String> instanceList;
+    private String metricRegex;
     private String dataFormat;
     private String dataFormatRegex;
-    private String  agentType;
-    private int  collectingTime;
-    private int  bufferSize=100000;
+    private String agentType;
+    private int collectingTime;
+    private int bufferSize = 100000;
     private String projectDelimiter;
     private boolean logParsingInfo;
     private boolean logSendingData;
@@ -42,6 +42,15 @@ public class IFConfig {
     private String metricNameFilter;
     private int kafkaMetricLogInterval;
     private boolean fastRecovery;
+    private boolean logProject;
+    private String logProjectName;
+    private String logSystemName;
+    private String logTimestampFormat;
+    private List<String> logTimestampFieldPathList;
+    private List<String> logInstanceFieldPathList;
+
+    private List<String> logComponentFieldPathList;
+    private Set<String> logMetadataTopics;
 
     public String getUserName() {
         return userName;
@@ -108,7 +117,6 @@ public class IFConfig {
     }
 
 
-
     public String getProjectList() {
         return projectList;
     }
@@ -116,6 +124,7 @@ public class IFConfig {
     public void setProjectList(String projectList) {
         this.projectList = projectList;
     }
+
     public Set<String> getInstanceList() {
         return instanceList;
     }
@@ -282,5 +291,69 @@ public class IFConfig {
 
     public void setFastRecovery(boolean fastRecovery) {
         this.fastRecovery = fastRecovery;
+    }
+
+    public boolean isLogProject() {
+        return logProject;
+    }
+
+    public void setLogProject(boolean logProject) {
+        this.logProject = logProject;
+    }
+
+    public String getLogProjectName() {
+        return logProjectName;
+    }
+
+    public void setLogProjectName(String logProjectName) {
+        this.logProjectName = logProjectName;
+    }
+
+    public String getLogSystemName() {
+        return logSystemName;
+    }
+
+    public void setLogSystemName(String logSystemName) {
+        this.logSystemName = logSystemName;
+    }
+
+    public String getLogTimestampFormat() {
+        return logTimestampFormat;
+    }
+
+    public void setLogTimestampFormat(String logTimestampFormat) {
+        this.logTimestampFormat = logTimestampFormat;
+    }
+
+    public List<String> getLogTimestampFieldPathList() {
+        return logTimestampFieldPathList;
+    }
+
+    public void setLogTimestampFieldPathList(List<String> logTimestampFieldPathList) {
+        this.logTimestampFieldPathList = logTimestampFieldPathList;
+    }
+
+    public List<String> getLogInstanceFieldPathList() {
+        return logInstanceFieldPathList;
+    }
+
+    public void setLogInstanceFieldPathList(List<String> logInstanceFieldPathList) {
+        this.logInstanceFieldPathList = logInstanceFieldPathList;
+    }
+
+    public List<String> getLogComponentFieldPathList() {
+        return logComponentFieldPathList;
+    }
+
+    public void setLogComponentFieldPathList(List<String> logComponentFieldPathList) {
+        this.logComponentFieldPathList = logComponentFieldPathList;
+    }
+
+    public Set<String> getLogMetadataTopics() {
+        return logMetadataTopics;
+    }
+
+    public void setLogMetadataTopics(Set<String> logMetadataTopics) {
+        this.logMetadataTopics = logMetadataTopics;
     }
 }

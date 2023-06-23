@@ -1,8 +1,7 @@
 package com.insightfinder.KafkaCollectorAgent.logic;
 
-import com.google.gson.JsonObject;
-
-import java.util.*;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
@@ -11,7 +10,7 @@ public class IFStreamingBuffer {
     private String project;
     private String system;
 
-    private ConcurrentHashMap<String, InstanceData> allInstanceDataMap;
+    private final ConcurrentHashMap<String, InstanceData> allInstanceDataMap;
 
     public IFStreamingBuffer(String projectName, String systemName) {
         this.project = projectName;
@@ -19,24 +18,24 @@ public class IFStreamingBuffer {
         this.allInstanceDataMap = new ConcurrentHashMap<>();
     }
 
-    public void addData(String instanceName , long timestamp ,String metricName, double value){
-        if (!allInstanceDataMap.containsKey(instanceName)){
+    public void addData(String instanceName, long timestamp, String metricName, double value) {
+        if (!allInstanceDataMap.containsKey(instanceName)) {
             allInstanceDataMap.put(instanceName, new InstanceData(this.project, instanceName));
         }
         allInstanceDataMap.get(instanceName).addData(metricName, timestamp, value);
     }
 
-    public void clear(){
+    public void clear() {
         this.allInstanceDataMap.clear();
     }
 
-    public IFStreamingBuffer mergeDataAndGetSendingData(IFStreamingBuffer ifStreamingBuffer){
+    public IFStreamingBuffer mergeDataAndGetSendingData(IFStreamingBuffer ifStreamingBuffer) {
         IFStreamingBuffer result = new IFStreamingBuffer(ifStreamingBuffer.getProject(), ifStreamingBuffer.getSystem());
-        for (String key : allInstanceDataMap.keySet()){
+        for (String key : allInstanceDataMap.keySet()) {
             InstanceData instanceData = null;
-            if (ifStreamingBuffer.allInstanceDataMap.containsKey(key)){
+            if (ifStreamingBuffer.allInstanceDataMap.containsKey(key)) {
                 instanceData = allInstanceDataMap.get(key).mergeDataAndGetSendingData(ifStreamingBuffer.allInstanceDataMap.remove(key));
-            }else {
+            } else {
                 instanceData = allInstanceDataMap.remove(key);
             }
             result.allInstanceDataMap.put(key, instanceData);
