@@ -26,7 +26,7 @@ const PowerScaleSectionName = "powerScale"
 const PowerStoreSectionName = "powerStore"
 const PowerFlexManagerSection = "powerFlexManager"
 
-const RunningIndex = "running_index-%s.txt"
+const RunningIndex = "running_index-%s-%s.txt"
 
 func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	// Required parameters
@@ -205,6 +205,7 @@ func isProjectExist(IFconfig map[string]interface{}) bool {
 		strings.NewReader(form.Encode()),
 		headers,
 		AuthRequest{},
+		false,
 	)
 	println(string(response))
 	var result map[string]interface{}
@@ -253,6 +254,7 @@ func createProject(IFconfig map[string]interface{}) {
 		strings.NewReader(form.Encode()),
 		headers,
 		AuthRequest{},
+		false,
 	)
 	var result map[string]interface{}
 	json.Unmarshal(response, &result)
@@ -279,23 +281,6 @@ func getMetricSectionData(p *configparser.ConfigParser, IFconfig map[string]inte
 	return data
 }
 
-func getInputLogSectionData(p *configparser.ConfigParser, IFConfig map[string]interface{}, offset int) []LogData {
-	allSections := p.Sections()
-
-	var data []LogData
-	for i := 0; i < len(allSections); i++ {
-		switch allSections[i] {
-		case PowerFlexManagerSection:
-			data = PowerFlexManagerDataStream(p, offset)
-		case IF_SECTION_NAME:
-			continue
-		default:
-			panic("No supported agent type found in the config file.")
-		}
-	}
-	return data
-}
-
 func workerProcess(configPath string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -308,38 +293,60 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 	var IFConfig = getIFConfigsSection(p)
 	checkProject(IFConfig)
 
-	configName := path.Base(configPath)
-	configName = configName[:len(configName)-len(path.Ext(configName))] // remove the extension name
-	indexName := fmt.Sprintf(RunningIndex, configName)
-
-	indexContent := readIndexFile(indexName)
-
 	if IFConfig["projectType"] == "LOG" {
-		//
-		offset := 0
-		if indexContent != "" {
-			offset, err = strconv.Atoi(indexContent)
+		config := getPFMConfig(p)
+
+		connectionUrl := config["connectionUrl"].(string)
+		connectionUrlList := []string{connectionUrl}
+
+		if strings.Contains(connectionUrl, ",") {
+			connectionUrlList = strings.Split(connectionUrl, ",")
+		} else {
+			connectionUrlList = append(connectionUrlList, connectionUrl)
+		}
+
+		for _, connUrl := range connectionUrlList {
+			cfg := copyAnyMap(config)
+			connUrl := strings.TrimSpace(connUrl)
+			cfg["connectionUrl"] = connUrl
+
+			conn, err := url.Parse(connUrl)
 			if err != nil {
+				log.Output(1, "[ERROR] Fail to pares the URL. Please check your config.")
 				panic(err)
 			}
-		}
-		log.Output(2, fmt.Sprintf("[LOG] The offset of the log is: %d", offset))
 
-		fetchNext := true
-		totalCount := 0
-		maxFetchCount := 50000
+			configName := path.Base(configPath)
+			configName = configName[:len(configName)-len(path.Ext(configName))] // remove the extension name
+			indexName := fmt.Sprintf(RunningIndex, configName, conn.Host)
 
-		for fetchNext {
-			data := getInputLogSectionData(p, IFConfig, offset)
-			count := len(data)
+			indexContent := readIndexFile(indexName)
 
-			sendLogData(data, IFConfig)
+			offset := 0
+			if indexContent != "" {
+				offset, err = strconv.Atoi(indexContent)
+				if err != nil {
+					panic(err)
+				}
+			}
+			log.Output(2, fmt.Sprintf("[LOG] The offset of the log is: %d", offset))
 
-			writeIndexFile(indexName, fmt.Sprint(offset))
-			offset += count
-			totalCount += count
-			if count == 0 || (maxFetchCount > 0 && totalCount >= maxFetchCount) {
-				fetchNext = false
+			fetchNext := true
+			totalCount := 0
+			maxFetchCount := 50000
+
+			for fetchNext {
+				data := PowerFlexManagerDataStream(config, offset)
+				count := len(data)
+
+				sendLogData(data, IFConfig)
+
+				writeIndexFile(indexName, fmt.Sprint(offset))
+				offset += count
+				totalCount += count
+				if count == 0 || (totalCount >= maxFetchCount) {
+					fetchNext = false
+				}
 			}
 		}
 	} else {

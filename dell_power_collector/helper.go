@@ -132,20 +132,20 @@ func parseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 				dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, value)
 			} else {
 				log.Output(1, err.Error())
-				log.Output(1, "Failed to cast value"+fmt.Sprint(curVal)+"to number")
+				log.Output(1, "Failed to cast value "+fmt.Sprint(curVal)+" to number")
 			}
-		case float64, int64:
+		case uint8, uint16, uint32, uint64, int, int8, int16, int32, int64, float32, float64:
 			value, err := formMetricDataPoint(curPrefix, fmt.Sprint(curVal))
 			if err == nil {
 				dataInTs.MetricDataPoints = append(dataInTs.MetricDataPoints, value)
 			} else {
 				log.Output(1, err.Error())
-				log.Output(1, "Failed to cast value"+curVal.(string)+"to number")
+				log.Output(1, "Failed to cast value "+curVal.(string)+" to number")
 			}
 		case interface{}:
 			curMetricMap, success := curVal.(map[string]interface{})
 			if !success {
-				panic("[ERROR] Can't parse the metric " + curPrefix)
+				log.Output(1, "[ERROR] Can't parse the metric "+curPrefix)
 			}
 			for k, v := range curMetricMap {
 				stack.Push(MetricStack{
@@ -154,8 +154,8 @@ func parseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 				})
 			}
 		default:
-			panic("[ERROR] Wrong type input from the data. Key:" +
-				curPrefix + " ;Value: " + fmt.Sprint(curVal))
+			log.Output(1, "[ERROR] Wrong type input from the data. Key:"+
+				curPrefix+" ;Value: "+fmt.Sprint(curVal))
 		}
 	}
 	return dataInTs
@@ -292,6 +292,7 @@ func sendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 		bytes.NewBuffer(data),
 		headers,
 		AuthRequest{},
+		false,
 	)
 	var result map[string]interface{}
 	json.Unmarshal(response, &result)
@@ -302,7 +303,7 @@ func sendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 	}
 }
 
-func sendRequest(operation string, endpoint string, form io.Reader, headers map[string]string, auth AuthRequest) ([]byte, http.Header) {
+func sendRequest(operation string, endpoint string, form io.Reader, headers map[string]string, auth AuthRequest, skipCertificate bool) ([]byte, http.Header) {
 	newRequest, err := http.NewRequest(
 		operation,
 		endpoint,
@@ -318,12 +319,17 @@ func sendRequest(operation string, endpoint string, form io.Reader, headers map[
 	for k := range headers {
 		newRequest.Header.Add(k, headers[k])
 	}
-
-	// Skip certificate verification.
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	var client *http.Client
+	// If we will skip certificate verification.
+	if !skipCertificate {
+		client = &http.Client{}
+	} else {
+		tr := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: skipCertificate},
+		}
+		client = &http.Client{Transport: tr}
 	}
-	client := &http.Client{Transport: tr}
+
 	res, err := client.Do(newRequest)
 	if err != nil {
 		panic(err)
@@ -389,11 +395,7 @@ func ToString(inputVar interface{}) string {
 	if inputVar == nil {
 		return ""
 	}
-	mtype := reflect.TypeOf(inputVar)
-	if fmt.Sprint(mtype) == "string" {
-		return inputVar.(string)
-	}
-	panic("[ERROR] Wrong input type. Can not convert current input to string.")
+	return fmt.Sprint(inputVar)
 }
 
 func ToBool(inputVar interface{}) bool {
@@ -498,4 +500,26 @@ func (s *Stack) Pop() (MetricStack, bool) {
 		*s = (*s)[:index]      // Remove it from the stack by slicing it off.
 		return element, true
 	}
+}
+
+func copyMap[K, V comparable](m map[K]V) map[K]V {
+	result := make(map[K]V)
+	for k, v := range m {
+		result[k] = v
+	}
+	return result
+}
+
+func copyAnyMap(m map[string]interface{}) map[string]interface{} {
+	cp := make(map[string]interface{})
+	for k, v := range m {
+		vm, ok := v.(map[string]interface{})
+		if ok {
+			cp[k] = copyAnyMap(vm)
+		} else {
+			cp[k] = v
+		}
+	}
+
+	return cp
 }

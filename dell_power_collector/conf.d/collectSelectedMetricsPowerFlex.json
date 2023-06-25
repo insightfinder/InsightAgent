@@ -1,0 +1,9 @@
+{
+    "/api/instances/{$instanceType}::{$id}/relationships/Statistics":[
+        "unusedCapacityInKb",
+        "totalReadBwc",
+        "persistentChecksumCapacityInKb",
+        "numOfVolumes",
+        "currentTickerValue"
+    ]
+}
