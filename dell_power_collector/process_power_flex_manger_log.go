@@ -65,6 +65,7 @@ func authenticationPF(config map[string]interface{}) map[string]string {
 		bytes.NewBuffer(bytesPayload),
 		headers,
 		AuthRequest{},
+		true,
 	)
 
 	var result AuthResponse
@@ -104,6 +105,7 @@ func getPFMLogData(reqHeader map[string]string, config map[string]interface{}, o
 		strings.NewReader(params.Encode()),
 		reqHeader,
 		AuthRequest{},
+		true,
 	)
 	json.Unmarshal(body, &result)
 	return
@@ -142,8 +144,7 @@ func processPFMLogData(rawData []map[string]interface{}, config map[string]inter
 	return
 }
 
-func PowerFlexManagerDataStream(p *configparser.ConfigParser, offset int) []LogData {
-	config := getPFMConfig(p)
+func PowerFlexManagerDataStream(config map[string]interface{}, offset int) []LogData {
 	authHeaders := authenticationPF(config)
 	rawLogData := getPFMLogData(authHeaders, config, offset)
 

@@ -62,6 +62,7 @@ func getInstanceList(config map[string]string) (instanceList []string) {
 			UserName: "",
 			Password: config["token"],
 		},
+		true,
 	)
 
 	var result []interface{}
@@ -101,6 +102,7 @@ func processDataFromInstances(instance string, config map[string]string, endpoin
 			UserName: "",
 			Password: config["token"],
 		},
+		true,
 	)
 
 	log.Output(1, "[LOG] Getting instances data")
@@ -143,19 +145,13 @@ func getToken(config map[string]string) string {
 			UserName: config["userName"],
 			Password: config["password"],
 		},
+		true,
 	)
 
 	return string(token)
 }
 
 func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]interface{}) MetricDataReceivePayload {
-	config := getPFConfig(p)
-	token := getToken(config)
-	token = strings.ReplaceAll(token, "\"", "")
-	log.Output(1, "[LOG] Successful get the token from Gateway API")
-	log.Output(1, "[LOG] token: "+token)
-	config["token"] = token
-	instances := getInstanceList(config)
 
 	projectName := ToString(IFconfig["projectName"])
 	userName := ToString(IFconfig["userName"])
@@ -165,15 +161,39 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 		InstanceDataMap: make(map[string]InstanceData),
 	}
 
-	endpointMapping, err := GetEndpointMetricMapping(config["metricPath"])
-	if err != nil {
-		panic(err)
+	config := getPFConfig(p)
+
+	connectionUrl := config["connectionUrl"]
+	connectionUrlList := []string{connectionUrl}
+
+	if strings.Contains(connectionUrl, ",") {
+		connectionUrlList = strings.Split(connectionUrl, ",")
+	} else {
+		connectionUrlList = append(connectionUrlList, connectionUrl)
 	}
-	for _, inst := range instances {
-		log.Output(2, "[LOG] Getting data from instance: ["+inst+"] now.")
-		for endpoint, metrics := range endpointMapping {
-			processDataFromInstances(inst, config, endpoint, metrics, &data)
+
+	for _, connUrl := range connectionUrlList {
+		cfg := copyMap(config)
+		cfg["connectionUrl"] = strings.TrimSpace(connUrl)
+
+		token := getToken(cfg)
+		token = strings.ReplaceAll(token, "\"", "")
+		log.Output(1, "[LOG] Successful get the token from Gateway API")
+		log.Output(1, "[LOG] token: "+token)
+		cfg["token"] = token
+		instances := getInstanceList(cfg)
+
+		endpointMapping, err := GetEndpointMetricMapping(cfg["metricPath"])
+		if err != nil {
+			panic(err)
+		}
+		for _, inst := range instances {
+			log.Output(2, "[LOG] Getting data from instance: ["+inst+"] now.")
+			for endpoint, metrics := range endpointMapping {
+				processDataFromInstances(inst, cfg, endpoint, metrics, &data)
+			}
 		}
 	}
+
 	return data
 }

@@ -1,0 +1,9 @@
+{
+    "/metric/generate":[
+        "avg_latency",
+        "avg_io_size",
+        "avg_read_latency",
+        "avg_read_size",
+        "avg_total_iops"
+    ]
+}
