@@ -1,0 +1,163 @@
+#fluetd-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-configmap-conf
+  namespace: logging
+  labels:
+    app: fluentd
+    kubernetes.io/cluster-service: "true"
+data:
+  fluent.conf: |
+    <match fluent.**>
+      @type null
+    </match>
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+    # Here in exclude_path, we can define the path having the namespace name like prometheus, logging etc for which we don't want to create the indexes.
+    #Appserver
+      exclude_path ["/var/log/containers/*prometheus*.log", "/var/log/containers/*logging*.log","/var/log/containers/fluent*", "/var/log/containers/aws*", "/var/log/containers/coredns*", "/var/log/containers/helm*", "/var/log/containers/image*", "/var/log/containers/ingress*", "/var/log/containers/kustomize*", "/var/log/containers/metrics*", "/var/log/containers/source*", "/var/log/containers/ebs*", "/var/log/containers/insightfinder-general*", "/var/log/containers/insightfinder-log*", "/var/log/containers/insightfinder-coordinator*", "/var/log/containers/insightfinder-metric*", "/var/log/containers/insightfinder-rabbitmq*", "/var/log/containers/insightfinder-cron*", "/var/log/containers/insightfinder-anomaly*", "/var/log/containers/insightfinder-causal*", "/var/log/containers/kube*", "/var/log/containers/notification*", "/var/log/containers/reloader*", "/var/log/containers/cluster*", "/var/log/containers/init*", "/var/log/containers/tst*", "/var/log/containers/tst*", "/var/log/containers/grafana*"]
+      pos_file /var/log/fluentd-containers-Appserver.log.pos
+      time_format %Y-%m-%dT%H:%M:%S.%NZ
+      tag iflog.appserver
+      format syslog
+      read_from_head false
+    </source>
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+    # Here in exclude_path, we can define the path having the namespace name like prometheus, logging etc for which we don't want to create the indexes.
+    #GeneralWorker
+      exclude_path ["/var/log/containers/*prometheus*.log", "/var/log/containers/*logging*.log","/var/log/containers/fluent*", "/var/log/containers/aws*", "/var/log/containers/coredns*", "/var/log/containers/helm*", "/var/log/containers/image*", "/var/log/containers/ingress*", "/var/log/containers/kustomize*", "/var/log/containers/metrics*", "/var/log/containers/source*", "/var/log/containers/ebs*", "/var/log/containers/insightfinder-appserver*", "/var/log/containers/insightfinder-log*", "/var/log/containers/insightfinder-coordinator*", "/var/log/containers/insightfinder-metric*", "/var/log/containers/insightfinder-rabbitmq*", "/var/log/containers/insightfinder-cron*", "/var/log/containers/insightfinder-anomaly*", "/var/log/containers/insightfinder-causal*", "/var/log/containers/kube*", "/var/log/containers/notification*", "/var/log/containers/reloader*", "/var/log/containers/cluster*", "/var/log/containers/init*", "/var/log/containers/tst*", "/var/log/containers/tst*", "/var/log/containers/grafana*"]
+      pos_file /var/log/fluentd-containers-GeneralWorker.log.pos
+      time_format %Y-%m-%dT%H:%M:%S.%NZ
+      tag iflog.generalworker
+      format syslog
+      read_from_head false
+    </source>
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+    # Here in exclude_path, we can define the path having the namespace name like prometheus, logging etc for which we don't want to create the indexes.
+    #LogWorker/LogSavenidworker
+      exclude_path ["/var/log/containers/*prometheus*.log", "/var/log/containers/*logging*.log","/var/log/containers/fluent*", "/var/log/containers/aws*", "/var/log/containers/coredns*", "/var/log/containers/helm*", "/var/log/containers/image*", "/var/log/containers/ingress*", "/var/log/containers/kustomize*", "/var/log/containers/metrics*", "/var/log/containers/source*", "/var/log/containers/ebs*", "/var/log/containers/insightfinder-appserver*", "/var/log/containers/insightfinder-general*", "/var/log/containers/insightfinder-coordinator*", "/var/log/containers/insightfinder-metric*", "/var/log/containers/insightfinder-rabbitmq*", "/var/log/containers/insightfinder-cron*", "/var/log/containers/insightfinder-anomaly*", "/var/log/containers/insightfinder-causal*", "/var/log/containers/kube*", "/var/log/containers/notification*", "/var/log/containers/reloader*", "/var/log/containers/cluster*", "/var/log/containers/init*", "/var/log/containers/tst*", "/var/log/containers/tst*", "/var/log/containers/grafana*"]
+      pos_file /var/log/fluentd-containers-LogWorker.log.pos
+      time_format %Y-%m-%dT%H:%M:%S.%NZ
+      tag iflog.logworker
+      format syslog
+      read_from_head false
+    </source>
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+    # Here in exclude_path, we can define the path having the namespace name like prometheus, logging etc for which we don't want to create the indexes.
+    #MetricWorker
+      exclude_path ["/var/log/containers/*prometheus*.log", "/var/log/containers/*logging*.log","/var/log/containers/fluent*", "/var/log/containers/aws*", "/var/log/containers/coredns*", "/var/log/containers/helm*", "/var/log/containers/image*", "/var/log/containers/ingress*", "/var/log/containers/kustomize*", "/var/log/containers/metrics*", "/var/log/containers/source*", "/var/log/containers/ebs*", "/var/log/containers/insightfinder-appserver*", "/var/log/containers/insightfinder-general*", "/var/log/containers/insightfinder-coordinator*", "/var/log/containers/insightfinder-log*", "/var/log/containers/insightfinder-rabbitmq*", "/var/log/containers/insightfinder-cron*", "/var/log/containers/insightfinder-anomaly*", "/var/log/containers/insightfinder-causal*", "/var/log/containers/kube*", "/var/log/containers/notification*", "/var/log/containers/reloader*", "/var/log/containers/cluster*", "/var/log/containers/init*", "/var/log/containers/tst*", "/var/log/containers/tst*", "/var/log/containers/grafana*"]
+      pos_file /var/log/fluentd-containers-Metric.log.pos
+      time_format %Y-%m-%dT%H:%M:%S.%NZ
+      tag 'iflog.metricworker'
+      format syslog
+      read_from_head false
+    </source>
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+    # Here in exclude_path, we can define the path having the namespace name like prometheus, logging etc for which we don't want to create the indexes.
+    #Coordinator
+      exclude_path ["/var/log/containers/*prometheus*.log", "/var/log/containers/*logging*.log","/var/log/containers/fluent*", "/var/log/containers/aws*", "/var/log/containers/coredns*", "/var/log/containers/helm*", "/var/log/containers/image*", "/var/log/containers/ingress*", "/var/log/containers/kustomize*", "/var/log/containers/metrics*", "/var/log/containers/source*", "/var/log/containers/ebs*", "/var/log/containers/insightfinder-appserver*", "/var/log/containers/insightfinder-general*", "/var/log/containers/insightfinder-metric*", "/var/log/containers/insightfinder-log*", "/var/log/containers/insightfinder-rabbitmq*", "/var/log/containers/insightfinder-cron*", "/var/log/containers/insightfinder-anomaly*", "/var/log/containers/insightfinder-causal*", "/var/log/containers/kube*", "/var/log/containers/notification*", "/var/log/containers/reloader*", "/var/log/containers/cluster*", "/var/log/containers/init*", "/var/log/containers/tst*", "/var/log/containers/tst*", "/var/log/containers/grafana*"]
+      pos_file /var/log/fluentd-containers-Coordinator.log.pos
+      time_format %Y-%m-%dT%H:%M:%S.%NZ
+      tag iflog.coordinator
+      format syslog
+      read_from_head false
+    </source>
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+    # Here in exclude_path, we can define the path having the namespace name like prometheus, logging etc for which we don't want to create the indexes.
+    #cron
+      exclude_path ["/var/log/containers/*prometheus*.log", "/var/log/containers/*logging*.log","/var/log/containers/fluent*", "/var/log/containers/aws*", "/var/log/containers/coredns*", "/var/log/containers/helm*", "/var/log/containers/image*", "/var/log/containers/ingress*", "/var/log/containers/kustomize*", "/var/log/containers/metrics*", "/var/log/containers/source*", "/var/log/containers/ebs*", "/var/log/containers/insightfinder-appserver*", "/var/log/containers/insightfinder-general*", "/var/log/containers/insightfinder-coordinator*", "/var/log/containers/insightfinder-log*", "/var/log/containers/insightfinder-rabbitmq*", "/var/log/containers/insightfinder-anomaly*", "/var/log/containers/insightfinder-causal*", "/var/log/containers/kube*", "/var/log/containers/notification*", "/var/log/containers/reloader*", "/var/log/containers/cluster*", "/var/log/containers/init*", "/var/log/containers/tst*", "/var/log/containers/tst*", "/var/log/containers/grafana*"]
+      pos_file /var/log/fluentd-containers-cron.log.pos
+      time_format %Y-%m-%dT%H:%M:%S.%NZ
+      tag iflog.cron
+      format syslog
+      read_from_head false
+    </source>
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+    # Here in exclude_path, we can define the path having the namespace name like prometheus, logging etc for which we don't want to create the indexes.
+    #rabbitmq
+      exclude_path ["/var/log/containers/*prometheus*.log", "/var/log/containers/*logging*.log","/var/log/containers/fluent*", "/var/log/containers/aws*", "/var/log/containers/coredns*", "/var/log/containers/helm*", "/var/log/containers/image*", "/var/log/containers/ingress*", "/var/log/containers/kustomize*", "/var/log/containers/metrics*", "/var/log/containers/source*", "/var/log/containers/ebs*", "/var/log/containers/insightfinder-appserver*", "/var/log/containers/insightfinder-general*", "/var/log/containers/insightfinder-coordinator*", "/var/log/containers/insightfinder-log*", "/var/log/containers/insightfinder-cron*", "/var/log/containers/insightfinder-anomaly*", "/var/log/containers/insightfinder-causal*", "/var/log/containers/kube*", "/var/log/containers/notification*", "/var/log/containers/reloader*", "/var/log/containers/cluster*", "/var/log/containers/init*", "/var/log/containers/tst*", "/var/log/containers/tst*", "/var/log/containers/grafana*"]
+      pos_file /var/log/fluentd-containers-rabbitmq.log.pos
+      time_format %Y-%m-%dT%H:%M:%S.%NZ
+      tag iflog.rabbitmq
+      format syslog
+      read_from_head false
+    </source>
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+    # Here in exclude_path, we can define the path having the namespace name like prometheus, logging etc for which we don't want to create the indexes.
+    #anomalyinsights
+      exclude_path ["/var/log/containers/*prometheus*.log", "/var/log/containers/*logging*.log","/var/log/containers/fluent*", "/var/log/containers/aws*", "/var/log/containers/coredns*", "/var/log/containers/helm*", "/var/log/containers/image*", "/var/log/containers/ingress*", "/var/log/containers/kustomize*", "/var/log/containers/metrics*", "/var/log/containers/source*", "/var/log/containers/ebs*", "/var/log/containers/insightfinder-appserver*", "/var/log/containers/insightfinder-general*", "/var/log/containers/insightfinder-coordinator*", "/var/log/containers/insightfinder-log*", "/var/log/containers/insightfinder-cron*", "/var/log/containers/insightfinder-rabbitmq*", "/var/log/containers/insightfinder-causal*", "/var/log/containers/kube*", "/var/log/containers/notification*", "/var/log/containers/reloader*", "/var/log/containers/cluster*", "/var/log/containers/init*", "/var/log/containers/tst*", "/var/log/containers/tst*", "/var/log/containers/grafana*"]
+      pos_file /var/log/fluentd-containers-anomalyinsights.log.pos
+      time_format %Y-%m-%dT%H:%M:%S.%NZ
+      tag iflog.anomalyinsights
+      format syslog
+      read_from_head false
+    </source>
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+    # Here in exclude_path, we can define the path having the namespace name like prometheus, logging etc for which we don't want to create the indexes.
+    #causal
+      exclude_path ["/var/log/containers/*prometheus*.log", "/var/log/containers/*logging*.log","/var/log/containers/fluent*", "/var/log/containers/aws*", "/var/log/containers/coredns*", "/var/log/containers/helm*", "/var/log/containers/image*", "/var/log/containers/ingress*", "/var/log/containers/kustomize*", "/var/log/containers/metrics*", "/var/log/containers/source*", "/var/log/containers/ebs*", "/var/log/containers/insightfinder-appserver*", "/var/log/containers/insightfinder-general*", "/var/log/containers/insightfinder-coordinator*", "/var/log/containers/insightfinder-log*", "/var/log/containers/insightfinder-cron*", "/var/log/containers/insightfinder-rabbitmq*", "/var/log/containers/insightfinder-anomaly*", "/var/log/containers/kube*", "/var/log/containers/notification*", "/var/log/containers/reloader*", "/var/log/containers/cluster*", "/var/log/containers/init*", "/var/log/containers/tst*", "/var/log/containers/tst*", "/var/log/containers/grafana*"]
+      pos_file /var/log/fluentd-containers-causal.log.pos
+      time_format %Y-%m-%dT%H:%M:%S.%NZ
+      tag iflog.causal
+      format syslog
+      read_from_head false
+    </source>
+    <filter iflog.**>
+      @type kubernetes_metadata
+      annotation_match [".*"]
+      de_dot false
+      tag_to_kubernetes_name_regexp ".+?\\.containers\\.(?<pod_name>[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)_(?<namespace>[^_]+)_(?<container_name>.+)-(?<docker_id>[a-z0-9]{64})\\.log$"
+    </filter>
+    <match iflog.**>
+      @type InsightFinder
+      flush_interval 60s
+      buffer_chunk_limit 200k
+    # Endpoint for messages
+      destinationHost https://app.insightfinder.com/customprojectrawdata
+    #Comma separated list of http statuses which need to be retried
+      http_retry_statuses 500,403
+    #Read timeout in seconds, supports floats
+      http_read_timeout 2.2
+    #Open timeout in seconds, supports floats
+      http_open_timeout 2.34
+      userName user
+      projectName IF-STG-LOGS-2
+    #instancename (leave blank to use hostname)
+      instanceName
+    #License Key
+      licenseKey a333bd39662ad1edf64e99e97e4b776109827234
+    #Instance Type
+      instanceType AWS
+    </match>
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+    # Here in exclude_path, we can define the path having the namespace name like prometheus, logging etc for which we don't want to create the indexes.
+      exclude_path ["/var/log/containers/*prometheus*.log", "/var/log/containers/*logging*.log","/var/log/containers/fluent*"]
+      pos_file /var/log/fluentd-containers.log.pos
+      time_format %Y-%m-%dT%H:%M:%S.%NZ
+      tag iflog-inactive.debug
+      format syslog
+      read_from_head false
+    </source>
+    <match iflog.debug>
+      @type stdout
+    </match>
