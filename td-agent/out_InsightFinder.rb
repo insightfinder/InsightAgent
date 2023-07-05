@@ -84,6 +84,7 @@ module Fluent
           time_hash = {"tag" => tag.to_s, "timestamp" => (time*1000).to_s, "data" => record}
         else
           time_hash = {"tag" => @instanceName, "timestamp" => (time*1000).to_s, "data" => record}
+        end
         data << time_hash
         if $maxtimestamp == 0
           $maxtimestamp = time
