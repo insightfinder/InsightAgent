@@ -11,6 +11,7 @@ module Fluent
       require 'uri'
       require 'json'
       require 'socket'
+      require 'openssl'
     end
     $maxtimestamp = 0
     $mintimestamp = 0
@@ -57,6 +58,7 @@ module Fluent
 
       @http = Net::HTTP.new(@uri.host, @uri.port)
       @http.use_ssl = true
+      @http.verify_mode = OpenSSL::SSL::VERIFY_NONE
       @http.read_timeout = @http_read_timeout
       @http.open_timeout = @http_open_timeout
     end
