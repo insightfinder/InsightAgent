@@ -29,6 +29,25 @@ func AbsFilePath(filename string) string {
 	return filepath.Join(mydir, filename)
 }
 
+// The path of the configuration files. If input is empty string,
+// it will read from ./conf.d
+func GetConfigFiles(configRelativePath string) []string {
+	if configRelativePath == "" {
+		// default value for configuration path
+		configRelativePath = "conf.d"
+	}
+	configPath := AbsFilePath(configRelativePath)
+	log.Output(2, "Reading config files from directory: "+configPath)
+	allConfigs, err := filepath.Glob(configPath + "/*.ini")
+	if err != nil {
+		panic(err)
+	}
+	if len(allConfigs) == 0 {
+		panic("[ERROR] No config file found in" + configPath)
+	}
+	return allConfigs
+}
+
 func GetConfigValue(p *configparser.ConfigParser, section string, param string, required bool) interface{} {
 	result, err := p.Get(section, param)
 	if err != nil && required {
