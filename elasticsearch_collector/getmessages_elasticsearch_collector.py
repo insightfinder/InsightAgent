@@ -1320,17 +1320,24 @@ def listener_configurer(c_config, if_config_vars):
 def listener_process(q, c_config, if_config_vars):
     listener_configurer(c_config, if_config_vars)
     while True:
-        while not q.empty():
-            record = q.get()
+        try:
+            while not q.empty():
+                try:
+                    record = q.get()
 
-            if not record:
-                continue
+                    if not record:
+                        continue
 
-            if record.name == 'KILL':
-                return
+                    if record.name == 'KILL':
+                        return
 
-            logger = logging.getLogger(record.name)
-            logger.handle(record)
+                    logger = logging.getLogger(record.name)
+                    logger.handle(record)
+                except Exception as e:
+                    # if exception raise, the main process quit, so the listener process should quit too
+                    return
+        except Exception as e:
+            return
         sleep(1)
 
 
