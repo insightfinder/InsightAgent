@@ -3,7 +3,8 @@ FROM registry.access.redhat.com/ubi8/go-toolset:1.18.10 AS builder
 USER root
 COPY . /powerAgent
 WORKDIR /powerAgent
-RUN ./build_for_linux_in_linux_env.sh
+RUN ./build_for_linux_in_linux_env.sh && \
+    cd conf.d && rm -rf *
 
 # Build runtime container
 FROM registry.access.redhat.com/ubi8/ubi

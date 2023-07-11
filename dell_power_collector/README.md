@@ -19,14 +19,14 @@ In the same directory with go.mod, run the following commands to build :
 
 ## Build the Agent Docker Image
 1. Make sure you have the Dell Root CA certificate. Rename it to `Dell_Root_CA.pem` and put it under this repo.
-2. Build docker image using `docker build . -t insightfinderinc/dellPowerAgent:latest`
-3. (Optional) Push the image to our DockerHub: `docker login` and `docker push insightfinderinc/dellPowerAgent:latest`
+2. Build docker image using `docker build . -t insightfinderinc/dellpoweragent:latest`
+3. (Optional) Push the image to our DockerHub: `docker login` and `docker push insightfinderinc/dellpoweragent:latest`
 
 ## Run the Agent Docker Container
-1. Make sure the image `insightfinderinc/dellPowerAgent:latest` exists on the server. If not, run `docker login` and `docker pull insightfinderinc/dellPowerAgent:latest`
+1. Make sure the image `insightfinderinc/dellpoweragent:latest` exists on the server. If not, run `docker login` and `docker pull insightfinderinc/dellpoweragent:latest`
 2. Prepare Agent Configurations file by creating a `conf.d` folder and many of the `*.ini` files.
-3. Run Ccontainer: `docker run --name dellPowerAgent -itd -v conf.d:/root/powerAgent/conf.d insightfinderinc/dellPowerAgent:latest`
-4. Check the agent logs: `docker logs dellPowerAgent`
+3. Run Ccontainer: `docker run --name dellpoweragent -itd -v conf.d:/root/powerAgent/conf.d insightfinderinc/dellpoweragent:latest`
+4. Check the agent logs: `docker logs dellpoweragent`
 
 ## Installation Steps:
 
