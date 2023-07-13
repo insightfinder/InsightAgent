@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 IF = "IF"
 LICENSE_KEY = "license_key"
 USER_NAME = "user_name"
@@ -15,11 +16,11 @@ DEPLOYMENT = "Deployment"
 WEB = "Web"
 METRIC = "Metric"
 ALERT = "Alert"
-LOG_PROJECT_NAME = "TD-infrastructure-core"
-DEPLOYMENT_PROJECT_NAME = "TD-deployment"
-WEB_PROJECT_NAME = "TD-web"
-METRIC_PROJECT_NAME = "TD-metric"
-ALERT_PROJECT_NAME = "TD-alert"
+LOG_PROJECT_NAME = "TD_infrastructure_core"
+DEPLOYMENT_PROJECT_NAME = "TD_deployment"
+WEB_PROJECT_NAME = "TD_web"
+METRIC_PROJECT_NAME = "TD_metric"
+ALERT_PROJECT_NAME = "TD_alert"
 DATA_TYPE_NORMAL = "normal"
 DATA_TYPE_ABNORMAL = "abnormal"
 DATE_TIME_FORMAT_MINUTE = "%Y-%m-%dT%H:%M:00"
@@ -78,7 +79,7 @@ Author: Ariy <Ariy@insightfinder.com>\n
     Add multithread support for data loading to enhance the performance
     Add paging support for loading large chunk of data''']
 
-DEPLOYMENT_DATA_INDEX = {0:0, 4:0, 8:1, 12:1, 16:2, 20:3}
+DEPLOYMENT_DATA_INDEX = {0:0, 4:0, 8:1, 12:1, 16:1, 20:3}
 
 # Web data
 WEB_INCIDENT_DATA = "Production 911: Checkout server returns 500 error"
@@ -181,7 +182,8 @@ IF_CAT = 'InsightFinder'
 INSTANCE_CORE_SERVER = "core server"
 DEP_INSTANCE = 'Jenkins'
 # Put the ip address of the machine where the demo scripts exist, e.g. on stg the demo scripts are in the app-server node
-INSTANCE_ALERT = 'Undefined Check the above comment'
+# WEB_INSTANCE = 'ip-172-31-52-141.ec2.internal'
+INSTANCE_ALERT = 'ip-172-31-52-141.ec2.internal'
 # Log data constant
 EVENT_ID = 'eventId'
 TAG = 'tag'
