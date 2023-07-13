@@ -30,6 +30,8 @@ def get_agent_config_vars():
             abnormal_time_str = parser.get(constant.IF, constant.ABNORMAL_TIME)
             reverse_deployment = parser.getboolean(constant.IF, constant.REVERSE_DEPLOYMENT)
             time_zone = parser.get(constant.IF, constant.TIME_ZONE)
+            buggy_deploy = parser.get(constant.IF, constant.BUGGY_DEPLOY)
+            buggy_deploy_start_time = parser.get(constant.IF, constant.BUGGY_DP_START_TIME)
             # DEMO project names config
             log_project_name = parser.get(constant.LOG, constant.PROJECT_NAME)
             deployment_project_name = parser.get(constant.DEPLOYMENT, constant.PROJECT_NAME)
@@ -57,9 +59,16 @@ def get_agent_config_vars():
             if len(metric_project_name) == 0:
                 logging.warning("Demo agent not correctly configured(Metric project name). Check config file.")
                 sys.exit(1)
+            if len(start_time_str) == 0:
+                # If there's no start time, set it to current time.
+                buggy_deploy_start_time = get_current_date_minute()
             if not time_zone:
                 time_zone = "GMT"
+            if not buggy_deploy or len(buggy_deploy)==0:
+                buggy_deploy = constant.BUGGY_DEPLOY_FALSE
             configs[constant.TIME_ZONE] = time_zone
+            configs[constant.BUGGY_DEPLOY] = buggy_deploy
+            configs[constant.BUGGY_DP_START_TIME] = datetime.datetime.strptime(buggy_deploy_start_time, '%Y-%m-%dT%H:%M:%S')
             configs[constant.LICENSE_KEY] = license_key
             configs[constant.USER_NAME] = user_name
             configs[constant.SERVER_URL] = server_url
@@ -370,16 +379,109 @@ def generate_web_data(is_abnormal_flag):
 def generate_error_web_data(user, api, state):
     return {"user": user,"state": state, "api": api, "status":500}
 
+def send_normal_log_data(timestamp):
+    num_message = random.randint(1, 3)
+    data_array = []
+    for i in range(0, num_message):
+        for data in constant.NORMAL_LOG_DATA:
+            log_data = get_log_data_with_instance(timestamp + i, constant.INSTANCE_CORE_SERVER, data)
+            data_array.append(log_data)
+    # stream some exception data
+    for i in range(0, random.randint(1,3)):
+        exception_data = get_log_data(timestamp + i, constant.INSTANCE_CORE_SERVER, constant.NORMAL_EXCEPTION_DATA[0])
+        data_array.append(exception_data)
+    for i in range(0, random.randint(1,3)):
+        exception_data = get_log_data(timestamp + i, constant.INSTANCE_CORE_SERVER, constant.NORMAL_EXCEPTION_DATA[1])
+        data_array.append(exception_data)
+    for i in range(0, random.randint(1,3)):
+        exception_data = get_log_data(timestamp + i, constant.INSTANCE_CORE_SERVER, constant.NORMAL_EXCEPTION_DATA[2])
+        data_array.append(exception_data)
+    replay_log_data(configs[constant.LOG], data_array, "Log normal data")
+
+def send_abnormal_log_data(timestamp):
+    num_message = 1
+    data_array = []
+    for i in range(0, num_message):
+        data = get_log_data(timestamp + i, constant.INSTANCE_CORE_SERVER, constant.EXCEPTION_LOG_DATA)
+        data_array.append(data)
+    replay_log_data(configs[constant.LOG], data_array, "Log exception data")
+
+def send_web_data(is_abnormal,timestamp, burst_error_time, minute):
+    normal_num = random.randint(100, 500)
+    error_num = random.randint(0, 25)
+    data_array = []
+    status = is_abnormal and minute <= burst_error_time
+    for i in range(0, normal_num):
+        data = get_log_data(timestamp + i * 1000, constant.INSTANCE_ALERT, generate_web_data(False))
+        data_array.append(data)
+    for i in range(0, error_num):
+        data = get_log_data(timestamp + i * 1000, constant.INSTANCE_ALERT, generate_web_data(True))
+        data_array.append(data)
+    if status:
+        # burst error
+        for i in range(0, random.randint(100, 150)):
+            data = get_log_data(timestamp + i * 100, constant.INSTANCE_ALERT, generate_error_web_data("James", "api/v1/settingchange", "NY"))
+            data_array.append(data)
+            data = get_log_data(timestamp + i * 100, constant.INSTANCE_ALERT, generate_error_web_data("Robert", "api/v1/checkout", "NY"))
+            data_array.append(data)
+    replay_log_data(configs[constant.WEB], data_array, "Web data")
+
+def send_incident_data(timestamp):
+    data = get_log_data(timestamp, constant.INSTANCE_ALERT, constant.ALERT_INCIDENT_DATA)
+    replay_log_data(configs[constant.ALERT], [data], "Alert incident data")
+    
+def send_log_data_for_buggy_dp(lasting_time, timestamp):
+    if lasting_time in [30, 40, 50]:
+        send_abnormal_log_data(timestamp)
+    send_normal_log_data(timestamp)
+
+def send_web_incident_data_for_buggy_dp(lasting_time, timestamp, minute):
+    if lasting_time in [49, 50, 51, 52, 53]:
+        send_incident_data(timestamp)
+    send_web_data(True,timestamp, 49, minute)
+
+def send_abnormal_metric_data(timestamp, minute):
+    index = (minute + 30) % 60
+    read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data")
+
+def buggy_deploy():
+    b_start_time = configs[constant.BUGGY_DP_START_TIME]
+    current_time = get_current_time()
+    timestamp = to_epochtime_minute(current_time)
+    lasting_time =  get_time_delta_minute(current_time - b_start_time)
+    minute = current_time.minute
+    if lasting_time > 60:
+        # Stop the buggy deployment after running for 60 mins.
+        configs[constant.BUGGY_DEPLOY] = constant.BUGGY_DEPLOY_FALSE
+        config_file_name = utility.get_config_file_name(user_name)
+        utility.save_config_file(config_file_name, configs)
+        return
+    # Do things based on the current lasting_time
+    if lasting_time < 1:
+        # Trigger the buggy deployment.
+        data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_BUGGY[0])
+        replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment buggy data")
+
+    # web_incident 49 min  lasts 5 mins
+    send_web_incident_data_for_buggy_dp(lasting_time,timestamp, minute)
+    # log wrong 30, 40 ,50 mins 
+    send_log_data_for_buggy_dp(lasting_time, timestamp)
+    # Send abnormal metric after the deployment 
+    send_abnormal_metric_data(timestamp, minute)
+
 if __name__ == "__main__":
     logging_setting()
     urllib3.disable_warnings()
     user_name = utility.get_username()
     configs = get_agent_config_vars()
-    cur_time = get_current_time() + datetime.timedelta(hours=3)
-    is_abnormal_flag = is_abnormal_period(cur_time)
-    logging.info("==========New Data Send Round==========")
-    logging.info("Current time: " + str(cur_time) + ", status: " + str(is_abnormal_flag))
-    send_web_or_incident_data(cur_time, is_abnormal_flag)
-    send_log_data(cur_time, is_abnormal_flag)
-    send_deployment_demo_data(cur_time, is_abnormal_flag)
-    send_metric_data(cur_time, is_abnormal_flag)
+    if configs[constant.BUGGY_DEPLOY] == constant.BUGGY_DEPLOY_TRUE:
+        buggy_deploy()
+    else:
+        cur_time = get_current_time() + datetime.timedelta(hours=3)
+        is_abnormal_flag = is_abnormal_period(cur_time)
+        logging.info("==========New Data Send Round==========")
+        logging.info("Current time: " + str(cur_time) + ", status: " + str(is_abnormal_flag))
+        send_web_or_incident_data(cur_time, is_abnormal_flag)
+        send_log_data(cur_time, is_abnormal_flag)
+        send_deployment_demo_data(cur_time, is_abnormal_flag)
+        send_metric_data(cur_time, is_abnormal_flag)
