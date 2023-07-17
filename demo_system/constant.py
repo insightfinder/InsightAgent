@@ -83,7 +83,7 @@ Author: Ariy <Ariy@insightfinder.com>\n
     Add multithread support for data loading to enhance the performance
     Add paging support for loading large chunk of data''']
 
-DEPLOYMENT_DATA_INDEX = {0:0, 4:0, 8:1, 12:1, 16:1, 20:3}
+DEPLOYMENT_DATA_INDEX = {0:0, 4:0, 8:1, 12:1, 16:2, 20:3}
 
 # Web data
 WEB_INCIDENT_DATA = "Production 911: Checkout server returns 500 error"

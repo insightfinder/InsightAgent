@@ -152,10 +152,10 @@ def send_deployment_demo_data(time, is_abnormal):
 
 
 '''
-Send incident start from 01:25 to 01:29 or 09:25 to 09:29 or 17:25 to 17:29
+Send incident start from 01:25 to 01:29 or 09:25 to 09:29
 '''
 def send_web_or_incident_data(time, is_abnormal):
-    timestamp = to_epochtime_minute(time - datetime.timedelta(hours=3))
+    timestamp = to_epochtime_minute(time)
     minute = time.minute
     hour = time.hour
     if is_abnormal:
@@ -183,10 +183,10 @@ def send_web_or_incident_data(time, is_abnormal):
 
 
 '''
-Send exception data start at 1:00, 1:10, 1:20 or 9:00, 9:10, 9:20 or 17:00, 17:10, 17：20
+Send exception data start at 1:00, 1:10, 1:20 or 9:00, 9:10, 9:20
 '''
 def send_log_data(time, is_abnormal):
-    timestamp = to_epochtime_minute(time - datetime.timedelta(hours=3))
+    timestamp = to_epochtime_minute(time)
     minute = time.minute
     hour = time.hour
     if is_abnormal:
@@ -245,8 +245,6 @@ def send_metric_data(time, is_abnormal):
         read_metric_data(timestamp, index, constant.NORMAL_DATA_FILENAME, "Metric normal data")
 
 def send_data_to_receiver(post_url, to_send_data, log_msg, num_of_message):
-    print("sending data")
-    print(to_send_data)
     attempts = 0
     while attempts < 12:
         response_code = -1
@@ -436,7 +434,7 @@ def send_log_data_for_buggy_dp(timestamp):
 
 def send_web_incident_data_for_buggy_dp(lasting_time, timestamp):
     # Send incident if the abnormal lasts for longer than 14 min
-    if lasting_time >14:
+    if lasting_time > 14 and lasting_time < 20:
         send_incident_data(timestamp)
     send_web_data(timestamp)
 
@@ -477,6 +475,7 @@ if __name__ == "__main__":
     user_name = utility.get_username()
     configs, parser = get_agent_config_vars()
     if configs[constant.BUGGY_DEPLOY] == constant.BUGGY_DEPLOY_TRUE:
+        logging.info("==========Buggy Deployment Triggered==========")
         buggy_deploy()
     else:
         cur_time = get_current_time() + datetime.timedelta(hours=3)
