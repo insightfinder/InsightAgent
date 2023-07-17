@@ -87,7 +87,7 @@ def get_agent_config_vars():
             configs[constant.ALERT] = alert_project_name
     except IOError:
         logging.warning("config.ini file is missing")
-    return configs
+    return configs, parser
 
 
 def get_current_time():
@@ -240,10 +240,13 @@ def send_metric_data(time, is_abnormal):
             index = (minute + 30) % 60
             read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data")
     else:
+        # 180 lines in the normal data
         index = (hour * 60 + minute) % 180
         read_metric_data(timestamp, index, constant.NORMAL_DATA_FILENAME, "Metric normal data")
 
 def send_data_to_receiver(post_url, to_send_data, log_msg, num_of_message):
+    print("sending data")
+    print(to_send_data)
     attempts = 0
     while attempts < 12:
         response_code = -1
@@ -399,62 +402,61 @@ def send_normal_log_data(timestamp):
     replay_log_data(configs[constant.LOG], data_array, "Log normal data")
 
 def send_abnormal_log_data(timestamp):
-    num_message = 1
     data_array = []
-    for i in range(0, num_message):
-        data = get_log_data(timestamp + i, constant.INSTANCE_CORE_SERVER, constant.EXCEPTION_LOG_DATA)
-        data_array.append(data)
+    data = get_log_data(timestamp, constant.INSTANCE_CORE_SERVER, constant.EXCEPTION_LOG_DATA)
+    data_array.append(data)
     replay_log_data(configs[constant.LOG], data_array, "Log exception data")
 
-def send_web_data(is_abnormal,timestamp, burst_error_time, minute):
+def send_web_data(timestamp):
     normal_num = random.randint(100, 500)
     error_num = random.randint(0, 25)
     data_array = []
-    status = is_abnormal and minute <= burst_error_time
     for i in range(0, normal_num):
         data = get_log_data(timestamp + i * 1000, constant.INSTANCE_ALERT, generate_web_data(False))
         data_array.append(data)
     for i in range(0, error_num):
         data = get_log_data(timestamp + i * 1000, constant.INSTANCE_ALERT, generate_web_data(True))
         data_array.append(data)
-    if status:
-        # burst error
-        for i in range(0, random.randint(100, 150)):
-            data = get_log_data(timestamp + i * 100, constant.INSTANCE_ALERT, generate_error_web_data("James", "api/v1/settingchange", "NY"))
-            data_array.append(data)
-            data = get_log_data(timestamp + i * 100, constant.INSTANCE_ALERT, generate_error_web_data("Robert", "api/v1/checkout", "NY"))
-            data_array.append(data)
+
+    # burst error 
+    for i in range(0, random.randint(100, 150)):
+        data = get_log_data(timestamp + i * 100, constant.INSTANCE_ALERT, generate_error_web_data("James", "api/v1/settingchange", "NY"))
+        data_array.append(data)
+        data = get_log_data(timestamp + i * 100, constant.INSTANCE_ALERT, generate_error_web_data("Robert", "api/v1/checkout", "NY"))
+        data_array.append(data)
     replay_log_data(configs[constant.WEB], data_array, "Web data")
 
 def send_incident_data(timestamp):
     data = get_log_data(timestamp, constant.INSTANCE_ALERT, constant.ALERT_INCIDENT_DATA)
     replay_log_data(configs[constant.ALERT], [data], "Alert incident data")
     
-def send_log_data_for_buggy_dp(lasting_time, timestamp):
-    if lasting_time in [30, 40, 50]:
-        send_abnormal_log_data(timestamp)
+def send_log_data_for_buggy_dp(timestamp):
+    send_abnormal_log_data(timestamp)
     send_normal_log_data(timestamp)
 
-def send_web_incident_data_for_buggy_dp(lasting_time, timestamp, minute):
-    if lasting_time in [49, 50, 51, 52, 53]:
+def send_web_incident_data_for_buggy_dp(lasting_time, timestamp):
+    # Send incident if the abnormal lasts for longer than 14 min
+    if lasting_time >14:
         send_incident_data(timestamp)
-    send_web_data(True,timestamp, 49, minute)
+    send_web_data(timestamp)
 
-def send_abnormal_metric_data(timestamp, minute):
-    index = (minute + 30) % 60
+def send_abnormal_metric_data(timestamp, lasting_time):
+    # We will start the ingestion from the 26th row abnormal data.
+    index = lasting_time + 26
     read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data")
 
 def buggy_deploy():
     b_start_time = configs[constant.BUGGY_DP_START_TIME]
     current_time = get_current_time()
     timestamp = to_epochtime_minute(current_time)
-    lasting_time =  get_time_delta_minute(current_time - b_start_time)
-    minute = current_time.minute
-    if lasting_time > 60:
-        # Stop the buggy deployment after running for 60 mins.
-        configs[constant.BUGGY_DEPLOY] = constant.BUGGY_DEPLOY_FALSE
+    lasting_time =  current_time - b_start_time
+    # Get the time gap in minute
+    lasting_time = lasting_time.total_seconds() // 60
+    if lasting_time > 15:
+        # Stop the buggy deployment after running for 15 mins.
+        parser.set(constant.IF, constant.BUGGY_DEPLOY, constant.BUGGY_DEPLOY_FALSE)
         config_file_name = utility.get_config_file_name(user_name)
-        utility.save_config_file(config_file_name, configs)
+        utility.save_config_file(config_file_name, parser)
         return
     # Do things based on the current lasting_time
     if lasting_time < 1:
@@ -462,18 +464,18 @@ def buggy_deploy():
         data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_BUGGY[0])
         replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment buggy data")
 
-    # web_incident 49 min  lasts 5 mins
-    send_web_incident_data_for_buggy_dp(lasting_time,timestamp, minute)
-    # log wrong 30, 40 ,50 mins 
-    send_log_data_for_buggy_dp(lasting_time, timestamp)
-    # Send abnormal metric after the deployment 
-    send_abnormal_metric_data(timestamp, minute)
+    # after 15 mins , ingest incident.
+    send_web_incident_data_for_buggy_dp(lasting_time,timestamp)
+    # the normal and abnormal logs are streaming all the time
+    send_log_data_for_buggy_dp(timestamp)
+    # Send abnormal metric right after the deployment 
+    send_abnormal_metric_data(timestamp, lasting_time)
 
 if __name__ == "__main__":
     logging_setting()
     urllib3.disable_warnings()
     user_name = utility.get_username()
-    configs = get_agent_config_vars()
+    configs, parser = get_agent_config_vars()
     if configs[constant.BUGGY_DEPLOY] == constant.BUGGY_DEPLOY_TRUE:
         buggy_deploy()
     else:
