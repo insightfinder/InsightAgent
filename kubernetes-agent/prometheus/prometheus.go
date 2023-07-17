@@ -15,10 +15,10 @@ const (
 )
 
 const (
-	CPU_METRIC_QUERY         = "avg(rate(container_cpu_usage_seconds_total{container!='POD',container!='',pod!=''}[10m])) by (pod,namespace)"
-	MEMORY_METRIC_QUERY      = "avg(container_memory_working_set_bytes{container!='POD',container!='',pod!=''}) by (pod,namespace)"
-	DISK_READ_METRIC_QUERY   = "avg(rate(container_fs_reads_bytes_total{container!='POD',pod!=''}[10m])) by (pod, namespace)"
-	DISK_WRITE_METRIC_QUERY  = "avg(rate(container_fs_writes_bytes_total{container!='POD',pod!=''}[10m])) by (pod, namespace)"
+	CPU_METRIC_QUERY         = "avg(rate(container_cpu_usage_seconds_total{container!='POD',container!='',pod!=''}[10m])) by (pod,namespace, container)"
+	MEMORY_METRIC_QUERY      = "avg(container_memory_working_set_bytes{container!='POD',container!='',pod!=''}) by (pod,namespace, container)"
+	DISK_READ_METRIC_QUERY   = "avg(rate(container_fs_reads_bytes_total{container!='POD',pod!=''}[10m])) by (pod, namespace, container)"
+	DISK_WRITE_METRIC_QUERY  = "avg(rate(container_fs_writes_bytes_total{container!='POD',pod!=''}[10m])) by (pod, namespace, container)"
 	NETWORK_IN_METRIC_QUERY  = "avg(rate(container_network_receive_bytes_total{container!='POD',pod!=''}[10m])) by (pod, namespace)"
 	NETWORK_OUT_METRIC_QUERY = "avg(rate(container_network_transmit_bytes_total{container!='POD',pod!=''}[10m])) by (pod, namespace)"
 )
@@ -90,6 +90,7 @@ func (p Prometheus) GetMetricData(Type string, StartTime time.Time, EndTime time
 	for _, Data := range QueryResult.Data.Result {
 		NameSpace := Data.Metric.Namespace
 		Pod := Data.Metric.Pod
+		Container := Data.Metric.Container
 		metrics := make([]Metric, 0)
 		for _, ValueSet := range Data.Values {
 			var Timestamp float64
@@ -99,7 +100,7 @@ func (p Prometheus) GetMetricData(Type string, StartTime time.Time, EndTime time
 
 			metrics = append(metrics, Metric{Timestamp, Value})
 		}
-		promMetricData = append(promMetricData, PromMetricData{NameSpace, Pod, metrics})
+		promMetricData = append(promMetricData, PromMetricData{NameSpace, Pod, Container, metrics})
 	}
 	return promMetricData
 }
