@@ -103,7 +103,7 @@ def modified_config_file():
             config[constant.IF][constant.BUGGY_DEPLOY] = constant.BUGGY_DEPLOY_FALSE
             logging.info("Turn off buggy deployment.")
     else:
-        logging.info("Same buggy deployment flag: "+ config[constant.IF][constant.BUGGY_DEPLOY]+". Won't update it.")
+        logging.info("Current buggy deployment flag is: "+ config[constant.IF][constant.BUGGY_DEPLOY]+". Won't update it.")
     if current_data_type == 'abnormal' and parameters[constant.DATA_TYPE] == 'normal':
         is_reverse = True
         logging.info("Modification triggered: is_reverse is " + str(is_reverse))
@@ -126,7 +126,7 @@ def generate_config_file():
                            constant.SERVER_URL: parameters[constant.SERVER_URL],
                            constant.START_TIME: time,
                            constant.DATA_TYPE: constant.DATA_TYPE_NORMAL,
-                           constant.BUGGY_DEPLOY: parameters[constant.BUGGY_DEPLOY],
+                           constant.BUGGY_DEPLOY: constant.BUGGY_DEPLOY_FALSE,
                            constant.REVERSE_DEPLOYMENT: 'False',
                            constant.NORMAL_TIME: time,
                            constant.ABNORMAL_TIME: 0,
