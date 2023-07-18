@@ -33,8 +33,10 @@ def get_parameters():
         parameters[constant.DATA_TYPE] = options.data_type
     else:
         parameters[constant.DATA_TYPE] = None
-    if options.data_type is not None:
+    if options.buggy_deploy is not None:
         parameters[constant.BUGGY_DEPLOY] = options.buggy_deploy
+    else:
+        parameters[constant.BUGGY_DEPLOY] = constant.BUGGY_DEPLOY_FALSE
     return parameters
 
 
