@@ -17,6 +17,7 @@ from configparser import SafeConfigParser
 def get_agent_config_vars():
     configs = {}
     config_file_name = utility.get_config_file_name(user_name)
+    parser = SafeConfigParser()
     try:
         if os.path.exists(os.path.join(os.getcwd(), config_file_name)):
             parser = SafeConfigParser()
@@ -134,7 +135,7 @@ def get_time_delta_hour(time_delta):
 Send deployemt data based on the hour
 '''
 def send_deployment_demo_data(time, is_abnormal):
-    timestamp = to_epochtime_minute(time - datetime.timedelta(hours=3))
+    timestamp = to_epochtime_minute(time)
     minute = time.minute
     hour = time.hour
     if hour not in constant.DEPLOYMENT_DATA_INDEX:
@@ -428,8 +429,9 @@ def send_incident_data(timestamp):
     data = get_log_data(timestamp, constant.INSTANCE_ALERT, constant.ALERT_INCIDENT_DATA)
     replay_log_data(configs[constant.ALERT], [data], "Alert incident data")
     
-def send_log_data_for_buggy_dp(timestamp):
-    send_abnormal_log_data(timestamp)
+def send_log_data_for_buggy_dp(timestamp, lasting_time):
+    if lasting_time in [1, 3, 9]:
+        send_abnormal_log_data(timestamp)
     send_normal_log_data(timestamp)
 
 def send_web_incident_data_for_buggy_dp(lasting_time, timestamp):
@@ -443,13 +445,13 @@ def send_abnormal_metric_data(timestamp, lasting_time):
     index = lasting_time + 26
     read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data")
 
-def buggy_deploy():
+def buggy_deploy(current_time):
     b_start_time = configs[constant.BUGGY_DP_START_TIME]
-    current_time = get_current_time()
     timestamp = to_epochtime_minute(current_time)
     lasting_time =  current_time - b_start_time
     # Get the time gap in minute
     lasting_time = lasting_time.total_seconds() // 60
+    logging.info("current lasting_time value is: "+ str(lasting_time))
     if lasting_time > 15:
         # Stop the buggy deployment after running for 15 mins.
         parser.set(constant.IF, constant.BUGGY_DEPLOY, constant.BUGGY_DEPLOY_FALSE)
@@ -457,28 +459,27 @@ def buggy_deploy():
         utility.save_config_file(config_file_name, parser)
         return
     # Do things based on the current lasting_time
-    if lasting_time < 1:
+    if lasting_time == 0:
         # Trigger the buggy deployment.
         data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_BUGGY[0])
         replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment buggy data")
-
-    # after 15 mins , ingest incident.
-    send_web_incident_data_for_buggy_dp(lasting_time,timestamp)
-    # the normal and abnormal logs are streaming all the time
-    send_log_data_for_buggy_dp(timestamp)
-    # Send abnormal metric right after the deployment 
-    send_abnormal_metric_data(timestamp, lasting_time)
+    if lasting_time < 16:
+        send_web_incident_data_for_buggy_dp(lasting_time,timestamp)
+        # the normal and abnormal logs are streaming all the time
+        send_log_data_for_buggy_dp(timestamp, lasting_time)
+        # Send abnormal metric right after the deployment 
+        send_abnormal_metric_data(timestamp, lasting_time)
 
 if __name__ == "__main__":
     logging_setting()
     urllib3.disable_warnings()
     user_name = utility.get_username()
     configs, parser = get_agent_config_vars()
+    cur_time = get_current_time()
     if configs[constant.BUGGY_DEPLOY] == constant.BUGGY_DEPLOY_TRUE:
         logging.info("==========Buggy Deployment Triggered==========")
-        buggy_deploy()
+        buggy_deploy(cur_time)
     else:
-        cur_time = get_current_time() + datetime.timedelta(hours=3)
         is_abnormal_flag = is_abnormal_period(cur_time)
         logging.info("==========New Data Send Round==========")
         logging.info("Current time: " + str(cur_time) + ", status: " + str(is_abnormal_flag))
