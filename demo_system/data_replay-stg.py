@@ -135,7 +135,7 @@ def get_time_delta_hour(time_delta):
 Send deployemt data based on the hour
 '''
 def send_deployment_demo_data(time, is_abnormal):
-    timestamp = to_epochtime_minute(time)
+    timestamp = to_epochtime_minute(time - datetime.timedelta(hours=3))
     minute = time.minute
     hour = time.hour
     if hour not in constant.DEPLOYMENT_DATA_INDEX:
@@ -156,7 +156,7 @@ def send_deployment_demo_data(time, is_abnormal):
 Send incident start from 01:25 to 01:29 or 09:25 to 09:29 or 17:25 to 17:29
 '''
 def send_web_or_incident_data(time, is_abnormal):
-    timestamp = to_epochtime_minute(time)
+    timestamp = to_epochtime_minute(time - datetime.timedelta(hours=3))
     minute = time.minute
     hour = time.hour
     if is_abnormal:
@@ -184,10 +184,10 @@ def send_web_or_incident_data(time, is_abnormal):
 
 
 '''
-Send exception data start at 1:00, 1:10, 1:20 or 9:00, 9:10, 9:20 or 17:00, 17:10, 17:20
+Send exception data start at 1:00, 1:10, 1:20 or 9:00, 9:10, 9:20 or 17:00, 17:10, 17：20
 '''
 def send_log_data(time, is_abnormal):
-    timestamp = to_epochtime_minute(time)
+    timestamp = to_epochtime_minute(time - datetime.timedelta(hours=3))
     minute = time.minute
     hour = time.hour
     if is_abnormal:
@@ -447,7 +447,7 @@ def send_abnormal_metric_data(timestamp, lasting_time):
 
 def buggy_deploy(current_time):
     b_start_time = configs[constant.BUGGY_DP_START_TIME]
-    timestamp = to_epochtime_minute(current_time)
+    timestamp = to_epochtime_minute(current_time - datetime.timedelta(hours=3))
     lasting_time =  current_time - b_start_time
     # Get the time gap in minute
     lasting_time = lasting_time.total_seconds() // 60
@@ -465,7 +465,7 @@ def buggy_deploy(current_time):
         # Trigger the buggy deployment.
         data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_BUGGY[0])
         replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment buggy data")
-    if lasting_time < 16:
+    if lasting_time > 0 and lasting_time < 16:
         send_web_incident_data_for_buggy_dp(lasting_time,timestamp)
         # the normal and abnormal logs are streaming all the time
         send_log_data_for_buggy_dp(timestamp, lasting_time)
@@ -477,7 +477,7 @@ if __name__ == "__main__":
     urllib3.disable_warnings()
     user_name = utility.get_username()
     configs, parser = get_agent_config_vars()
-    cur_time = get_current_time()
+    cur_time = get_current_time() + datetime.timedelta(hours=3)
     if configs[constant.BUGGY_DEPLOY] == constant.BUGGY_DEPLOY_TRUE:
         logging.info("==========Buggy Deployment Triggered==========")
         buggy_deploy(cur_time)
