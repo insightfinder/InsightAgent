@@ -466,6 +466,7 @@ def buggy_deploy(current_time):
         data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_BUGGY[0])
         replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment buggy data")
     if lasting_time == 8:
+        logging.info("Trigger the metric detection and the prediction.")
         # Specify the query parameters.
         query_params = {
             "startTime": to_epochtime_minute(current_time - datetime.timedelta(minutes=8)),
@@ -507,7 +508,7 @@ def make_get_request_with_retry(url, params, max_retries, retry_delay):
             # Wait before the next retry
             time.sleep(retry_delay)
 
-    logging.info(f"Max retries ({max_retries}) reached. Failed to get a successful response.")
+    logging.info("Failed to get a successful response.")
 
 if __name__ == "__main__":
     logging_setting()
