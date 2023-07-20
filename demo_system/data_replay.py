@@ -465,6 +465,19 @@ def buggy_deploy(current_time):
         # Trigger the buggy deployment.
         data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_BUGGY[0])
         replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment buggy data")
+    if lasting_time == 8:
+        # Specify the query parameters.
+        query_params = {
+            "startTime": to_epochtime_minute(current_time - datetime.timedelta(minutes=8)),
+            "endTime": timestamp,
+            "userName": user_name,
+            "projectName": "TD_metric"
+        }
+
+        max_retries = 10
+        retry_delay = 10  # seconds
+        url = configs[constant.SERVER_URL] + "/api/v1/triggerMetricAndPrediction"
+        make_get_request_with_retry(url, query_params, max_retries, retry_delay)
     if lasting_time < 16:
         send_web_incident_data_for_buggy_dp(lasting_time,timestamp)
         # the normal and abnormal logs are streaming all the time
@@ -472,10 +485,35 @@ def buggy_deploy(current_time):
         # Send abnormal metric right after the deployment 
         send_abnormal_metric_data(timestamp, lasting_time)
 
+def make_get_request_with_retry(url, params, max_retries, retry_delay):
+    for _ in range(1, max_retries + 1):
+        try:
+            # Make the GET request with the specified parameters
+            response = requests.get(url, params=params)
+
+            # Check if the request was successful (status code 200)
+            if response.status_code == 200:
+                logging.info("Request successful!")
+                logging.info("Response JSON:", response.json())
+                return  # Exit the loop on success
+            else:
+                logging.info("Request failed with status code:", response.status_code)
+                logging.info("Response content:", response.text)
+
+            # Wait before the next retry
+            time.sleep(retry_delay)
+        except requests.exceptions.RequestException as e:
+            logging.info("An error occurred:", e)
+            # Wait before the next retry
+            time.sleep(retry_delay)
+
+    logging.info(f"Max retries ({max_retries}) reached. Failed to get a successful response.")
+
 if __name__ == "__main__":
     logging_setting()
     urllib3.disable_warnings()
     user_name = utility.get_username()
+    user_name = 'demoUser'
     configs, parser = get_agent_config_vars()
     cur_time = get_current_time()
     if configs[constant.BUGGY_DEPLOY] == constant.BUGGY_DEPLOY_TRUE:
