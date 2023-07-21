@@ -72,6 +72,42 @@ func handleWalkResult(host string, resultChan chan string) gosnmp.WalkFunc {
 	}
 }
 
+func snmpTrapHandler(packet *gosnmp.SnmpPacket, addr *net.UDPAddr) {
+	log.Printf("SNMP trap received from: %s:%d. Community:%s, SnmpVersion:%s\n",
+		addr.IP, addr.Port, packet.Community, packet.Version)
+	for i, variable := range packet.Variables {
+		var val string
+		switch variable.Type {
+		case gosnmp.OctetString:
+			val = string(variable.Value.([]byte))
+		case gosnmp.ObjectIdentifier:
+			val = fmt.Sprintf("%s", variable.Value)
+		case gosnmp.TimeTicks:
+			a := gosnmp.ToBigInt(variable.Value)
+			val = fmt.Sprintf("%d", (*a).Int64())
+		case gosnmp.Null:
+			val = ""
+		default:
+			a := gosnmp.ToBigInt(variable.Value)
+			val = fmt.Sprintf("%d", (*a).Int64())
+		}
+		log.Printf("- oid[%d]: %s (%s) = %v \n", i, variable.Name, variable.Type, val)
+	}
+}
+
+func snmpTrapServer(address string) {
+	tl := gosnmp.NewTrapListener()
+	tl.OnNewTrap = snmpTrapHandler
+	tl.Params = gosnmp.Default
+	tl.Params.Logger = gosnmp.NewLogger(log.New(os.Stdout, "", 0))
+
+	err := tl.Listen(address)
+	if err != nil {
+		time.Sleep(1 * time.Second)
+		log.Fatalf("Error in TRAP listen: %s\n", err)
+	}
+}
+
 func snmpDiscovery(ipRange string, port int, community string, oid string) {
 	// Use nmap to scan the network for hosts with the specified port open
 	//hosts := nmapScan(ipRange, port)
@@ -293,29 +329,65 @@ func getConfigFiles(configRelativePath string) []string {
 	return allConfigs
 }
 
-func NewRootCommand() *cobra.Command {
+func NewTrapCommand() *cobra.Command {
 
+	address := ""
+
+	trapCmd := &cobra.Command{
+		Use:   "trap",
+		Short: "Start trap service",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return initializeConfig(cmd)
+		}, Run: func(cmd *cobra.Command, args []string) {
+			log.Printf("Starting SNMP TRAP Server on: %s\n", address)
+			snmpTrapServer(address)
+		},
+	}
+
+	trapCmd.Flags().StringVarP(&address, "address", "a", "0.0.0.0:9162", "SNMP trap server address")
+
+	return trapCmd
+}
+
+func NewScanCommand() *cobra.Command {
 	ipRange := ""
 	community := ""
 	oid := ""
 	port := 0
 
-	rootCmd := &cobra.Command{
-		Use:   "snmp_discovery",
-		Short: "SNMP Discovery",
+	scanCmd := &cobra.Command{
+		Use:   "scan",
+		Short: "Scan snmp devices",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			return initializeConfig(cmd)
 		}, Run: func(cmd *cobra.Command, args []string) {
 
-			println("snmp discovery with ip range:", ipRange, ",community:", community, ",oid:", oid, ",port:", port)
+			println("snmp scanning with ip range:", ipRange, ",community:", community, ",oid:", oid, ",port:", port)
 			snmpDiscovery(ipRange, port, community, oid)
 		},
 	}
 
-	rootCmd.Flags().StringVarP(&ipRange, "ip-range", "", "", "ip range to discover the devices")
-	rootCmd.Flags().StringVarP(&community, "community", "c", "public", "What is the community string?")
-	rootCmd.Flags().StringVarP(&oid, "oid", "o", "", "the mid/oid defining a subtree of values, split by commas")
-	rootCmd.Flags().IntVarP(&port, "port", "p", 161, "the port to use for the SNMP connection")
+	scanCmd.Flags().StringVarP(&ipRange, "ip-range", "", "", "ip range to discover the devices")
+	scanCmd.Flags().StringVarP(&community, "community", "c", "public", "What is the community string?")
+	scanCmd.Flags().StringVarP(&oid, "oid", "o", "", "the mid/oid defining a subtree of values, split by commas")
+	scanCmd.Flags().IntVarP(&port, "port", "p", 161, "the port to use for the SNMP connection")
+
+	return scanCmd
+}
+
+func NewRootCommand() *cobra.Command {
+
+	rootCmd := &cobra.Command{
+		Use:   "snmp_discovery",
+		Short: "Using SNMP protocol to scan devices and trap devices activities",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return initializeConfig(cmd)
+		}, Run: func(cmd *cobra.Command, args []string) {
+		},
+	}
+
+	rootCmd.AddCommand(NewScanCommand())
+	rootCmd.AddCommand(NewTrapCommand())
 
 	return rootCmd
 }
