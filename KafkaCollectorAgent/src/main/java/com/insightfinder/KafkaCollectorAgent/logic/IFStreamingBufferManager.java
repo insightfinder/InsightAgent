@@ -1,5 +1,6 @@
 package com.insightfinder.KafkaCollectorAgent.logic;
 
+import com.google.common.collect.Lists;
 import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
 import com.google.gson.Gson;
@@ -8,6 +9,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.apache.kafka.common.protocol.types.Field;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -206,6 +208,17 @@ public class IFStreamingBufferManager {
         return data;
     }
 
+    private String getIFProjectAndSystemInfo(JsonObject srcData){
+        String ret = null;
+        for (String key : projectList.keySet()){
+            String[] keyArr = key.split(":");
+            if (keyArr.length == 2 && srcData.has(keyArr[0]) && srcData.get(keyArr[0]).getAsString().equalsIgnoreCase(keyArr[1])){
+                return String.format("%s@%s",projectList.get(key).get("project"), projectList.get(key).get("system")) ;
+            }
+        }
+        return  ret;
+    }
+
     private JsonObject processLogData(JsonObject srcData) {
         JsonObject data = new JsonObject();
         String timestampStr = getKeyFromJson(srcData, ifConfig.getLogTimestampFieldPathList());
@@ -304,25 +317,25 @@ public class IFStreamingBufferManager {
         JsonObject jsonObject = null;
         if (ifConfig.isLogProject()) {
             jsonObject = gson.fromJson(content, JsonObject.class);
-
             if (ifConfig.getLogMetadataTopics() != null && ifConfig.getLogMetadataTopics().contains(topic)){
                 JsonObject data = processMetadata(jsonObject);
                 if (data != null){
-                    if (!collectingLogMetadataMap.containsKey(ifConfig.getLogProjectName())) {
-                        collectingLogMetadataMap.put(ifConfig.getLogProjectName(), ConcurrentHashMap.newKeySet());
+                    if (!collectingLogMetadataMap.containsKey(topic)) {
+                        collectingLogMetadataMap.put(topic, ConcurrentHashMap.newKeySet());
                     }
-                    Set<JsonObject> jsonArray = collectingLogMetadataMap.get(ifConfig.getLogProjectName());
+                    Set<JsonObject> jsonArray = collectingLogMetadataMap.get(topic);
                     if (jsonArray != null) {
                         jsonArray.add(data);
                     }
                 }
             }else {
                 JsonObject data = processLogData(jsonObject);
-                if (data != null) {
-                    if (!collectingLogDataMap.containsKey(data.get("tag").getAsString())) {
-                        collectingLogDataMap.put(data.get("tag").getAsString(), ConcurrentHashMap.newKeySet());
+                String projectInfo = getIFProjectAndSystemInfo(jsonObject);
+                if (data != null && projectInfo != null) {
+                    if (!collectingLogDataMap.containsKey(projectInfo)) {
+                        collectingLogDataMap.put(projectInfo, ConcurrentHashMap.newKeySet());
                     }
-                    Set<JsonObject> jsonArray = collectingLogDataMap.get(data.get("tag").getAsString());
+                    Set<JsonObject> jsonArray = collectingLogDataMap.get(projectInfo);
                     if (jsonArray != null) {
                         jsonArray.add(data);
                     }
@@ -422,12 +435,23 @@ public class IFStreamingBufferManager {
 
     public void mergeLogDataAndSendToIF2(Map<String, Set<JsonObject>> collectingDataMap) {
         for (String key : collectingDataMap.keySet()) {
-            sendToIF(gson.toJson(collectingDataMap.get(key)), ifConfig.getLogProjectName(), ifConfig.getLogSystemName());
-            collectingDataMap.remove(key);
+            String[] infoArr = key.split("@");
+            if (infoArr.length == 2){
+                String ifProjectName = infoArr[0];
+                String ifSystemName = infoArr[1];
+                Lists.partition(Lists.newArrayList(collectingDataMap.get(key)), 1000).forEach(subData->{
+                    sendToIF(gson.toJson(subData), ifProjectName, ifSystemName);
+                });
+                collectingDataMap.remove(key);
+            }
         }
         if (!collectingLogMetadataMap.isEmpty()){
             for (String key : collectingLogMetadataMap.keySet()) {
-                sendMetadataToIF(gson.toJson(collectingLogMetadataMap.get(key)), ifConfig.getLogProjectName(), ifConfig.getLogSystemName());
+                projectList.values().forEach(ifProjectInfo->{
+                    String ifProjectName = ifProjectInfo.get("project");
+                    String ifSystemName = ifProjectInfo.get("system");
+                    sendMetadataToIF(gson.toJson(collectingLogMetadataMap.get(key)), ifProjectName, ifSystemName);
+                });
                 collectingLogMetadataMap.remove(key);
             }
         }
