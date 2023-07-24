@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/bigkevmcd/go-configparser"
 	"kubernetes-agent/insightfinder"
 	"kubernetes-agent/prometheus"
@@ -36,6 +37,10 @@ func main() {
 
 	// Read configuration
 	configFiles := insightfinder.GetConfigFiles("conf.d")
+
+	// Initialize time counters
+	Now := time.Now()
+	Before := Now.Add(-time.Minute * 10)
 
 	for {
 		log.Output(2, "Start...")
@@ -74,17 +79,15 @@ func main() {
 				prometheusServer.Verify()
 
 				// Collect Data
+				log.Output(2, fmt.Sprintf("Prepare to collect Prometheus data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 				metricData := make(map[string][]prometheus.PromMetricData)
 
-				Now := time.Now()
-				TenMinBefore := Now.Add(-time.Minute * 10)
-
-				metricData["CPU"] = prometheusServer.GetMetricData("CPU", namespaceFilter, TenMinBefore, Now)
-				metricData["Memory"] = prometheusServer.GetMetricData("Memory", namespaceFilter, TenMinBefore, Now)
-				metricData["DiskRead"] = prometheusServer.GetMetricData("DiskRead", namespaceFilter, TenMinBefore, Now)
-				metricData["DiskWrite"] = prometheusServer.GetMetricData("DiskWrite", namespaceFilter, TenMinBefore, Now)
-				metricData["NetworkIn"] = prometheusServer.GetMetricData("NetworkIn", namespaceFilter, TenMinBefore, Now)
-				metricData["NetworkOut"] = prometheusServer.GetMetricData("NetworkOut", namespaceFilter, TenMinBefore, Now)
+				metricData["CPU"] = prometheusServer.GetMetricData("CPU", namespaceFilter, Before, Now)
+				metricData["Memory"] = prometheusServer.GetMetricData("Memory", namespaceFilter, Before, Now)
+				metricData["DiskRead"] = prometheusServer.GetMetricData("DiskRead", namespaceFilter, Before, Now)
+				metricData["DiskWrite"] = prometheusServer.GetMetricData("DiskWrite", namespaceFilter, Before, Now)
+				metricData["NetworkIn"] = prometheusServer.GetMetricData("NetworkIn", namespaceFilter, Before, Now)
+				metricData["NetworkOut"] = prometheusServer.GetMetricData("NetworkOut", namespaceFilter, Before, Now)
 
 				metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, &db)
 				tools.PrintStruct(metricPayload, false)
@@ -93,7 +96,11 @@ func main() {
 		}
 
 		log.Output(2, "Sleep...")
+
+		// Prepare for next 10 time range
+		Before = Now
 		time.Sleep(time.Minute * 10)
+		Now = time.Now()
 	}
 
 }

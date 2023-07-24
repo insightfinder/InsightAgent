@@ -308,7 +308,7 @@ func isProjectExist(IFconfig map[string]interface{}) bool {
 	var result map[string]interface{}
 	json.Unmarshal(response, &result)
 	if !ToBool(result["success"]) {
-		panic("[ERROR] Check project exist failed. Please check your parameters.")
+		log.Output(2, "[ERROR] Check project exist failed. Please check your parameters.")
 	}
 
 	return ToBool(result["isProjectExist"])
