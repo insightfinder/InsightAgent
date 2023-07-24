@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: if-kubernetes-agent
+  labels:
+    app: if-kubernetes-agent
+spec:
+  selector:
+    matchLabels:
+      app: if-kubernetes-agent
+  replicas: {{.Values.replicaCount}}
+  template:
+    metadata:
+      labels:
+        app: if-kubernetes-agent
+    spec:
+      containers:
+        - name: agent
+          tty: true
+          image: {{.Values.image}}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/conf.d
+      volumes:
+        - name: config-volume
+          configMap:
+            name: if-kubernetes-config
+            items:
+              - key: prometheus.ini
+                path: prometheus.ini
