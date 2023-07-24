@@ -42,21 +42,28 @@ func (db *InstanceNameDB) Merge(namespacePodMap map[string]bool) {
 	for instanceName, _ := range namespacePodMap {
 		//Get component name
 		componentName := getComponentFromPodName(instanceName)
-		// Assign Index
-		var currIndex int64
-		if len(db.RemovedIndex[componentName]) > 0 {
-			currIndex = db.RemovedIndex[componentName][0]
-			db.RemovedIndex[componentName] = db.RemovedIndex[componentName][1:]
-		} else {
-			currIndex = db.IndexCount[componentName]
-			db.IndexCount[componentName]++
-		}
 
-		// Save the index to the name storage
+		// Create component if not exist
 		if db.NameStorage[componentName] == nil {
 			db.NameStorage[componentName] = make(map[string]int64)
 		}
-		db.NameStorage[componentName][instanceName] = currIndex
+
+		componentStorage, _ := db.NameStorage[componentName]
+		if _, foundPodName := componentStorage[instanceName]; !foundPodName {
+			// Assign Index to new podName
+			var currIndex int64
+			if len(db.RemovedIndex[componentName]) > 0 {
+				currIndex = db.RemovedIndex[componentName][0]
+				db.RemovedIndex[componentName] = db.RemovedIndex[componentName][1:]
+			} else {
+				currIndex = db.IndexCount[componentName]
+				db.IndexCount[componentName]++
+			}
+
+			// Save the index to the name storage
+			db.NameStorage[componentName][instanceName] = currIndex
+		}
+
 	}
 	//db.Save()
 }
