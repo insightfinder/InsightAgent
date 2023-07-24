@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/carlmjohnson/requests"
 	"log"
+	"strconv"
 	"time"
 )
 
@@ -15,25 +16,29 @@ const (
 )
 
 const (
-	CPU_METRIC_QUERY         = "avg(rate(container_cpu_usage_seconds_total{container!='POD',container!='',pod!=''}[10m])) by (pod,namespace, container)"
-	MEMORY_METRIC_QUERY      = "avg(container_memory_working_set_bytes{container!='POD',container!='',pod!=''}) by (pod,namespace, container)"
-	DISK_READ_METRIC_QUERY   = "avg(rate(container_fs_reads_bytes_total{container!='POD',pod!=''}[10m])) by (pod, namespace, container)"
-	DISK_WRITE_METRIC_QUERY  = "avg(rate(container_fs_writes_bytes_total{container!='POD',pod!=''}[10m])) by (pod, namespace, container)"
-	NETWORK_IN_METRIC_QUERY  = "avg(rate(container_network_receive_bytes_total{container!='POD',pod!=''}[10m])) by (pod, namespace)"
-	NETWORK_OUT_METRIC_QUERY = "avg(rate(container_network_transmit_bytes_total{container!='POD',pod!=''}[10m])) by (pod, namespace)"
+	CPU_METRIC_QUERY         = "sum(rate(container_cpu_usage_seconds_total{namespace=~\"%s\",container!='POD',container!='',pod!=''}[10m])) by (pod,namespace,instance)"
+	MEMORY_METRIC_QUERY      = "sum(container_memory_working_set_bytes{namespace=~\"%s\",container!='POD',container!='',pod!=''}) by (pod,namespace,instance)"
+	DISK_READ_METRIC_QUERY   = "sum(rate(container_fs_reads_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[10m])) by (pod, namespace,instance)"
+	DISK_WRITE_METRIC_QUERY  = "sum(rate(container_fs_writes_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[10m])) by (pod, namespace,instance)"
+	NETWORK_IN_METRIC_QUERY  = "sum(rate(container_network_receive_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[10m])) by (pod, namespace,instance)"
+	NETWORK_OUT_METRIC_QUERY = "sum(rate(container_network_transmit_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[10m])) by (pod, namespace,instance)"
 )
 
-type Prometheus struct {
+type PrometheusServer struct {
 	// Constants
-	EndPoint string
-	UserName string
-	Password string
+	EndPoint    string
+	UserName    string
+	Password    string
+	VerifyCerts string
+	CACerts     string
+	ClientCert  string
+	ClientKey   string
 
 	// Vars
 	IsBasicAuth bool
 }
 
-func (p Prometheus) Verify() bool {
+func (p PrometheusServer) Verify() bool {
 
 	// Must have EndPoint
 	if p.EndPoint == "" {
@@ -52,11 +57,11 @@ func (p Prometheus) Verify() bool {
 	return ConfigResponseBody.Status != "success"
 }
 
-func (p Prometheus) Query(QueryStr string, StartTime time.Time, EndTime time.Time) QueryResponseBody {
+func (p PrometheusServer) Query(QueryStr string, StartTime time.Time, EndTime time.Time) QueryResponseBody {
 	StartTimeStr := fmt.Sprintf("%.3f", float64(StartTime.UnixMilli())/1000)
 	EndTimeStr := fmt.Sprintf("%.3f", float64(EndTime.UnixMilli())/1000)
 	ResponseBody := QueryResponseBody{}
-	err := requests.URL(p.EndPoint+QUERY_API).Param("query", QueryStr).Param("start", StartTimeStr).Param("end", EndTimeStr).Param("step", "2").ToJSON(&ResponseBody).Fetch(context.Background())
+	err := requests.URL(p.EndPoint+QUERY_API).Param("query", QueryStr).Param("start", StartTimeStr).Param("end", EndTimeStr).Param("step", "60").ToJSON(&ResponseBody).Fetch(context.Background())
 
 	if err != nil {
 		log.Println("Failed to query: ", QueryStr)
@@ -67,7 +72,7 @@ func (p Prometheus) Query(QueryStr string, StartTime time.Time, EndTime time.Tim
 	}
 }
 
-func (p Prometheus) GetMetricData(Type string, StartTime time.Time, EndTime time.Time) []PromMetricData {
+func (p PrometheusServer) GetMetricData(Type string, namespaceFilter string, StartTime time.Time, EndTime time.Time) []PromMetricData {
 	var QueryStr string
 	var promMetricData []PromMetricData
 
@@ -85,22 +90,23 @@ func (p Prometheus) GetMetricData(Type string, StartTime time.Time, EndTime time
 	case "NetworkOut":
 		QueryStr = NETWORK_OUT_METRIC_QUERY
 	}
+	QueryStr = FormatQueryWithNamespaces(QueryStr, namespaceFilter)
 
 	QueryResult := p.Query(QueryStr, StartTime, EndTime)
 	for _, Data := range QueryResult.Data.Result {
 		NameSpace := Data.Metric.Namespace
 		Pod := Data.Metric.Pod
-		Container := Data.Metric.Container
+		Node := Data.Metric.Node
 		metrics := make([]Metric, 0)
 		for _, ValueSet := range Data.Values {
 			var Timestamp float64
 			var Value string
 			json.Unmarshal(ValueSet[0], &Timestamp)
 			json.Unmarshal(ValueSet[1], &Value)
-
-			metrics = append(metrics, Metric{Timestamp, Value})
+			valueFloat64, _ := strconv.ParseFloat(Value, 64)
+			metrics = append(metrics, Metric{int64(Timestamp * 1000), valueFloat64})
 		}
-		promMetricData = append(promMetricData, PromMetricData{NameSpace, Pod, Container, metrics})
+		promMetricData = append(promMetricData, PromMetricData{Type, NameSpace, Pod, Node, metrics})
 	}
 	return promMetricData
 }

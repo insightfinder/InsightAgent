@@ -1,0 +1,12 @@
+replicaCount: 1
+image: "docker.io/insightfinderinc/kubernetes-agent:latest"
+imagePullPolicy: Always
+agent:
+  namespaceFilter: "insightfinder"
+prometheus:
+  endpoint: http://prometheus-server.monitoring.svc.cluster.local:80
+insightfinder:
+  projectName: "maoyu-test-k8s-monitor-6"
+  systemName: "maoyu-test-k8s-monitor"
+  user_name: "user"
+  license_key: ""

@@ -26,6 +26,7 @@ type QueryResponseBody struct {
 				Namespace string `json:"namespace"`
 				Pod       string `json:"pod"`
 				Container string `json:"container"`
+				Node      string `json:"instance"`
 			} `json:"metric"`
 			Values [][]json.RawMessage `json:"values"`
 		} `json:"result"`
@@ -33,13 +34,14 @@ type QueryResponseBody struct {
 }
 
 type Metric struct {
-	TimeStamp float64
-	Value     string
+	TimeStamp int64
+	Value     float64
 }
 
 type PromMetricData struct {
+	Type      string // CPU, Memory, NetworkIn,NetworkOut , DiskRead, DiskWrite
 	NameSpace string
 	Pod       string
-	Container string
+	Node      string
 	Data      []Metric
 }
