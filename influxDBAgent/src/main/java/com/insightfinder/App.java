@@ -6,6 +6,7 @@ import com.insightfinder.payload.MetricDataBody;
 import com.insightfinder.payload.MetricDataReceivePayload;
 import com.insightfinder.utilities.GsonUtility;
 import com.insightfinder.utilities.HttpUtility;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.http.HttpResponse;
 import java.util.Map;
@@ -20,11 +21,17 @@ public class App {
   private static final Logger logger = Logger.getLogger(App.class.getName());
 
   public static void main(String[] args) throws IOException, InterruptedException {
+    if (args.length < 1) {
+      logger.log(Level.SEVERE, "config file parameter is missing");
+      return;
+    }
+    String configFilePath = args[0];
+    final Properties prop = new Properties();
+    try (FileInputStream in = new FileInputStream(configFilePath)) {
+      prop.load(in);
+    }
+
     long lastFetchTimestamp = System.currentTimeMillis();
-
-    Properties prop = new Properties();
-    prop.load(App.class.getClassLoader().getResourceAsStream("config.properties"));
-
     InfluxDBMetricCollector collector = new InfluxDBMetricCollector(prop.getProperty("db.url"),
         prop.getProperty("db.username"), prop.getProperty("db.password"),
         prop.getProperty("db.query"));
