@@ -56,4 +56,12 @@ public class DataInTimestamp implements Serializable {
   public int hashCode() {
     return Objects.hash(timestamp);
   }
+
+  @Override
+  public String toString() {
+    return "DataInTimestamp{" +
+        "timestamp=" + timestamp +
+        ", metricDataPointSet=" + metricDataPointSet +
+        '}';
+  }
 }

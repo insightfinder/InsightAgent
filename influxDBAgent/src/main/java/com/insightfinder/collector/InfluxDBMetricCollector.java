@@ -16,8 +16,6 @@ import org.influxdb.dto.QueryResult.Series;
 //https://github.com/influxdata/influxdb-java/blob/master/MANUAL.md
 public class InfluxDBMetricCollector {
 
-  public static final String INSIGHTFINDER_ENDPOINT = "/api/v2/metric-data-receive";
-
   String dbUrl;
   private final String userName;
   private final String password;
@@ -41,7 +39,6 @@ public class InfluxDBMetricCollector {
     Map<String, InstanceData> instanceDataMap = new HashMap<>();
     for (Result result : queryResult.getResults()) {
       for (Series series : result.getSeries()) {
-        System.out.println("full result " + series.getValues());
         for (List<Object> values : series.getValues()) {
           long timestamp = Instant.parse(values.get(0).toString()).toEpochMilli();
           String metricName = values.get(1).toString();
@@ -54,7 +51,6 @@ public class InfluxDBMetricCollector {
         }
       }
     }
-    System.out.println(instanceDataMap);
     return instanceDataMap;
   }
 }
