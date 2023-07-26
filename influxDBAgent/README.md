@@ -1,3 +1,9 @@
+1. use maven to package:
+```
 mvn clean package
+```
 
+2. Use jdk19 to run agent: 
+```
 java -jar target/influxDBAgent-1.0-SNAPSHOT-jar-with-dependencies.jar /home/elay/config.properties
+```
