@@ -1,1 +1,4 @@
 conf.d/*.ini
+*.pem
+*.csr
+*.ext
