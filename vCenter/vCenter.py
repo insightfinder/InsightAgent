@@ -35,6 +35,8 @@ This script gets metric data from VMware vSphere and ingests it into an IF metri
 RETRY_WAIT_TIME_IN_SEC = 30
 SESSION = requests.Session()
 ATTEMPTS = 3
+# Set it to 4 mins because VCenter cron is every 5 mins
+MAX_TIME_OUT_THRESHOLD =  240
 
 def set_logger_config():
     '''
@@ -565,6 +567,7 @@ def worker_process(path):
             send_metric_data(metric_data, if_vars, agent_vars)
     except Exception as e:
         logger.error(e, exc_info=True)
+        return
 
 
 if __name__ == '__main__':
@@ -585,9 +588,9 @@ if __name__ == '__main__':
     pool.close()
 
     try:
-        pool_result.get(None)
+        pool_result.get(timeout=MAX_TIME_OUT_THRESHOLD)
         pool.join()
-    except TimeoutError:
-        logger.error("We lacked patience and got a multiprocessing.TimeoutError")
+    except Exception as e:
+        logger.error(e, exc_info=True)
         pool.terminate()
     logger.info("Now the pool is closed and no longer available")
