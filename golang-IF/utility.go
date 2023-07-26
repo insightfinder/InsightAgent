@@ -83,6 +83,9 @@ func ToBool(inputVar interface{}) (boolValue bool) {
 	switch castedVal := inputVar.(type) {
 	case string:
 		var err error
+		if castedVal == "" {
+			return false
+		}
 		boolValue, err = strconv.ParseBool(castedVal)
 		if err != nil {
 			panic("[ERROR] Wrong input type. Can not convert current input to boolean.")
