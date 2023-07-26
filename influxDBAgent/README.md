@@ -5,5 +5,5 @@ mvn clean package
 
 2. Use jdk19 to run agent: 
 ```
-java -jar target/influxDBAgent-1.0-SNAPSHOT-jar-with-dependencies.jar /home/elay/config.properties
+$JAVA_HOME/bin/java -jar target/influxDBAgent-1.0-SNAPSHOT-jar-with-dependencies.jar /home/elay/config.properties
 ```
