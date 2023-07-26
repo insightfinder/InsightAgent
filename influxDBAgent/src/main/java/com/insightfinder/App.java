@@ -36,10 +36,10 @@ public class App {
         prop.getProperty("db.username"), prop.getProperty("db.password"),
         prop.getProperty("db.query"));
 
-    long fetchInterval = Long.parseLong(prop.getProperty("collecter.fetchinterval"));
+    String samplingInterval = prop.getProperty("insightfinder.samplingInterval");
+    long fetchInterval = Long.parseLong(samplingInterval) * 60 * 1000;
     String projectName = prop.getProperty("insightfinder.projectName");
     String userName = prop.getProperty("insightfinder.userName");
-    String samplingInterval = prop.getProperty("insightfinder.samplingInterval");
     String licenseKey = prop.getProperty("insightfinder.licenseKey");
 
     while (true) {
