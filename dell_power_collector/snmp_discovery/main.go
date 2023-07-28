@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,9 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
+
+const DEFAULT_MATADATE_MAX_INSTANCE = 1500
+const IF_SECTION_NAME = "insightfinder"
 
 var (
 	defaultConfigFilename = "snmp_discovery"
@@ -344,7 +348,7 @@ func NewTrapCommand() *cobra.Command {
 		},
 	}
 
-	trapCmd.Flags().StringVarP(&address, "address", "a", "0.0.0.0:9162", "SNMP trap server address")
+	trapCmd.Flags().StringVarP(&address, "address", "a", "0.0.0.0:162", "SNMP trap server address")
 
 	return trapCmd
 }
@@ -422,4 +426,105 @@ func bindFlags(cmd *cobra.Command, v *viper.Viper) {
 			_ = cmd.Flags().Set(f.Name, val.(string))
 		}
 	})
+}
+
+func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
+	// Required parameters
+	var userName = ToString(GetConfigValue(p, IF_SECTION_NAME, "user_name", true))
+	var licenseKey = ToString(GetConfigValue(p, IF_SECTION_NAME, "license_key", true))
+	var projectName = ToString(GetConfigValue(p, IF_SECTION_NAME, "project_name", true))
+	// We use uppercase for project log type.
+	var projectType = strings.ToUpper(ToString(GetConfigValue(p, IF_SECTION_NAME, "project_type", true)))
+	var runInterval = ToString(GetConfigValue(p, IF_SECTION_NAME, "run_interval", true))
+
+	// Optional parameters
+	var token = ToString(GetConfigValue(p, IF_SECTION_NAME, "token", false))
+	var systemName = ToString(GetConfigValue(p, IF_SECTION_NAME, "system_name", false))
+	var projectNamePrefix = ToString(GetConfigValue(p, IF_SECTION_NAME, "project_name_prefix", false))
+	var metaDataMaxInstance = ToString(GetConfigValue(p, IF_SECTION_NAME, "metadata_max_instances", false))
+	var samplingInterval = ToString(GetConfigValue(p, IF_SECTION_NAME, "sampling_interval", false))
+	var ifURL = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_url", false))
+	var httpProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_http_proxy", false))
+	var httpsProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_https_proxy", false))
+	var isReplay = ToString(GetConfigValue(p, IF_SECTION_NAME, "isReplay", false))
+	var samplingIntervalInSeconds string
+
+	if len(projectNamePrefix) > 0 && !strings.HasSuffix(projectNamePrefix, "-") {
+		projectNamePrefix = projectNamePrefix + "-"
+	}
+
+	if !IsValidProjectType(projectType) {
+		panic("[ERROR] Non-existing project type: " + projectType + "! Please use the supported project types. ")
+	}
+
+	if len(samplingInterval) == 0 {
+		if strings.Contains(projectType, "METRIC") {
+			panic("[ERROR] InsightFinder configuration [sampling_interval] is required for METRIC project!")
+		} else {
+			// Set default for non-metric project
+			samplingInterval = "10"
+			samplingIntervalInSeconds = "600"
+		}
+	}
+
+	if strings.HasSuffix(samplingInterval, "s") {
+		samplingIntervalInSeconds = samplingInterval[:len(samplingInterval)-1]
+		samplingIntervalInt, err := strconv.Atoi(samplingInterval)
+		if err != nil {
+			panic(err)
+		}
+		samplingInterval = fmt.Sprint(samplingIntervalInt / 60.0)
+	} else {
+		samplingIntervalInt, err := strconv.Atoi(samplingInterval)
+		if err != nil {
+			panic(err)
+		}
+		samplingIntervalInSeconds = fmt.Sprint(int64(samplingIntervalInt * 60))
+	}
+
+	isReplay = strconv.FormatBool(strings.Contains(projectType, "REPLAY"))
+
+	if len(metaDataMaxInstance) == 0 {
+		metaDataMaxInstance = strconv.FormatInt(int64(DEFAULT_MATADATE_MAX_INSTANCE), 10)
+	} else {
+		metaDataMaxInstanceInt, err := strconv.Atoi(metaDataMaxInstance)
+		if err != nil {
+			log.Output(2, err.Error())
+			log.Output(2, "[ERROR] Meta data max instance can only be integer number.")
+			os.Exit(1)
+		}
+		if metaDataMaxInstanceInt > DEFAULT_MATADATE_MAX_INSTANCE {
+			metaDataMaxInstance = string(rune(metaDataMaxInstanceInt))
+		}
+	}
+
+	if len(ifURL) == 0 {
+		ifURL = "https://app.insightfinder.com"
+	}
+
+	ifProxies := make(map[string]string)
+	if len(httpProxy) > 0 {
+		ifProxies["http"] = httpProxy
+	}
+	if len(httpsProxy) > 0 {
+		ifProxies["https"] = httpsProxy
+	}
+
+	configIF := map[string]interface{}{
+		"userName":                  userName,
+		"licenseKey":                licenseKey,
+		"token":                     token,
+		"projectName":               projectName,
+		"systemName":                systemName,
+		"projectNamePrefix":         projectNamePrefix,
+		"projectType":               projectType,
+		"metaDataMaxInstance":       metaDataMaxInstance,
+		"samplingInterval":          samplingInterval,
+		"samplingIntervalInSeconds": samplingIntervalInSeconds,
+		"runInterval":               runInterval,
+		"ifURL":                     ifURL,
+		"ifProxies":                 ifProxies,
+		"isReplay":                  isReplay,
+	}
+	return configIF
 }
