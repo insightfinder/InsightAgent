@@ -47,7 +47,7 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	var httpProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_http_proxy", false))
 	var httpsProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_https_proxy", false))
 	var isReplay = ToString(GetConfigValue(p, IF_SECTION_NAME, "isReplay", false))
-	var instance_whitelist_string = ToString(GetConfigValue(p, IF_SECTION_NAME, "instance_whitelist", false))
+	var instance_blacklist_string = ToString(GetConfigValue(p, IF_SECTION_NAME, "instance_blacklist", false))
 
 	var samplingIntervalInSeconds string
 
@@ -111,11 +111,11 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	if len(httpsProxy) > 0 {
 		ifProxies["https"] = httpsProxy
 	}
-	var instance_whitelist []string
-	if len(instance_whitelist_string) > 0 {
-		instance_whitelist = strings.Split(strings.TrimSpace(instance_whitelist_string), ",")
+	var instance_blacklist []string
+	if len(instance_blacklist_string) > 0 {
+		instance_blacklist = strings.Split(strings.TrimSpace(instance_blacklist_string), ",")
 	} else {
-		instance_whitelist = []string{}
+		instance_blacklist = []string{}
 	}
 
 	configIF := map[string]interface{}{
@@ -133,7 +133,7 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 		"ifURL":                     ifURL,
 		"ifProxies":                 ifProxies,
 		"isReplay":                  isReplay,
-		"instance_whitelist":        instance_whitelist,
+		"instance_blacklist":        instance_blacklist,
 	}
 	return configIF
 }

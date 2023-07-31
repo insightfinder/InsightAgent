@@ -77,8 +77,8 @@ system_name =
 project_type = metric
 sampling_interval = 10
 run_interval = 5
-# instance names we want to include. If this field is NOT EMPTY, only the instance name in the list will be sent to insightFdiner.
-instance_whitelist = 
+# instance names we want to exclude.
+instance_blacklist = 
 
 if_url = https://app.insightfinder.com
 if_http_proxy =

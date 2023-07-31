@@ -212,10 +212,9 @@ func sendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 		SystemName:      ToString(IFconfig["systemName"]),
 	}
 	for instanceName, istData := range data.InstanceDataMap {
-		instance_whitelist := IFconfig["instance_whitelist"].([]string)
-		// If the whitelist isn't empty and current instance name isn't in it.
-		// Skip the instance when sending data.
-		if len(instance_whitelist) != 0 && !Contains(instance_whitelist, instanceName) {
+		instance_blacklist := IFconfig["instance_blacklist"].([]string)
+		// If the blacklist isn't empty and instance name in it will be skipped.
+		if len(instance_blacklist) != 0 && Contains(instance_blacklist, instanceName) {
 			continue
 		}
 		instanceData, ok := newPayload.InstanceDataMap[instanceName]
@@ -278,7 +277,6 @@ func sendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 
 func sendDataToIF(data []byte, receiveEndpoint string, config map[string]interface{}) {
 	log.Output(1, "-------- Sending data to InsightFinder --------")
-
 	if len(data) > MAX_PACKET_SIZE {
 		panic("[ERROR]The packet size is too large.")
 	}
