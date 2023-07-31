@@ -212,6 +212,12 @@ func sendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 		SystemName:      ToString(IFconfig["systemName"]),
 	}
 	for instanceName, istData := range data.InstanceDataMap {
+		instance_whitelist := IFconfig["instance_whitelist"].([]string)
+		// If the whitelist isn't empty and current instance name isn't in it.
+		// Skip the instance when sending data.
+		if len(instance_whitelist) != 0 && !Contains(instance_whitelist, instanceName) {
+			continue
+		}
 		instanceData, ok := newPayload.InstanceDataMap[instanceName]
 		if !ok {
 			// Current Instance didn't exist
@@ -236,7 +242,7 @@ func sendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 				request := IFMetricPostRequestPayload{
 					LicenseKey: ToString(IFconfig["licenseKey"]),
 					UserName:   ToString(IFconfig["userName"]),
-					Data:       data,
+					Data:       newPayload,
 				}
 				jData, err := json.Marshal(request)
 				if err != nil {
@@ -261,7 +267,7 @@ func sendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 	request := IFMetricPostRequestPayload{
 		LicenseKey: ToString(IFconfig["licenseKey"]),
 		UserName:   ToString(IFconfig["userName"]),
-		Data:       data,
+		Data:       newPayload,
 	}
 	jData, err := json.Marshal(request)
 	if err != nil {
@@ -379,6 +385,15 @@ func GetConfigValue(p *configparser.ConfigParser, section string, param string, 
 		panic("[ERROR] InsightFinder configuration [" + param + "] is required!")
 	}
 	return result
+}
+
+func Contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
 }
 
 func FormCompleteURL(link string, endpoint string) string {
