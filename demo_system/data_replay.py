@@ -514,7 +514,6 @@ if __name__ == "__main__":
     logging_setting()
     urllib3.disable_warnings()
     user_name = utility.get_username()
-    user_name = 'demoUser'
     configs, parser = get_agent_config_vars()
     cur_time = get_current_time()
     if configs[constant.BUGGY_DEPLOY] == constant.BUGGY_DEPLOY_TRUE:
