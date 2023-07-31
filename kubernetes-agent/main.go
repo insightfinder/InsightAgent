@@ -32,8 +32,8 @@ func createPrometheusServer(config *configparser.ConfigParser) prometheus.Promet
 
 func main() {
 	// Initialize InstanceName DB
-	db := tools.InstanceNameDB{}
-	db.Initialize()
+	instanceMapper := tools.InstanceMapper{}
+	instanceMapper.Initialize()
 
 	// Read configuration
 	configFiles := insightfinder.GetConfigFiles("conf.d")
@@ -58,21 +58,15 @@ func main() {
 
 			// Get Namespace need to use
 			namespaceFilter, _ := configFile.Get("prometheus", "namespace")
-
-			// Get connection to Kubernetes
-			//kubernetesConnType, _ := configFile.Get("kubernetes", "connection_type")
-			//kubernetesServer := kubernetes.KubernetesServer{
-			//	ConnectionType: kubernetesConnType,
-			//}
-			//kubernetesServer.Initialize()
-
-			// Get all pods in the cluster
-			//PodsInfo := kubernetesServer.GetPodsNodesMap()
+			instanceMapper.AddNamespace(namespaceFilter)
+			instanceMapper.Update()
 
 			// Process other sections
 			if IFConfig["projectType"] == "LOG" {
 				log.Output(2, "TODO: Log Project")
 			} else if IFConfig["projectType"] == "METRIC" {
+
+				log.Output(2, fmt.Sprintf("Start sending data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 
 				// Create connection to Prometheus
 				prometheusServer := createPrometheusServer(configFile)
@@ -89,17 +83,17 @@ func main() {
 				metricData["NetworkIn"] = prometheusServer.GetMetricData("NetworkIn", namespaceFilter, Before, Now)
 				metricData["NetworkOut"] = prometheusServer.GetMetricData("NetworkOut", namespaceFilter, Before, Now)
 
-				metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, &db)
+				metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, &instanceMapper)
 				tools.PrintStruct(metricPayload, false)
-				insightfinder.SendMetricData(metricPayload, IFConfig)
+				//insightfinder.SendMetricData(metricPayload, IFConfig)
 			}
 		}
 
-		log.Output(2, "Sleep...")
+		log.Output(2, "Finished sending data.")
 
-		// Prepare for next 10 time range
+		// Prepare for next 1 time range
 		Before = Now
-		time.Sleep(time.Minute * 10)
+		time.Sleep(time.Minute * 1)
 		Now = time.Now()
 	}
 

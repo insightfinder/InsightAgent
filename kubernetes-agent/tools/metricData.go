@@ -5,17 +5,13 @@ import (
 	"kubernetes-agent/prometheus"
 )
 
-func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instNameDB *InstanceNameDB) insightfinder.MetricDataReceivePayload {
-
-	// Add data to instanceNameDB
-	namespacePodMap := buildNamespacePodMap((*metricDataMap)["CPU"])
-	instNameDB.Merge(*namespacePodMap)
+func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper) insightfinder.MetricDataReceivePayload {
 
 	// Build InstanceDataMap
 	instanceDataMap := make(map[string]insightfinder.InstanceData)
 	for _, metricData := range *metricDataMap {
 		for _, promMetricData := range metricData {
-			componentName := instNameDB.GetStaticInstanceName(promMetricData.NameSpace + "/" + promMetricData.Pod)
+			componentName := instanceNameMapper.GetInstanceName(promMetricData.NameSpace, promMetricData.Pod)
 			if componentName == "" {
 				continue
 			}

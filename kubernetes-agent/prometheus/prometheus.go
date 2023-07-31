@@ -16,12 +16,12 @@ const (
 )
 
 const (
-	CPU_METRIC_QUERY         = "sum(rate(container_cpu_usage_seconds_total{namespace=~\"%s\",container!='POD',container!='',pod!=''}[10m])) by (pod,namespace,instance)"
+	CPU_METRIC_QUERY         = "sum(rate(container_cpu_usage_seconds_total{namespace=~\"%s\",container!='POD',container!='',pod!=''}[3m])) by (pod,namespace,instance)"
 	MEMORY_METRIC_QUERY      = "sum(container_memory_working_set_bytes{namespace=~\"%s\",container!='POD',container!='',pod!=''}) by (pod,namespace,instance)"
-	DISK_READ_METRIC_QUERY   = "sum(rate(container_fs_reads_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[10m])) by (pod, namespace,instance)"
-	DISK_WRITE_METRIC_QUERY  = "sum(rate(container_fs_writes_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[10m])) by (pod, namespace,instance)"
-	NETWORK_IN_METRIC_QUERY  = "sum(rate(container_network_receive_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[10m])) by (pod, namespace,instance)"
-	NETWORK_OUT_METRIC_QUERY = "sum(rate(container_network_transmit_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[10m])) by (pod, namespace,instance)"
+	DISK_READ_METRIC_QUERY   = "sum(rate(container_fs_reads_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance)"
+	DISK_WRITE_METRIC_QUERY  = "sum(rate(container_fs_writes_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance)"
+	NETWORK_IN_METRIC_QUERY  = "sum(rate(container_network_receive_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance)"
+	NETWORK_OUT_METRIC_QUERY = "sum(rate(container_network_transmit_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance)"
 )
 
 type PrometheusServer struct {

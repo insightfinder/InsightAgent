@@ -3,6 +3,7 @@ package insightfinder
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/bigkevmcd/go-configparser"
 	"log"
 	"net/http"
 	"net/url"
@@ -13,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/bigkevmcd/go-configparser"
 )
 
 const DEFAULT_MATADATE_MAX_INSTANCE = 1500
@@ -273,8 +272,6 @@ func CheckProject(IFconfig map[string]interface{}) {
 	if len(projectName) > 0 {
 		if !isProjectExist(IFconfig) {
 			log.Output(1, fmt.Sprintf("Didn't find the project named %s. Start creating project in the InsightFinder.", projectName))
-			createProject(IFconfig)
-			log.Output(1, "Sleep for 5 seconds to wait for project creation and will check the project exisitense again.")
 			time.Sleep(time.Second * 5)
 			if !isProjectExist(IFconfig) {
 				panic("[ERROR] Fail to create project " + projectName)
@@ -312,47 +309,4 @@ func isProjectExist(IFconfig map[string]interface{}) bool {
 	}
 
 	return ToBool(result["isProjectExist"])
-}
-
-func createProject(IFconfig map[string]interface{}) {
-	projectName := ToString(IFconfig["projectName"])
-	projectType := ToString(IFconfig["projectType"])
-
-	log.Output(1, fmt.Sprintf("[LOG]Creating the project named %s in the InsightFinder.", projectName))
-	form := url.Values{}
-
-	form.Add("operation", "create")
-	form.Add("userName", ToString(IFconfig["userName"]))
-	form.Add("licenseKey", ToString(IFconfig["licenseKey"]))
-	form.Add("projectName", projectName)
-
-	if IFconfig["systemName"] != nil {
-		form.Add("systemName", ToString(IFconfig["systemName"]))
-	} else {
-		form.Add("systemName", projectName)
-	}
-	form.Add("instanceType", "PrivateCloud")
-	form.Add("projectCloudType", "PrivateCloud")
-	form.Add("dataType", ProjectTypeToDataType(projectType))
-	form.Add("insightAgentType", ProjectTypeToAgentType(projectType, false))
-	form.Add("samplingInterval", ToString(IFconfig["samplingInterval"]))
-	form.Add("samplingIntervalInSeconds", ToString(IFconfig["samplingInterval"]))
-	samplingIntervalINT, err := strconv.Atoi(ToString(IFconfig["samplingInterval"]))
-	if err != nil {
-		panic(err)
-	}
-	form.Add("samplingIntervalInSeconds", fmt.Sprint(samplingIntervalINT*60))
-	headers := map[string]string{
-		"Content-Type": "application/x-www-form-urlencoded",
-	}
-	response, _ := SendRequest(
-		http.MethodPost,
-		FormCompleteURL(ToString(IFconfig["ifURL"]), PROJECT_END_POINT),
-		strings.NewReader(form.Encode()),
-		headers,
-		AuthRequest{},
-	)
-	var result map[string]interface{}
-	json.Unmarshal(response, &result)
-	log.Output(1, ToString(result["message"]))
 }
