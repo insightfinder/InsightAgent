@@ -7,3 +7,6 @@ mvn clean package
 ```
 $JAVA_HOME/bin/java -jar target/influxDBAgent-1.0-SNAPSHOT-jar-with-dependencies.jar /home/elay/config.properties
 ```
+
+3. POC Discussion
+SQL query? Authentication (HTTPS)?
