@@ -16,8 +16,6 @@ import java.util.logging.Logger;
 
 public class App {
 
-  public static final String INSIGHTFINDER_ENDPOINT = "http://localhost:8080/api/v2/metric-data-receive";
-
   private static final Logger logger = Logger.getLogger(App.class.getName());
 
   public static void main(String[] args) throws IOException, InterruptedException {
@@ -41,6 +39,7 @@ public class App {
     String projectName = prop.getProperty("insightfinder.projectName");
     String userName = prop.getProperty("insightfinder.userName");
     String licenseKey = prop.getProperty("insightfinder.licenseKey");
+    String ifEndpoint = prop.getProperty("insightfinder.endpoint");
 
     while (true) {
       long currentTimestamp = System.currentTimeMillis();
@@ -51,7 +50,7 @@ public class App {
         MetricDataReceivePayload payload = new MetricDataReceivePayload(projectName, userName,
             "influxDBAgent", samplingInterval, dataMap);
         MetricDataBody metricDataBody = new MetricDataBody(payload, licenseKey, userName);
-        HttpResponse<String> response = HttpUtility.sendHttpRequest(INSIGHTFINDER_ENDPOINT,
+        HttpResponse<String> response = HttpUtility.sendHttpRequest(ifEndpoint,
             GsonUtility.gson.toJson(metricDataBody));
         logger.log(Level.INFO, "Response: " + response.body());
       }
