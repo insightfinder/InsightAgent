@@ -85,7 +85,7 @@ func main() {
 
 				metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, &instanceMapper)
 				tools.PrintStruct(metricPayload, false)
-				//insightfinder.SendMetricData(metricPayload, IFConfig)
+				insightfinder.SendMetricData(metricPayload, IFConfig)
 			}
 		}
 

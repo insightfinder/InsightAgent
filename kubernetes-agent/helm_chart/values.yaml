@@ -4,9 +4,9 @@ imagePullPolicy: Always
 agent:
   namespaceFilter: "insightfinder"
 prometheus:
-  endpoint: http://prometheus-server.monitoring.svc.cluster.local:80
-insightfinder:
-  projectName: "maoyu-test-k8s-monitor-6"
+  projectName: "maoyu-test-k8s-monitor-08-01"
   systemName: "maoyu-test-k8s-monitor"
+  endpoint: "http://prometheus-server.monitoring.svc.cluster.local:80"
+insightfinder:
   user_name: "user"
   license_key: ""

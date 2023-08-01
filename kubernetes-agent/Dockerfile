@@ -9,5 +9,6 @@ RUN dnf update -y && \
 WORKDIR /app
 COPY --from=builder /app/kubernetes-agent /app/
 RUN mkdir /app/conf.d && \
+    mkdir /app/storage && \
     chmod +x /app/kubernetes-agent
 CMD ["/app/kubernetes-agent"]
