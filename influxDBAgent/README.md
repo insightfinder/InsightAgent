@@ -9,4 +9,4 @@ $JAVA_HOME/bin/java -jar target/influxDBAgent-1.0-SNAPSHOT-jar-with-dependencies
 ```
 
 3. POC Discussion
-SQL query? Authentication (HTTPS)?
+SQL query? Authentication (HTTPS)? change collectData() params

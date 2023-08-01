@@ -8,15 +8,12 @@ public class MetricDataReceivePayload extends BasePayload {
 
   @SerializedName(value = "i", alternate = {"isTimestampConverted"})
   private final boolean isTimestampConverted = false;
-  @SerializedName(value = "si", alternate = {"samplingInterval"})
-  private final String samplingInterval;
   @SerializedName(value = "idm", alternate = {"instanceDataMap"})
   private final Map<String, InstanceData> instanceDataMap;
 
-  public MetricDataReceivePayload(String projectName, String userName, String samplingInterval,
+  public MetricDataReceivePayload(String projectName, String userName,
       Map<String, InstanceData> instanceDataMap) {
     super(projectName, userName, null);
-    this.samplingInterval = samplingInterval;
     this.instanceDataMap = instanceDataMap;
   }
 
@@ -24,10 +21,6 @@ public class MetricDataReceivePayload extends BasePayload {
     return isTimestampConverted;
   }
 
-
-  public String getSamplingInterval() {
-    return samplingInterval;
-  }
 
   public Map<String, InstanceData> getInstanceDataMap() {
     return instanceDataMap;
@@ -37,7 +30,6 @@ public class MetricDataReceivePayload extends BasePayload {
   public String toString() {
     return "MetricDataReceivePayload{" +
         "isTimestampConverted=" + isTimestampConverted +
-        ", samplingInterval='" + samplingInterval + '\'' +
         ", instanceDataMap=" + instanceDataMap +
         ", projectName='" + projectName + '\'' +
         ", projectType='" + projectType + '\'' +
