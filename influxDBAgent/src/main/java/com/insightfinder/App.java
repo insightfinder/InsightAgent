@@ -9,6 +9,8 @@ import com.insightfinder.utilities.HttpUtility;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.http.HttpResponse;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
 import java.util.Map;
 import java.util.Properties;
 import java.util.logging.Level;
@@ -16,9 +18,11 @@ import java.util.logging.Logger;
 
 public class App {
 
+  public static final String CUSTOM_AGENT_TYPE = "Custom";
   private static final Logger logger = Logger.getLogger(App.class.getName());
 
-  public static void main(String[] args) throws IOException, InterruptedException {
+  public static void main(String[] args)
+      throws IOException, InterruptedException, NoSuchAlgorithmException, KeyManagementException {
     if (args.length < 1) {
       logger.log(Level.SEVERE, "config file parameter is missing");
       return;
