@@ -4,6 +4,7 @@ import com.insightfinder.collector.InfluxDBMetricCollector;
 import com.insightfinder.datamodel.InstanceData;
 import com.insightfinder.payload.MetricDataBody;
 import com.insightfinder.payload.MetricDataReceivePayload;
+import com.insightfinder.service.IFProjectService;
 import com.insightfinder.utilities.GsonUtility;
 import com.insightfinder.utilities.HttpUtility;
 import java.io.FileInputStream;
@@ -18,8 +19,11 @@ import java.util.logging.Logger;
 
 public class App {
 
-  public static final String CUSTOM_AGENT_TYPE = "Custom";
+  public static final String DATA_RECEIVEENDPOINT_SUFFIX = "/api/v2/metric-data-receive";
+  public static final String CHECK_AND_CREATE_PROJECT_SUFFIX = "/api/v1/check-and-add-custom-project";
+
   private static final Logger logger = Logger.getLogger(App.class.getName());
+  private static final IFProjectService ifProjectService = new IFProjectService();
 
   public static void main(String[] args)
       throws IOException, InterruptedException, NoSuchAlgorithmException, KeyManagementException {
@@ -43,7 +47,17 @@ public class App {
     String projectName = prop.getProperty("insightfinder.projectName");
     String userName = prop.getProperty("insightfinder.userName");
     String licenseKey = prop.getProperty("insightfinder.licenseKey");
-    String ifEndpoint = prop.getProperty("insightfinder.endpoint");
+    String url = prop.getProperty("insightfinder.endpoint");
+    String dataReceiveEndpoint = url + DATA_RECEIVEENDPOINT_SUFFIX;
+    String projectEndpoint = url + CHECK_AND_CREATE_PROJECT_SUFFIX;
+
+    if (!ifProjectService.checkProject(projectEndpoint, licenseKey, projectName, userName)) {
+      String systemName = prop.getProperty("insightfinder.systemName");
+      if (!ifProjectService.createProject(projectEndpoint, licenseKey, projectName, userName,
+          systemName, samplingInterval)) {
+        return;
+      }
+    }
 
     while (true) {
       long currentTimestamp = System.currentTimeMillis();
@@ -52,9 +66,9 @@ public class App {
       Map<String, InstanceData> dataMap = collector.collectData(0L, Long.MAX_VALUE);
       if (!dataMap.isEmpty()) {
         MetricDataReceivePayload payload = new MetricDataReceivePayload(projectName, userName,
-            "influxDBAgent", samplingInterval, dataMap);
+            samplingInterval, dataMap);
         MetricDataBody metricDataBody = new MetricDataBody(payload, licenseKey, userName);
-        HttpResponse<String> response = HttpUtility.sendHttpRequest(ifEndpoint,
+        HttpResponse<String> response = HttpUtility.sendHttpRequest(dataReceiveEndpoint,
             GsonUtility.gson.toJson(metricDataBody));
         logger.log(Level.INFO, "Response: " + response.body());
       }
