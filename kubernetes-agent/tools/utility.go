@@ -7,6 +7,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"time"
 )
 
 func ToString(inputVar interface{}) string {
@@ -59,15 +60,8 @@ func PrintStruct(v any, needPrint bool) {
 	if needPrint {
 		fmt.Println(string(jsonBytes))
 	}
-	err = os.WriteFile("PrintStruct.json", jsonBytes, 0644)
+	err = os.WriteFile("PrintStruct-"+time.Now().Format(time.RFC3339), jsonBytes, 0644)
 	if err != nil {
 		log.Fatalf("Writing to file failed: %s", err)
-	}
-}
-
-func PrintSet(m map[string]bool) {
-	for k, _ := range m {
-		fmt.Print(k)
-		fmt.Println()
 	}
 }

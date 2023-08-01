@@ -31,6 +31,8 @@ spec:
             items:
               - key: prometheus.ini
                 path: prometheus.ini
+              - key: loki.ini
+                path: loki.ini
   volumeClaimTemplates:
     - metadata:
         name: if-k8s-agent-storage
