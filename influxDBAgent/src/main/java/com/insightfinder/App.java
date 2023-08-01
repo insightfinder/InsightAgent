@@ -66,7 +66,7 @@ public class App {
       Map<String, InstanceData> dataMap = collector.collectData(0L, Long.MAX_VALUE);
       if (!dataMap.isEmpty()) {
         MetricDataReceivePayload payload = new MetricDataReceivePayload(projectName, userName,
-            samplingInterval, dataMap);
+            dataMap);
         MetricDataBody metricDataBody = new MetricDataBody(payload, licenseKey, userName);
         HttpResponse<String> response = HttpUtility.sendHttpRequest(dataReceiveEndpoint,
             GsonUtility.gson.toJson(metricDataBody));

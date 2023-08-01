@@ -60,7 +60,7 @@ public class IFProjectService {
     Response response = client.newCall(request).execute();
     JSONObject json = new JSONObject(response.body().string());
     if (json.has("success") && json.getBoolean("success")) {
-      logger.log(Level.INFO, "Success to create project " + projectName);
+      logger.log(Level.INFO, "Successfully created project " + projectName);
       return true;
     }
     logger.log(Level.INFO, "Failed to create project " + projectName);
