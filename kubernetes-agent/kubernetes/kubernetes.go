@@ -73,7 +73,7 @@ func (k *KubernetesServer) GetTargetReplicas(namespace string) map[string]map[st
 		if _, ok := targetReplicas["Deployment"]; !ok {
 			targetReplicas["Deployment"] = make(map[string]int32)
 		}
-		targetReplicas["Deployment"][deployment.Name] = deployment.Status.Replicas
+		targetReplicas["Deployment"][deployment.Name] = *deployment.Spec.Replicas
 	}
 
 	// Process statefulSets
@@ -81,7 +81,7 @@ func (k *KubernetesServer) GetTargetReplicas(namespace string) map[string]map[st
 		if _, ok := targetReplicas["StatefulSet"]; !ok {
 			targetReplicas["StatefulSet"] = make(map[string]int32)
 		}
-		targetReplicas["StatefulSet"][statefulSet.Name] = statefulSet.Status.Replicas
+		targetReplicas["StatefulSet"][statefulSet.Name] = *statefulSet.Spec.Replicas
 
 	}
 
