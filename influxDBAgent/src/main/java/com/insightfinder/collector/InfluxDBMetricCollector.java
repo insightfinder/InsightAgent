@@ -1,10 +1,16 @@
 package com.insightfinder.collector;
 
 import com.insightfinder.datamodel.InstanceData;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+import okhttp3.OkHttpClient;
 import org.influxdb.InfluxDB;
 import org.influxdb.InfluxDBFactory;
 import org.influxdb.dto.BoundParameterQuery.QueryBuilder;
@@ -30,8 +36,10 @@ public class InfluxDBMetricCollector {
     this.queryURL = queryURL;
   }
 
-  public Map<String, InstanceData> collectData(long fromTimeMillis, long toTimeMillis) {
-    final InfluxDB influxDB = InfluxDBFactory.connect(dbUrl, userName, password);
+  public Map<String, InstanceData> collectData(long fromTimeMillis, long toTimeMillis)
+      throws NoSuchAlgorithmException, KeyManagementException {
+    final InfluxDB influxDB = InfluxDBFactory.connect(dbUrl, userName, password,
+        getInsecureOkHttpClientBuilder());
     Query query = QueryBuilder.newQuery(queryURL).bind(STARTTIMESTAMP, fromTimeMillis)
         .bind(ENDTIMESTAMP, toTimeMillis).create();
     QueryResult queryResult = influxDB.query(query);
@@ -52,5 +60,38 @@ public class InfluxDBMetricCollector {
       }
     }
     return instanceDataMap;
+  }
+
+  private OkHttpClient.Builder getSecureOkHttpClientBuilder() {
+    return new OkHttpClient.Builder();
+  }
+
+  // use this for self-signed certificate
+  private OkHttpClient.Builder getInsecureOkHttpClientBuilder()
+      throws NoSuchAlgorithmException, KeyManagementException {
+    TrustManager[] trustAllCerts = new TrustManager[]{
+        new X509TrustManager() {
+          @Override
+          public void checkClientTrusted(java.security.cert.X509Certificate[] chain,
+              String authType) {
+          }
+
+          @Override
+          public void checkServerTrusted(java.security.cert.X509Certificate[] chain,
+              String authType) {
+          }
+
+          @Override
+          public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+            return new java.security.cert.X509Certificate[]{};
+          }
+        }
+    };
+    SSLContext sslContext = SSLContext.getInstance("SSL");
+    sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+    OkHttpClient.Builder builder = new OkHttpClient.Builder();
+    builder.sslSocketFactory(sslContext.getSocketFactory(), (X509TrustManager) trustAllCerts[0]);
+    builder.hostnameVerifier((hostname, session) -> true);
+    return builder;
   }
 }
