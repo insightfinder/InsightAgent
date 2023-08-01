@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/bigkevmcd/go-configparser"
 	"kubernetes-agent/insightfinder"
+	"kubernetes-agent/loki"
 	"kubernetes-agent/prometheus"
 	"kubernetes-agent/tools"
 	"log"
@@ -30,6 +31,11 @@ func createPrometheusServer(config *configparser.ConfigParser) prometheus.Promet
 	}
 }
 
+func createLokiServer(config *configparser.ConfigParser) loki.LokiServer {
+	lokiEndpoint, _ := config.Get("loki", "endpoint")
+	return loki.LokiServer{Endpoint: lokiEndpoint}
+}
+
 func main() {
 	// Initialize InstanceName DB
 	instanceMapper := tools.InstanceMapper{}
@@ -40,7 +46,7 @@ func main() {
 
 	// Initialize time counters
 	Now := time.Now()
-	Before := Now.Add(-time.Minute * 10)
+	Before := Now.Add(-time.Minute * 1)
 
 	for {
 		log.Output(2, "Start...")
@@ -57,16 +63,30 @@ func main() {
 			insightfinder.CheckProject(IFConfig)
 
 			// Get Namespace need to use
-			namespaceFilter, _ := configFile.Get("prometheus", "namespace")
+			namespaceFilter, _ := configFile.Get("general", "namespace")
 			instanceMapper.AddNamespace(namespaceFilter)
 			instanceMapper.Update()
 
 			// Process other sections
 			if IFConfig["projectType"] == "LOG" {
-				log.Output(2, "TODO: Log Project")
+				log.Output(2, fmt.Sprintf("Start sending log data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
+
+				// Create connection to Loki
+				lokiServer := createLokiServer(configFile)
+				lokiServer.Verify()
+
+				// Collect Data
+				log.Output(2, fmt.Sprintf("Prepare to collect Loki data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
+				logData := lokiServer.GetLogData(namespaceFilter, Before, Now)
+
+				// Send data
+				logDataList := tools.BuildLogDataList(&logData, IFConfig, &instanceMapper)
+				//tools.PrintStruct(logPayload, false)
+				insightfinder.SendLogData(logDataList, IFConfig)
+
 			} else if IFConfig["projectType"] == "METRIC" {
 
-				log.Output(2, fmt.Sprintf("Start sending data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
+				log.Output(2, fmt.Sprintf("Start sending metic data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 
 				// Create connection to Prometheus
 				prometheusServer := createPrometheusServer(configFile)
@@ -84,12 +104,12 @@ func main() {
 				metricData["NetworkOut"] = prometheusServer.GetMetricData("NetworkOut", namespaceFilter, Before, Now)
 
 				metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, &instanceMapper)
-				tools.PrintStruct(metricPayload, false)
+				//tools.PrintStruct(metricPayload, false)
 				insightfinder.SendMetricData(metricPayload, IFConfig)
 			}
 		}
 
-		log.Output(2, "Finished sending data.")
+		log.Output(2, "Finished sending metric data.")
 
 		// Prepare for next 1 time range
 		Before = Now

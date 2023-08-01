@@ -4,9 +4,9 @@ metadata:
   name: if-kubernetes-config
 data:
   prometheus.ini: |
-    ;[kubernetes]
-    ;# kubernetes conn type: in_cluster, remote
-    ;connection_type = remote
+    [general]
+    # The name space needed to monitor: kube-system, insightfinder
+    namespace = {{.Values.agent.namespaceFilter}}
     [prometheus]
     ## prometheus info
     # required
@@ -22,8 +22,6 @@ data:
     client_cert =
     # path to client key
     client_key =
-    # The name space needed to monitor: kube-system, insightfinder
-    namespace = {{.Values.agent.namespaceFilter}}
 
     [insightfinder]
     user_name = {{.Values.insightfinder.user_name}}
@@ -34,11 +32,39 @@ data:
     # Prefix of the project name, the rest of the project name will be used as the system name
     project_name_prefix =
     # Name of system owned by project. If project_name does not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
-    system_name = {{.Values.prometheus.systemName}}
+    system_name = {{.Values.insightfinder.systemName}}
     # metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
     project_type = metric
     run_interval = 10
     indexing=false
+    if_url = https://stg.insightfinder.com
+    if_http_proxy =
+    if_https_proxy =
+    metadata_max_instances =
+
+  loki.ini: |
+    [general]
+    # The name space needed to monitor: kube-system, insightfinder
+    namespace = {{.Values.agent.namespaceFilter}}
+    [loki]
+    ## Loki info
+    # required
+    endpoint = {{.Values.loki.endpoint}}
+
+    [insightfinder]
+    user_name = {{.Values.insightfinder.user_name}}
+    license_key = {{.Values.insightfinder.license_key}}
+    token =
+    # Name of the project created in the InsightFinder UI. If this project does not exist, agent will create it automatically. If multiple projects, seperate project names by `;`, like project_1;project_2
+    project_name ={{.Values.loki.projectName}}
+    # Prefix of the project name, the rest of the project name will be used as the system name
+    project_name_prefix =
+    # Name of system owned by project. If project_name does not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+    system_name = {{.Values.insightfinder.systemName}}
+    # metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
+    project_type = log
+    run_interval = 10
+    indexing = false
 
     if_url = https://stg.insightfinder.com
     if_http_proxy =
