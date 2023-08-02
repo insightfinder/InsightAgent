@@ -291,7 +291,6 @@ func sendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 		endpoint,
 		bytes.NewBuffer(data),
 		headers,
-		AuthRequest{},
 		false,
 	)
 	var result map[string]interface{}
@@ -303,15 +302,12 @@ func sendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 	}
 }
 
-func sendRequest(operation string, endpoint string, form io.Reader, headers map[string]string, auth AuthRequest, skipCertificate bool) ([]byte, http.Header) {
+func sendRequest(operation string, endpoint string, form io.Reader, headers map[string]string, skipCertificate bool) ([]byte, http.Header) {
 	newRequest, err := http.NewRequest(
 		operation,
 		endpoint,
 		form,
 	)
-	if auth.Password != "" {
-		newRequest.SetBasicAuth(auth.UserName, auth.Password)
-	}
 	if err != nil {
 		panic(err)
 	}
