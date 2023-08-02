@@ -6,7 +6,7 @@ The scan command is used to scan the snmp devices on the network and add then to
 run the scan command:
 
 ```
-./snmp_discovery.py scan
+./snmp_discovery scan
 ```
 
 The config file is snmp_discovery.ini. The following are the parameters that can be configured:
@@ -23,7 +23,7 @@ The trap command starts a snmp trap server to receive the traps from the devices
 trap command:
 
 ```
-./snmp_discovery.py trap
+./snmp_discovery trap
 ```
 
 The command options are:
