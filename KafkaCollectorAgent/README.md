@@ -210,6 +210,7 @@ insight-finder.logInstanceFieldPathList=
 # Component field in raw data: item_data.DeviceCategory&item_data.DeviceName,item_data.DeviceName,item_name, mutiple componentName, if connet with &, 
 # component values will be connected with "-"
 insight-finder.logComponentFieldPathList=
+insight-finder.logMetadataTopics
 
 ```
 
