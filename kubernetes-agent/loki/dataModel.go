@@ -1,12 +1,29 @@
 package loki
 
-import "time"
+import (
+	"time"
+)
 
 type LokiLogData struct {
 	Namespace string    `validate:"required"`
 	Timestamp time.Time `validate:"required"`
 	Pod       string    `validate:"required"`
 	Text      string    `validate:"required"`
+}
+
+func (logData *LokiLogData) Empty() {
+	logData.Namespace = ""
+	logData.Timestamp = time.Time{}
+	logData.Pod = ""
+	logData.Text = ""
+}
+
+func (logData *LokiLogData) IsEmpty() bool {
+	return logData.Namespace == "" && logData.Timestamp == time.Time{} && logData.Pod == "" && logData.Text == ""
+}
+
+func (logData *LokiLogData) IsSamePodAs(other LokiLogData) bool {
+	return logData.Pod == other.Pod && logData.Namespace == other.Namespace
 }
 
 type LogQueryResponseBody struct {
