@@ -31,9 +31,25 @@ The command options are:
 ``address``: The IP address and port to listen on. Default is ``0.0.0.0:162``
 
 ### trap config
-To send trap to the trap server, add the following config in the `/etc/snmp/snmpt.conf` and then restart the snmpd
+To send trap to the trap server, add the following config in the `/etc/snmp/snmpd.conf` and then restart the snmpd
 
 ```
-# /etc/snmp/snmpt.conf
+# /etc/snmp/snmpd.conf
 trapsink 0.0.0.0 public
+rocommunity public
+```
+
+To send a sample SNMP trap information.
+
+**-v** 2c specifies SNMP version 2c.
+
+**-c** public specifies the SNMP community string (you can replace this with your configured community string).
+
+**localhost** is the target host.
+
+**1.3.6.1.2.1.1.6.0** is the OID for the sysLocation MIB.
+
+**"This is a test trap"** is the value to be sent in the trap.
+```
+snmptrap -v 2c -c public localhost '' 1.3.6.1.2.1.1.6.0 s int 4
 ```
