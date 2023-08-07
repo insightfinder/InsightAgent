@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/bigkevmcd/go-configparser"
 	"io"
 	"io/ioutil"
 	"log"
@@ -17,8 +18,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/bigkevmcd/go-configparser"
 )
 
 const METRIC_DATA_API = "/api/v2/metric-data-receive"

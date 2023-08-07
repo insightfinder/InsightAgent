@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/bigkevmcd/go-configparser"
 	"log"
 	"net"
 	"os"
@@ -12,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bigkevmcd/go-configparser"
 	"github.com/gosnmp/gosnmp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
