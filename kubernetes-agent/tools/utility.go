@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"reflect"
-	"regexp"
 	"time"
 )
 
@@ -39,19 +38,6 @@ func ToInt(inputVar interface{}) int {
 	panic("[ERROR] Wrong input type. Can not convert current input to int.")
 }
 
-func getComponentFromPodName(podName string) string {
-	// split the pod name with '-' and remove the last part to be the component name
-	// e.g. "prometheus-k8s-0" -> "prometheus-k8s"
-	rMatchGeneralDeployments, _ := regexp.Compile("^(.*?)(-[^-]*){1,2}$")
-	rMatchEndOfStringDashDigits, _ := regexp.Compile("-\\d+$")
-	if rMatchEndOfStringDashDigits.MatchString(podName) {
-		return rMatchEndOfStringDashDigits.ReplaceAllString(podName, "")
-	} else {
-		return rMatchGeneralDeployments.ReplaceAllString(podName, "$1")
-	}
-
-}
-
 func PrintStruct(v any, needPrint bool) {
 	jsonBytes, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
@@ -60,7 +46,7 @@ func PrintStruct(v any, needPrint bool) {
 	if needPrint {
 		fmt.Println(string(jsonBytes))
 	}
-	err = os.WriteFile("PrintStruct-"+time.Now().Format(time.RFC3339), jsonBytes, 0644)
+	err = os.WriteFile("PrintStruct-"+time.Now().Format(time.RFC3339)+".json", jsonBytes, 0644)
 	if err != nil {
 		log.Fatalf("Writing to file failed: %s", err)
 	}

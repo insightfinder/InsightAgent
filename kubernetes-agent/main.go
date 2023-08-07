@@ -80,9 +80,9 @@ func main() {
 				logData := lokiServer.GetLogData(namespaceFilter, Before, Now)
 
 				// Send data
-				logDataList := tools.BuildLogDataList(&logData, IFConfig, &instanceMapper)
-				//tools.PrintStruct(logPayload, false)
-				insightfinder.SendLogData(logDataList, IFConfig)
+				tools.BuildLogDataList(&logData, IFConfig, &instanceMapper)
+				//tools.PrintStruct(logDataList, false)
+				//insightfinder.SendLogData(logDataList, IFConfig)
 
 			} else if IFConfig["projectType"] == "METRIC" {
 
@@ -104,8 +104,8 @@ func main() {
 				metricData["NetworkOut"] = prometheusServer.GetMetricData("NetworkOut", namespaceFilter, Before, Now)
 
 				metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, &instanceMapper)
-				//tools.PrintStruct(metricPayload, false)
-				insightfinder.SendMetricData(metricPayload, IFConfig)
+				tools.PrintStruct(metricPayload, false)
+				//insightfinder.SendMetricData(metricPayload, IFConfig)
 			}
 		}
 
