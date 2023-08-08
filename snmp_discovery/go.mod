@@ -6,6 +6,7 @@ require (
 	github.com/bigkevmcd/go-configparser v0.0.0-20230427073640-c6b631f70126 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/gosnmp/gosnmp v1.35.0 // indirect
+	github.com/hallidave/mibtool v0.2.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect

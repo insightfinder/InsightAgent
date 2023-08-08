@@ -33,9 +33,3 @@ type IFMetricPostRequestPayload struct {
 	UserName   string                   `json:"userName" validate:"required"`
 	Data       MetricDataReceivePayload `json:"data" validate:"required"`
 }
-
-type PowerStoreMetricDataRequestPayload struct {
-	Entity    string `json:"entity" validate:"required"`
-	Entity_id string `json:"entity_id" validate:"required"`
-	Interval  string `json:"interval"`
-}
