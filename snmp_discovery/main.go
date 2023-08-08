@@ -3,11 +3,11 @@ package main
 import (
 	"fmt"
 	"github.com/bigkevmcd/go-configparser"
+	"github.com/hallidave/mibtool/smi"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,31 +23,18 @@ const DEFAULT_MATADATE_MAX_INSTANCE = 1500
 const IF_SECTION_NAME = "insightfinder"
 
 var (
-	defaultConfigFilename = "snmp_discovery"
+	configPath            = "./conf.d"
+	defaultConfigFilename = "config"
 	defaultIniSectionName = "snmp_discovery"
-	CONFIGPATH            = "../conf.d"
-	// TODO: Need to update the each case
-	POWERSTORETYPE = "0"
-	POWERSCALETYPE = "1"
-	POWERFLEXTYPE  = "2"
-	CONNECTIONKEY  = "connectionUrl"
-	URLPREFIX      = "https://"
 )
 
-type snmpInfo struct {
-	Host     string `json:"host,omitempty" validate:"required"`
-	PduName  string `json:"pduName,omitempty" validate:"required"`
-	TypeName string `json:"typeName,omitempty" validate:"required"`
+type snmpDataValue struct {
+	Host  string `json:"host,omitempty" validate:"required"`
+	Name  string `json:"name,omitempty" validate:"required"`
+	Value string `json:"value,omitempty" validate:"required"`
 }
 
-func main() {
-	cmd := NewRootCommand()
-	if err := cmd.Execute(); err != nil {
-		os.Exit(1)
-	}
-}
-
-func inc(ip net.IP) {
+func incIP(ip net.IP) {
 	for j := len(ip) - 1; j >= 0; j-- {
 		ip[j]++
 		if ip[j] > 0 {
@@ -56,21 +43,38 @@ func inc(ip net.IP) {
 	}
 }
 
-func handleWalkResult(host string, resultChan chan string) gosnmp.WalkFunc {
+func handleWalkResult(oidNames map[string]string, host string, resultChan chan snmpDataValue) gosnmp.WalkFunc {
 	return func(pdu gosnmp.SnmpPDU) error {
-		// The string to be passed into the channel.
-		var resString string
-		// fmt.Printf("%s\t%s = ", host, pdu.Name)
-		resString += host + ";" + pdu.Name + ";"
-		switch pdu.Type {
-		case gosnmp.OctetString:
-			b := pdu.Value.([]byte)
-			fmt.Printf("STRING: %s\n", string(b))
-			resString += string(b)
-		default:
-			// fmt.Printf("TYPE %d: %d\n", pdu.Type, gosnmp.ToBigInt(pdu.Value))
-			resString += fmt.Sprint(gosnmp.ToBigInt(pdu.Value))
-			resultChan <- resString
+
+		// The oid might have . as prefix or .n as postfix
+		oid := pdu.Name
+
+		name, ok := oidNames[oid]
+		if !ok {
+			// remove the . prefix and try again
+			if strings.HasPrefix(oid, ".") {
+				oid = oid[1:]
+				name, ok = oidNames[oid]
+			}
+		}
+
+		if !ok {
+			// Try to remove the last digit
+			parts := strings.Split(oid, ".")
+			oid = strings.Join(parts[:len(parts)-1], ".")
+			name, ok = oidNames[oid]
+			if ok {
+				name += "." + parts[len(parts)-1]
+			}
+		}
+
+		if !ok {
+			return nil
+		}
+
+		if pdu.Type == gosnmp.Counter32 || pdu.Type == gosnmp.Counter64 || pdu.Type == gosnmp.Integer || pdu.Type == gosnmp.Uinteger32 {
+			value := fmt.Sprint(gosnmp.ToBigInt(pdu.Value))
+			resultChan <- snmpDataValue{Host: host, Name: name, Value: value}
 		}
 		return nil
 	}
@@ -112,11 +116,28 @@ func snmpTrapServer(address string) {
 	}
 }
 
-func snmpDiscovery(ipRange string, port int, community string, oid string) {
+func snmpDiscovery(ipRange string, port int, community string, mibDirs string, modules string, oid string) {
 	// Use nmap to scan the network for hosts with the specified port open
-	//hosts := nmapScan(ipRange, port)
+	// hosts := nmapScan(ipRange, port)
 	ranges := strings.Split(ipRange, " ")
 	hosts := make([]string, 0)
+
+	mibPaths := strings.Split(mibDirs, ",")
+	mib := smi.NewMIB(mibPaths...)
+	mib.Debug = true
+
+	// Load the MIB modules
+	err := mib.LoadModules(strings.Split(modules, ",")...)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Build the oid to name mapping
+	oidNames := make(map[string]string)
+
+	mib.VisitSymbols(func(sym *smi.Symbol, oid smi.OID) {
+		oidNames[oid.String()] = sym.Name
+	})
 
 	for _, r := range ranges {
 		if len(strings.TrimSpace(r)) > 0 {
@@ -126,13 +147,13 @@ func snmpDiscovery(ipRange string, port int, community string, oid string) {
 
 				ipAddress := net.ParseIP(r)
 				if ipAddress == nil {
-					log.Output(1, "Failed to pass the IP address, ignore.")
+					_ = log.Output(1, "Failed to pass the IP address, ignore.")
 				}
 				hosts = append(hosts, ipAddress.String())
 				continue
 			}
 
-			for ip := ipnet.IP.Mask(ipnet.Mask); ipnet.Contains(ip); inc(ip) {
+			for ip := ipnet.IP.Mask(ipnet.Mask); ipnet.Contains(ip); incIP(ip) {
 				hosts = append(hosts, ip.String())
 			}
 		}
@@ -142,7 +163,7 @@ func snmpDiscovery(ipRange string, port int, community string, oid string) {
 
 	// Create a channel to receive SNMP results
 	// resultChan := make(chan *gosnmp.SnmpPacket)
-	resultChan := make(chan string)
+	resultChan := make(chan snmpDataValue)
 
 	// Use the results to print an example output
 	for _, host := range hosts {
@@ -167,10 +188,11 @@ func snmpDiscovery(ipRange string, port int, community string, oid string) {
 			}
 
 			defer func(Conn net.Conn) {
-				Conn.Close()
+				_ = Conn.Close()
 			}(gs.Conn)
-			log.Output(1, "Processing the host: "+host)
-			err = gs.BulkWalk(oid, handleWalkResult(host, resultChan))
+
+			_ = log.Output(1, "Processing the host: "+host)
+			err = gs.BulkWalk(oid, handleWalkResult(oidNames, host, resultChan))
 			if err != nil {
 				fmt.Printf("[ERROR] SNMP walk failed at %s:%v, error: %v\n", host, port, err)
 				return
@@ -185,120 +207,18 @@ func snmpDiscovery(ipRange string, port int, community string, oid string) {
 	}()
 
 	// Process SNMP results
+	hostData := make(map[string]map[string]string)
 	for result := range resultChan {
-		updateConfigBasedOnSNPM(result)
+		if _, ok := hostData[result.Host]; !ok {
+			hostData[result.Host] = make(map[string]string)
+		}
+		hostData[result.Host][result.Name] = result.Value
 	}
+	processSNMPResult(hostData)
 }
 
-func updateConfigBasedOnSNPM(result string) {
-	items := strings.Split(result, ";")
-	snmp := snmpInfo{
-		Host:     items[0],
-		PduName:  items[1],
-		TypeName: items[2],
-	}
-	configPaths := getConfigFiles(CONFIGPATH)
-	var powerFlexParser []string
-	var powerStoreParser []string
-	var powerScaleParser []string
-	for _, path := range configPaths {
-		p, err := configparser.NewConfigParserFromFile(path)
-		if err != nil {
-			panic(err)
-		}
-		for _, v := range p.Sections() {
-			switch v {
-			case "powerFlex":
-				powerFlexParser = append(powerFlexParser, path)
-			case "powerScale":
-				powerScaleParser = append(powerScaleParser, path)
-			case "powerStore":
-				powerStoreParser = append(powerStoreParser, path)
-			}
-		}
-	}
-
-	switch snmp.TypeName {
-	// Update the configuration file according to the instance type
-	case POWERFLEXTYPE:
-		if len(powerFlexParser) != 0 {
-			updateConnectionURL(snmp.Host, powerFlexParser)
-		}
-	case POWERSCALETYPE:
-		if len(powerScaleParser) != 0 {
-			updateConnectionURL(snmp.Host, powerScaleParser)
-		}
-	case POWERSTORETYPE:
-		if len(powerStoreParser) != 0 {
-			updateConnectionURL(snmp.Host, powerStoreParser)
-		}
-
-	}
-}
-
-func updateConnectionURL(host string, configPath []string) {
-	for _, path := range configPath {
-		p, err := configparser.NewConfigParserFromFile(path)
-		if err != nil {
-			panic(err)
-		}
-		for _, sec := range p.Sections() {
-			switch sec {
-			case "insightfinder":
-				continue
-			default:
-				// Update the section other than IF.
-				curVal, err := p.Get(sec, CONNECTIONKEY)
-				urls := parseURLList(curVal)
-				var hasPort bool
-				var port string
-				// Check if the original URL uses port number.
-				if len(urls) > 0 {
-					urlElems := strings.Split(urls[0], ":")
-					// If there's a port number, it should be the last element.
-					last := urlElems[len(urlElems)-1]
-					hasPort = regexp.MustCompile(`\d`).MatchString(last)
-					if hasPort {
-						port = last
-					}
-				}
-				host = URLPREFIX + host
-				if hasPort {
-					host = host + ":" + port
-				}
-
-				if contains(urls, host) {
-					break
-				}
-				if err != nil {
-					panic(err)
-				}
-				p.Set(sec, CONNECTIONKEY, curVal+","+host)
-			}
-		}
-		p.SaveWithDelimiter(path, "=")
-	}
-}
-
-func parseURLList(input string) []string {
-	urls := strings.Split(input, ",")
-	return Map(urls, strings.TrimSpace)
-}
-func Map(vs []string, f func(string) string) []string {
-	vsm := make([]string, len(vs))
-	for i, v := range vs {
-		vsm[i] = f(v)
-	}
-	return vsm
-}
-
-func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
+func processSNMPResult(hostData map[string]map[string]string) {
+	println(hostData)
 }
 
 func absFilePath(filename string) string {
@@ -358,6 +278,8 @@ func NewScanCommand() *cobra.Command {
 	community := ""
 	oid := ""
 	port := 0
+	midDirs := ""
+	modules := ""
 
 	scanCmd := &cobra.Command{
 		Use:   "scan",
@@ -366,15 +288,17 @@ func NewScanCommand() *cobra.Command {
 			return initializeConfig(cmd)
 		}, Run: func(cmd *cobra.Command, args []string) {
 
-			println("snmp scanning with ip range:", ipRange, ",community:", community, ",oid:", oid, ",port:", port)
-			snmpDiscovery(ipRange, port, community, oid)
+			println("snmp scanning with ip range:", ipRange, ",community:", community, ",oid:", oid, ",port:", port, ",midDirs:", midDirs, ",modules:", modules)
+			snmpDiscovery(ipRange, port, community, midDirs, modules, oid)
 		},
 	}
 
-	scanCmd.Flags().StringVarP(&ipRange, "ip-range", "", "", "ip range to discover the devices")
-	scanCmd.Flags().StringVarP(&community, "community", "c", "public", "What is the community string?")
-	scanCmd.Flags().StringVarP(&oid, "oid", "o", "", "the mid/oid defining a subtree of values, split by commas")
+	scanCmd.Flags().StringVarP(&ipRange, "ip-range", "", "0.0.0.0/32", "ip range to discover the devices")
 	scanCmd.Flags().IntVarP(&port, "port", "p", 161, "the port to use for the SNMP connection")
+	scanCmd.Flags().StringVarP(&community, "community", "c", "public", "What is the community string?")
+	scanCmd.Flags().StringVarP(&midDirs, "mid-dirs", "", "/usr/share/snmp/mibs", "folder path to store mid definitions, split by commas")
+	scanCmd.Flags().StringVarP(&modules, "modules", "", "UCD-SNMP-MIB,UCD-DISKIO-MIB", "mid modules to use, split by commas")
+	scanCmd.Flags().StringVarP(&oid, "oid", "o", "", "the mid/oid defining a subtree of values, split by commas")
 
 	return scanCmd
 }
@@ -401,7 +325,7 @@ func initializeConfig(cmd *cobra.Command) error {
 
 	v.SetConfigName(defaultConfigFilename)
 	v.SetConfigType("ini")
-	v.AddConfigPath(".")
+	v.AddConfigPath(configPath)
 
 	if err := v.ReadInConfig(); err != nil {
 		// It's okay if the config file doesn't exist
@@ -527,4 +451,11 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 		"isReplay":                  isReplay,
 	}
 	return configIF
+}
+
+func main() {
+	cmd := NewRootCommand()
+	if err := cmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
