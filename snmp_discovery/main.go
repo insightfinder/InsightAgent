@@ -29,9 +29,9 @@ var (
 )
 
 type snmpDataValue struct {
-	Host  string `json:"host,omitempty" validate:"required"`
-	Name  string `json:"name,omitempty" validate:"required"`
-	Value string `json:"value,omitempty" validate:"required"`
+	Host  string      `json:"host,omitempty" validate:"required"`
+	Name  string      `json:"name,omitempty" validate:"required"`
+	Value interface{} `json:"value,omitempty" validate:"required"`
 }
 
 func incIP(ip net.IP) {
@@ -119,7 +119,7 @@ func snmpTrapServer(address string) {
 func snmpDiscovery(ipRange string, port int, community string, mibDirs string, modules string, oid string) {
 	// Use nmap to scan the network for hosts with the specified port open
 	// hosts := nmapScan(ipRange, port)
-	ranges := strings.Split(ipRange, " ")
+	ranges := strings.Split(ipRange, ",")
 	hosts := make([]string, 0)
 
 	mibPaths := strings.Split(mibDirs, ",")
@@ -207,18 +207,23 @@ func snmpDiscovery(ipRange string, port int, community string, mibDirs string, m
 	}()
 
 	// Process SNMP results
-	hostData := make(map[string]map[string]string)
+	hostData := make(map[string]map[string]interface{})
 	for result := range resultChan {
 		if _, ok := hostData[result.Host]; !ok {
-			hostData[result.Host] = make(map[string]string)
+			hostData[result.Host] = make(map[string]interface{})
 		}
 		hostData[result.Host][result.Name] = result.Value
 	}
 	processSNMPResult(hostData)
 }
 
-func processSNMPResult(hostData map[string]map[string]string) {
-	println(hostData)
+func processSNMPResult(hostData map[string]map[string]interface{}) {
+	for host, data := range hostData {
+		println(host)
+		for name, val := range data {
+			println(name, val)
+		}
+	}
 }
 
 func absFilePath(filename string) string {
