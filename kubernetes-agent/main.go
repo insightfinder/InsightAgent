@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	"github.com/bigkevmcd/go-configparser"
 	"kubernetes-agent/insightfinder"
 	"kubernetes-agent/loki"
 	"kubernetes-agent/prometheus"
 	"kubernetes-agent/tools"
 	"log"
 	"time"
+
+	"github.com/bigkevmcd/go-configparser"
 )
 
 func createPrometheusServer(config *configparser.ConfigParser) prometheus.PrometheusServer {
@@ -80,9 +81,9 @@ func main() {
 				logData := lokiServer.GetLogData(namespaceFilter, Before, Now)
 
 				// Send data
-				tools.BuildLogDataList(&logData, IFConfig, &instanceMapper)
+				logDataList := tools.BuildLogDataList(&logData, IFConfig, &instanceMapper)
 				//tools.PrintStruct(logDataList, false)
-				//insightfinder.SendLogData(logDataList, IFConfig)
+				insightfinder.SendLogData(logDataList, IFConfig)
 
 			} else if IFConfig["projectType"] == "METRIC" {
 
@@ -104,8 +105,8 @@ func main() {
 				metricData["NetworkOut"] = prometheusServer.GetMetricData("NetworkOut", namespaceFilter, Before, Now)
 
 				metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, &instanceMapper)
-				tools.PrintStruct(metricPayload, false)
-				//insightfinder.SendMetricData(metricPayload, IFConfig)
+				//tools.PrintStruct(metricPayload, false)
+				insightfinder.SendMetricData(metricPayload, IFConfig)
 			}
 		}
 
