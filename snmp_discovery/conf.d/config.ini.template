@@ -1,0 +1,20 @@
+# ----------------------------------- insightfinder section ---------------------------------------------
+[insightfinder]
+user_name =
+license_key =
+token =
+# Name of the project created in the InsightFinder UI. If this project does not exist, agent will create it automatically. If multiple projects, seperate project names by `;`, like project_1;project_2
+project_name = 
+# Prefix of the project name, the rest of the project name will be used as the system name
+project_name_prefix =
+# Name of system owned by project. If project_name does not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name = 
+# metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
+project_type = metric
+sampling_interval = 10
+run_interval = 5
+
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
+metadata_max_instances =
