@@ -6,7 +6,36 @@ This agent get events from Insightfinder edge cluster and sends it to Insightfin
 1. Python == 3.6.8
 1. Pip3
 
-###### Installation Steps:
+
+### Docker
+#### Create
+Use the following command to create the docker image for this agent and push to our docker hub
+```bash
+docker build . -t insightfinderinc/event-push-agent:0.0.1
+docker push insightfinderinc/event-push-agent:0.0.1
+```
+#### Run
+Use the following commad to start the event push agent container
+
+Current `conf.d` folder will be copied to the container automatically
+```bash
+docker run -itd --name if-event-push-agent -v ./conf.d:/opt/app-root/src/conf.d  docker.io/insightfinderinc/event-push-agent:0.0.1
+```
+
+#### Kubernetes
+We use helm chart to deploy our agent to kubernetes
+```bash
+cd helm_chart
+vim values.yaml # Edit the configuration values
+
+# For fresh installation
+helm install --atomic --create-namespace -n if-event-push-agent if-event-push-agent .
+
+# For upgrade
+helm upgrade --atomic -n if-event-push-agent if-event-push-agent .
+```
+
+### Installation Steps:
 1. Download the event_push.tar.gz package
 1. Copy the agent package to the machine that will be running the agent
 1. Extract the package

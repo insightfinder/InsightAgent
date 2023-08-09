@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: if-event-push-agent
+  labels:
+    app: if-event-push-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: if-event-push-agent
+  template:
+    metadata:
+      labels:
+        app: if-event-push-agent
+    spec:
+      containers:
+      - name: agent
+        image: {{ .Values.insightfinder.eventPushAgent.image }}
+        tty: true
+        volumeMounts:
+        - name: config-volume
+          mountPath: /opt/app-root/src/conf.d
+      volumes:
+      - name: config-volume
+        configMap:
+          name: if-event-push-agent-cm
+          items:
+          - key: config.ini
+            path: config.ini
