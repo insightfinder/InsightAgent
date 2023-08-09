@@ -1,6 +1,6 @@
-;[kubernetes]
-;# kubernetes conn type: in_cluster, remote
-;connection_type = remote
+[general]
+namespace = insightfinder
+
 [prometheus]
 ## prometheus info
 # required
@@ -24,14 +24,14 @@ user_name = user
 license_key =
 token =
 # Name of the project created in the InsightFinder UI. If this project does not exist, agent will create it automatically. If multiple projects, seperate project names by `;`, like project_1;project_2
-project_name = maoyu-test-k8s-monitor-07-31
+project_name = maoyu-test-k8s-monitor-
 # Prefix of the project name, the rest of the project name will be used as the system name
 project_name_prefix =
 # Name of system owned by project. If project_name does not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
 system_name = maoyu-test-k8s-monitor
 # metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
 project_type = metric
-run_interval = 10
+run_interval = 1
 indexing=false
 
 if_url = https://stg.insightfinder.com

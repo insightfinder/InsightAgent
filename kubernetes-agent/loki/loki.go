@@ -39,10 +39,6 @@ func (loki *LokiServer) Verify() {
 func (loki *LokiServer) GetLogData(namespace string, StartTime time.Time, EndTime time.Time) []LokiLogData {
 	var resultList []LokiLogData
 	queryStr := FormatQueryWithNamespaces(LOG_QUERY, namespace)
-	// DEBUG START
-	StartTime = time.UnixMilli(1690919400000).Add(time.Minute * 5).Add(time.Second * 6)
-	EndTime = StartTime.Add(time.Second * 30)
-	// DEBUG END
 	queryResult := loki.Query(queryStr, StartTime.Format(time.RFC3339), EndTime.Format(time.RFC3339))
 	for _, result := range queryResult.Data.Result {
 		for _, logData := range result.Values {

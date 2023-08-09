@@ -5,7 +5,7 @@ agent:
   namespaceFilter: "insightfinder"
 loki:
   endpoint: "http://loki.monitoring.svc.cluster.local:3100"
-  projectName: "maoyu-test-k8s-monitor-log-1"
+  projectName: "maoyu-k8s-log-test-1"
 prometheus:
   endpoint: "http://prometheus-server.monitoring.svc.cluster.local:80"
   projectName: "metric-test-1"
@@ -13,3 +13,4 @@ insightfinder:
   user_name: "user"
   systemName: "maoyu-test-k8s-monitor"
   license_key: ""
+  run_interval: 1

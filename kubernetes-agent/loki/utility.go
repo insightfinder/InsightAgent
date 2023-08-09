@@ -38,9 +38,9 @@ func ProcessMultiLines(originData *[]LokiLogData) []LokiLogData {
 
 func ProcessNodeJSMultiLines(originData *[]LokiLogData) ([]LokiLogData, []LokiLogData) {
 	// TODO: Implement the multiline algorithm for NodeJS
-	normalLogs := make([]LokiLogData, 0)
+	//normalLogs := make([]LokiLogData, 0)
 	exceptionLogs := make([]LokiLogData, 0)
-	return normalLogs, exceptionLogs
+	return *originData, exceptionLogs
 }
 
 func ProcessJavaMultiLines(originData *[]LokiLogData) ([]LokiLogData, []LokiLogData) {
