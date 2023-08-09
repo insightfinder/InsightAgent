@@ -20,6 +20,7 @@ import (
 	"time"
 )
 
+const ProjectEndPoint = "api/v1/check-and-add-custom-project"
 const METRIC_DATA_API = "/api/v2/metric-data-receive"
 const LOG_DATA_API = "/customprojectrawdata"
 const LOG_DATA_AGENT_TYPE = "Stream"
@@ -379,7 +380,7 @@ func GetConfigValue(p *configparser.ConfigParser, section string, param string, 
 func FormCompleteURL(link string, endpoint string) string {
 	postUrl, err := url.Parse(link)
 	if err != nil {
-		log.Output(1, "[ERROR] Fail to pares the URL. Please check your config.")
+		log.Printf("[ERROR] Fail to pares the URL. Please check your config.")
 		panic(err)
 	}
 	postUrl.Path = path.Join(postUrl.Path, endpoint)
@@ -517,4 +518,101 @@ func copyAnyMap(m map[string]interface{}) map[string]interface{} {
 	}
 
 	return cp
+}
+
+func checkProject(IFconfig map[string]interface{}) {
+	projectName := ToString(IFconfig["projectName"])
+
+	if len(projectName) > 0 {
+		if !isProjectExist(IFconfig) {
+
+			log.Printf("Didn't find the project named %s. Start creating project in the InsightFinder.\n", projectName)
+
+			createProject(IFconfig)
+
+			log.Printf("Sleep for 5 seconds to wait for project creation and will check the project exisitense again.")
+
+			time.Sleep(time.Second * 5)
+
+			if !isProjectExist(IFconfig) {
+				panic("[ERROR] Fail to create project " + projectName)
+			}
+			log.Printf(fmt.Sprintf("Create project %s successfully!", projectName))
+		} else {
+			log.Printf(fmt.Sprintf("Project named %s exist. Program will continue.", projectName))
+		}
+	}
+}
+
+func isProjectExist(IFconfig map[string]interface{}) bool {
+	projectName := ToString(IFconfig["projectName"])
+
+	log.Printf("Check if the project named %s exists in the InsightFinder.", projectName)
+
+	form := url.Values{}
+	form.Add("operation", "check")
+	form.Add("userName", ToString(IFconfig["userName"]))
+	form.Add("licenseKey", ToString(IFconfig["licenseKey"]))
+	form.Add("projectName", projectName)
+
+	headers := map[string]string{
+		"Content-Type": "application/x-www-form-urlencoded",
+	}
+
+	endpoint := FormCompleteURL(ToString(IFconfig["ifURL"]), ProjectEndPoint)
+	response, _ := sendRequest(http.MethodPost, endpoint, strings.NewReader(form.Encode()), headers, false)
+
+	var result map[string]interface{}
+	err := json.Unmarshal(response, &result)
+	if err != nil {
+		panic("[ERROR] Check project exist failed. Please check your parameters.")
+	}
+
+	if !ToBool(result["success"]) {
+		panic("[ERROR] Check project exist failed. Please check your parameters.")
+	}
+
+	return ToBool(result["isProjectExist"])
+}
+
+func createProject(IFconfig map[string]interface{}) {
+
+	projectName := ToString(IFconfig["projectName"])
+	projectType := ToString(IFconfig["projectType"])
+
+	log.Printf("Creating the project named %s in the InsightFinder.", projectName)
+
+	form := url.Values{}
+	form.Add("operation", "create")
+	form.Add("userName", ToString(IFconfig["userName"]))
+	form.Add("licenseKey", ToString(IFconfig["licenseKey"]))
+	form.Add("projectName", projectName)
+
+	if IFconfig["systemName"] != nil {
+		form.Add("systemName", ToString(IFconfig["systemName"]))
+	} else {
+		form.Add("systemName", projectName)
+	}
+	form.Add("instanceType", "PrivateCloud")
+	form.Add("projectCloudType", "PrivateCloud")
+	form.Add("dataType", ProjectTypeToDataType(projectType))
+	form.Add("insightAgentType", ProjectTypeToAgentType(projectType, false))
+	form.Add("samplingInterval", ToString(IFconfig["samplingInterval"]))
+	form.Add("samplingIntervalInSeconds", ToString(IFconfig["samplingInterval"]))
+
+	samplingIntervalINT, err := strconv.Atoi(ToString(IFconfig["samplingInterval"]))
+
+	if err != nil {
+		panic(err)
+	}
+
+	form.Add("samplingIntervalInSeconds", fmt.Sprint(samplingIntervalINT*60))
+	headers := map[string]string{
+		"Content-Type": "application/x-www-form-urlencoded",
+	}
+	endpoint := FormCompleteURL(ToString(IFconfig["ifURL"]), ProjectEndPoint)
+
+	response, _ := sendRequest(http.MethodPost, endpoint, strings.NewReader(form.Encode()), headers, false)
+	var result map[string]interface{}
+	_ = json.Unmarshal(response, &result)
 }

@@ -19,13 +19,14 @@ import (
 	"github.com/spf13/viper"
 )
 
-const DEFAULT_MATADATE_MAX_INSTANCE = 1500
-const IF_SECTION_NAME = "insightfinder"
+const DefaultMetadataMaxInstance = 1500
+const IfSectionName = "insightfinder"
 
 var (
 	configPath            = "./conf.d"
 	defaultConfigFilename = "config"
 	defaultIniSectionName = "snmp_discovery"
+	ifConfig              = make(map[string]interface{})
 )
 
 type snmpDataValue struct {
@@ -241,23 +242,6 @@ func absFilePath(filename string) string {
 	return filepath.Join(mydir, filename)
 }
 
-func getConfigFiles(configRelativePath string) []string {
-	if configRelativePath == "" {
-		// default value for configuration path
-		configRelativePath = "conf.d"
-	}
-	configPath := absFilePath(configRelativePath)
-	log.Output(2, "Reading config files from directory: "+configPath)
-	allConfigs, err := filepath.Glob(configPath + "/*.ini")
-	if err != nil {
-		panic(err)
-	}
-	if len(allConfigs) == 0 {
-		panic("[ERROR] No config file found in" + configPath)
-	}
-	return allConfigs
-}
-
 func NewTrapCommand() *cobra.Command {
 
 	address := ""
@@ -290,7 +274,13 @@ func NewScanCommand() *cobra.Command {
 		Use:   "scan",
 		Short: "Scan snmp devices",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			return initializeConfig(cmd)
+			err := initializeConfig(cmd)
+			if err != nil {
+				return err
+			}
+
+			initializeIFSettings()
+			return nil
 		}, Run: func(cmd *cobra.Command, args []string) {
 
 			println("snmp scanning with ip range:", ipRange, ",community:", community, ",oid:", oid, ",port:", port, ",midDirs:", midDirs, ",modules:", modules)
@@ -340,7 +330,22 @@ func initializeConfig(cmd *cobra.Command) error {
 	}
 
 	bindFlags(cmd, v)
+
 	return nil
+}
+
+func initializeIFSettings() {
+	// get if config
+	configFilePath := filepath.Join(configPath, defaultConfigFilename+".ini")
+	p, err := configparser.NewConfigParserFromFile(configFilePath)
+	if err != nil {
+		log.Fatal("cannot load config file: "+configFilePath, err)
+	}
+
+	ifConfig = getIFConfigsSection(p)
+
+	checkProject(ifConfig)
+	return
 }
 
 func bindFlags(cmd *cobra.Command, v *viper.Viper) {
@@ -360,23 +365,23 @@ func bindFlags(cmd *cobra.Command, v *viper.Viper) {
 
 func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	// Required parameters
-	var userName = ToString(GetConfigValue(p, IF_SECTION_NAME, "user_name", true))
-	var licenseKey = ToString(GetConfigValue(p, IF_SECTION_NAME, "license_key", true))
-	var projectName = ToString(GetConfigValue(p, IF_SECTION_NAME, "project_name", true))
+	var userName = ToString(GetConfigValue(p, IfSectionName, "user_name", true))
+	var licenseKey = ToString(GetConfigValue(p, IfSectionName, "license_key", true))
+	var projectName = ToString(GetConfigValue(p, IfSectionName, "project_name", true))
 	// We use uppercase for project log type.
-	var projectType = strings.ToUpper(ToString(GetConfigValue(p, IF_SECTION_NAME, "project_type", true)))
-	var runInterval = ToString(GetConfigValue(p, IF_SECTION_NAME, "run_interval", true))
+	var projectType = strings.ToUpper(ToString(GetConfigValue(p, IfSectionName, "project_type", true)))
+	var runInterval = ToString(GetConfigValue(p, IfSectionName, "run_interval", true))
 
 	// Optional parameters
-	var token = ToString(GetConfigValue(p, IF_SECTION_NAME, "token", false))
-	var systemName = ToString(GetConfigValue(p, IF_SECTION_NAME, "system_name", false))
-	var projectNamePrefix = ToString(GetConfigValue(p, IF_SECTION_NAME, "project_name_prefix", false))
-	var metaDataMaxInstance = ToString(GetConfigValue(p, IF_SECTION_NAME, "metadata_max_instances", false))
-	var samplingInterval = ToString(GetConfigValue(p, IF_SECTION_NAME, "sampling_interval", false))
-	var ifURL = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_url", false))
-	var httpProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_http_proxy", false))
-	var httpsProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_https_proxy", false))
-	var isReplay = ToString(GetConfigValue(p, IF_SECTION_NAME, "isReplay", false))
+	var token = ToString(GetConfigValue(p, IfSectionName, "token", false))
+	var systemName = ToString(GetConfigValue(p, IfSectionName, "system_name", false))
+	var projectNamePrefix = ToString(GetConfigValue(p, IfSectionName, "project_name_prefix", false))
+	var metaDataMaxInstance = ToString(GetConfigValue(p, IfSectionName, "metadata_max_instances", false))
+	var samplingInterval = ToString(GetConfigValue(p, IfSectionName, "sampling_interval", false))
+	var ifURL = ToString(GetConfigValue(p, IfSectionName, "if_url", false))
+	var httpProxy = ToString(GetConfigValue(p, IfSectionName, "if_http_proxy", false))
+	var httpsProxy = ToString(GetConfigValue(p, IfSectionName, "if_https_proxy", false))
+	var isReplay = ToString(GetConfigValue(p, IfSectionName, "isReplay", false))
 	var samplingIntervalInSeconds string
 
 	if len(projectNamePrefix) > 0 && !strings.HasSuffix(projectNamePrefix, "-") {
@@ -415,7 +420,7 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	isReplay = strconv.FormatBool(strings.Contains(projectType, "REPLAY"))
 
 	if len(metaDataMaxInstance) == 0 {
-		metaDataMaxInstance = strconv.FormatInt(int64(DEFAULT_MATADATE_MAX_INSTANCE), 10)
+		metaDataMaxInstance = strconv.FormatInt(int64(DefaultMetadataMaxInstance), 10)
 	} else {
 		metaDataMaxInstanceInt, err := strconv.Atoi(metaDataMaxInstance)
 		if err != nil {
@@ -423,7 +428,7 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 			log.Output(2, "[ERROR] Meta data max instance can only be integer number.")
 			os.Exit(1)
 		}
-		if metaDataMaxInstanceInt > DEFAULT_MATADATE_MAX_INSTANCE {
+		if metaDataMaxInstanceInt > DefaultMetadataMaxInstance {
 			metaDataMaxInstance = string(rune(metaDataMaxInstanceInt))
 		}
 	}
