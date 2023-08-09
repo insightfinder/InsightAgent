@@ -219,12 +219,44 @@ func snmpDiscovery(ipRange string, port int, community string, mibDirs string, m
 }
 
 func processSNMPResult(hostData map[string]map[string]interface{}) {
-	for host, data := range hostData {
-		println(host)
-		for name, val := range data {
-			println(name, val)
+	payload := make(map[string]InstanceData)
+
+	for instanceName, data := range hostData {
+		timeStamp := time.Now().UnixMilli()
+
+		instanceData, ok := payload[instanceName]
+		if !ok {
+			// Current Instance didn't exist
+			instanceData = InstanceData{
+				InstanceName:       instanceName,
+				ComponentName:      instanceName,
+				DataInTimestampMap: make(map[int64]DataInTimestamp),
+			}
+			payload[instanceName] = instanceData
 		}
+
+		dataInTimestampMap, ok := instanceData.DataInTimestampMap[timeStamp]
+		if !ok {
+			dataInTimestampMap = DataInTimestamp{
+				TimeStamp:        timeStamp,
+				MetricDataPoints: make([]MetricDataPoint, 0),
+			}
+		}
+
+		metricDataPoints := dataInTimestampMap.MetricDataPoints
+		for metric, val := range data {
+			intVar, _ := strconv.ParseFloat(ToString(val), 64)
+			metricDP := MetricDataPoint{
+				MetricName: metric,
+				Value:      intVar,
+			}
+			metricDataPoints = append(metricDataPoints, metricDP)
+		}
+		dataInTimestampMap.MetricDataPoints = metricDataPoints
+		instanceData.DataInTimestampMap[timeStamp] = dataInTimestampMap
+
 	}
+	sendMetricData(payload, ifConfig)
 }
 
 func absFilePath(filename string) string {
