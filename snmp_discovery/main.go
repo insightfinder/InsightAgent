@@ -347,10 +347,11 @@ func bindFlags(cmd *cobra.Command, v *viper.Viper) {
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
 		configName := f.Name
 
-		if !f.Changed && (v.IsSet(configName) || v.IsSet(defaultIniSectionName+"."+configName)) {
+		sectionName := fmt.Sprintf("%s.%s.%s", defaultIniSectionName, cmd.Use, configName)
+		if !f.Changed && (v.IsSet(configName) || v.IsSet(sectionName)) {
 			val := v.Get(configName)
 			if val == nil {
-				val = v.Get(defaultIniSectionName + "." + configName)
+				val = v.Get(sectionName)
 			}
 			_ = cmd.Flags().Set(f.Name, val.(string))
 		}
