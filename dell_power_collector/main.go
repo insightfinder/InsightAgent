@@ -320,11 +320,28 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 			configName = configName[:len(configName)-len(path.Ext(configName))] // remove the extension name
 			indexName := fmt.Sprintf(RunningIndex, configName, conn.Host)
 
-			indexContent := readIndexFile(indexName)
+			fileContent := readIndexFile(indexName)
+			splitted := strings.Split(fileContent, "$")
+			index := ""
+			lastTS := ""
+			if len(splitted) > 1 {
+				index = splitted[0]
+				lastTS = splitted[1]
+			} else if len(splitted) > 0 {
+				index = splitted[0]
+			}
 
 			offset := 0
-			if indexContent != "" {
-				offset, err = strconv.Atoi(indexContent)
+			if index != "" {
+				offset, err = strconv.Atoi(index)
+				if err != nil {
+					panic(err)
+				}
+			}
+			// Default value being a future timestamp.
+			ts := 33338991126000
+			if lastTS != "" {
+				ts, err = strconv.Atoi(lastTS)
 				if err != nil {
 					panic(err)
 				}
@@ -340,8 +357,16 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 				count := len(data)
 
 				sendLogData(data, IFConfig)
+				if count == 0 {
+					oldData := PowerFlexManagerDataStream(config, 0)
+					if len(oldData) > 0 && oldData[0].TimeStamp > int64(ts) {
+						// The oldest data is after the recorded last timestamp
+						// A offset reset happened.
+						offset = 0
+					}
+				}
 
-				writeIndexFile(indexName, fmt.Sprint(offset))
+				writeIndexFile(indexName, fmt.Sprint(offset)+"$"+fmt.Sprint(data[count-1].TimeStamp))
 				offset += count
 				totalCount += count
 				if count == 0 || (totalCount >= maxFetchCount) {
