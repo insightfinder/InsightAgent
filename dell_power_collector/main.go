@@ -324,10 +324,10 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 			splitted := strings.Split(fileContent, "$")
 			index := ""
 			lastTS := ""
-			if len(splitted) > 1 {
+			if len(splitted) == 2 {
 				index = splitted[0]
 				lastTS = splitted[1]
-			} else if len(splitted) > 0 {
+			} else if len(splitted) == 1 {
 				index = splitted[0]
 			}
 
@@ -339,9 +339,9 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 				}
 			}
 			// Default value being a future timestamp.
-			ts := 33338991126000
+			var ts int64 = 33338991126000
 			if lastTS != "" {
-				ts, err = strconv.Atoi(lastTS)
+				ts, err = strconv.ParseInt(lastTS, 10, 64)
 				if err != nil {
 					panic(err)
 				}
@@ -353,12 +353,12 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 			maxFetchCount := 50000
 
 			for fetchNext {
-				data := PowerFlexManagerDataStream(config, offset)
+				data := PowerFlexManagerDataStream(config, offset, 1000)
 				count := len(data)
 
 				sendLogData(data, IFConfig)
 				if count == 0 {
-					oldData := PowerFlexManagerDataStream(config, 0)
+					oldData := PowerFlexManagerDataStream(config, 0, 1)
 					if len(oldData) > 0 && oldData[0].TimeStamp > int64(ts) {
 						// The oldest data is after the recorded last timestamp
 						// A offset reset happened.

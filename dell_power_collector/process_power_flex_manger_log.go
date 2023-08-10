@@ -92,11 +92,11 @@ func authenticationPF(config map[string]interface{}) map[string]string {
 	return resHeader
 }
 
-func getPFMLogData(reqHeader map[string]string, config map[string]interface{}, offset int) (result []map[string]interface{}) {
+func getPFMLogData(reqHeader map[string]string, config map[string]interface{}, offset int, limit int) (result []map[string]interface{}) {
 	params := url.Values{}
 	//params.Add("sort", "-"+config["timeStampField"])
 	params.Add("offset", fmt.Sprint(offset))
-	params.Add("limit", "1000")
+	params.Add("limit", fmt.Sprint(limit))
 	endpoint := FormCompleteURL(config["connectionUrl"].(string), config["apiEndPoint"].(string)) + "?" + params.Encode()
 	log.Output(2, "Getting log data from endpoint: "+endpoint)
 	body, _ := sendRequest(
@@ -144,9 +144,9 @@ func processPFMLogData(rawData []map[string]interface{}, config map[string]inter
 	return
 }
 
-func PowerFlexManagerDataStream(config map[string]interface{}, offset int) []LogData {
+func PowerFlexManagerDataStream(config map[string]interface{}, offset int, limit int) []LogData {
 	authHeaders := authenticationPF(config)
-	rawLogData := getPFMLogData(authHeaders, config, offset)
+	rawLogData := getPFMLogData(authHeaders, config, offset, limit)
 
 	log.Output(1, "The number of log entries being processed is: "+fmt.Sprint(len(rawLogData)))
 	return processPFMLogData(rawLogData, config)
