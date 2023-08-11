@@ -297,7 +297,7 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 		config := getPFMConfig(p)
 
 		connectionUrl := config["connectionUrl"].(string)
-		connectionUrlList := []string{connectionUrl}
+		connectionUrlList := []string{}
 
 		if strings.Contains(connectionUrl, ",") {
 			connectionUrlList = strings.Split(connectionUrl, ",")
@@ -355,17 +355,16 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 			for fetchNext {
 				data := PowerFlexManagerDataStream(config, offset, 1000)
 				count := len(data)
-
-				sendLogData(data, IFConfig)
 				if count == 0 {
 					oldData := PowerFlexManagerDataStream(config, 0, 1)
 					if len(oldData) > 0 && oldData[0].TimeStamp > int64(ts) {
 						// The oldest data is after the recorded last timestamp
 						// A offset reset happened.
-						offset = 0
+						writeIndexFile(indexName, fmt.Sprint(0))
 					}
+					break
 				}
-
+				sendLogData(data, IFConfig)
 				writeIndexFile(indexName, fmt.Sprint(offset)+"$"+fmt.Sprint(data[count-1].TimeStamp))
 				offset += count
 				totalCount += count
