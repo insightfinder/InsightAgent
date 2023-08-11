@@ -232,3 +232,15 @@ func (mapper *InstanceMapper) GetDiffMap(namespace string) (map[string]map[strin
 
 	return createPods, deletePods
 }
+
+func (mapper *InstanceMapper) ListPods(namespace string) []string {
+	var allPods []string
+	for _, resources := range mapper.Storage[namespace] {
+		for _, pods := range resources {
+			for _, pod := range pods {
+				allPods = append(allPods, pod)
+			}
+		}
+	}
+	return allPods
+}
