@@ -50,8 +50,7 @@ func ProcessJavaMultiLines(originData *[]LokiLogData) ([]LokiLogData, []LokiLogD
 	logCache.Empty()
 
 	// Initialize the regex for Java stack trace
-	//javaStackTraceExceptionRegex := regexp.MustCompile(`Exception:.*`)
-	//javaStackTraceAtRegex := regexp.MustCompile(`^\s*at.*\.java:\d+`)
+	javaStackTraceExceptionRegex := regexp.MustCompile(`Exception:.*`)
 	javaStackTraceAtRegex := regexp.MustCompile(`^\s*at.*\(*\)`)
 	javaStackTraceCausedByRegex := regexp.MustCompile(`Caused by:`)
 
@@ -67,7 +66,10 @@ func ProcessJavaMultiLines(originData *[]LokiLogData) ([]LokiLogData, []LokiLogD
 		}
 
 		// If current line is a Java stack trace line.
-		if (javaStackTraceAtRegex.MatchString(logData.Text) || javaStackTraceCausedByRegex.MatchString(logData.Text)) && logCache.IsSamePodAs(logData) && WithinTimeRange(logCache.Timestamp, logData.Timestamp, time.Second*1) {
+		if (javaStackTraceAtRegex.MatchString(logData.Text) ||
+			javaStackTraceCausedByRegex.MatchString(logData.Text) ||
+			javaStackTraceExceptionRegex.MatchString(logData.Text)) &&
+			(logCache.IsSamePodAs(logData) && WithinTimeRange(logCache.Timestamp, logData.Timestamp, time.Second*1)) {
 			logCache.Text += "\n" + logData.Text
 			ExceptionMode = true
 			continue
