@@ -78,12 +78,13 @@ func main() {
 
 				// Collect Data
 				log.Output(2, fmt.Sprintf("Prepare to collect Loki data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-				logData := lokiServer.GetLogData(namespaceFilter, Before, Now)
+				podList := instanceMapper.ListPods(namespaceFilter)
+				logData := lokiServer.GetLogData(namespaceFilter, podList, Before, Now)
 
 				// Send data
-				logDataList := tools.BuildLogDataList(&logData, IFConfig, &instanceMapper)
+				tools.BuildLogDataList(&logData, IFConfig, &instanceMapper)
 				//tools.PrintStruct(logDataList, false)
-				insightfinder.SendLogData(logDataList, IFConfig)
+				//insightfinder.SendLogData(logDataList, IFConfig)
 
 			} else if IFConfig["projectType"] == "METRIC" {
 
@@ -104,9 +105,9 @@ func main() {
 				metricData["NetworkIn"] = prometheusServer.GetMetricData("NetworkIn", namespaceFilter, Before, Now)
 				metricData["NetworkOut"] = prometheusServer.GetMetricData("NetworkOut", namespaceFilter, Before, Now)
 
-				metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, &instanceMapper)
+				tools.BuildMetricDataPayload(&metricData, IFConfig, &instanceMapper)
 				//tools.PrintStruct(metricPayload, false)
-				insightfinder.SendMetricData(metricPayload, IFConfig)
+				//insightfinder.SendMetricData(metricPayload, IFConfig)
 			}
 		}
 

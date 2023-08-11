@@ -15,7 +15,7 @@ type LokiServer struct {
 
 const HEALTH_API = "/ready"
 const RANGE_QUERY_API = "/loki/api/v1/query_range"
-const LOG_QUERY = "{namespace=~\"%s\"}"
+const LOG_QUERY = "{namespace=~\"%s\", pod=\"%s\"}"
 
 func (loki *LokiServer) Query(queryStr string, StartTime string, EndTime string) LogQueryResponseBody {
 	var response LogQueryResponseBody
@@ -36,21 +36,24 @@ func (loki *LokiServer) Verify() {
 	}
 }
 
-func (loki *LokiServer) GetLogData(namespace string, StartTime time.Time, EndTime time.Time) []LokiLogData {
+func (loki *LokiServer) GetLogData(namespace string, podList []string, StartTime time.Time, EndTime time.Time) []LokiLogData {
 	var resultList []LokiLogData
-	queryStr := FormatQueryWithNamespaces(LOG_QUERY, namespace)
-	queryResult := loki.Query(queryStr, StartTime.Format(time.RFC3339), EndTime.Format(time.RFC3339))
-	for _, result := range queryResult.Data.Result {
-		for _, logData := range result.Values {
-			logTimestamp := logData[0]
-			logTimestampDigits, _ := strconv.ParseInt(logTimestamp, 10, 64)
-			logTimestampTime := time.Unix(0, logTimestampDigits)
-			logPod := result.Stream.Pod
-			logMessage := logData[1]
-			logNamespace := result.Stream.Namespace
 
-			// Save to the result list
-			resultList = append(resultList, LokiLogData{Namespace: logNamespace, Timestamp: logTimestampTime, Text: logMessage, Pod: logPod})
+	for _, pod := range podList {
+		queryStr := FormatQuery(LOG_QUERY, namespace, pod)
+		queryResult := loki.Query(queryStr, StartTime.Format(time.RFC3339), EndTime.Format(time.RFC3339))
+		for _, result := range queryResult.Data.Result {
+			for _, logData := range result.Values {
+				logTimestamp := logData[0]
+				logTimestampDigits, _ := strconv.ParseInt(logTimestamp, 10, 64)
+				logTimestampTime := time.Unix(0, logTimestampDigits)
+				logPod := result.Stream.Pod
+				logMessage := logData[1]
+				logNamespace := result.Stream.Namespace
+
+				// Save to the result list
+				resultList = append(resultList, LokiLogData{Namespace: logNamespace, Timestamp: logTimestampTime, Text: logMessage, Pod: logPod})
+			}
 		}
 	}
 	return ProcessMultiLines(&resultList)
