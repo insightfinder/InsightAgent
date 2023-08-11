@@ -1,0 +1,30 @@
+insightfinder:
+  eventPushAgent:
+    # The Docker image for event push agent
+    image: docker.io/insightfinderinc/event-push-agent:0.0.1
+
+    # The running interval for event push agent in seconds
+    runInterval: 60
+
+
+  edgeBrain:
+    # The url of the Edge brain. Please include the protocl (http/https) and port number if needed.
+    # Put the service name here if the Edge brain is deployed in the same k8s cluster
+    url: https://10.1.37.132
+
+    # The username of the Edge brain
+    username: 
+
+    # The license key of the user on the Edge brain
+    licenseKey: 
+
+
+  mainBrain:
+    # The url of the InsightFinder main brain
+    url: https://app.insightfinder.com
+
+    # The username of the InsightFinder main brain
+    # We need to use the same username for both Edge brain and InsightFinder main brain
+    username: 
+    # The license key of the user on the InsightFinder main brain
+    licenseKey: 
