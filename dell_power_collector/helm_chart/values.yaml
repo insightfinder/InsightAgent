@@ -17,6 +17,11 @@ powerCollectorAgent:
   # The sampling interval for each project created on InsightFinder website
   samplingInterval: 5 #(minutes)
 
+  # The instance we want to skip the data collection
+  # Each instance is separated by comma. Leave it empty if you don't want to skip any instance.
+  # For exmaple: "instance1,instance2,instance3"
+  instanceBlacklist: ""
+
   # The configurations for the agent.
   # One item in the list represents one agent task.
   # It supports the following types of agent tasks:
