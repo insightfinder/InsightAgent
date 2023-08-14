@@ -63,6 +63,7 @@ data:
         
         sampling_interval = {{ $.Values.powerCollectorAgent.samplingInterval }}
         run_interval = {{ $.Values.powerCollectorAgent.runInterval }}
+        instance_blacklist = {{ $.Values.powerCollectorAgent.instanceBlacklist }}
 
         if_url = {{ $.Values.insightfinder.url }}
         if_http_proxy =
