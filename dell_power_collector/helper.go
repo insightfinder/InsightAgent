@@ -212,6 +212,11 @@ func sendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 		SystemName:      ToString(IFconfig["systemName"]),
 	}
 	for instanceName, istData := range data.InstanceDataMap {
+		instance_blacklist := IFconfig["instance_blacklist"].([]string)
+		// If the blacklist isn't empty and instance name in it will be skipped.
+		if len(instance_blacklist) != 0 && Contains(instance_blacklist, instanceName) {
+			continue
+		}
 		instanceData, ok := newPayload.InstanceDataMap[instanceName]
 		if !ok {
 			// Current Instance didn't exist
@@ -236,7 +241,7 @@ func sendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 				request := IFMetricPostRequestPayload{
 					LicenseKey: ToString(IFconfig["licenseKey"]),
 					UserName:   ToString(IFconfig["userName"]),
-					Data:       data,
+					Data:       newPayload,
 				}
 				jData, err := json.Marshal(request)
 				if err != nil {
@@ -261,7 +266,7 @@ func sendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 	request := IFMetricPostRequestPayload{
 		LicenseKey: ToString(IFconfig["licenseKey"]),
 		UserName:   ToString(IFconfig["userName"]),
-		Data:       data,
+		Data:       newPayload,
 	}
 	jData, err := json.Marshal(request)
 	if err != nil {
@@ -272,7 +277,6 @@ func sendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 
 func sendDataToIF(data []byte, receiveEndpoint string, config map[string]interface{}) {
 	log.Output(1, "-------- Sending data to InsightFinder --------")
-
 	if len(data) > MAX_PACKET_SIZE {
 		panic("[ERROR]The packet size is too large.")
 	}
@@ -379,6 +383,15 @@ func GetConfigValue(p *configparser.ConfigParser, section string, param string, 
 		panic("[ERROR] InsightFinder configuration [" + param + "] is required!")
 	}
 	return result
+}
+
+func Contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
 }
 
 func FormCompleteURL(link string, endpoint string) string {

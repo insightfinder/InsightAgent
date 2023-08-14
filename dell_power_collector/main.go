@@ -47,6 +47,8 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	var httpProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_http_proxy", false))
 	var httpsProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_https_proxy", false))
 	var isReplay = ToString(GetConfigValue(p, IF_SECTION_NAME, "isReplay", false))
+	var instance_blacklist_string = ToString(GetConfigValue(p, IF_SECTION_NAME, "instance_blacklist", false))
+
 	var samplingIntervalInSeconds string
 
 	if len(projectNamePrefix) > 0 && !strings.HasSuffix(projectNamePrefix, "-") {
@@ -109,6 +111,12 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	if len(httpsProxy) > 0 {
 		ifProxies["https"] = httpsProxy
 	}
+	var instance_blacklist []string
+	if len(instance_blacklist_string) > 0 {
+		instance_blacklist = strings.Split(strings.TrimSpace(instance_blacklist_string), ",")
+	} else {
+		instance_blacklist = []string{}
+	}
 
 	configIF := map[string]interface{}{
 		"userName":                  userName,
@@ -125,6 +133,7 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 		"ifURL":                     ifURL,
 		"ifProxies":                 ifProxies,
 		"isReplay":                  isReplay,
+		"instance_blacklist":        instance_blacklist,
 	}
 	return configIF
 }
