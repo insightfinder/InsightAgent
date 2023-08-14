@@ -306,7 +306,7 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 		config := getPFMConfig(p)
 
 		connectionUrl := config["connectionUrl"].(string)
-		connectionUrlList := []string{connectionUrl}
+		connectionUrlList := []string{}
 
 		if strings.Contains(connectionUrl, ",") {
 			connectionUrlList = strings.Split(connectionUrl, ",")
@@ -329,11 +329,28 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 			configName = configName[:len(configName)-len(path.Ext(configName))] // remove the extension name
 			indexName := fmt.Sprintf(RunningIndex, configName, conn.Host)
 
-			indexContent := readIndexFile(indexName)
+			fileContent := readIndexFile(indexName)
+			splitted := strings.Split(fileContent, "$")
+			index := ""
+			lastTS := ""
+			if len(splitted) == 2 {
+				index = splitted[0]
+				lastTS = splitted[1]
+			} else if len(splitted) == 1 {
+				index = splitted[0]
+			}
 
 			offset := 0
-			if indexContent != "" {
-				offset, err = strconv.Atoi(indexContent)
+			if index != "" {
+				offset, err = strconv.Atoi(index)
+				if err != nil {
+					panic(err)
+				}
+			}
+			// Default value being a future timestamp.
+			var ts int64 = 33338991126000
+			if lastTS != "" {
+				ts, err = strconv.ParseInt(lastTS, 10, 64)
 				if err != nil {
 					panic(err)
 				}
@@ -345,12 +362,19 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 			maxFetchCount := 50000
 
 			for fetchNext {
-				data := PowerFlexManagerDataStream(config, offset)
+				data := PowerFlexManagerDataStream(config, offset, 1000)
 				count := len(data)
-
+				if count == 0 {
+					oldData := PowerFlexManagerDataStream(config, 0, 1)
+					if len(oldData) > 0 && oldData[0].TimeStamp > int64(ts) {
+						// The oldest data is after the recorded last timestamp
+						// A offset reset happened.
+						writeIndexFile(indexName, fmt.Sprint(0))
+					}
+					break
+				}
 				sendLogData(data, IFConfig)
-
-				writeIndexFile(indexName, fmt.Sprint(offset))
+				writeIndexFile(indexName, fmt.Sprint(offset)+"$"+fmt.Sprint(data[count-1].TimeStamp))
 				offset += count
 				totalCount += count
 				if count == 0 || (totalCount >= maxFetchCount) {
