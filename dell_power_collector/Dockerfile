@@ -4,7 +4,7 @@ USER root
 COPY . /powerAgent
 WORKDIR /powerAgent
 RUN ./build_for_linux_in_linux_env.sh && \
-    cd conf.d && rm -rf *
+    rm -rf helm_chart
 
 # Build runtime container
 FROM registry.access.redhat.com/ubi8/ubi
@@ -16,4 +16,4 @@ WORKDIR /root/powerAgent
 RUN cp -f Dell_Root_CA.pem /etc/pki/ca-trust/source/anchors/ && \
     update-ca-trust
 
-CMD ["/root/powerAgent/AgentCron.sh"]
+CMD ["/root/powerAgent/entrypoint.sh"]
