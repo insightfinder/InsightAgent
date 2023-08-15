@@ -1,7 +1,7 @@
 # ----------------------------------- powerFlex ---------------------------------------------
 [powerFlex]
 # instance type in the Dell PowerFlex.  PowerFlex API doc: https://developer.dell.com/apis/4008/versions/3.5.1/PowerFlex_3.5.1_API.json
-instanceType = ProtectionDomain 
+instanceType = ProtectionDomain
 
 # Specify the metrics file(list all the needed metrics there) in this section. It should be located inside conf.d directory.
 # The metrics info in the txt file should be one metric per line. NESTED STRCUTURE IS NOT SUPPORTED.
