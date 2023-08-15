@@ -1,0 +1,54 @@
+# -- URL of InsightFinder Platform. e.g. https://stg.insightfinder.com
+destinationHost: ""
+
+# -- User name
+userName: ""
+
+# -- License Key
+licenseKey: ""
+
+# -- Project name
+projectName: ""
+
+# -- Instance name (leave blank to use hostname)
+instanceName: ""
+
+# -- Flush interval
+flushInterval: 60s
+
+# -- Buffer chunk limit
+bufferChunkCimit: 200k
+
+# -- Comma separated list of http statuses which need to be retried
+httpRetryStatuses: "500,403"
+
+# -- Read timeout in seconds, supports floats
+httpReadTimeout: 2.2
+
+# -- Open timeout in seconds, supports floats
+httpOpenTimeout: 2.34
+
+image:
+  # -- Image repo
+  repository: "fluent/fluentd-kubernetes-daemonset"
+  # -- Image pull policy
+  pullPolicy: "IfNotPresent"
+  # -- Image tag
+  tag: "v1.16-debian-forward-1"
+
+resources:
+  # -- Resources requests
+  requests:
+    cpu: 100m
+    memory: 300Mi
+  # -- Resources limits
+  limits:
+    memory: 500Mi
+
+serviceAccount:
+  # -- Enable creating ServiceAccount
+  create: true
+
+rbac:
+  # -- Enable creating ClusterRole and ClusterRoleBinding
+  create: true
