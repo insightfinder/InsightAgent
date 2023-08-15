@@ -11,6 +11,9 @@ powerCollectorAgent:
   # The image of the agent
   image: docker.io/insightfinderinc/power-collector-agent:0.0.1
 
+  # The image pull Secrets
+  imagePullSecrets: []
+
   # The interval for the agent cron
   runInterval: 5 #(minutes)
 
@@ -111,7 +114,6 @@ powerCollectorAgent:
 
       # The metric data interval output from server. Choose from: Best_Available,Five_Sec,Twenty_Sec,Five_Mins,One_Hour,One_Day
       metric_interval_from_server: Five_Mins
-
 
       # (node, appliance)
       instanceType: appliance
