@@ -9,6 +9,7 @@ source venv/bin/activate
 python event_push.py -t
 
 # Run Agent
+echo "Waiting for agent next cron..." > output.log
 nohup python cron.py > nohup.log &
 
 # Stream logs to stdout
