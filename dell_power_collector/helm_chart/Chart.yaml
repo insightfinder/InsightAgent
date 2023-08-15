@@ -1,0 +1,6 @@
+apiVersion: v2
+name: if-power-collector-agent
+description: The InsightFinder agent for Dell Power Collector
+type: application
+version: 0.0.1
+appVersion: "0.0.1"
