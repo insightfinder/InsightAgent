@@ -17,6 +17,10 @@ spec:
       labels:
         app: {{ .Release.Name }}-if-vcenter-agent-app
     spec:
+      imagePullSecret:
+      {{- range .Values.vCenterAgent.imagePullSecrets }}
+      - name: {{ . }}
+      {{- end }}
       containers:
       - name: agent
         imagePullPolicy: Always
