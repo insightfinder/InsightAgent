@@ -12,14 +12,17 @@ import (
 	"github.com/bigkevmcd/go-configparser"
 )
 
+const PROMETHEUS_SECTION = "prometheus"
+const LOKI_SECTION = "loki"
+
 func createPrometheusServer(config *configparser.ConfigParser) prometheus.PrometheusServer {
-	prometheusEndpoint, _ := config.Get("prometheus", "endpoint")
-	prometheusUser, _ := config.Get("prometheus", "user")
-	prometheusPassword, _ := config.Get("prometheus", "password")
-	prometheusVerifyCerts, _ := config.Get("prometheus", "verify_certs")
-	prometheusCACerts, _ := config.Get("prometheus", "ca_certs")
-	prometheusClientCert, _ := config.Get("prometheus", "client_cert")
-	prometheusClientKey, _ := config.Get("prometheus", "client_key")
+	prometheusEndpoint, _ := config.Get(PROMETHEUS_SECTION, "endpoint")
+	prometheusUser, _ := config.Get(PROMETHEUS_SECTION, "user")
+	prometheusPassword, _ := config.Get(PROMETHEUS_SECTION, "password")
+	prometheusVerifyCerts, _ := config.Get(PROMETHEUS_SECTION, "verify_certs")
+	prometheusCACerts, _ := config.Get(PROMETHEUS_SECTION, "ca_certs")
+	prometheusClientCert, _ := config.Get(PROMETHEUS_SECTION, "client_cert")
+	prometheusClientKey, _ := config.Get(PROMETHEUS_SECTION, "client_key")
 
 	return prometheus.PrometheusServer{
 		EndPoint:    prometheusEndpoint,
@@ -33,7 +36,7 @@ func createPrometheusServer(config *configparser.ConfigParser) prometheus.Promet
 }
 
 func createLokiServer(config *configparser.ConfigParser) loki.LokiServer {
-	lokiEndpoint, _ := config.Get("loki", "endpoint")
+	lokiEndpoint, _ := config.Get(LOKI_SECTION, "endpoint")
 	return loki.LokiServer{Endpoint: lokiEndpoint}
 }
 
@@ -70,8 +73,6 @@ func main() {
 
 			// Process other sections
 			if IFConfig["projectType"] == "LOG" {
-				log.Output(2, fmt.Sprintf("Start sending log data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-
 				// Create connection to Loki
 				lokiServer := createLokiServer(configFile)
 				lokiServer.Verify()
@@ -84,11 +85,10 @@ func main() {
 				// Send data
 				logDataList := tools.BuildLogDataList(&logData, IFConfig, &instanceMapper)
 				//tools.PrintStruct(logDataList, false)
+				log.Output(2, fmt.Sprintf("Start sending log data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 				insightfinder.SendLogData(logDataList, IFConfig)
 
 			} else if IFConfig["projectType"] == "METRIC" {
-
-				log.Output(2, fmt.Sprintf("Start sending metic data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 
 				// Create connection to Prometheus
 				prometheusServer := createPrometheusServer(configFile)
@@ -107,6 +107,7 @@ func main() {
 
 				metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, &instanceMapper)
 				//tools.PrintStruct(metricPayload, false)
+				log.Output(2, fmt.Sprintf("Start sending metic data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 				insightfinder.SendMetricData(metricPayload, IFConfig)
 			}
 		}

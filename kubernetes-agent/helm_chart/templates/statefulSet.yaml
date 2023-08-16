@@ -8,7 +8,7 @@ spec:
   selector:
     matchLabels:
       app: if-kubernetes-agent
-  replicas: {{.Values.replicaCount}}
+  replicas: 1
   template:
     metadata:
       labels:
