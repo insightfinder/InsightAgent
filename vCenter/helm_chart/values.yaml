@@ -22,7 +22,7 @@ vCenterAgent:
   thread_pool: "1"
 
   # Maximum size of a data chunk to be sent to IF, in kilobytes
-  chunk_size_kb: "2048"
+  chunk_size_kb: "100"
 
   # The HTTP proxy needed to connect to vCenter API endpoint. Leave empty if no proxy is needed.
   http_proxy: ""
