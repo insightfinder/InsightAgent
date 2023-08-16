@@ -2,13 +2,14 @@ package kubernetes
 
 import (
 	"context"
+	"log"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
-	"log"
 )
 
 type KubernetesServer struct {
@@ -88,67 +89,6 @@ func (k *KubernetesServer) GetTargetReplicas(namespace string) map[string]map[st
 	return targetReplicas
 
 }
-
-//func (k *KubernetesServer) GetPodsChangesInEvents(namespace string) (map[string]map[string]map[string]bool, map[string]map[string]map[string]bool) {
-//	creationEvents := make(map[string]map[string]map[string]bool)
-//	deletionEvents := make(map[string]map[string]map[string]bool)
-//	replicaSetEventList, _ := k.Client.CoreV1().Events(namespace).List(context.Background(), metav1.ListOptions{FieldSelector: "involvedObject.kind=ReplicaSet"})
-//	statefulSetEventList, _ := k.Client.CoreV1().Events(namespace).List(context.Background(), metav1.ListOptions{FieldSelector: "involvedObject.kind=StatefulSet"})
-//
-//	// Combine all events
-//	allEvents := make([]corev1.Event, 0)
-//	allEvents = append(allEvents, replicaSetEventList.Items...)
-//	allEvents = append(allEvents, statefulSetEventList.Items...)
-//
-//	// Process replicaSetEvents
-//	for _, event := range allEvents {
-//
-//		// Convert ReplicaSet to its parent Deployment
-//		resourceKind := event.InvolvedObject.Kind
-//		resourceName := event.InvolvedObject.Name
-//		if event.InvolvedObject.Kind == "ReplicaSet" {
-//			replicaSet, _ := k.Client.AppsV1().ReplicaSets(namespace).Get(context.Background(), event.InvolvedObject.Name, metav1.GetOptions{})
-//			if replicaSet.OwnerReferences != nil && replicaSet.OwnerReferences[0].Kind == "Deployment" {
-//				resourceKind = "Deployment"
-//				resourceName = replicaSet.OwnerReferences[0].Name
-//			} else {
-//				// Skip this non-Deployment ReplicaSet
-//				continue
-//			}
-//		}
-//
-//		if _, ok := creationEvents[resourceKind]; !ok {
-//			creationEvents[resourceKind] = make(map[string]map[string]bool)
-//			deletionEvents[resourceKind] = make(map[string]map[string]bool)
-//		}
-//
-//		if event.Reason == "SuccessfulDelete" {
-//			if _, ok := deletionEvents[resourceKind][resourceName]; !ok {
-//				deletionEvents[resourceKind][resourceName] = make(map[string]bool)
-//			}
-//			deletionEvents[resourceKind][resourceName][getPodNameFromEventMessage(event.Message)] = true
-//		} else if event.Reason == "SuccessfulCreate" {
-//			if _, ok := creationEvents[resourceKind][resourceName]; !ok {
-//				creationEvents[resourceKind][resourceName] = make(map[string]bool)
-//			}
-//			creationEvents[resourceKind][resourceName][getPodNameFromEventMessage(event.Message)] = true
-//		}
-//	}
-//
-//	// Create changeEvents by removing duplicates
-//	for resourceKind, resourceEvents := range deletionEvents {
-//		for resourceName, deletedPods := range resourceEvents {
-//			for deletedPod, _ := range deletedPods {
-//				if findPodInEvents(deletedPod, resourceKind, resourceName, &creationEvents) {
-//					delete(creationEvents[resourceKind][resourceName], deletedPod)
-//				}
-//			}
-//		}
-//	}
-//
-//	return creationEvents, deletionEvents
-//
-//}
 
 func (k *KubernetesServer) GetPods(namespace string) map[string]map[string]map[string]bool {
 	result := make(map[string]map[string]map[string]bool)
