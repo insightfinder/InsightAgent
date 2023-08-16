@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: if-power-collector-config-json-cm
+  name: {{ .Release.Name }}-config-json-cm
   namespace: {{ .Release.Namespace }}
 data:
     {{- range $index, $configValue := .Values.powerCollectorAgent.config }}
