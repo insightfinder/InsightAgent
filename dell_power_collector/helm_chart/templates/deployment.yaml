@@ -2,21 +2,25 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   namespace: {{ .Release.Namespace }}
-  name: if-power-collector-agent
+  name: {{ .Release.Name }}-app
   labels:
-    app: if-power-collector-agent
+    app: {{ .Release.Name }}-app
 spec:
   replicas: 1
   strategy:
         type: Recreate
   selector:
     matchLabels:
-      app: if-power-collector-agent
+      app: {{ .Release.Name }}-app
   template:
     metadata:
       labels:
-        app: if-power-collector-agent
+        app: {{ .Release.Name }}-app
     spec:
+      imagePullSecrets:
+      {{- range .Values.powerCollectorAgent.imagePullSecrets }}
+      - name: {{ . }}
+      {{- end }}
       containers:
       - name: agent
         imagePullPolicy: Always
@@ -37,7 +41,7 @@ spec:
       volumes:
       - name: config-ini-volume
         configMap:
-          name: if-power-collector-config-ini-cm
+          name: {{ .Release.Name }}-config-ini-cm
           items:
           {{- range $configValue := .Values.powerCollectorAgent.config }}
           - key: {{$configValue.name}}.ini
@@ -46,7 +50,7 @@ spec:
 
       - name: config-json-volume
         configMap:
-          name: if-power-collector-config-json-cm
+          name: {{ .Release.Name }}-config-json-cm
           items:
           {{- range $configValue := .Values.powerCollectorAgent.config }}
           {{- if or (eq $configValue.type "powerFlex") (eq $configValue.type "powerScale") (eq $configValue.type "powerStore")}}
@@ -57,7 +61,7 @@ spec:
       
       - name: certificate-volume
         configMap:
-          name: dell-root-ca-cert
+          name: {{ .Release.Name }}-dell-root-ca-cert
           items:
           - key: cert.pem
             path: cert.pem

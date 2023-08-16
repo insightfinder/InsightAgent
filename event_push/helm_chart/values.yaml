@@ -3,6 +3,8 @@ insightfinder:
     # The Docker image for event push agent
     image: docker.io/insightfinderinc/event-push-agent:0.0.1
 
+    imagePullSecrets: []
+
     # The running interval for event push agent in seconds
     runInterval: 60
 

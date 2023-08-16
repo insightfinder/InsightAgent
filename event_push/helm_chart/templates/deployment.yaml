@@ -15,6 +15,10 @@ spec:
       labels:
         app: if-event-push-agent
     spec:
+      imagePullSecrets:
+      {{- range .Values.insightfinder.eventPushAgent.imagePullSecrets }}
+      - name: {{ . }}
+      {{- end }}
       containers:
       - name: agent
         image: {{ .Values.insightfinder.eventPushAgent.image }}

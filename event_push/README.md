@@ -23,17 +23,7 @@ docker run -itd --name if-event-push-agent -v ./conf.d:/opt/app-root/src/conf.d 
 ```
 
 #### Kubernetes
-We use helm chart to deploy our agent to kubernetes
-```bash
-cd helm_chart
-vim values.yaml # Edit the configuration values
-
-# For fresh installation
-helm install --atomic --create-namespace -n if-event-push-agent if-event-push-agent .
-
-# For upgrade
-helm upgrade --atomic -n if-event-push-agent if-event-push-agent .
-```
+See [helm_chart/README.md](./helm_chart/README.md)
 
 ### Installation Steps:
 1. Download the event_push.tar.gz package
