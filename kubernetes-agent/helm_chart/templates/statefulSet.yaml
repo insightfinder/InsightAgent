@@ -14,7 +14,8 @@ spec:
       labels:
         app: if-kubernetes-agent
     spec:
-      serviceAccountName: if-kubernetes-agent-service-account
+
+      serviceAccountName: if-k8s-agent-sa-{{ .Release.Name }}
       containers:
         - name: agent
           tty: true
@@ -41,3 +42,4 @@ spec:
         resources:
           requests:
             storage: 1Gi
+  serviceName: if-kubernetes-agent-svc-name

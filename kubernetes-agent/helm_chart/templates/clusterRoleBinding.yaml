@@ -1,10 +1,10 @@
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: if-kubernetes-agent-cluster-role-binding
+  name: if-k8s-agent-crb-{{ .Release.Name }}
 subjects:
   - kind: ServiceAccount
-    name: if-kubernetes-agent-service-account
+    name: if-k8s-agent-sa-{{ .Release.Name }}
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
