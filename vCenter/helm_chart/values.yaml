@@ -15,6 +15,9 @@ vCenterAgent:
   # The image of the agent
   image: docker.io/insightfinderinc/vcenter-agent:0.0.1
 
+  # Image Pull Secret
+  imagePullSecret: []
+
   # The sampling interval for each project created on InsightFinder website
   samplingInterval: "5" #(minutes)
 
