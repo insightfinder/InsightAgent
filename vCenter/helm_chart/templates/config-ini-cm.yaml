@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-if-vcenter-agent-cm
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-if-vcenter-agent-app
+data:
+  {{- range $index, $configValue := .Values.vCenterAgent.config }}
+  {{ $configValue.name }}.ini: |
+    [insightFinder_vars]
+    host_url = {{ $.Values.insightfinder.url }}
+    user_name = {{ $.Values.insightfinder.username }}
+    license_key = {{ $.Values.insightfinder.licenseKey }}
+
+    system_name = {{ $configValue.IF_SystemName }}
+    project_name = {{ $configValue.IF_Project }}
+    
+    http_proxy = {{ $.Values.insightfinder.http_proxy }}
+    https_proxy = 
+    
+    retries = 3
+    project_type = metric
+    sleep_seconds = 1
+    sampling_interval = {{ $.Values.vCenterAgent.samplingInterval }}
+
+    [vCenter_vars]
+    host = {{ $configValue.host }}
+    user_name = {{ $configValue.username }}
+    password = {{ $configValue.password }}
+
+    http_proxy = {{ $.Values.vCenterAgent.http_proxy }}
+    https_proxy = 
+
+    virtual_machines_list = {{ $configValue.virtual_machines_list }}
+    virtual_machines_regex = {{ $configValue.virtual_machines_regex }}
+    
+    hosts_list = {{ $configValue.hosts_list }}
+    hosts_regex = {{ $configValue.hosts_regex }}
+    
+    datastores_list = {{ $configValue.datastores_list }}
+    datastores_regex = {{ $configValue.datastores_regex }}
+    
+    metrics_list = {{ $configValue.metrics_list }}
+    metrics_regex = {{ $configValue.metrics_regex }}
+
+    [agent_vars]
+    thread_pool = {{ $.Values.vCenterAgent.thread_pool }}
+    chunk_size_kb = {{ $.Values.vCenterAgent.chunk_size_kb }}
+
+  {{- end }}

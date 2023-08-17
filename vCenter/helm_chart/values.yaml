@@ -1,0 +1,79 @@
+# The configurations for the InsightFinder
+insightfinder:
+  # The primary configuration for InsightFinder
+  url: https://app.insightfinder.com
+  username: ""
+  licenseKey: ""
+
+  # The HTTP proxy needed to connect to InsightFinder. Leave empty if no proxy is needed.
+  http_proxy: ""
+  
+
+# The configurations for the agent
+vCenterAgent:
+
+  # The image of the agent
+  image: docker.io/insightfinderinc/vcenter-agent:0.0.1
+
+  # Image Pull Secret
+  imagePullSecret: []
+
+  # The sampling interval for each project created on InsightFinder website
+  samplingInterval: "5" #(minutes)
+
+  # number of threads to be used in the multiprocessing pool
+  thread_pool: "1"
+
+  # Maximum size of a data chunk to be sent to IF, in kilobytes
+  chunk_size_kb: "100"
+
+  # The HTTP proxy needed to connect to vCenter API endpoint. Leave empty if no proxy is needed.
+  http_proxy: ""
+
+
+  # The configurations for the agent.
+  # Each item in the list represent a standalone vcenter server collector
+  config:
+    - name: vcenterServer1
+      # The system name created on InsightFinder.
+      IF_SystemName: ""
+
+      # The project name created on InsightFinder.
+      IF_Project: ""
+
+      # The vcenter address
+      host: ""
+
+      # The vcenter username
+      username: ""
+
+      # The vcenter password
+      password: ""
+      
+      # enter a list of virtual machine names separated by comma(,) or a regex to match from all available virtual machine names
+      # if list and regex are both provided, the list is given precedence and the regex param will be ignored
+      # if both are missing, no virtual machines will be processed (set regex to < .* > to select all virtual machines)
+      virtual_machines_list: ""
+      virtual_machines_regex: ".*"
+
+      # enter a list of host system names separated by comma(,) or a regex to match from all available host system names
+      # if list and regex are both provided, the list is given precedence and the regex param will be ignored
+      # if both are missing, no host systems will be processed (set regex to < .* > to select all host systems)
+      # NOTE: the selected hosts are also used to filter/whitelist virtual machines
+      hosts_list: ""
+      hosts_regex: ".*"
+
+      # enter a list of datastore names separated by comma(,) or a regex to match from all available datastore names
+      # if list and regex are both provided, the list is given precedence and the regex param will be ignored
+      # if both are missing, no datastores will be processed (set regex to < .* > to select all datastores)
+      datastores_list: ""
+      datastores_regex: ".*"
+
+      # enter a list of performance metrics separated by comma(,) or a regex to match from all available metrics
+      # if list and regex are both provided, the list is given precedence and the regex param will be ignored
+      # if both are missing, no metrics will be processed (set regex to < .* > to select all metrics)
+      # Metrics should follow the format: <counter.groupInfo.key>.<counter.nameInfo.key>.<counter.unitInfo.key>.<counter.rollupType>
+      # where, counter is a vim.PerformanceManager.CounterInfo object
+      # e.g., cpu.usage.percent.average, mem.shared.kiloBytes.maximum, disk.maxTotalLatency.millisecond.latest, net.usage.kiloBytesPerSecond.minimum
+      metrics_list: ""
+      metrics_regex: ".*"
