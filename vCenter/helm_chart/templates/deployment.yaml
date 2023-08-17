@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Release.Name }}-if-vcenter-agent-app
+  labels:
+    app: {{ .Release.Name }}-if-vcenter-agent-app
+spec:
+  replicas: 1
+  strategy:
+        type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-if-vcenter-agent-app
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-if-vcenter-agent-app
+    spec:
+      imagePullSecret:
+      {{- range .Values.vCenterAgent.imagePullSecrets }}
+      - name: {{ . }}
+      {{- end }}
+      containers:
+      - name: agent
+        imagePullPolicy: Always
+        image: {{ .Values.vCenterAgent.image }}
+        tty: true
+        env:
+        - name: AGENT_RUN_INTERVAL
+          value: {{ .Values.vCenterAgent.samplingInterval | quote }}
+        volumeMounts:
+        - name: config-ini-volume
+          mountPath: /opt/app-root/src/conf.d
+        
+      volumes:
+      - name: config-ini-volume
+        configMap:
+          name: {{ .Release.Name }}-if-vcenter-agent-cm
+          items:
+          {{- range $configValue := .Values.vCenterAgent.config }}
+          - key: {{$configValue.name}}.ini
+            path: {{$configValue.name}}.ini
+          {{- end }}
