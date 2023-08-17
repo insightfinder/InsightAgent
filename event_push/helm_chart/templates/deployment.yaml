@@ -16,13 +16,16 @@ spec:
         app: if-event-push-agent
     spec:
       imagePullSecrets:
-      {{- range .Values.insightfinder.eventPushAgent.imagePullSecrets }}
+      {{- range .Values.eventPushAgent.imagePullSecrets }}
       - name: {{ . }}
       {{- end }}
       containers:
       - name: agent
-        image: {{ .Values.insightfinder.eventPushAgent.image }}
+        imagePullPolicy: Always
+        image: {{ .Values.eventPushAgent.image }}
         tty: true
+          {{- if eq (len .Values.eventPushAgent.users) 0 }}
+          {{- else }}
         volumeMounts:
         - name: config-volume
           mountPath: /opt/app-root/src/conf.d
@@ -31,5 +34,8 @@ spec:
         configMap:
           name: if-event-push-agent-cm
           items:
-          - key: config.ini
-            path: config.ini
+          {{- range $index,$configValue := .Values.eventPushAgent.users}}
+          - key: {{ $configValue.name }}.ini
+            path: {{ $configValue.name }}.ini
+          {{- end}}
+          {{- end }}
