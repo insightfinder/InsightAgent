@@ -4,30 +4,32 @@ metadata:
   name: if-event-push-agent-cm
   namespace: {{ .Release.Namespace }}
 data:
-  config.ini: |-
-    [edge]
-    # Edge Node URL including prefix [http, https]
-    if_url = {{ .Values.insightfinder.edgeBrain.url }}
-    user_name = {{ .Values.insightfinder.edgeBrain.username }}
-    license_key = {{ .Values.insightfinder.edgeBrain.licenseKey }}
-    # default to 3 retries
-    retry =
-    http_proxy =
-    https_proxy =
+  {{- range $index, $configValue := .Values.eventPushAgent.users }}
+  {{$configValue.name}}.ini: |-
+      [edge]
+      # Edge Node URL including prefix [http, https]
+      if_url = {{ $.Values.eventPushAgent.edgeBrainURL }}
+      user_name = {{ $configValue.name }}
+      license_key = {{ $configValue.edgeBrainLicenseKey }}
+      # default to 3 retries
+      retry =
+      http_proxy =
+      https_proxy =
 
-    [main]
-    # Main IF URL including prefix [http, https]
-    if_url = {{ .Values.insightfinder.mainBrain.url }}
-    user_name = {{ .Values.insightfinder.mainBrain.username }}
-    license_key = {{ .Values.insightfinder.mainBrain.licenseKey }}
-    # default to 3 retries
-    retry =
-    http_proxy =
-    https_proxy =
+      [main]
+      # Main IF URL including prefix [http, https]
+      if_url = {{ $.Values.eventPushAgent.mainBrainURL }}
+      user_name = {{ $configValue.name }}
+      license_key = {{ $configValue.mainBrainLicenseKey }}
+      # default to 3 retries
+      retry =
+      http_proxy =
+      https_proxy =
 
-    [insightfinder]
-    # history data time config. If these options is set, the agent will query results by time range
-    # time range, Example: 2022-06-10 00:00:00,2022-06-13 00:00:00
-    his_time_range =
-    # For streaming data, this var is the interval with cron, could set to 60. For history data, this var is the time range of each api call, could set to 1440.
-    run_interval = {{ .Values.insightfinder.eventPushAgent.runInterval }}
+      [insightfinder]
+      # history data time config. If these options is set, the agent will query results by time range
+      # time range, Example: 2022-06-10 00:00:00,2022-06-13 00:00:00
+      his_time_range =
+      # For streaming data, this var is the interval with cron, could set to 60. For history data, this var is the time range of each api call, could set to 1440.
+      run_interval = {{ $.Values.eventPushAgent.runInterval }}
+  {{- end }}

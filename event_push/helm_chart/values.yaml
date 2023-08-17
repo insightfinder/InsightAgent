@@ -1,32 +1,24 @@
-insightfinder:
-  eventPushAgent:
-    # The Docker image for event push agent
-    image: docker.io/insightfinderinc/event-push-agent:0.0.1
+eventPushAgent:
+  # The Docker image for event push agent
+  image: docker.io/insightfinderinc/event-push-agent:0.0.1
+  imagePullSecrets: []
 
-    imagePullSecrets: []
+  # The running interval for event push agent in minutes
+  runInterval: 1
 
-    # The running interval for event push agent in seconds
-    runInterval: 60
+  # The url of the Edge brain. Please include the protocl (http/https) and port number if needed.
+  # Put the service name here if the Edge brain is deployed in the same k8s cluster
+  edgeBrainURL: https://insightfinder-edge-appserver.maoyu-if.svc.cluster.local
 
+  # The url of the InsightFinder main brain
+  mainBrainURL: https://app.insightfinder.com
 
-  edgeBrain:
-    # The url of the Edge brain. Please include the protocl (http/https) and port number if needed.
-    # Put the service name here if the Edge brain is deployed in the same k8s cluster
-    url: https://10.1.37.132
-
-    # The username of the Edge brain
-    username: 
-
-    # The license key of the user on the Edge brain
-    licenseKey: 
-
-
-  mainBrain:
-    # The url of the InsightFinder main brain
-    url: https://app.insightfinder.com
-
-    # The username of the InsightFinder main brain
-    # We need to use the same username for both Edge brain and InsightFinder main brain
-    username: 
-    # The license key of the user on the InsightFinder main brain
-    licenseKey: 
+  # Configure the users mapping here.
+  # This user mapping is used to map the user from the Edge brain to the same user in the main brain.
+  # This user should be have the same timezone in both Edge brain and Main brain.
+  users: []
+    # - name: user1
+    #   # The license key for the user in the Edge brain
+    #   edgeBrainLicenseKey: 
+    #   # The license key for the same user in the Main brain
+    #   mainBrainLicenseKey: 
