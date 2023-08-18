@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: if-kubernetes-agent
+  labels:
+    app: if-kubernetes-agent
+spec:
+  selector:
+    matchLabels:
+      app: if-kubernetes-agent
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: if-kubernetes-agent
+    spec:
+
+      serviceAccountName: if-k8s-agent-sa-{{ .Release.Name }}
+      containers:
+        - name: agent
+          tty: true
+          image: {{.Values.image}}
+          volumeMounts:
+            - name: if-k8s-agent-config
+              mountPath: /app/conf.d
+            - name: if-k8s-agent-storage
+              mountPath: /app/storage
+      volumes:
+        - name: if-k8s-agent-config
+          configMap:
+            name: if-kubernetes-config
+            items:
+              - key: prometheus.ini
+                path: prometheus.ini
+              - key: loki.ini
+                path: loki.ini
+  volumeClaimTemplates:
+    - metadata:
+        name: if-k8s-agent-storage
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi
+  serviceName: if-kubernetes-agent-svc-name

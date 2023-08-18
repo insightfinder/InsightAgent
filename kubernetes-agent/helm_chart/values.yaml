@@ -1,0 +1,43 @@
+# The image of the agent.
+image: "docker.io/insightfinderinc/kubernetes-agent:latest"
+
+agent:
+
+  # The namespaces to monitor. Seperate each namespace by comma (e.g. namepsace1, namespace2)
+  namespaceFilter: "insightfinder"
+
+# The main configuration for loki to get log data.
+loki:
+
+  # The API endpoint for loki server.
+  endpoint: "http://loki.monitoring.svc.cluster.local:3100"
+
+  # The log project created in InsightFinder.
+  projectName: "maoyu-k8s-log-test-1"
+
+# The main configuration for prometheus to get metric data.
+prometheus:
+
+  # The API endpoint for the prometheus server.
+  endpoint: "http://prometheus-server.monitoring.svc.cluster.local:80"
+
+  # The metric project created in InsightFinder.
+  projectName: "metric-test-1"
+
+# The configuration for InsightFinder
+insightfinder:
+
+  # The url of insightfinder application.
+  url: "https://app.insightfinder.com"
+
+  # Username for InsightFinder.
+  user_name: "user"
+
+  # license_key for that InsightFinder user.
+  license_key: ""
+
+  # The system created in InsightFinder.
+  systemName: "maoyu-test-k8s-monitor"
+
+  # The running interval for our agents (minute)
+  run_interval: 1
