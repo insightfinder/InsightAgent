@@ -1,0 +1,72 @@
+#fluetd-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-configmap-out-insightfinder
+  labels:
+    app: if-fluentd
+    kubernetes.io/cluster-service: "true"
+data:
+  out_InsightFinder.rb: "# encoding: utf-8\n#require 'fluent/output'\nmodule Fluent\n
+    \ # Main Output plugin class\n  class HttpBufferedOutput < Fluent::BufferedOutput\n
+    \   Fluent::Plugin.register_output('InsightFinder', self)\n\n    def initialize\n
+    \     super\n      require 'net/http'\n      require 'uri'\n      require 'json'\n
+    \     require 'socket'\n    end\n    $maxtimestamp = 0\n    $mintimestamp = 0\n
+    \   # Endpoint URL ex. localhost.local/api/\n    config_param :destinationHost,
+    :string\n\n    # statuses under which to retry\n    config_param :http_retry_statuses,
+    :string, default: ''\n\n    # read timeout for the http call\n    config_param
+    :http_read_timeout, :float, default: 2.0\n\n    # open timeout for the http call\n
+    \   config_param :http_open_timeout, :float, default: 2.0\n\n    config_param
+    :userName, :string\n\n    config_param :projectName, :string\n\n    config_param
+    :licenseKey, :string\n\n    config_param :instanceType, :string\n\n    config_param
+    :instanceName, :string\n\n    def configure(conf)\n      super\n\n      # Check
+    if endpoint URL is valid\n      unless @destinationHost =~ /^#{URI.regexp}$/\n
+    \       fail Fluent::ConfigError, 'destinationHost invalid'\n      end\n\n      begin\n
+    \       @uri = URI.parse(@destinationHost)\n      rescue URI::InvalidURIError\n
+    \       raise Fluent::ConfigError, 'destinationHost invalid'\n      end\n\n      #
+    Parse http statuses\n      @statuses = @http_retry_statuses.split(',').map { |status|
+    status.to_i }\n\n      @statuses = [] if @statuses.nil?\n\n      @http = Net::HTTP.new(@uri.host,
+    @uri.port)\n      @http.use_ssl = true\n      @http.read_timeout = @http_read_timeout\n
+    \     @http.open_timeout = @http_open_timeout\n    end\n\n    def start\n      super\n
+    \   end\n\n    def shutdown\n      super\n      begin\n        @http.finish\n
+    \     rescue\n      end\n    end\n\n    def format(tag, time, record)\n      [tag,
+    time, record].to_msgpack\n    end\n\n    def write(chunk)\n      data = []\n      chunk.msgpack_each
+    do |(tag, time, record)|\n        if @instanceName.to_s.empty?\n          time_hash
+    = {\"tag\" => tag.to_s, \"timestamp\" => (time*1000).to_s, \"data\" => record}\n
+    \       else\n          time_hash = {\"tag\" => @instanceName, \"timestamp\" =>
+    (time*1000).to_s, \"data\" => record}\n        end\n        data << time_hash\n
+    \       if $maxtimestamp == 0\n          $maxtimestamp = time\n        else\n
+    \         if $maxtimestamp < time \n            $maxtimestamp = time \n          end\n
+    \       end\n        if $mintimestamp == 0\n          $mintimestamp = time\n        else\n
+    \         if $mintimestamp > time\n            $mintimestamp = time\n          end\n
+    \       end\n\n        #time_hash = {\"data\" => record[\"data\"]}\n        #data
+    << JSON.generate(time_hash)\n        #data << JSON.generate(time_hash)       \n
+    \        #data << JSON.parse(record)\n      end\n      #respond_with myhash.to_json\n
+    \     request = create_request(data)\n\n      begin\n        response = @http.start
+    do |http|\n          request = create_request(data)\n          http.request request\n
+    \       end\n\n        if @statuses.include? response.code.to_i\n          # Raise
+    an exception so that fluent retries\n          fail \"Server returned bad status:
+    #{response.code}\"\n        end\n      rescue IOError, EOFError, SystemCallError
+    => e\n        # server didn't respond\n        $log.warn \"Net::HTTP.#{request.method.capitalize}
+    raises exception: #{e.class}, '#{e.message}'\"\n      ensure\n        begin\n
+    \         @http.finish\n        rescue\n        end\n      end\n    end\n\n    protected\n\n
+    \     def create_request(data)\n        request = Net::HTTP::Post.new(@uri.request_uri)\n
+    \       # Headers\n        request['Content-Type'] = 'application/json'\n        #request['userName']
+    \ =  @userName\n        #request['projectName'] = @projectName\n        #request['licenseKey']
+    =  @licenseKey\n        #request['destinationHost'] = @destinationHost\n        #request['userName']
+    = 'Chen'\n        #request['projectName'] = 'RealMadrid'\n        #request['licenseKey']
+    = '123123123'\n        # Body\n        #request.body = JSON.dump(data)\n        data
+    = JSON.generate(data)\n        #Iname = @instanceName\n        #if @instanceName.to_s.empty?
+    \n           #Iname = Socket.gethostname\n        #Iname = \"werty\"\n        if
+    @instanceName.to_s.empty?\n            hash_test = {\"userName\" => @userName,
+    \"projectName\" => @projectName, \"licenseKey\" => @licenseKey, \"metricData\"
+    => data, \"minTimestamp\" => ($mintimestamp*1000).to_s, \"maxTimestamp\" => ($maxtimestamp*1000
+    + 999).to_s, \"agentType\" => \"td-agentPlugin\", \"instanceType\" => @instanceType,
+    \"instanceName\" => Socket.gethostname}\n        else\n            hash_test =
+    {\"userName\" => @userName, \"projectName\" => @projectName, \"licenseKey\" =>
+    @licenseKey, \"metricData\" => data, \"minTimestamp\" => ($mintimestamp*1000).to_s,
+    \"maxTimestamp\" => ($maxtimestamp*1000 + 999).to_s, \"agentType\" => \"td-agentPlugin\",
+    \"instanceType\" => @instanceType, \"instanceName\" => @instanceName}\n        end
+    \   \n        #request.body = '1234567890987654321'\n        request.set_form_data(hash_test)\n
+    \        #request.set_form_data(JSON)\n         #request.body = JSON.dump(data)\n
+    \       request\n      end\n  end\nend"
