@@ -135,7 +135,7 @@ def get_time_delta_hour(time_delta):
 Send deployemt data based on the hour
 '''
 def send_deployment_demo_data(time, is_abnormal):
-    timestamp = to_epochtime_minute(time)
+    timestamp = to_epochtime_minute(time - datetime.timedelta(hours=3))
     minute = time.minute
     hour = time.hour
     if hour not in constant.DEPLOYMENT_DATA_INDEX:
@@ -156,7 +156,7 @@ def send_deployment_demo_data(time, is_abnormal):
 Send incident start from 01:25 to 01:29 or 09:25 to 09:29 or 17:25 to 17:29
 '''
 def send_web_or_incident_data(time, is_abnormal):
-    timestamp = to_epochtime_minute(time)
+    timestamp = to_epochtime_minute(time - datetime.timedelta(hours=3))
     minute = time.minute
     hour = time.hour
     if is_abnormal:
@@ -184,10 +184,10 @@ def send_web_or_incident_data(time, is_abnormal):
 
 
 '''
-Send exception data start at 1:00, 1:10, 1:20 or 9:00, 9:10, 9:20 or 17:00, 17:10, 17:20
+Send exception data start at 1:00, 1:10, 1:20 or 9:00, 9:10, 9:20 or 17:00, 17:10, 17：20
 '''
 def send_log_data(time, is_abnormal):
-    timestamp = to_epochtime_minute(time)
+    timestamp = to_epochtime_minute(time - datetime.timedelta(hours=3))
     minute = time.minute
     hour = time.hour
     if is_abnormal:
@@ -445,47 +445,6 @@ def send_abnormal_metric_data(timestamp, lasting_time):
     index = lasting_time + 26
     read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data")
 
-def buggy_deploy(current_time):
-    b_start_time = configs[constant.BUGGY_DP_START_TIME]
-    timestamp = to_epochtime_minute(current_time)
-    lasting_time =  current_time - b_start_time
-    # Get the time gap in minute
-    lasting_time = lasting_time.total_seconds() // 60
-    # Handle the timezone difference. Ignore any hourly difference.
-    lasting_time = lasting_time % 60
-    logging.info("current lasting_time value is: "+ str(lasting_time))
-    if lasting_time > 15:
-        # Stop the buggy deployment after running for 15 mins.
-        parser.set(constant.IF, constant.BUGGY_DEPLOY, constant.BUGGY_DEPLOY_FALSE)
-        config_file_name = utility.get_config_file_name(user_name)
-        utility.save_config_file(config_file_name, parser)
-        return
-    # Do things based on the current lasting_time
-    if lasting_time == 1:
-        # Trigger the buggy deployment.
-        data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_BUGGY[0])
-        replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment buggy data")
-    if lasting_time == 8:
-        logging.info("Trigger the metric detection and the prediction.")
-        # Specify the query parameters.
-        query_params = {
-            "startTime": to_epochtime_minute(current_time - datetime.timedelta(minutes=8)),
-            "endTime": timestamp,
-            "userName": user_name,
-            "projectName": "TD_metric"
-        }
-
-        max_retries = 10
-        retry_delay = 10  # seconds
-        url = configs[constant.SERVER_URL] + "/api/v1/triggerMetricAndPrediction"
-        make_get_request_with_retry(url, query_params, max_retries, retry_delay)
-    if lasting_time < 16:
-        send_web_incident_data_for_buggy_dp(lasting_time,timestamp)
-        # the normal and abnormal logs are streaming all the time
-        send_log_data_for_buggy_dp(timestamp, lasting_time)
-        # Send abnormal metric right after the deployment 
-        send_abnormal_metric_data(timestamp, lasting_time)
-
 def make_get_request_with_retry(url, params, max_retries, retry_delay):
     for _ in range(1, max_retries + 1):
         try:
@@ -510,12 +469,53 @@ def make_get_request_with_retry(url, params, max_retries, retry_delay):
 
     logging.info("Failed to get a successful response.")
 
+def buggy_deploy(current_time):
+    b_start_time = configs[constant.BUGGY_DP_START_TIME]
+    timestamp = to_epochtime_minute(current_time - datetime.timedelta(hours=3))
+    lasting_time =  current_time - b_start_time
+    # Get the time gap in minute
+    lasting_time = lasting_time.total_seconds() // 60
+    # Handle the timezone difference. Ignore any hourly difference.
+    lasting_time = lasting_time % 60
+    logging.info("current lasting_time value is: "+ str(lasting_time))
+    if lasting_time > 15:
+        # Stop the buggy deployment after running for 15 mins.
+        parser.set(constant.IF, constant.BUGGY_DEPLOY, constant.BUGGY_DEPLOY_FALSE)
+        config_file_name = utility.get_config_file_name(user_name)
+        utility.save_config_file(config_file_name, parser)
+        return
+    # Do things based on the current lasting_time
+    if lasting_time == 1:
+        # Trigger the buggy deployment.
+        data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_BUGGY[0])
+        replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment buggy data")
+    if lasting_time == 8:
+        logging.info("Trigger the metric detection and the prediction.")
+        # Specify the query parameters.
+        query_params = {
+            "startTime": to_epochtime_minute(current_time - datetime.timedelta(hours=3) - datetime.timedelta(minutes=8)),
+            "endTime": timestamp,
+            "userName": user_name,
+            "projectName": "TD_metric"
+        }
+
+        max_retries = 10
+        retry_delay = 10  # seconds
+        url = configs[constant.SERVER_URL] + "/api/v1/triggerMetricAndPrediction"
+        make_get_request_with_retry(url, query_params, max_retries, retry_delay)
+    if lasting_time > 0 and lasting_time < 16:
+        send_web_incident_data_for_buggy_dp(lasting_time,timestamp)
+        # the normal and abnormal logs are streaming all the time
+        send_log_data_for_buggy_dp(timestamp, lasting_time)
+        # Send abnormal metric right after the deployment 
+        send_abnormal_metric_data(timestamp, lasting_time)
+
 if __name__ == "__main__":
     logging_setting()
     urllib3.disable_warnings()
     user_name = utility.get_username()
     configs, parser = get_agent_config_vars()
-    cur_time = get_current_time()
+    cur_time = get_current_time() + datetime.timedelta(hours=3)
     if configs[constant.BUGGY_DEPLOY] == constant.BUGGY_DEPLOY_TRUE:
         logging.info("==========Buggy Deployment Triggered==========")
         buggy_deploy(cur_time)

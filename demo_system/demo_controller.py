@@ -19,6 +19,8 @@ def get_parameters():
                       action="store", dest="server_url", help="Server url to stream data")
     parser.add_option("-d", "--data_type",
                       action="store", dest="data_type", help="The data type of the data to stream")
+    parser.add_option("-b", "--buggy_deploy",
+                      action="store", dest="buggy_deploy", help="The manual triggered buggy deployment")
     (options, args) = parser.parse_args()
     parameters = {}
     if options.license_key is not None:
@@ -31,6 +33,10 @@ def get_parameters():
         parameters[constant.DATA_TYPE] = options.data_type
     else:
         parameters[constant.DATA_TYPE] = None
+    if options.buggy_deploy is not None:
+        parameters[constant.BUGGY_DEPLOY] = options.buggy_deploy
+    else:
+        parameters[constant.BUGGY_DEPLOY] = constant.BUGGY_DEPLOY_FALSE
     return parameters
 
 
@@ -83,6 +89,21 @@ def modified_config_file():
     config = SafeConfigParser()
     config.read(config_file_name)
     current_data_type = config[constant.IF][constant.DATA_TYPE]
+    # Update the buggy deployment flag if it's different
+    if config[constant.IF][constant.BUGGY_DEPLOY] != parameters[constant.BUGGY_DEPLOY]:
+        logging.info(
+            "Buggy deployment flag needs to be updated from " +
+            config[constant.IF][constant.BUGGY_DEPLOY] +" to " + parameters[constant.BUGGY_DEPLOY]
+        )
+        if parameters[constant.BUGGY_DEPLOY] == constant.BUGGY_DEPLOY_TRUE:
+            config[constant.IF][constant.BUGGY_DP_START_TIME] = get_current_date_minute()
+            logging.info("Manual buggy deployment triggered.")
+            config[constant.IF][constant.BUGGY_DEPLOY] = constant.BUGGY_DEPLOY_TRUE
+        else:
+            config[constant.IF][constant.BUGGY_DEPLOY] = constant.BUGGY_DEPLOY_FALSE
+            logging.info("Turn off buggy deployment.")
+    else:
+        logging.info("Current buggy deployment flag is: "+ config[constant.IF][constant.BUGGY_DEPLOY]+". Won't update it.")
     if current_data_type == 'abnormal' and parameters[constant.DATA_TYPE] == 'normal':
         is_reverse = True
         logging.info("Modification triggered: is_reverse is " + str(is_reverse))
@@ -105,6 +126,7 @@ def generate_config_file():
                            constant.SERVER_URL: parameters[constant.SERVER_URL],
                            constant.START_TIME: time,
                            constant.DATA_TYPE: constant.DATA_TYPE_NORMAL,
+                           constant.BUGGY_DEPLOY: constant.BUGGY_DEPLOY_FALSE,
                            constant.REVERSE_DEPLOYMENT: 'False',
                            constant.NORMAL_TIME: time,
                            constant.ABNORMAL_TIME: 0,
