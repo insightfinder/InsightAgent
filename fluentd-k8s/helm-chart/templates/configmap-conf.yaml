@@ -1,0 +1,10 @@
+#fluetd-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-configmap-conf
+  labels:
+    app: if-fluentd
+    kubernetes.io/cluster-service: "true"
+data:
+{{ tpl (.Files.Glob "files/fluent.conf").AsConfig . | indent 2 }}
