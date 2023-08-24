@@ -50,9 +50,10 @@ func (loki *LokiServer) GetLogData(namespace string, podList []string, StartTime
 				logPod := result.Stream.Pod
 				logMessage := logData[1]
 				logNamespace := result.Stream.Namespace
+				logNode := result.Stream.NodeName
 
 				// Save to the result list
-				resultList = append(resultList, LokiLogData{Namespace: logNamespace, Timestamp: logTimestampTime, Text: logMessage, Pod: logPod})
+				resultList = append(resultList, LokiLogData{Namespace: logNamespace, Timestamp: logTimestampTime, Text: logMessage, Pod: logPod, Node: logNode})
 			}
 		}
 	}
