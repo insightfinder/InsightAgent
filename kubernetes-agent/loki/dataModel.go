@@ -9,6 +9,7 @@ type LokiLogData struct {
 	Timestamp time.Time `validate:"required"`
 	Pod       string    `validate:"required"`
 	Text      string    `validate:"required"`
+	Node      string    `validate:"required"`
 }
 
 func (logData *LokiLogData) Empty() {
@@ -16,10 +17,11 @@ func (logData *LokiLogData) Empty() {
 	logData.Timestamp = time.Time{}
 	logData.Pod = ""
 	logData.Text = ""
+	logData.Node = ""
 }
 
 func (logData *LokiLogData) IsEmpty() bool {
-	return logData.Namespace == "" && logData.Timestamp == time.Time{} && logData.Pod == "" && logData.Text == ""
+	return logData.Namespace == "" && logData.Timestamp == time.Time{} && logData.Pod == "" && logData.Text == "" && logData.Node == ""
 }
 
 func (logData *LokiLogData) IsSamePodAs(other LokiLogData) bool {
