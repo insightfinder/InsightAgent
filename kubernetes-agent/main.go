@@ -83,7 +83,7 @@ func main() {
 				logData := lokiServer.GetLogData(namespaceFilter, podList, Before, Now)
 
 				// Send data
-				logDataList := tools.BuildLogDataList(&logData, IFConfig, &instanceMapper)
+				logDataList := tools.BuildLogDataList(&logData, &instanceMapper)
 				//tools.PrintStruct(logDataList, false)
 				log.Output(2, fmt.Sprintf("Start sending log data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 				insightfinder.SendLogData(logDataList, IFConfig)

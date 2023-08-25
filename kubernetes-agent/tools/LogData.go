@@ -5,7 +5,7 @@ import (
 	"kubernetes-agent/loki"
 )
 
-func BuildLogDataList(lokiLogData *[]loki.LokiLogData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper) []insightfinder.LogData {
+func BuildLogDataList(lokiLogData *[]loki.LokiLogData, instanceNameMapper *InstanceMapper) []insightfinder.LogData {
 	logDataList := make([]insightfinder.LogData, 0)
 
 	// Build logDataList
@@ -18,6 +18,10 @@ func BuildLogDataList(lokiLogData *[]loki.LokiLogData, IFConfig map[string]inter
 			TimeStamp: logData.Timestamp.UnixMilli(),
 			Tag:       instanceName,
 			Data:      logData.Text,
+			K8Identity: insightfinder.K8Identity{
+				HostId: logData.Node,
+				PodId:  logData.Pod,
+			},
 		})
 	}
 

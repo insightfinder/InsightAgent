@@ -1,9 +1,10 @@
 package insightfinder
 
 type LogData struct {
-	TimeStamp int64       `json:"timestamp" validate:"required"`
-	Tag       string      `json:"tag" validate:"required"`
-	Data      interface{} `json:"data" validate:"required"`
+	TimeStamp  int64       `json:"timestamp" validate:"required"`
+	Tag        string      `json:"tag" validate:"required"`
+	Data       interface{} `json:"data" validate:"required"`
+	K8Identity K8Identity  `json:"k,omitempty"`
 }
 
 type LogDataReceivePayload struct {
