@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"reflect"
-	"time"
 )
 
 func ToString(inputVar interface{}) string {
@@ -46,7 +45,7 @@ func PrintStruct(v any, needPrint bool) {
 	if needPrint {
 		fmt.Println(string(jsonBytes))
 	}
-	err = os.WriteFile("PrintStruct-"+time.Now().Format(time.RFC3339)+".json", jsonBytes, 0644)
+	err = os.WriteFile("PrintStruct"+".json", jsonBytes, 0644)
 	if err != nil {
 		log.Fatalf("Writing to file failed: %s", err)
 	}
