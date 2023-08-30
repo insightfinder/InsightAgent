@@ -84,9 +84,9 @@ func main() {
 
 				// Send data
 				logDataList := tools.BuildLogDataList(&logData, &instanceMapper)
-				tools.PrintStruct(logDataList, false)
+				//tools.PrintStruct(logDataList, false)
 				log.Output(2, fmt.Sprintf("Start sending log data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-				//insightfinder.SendLogData(logDataList, IFConfig)
+				insightfinder.SendLogData(logDataList, IFConfig)
 
 			} else if IFConfig["projectType"] == "METRIC" {
 
