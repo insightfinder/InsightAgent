@@ -1,0 +1,19 @@
+{
+    "dataset_context_id": "CE3531A5-4F7D-4B2A-8347-595ED5C2ED2D",
+    "dataset_id": "1CAAF504-19A6-4814-A02D-68834CA93AA2",
+    "dataset_name": "CrashEvent",
+    "device_context_id": "50C56051-0C21-40C8-9101-635569823B4C",
+    "item_context_id": "C3001A24-1DE6-4E44-9CEA-4356CAEC251F",
+    "item_data": {
+        "cab_id": "e360b805-eced-435e-ac2e-2a4dcee33d55",
+        "failure_name": "0x00000050 (0xffffbd8106dfa022, 0x0000000000000000, 0xfffff8025202492a, 0x0000000000000000)",
+        "mini_dump": "bb84e25a-8bbc-4ec2-8798-6d872cca1135",
+        "timestamp": "2022-12-02T13:05:22-05:00"
+    },
+    "item_id": "A18F6D9F-63F5-487D-B649-5AD509A3AA8A",
+    "item_name": "CrashEvent",
+    "item_time": "2023-03-06T15:29:43-05:00",
+    "schema_ver": "2.0",
+    "source": "0F9C839C-B366-47FC-9251-97B675DC39BB",
+    "source_component": "pa/Crash"
+}

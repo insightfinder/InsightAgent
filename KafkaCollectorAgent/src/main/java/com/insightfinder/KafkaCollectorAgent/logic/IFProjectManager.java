@@ -3,6 +3,7 @@ package com.insightfinder.KafkaCollectorAgent.logic;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
+import org.apache.kafka.common.protocol.types.Field;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -30,7 +31,6 @@ public class IFProjectManager {
     private Set<String> projects;
 
     public IFProjectManager() {
-
     }
 
     @PostConstruct
@@ -39,7 +39,7 @@ public class IFProjectManager {
     }
 
     boolean checkAndCreateProject(String projectName, String systemName, String dataType) {
-        if (projects.contains(projectName)) {
+        if (isProjectExisted(projectName)) {
             return true;
         }
         if (checkProject(projectName, systemName)) {
@@ -96,5 +96,17 @@ public class IFProjectManager {
         }
         logger.log(Level.INFO, "Failed to create project " + projectName);
         return false;
+    }
+
+    public boolean isProjectExisted(String projectName){
+        return projects.contains(projectName);
+    }
+
+    public Set<String> getProjects() {
+        return projects;
+    }
+
+    public void setProjects(Set<String> projects) {
+        this.projects = projects;
     }
 }
