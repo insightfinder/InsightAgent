@@ -48,6 +48,14 @@ public class KafkaConsumerManager {
 
     }
 
+    public void setKafkaConfig(KafkaConfig kafkaConfig) {
+        this.kafkaConfig = kafkaConfig;
+    }
+
+    public void setIfConfig(IFConfig ifConfig) {
+        this.ifConfig = ifConfig;
+    }
+
     @PostConstruct
     public void init() {
         Map<String, Map<String, String>> clusterInfo = kafkaConfig.getKafkaClusterInfo();

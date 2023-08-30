@@ -102,6 +102,32 @@ public class IFStreamingBufferManager {
         return Collections.unmodifiableMap(namedGroups);
     }
 
+
+
+    public void setFilter(BloomFilter<String> filter) {
+        this.filter = filter;
+    }
+
+    public void setGson(Gson gson) {
+        this.gson = gson;
+    }
+
+    public void setIfConfig(IFConfig ifConfig) {
+        this.ifConfig = ifConfig;
+    }
+
+    public void setProjectManager(IFProjectManager projectManager) {
+        this.projectManager = projectManager;
+    }
+
+    public void setWebClient(WebClient webClient) {
+        this.webClient = webClient;
+    }
+
+    public void setProjectList(Map<String, Map<String, String>> projectList) {
+        this.projectList = projectList;
+    }
+
     @PostConstruct
     public void init() throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
         if (ifConfig.getDataFormat().equalsIgnoreCase("JSON")) {
@@ -150,7 +176,6 @@ public class IFStreamingBufferManager {
                         }
                     });
                 }
-
                 try {
                     Thread.sleep(1000);
                     printMetricsTimer--;
@@ -165,7 +190,6 @@ public class IFStreamingBufferManager {
     public Map<String, Map<String, String>> getProjectMapping(String projectList) {
         Map<String, Map<String, String>> mapping = new HashMap<>();
         mapping = gson.fromJson(projectList, MAP_MAP_TYPE);
-
         Map<String, Map<String, String>> resultMapping = new HashMap<>();
         for (String projectKey : mapping.keySet()) {
             String[] keys = projectKey.split(ifConfig.getProjectDelimiter());
@@ -177,7 +201,7 @@ public class IFStreamingBufferManager {
         return resultMapping;
     }
 
-    private long getGMTinHourFromMillis(String date, String format) {
+    public long getGMTinHourFromMillis(String date, String format) {
         SimpleDateFormat sdf = new SimpleDateFormat(format);
         sdf.setTimeZone(TimeZone.getTimeZone("GMT"));
         try {
@@ -401,7 +425,6 @@ public class IFStreamingBufferManager {
                         }
 
                         for (String projectName : projects) {
-                            long start = System.currentTimeMillis();
                             Map<String, String> ifProjectInfo = projectList.get(projectName);
                             String ifProjectName = ifProjectInfo.get("project");
                             String ifSystemName = ifProjectInfo.get("system");
@@ -409,10 +432,6 @@ public class IFStreamingBufferManager {
                                 collectingDataMap.put(ifProjectName, new IFStreamingBuffer(ifProjectName, ifSystemName));
                             }
                             collectingDataMap.get(ifProjectName).addData(instanceName, Long.parseLong(timeStamp), metricName, metricValue);
-                            long end = System.currentTimeMillis();
-                            if (end - start > 1000) {
-                                logger.log(Level.INFO, "add use " + ((end - start) / 1000) + " size" + collectingDataMap.size());
-                            }
                         }
                     }
                 } else {
@@ -445,6 +464,10 @@ public class IFStreamingBufferManager {
                 collectingDataMap.remove(key);
             }
         }
+        mergeLogMetaDataAndSendToIF2(collectingLogMetadataMap);
+    }
+
+    public void mergeLogMetaDataAndSendToIF2(Map<String, Set<JsonObject>> collectingLogMetadataMap){
         if (!collectingLogMetadataMap.isEmpty()){
             for (String key : collectingLogMetadataMap.keySet()) {
                 projectList.values().forEach(ifProjectInfo->{

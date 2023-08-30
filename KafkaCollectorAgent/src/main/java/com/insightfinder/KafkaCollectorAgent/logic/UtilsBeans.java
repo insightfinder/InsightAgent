@@ -32,12 +32,7 @@ public class UtilsBeans {
         return new Gson();
     }
 
-    @Bean
-    public StreamingBuffers getStreamingBuffers() {
-        return new StreamingBuffers(ifConfig.getBufferSize());
-    }
-
-    private SslContext createSSLContext() {
+    public SslContext createSSLContext() {
         try {
             SslContextBuilder sslContextBuilder = SslContextBuilder.forClient();
             boolean loadKeys = false;
