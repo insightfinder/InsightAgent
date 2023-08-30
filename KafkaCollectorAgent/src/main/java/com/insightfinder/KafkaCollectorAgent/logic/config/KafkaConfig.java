@@ -16,9 +16,6 @@ import java.util.stream.StreamSupport;
 public class KafkaConfig {
     @Autowired
     private Environment env;
-
-    private int clusterNum;
-
     public KafkaConfig() {
     }
 
@@ -39,13 +36,5 @@ public class KafkaConfig {
                     }
                 });
         return info;
-    }
-
-    public int getClusterNum() {
-        return clusterNum;
-    }
-
-    public void setClusterNum(int clusterNum) {
-        this.clusterNum = clusterNum;
     }
 }

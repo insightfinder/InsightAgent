@@ -47,13 +47,6 @@ public class IFStreamingBuffer {
         return allInstanceDataMap;
     }
 
-    public Logger getLogger() {
-        return logger;
-    }
-
-    public void setLogger(Logger logger) {
-        this.logger = logger;
-    }
 
     public String getProject() {
         return project;
@@ -62,13 +55,8 @@ public class IFStreamingBuffer {
     public void setProject(String project) {
         this.project = project;
     }
-
     public String getSystem() {
         return system;
-    }
-
-    public void setSystem(String system) {
-        this.system = system;
     }
 
     @Override

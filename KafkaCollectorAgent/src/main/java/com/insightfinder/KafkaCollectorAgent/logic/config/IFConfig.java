@@ -29,8 +29,6 @@ public class IFConfig {
     private String dataFormat;
     private String dataFormatRegex;
     private String agentType;
-    private int collectingTime;
-    private int bufferSize = 100000;
     private String projectDelimiter;
     private boolean logParsingInfo;
     private boolean logSendingData;
@@ -147,22 +145,6 @@ public class IFConfig {
 
     public void setAgentType(String agentType) {
         this.agentType = agentType;
-    }
-
-    public int getCollectingTime() {
-        return collectingTime;
-    }
-
-    public void setCollectingTime(int collectingTime) {
-        this.collectingTime = collectingTime;
-    }
-
-    public int getBufferSize() {
-        return bufferSize;
-    }
-
-    public void setBufferSize(int bufferSize) {
-        this.bufferSize = bufferSize;
     }
 
     public String getDataFormat() {
@@ -299,22 +281,6 @@ public class IFConfig {
 
     public void setLogProject(boolean logProject) {
         this.logProject = logProject;
-    }
-
-    public String getLogProjectName() {
-        return logProjectName;
-    }
-
-    public void setLogProjectName(String logProjectName) {
-        this.logProjectName = logProjectName;
-    }
-
-    public String getLogSystemName() {
-        return logSystemName;
-    }
-
-    public void setLogSystemName(String logSystemName) {
-        this.logSystemName = logSystemName;
     }
 
     public String getLogTimestampFormat() {
