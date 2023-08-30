@@ -1,25 +1,27 @@
 package loki
 
 import (
+	"bytes"
 	"context"
 	"github.com/carlmjohnson/requests"
+	"gopkg.in/yaml.v2"
 	"log"
 	"strconv"
-	"strings"
 	"time"
 )
 
 type LokiServer struct {
 	Endpoint string
+	Config   LokiConfig
 }
 
-const HEALTH_API = "/ready"
+const CONFIG_API = "/config"
 const RANGE_QUERY_API = "/loki/api/v1/query_range"
 const LOG_QUERY = "{namespace=~\"%s\", pod=\"%s\"}"
 
 func (loki *LokiServer) Query(queryStr string, StartTime string, EndTime string) LogQueryResponseBody {
 	var response LogQueryResponseBody
-	err := requests.URL(loki.Endpoint+RANGE_QUERY_API).Param("query", queryStr).Param("start", StartTime).Param("end", EndTime).Param("direction", "forward").Param("limit", "5000").ToJSON(&response).Fetch(context.Background())
+	err := requests.URL(loki.Endpoint+RANGE_QUERY_API).Param("query", queryStr).Param("start", StartTime).Param("end", EndTime).Param("direction", "forward").Param("limit", strconv.Itoa(loki.Config.LimitsConfig.MaxEntriesLimitPerQuery)).ToJSON(&response).Fetch(context.Background())
 	if err != nil {
 		log.Output(2, "Failed to query loki server: "+loki.Endpoint)
 		panic(err)
@@ -27,13 +29,18 @@ func (loki *LokiServer) Query(queryStr string, StartTime string, EndTime string)
 	return response
 }
 
-func (loki *LokiServer) Verify() {
-	var response string
-	err := requests.URL(loki.Endpoint + HEALTH_API).ToString(&response).Fetch(context.Background())
-	if err != nil || strings.ReplaceAll(response, "\n", "") != "ready" {
-		log.Output(2, "Loki server is not ready: "+response)
+func (loki *LokiServer) Initialize() {
+	var buf bytes.Buffer
+	err := requests.URL(loki.Endpoint + CONFIG_API).ToBytesBuffer(&buf).Fetch(context.Background())
+	if err != nil {
+		log.Output(2, "Loki server is not ready.")
 		panic(err)
 	}
+	err = yaml.Unmarshal(buf.Bytes(), &loki.Config)
+	if err != nil {
+		log.Fatalf("Failed to read config from Loki.")
+	}
+
 }
 
 func (loki *LokiServer) GetLogData(namespace string, podList []string, StartTime time.Time, EndTime time.Time) []LokiLogData {

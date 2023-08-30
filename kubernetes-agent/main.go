@@ -75,7 +75,7 @@ func main() {
 			if IFConfig["projectType"] == "LOG" {
 				// Create connection to Loki
 				lokiServer := createLokiServer(configFile)
-				lokiServer.Verify()
+				lokiServer.Initialize()
 
 				// Collect Data
 				log.Output(2, fmt.Sprintf("Prepare to collect Loki data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
@@ -84,15 +84,15 @@ func main() {
 
 				// Send data
 				logDataList := tools.BuildLogDataList(&logData, &instanceMapper)
-				//tools.PrintStruct(logDataList, false)
+				tools.PrintStruct(logDataList, false)
 				log.Output(2, fmt.Sprintf("Start sending log data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-				insightfinder.SendLogData(logDataList, IFConfig)
+				//insightfinder.SendLogData(logDataList, IFConfig)
 
 			} else if IFConfig["projectType"] == "METRIC" {
 
 				// Create connection to Prometheus
 				prometheusServer := createPrometheusServer(configFile)
-				prometheusServer.Verify()
+				prometheusServer.Initialize()
 
 				// Collect Data
 				log.Output(2, fmt.Sprintf("Prepare to collect Prometheus data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
@@ -112,7 +112,7 @@ func main() {
 			}
 		}
 
-		log.Output(2, "Finished sending metric data.")
+		log.Output(2, "Finished sending data.")
 
 		// Prepare for next 1 time range
 		Before = Now

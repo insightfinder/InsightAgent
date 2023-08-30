@@ -38,7 +38,7 @@ type PrometheusServer struct {
 	IsBasicAuth bool
 }
 
-func (p PrometheusServer) Verify() bool {
+func (p PrometheusServer) Initialize() bool {
 
 	// Must have EndPoint
 	if p.EndPoint == "" {
