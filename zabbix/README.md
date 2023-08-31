@@ -1,8 +1,7 @@
 # zabbix
 * This agent collects data from zabbix and sends it to Insightfinder.
 * The auto setup of agent is only support in Centos 7.
-* This agent is use Python 2 to run script by default. You can use `getmessages_zabbix_py3.py` to run script with Python 3.
-* Or you can update script `getmessages_zabbix.py` from Python 2 to Python 3 with `2to3`.
+* This agent use Python 3 to run script by default.
 
 ## Installing the Agent
 
