@@ -184,7 +184,7 @@ def send_web_or_incident_data(time, is_abnormal):
 
 
 '''
-Send exception data start at 1:00, 1:10, 1:20 or 9:00, 9:10, 9:20 or 17:00, 17:10, 17:20
+Send exception data start at 1:05, 1:15, 1:25 or 9:05, 9:15, 9:25 or 17:05, 17:15, 17:25
 '''
 def send_log_data(time, is_abnormal):
     timestamp = to_epochtime_minute(time)
