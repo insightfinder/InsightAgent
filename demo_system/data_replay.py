@@ -191,7 +191,7 @@ def send_log_data(time, is_abnormal):
     minute = time.minute
     hour = time.hour
     if is_abnormal:
-        if hour in [1, 9, 17] and minute in [0, 10, 20]:
+        if hour in [1, 9, 17] and minute in [5, 15, 25]:
             num_message = 1
             data_array = []
             for i in range(0, num_message):
