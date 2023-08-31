@@ -11,14 +11,12 @@ import arrow
 import urllib.parse
 import http.client
 import requests
-import statistics
-import subprocess
 import shlex
 import traceback
 
 from sys import getsizeof
 from optparse import OptionParser
-from pyzabbix.api import ZabbixAPI
+from pyzabbix import ZabbixAPI
 
 """
 This script gathers data to send to Insightfinder
@@ -29,7 +27,12 @@ def start_data_processing():
     logger.info('Started......')
 
     # Create ZabbixAPI class instance
-    zapi = ZabbixAPI(**agent_config_vars['zabbix_kwargs'])
+    zabbix_config = agent_config_vars['zabbix_kwargs']
+    zabbix_url = zabbix_config['url']
+    zabbix_user = zabbix_config['user']
+    zabbix_password = zabbix_config['password']
+    zapi = ZabbixAPI(server=zabbix_url)
+    zapi.login(user=zabbix_user,password=zabbix_password)
     logger.info("Connected to Zabbix API Version %s" % zapi.api_version())
 
     # get host groups
@@ -216,7 +219,7 @@ def get_agent_config_vars():
     """ Read and parse config.ini """
     config_ini = config_ini_path()
     if os.path.exists(config_ini):
-        config_parser = configparser.SafeConfigParser()
+        config_parser = configparser.ConfigParser()
         config_parser.read(config_ini)
 
         zabbix_kwargs = {}
@@ -365,7 +368,7 @@ def get_if_config_vars():
     """ get config.ini vars """
     config_ini = config_ini_path()
     if os.path.exists(config_ini):
-        config_parser = configparser.SafeConfigParser()
+        config_parser = configparser.ConfigParser()
         config_parser.read(config_ini)
         try:
             user_name = config_parser.get('insightfinder', 'user_name')
