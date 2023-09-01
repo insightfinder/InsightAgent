@@ -164,7 +164,8 @@ func parseData(data map[string]interface{}, timeStamp int64, metrics []string) D
 func sendLogData(data []LogData, IFConfig map[string]interface{}) {
 	curTotal := 0
 	curData := make([]LogData, 0)
-	for _, log := range data {
+	var timezone = ToString(IFConfig["timezone"])
+	for _, logEntry := range data {
 		if curTotal > CHUNK_SIZE {
 			jData, err := json.Marshal(
 				LogDataReceivePayload{
@@ -183,8 +184,15 @@ func sendLogData(data []LogData, IFConfig map[string]interface{}) {
 			curTotal = 0
 			curData = make([]LogData, 0)
 		}
-		curData = append(curData, log)
-		dataBytes, _ := json.Marshal(log)
+		if timezone != "" {
+			timestamp, err := convertToGMT(logEntry.TimeStamp, timezone)
+			if err != nil {
+				log.Output(1, "[ERROR] Failed to conver the timezone. Will use the original timestamp. Please check the time_zone setting if config file. "+err.Error())
+			}
+			logEntry.TimeStamp = timestamp
+		}
+		curData = append(curData, logEntry)
+		dataBytes, _ := json.Marshal(logEntry)
 		curTotal += len(dataBytes)
 	}
 	jData, err := json.Marshal(
@@ -211,6 +219,7 @@ func sendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 		InstanceDataMap: make(map[string]InstanceData),
 		SystemName:      ToString(IFconfig["systemName"]),
 	}
+	var timezone = ToString(IFconfig["timezone"])
 	for instanceName, istData := range data.InstanceDataMap {
 		instance_blacklist := IFconfig["instance_blacklist"].([]string)
 		// If the blacklist isn't empty and instance name in it will be skipped.
@@ -229,9 +238,19 @@ func sendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 		}
 		for timeStamp, tsData := range istData.DataInTimestampMap {
 			// Need to send out the data in the same timestamp in one payload
+			// Conver the timestamp to GMT if there's a timezone difference
+			var err error
+			if timezone != "" {
+				timeStamp, err = convertToGMT(timeStamp, timezone)
+				if err != nil {
+					log.Output(1, "[ERROR] Failed to conver the timezone. Will use the original timestamp. Please check the time_zone setting if config file. "+err.Error())
+				}
+				tsData.TimeStamp = timeStamp
+			}
 			dataBytes, err := json.Marshal(tsData)
 			if err != nil {
-				panic("[ERORR] There's issue form json data for DataInTimestampMap.")
+				log.Output(1, "[ERORR] There's issue form json data for DataInTimestampMap. "+err.Error())
+				return
 			}
 			// Add the data into the payload
 			instanceData.DataInTimestampMap[timeStamp] = tsData
@@ -358,6 +377,25 @@ func AbsFilePath(filename string) string {
 		panic(err)
 	}
 	return filepath.Join(mydir, filename)
+}
+
+func convertToGMT(timestamp int64, timeZoneName string) (int64, error) {
+	loc, err := time.LoadLocation(timeZoneName)
+
+	if err != nil {
+		fmt.Println("Error loading location:", err)
+		return timestamp, err
+	}
+
+	// Get the current time in UTC and the specified location
+	t1 := time.Now()
+	t2 := t1.In(loc)
+	// Get the offset in seconds for each time zone
+	//for the time zones
+	_, offset2 := t2.Zone()
+	log.Output(1, "Successfully convert the timestamp from timezone "+
+		timeZoneName+" to GMT. The offset is "+fmt.Sprint(offset2)+" seconds")
+	return timestamp - int64(offset2*1000), nil
 }
 
 func GetEndpointMetricMapping(path string) (map[string][]string, error) {

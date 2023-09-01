@@ -136,6 +136,7 @@ Refer to "https://developer.dell.com/apis/5468/versions/3.8/PowerFlexManager_RES
 * `if_url`: URL for InsightFinder. Default is `https://app.insightfinder.com`.
 * `if_http_proxy`: HTTP proxy used to connect to InsightFinder.
 * `if_https_proxy`: As above, but HTTPS.
+* `timezone_for_data`: The timezone where the data timestamp is in. If there's timezone info in the timestamp already, please leave it empty. Supported input, Time Zone Abbreviation, IANA Time Zone Identifier and UTC Offset
 
 The following fields will be supported in the future:
 
