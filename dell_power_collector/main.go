@@ -48,6 +48,7 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	var httpsProxy = ToString(GetConfigValue(p, IF_SECTION_NAME, "if_https_proxy", false))
 	var isReplay = ToString(GetConfigValue(p, IF_SECTION_NAME, "isReplay", false))
 	var instance_blacklist_string = ToString(GetConfigValue(p, IF_SECTION_NAME, "instance_blacklist", false))
+	var timezone = ToString(GetConfigValue(p, IF_SECTION_NAME, "timezone_for_data", false))
 
 	var samplingIntervalInSeconds string
 
@@ -134,6 +135,7 @@ func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 		"ifProxies":                 ifProxies,
 		"isReplay":                  isReplay,
 		"instance_blacklist":        instance_blacklist,
+		"timezone":                  timezone,
 	}
 	return configIF
 }
