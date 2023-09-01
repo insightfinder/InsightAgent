@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-import ConfigParser
+import configparser
 import json
 import logging
 import os
@@ -9,17 +8,15 @@ import sys
 import time
 import pytz
 import arrow
-import urlparse
-import httplib
+import urllib.parse
+import http.client
 import requests
-import statistics
-import subprocess
 import shlex
 import traceback
 
 from sys import getsizeof
 from optparse import OptionParser
-from pyzabbix.api import ZabbixAPI
+from pyzabbix import ZabbixAPI
 
 """
 This script gathers data to send to Insightfinder
@@ -30,18 +27,25 @@ def start_data_processing():
     logger.info('Started......')
 
     # Create ZabbixAPI class instance
-    zapi = ZabbixAPI(**agent_config_vars['zabbix_kwargs'])
+    zabbix_config = agent_config_vars['zabbix_kwargs']
+    zabbix_url = zabbix_config['url']
+    zabbix_user = zabbix_config['user']
+    zabbix_password = zabbix_config['password']
+    zapi = ZabbixAPI(server=zabbix_url)
+    zapi.login(user=zabbix_user, password=zabbix_password)
     logger.info("Connected to Zabbix API Version %s" % zapi.api_version())
 
     # get host groups
     host_groups_map = {}
     host_groups_ids = []
-    host_groups_res = zapi.do_request('hostgroup.get', {
-        'output': 'extend',
-        'filter': {
-            "name": agent_config_vars['host_groups']
-        },
-    })
+
+    if len(agent_config_vars['host_groups']) == 0:
+        logger.info("Query all host_groups")
+        host_groups_req_params = {'output': 'extend'}
+    else:
+        host_groups_req_params = {'output': 'extend', 'filter': {"name": agent_config_vars['host_groups']}}
+
+    host_groups_res = zapi.do_request('hostgroup.get', host_groups_req_params)
     for item in host_groups_res['result']:
         group_id = item['groupid']
         name = item['name']
@@ -69,23 +73,24 @@ def start_data_processing():
         logger.error('Hosts list is empty')
         sys.exit(1)
 
-    # get applications
-    application_map = {}
-    application_ids = []
-    application_res = zapi.do_request('application.get', {
-        'output': 'extend',
-        "hostids": hosts_ids,
-        'filter': {
-            "name": agent_config_vars['applications']
-        },
-    })
-    for item in application_res['result']:
-        host_id = item['hostid']
-        application_id = item['applicationid']
-        name = item['name']
-        application_ids.append(application_id)
-        application_map[application_id] = name
-    logger.info("Zabbix host applications: %s" % json.dumps(application_map))
+    # application.get API is not available when Zabbix >= 6.0
+    # # get applications
+    # application_map = {}
+    # application_ids = []
+    # application_res = zapi.do_request('application.get', {
+    #     'output': 'extend',
+    #     "hostids": hosts_ids,
+    #     'filter': {
+    #         "name": agent_config_vars['applications']
+    #     },
+    # })
+    # for item in application_res['result']:
+    #     host_id = item['hostid']
+    #     application_id = item['applicationid']
+    #     name = item['name']
+    #     application_ids.append(application_id)
+    #     application_map[application_id] = name
+    # logger.info("Zabbix host applications: %s" % json.dumps(application_map))
 
     # get metrics by hosts/applications
     items_map = {}
@@ -94,7 +99,6 @@ def start_data_processing():
         'output': 'extend',
         'groupids': host_groups_ids,
         "hostids": hosts_ids,
-        "applicationids": application_ids,
 
     })
     for item in items_res['result']:
@@ -217,7 +221,7 @@ def get_agent_config_vars():
     """ Read and parse config.ini """
     config_ini = config_ini_path()
     if os.path.exists(config_ini):
-        config_parser = ConfigParser.SafeConfigParser()
+        config_parser = configparser.ConfigParser()
         config_parser.read(config_ini)
 
         zabbix_kwargs = {}
@@ -230,7 +234,7 @@ def get_agent_config_vars():
             zabbix_config = {}
 
             # only keep settings with values
-            zabbix_kwargs = {k: v for (k, v) in zabbix_config.items() if v}
+            zabbix_kwargs = {k: v for (k, v) in list(zabbix_config.items()) if v}
 
             # handle boolean setting
 
@@ -271,22 +275,21 @@ def get_agent_config_vars():
             timezone = config_parser.get('zabbix', 'timezone') or 'UTC'
             data_fields = config_parser.get('zabbix', 'data_fields', raw=True)
 
-        except ConfigParser.NoOptionError as cp_noe:
+        except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
 
         # host_groups
         if len(host_groups) != 0:
-            host_groups = filter(lambda x: x.strip(), host_groups.split(','))
+            host_groups = [x for x in host_groups.split(',') if x.strip()]
         if len(hosts) != 0:
-            hosts = filter(lambda x: x.strip(), hosts.split(','))
+            hosts = [x for x in hosts.split(',') if x.strip()]
         if len(applications) != 0:
-            applications = filter(lambda x: x.strip(), applications.split(','))
+            applications = [x for x in applications.split(',') if x.strip()]
 
         if len(his_time_range) != 0:
-            his_time_range = filter(lambda x: x.strip(),
-                                    his_time_range.split(','))
-            his_time_range = map(lambda x: int(arrow.get(x).float_timestamp), his_time_range)
+            his_time_range = [x for x in his_time_range.split(',') if x.strip()]
+            his_time_range = [int(arrow.get(x).float_timestamp) for x in his_time_range]
 
         if len(target_timestamp_timezone) != 0:
             target_timestamp_timezone = int(arrow.now(target_timestamp_timezone).utcoffset().total_seconds())
@@ -317,8 +320,8 @@ def get_agent_config_vars():
 
         # fields
         # project_fields = project_field.split(',')
-        instance_fields = filter(lambda x: x.strip(), instance_field.split(','))
-        device_fields = filter(lambda x: x.strip(), device_field.split(','))
+        instance_fields = [x for x in instance_field.split(',') if x.strip()]
+        device_fields = [x for x in device_field.split(',') if x.strip()]
         timestamp_fields = timestamp_field.split(',')
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
@@ -367,7 +370,7 @@ def get_if_config_vars():
     """ get config.ini vars """
     config_ini = config_ini_path()
     if os.path.exists(config_ini):
-        config_parser = ConfigParser.SafeConfigParser()
+        config_parser = configparser.ConfigParser()
         config_parser.read(config_ini)
         try:
             user_name = config_parser.get('insightfinder', 'user_name')
@@ -381,7 +384,7 @@ def get_if_config_vars():
             if_url = config_parser.get('insightfinder', 'if_url')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
-        except ConfigParser.NoOptionError as cp_noe:
+        except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             config_error()
 
@@ -638,7 +641,7 @@ def initialize_data_gathering():
 
 def clear_metric_buffer():
     # move all buffer data to current data, and send
-    buffer_values = metric_buffer['buffer_dict'].values()
+    buffer_values = list(metric_buffer['buffer_dict'].values())
 
     count = 0
     for row in buffer_values:
@@ -704,7 +707,7 @@ def send_data_to_if(chunk_metric_data):
         return
 
     # send the data
-    post_url = urlparse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
+    post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
     send_request(post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
                  data=data_to_post, verify=False, proxies=if_config_vars['if_proxies'])
@@ -727,7 +730,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     for req_num in range(ATTEMPTS):
         try:
             response = req(url, **request_passthrough)
-            if response.status_code == httplib.OK:
+            if response.status_code == http.client.OK:
                 logger.info(success_message)
                 return response
             else:
