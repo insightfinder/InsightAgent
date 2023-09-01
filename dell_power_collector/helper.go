@@ -393,6 +393,8 @@ func convertToGMT(timestamp int64, timeZoneName string) (int64, error) {
 	// Get the offset in seconds for each time zone
 	//for the time zones
 	_, offset2 := t2.Zone()
+	log.Output(1, "Successfully convert the timestamp from timezone "+
+		timeZoneName+" to GMT. The offset is "+fmt.Sprint(offset2)+" seconds")
 	return timestamp - int64(offset2*1000), nil
 }
 
