@@ -79,6 +79,9 @@ sampling_interval = 10
 run_interval = 5
 # instance names we want to exclude.
 instance_blacklist = 
+# The timezone of the timestamp of the data the agent collect if it's not in GMT. Only fill this field when
+# The timestamp itself doesn't have timezone info.
+timezone_for_data = 
 
 if_url = https://app.insightfinder.com
 if_http_proxy =
