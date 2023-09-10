@@ -50,7 +50,7 @@ func main() {
 
 	// Initialize time counters
 	Now := time.Now()
-	Before := Now.Add(-time.Minute * 1)
+	Before := Now.Add(-time.Second * 30)
 
 	for {
 		log.Output(2, "Start...")
@@ -114,9 +114,9 @@ func main() {
 
 		log.Output(2, "Finished sending metric data.")
 
-		// Prepare for next 1 time range
+		// Prepare for next 30 seconds time range
 		Before = Now
-		time.Sleep(time.Minute * 1)
+		time.Sleep(time.Second * 30)
 		Now = time.Now()
 	}
 
