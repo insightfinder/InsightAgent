@@ -75,18 +75,19 @@ func main() {
 			if IFConfig["projectType"] == "LOG" {
 				// Create connection to Loki
 				lokiServer := createLokiServer(configFile)
-				lokiServer.Verify()
+				lokiServer.Initialize()
 
 				// Collect Data
-				log.Output(2, fmt.Sprintf("Prepare to collect Loki data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
+				log.Output(2, fmt.Sprintf("Prepare to collect log data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 				podList := instanceMapper.ListPods(namespaceFilter)
 				logData := lokiServer.GetLogData(namespaceFilter, podList, Before, Now)
 
 				// Send data
 				logDataList := tools.BuildLogDataList(&logData, &instanceMapper)
-				//tools.PrintStruct(logDataList, false)
+				tools.PrintStruct(logDataList, false)
 				log.Output(2, fmt.Sprintf("Start sending log data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-				insightfinder.SendLogData(logDataList, IFConfig)
+				//insightfinder.SendLogData(logDataList, IFConfig)
+				log.Output(2, "Finished sending log data.")
 
 			} else if IFConfig["projectType"] == "METRIC" {
 
@@ -95,7 +96,7 @@ func main() {
 				prometheusServer.Verify()
 
 				// Collect Data
-				log.Output(2, fmt.Sprintf("Prepare to collect Prometheus data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
+				log.Output(2, fmt.Sprintf("Prepare to collect metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 				metricData := make(map[string][]prometheus.PromMetricData)
 
 				metricData["CPU"] = prometheusServer.GetMetricData("CPU", namespaceFilter, Before, Now)
@@ -109,10 +110,9 @@ func main() {
 				//tools.PrintStruct(metricPayload, false)
 				log.Output(2, fmt.Sprintf("Start sending metic data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 				insightfinder.SendMetricData(metricPayload, IFConfig)
+				log.Output(2, "Finished sending metric data.")
 			}
 		}
-
-		log.Output(2, "Finished sending metric data.")
 
 		// Prepare for next 30 seconds time range
 		Before = Now
