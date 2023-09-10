@@ -125,3 +125,9 @@ type LogQueryResponseBody struct {
 		} `json:"stats"`
 	} `json:"data"`
 }
+
+type LogConfigResponseBody struct {
+	LimitsConfig struct {
+		MaxEntriesLimitPerQuery int `yaml:"max_entries_limit_per_query"`
+	} `yaml:"limits_config"`
+}

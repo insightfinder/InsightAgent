@@ -21,7 +21,7 @@ vim conf.d/prometheus.ini
 ## Docker
 ### Build
 ```bash
-docker build . -t docker.io/insightfinderinc/kubernetes-agent:latest
+docker build . --platform linux/amd64 -t docker.io/insightfinderinc/kubernetes-agent:latest
 ```
 ### Run
 ```bash
