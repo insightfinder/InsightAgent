@@ -93,7 +93,7 @@ func main() {
 
 				// Create connection to Prometheus
 				prometheusServer := createPrometheusServer(configFile)
-				prometheusServer.Verify()
+				prometheusServer.Initialize()
 
 				// Collect Data
 				log.Output(2, fmt.Sprintf("Prepare to collect metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))

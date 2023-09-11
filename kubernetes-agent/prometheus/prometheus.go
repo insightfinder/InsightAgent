@@ -38,7 +38,7 @@ type PrometheusServer struct {
 	IsBasicAuth bool
 }
 
-func (p PrometheusServer) Verify() bool {
+func (p *PrometheusServer) Initialize() bool {
 
 	// Must have EndPoint
 	if p.EndPoint == "" {
@@ -57,7 +57,7 @@ func (p PrometheusServer) Verify() bool {
 	return ConfigResponseBody.Status != "success"
 }
 
-func (p PrometheusServer) Query(QueryStr string, StartTime time.Time, EndTime time.Time) QueryResponseBody {
+func (p *PrometheusServer) Query(QueryStr string, StartTime time.Time, EndTime time.Time) QueryResponseBody {
 	StartTimeStr := fmt.Sprintf("%.3f", float64(StartTime.UnixMilli())/1000)
 	EndTimeStr := fmt.Sprintf("%.3f", float64(EndTime.UnixMilli())/1000)
 	ResponseBody := QueryResponseBody{}
@@ -72,7 +72,7 @@ func (p PrometheusServer) Query(QueryStr string, StartTime time.Time, EndTime ti
 	}
 }
 
-func (p PrometheusServer) GetMetricData(Type string, namespaceFilter string, StartTime time.Time, EndTime time.Time) []PromMetricData {
+func (p *PrometheusServer) GetMetricData(Type string, namespaceFilter string, StartTime time.Time, EndTime time.Time) []PromMetricData {
 	var QueryStr string
 	var promMetricData []PromMetricData
 
