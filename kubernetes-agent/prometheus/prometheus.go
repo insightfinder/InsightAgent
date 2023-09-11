@@ -33,9 +33,6 @@ type PrometheusServer struct {
 	CACerts     string
 	ClientCert  string
 	ClientKey   string
-
-	// Vars
-	IsBasicAuth bool
 }
 
 func (p *PrometheusServer) Initialize() bool {
@@ -45,15 +42,9 @@ func (p *PrometheusServer) Initialize() bool {
 		return false
 	}
 
-	if p.UserName != "" && p.Password != "" {
-		p.IsBasicAuth = true
-	} else {
-		p.IsBasicAuth = false
-	}
-
 	// Test connection by getting configuration.
 	ConfigResponseBody := ConfigResponseBody{}
-	requests.URL(p.EndPoint + CONFIG_API).ToJSON(&ConfigResponseBody).Fetch(context.Background())
+	requests.URL(p.EndPoint+CONFIG_API).BasicAuth(p.UserName, p.Password).ToJSON(&ConfigResponseBody).Fetch(context.Background())
 	return ConfigResponseBody.Status != "success"
 }
 
@@ -61,7 +52,7 @@ func (p *PrometheusServer) Query(QueryStr string, StartTime time.Time, EndTime t
 	StartTimeStr := fmt.Sprintf("%.3f", float64(StartTime.UnixMilli())/1000)
 	EndTimeStr := fmt.Sprintf("%.3f", float64(EndTime.UnixMilli())/1000)
 	ResponseBody := QueryResponseBody{}
-	err := requests.URL(p.EndPoint+QUERY_API).Param("query", QueryStr).Param("start", StartTimeStr).Param("end", EndTimeStr).Param("step", "60").ToJSON(&ResponseBody).Fetch(context.Background())
+	err := requests.URL(p.EndPoint+QUERY_API).Param("query", QueryStr).BasicAuth(p.UserName, p.Password).Param("start", StartTimeStr).Param("end", EndTimeStr).Param("step", "60").ToJSON(&ResponseBody).Fetch(context.Background())
 
 	if err != nil {
 		log.Println("Failed to query: ", QueryStr)

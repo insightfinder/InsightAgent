@@ -14,6 +14,8 @@ import (
 
 type LokiServer struct {
 	Endpoint                string
+	Username                string
+	Password                string
 	MaxEntriesLimitPerQuery int
 }
 
@@ -24,7 +26,7 @@ const LOG_QUERY = "{namespace=~\"%s\", pod=\"%s\"}"
 
 func (loki *LokiServer) Query(queryStr string, StartTime string, EndTime string) LogQueryResponseBody {
 	var response LogQueryResponseBody
-	err := requests.URL(loki.Endpoint+RANGE_QUERY_API).Param("query", queryStr).Param("start", StartTime).Param("end", EndTime).Param("direction", "forward").Param("limit", strconv.Itoa(loki.MaxEntriesLimitPerQuery)).ToJSON(&response).Fetch(context.Background())
+	err := requests.URL(loki.Endpoint+RANGE_QUERY_API).BasicAuth(loki.Username, loki.Password).Param("query", queryStr).Param("start", StartTime).Param("end", EndTime).Param("direction", "forward").Param("limit", strconv.Itoa(loki.MaxEntriesLimitPerQuery)).ToJSON(&response).Fetch(context.Background())
 	if err != nil {
 		log.Output(2, "Failed to query loki server: "+loki.Endpoint)
 		panic(err)
@@ -36,7 +38,7 @@ func (loki *LokiServer) Initialize() {
 
 	// Connectivity check
 	var response string
-	err := requests.URL(loki.Endpoint + HEALTH_API).ToString(&response).Fetch(context.Background())
+	err := requests.URL(loki.Endpoint+HEALTH_API).BasicAuth(loki.Username, loki.Password).ToString(&response).Fetch(context.Background())
 	if err != nil || strings.ReplaceAll(response, "\n", "") != "OK" {
 		log.Output(2, "Loki server is not ready: "+response)
 		fmt.Print(err)
