@@ -11,17 +11,17 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 	instanceDataMap := make(map[string]insightfinder.InstanceData)
 	for _, metricData := range *metricDataMap {
 		for _, promMetricData := range metricData {
-			componentName := instanceNameMapper.GetInstanceName(promMetricData.NameSpace, promMetricData.Pod)
-			if componentName == "" {
+			instanceName := instanceNameMapper.GetInstanceName(promMetricData.NameSpace, promMetricData.Pod)
+			if instanceName == "" {
 				continue
 			}
-			if _, ok := instanceDataMap[componentName]; !ok {
-				instanceDataMap[componentName] = insightfinder.InstanceData{
-					InstanceName:       componentName,
+			if _, ok := instanceDataMap[instanceName]; !ok {
+				instanceDataMap[instanceName] = insightfinder.InstanceData{
+					InstanceName:       instanceName,
 					DataInTimestampMap: make(map[int64]insightfinder.DataInTimestamp),
 				}
 			}
-			dataInTimestampMap := instanceDataMap[componentName].DataInTimestampMap
+			dataInTimestampMap := instanceDataMap[instanceName].DataInTimestampMap
 
 			for _, promMetricPoint := range promMetricData.Data {
 				if _, ok := dataInTimestampMap[promMetricPoint.TimeStamp]; !ok {

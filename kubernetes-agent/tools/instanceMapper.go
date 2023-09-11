@@ -162,7 +162,7 @@ func (mapper *InstanceMapper) GetInstanceName(namespace string, podName string) 
 		for resource, _ := range resources {
 			mappingIndex := mapper.FindIndexByPodName(namespace, resourceKind, resource, podName)
 			if mappingIndex != "-1" {
-				return namespace + "/" + resource + "-" + mappingIndex
+				return resource + "-" + mappingIndex
 			}
 		}
 	}
