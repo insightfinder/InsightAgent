@@ -70,8 +70,7 @@ func (loki *LokiServer) getConfig() LogConfigResponseBody {
 }
 
 func (loki *LokiServer) GetLogData(namespace string, podList []string, StartTime time.Time, EndTime time.Time) []LokiLogData {
-	var resultList []LokiLogData
-
+	var resultList []*LokiLogData
 	for _, pod := range podList {
 		queryStr := FormatQuery(LOG_QUERY, namespace, pod)
 		queryResult := loki.Query(queryStr, StartTime.Format(time.RFC3339), EndTime.Format(time.RFC3339))
@@ -85,10 +84,14 @@ func (loki *LokiServer) GetLogData(namespace string, podList []string, StartTime
 				logNamespace := result.Stream.Namespace
 				logNode := result.Stream.NodeName
 
-				// Save to the result list
-				resultList = append(resultList, LokiLogData{Namespace: logNamespace, Timestamp: logTimestampTime, Text: logMessage, Pod: logPod, Node: logNode})
+				// Save non-empty logs to the result list
+				tmpMsg := strings.ReplaceAll(logMessage, "\n", "")
+				tmpMsg = strings.ReplaceAll(tmpMsg, " ", "")
+				if tmpMsg != "" {
+					resultList = append(resultList, &LokiLogData{Namespace: logNamespace, Timestamp: logTimestampTime, Text: logMessage, Pod: logPod, Node: logNode})
+				}
 			}
 		}
 	}
-	return ProcessMultiLines(&resultList)
+	return ProcessMultiLines(resultList)
 }
