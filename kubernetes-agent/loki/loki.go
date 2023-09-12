@@ -29,7 +29,7 @@ func (loki *LokiServer) Query(queryStr string, StartTime string, EndTime string)
 	err := requests.URL(loki.Endpoint+RANGE_QUERY_API).BasicAuth(loki.Username, loki.Password).Param("query", queryStr).Param("start", StartTime).Param("end", EndTime).Param("direction", "forward").Param("limit", strconv.Itoa(loki.MaxEntriesLimitPerQuery)).ToJSON(&response).Fetch(context.Background())
 	if err != nil {
 		log.Output(2, "Failed to query loki server: "+loki.Endpoint)
-		panic(err)
+		fmt.Println(err.Error())
 	}
 	return response
 }

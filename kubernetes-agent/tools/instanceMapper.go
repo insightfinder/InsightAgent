@@ -157,16 +157,16 @@ func (mapper *InstanceMapper) FindIndexByPodName(namespace string, resourceKind 
 	return "-1"
 }
 
-func (mapper *InstanceMapper) GetInstanceName(namespace string, podName string) string {
+func (mapper *InstanceMapper) GetInstanceMapping(namespace string, podName string) (string, string) {
 	for resourceKind, resources := range mapper.Storage[namespace] {
 		for resource, _ := range resources {
 			mappingIndex := mapper.FindIndexByPodName(namespace, resourceKind, resource, podName)
 			if mappingIndex != "-1" {
-				return resource + "-" + mappingIndex
+				return resource + "-" + mappingIndex, resource
 			}
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // Load Data from disk
