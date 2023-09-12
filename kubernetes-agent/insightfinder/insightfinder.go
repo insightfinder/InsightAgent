@@ -75,7 +75,7 @@ func SendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 			// Current Node didn't exist
 			instanceData = InstanceData{
 				InstanceName:       istData.InstanceName,
-				ComponentName:      istData.InstanceName,
+				ComponentName:      istData.ComponentName,
 				DataInTimestampMap: make(map[int64]DataInTimestamp),
 			}
 			newPayload.InstanceDataMap[instanceName] = instanceData
