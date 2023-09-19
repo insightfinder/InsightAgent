@@ -19,6 +19,7 @@ spec:
       containers:
         - name: agent
           tty: true
+          imagePullPolicy: Always
           image: {{.Values.image}}
           volumeMounts:
             - name: if-k8s-agent-config
