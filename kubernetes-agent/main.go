@@ -107,9 +107,9 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 
 		// Send data
 		logDataList := tools.BuildLogDataList(&logData, instanceMapper)
-		tools.PrintStruct(logDataList, false)
+		//tools.PrintStruct(logDataList, false)
 		log.Output(2, fmt.Sprintf("Start sending log data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-		//insightfinder.SendLogData(logDataList, IFConfig)
+		insightfinder.SendLogData(logDataList, IFConfig)
 		log.Output(2, "Finished sending log data.")
 
 	} else if IFConfig["projectType"] == "METRIC" {
@@ -122,7 +122,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 		log.Output(2, fmt.Sprintf("Prepare to collect metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 		metricData := make(map[string][]prometheus.PromMetricData)
 
-		metricData["CPU"] = prometheusServer.GetMetricData("CPU", namespaceFilter, Before, Now)
+		metricData["CPUCores"] = prometheusServer.GetMetricData("CPU", namespaceFilter, Before, Now)
 		metricData["Memory"] = prometheusServer.GetMetricData("Memory", namespaceFilter, Before, Now)
 		metricData["DiskRead"] = prometheusServer.GetMetricData("DiskRead", namespaceFilter, Before, Now)
 		metricData["DiskWrite"] = prometheusServer.GetMetricData("DiskWrite", namespaceFilter, Before, Now)
