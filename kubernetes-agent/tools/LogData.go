@@ -5,12 +5,13 @@ import (
 	"kubernetes-agent/loki"
 )
 
-func BuildLogDataList(lokiLogData *[]loki.LokiLogData, instanceNameMapper *InstanceMapper) []insightfinder.LogData {
+func BuildLogDataList(lokiLogData *[]loki.LokiLogData, instanceNameMapper *InstanceMapper, postProcessor *PostProcessor) []insightfinder.LogData {
 	logDataList := make([]insightfinder.LogData, 0)
 
 	// Build logDataList
 	for _, logData := range *lokiLogData {
 		instanceName, componentName := instanceNameMapper.GetInstanceMapping(logData.Namespace, logData.Pod)
+		componentName = postProcessor.ProcessComponentName(componentName)
 		if instanceName == "" {
 			continue
 		}
