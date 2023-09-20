@@ -5,13 +5,14 @@ import (
 	"kubernetes-agent/prometheus"
 )
 
-func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper) insightfinder.MetricDataReceivePayload {
+func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper, postProcessor *PostProcessor) insightfinder.MetricDataReceivePayload {
 
 	// Build InstanceDataMap
 	instanceDataMap := make(map[string]insightfinder.InstanceData)
 	for _, metricData := range *metricDataMap {
 		for _, promMetricData := range metricData {
 			instanceName, componentName := instanceNameMapper.GetInstanceMapping(promMetricData.NameSpace, promMetricData.Pod)
+			componentName = postProcessor.ProcessComponentName(componentName)
 			if instanceName == "" {
 				continue
 			}
@@ -54,12 +55,4 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 		MaxTimestamp:     0,
 		InsightAgentType: insightfinder.ProjectTypeToAgentType(IFConfig["projectType"].(string), false),
 	}
-}
-
-func buildNamespacePodMap(promMetricDataList []prometheus.PromMetricData) *map[string]bool {
-	namespacePodMap := make(map[string]bool)
-	for _, promMetricData := range promMetricDataList {
-		namespacePodMap[promMetricData.NameSpace+"/"+promMetricData.Pod] = true
-	}
-	return &namespacePodMap
 }

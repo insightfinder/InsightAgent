@@ -16,12 +16,12 @@ const (
 )
 
 const (
-	CPU_METRIC_QUERY         = "sum(rate(container_cpu_usage_seconds_total{namespace=~\"%s\",container!='POD',container!='',pod!=''}[3m])) by (pod,namespace,instance)"
-	MEMORY_METRIC_QUERY      = "sum(container_memory_working_set_bytes{namespace=~\"%s\",container!='POD',container!='',pod!=''}) by (pod,namespace,instance)"
-	DISK_READ_METRIC_QUERY   = "sum(rate(container_fs_reads_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance)"
-	DISK_WRITE_METRIC_QUERY  = "sum(rate(container_fs_writes_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance)"
-	NETWORK_IN_METRIC_QUERY  = "sum(rate(container_network_receive_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance)"
-	NETWORK_OUT_METRIC_QUERY = "sum(rate(container_network_transmit_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance)"
+	POD_CPU_CORES_METRIC_QUERY   = "sum(rate(container_cpu_usage_seconds_total{namespace=~\"%s\",container!='POD',container!='',pod!=''}[3m])) by (pod,namespace,instance)"
+	POD_MEMORY_METRIC_QUERY      = "sum(container_memory_working_set_bytes{namespace=~\"%s\",container!='POD',container!='',pod!=''}) by (pod,namespace,instance)  / 1024 / 1024"
+	POD_DISK_READ_METRIC_QUERY   = "sum(rate(container_fs_reads_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance) / 1024 / 1024"
+	POD_DISK_WRITE_METRIC_QUERY  = "sum(rate(container_fs_writes_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance) / 1024 / 1024"
+	POD_NETWORK_IN_METRIC_QUERY  = "sum(rate(container_network_receive_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance) / 1024 / 1024"
+	POD_NETWORK_OUT_METRIC_QUERY = "sum(rate(container_network_transmit_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance) / 1024 / 1024"
 )
 
 type PrometheusServer struct {
@@ -68,18 +68,18 @@ func (p *PrometheusServer) GetMetricData(Type string, namespaceFilter string, St
 	var promMetricData []PromMetricData
 
 	switch Type {
-	case "CPU":
-		QueryStr = CPU_METRIC_QUERY
+	case "CPUCores":
+		QueryStr = POD_CPU_CORES_METRIC_QUERY
 	case "Memory":
-		QueryStr = MEMORY_METRIC_QUERY
+		QueryStr = POD_MEMORY_METRIC_QUERY
 	case "DiskRead":
-		QueryStr = DISK_READ_METRIC_QUERY
+		QueryStr = POD_DISK_READ_METRIC_QUERY
 	case "DiskWrite":
-		QueryStr = DISK_WRITE_METRIC_QUERY
+		QueryStr = POD_DISK_WRITE_METRIC_QUERY
 	case "NetworkIn":
-		QueryStr = NETWORK_IN_METRIC_QUERY
+		QueryStr = POD_NETWORK_IN_METRIC_QUERY
 	case "NetworkOut":
-		QueryStr = NETWORK_OUT_METRIC_QUERY
+		QueryStr = POD_NETWORK_OUT_METRIC_QUERY
 	}
 	QueryStr = FormatQueryWithNamespaces(QueryStr, namespaceFilter)
 

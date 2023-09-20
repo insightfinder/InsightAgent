@@ -91,8 +91,10 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 	IFConfig := insightfinder.GetInsightFinderConfig(configFile)
 	insightfinder.CheckProject(IFConfig)
 
-	// Get Namespace need to use
+	// Get General config
 	namespaceFilter, _ := configFile.Get("general", "namespace")
+	postProcessor := tools.PostProcessor{}
+	postProcessor.Initialize(configFile)
 
 	// Process other sections
 	if IFConfig["projectType"] == "LOG" {
@@ -106,7 +108,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 		logData := lokiServer.GetLogData(namespaceFilter, podList, Before, Now)
 
 		// Send data
-		logDataList := tools.BuildLogDataList(&logData, instanceMapper)
+		logDataList := tools.BuildLogDataList(&logData, instanceMapper, &postProcessor)
 		//tools.PrintStruct(logDataList, false)
 		log.Output(2, fmt.Sprintf("Start sending log data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 		insightfinder.SendLogData(logDataList, IFConfig)
@@ -122,14 +124,14 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 		log.Output(2, fmt.Sprintf("Prepare to collect metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 		metricData := make(map[string][]prometheus.PromMetricData)
 
-		metricData["CPUCores"] = prometheusServer.GetMetricData("CPU", namespaceFilter, Before, Now)
+		metricData["CPUCores"] = prometheusServer.GetMetricData("CPUCores", namespaceFilter, Before, Now)
 		metricData["Memory"] = prometheusServer.GetMetricData("Memory", namespaceFilter, Before, Now)
 		metricData["DiskRead"] = prometheusServer.GetMetricData("DiskRead", namespaceFilter, Before, Now)
 		metricData["DiskWrite"] = prometheusServer.GetMetricData("DiskWrite", namespaceFilter, Before, Now)
 		metricData["NetworkIn"] = prometheusServer.GetMetricData("NetworkIn", namespaceFilter, Before, Now)
 		metricData["NetworkOut"] = prometheusServer.GetMetricData("NetworkOut", namespaceFilter, Before, Now)
 
-		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper)
+		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper, &postProcessor)
 		//tools.PrintStruct(metricPayload, false)
 		log.Output(2, fmt.Sprintf("Start sending metic data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 		insightfinder.SendMetricData(metricPayload, IFConfig)
