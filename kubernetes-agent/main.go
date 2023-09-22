@@ -81,9 +81,9 @@ func main() {
 		var wg sync.WaitGroup
 		for _, configFile := range configFiles {
 			wg.Add(1)
-			dataCollectionRoutine(&wg, configFile, &instanceMapper, StartTime, EndTime)
+			go dataCollectionRoutine(&wg, configFile, &instanceMapper, StartTime, EndTime)
 		}
-		wg.Wait()
+		//wg.Wait()
 
 		// Prepare for next 10 seconds time range
 		StartTime = EndTime
