@@ -7,6 +7,7 @@ import (
 	"kubernetes-agent/prometheus"
 	"kubernetes-agent/tools"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/bigkevmcd/go-configparser"
@@ -60,12 +61,15 @@ func main() {
 	for _, configFile := range configFiles {
 		// Add Namespaces from all config files
 		namespaceFilter, _ := configFile.Get("general", "namespace")
-		instanceMapper.AddNamespace(namespaceFilter)
+		collectionTarget, _ := configFile.Get("general", "target")
+		if namespaceFilter != "" && collectionTarget != "node" {
+			instanceMapper.AddNamespace(namespaceFilter)
+		}
 	}
 
 	// Initialize time ranges
 	EndTime := time.Now()
-	StartTime := EndTime.Add(-time.Second * 30)
+	StartTime := EndTime.Add(-time.Second * 10)
 
 	for {
 		log.Output(2, "Start...")
@@ -74,18 +78,22 @@ func main() {
 		instanceMapper.Update()
 
 		// Process data collection based each config file
+		var wg sync.WaitGroup
 		for _, configFile := range configFiles {
-			dataCollectionRoutine(configFile, &instanceMapper, StartTime, EndTime)
+			wg.Add(1)
+			dataCollectionRoutine(&wg, configFile, &instanceMapper, StartTime, EndTime)
 		}
+		wg.Wait()
 
-		// Prepare for next 30 seconds time range
+		// Prepare for next 10 seconds time range
 		StartTime = EndTime
-		time.Sleep(time.Second * 30)
+		time.Sleep(time.Second * 10)
 		EndTime = time.Now()
 	}
 }
 
-func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper *tools.InstanceMapper, Before time.Time, Now time.Time) {
+func dataCollectionRoutine(wg *sync.WaitGroup, configFile *configparser.ConfigParser, instanceMapper *tools.InstanceMapper, Before time.Time, Now time.Time) {
+	defer wg.Done()
 
 	// Get InsightFinder config
 	IFConfig := insightfinder.GetInsightFinderConfig(configFile)
@@ -93,6 +101,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 
 	// Get General config
 	namespaceFilter, _ := configFile.Get("general", "namespace")
+	collectionTarget, _ := configFile.Get("general", "target")
 	postProcessor := tools.PostProcessor{}
 	postProcessor.Initialize(configFile)
 
@@ -104,15 +113,20 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 
 		// Collect Data
 		log.Output(2, fmt.Sprintf("Prepare to collect log data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-		podList := instanceMapper.ListPods(namespaceFilter)
-		logData := lokiServer.GetLogData(namespaceFilter, podList, Before, Now)
 
-		// Send data
-		logDataList := tools.BuildLogDataList(&logData, instanceMapper, &postProcessor)
-		//tools.PrintStruct(logDataList, false)
-		log.Output(2, fmt.Sprintf("Start sending log data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-		insightfinder.SendLogData(logDataList, IFConfig)
-		log.Output(2, "Finished sending log data.")
+		if collectionTarget == "node" {
+			log.Output(2, "TODO: Collecting log data from node.")
+		} else {
+			podList := instanceMapper.ListPods(namespaceFilter)
+			logData := lokiServer.GetLogData(namespaceFilter, podList, Before, Now)
+
+			// Send data
+			logDataList := tools.BuildLogDataList(&logData, instanceMapper, &postProcessor)
+			//tools.PrintStruct(logDataList, false)
+			log.Output(2, fmt.Sprintf("Start sending log data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
+			insightfinder.SendLogData(logDataList, IFConfig)
+			log.Output(2, "Finished sending log data.")
+		}
 
 	} else if IFConfig["projectType"] == "METRIC" {
 
@@ -124,12 +138,26 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 		log.Output(2, fmt.Sprintf("Prepare to collect metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 		metricData := make(map[string][]prometheus.PromMetricData)
 
-		metricData["CPUCores"] = prometheusServer.GetMetricData("CPUCores", namespaceFilter, Before, Now)
-		metricData["Memory"] = prometheusServer.GetMetricData("Memory", namespaceFilter, Before, Now)
-		metricData["DiskRead"] = prometheusServer.GetMetricData("DiskRead", namespaceFilter, Before, Now)
-		metricData["DiskWrite"] = prometheusServer.GetMetricData("DiskWrite", namespaceFilter, Before, Now)
-		metricData["NetworkIn"] = prometheusServer.GetMetricData("NetworkIn", namespaceFilter, Before, Now)
-		metricData["NetworkOut"] = prometheusServer.GetMetricData("NetworkOut", namespaceFilter, Before, Now)
+		if collectionTarget == "node" {
+			metricData["CPU"] = prometheusServer.GetPodMetricData("NodeCPU", "", Before, Now)
+			metricData["Memory"] = prometheusServer.GetPodMetricData("NodeMemory", "", Before, Now)
+			metricData["MemoryUsage"] = prometheusServer.GetPodMetricData("NodeMemoryUsage", "", Before, Now)
+			metricData["DiskUsage"] = prometheusServer.GetPodMetricData("NodeDiskUsage", "", Before, Now)
+			metricData["DiskRead"] = prometheusServer.GetPodMetricData("NodeDiskRead", "", Before, Now)
+			metricData["DiskWrite"] = prometheusServer.GetPodMetricData("NodeDiskWrite", "", Before, Now)
+			metricData["NetworkIn"] = prometheusServer.GetPodMetricData("NodeNetworkIn", "", Before, Now)
+			metricData["NetworkOut"] = prometheusServer.GetPodMetricData("NodeNetworkOut", "", Before, Now)
+			metricData["Processes"] = prometheusServer.GetPodMetricData("NodeProcesses", "", Before, Now)
+			metricData["BlockedProcesses"] = prometheusServer.GetPodMetricData("NodeBlockedProcesses", "", Before, Now)
+		} else {
+			metricData["CPUCores"] = prometheusServer.GetPodMetricData("PodCPUCores", namespaceFilter, Before, Now)
+			metricData["Memory"] = prometheusServer.GetPodMetricData("PodMemory", namespaceFilter, Before, Now)
+			metricData["DiskRead"] = prometheusServer.GetPodMetricData("PodDiskRead", namespaceFilter, Before, Now)
+			metricData["DiskWrite"] = prometheusServer.GetPodMetricData("PodDiskWrite", namespaceFilter, Before, Now)
+			metricData["NetworkIn"] = prometheusServer.GetPodMetricData("PodNetworkIn", namespaceFilter, Before, Now)
+			metricData["NetworkOut"] = prometheusServer.GetPodMetricData("PodNetworkOut", namespaceFilter, Before, Now)
+			metricData["Processes"] = prometheusServer.GetPodMetricData("PodProcesses", namespaceFilter, Before, Now)
+		}
 
 		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper, &postProcessor)
 		//tools.PrintStruct(metricPayload, false)

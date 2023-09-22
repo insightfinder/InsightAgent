@@ -23,10 +23,11 @@ type QueryResponseBody struct {
 		ResultType string `json:"resultType"`
 		Result     []struct {
 			Metric struct {
-				Namespace string `json:"namespace"`
-				Pod       string `json:"pod"`
-				Container string `json:"container"`
-				Node      string `json:"instance"`
+				Namespace    string `json:"namespace"`
+				Pod          string `json:"pod"`
+				Container    string `json:"container"`
+				NodeInstance string `json:"instance"`
+				Node         string `json:"node"`
 			} `json:"metric"`
 			Values [][]json.RawMessage `json:"values"`
 		} `json:"result"`

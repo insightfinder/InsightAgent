@@ -72,7 +72,7 @@ func SendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 	for instanceName, istData := range data.InstanceDataMap {
 		instanceData, ok := newPayload.InstanceDataMap[instanceName]
 		if !ok {
-			// Current Node didn't exist
+			// Current NodeInstance didn't exist
 			instanceData = InstanceData{
 				InstanceName:       istData.InstanceName,
 				ComponentName:      istData.ComponentName,
