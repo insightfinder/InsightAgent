@@ -9,10 +9,22 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 
 	// Build InstanceDataMap
 	instanceDataMap := make(map[string]insightfinder.InstanceData)
-	for _, metricData := range *metricDataMap {
+	for metricType, metricData := range *metricDataMap {
 		for _, promMetricData := range metricData {
-			instanceName, componentName := instanceNameMapper.GetInstanceMapping(promMetricData.NameSpace, promMetricData.Pod)
+			var instanceName string
+			var componentName string
+			if promMetricData.Pod == "" || promMetricData.NameSpace == "" {
+				// Node level metric
+				instanceName = promMetricData.Node
+				componentName = ""
+			} else {
+				// Pod level metric
+				instanceName, componentName = instanceNameMapper.GetInstanceMapping(promMetricData.NameSpace, promMetricData.Pod)
+			}
+
+			// Post process for component name
 			componentName = postProcessor.ProcessComponentName(componentName)
+
 			if instanceName == "" {
 				continue
 			}
@@ -38,7 +50,7 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 				}
 				dataInTimestampEntry, _ := dataInTimestampMap[promMetricPoint.TimeStamp]
 				dataInTimestampEntry.MetricDataPoints = append(dataInTimestampEntry.MetricDataPoints, insightfinder.MetricDataPoint{
-					MetricName: promMetricData.Type,
+					MetricName: metricType,
 					Value:      promMetricPoint.Value,
 				})
 				dataInTimestampMap[promMetricPoint.TimeStamp] = dataInTimestampEntry
