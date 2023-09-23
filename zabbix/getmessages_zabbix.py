@@ -23,8 +23,8 @@ This script gathers data to send to Insightfinder
 """
 
 
-def start_data_processing():
-    logger.info('Started......')
+def start_data_processing(data_type):
+    logger.info('Starting fetch {} items......'.format(data_type))
 
     # Create ZabbixAPI class instance
     zabbix_config = agent_config_vars['zabbix_kwargs']
@@ -63,86 +63,68 @@ def start_data_processing():
         name = item['name']
         hosts_ids.append(host_id)
         hosts_map[host_id] = name
-    logger.info("Zabbix hosts length: %s" % len(hosts_ids))
+
+    logger.info("Zabbix hosts: %s" % hosts_map)
     if len(hosts_ids) == 0:
         logger.error('Hosts list is empty')
         sys.exit(1)
 
-    # application.get API is not available when Zabbix >= 6.0
-    # # get applications
-    # application_map = {}
-    # application_ids = []
-    # application_res = zapi.do_request('application.get', {
-    #     'output': 'extend',
-    #     "hostids": hosts_ids,
-    #     'filter': {
-    #         "name": agent_config_vars['applications']
-    #     },
-    # })
-    # for item in application_res['result']:
-    #     host_id = item['hostid']
-    #     application_id = item['applicationid']
-    #     name = item['name']
-    #     application_ids.append(application_id)
-    #     application_map[application_id] = name
-    # logger.info("Zabbix host applications: %s" % json.dumps(application_map))
+    # value_type: 0 - FLOAT 1 - CHAR 2 - LOG 3 - UNSIGNED(default)
+    value_type_list = ['0', '3'] if data_type == 'Metric' else ['2']
+    history_type = 0 if data_type == 'Metric' else 2
 
-    # get metrics by hosts/applications
     items_map = {}
     items_ids = []
-    items_res = zapi.do_request('item.get', {'output': 'extend', 'groupids': host_groups_ids, "hostids": hosts_ids, })
 
-    print(len(items_res['result']))
+    # get data by hosts/applications
+    items_res = zapi.do_request('item.get', {
+        'output': 'extend', 'groupids': host_groups_ids, "hostids": hosts_ids,
+        'filter': {
+            'value_type': value_type_list
+        }
+    })
+
     for item in items_res['result']:
         item_id = item['itemid']
-        value_type = item['value_type']
-        if value_type not in ['0', '3']:
-            continue
-
-        # key = item['key_']
-        # if '[' in key:
-        #     keys = key.split('[')[1].split(']')[0].split(',')
-        #     if len(keys) > 0:
-        #         for i, k in enumerate(keys):
-        #             name = name.replace('$' + str(i + 1), keys[i])
-
         items_ids.append(item_id)
         items_map[item_id] = item
+
     if len(items_ids) == 0:
-        logger.error('Metric list is empty')
+        logger.error('Item list is empty')
         sys.exit(1)
-    logger.info("Zabbix metrics length: %s" % len(items_ids))
+
+    logger.info("Zabbix item ids: %s" % items_ids)
 
     # build map by item field
-    all_field_map = {'hostid': hosts_map, }
+    all_field_map = {'hostid': hosts_map}
 
-    # parse sql string by params
-    logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
     if agent_config_vars['his_time_range']:
-        logger.debug('Using time range for replay data')
+        logger.debug('Using time range for replay data: {}'.format(agent_config_vars['his_time_range']))
         for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
                                if_config_vars['sampling_interval']):
-            history_res = zapi.do_request('history.get',
-                                          {'output': 'extend', "history": 0, "hostids": hosts_ids, "itemids": items_ids,
-                                              'time_from': timestamp,
-                                              'time_till': timestamp + if_config_vars['sampling_interval'], })
-            # parse_messages_zabbix(history_res['result'], all_field_map, items_map, 'history')
+            history_res = zapi.do_request('history.get', {
+                'output': 'extend', "history": history_type, "hostids": hosts_ids,
+                "itemids": items_ids,
+                'time_from': timestamp, 'time_till': timestamp + if_config_vars['sampling_interval'],
+            })
+            parse_messages_zabbix(data_type, history_res['result'], all_field_map, items_map, 'history')
 
-            # clear metric buffer when piece of time range end
-            # clear_metric_buffer()
+            # clear data buffer when piece of time range end
+            clear_data_buffer()
     else:
         logger.debug('Using current time for streaming data')
-        # parse_messages_zabbix(items_res['result'], all_field_map, items_map, 'live')
+        parse_messages_zabbix(data_type, items_res['result'], all_field_map, items_map, 'live')
 
-        # clear metric buffer when piece of time range end
-        # clear_metric_buffer()
+        # clear data buffer when piece of time range end
+        clear_data_buffer()
 
     logger.info('Closed......')
 
 
-def parse_messages_zabbix(result, all_field_map, items_map, data_type):
+def parse_messages_zabbix(data_type, result, all_field_map, items_map, replay_type):
     count = 0
     logger.info('Reading {} messages'.format(len(result)))
+    is_metric = True if data_type == 'Metric' else False
 
     for message in result:
         try:
@@ -168,26 +150,30 @@ def parse_messages_zabbix(result, all_field_map, items_map, data_type):
             full_instance = make_safe_instance_string(instance, device)
 
             # set timestamp
-            clock = message['lastclock'] if data_type == 'live' else message['clock']
+            clock = message['lastclock'] if replay_type == 'live' else message['clock']
             timestamp = int(clock) * 1000
             if timestamp == 0:
                 continue
 
-            # set metric field and value
+            # set data field and value
             data_field = items_map[item_id]['name']
-            data_field = make_safe_metric_key(data_field)
-            data_value = message['lastvalue'] if data_type == 'live' else message['value']
+            data_field = make_safe_data_key(data_field)
+            data_value = message['lastvalue'] if replay_type == 'live' else message['value']
 
             # set offset for timestamp
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
             timestamp = str(timestamp)
 
             key = '{}-{}'.format(timestamp, full_instance)
-            if key not in metric_buffer['buffer_dict']:
-                metric_buffer['buffer_dict'][key] = {"timestamp": timestamp}
+            if key not in data_buffer['buffer_dict']:
+                data_buffer['buffer_dict'][key] = {"timestamp": timestamp}
 
-            metric_key = '{}[{}]'.format(data_field, full_instance)
-            metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
+            if is_metric:
+                data_key = '{}[{}]'.format(data_field, full_instance)
+                data_buffer['buffer_dict'][key][data_key] = str(data_value)
+            else:
+                data_buffer['buffer_dict'][key]['tag'] = full_instance
+                data_buffer['buffer_dict'][key]['data'] = str(data_value)
 
         except Exception as e:
             logger.warn('Error when parsing message')
@@ -498,7 +484,7 @@ def make_safe_instance_string(instance, device=''):
     return instance
 
 
-def make_safe_metric_key(metric):
+def make_safe_data_key(metric):
     """ make safe string already handles this """
     metric = LEFT_BRACE.sub('(', metric)
     metric = RIGHT_BRACE.sub(')', metric)
@@ -567,36 +553,26 @@ def print_summary_info():
     logger.debug(cli_data_block)
 
 
-def initialize_log_data_gathering():
-    start_data_processing()
+def initialize_data_gathering():
+    data_type = get_data_type_from_project_type()
 
-
-def initialize_metric_data_gathering():
-    reset_metric_buffer()
+    reset_data_buffer()
     reset_track()
     track['chunk_count'] = 0
     track['entry_count'] = 0
 
-    start_data_processing()
+    start_data_processing(data_type)
 
-    # clear metric buffer when data processing end
-    clear_metric_buffer()
+    # clear data buffer when data processing end
+    clear_data_buffer()
 
     logger.info('Total chunks created: ' + str(track['chunk_count']))
     logger.info('Total {} entries: {}'.format(if_config_vars['project_type'].lower(), track['entry_count']))
 
 
-def initialize_data_gathering():
-    data_type = get_data_type_from_project_type()
-    if data_type is 'Log':
-        return initialize_log_data_gathering()
-    else:
-        return initialize_metric_data_gathering()
-
-
-def clear_metric_buffer():
+def clear_data_buffer():
     # move all buffer data to current data, and send
-    buffer_values = list(metric_buffer['buffer_dict'].values())
+    buffer_values = list(data_buffer['buffer_dict'].values())
 
     count = 0
     for row in buffer_values:
@@ -611,16 +587,16 @@ def clear_metric_buffer():
         logger.debug('Sending last chunk')
         send_data_wrapper()
 
-    reset_metric_buffer()
+    reset_data_buffer()
 
 
-def reset_metric_buffer():
-    metric_buffer['buffer_key_list'] = []
-    metric_buffer['buffer_ts_list'] = []
-    metric_buffer['buffer_dict'] = {}
+def reset_data_buffer():
+    data_buffer['buffer_key_list'] = []
+    data_buffer['buffer_ts_list'] = []
+    data_buffer['buffer_dict'] = {}
 
-    metric_buffer['buffer_collected_list'] = []
-    metric_buffer['buffer_collected_dict'] = {}
+    data_buffer['buffer_collected_list'] = []
+    data_buffer['buffer_collected_dict'] = {}
 
 
 def reset_track():
@@ -636,6 +612,7 @@ def reset_track():
 def send_data_wrapper():
     """ wrapper to send data """
     logger.debug('--- Chunk creation time: {} seconds ---'.format(round(time.time() - track['start_time'], 2)))
+    print(track['current_row'])
     send_data_to_if(track['current_row'])
     track['chunk_count'] += 1
     reset_track()
@@ -885,7 +862,7 @@ if __name__ == "__main__":
     ATTEMPTS = 3
     REQUESTS = dict()
     track = dict()
-    metric_buffer = dict()
+    data_buffer = dict()
 
     # get config
     cli_config_vars = get_cli_config_vars()
