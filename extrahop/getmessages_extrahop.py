@@ -200,19 +200,23 @@ def process_each_eda(logger, agent_config_vars, headers, first_metrics_resp):
         # running on an ECA
         eda_count = first_metrics_resp.get("num_results", 0)
         for i in range(eda_count):
-            logger.info('Requesting data from EDA {}/{}... Please Wait'.format(i+1, eda_count))
+            try:
+                logger.info('Requesting data from EDA {}/{}... Please Wait'.format(i+1, eda_count))
 
-            url = urllib.parse.urljoin(agent_config_vars['host'], '/api/v1/metrics/next/'+xid)
-            response = send_request(logger, url, mode='GET', headers=headers, verify=False, proxies=agent_config_vars['proxies'])
-            if response == -1:
-                logger.error('Requesting data from EDA {}/{} failed'.format(i+1, eda_count))
-            else:
-                result = response.json()
-                if isinstance(result, dict) and result.get("stats"):
-                    data.extend(result["stats"] or [])
+                url = urllib.parse.urljoin(agent_config_vars['host'], '/api/v1/metrics/next/'+str(xid))
+                response = send_request(logger, url, mode='GET', headers=headers, verify=False, proxies=agent_config_vars['proxies'])
+                if response == -1:
+                    logger.error('Requesting data from EDA {}/{} failed'.format(i+1, eda_count))
                 else:
-                    logger.error('Get invalid response from {}: {}'.format(url, result))
-
+                    result = response.json()
+                    if result.get("stats"):
+                        data.extend(result["stats"] or [])
+                    else:
+                        logger.error('Get invalid response from {}: {}'.format(url, result))
+            except Exception as e:
+                logger.warn('Requesting data from EDA {}/{} failed'.format(i+1, eda_count))
+                logger.warn(e)
+                logger.debug(traceback.format_exc())
     return data
 
 
@@ -222,8 +226,6 @@ def query_messages_extrahop(args):
 
     data = []
 
-    url = None
-    response = None
     try:
         # execute sql string
         url = urllib.parse.urljoin(agent_config_vars['host'], '/api/v1/metrics')
@@ -234,9 +236,9 @@ def query_messages_extrahop(args):
         else:
             result = response.json()
             # Check the result is Dict, and has field stats
-            if isinstance(result, dict) and result.get("stats"):
+            if result.get("stats"):
                 data = result["stats"] or []
-            elif isinstance(result, dict) and result.get("xid"):
+            elif result.get("xid"):
                 data = process_each_eda(logger, agent_config_vars, headers, result)
             else:
                 logger.error('Got invalid response from {}: {}'.format(url, result))
