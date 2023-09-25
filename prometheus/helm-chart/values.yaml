@@ -1,0 +1,106 @@
+# Default values for if-prometheus-agent.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: insightfinderinc/prometheus-agent
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1000Mi
+  requests:
+    cpu: 200m
+    memory: 200Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+prometheus:
+  ## prometheus info
+  # required
+  uri: http://prometheus-server.monitor
+  # Basic Authentication
+  user:
+  password:
+  verify_certs: false
+  # path to ca bundle
+  ca_certs:
+  # path to client cert
+  client_cert:
+  # path to client key
+  client_key:
+
+  ## metrics
+  # Prometheus query used to query all the needed metrics. If not set, it will use `{__name__=~".+"}` to query all metrics.
+  prometheus_query:
+  # metric's name field, Multiple fields are separated by commas. EX: __name__, job, the metric name =  {__name__}_{job}
+  metrics_name_field:
+  # history data time config. If these options is set, the agent will query results by time range
+  # time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
+  his_time_range:
+
+  # raw, rawtail, csv, csvtail, xls, xlsx, json, jsontail, avro, or xml
+  # *tail formats keep track of the current file & position + completed files in [state] below
+  data_format: json
+
+  ## message parsing
+  # timestamp format, as library [arrow]. multiple fields can be formatted together to create the timestamp a la `YYYY-MM-DD HH:mm:ss ZZ`. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
+  timestamp_format:
+  # timezone, as per pytz
+  timezone:
+  timestamp_field:
+  # Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+  target_timestamp_timezone: UTC
+  component_field:
+  # if no instance given, will set to 'Application'. Can also set instance name from multiple fields which separated by commas. Ex: instance_name_part1,instance_name_part2.
+  instance_field: instance
+  # instance_whitelist is a regex string used to define which instances will be filtered.
+  instance_whitelist:
+  # Field name of device. Can also set device name from multiple fields which separated by commas. Ex: device_name_part1,device_name_part2.
+  device_field:
+  # The connector for build `instance_field` or `device_field` from multiple fields. Default is `-`.
+  instance_connector:
+  # number of thread to used in the pool, default is 20
+  thread_pool: 20
+  # number of the worker processes, default is count_of_cpu * 4
+  processes:
+  # minutes the main process wait for workers to finish, default is 5
+  timeout: 5
+
+  ## proxy
+  agent_http_proxy:
+  agent_https_proxy:
+
+insightfinder:
+  user_name:
+  license_key:
+  token:
+  # Name of the project created in the InsightFinder UI, If this project is not exist, agent will create it automatically.
+  project_name:
+  # Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+  system_name:
+  # metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
+  project_type: metric
+  # Set to `YES` if project is container.
+  containerize: "no"
+  sampling_interval: 5
+  run_interval: 5
+  # what size to limit chunks sent to IF to, as kb
+  chunk_size_kb: 2048
+  if_url:
+  if_http_proxy:
+  if_https_proxy:
