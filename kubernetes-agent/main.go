@@ -151,7 +151,9 @@ func dataCollectionRoutine(wg *sync.WaitGroup, configFile *configparser.ConfigPa
 			metricData["BlockedProcesses"] = prometheusServer.GetPodMetricData("NodeBlockedProcesses", "", Before, Now)
 		} else {
 			metricData["CPUCores"] = prometheusServer.GetPodMetricData("PodCPUCores", namespaceFilter, Before, Now)
+			metricData["CPU"] = prometheusServer.GetPodMetricData("PodCPUUsage", namespaceFilter, Before, Now)
 			metricData["Memory"] = prometheusServer.GetPodMetricData("PodMemory", namespaceFilter, Before, Now)
+			metricData["MemoryUsage"] = prometheusServer.GetPodMetricData("PodMemoryUsage", namespaceFilter, Before, Now)
 			metricData["DiskRead"] = prometheusServer.GetPodMetricData("PodDiskRead", namespaceFilter, Before, Now)
 			metricData["DiskWrite"] = prometheusServer.GetPodMetricData("PodDiskWrite", namespaceFilter, Before, Now)
 			metricData["NetworkIn"] = prometheusServer.GetPodMetricData("PodNetworkIn", namespaceFilter, Before, Now)

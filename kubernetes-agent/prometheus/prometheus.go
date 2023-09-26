@@ -17,7 +17,9 @@ const (
 
 const (
 	POD_CPU_CORES_METRIC_QUERY                = "sum(rate(container_cpu_usage_seconds_total{namespace=~\"%s\",container!='POD',container!='',pod!=''}[3m])) by (pod,namespace,instance)"
+	POD_CPU_USAGE_PERCENTAGE                  = "sum(rate(container_cpu_usage_seconds_total{ namespace=~\"%s\",image!=\"\", container_name!=\"POD\"}[3m])) by (pod,namespace,instance) / sum(container_spec_cpu_quota{image!=\"\", container_name!=\"POD\"}/container_spec_cpu_period{ image!=\"\", container_name!=\"POD\"}) by  (pod,namespace,instance) * 100"
 	POD_MEMORY_METRIC_QUERY                   = "sum(container_memory_working_set_bytes{namespace=~\"%s\",container!='POD',container!='',pod!=''}) by (pod,namespace,instance)  / 1024 / 1024"
+	POD_MEMORY_USAGE_PERCENTAGE_METRIC_QUERY  = "100 *    sum(container_memory_working_set_bytes{namespace=~\"%s\",image!=\"\", container_name!=\"POD\"}) by (instance, pod, namespace) /  sum(container_spec_memory_limit_bytes{image!=\"\", container_name!=\"POD\"} > 0) by (instance, pod, namespace)"
 	POD_DISK_READ_METRIC_QUERY                = "sum(rate(container_fs_reads_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance) / 1024 / 1024"
 	POD_DISK_WRITE_METRIC_QUERY               = "sum(rate(container_fs_writes_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance) / 1024 / 1024"
 	POD_NETWORK_IN_METRIC_QUERY               = "sum(rate(container_network_receive_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance) / 1024 / 1024"
@@ -33,6 +35,8 @@ const (
 	NODE_NETWORK_OUT_RATE_METRIC_QUERY        = "sum(rate(node_network_transmit_bytes_total{device!~\"lo\"}[2m])) by (node) / 1024 / 1024"
 	NODE_PROCESSES_METRIC_QUERY               = "sum (node_procs_running) by (node)"
 	NODE_BLOCKED_PROCESSES_METRIC_QUERY       = "sum (node_procs_blocked) by (node)"
+	PVC_CAPACITY_METRIC_QUERY                 = "sum(kubelet_volume_stats_capacity_bytes{namespace=~\"%s\"}) by (persistentvolumeclaim,namespace) / 1024 / 1024"
+	PVC_USAGE_METRIC_QUERY                    = "sum(kubelet_volume_stats_used_bytes{namespace=~\"%s\"}) by (persistentvolumeclaim,namespace) / 1024 / 1024"
 )
 
 type PrometheusServer struct {
@@ -81,8 +85,12 @@ func (p *PrometheusServer) GetPodMetricData(Type string, namespaceFilter string,
 	switch Type {
 	case "PodCPUCores":
 		QueryStr = POD_CPU_CORES_METRIC_QUERY
+	case "PodCPUUsage":
+		QueryStr = POD_CPU_USAGE_PERCENTAGE
 	case "PodMemory":
 		QueryStr = POD_MEMORY_METRIC_QUERY
+	case "PodMemoryUsage":
+		QueryStr = POD_MEMORY_USAGE_PERCENTAGE_METRIC_QUERY
 	case "PodDiskRead":
 		QueryStr = POD_DISK_READ_METRIC_QUERY
 	case "PodDiskWrite":

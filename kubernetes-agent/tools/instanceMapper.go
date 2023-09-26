@@ -98,6 +98,9 @@ func (mapper *InstanceMapper) DeletePods(namespace string, resourceKind string, 
 }
 
 func (mapper *InstanceMapper) AddPods(namespace string, resourceKind string, resources map[string]map[string]bool) {
+	if resourceKind == "DaemonSet" {
+		return
+	}
 	for resource, pods := range resources {
 		slots := mapper.Storage[namespace][resourceKind][resource]
 		if slots != nil {
