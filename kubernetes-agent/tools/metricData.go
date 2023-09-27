@@ -13,10 +13,14 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 		for _, promMetricData := range metricData {
 			var instanceName string
 			var componentName string
-			if promMetricData.Pod == "" || promMetricData.NameSpace == "" {
+			if promMetricData.Pod == "" && promMetricData.NameSpace == "" {
 				// Node level metric
 				instanceName = promMetricData.Node
 				componentName = promMetricData.Node
+			} else if promMetricData.NameSpace != "" && promMetricData.PVC != "" {
+				// PVC level metric
+				instanceName = promMetricData.PVC
+				componentName = promMetricData.PVC
 			} else {
 				// Pod level metric
 				instanceName, componentName = instanceNameMapper.GetInstanceMapping(promMetricData.NameSpace, promMetricData.Pod)
@@ -39,6 +43,7 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 
 			for _, promMetricPoint := range promMetricData.Data {
 				if _, ok := dataInTimestampMap[promMetricPoint.TimeStamp]; !ok {
+
 					dataInTimestampMap[promMetricPoint.TimeStamp] = insightfinder.DataInTimestamp{
 						TimeStamp:        promMetricPoint.TimeStamp,
 						MetricDataPoints: make([]insightfinder.MetricDataPoint, 0),
