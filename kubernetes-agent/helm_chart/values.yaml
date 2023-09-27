@@ -1,43 +1,51 @@
 # The image of the agent.
-image: "docker.io/insightfinderinc/kubernetes-agent:latest"
-
-agent:
-
-  # The namespaces to monitor. Seperate each namespace by comma (e.g. namepsace1, namespace2)
-  namespaceFilter: "insightfinder"
-
-# The main configuration for loki to get log data.
-loki:
-
-  # The API endpoint for loki server.
-  endpoint: "http://loki.monitoring.svc.cluster.local:3100"
-
-  # The log project created in InsightFinder.
-  projectName: "maoyu-k8s-log-test-1"
+image: "docker.io/insightfinderinc/kubernetes-agent:0.0.3"
 
 # The main configuration for prometheus to get metric data.
 prometheus:
-
+  
   # The API endpoint for the prometheus server.
-  endpoint: "http://prometheus-server.monitoring.svc.cluster.local:80"
+  endpoint: "http://prometheus-server.monitor.svc.cluster.local"
 
-  # The metric project created in InsightFinder.
-  projectName: "metric-test-1"
+  # Prometheus Basic Auth Creadentials. (Optional) 
+  username: ""
+  password: ""
+
+# The main configuration for Loki to get log data.
+loki:
+
+  # The API endpoint for loki-gateway server.
+  endpoint: "http://loki-gateway.monitor.svc.cluster.local"
+
+  # Loki Basic Auth Creadentials. (Optional) 
+  username: ""
+  password: ""
 
 # The configuration for InsightFinder
 insightfinder:
+  url: "https://app.insightfinder.com"  # The url of InsightFinder.
+  user_name: ""                         # Username for InsightFinder.
+  license_key: ""                       # license_key for that InsightFinder user.
+  system_name: ""                       # The system created in InsightFinder website.
 
-  # The url of insightfinder application.
-  url: "https://app.insightfinder.com"
+# Each project entry is a project that will be created in InsightFinder.
+# Projects will get created automatically if they doesn't exist.
+projects: []
+  # - name: node-metrics
+  #   type: metric
+  #   target: node
 
-  # Username for InsightFinder.
-  user_name: "user"
+  # - name: pod-metric
+  #   type: metric
+  #   target: pod
+  #   namespace: namespace1
 
-  # license_key for that InsightFinder user.
-  license_key: ""
+  # - name: pod-log
+  #   type: log
+  #   target: pod
+  #   namespace: namespace2
 
-  # The system created in InsightFinder.
-  systemName: "maoyu-test-k8s-monitor"
-
-  # The running interval for our agents (minute)
-  run_interval: 1
+  # - name: pvc-metric
+  #   type: metric
+  #   target: pvc
+  #   namespace: namespace3

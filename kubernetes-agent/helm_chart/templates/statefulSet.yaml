@@ -31,10 +31,10 @@ spec:
           configMap:
             name: if-kubernetes-config
             items:
-              - key: prometheus.ini
-                path: prometheus.ini
-              - key: loki.ini
-                path: loki.ini
+              {{- range $key, $project := .Values.projects }}
+                - key: {{ $project.name }}.ini
+                  path: {{ $project.name }}.ini
+              {{- end }}
   volumeClaimTemplates:
     - metadata:
         name: if-k8s-agent-storage
