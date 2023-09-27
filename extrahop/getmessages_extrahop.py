@@ -129,6 +129,8 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
         logger.error('Devices list is empty')
         return
 
+    logger.info('Device id and ip address mapping: {}'.format(json.dumps(devices_ips_map)))
+
     # parse sql string by params
     logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
     if agent_config_vars['his_time_range']:
