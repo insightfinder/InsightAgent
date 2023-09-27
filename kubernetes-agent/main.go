@@ -120,7 +120,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 			logDataList := tools.BuildLogDataList(&logData, instanceMapper, &postProcessor)
 			tools.PrintStruct(logDataList, false, IFConfig["projectName"].(string))
 			log.Output(2, fmt.Sprintf("Start sending log data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-			//insightfinder.SendLogData(logDataList, IFConfig)
+			insightfinder.SendLogData(logDataList, IFConfig)
 			log.Output(2, "Finished sending log data.")
 		}
 
@@ -164,7 +164,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper, &postProcessor)
 		tools.PrintStruct(metricPayload, false, IFConfig["projectName"].(string))
 		log.Output(2, fmt.Sprintf("Start sending metic data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-		//insightfinder.SendMetricData(metricPayload, IFConfig)
+		insightfinder.SendMetricData(metricPayload, IFConfig)
 		log.Output(2, "Finished sending metric data.")
 	}
 }
