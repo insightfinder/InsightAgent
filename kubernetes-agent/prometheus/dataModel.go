@@ -23,11 +23,12 @@ type QueryResponseBody struct {
 		ResultType string `json:"resultType"`
 		Result     []struct {
 			Metric struct {
-				Namespace    string `json:"namespace"`
-				Pod          string `json:"pod"`
-				Container    string `json:"container"`
-				NodeInstance string `json:"instance"`
-				Node         string `json:"node"`
+				Namespace             string `json:"namespace"`
+				Pod                   string `json:"pod"`
+				Container             string `json:"container"`
+				NodeInstance          string `json:"instance"`
+				Node                  string `json:"node"`
+				PersistentVolumeClaim string `json:"persistentvolumeclaim"`
 			} `json:"metric"`
 			Values [][]json.RawMessage `json:"values"`
 		} `json:"result"`
@@ -44,5 +45,6 @@ type PromMetricData struct {
 	NameSpace string
 	Pod       string
 	Node      string
+	PVC       string
 	Data      []Metric
 }

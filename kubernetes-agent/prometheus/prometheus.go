@@ -78,7 +78,7 @@ func (p *PrometheusServer) Query(QueryStr string, StartTime time.Time, EndTime t
 	}
 }
 
-func (p *PrometheusServer) GetPodMetricData(Type string, namespaceFilter string, StartTime time.Time, EndTime time.Time) []PromMetricData {
+func (p *PrometheusServer) GetMetricData(Type string, namespaceFilter string, StartTime time.Time, EndTime time.Time) []PromMetricData {
 	var QueryStr string
 	var promMetricData []PromMetricData
 
@@ -121,6 +121,10 @@ func (p *PrometheusServer) GetPodMetricData(Type string, namespaceFilter string,
 		QueryStr = NODE_PROCESSES_METRIC_QUERY
 	case "NodeBlockedProcesses":
 		QueryStr = NODE_BLOCKED_PROCESSES_METRIC_QUERY
+	case "PVCCapacity":
+		QueryStr = PVC_CAPACITY_METRIC_QUERY
+	case "PVCUsage":
+		QueryStr = PVC_USAGE_METRIC_QUERY
 	}
 
 	QueryStr = FormatQueryWithNamespaces(QueryStr, namespaceFilter)
@@ -128,7 +132,7 @@ func (p *PrometheusServer) GetPodMetricData(Type string, namespaceFilter string,
 	for _, Data := range QueryResult.Data.Result {
 		NameSpace := Data.Metric.Namespace
 		Pod := Data.Metric.Pod
-
+		PVC := Data.Metric.PersistentVolumeClaim
 		var Node string = ""
 		if Data.Metric.NodeInstance != "" {
 			Node = Data.Metric.NodeInstance
@@ -146,7 +150,7 @@ func (p *PrometheusServer) GetPodMetricData(Type string, namespaceFilter string,
 			valueFloat64, _ := strconv.ParseFloat(Value, 64)
 			metrics = append(metrics, Metric{int64(Timestamp * 1000), valueFloat64})
 		}
-		promMetricData = append(promMetricData, PromMetricData{Type, NameSpace, Pod, Node, metrics})
+		promMetricData = append(promMetricData, PromMetricData{Type, NameSpace, Pod, Node, PVC, metrics})
 	}
 	return promMetricData
 }

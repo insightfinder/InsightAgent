@@ -62,7 +62,7 @@ func main() {
 		// Add Namespaces from all config files
 		namespaceFilter, _ := configFile.Get("general", "namespace")
 		collectionTarget, _ := configFile.Get("general", "target")
-		if namespaceFilter != "" && collectionTarget != "node" {
+		if namespaceFilter != "" && collectionTarget != "node" && collectionTarget != "pvc" {
 			instanceMapper.AddNamespace(namespaceFilter)
 		}
 	}
@@ -122,9 +122,9 @@ func dataCollectionRoutine(wg *sync.WaitGroup, configFile *configparser.ConfigPa
 
 			// Send data
 			logDataList := tools.BuildLogDataList(&logData, instanceMapper, &postProcessor)
-			//tools.PrintStruct(logDataList, false)
+			tools.PrintStruct(logDataList, false, IFConfig["projectName"].(string))
 			log.Output(2, fmt.Sprintf("Start sending log data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-			insightfinder.SendLogData(logDataList, IFConfig)
+			//insightfinder.SendLogData(logDataList, IFConfig)
 			log.Output(2, "Finished sending log data.")
 		}
 
@@ -139,32 +139,35 @@ func dataCollectionRoutine(wg *sync.WaitGroup, configFile *configparser.ConfigPa
 		metricData := make(map[string][]prometheus.PromMetricData)
 
 		if collectionTarget == "node" {
-			metricData["CPU"] = prometheusServer.GetPodMetricData("NodeCPU", "", Before, Now)
-			metricData["Memory"] = prometheusServer.GetPodMetricData("NodeMemory", "", Before, Now)
-			metricData["MemoryUsage"] = prometheusServer.GetPodMetricData("NodeMemoryUsage", "", Before, Now)
-			metricData["DiskUsage"] = prometheusServer.GetPodMetricData("NodeDiskUsage", "", Before, Now)
-			metricData["DiskRead"] = prometheusServer.GetPodMetricData("NodeDiskRead", "", Before, Now)
-			metricData["DiskWrite"] = prometheusServer.GetPodMetricData("NodeDiskWrite", "", Before, Now)
-			metricData["NetworkIn"] = prometheusServer.GetPodMetricData("NodeNetworkIn", "", Before, Now)
-			metricData["NetworkOut"] = prometheusServer.GetPodMetricData("NodeNetworkOut", "", Before, Now)
-			metricData["Processes"] = prometheusServer.GetPodMetricData("NodeProcesses", "", Before, Now)
-			metricData["BlockedProcesses"] = prometheusServer.GetPodMetricData("NodeBlockedProcesses", "", Before, Now)
+			metricData["CPU"] = prometheusServer.GetMetricData("NodeCPU", "", Before, Now)
+			metricData["Memory"] = prometheusServer.GetMetricData("NodeMemory", "", Before, Now)
+			metricData["MemoryUsage"] = prometheusServer.GetMetricData("NodeMemoryUsage", "", Before, Now)
+			metricData["DiskUsage"] = prometheusServer.GetMetricData("NodeDiskUsage", "", Before, Now)
+			metricData["DiskRead"] = prometheusServer.GetMetricData("NodeDiskRead", "", Before, Now)
+			metricData["DiskWrite"] = prometheusServer.GetMetricData("NodeDiskWrite", "", Before, Now)
+			metricData["NetworkIn"] = prometheusServer.GetMetricData("NodeNetworkIn", "", Before, Now)
+			metricData["NetworkOut"] = prometheusServer.GetMetricData("NodeNetworkOut", "", Before, Now)
+			metricData["Processes"] = prometheusServer.GetMetricData("NodeProcesses", "", Before, Now)
+			metricData["BlockedProcesses"] = prometheusServer.GetMetricData("NodeBlockedProcesses", "", Before, Now)
+		} else if collectionTarget == "pvc" {
+			metricData["Capacity"] = prometheusServer.GetMetricData("PVCCapacity", namespaceFilter, Before, Now)
+			metricData["Usage"] = prometheusServer.GetMetricData("PVCUsage", namespaceFilter, Before, Now)
 		} else {
-			metricData["CPUCores"] = prometheusServer.GetPodMetricData("PodCPUCores", namespaceFilter, Before, Now)
-			metricData["CPU"] = prometheusServer.GetPodMetricData("PodCPUUsage", namespaceFilter, Before, Now)
-			metricData["Memory"] = prometheusServer.GetPodMetricData("PodMemory", namespaceFilter, Before, Now)
-			metricData["MemoryUsage"] = prometheusServer.GetPodMetricData("PodMemoryUsage", namespaceFilter, Before, Now)
-			metricData["DiskRead"] = prometheusServer.GetPodMetricData("PodDiskRead", namespaceFilter, Before, Now)
-			metricData["DiskWrite"] = prometheusServer.GetPodMetricData("PodDiskWrite", namespaceFilter, Before, Now)
-			metricData["NetworkIn"] = prometheusServer.GetPodMetricData("PodNetworkIn", namespaceFilter, Before, Now)
-			metricData["NetworkOut"] = prometheusServer.GetPodMetricData("PodNetworkOut", namespaceFilter, Before, Now)
-			metricData["Processes"] = prometheusServer.GetPodMetricData("PodProcesses", namespaceFilter, Before, Now)
+			metricData["CPUCores"] = prometheusServer.GetMetricData("PodCPUCores", namespaceFilter, Before, Now)
+			metricData["CPU"] = prometheusServer.GetMetricData("PodCPUUsage", namespaceFilter, Before, Now)
+			metricData["Memory"] = prometheusServer.GetMetricData("PodMemory", namespaceFilter, Before, Now)
+			metricData["MemoryUsage"] = prometheusServer.GetMetricData("PodMemoryUsage", namespaceFilter, Before, Now)
+			metricData["DiskRead"] = prometheusServer.GetMetricData("PodDiskRead", namespaceFilter, Before, Now)
+			metricData["DiskWrite"] = prometheusServer.GetMetricData("PodDiskWrite", namespaceFilter, Before, Now)
+			metricData["NetworkIn"] = prometheusServer.GetMetricData("PodNetworkIn", namespaceFilter, Before, Now)
+			metricData["NetworkOut"] = prometheusServer.GetMetricData("PodNetworkOut", namespaceFilter, Before, Now)
+			metricData["Processes"] = prometheusServer.GetMetricData("PodProcesses", namespaceFilter, Before, Now)
 		}
 
 		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper, &postProcessor)
-		//tools.PrintStruct(metricPayload, false)
+		tools.PrintStruct(metricPayload, false, IFConfig["projectName"].(string))
 		log.Output(2, fmt.Sprintf("Start sending metic data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-		insightfinder.SendMetricData(metricPayload, IFConfig)
+		//insightfinder.SendMetricData(metricPayload, IFConfig)
 		log.Output(2, "Finished sending metric data.")
 	}
 }
