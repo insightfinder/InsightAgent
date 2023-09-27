@@ -83,7 +83,7 @@ func ToString(inputVar interface{}) string {
 }
 
 func ToBool(inputVar interface{}) (boolValue bool) {
-	if inputVar == nil {
+	if inputVar == nil || inputVar == "" {
 		return false
 	}
 	switch castedVal := inputVar.(type) {
@@ -179,7 +179,7 @@ func GetInsightFinderConfig(p *configparser.ConfigParser) map[string]interface{}
 	var projectName = ToString(GetConfigValue(p, IF_SECTION_NAME, "project_name", true))
 	// We use uppercase for project log type.
 	var projectType = strings.ToUpper(ToString(GetConfigValue(p, IF_SECTION_NAME, "project_type", true)))
-	var runInterval = ToString(GetConfigValue(p, IF_SECTION_NAME, "run_interval", true))
+	var runInterval = ToString(GetConfigValue(p, IF_SECTION_NAME, "run_interval", false))
 	// Optional parameters
 	var token = ToString(GetConfigValue(p, IF_SECTION_NAME, "token", false))
 	var systemName = ToString(GetConfigValue(p, IF_SECTION_NAME, "system_name", false))

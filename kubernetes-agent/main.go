@@ -2,14 +2,13 @@ package main
 
 import (
 	"fmt"
+	"github.com/bigkevmcd/go-configparser"
 	"kubernetes-agent/insightfinder"
 	"kubernetes-agent/loki"
 	"kubernetes-agent/prometheus"
 	"kubernetes-agent/tools"
 	"log"
 	"time"
-
-	"github.com/bigkevmcd/go-configparser"
 )
 
 const GENERAL_SECTION = "general"
@@ -38,7 +37,9 @@ func createPrometheusServer(config *configparser.ConfigParser) prometheus.Promet
 
 func createLokiServer(config *configparser.ConfigParser) loki.LokiServer {
 	lokiEndpoint, _ := config.Get(LOKI_SECTION, "endpoint")
-	return loki.LokiServer{Endpoint: lokiEndpoint}
+	lokiUsername, _ := config.Get(LOKI_SECTION, "user")
+	lokiPassword, _ := config.Get(LOKI_SECTION, "password")
+	return loki.LokiServer{Endpoint: lokiEndpoint, Username: lokiUsername, Password: lokiPassword}
 }
 
 func main() {
