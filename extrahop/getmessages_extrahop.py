@@ -241,7 +241,8 @@ def query_messages_extrahop(args):
             elif result.get("xid"):
                 data = process_each_eda(logger, agent_config_vars, headers, result)
             else:
-                logger.error('Got invalid response from {}: {}'.format(url, result))
+                logger.error('Got invalid or empty result from {} with params {}: {}'.format(
+                    url, json.dumps(params), result))
     except Exception as e:
         logger.error(e)
 
