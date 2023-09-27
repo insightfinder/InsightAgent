@@ -12,6 +12,7 @@ import (
 	"github.com/bigkevmcd/go-configparser"
 )
 
+const GENERAL_SECTION = "general"
 const PROMETHEUS_SECTION = "prometheus"
 const LOKI_SECTION = "loki"
 
@@ -59,8 +60,8 @@ func main() {
 	instanceMapper.Initialize()
 	for _, configFile := range configFiles {
 		// Add Namespaces from all config files
-		namespaceFilter, _ := configFile.Get("general", "namespace")
-		collectionTarget, _ := configFile.Get("general", "target")
+		namespaceFilter, _ := configFile.Get(GENERAL_SECTION, "namespace")
+		collectionTarget, _ := configFile.Get(GENERAL_SECTION, "target")
 		if namespaceFilter != "" && collectionTarget != "node" && collectionTarget != "pvc" {
 			instanceMapper.AddNamespace(namespaceFilter)
 		}
@@ -95,8 +96,8 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 	insightfinder.CheckProject(IFConfig)
 
 	// Get General config
-	namespaceFilter, _ := configFile.Get("general", "namespace")
-	collectionTarget, _ := configFile.Get("general", "target")
+	namespaceFilter, _ := configFile.Get(GENERAL_SECTION, "namespace")
+	collectionTarget, _ := configFile.Get(GENERAL_SECTION, "target")
 	postProcessor := tools.PostProcessor{}
 	postProcessor.Initialize(configFile)
 
