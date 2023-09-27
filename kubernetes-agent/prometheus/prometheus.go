@@ -36,7 +36,8 @@ const (
 	NODE_PROCESSES_METRIC_QUERY               = "sum (node_procs_running) by (node)"
 	NODE_BLOCKED_PROCESSES_METRIC_QUERY       = "sum (node_procs_blocked) by (node)"
 	PVC_CAPACITY_METRIC_QUERY                 = "sum(kubelet_volume_stats_capacity_bytes{namespace=~\"%s\"}) by (persistentvolumeclaim,namespace) / 1024 / 1024"
-	PVC_USAGE_METRIC_QUERY                    = "sum(kubelet_volume_stats_used_bytes{namespace=~\"%s\"}) by (persistentvolumeclaim,namespace) / 1024 / 1024"
+	PVC_USED_METRIC_QUERY                     = "sum(kubelet_volume_stats_used_bytes{namespace=~\"%s\"}) by (persistentvolumeclaim,namespace) / 1024 / 1024"
+	PVC_USAGE_PERCENTAGE_METRIC_QUERY         = "sum(kubelet_volume_stats_used_bytes{namespace=~\"%s\"}) by (persistentvolumeclaim,namespace) / sum(kubelet_volume_stats_capacity_bytes) by (persistentvolumeclaim,namespace) * 100"
 )
 
 type PrometheusServer struct {
@@ -123,8 +124,10 @@ func (p *PrometheusServer) GetMetricData(Type string, namespaceFilter string, St
 		QueryStr = NODE_BLOCKED_PROCESSES_METRIC_QUERY
 	case "PVCCapacity":
 		QueryStr = PVC_CAPACITY_METRIC_QUERY
+	case "PVCUsed":
+		QueryStr = PVC_USED_METRIC_QUERY
 	case "PVCUsage":
-		QueryStr = PVC_USAGE_METRIC_QUERY
+		QueryStr = PVC_USAGE_PERCENTAGE_METRIC_QUERY
 	}
 
 	QueryStr = FormatQueryWithNamespaces(QueryStr, namespaceFilter)

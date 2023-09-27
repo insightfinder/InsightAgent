@@ -147,6 +147,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 			metricData["BlockedProcesses"] = prometheusServer.GetMetricData("NodeBlockedProcesses", "", Before, Now)
 		} else if collectionTarget == "pvc" {
 			metricData["Capacity"] = prometheusServer.GetMetricData("PVCCapacity", namespaceFilter, Before, Now)
+			metricData["Used"] = prometheusServer.GetMetricData("PVCUsed", namespaceFilter, Before, Now)
 			metricData["Usage"] = prometheusServer.GetMetricData("PVCUsage", namespaceFilter, Before, Now)
 		} else {
 			metricData["CPUCores"] = prometheusServer.GetMetricData("PodCPUCores", namespaceFilter, Before, Now)
