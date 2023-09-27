@@ -7,7 +7,6 @@ import (
 	"kubernetes-agent/prometheus"
 	"kubernetes-agent/tools"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/bigkevmcd/go-configparser"
@@ -78,12 +77,9 @@ func main() {
 		instanceMapper.Update()
 
 		// Process data collection based each config file
-		var wg sync.WaitGroup
 		for _, configFile := range configFiles {
-			wg.Add(1)
-			go dataCollectionRoutine(&wg, configFile, &instanceMapper, StartTime, EndTime)
+			go dataCollectionRoutine(configFile, &instanceMapper, StartTime, EndTime)
 		}
-		//wg.Wait()
 
 		// Prepare for next 10 seconds time range
 		StartTime = EndTime
@@ -92,8 +88,7 @@ func main() {
 	}
 }
 
-func dataCollectionRoutine(wg *sync.WaitGroup, configFile *configparser.ConfigParser, instanceMapper *tools.InstanceMapper, Before time.Time, Now time.Time) {
-	defer wg.Done()
+func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper *tools.InstanceMapper, Before time.Time, Now time.Time) {
 
 	// Get InsightFinder config
 	IFConfig := insightfinder.GetInsightFinderConfig(configFile)
@@ -119,6 +114,7 @@ func dataCollectionRoutine(wg *sync.WaitGroup, configFile *configparser.ConfigPa
 		} else {
 			podList := instanceMapper.ListPods(namespaceFilter)
 			logData := lokiServer.GetLogData(namespaceFilter, podList, Before, Now)
+			log.Output(2, fmt.Sprintf("Finished collecting log data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 
 			// Send data
 			logDataList := tools.BuildLogDataList(&logData, instanceMapper, &postProcessor)
@@ -163,6 +159,7 @@ func dataCollectionRoutine(wg *sync.WaitGroup, configFile *configparser.ConfigPa
 			metricData["NetworkOut"] = prometheusServer.GetMetricData("PodNetworkOut", namespaceFilter, Before, Now)
 			metricData["Processes"] = prometheusServer.GetMetricData("PodProcesses", namespaceFilter, Before, Now)
 		}
+		log.Output(2, fmt.Sprintf("Finished collecting metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 
 		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper, &postProcessor)
 		tools.PrintStruct(metricPayload, false, IFConfig["projectName"].(string))
