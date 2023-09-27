@@ -20,7 +20,7 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 			} else if promMetricData.NameSpace != "" && promMetricData.PVC != "" {
 				// PVC level metric
 				instanceName = promMetricData.PVC
-				componentName = promMetricData.PVC
+				componentName = removePVCNameSuffix(promMetricData.PVC)
 			} else {
 				// Pod level metric
 				instanceName, componentName = instanceNameMapper.GetInstanceMapping(promMetricData.NameSpace, promMetricData.Pod)

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"regexp"
 )
 
 func ToString(inputVar interface{}) string {
@@ -49,4 +50,9 @@ func PrintStruct(v any, needPrint bool, fileName string) {
 	if err != nil {
 		log.Fatalf("Writing to file failed: %s", err)
 	}
+}
+
+func removePVCNameSuffix(PVCName string) string {
+	re := regexp.MustCompile(`-\d+$`)
+	return re.ReplaceAllString(PVCName, "")
 }
