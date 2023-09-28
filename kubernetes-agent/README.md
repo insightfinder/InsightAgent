@@ -2,33 +2,35 @@
 ## Overview
 InsightFinder Kubernetes Agent is a tool to collect metrics and logs from Prometheus and Loki.
 
-It will send those data to InsightFinder server for anomaly detection. It is designed to run as a Kubernetes StatefulSet.
+## Deploy
+Deployment is done by helm chart.
+See [helm_chart/README.md](helm_chart/README.md) for more details.
 
-## Build
+## Develop
+### Build
 ```bash
 go build
 ```
 
-## Configure
-Copy the example config files under `conf.d` and edit it:
+### Configure
+Rename the example config files with file extension `.ini.example` under `conf.d` and edit it:
+For example:
 ```bash
-cp conf.d/loki.ini.example conf.d/loki.ini
-cp conf.d/prometheus.ini.example conf.d/prometheus.ini
-vim conf.d/loki.ini
-vim conf.d/prometheus.ini
+mv conf.d/pod-metrics.ini.example conf.d/pod-metrics.ini
+vim conf.d/pod-metrics.ini
 ```
 
-## Docker
-### Build
+### Docker
+#### Build
 ```bash
 docker build . --platform linux/amd64 -t docker.io/insightfinderinc/kubernetes-agent:latest
 ```
-### Run
+#### Run
 ```bash
 docker run -itd -v ./conf.d:/app/conf.d -v ./storage:/app/storage --name if-kubernetes-agent docker.io/insightfinderinc/kubernetes-agent:latest
 ```
 
-## Kubernetes
+### Kubernetes
 1. Edit the `values.yaml`
 2. Install using `helm` command
     ```bash
@@ -40,5 +42,5 @@ docker run -itd -v ./conf.d:/app/conf.d -v ./storage:/app/storage --name if-kube
     ```
 3. Check the pod running logs by
     ```bash
-    kubectl logs -f deployment/if-kubernetes-agent
+    kubectl logs -f statefulset/if-kubernetes-agent
     ```

@@ -29,7 +29,7 @@ insightfinder:
   system_name: ""                       # The system created in InsightFinder website.
 
 # Each project entry is a project that will be created in InsightFinder.
-# Projects will get created automatically if they doesn't exist.
+# Projects will get created automatically if they don't exist.
 projects: []
   # - name: node-metrics
   #   type: metric
