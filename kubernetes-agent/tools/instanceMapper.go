@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"kubernetes-agent/kubernetes"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -97,6 +98,9 @@ func (mapper *InstanceMapper) DeletePods(namespace string, resourceKind string, 
 }
 
 func (mapper *InstanceMapper) AddPods(namespace string, resourceKind string, resources map[string]map[string]bool) {
+	if resourceKind == "DaemonSet" {
+		return
+	}
 	for resource, pods := range resources {
 		slots := mapper.Storage[namespace][resourceKind][resource]
 		if slots != nil {
@@ -116,6 +120,7 @@ func (mapper *InstanceMapper) AddPods(namespace string, resourceKind string, res
 }
 
 func (mapper *InstanceMapper) Update() {
+	log.Output(2, "Start updating Pod Instance Mapping...")
 
 	for namespace, _ := range mapper.Storage {
 		podsCreated, podsDeleted := mapper.GetDiffMap(namespace)
@@ -143,6 +148,7 @@ func (mapper *InstanceMapper) Update() {
 		}
 	}
 	mapper.Save()
+	log.Output(2, "Pod Instance Mapping updated successfully!")
 }
 
 func (mapper *InstanceMapper) FindIndexByPodName(namespace string, resourceKind string, resource string, podName string) string {
@@ -154,16 +160,16 @@ func (mapper *InstanceMapper) FindIndexByPodName(namespace string, resourceKind 
 	return "-1"
 }
 
-func (mapper *InstanceMapper) GetInstanceName(namespace string, podName string) string {
+func (mapper *InstanceMapper) GetInstanceMapping(namespace string, podName string) (string, string) {
 	for resourceKind, resources := range mapper.Storage[namespace] {
 		for resource, _ := range resources {
 			mappingIndex := mapper.FindIndexByPodName(namespace, resourceKind, resource, podName)
 			if mappingIndex != "-1" {
-				return namespace + "/" + resource + "-" + mappingIndex
+				return resource + "-" + mappingIndex, resource
 			}
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // Load Data from disk

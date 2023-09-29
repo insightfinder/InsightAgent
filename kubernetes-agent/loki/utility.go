@@ -21,29 +21,18 @@ func WithinTimeRange(startTime time.Time, endTime time.Time, duration time.Durat
 	return endTime.Sub(startTime) <= duration
 }
 
-func ProcessMultiLines(originData *[]LokiLogData) []LokiLogData {
+func ProcessMultiLines(originData []*LokiLogData) []LokiLogData {
 	var result []LokiLogData
 
 	// Extract the Java exception logs
 	OtherNormalLogs, JavaExceptionLogs := ProcessJavaMultiLines(originData)
 
-	// Extract the NodeJS exception logs
-	OtherNormalLogs, NodeJSExceptionLogs := ProcessNodeJSMultiLines(&OtherNormalLogs)
-
 	result = append(result, JavaExceptionLogs...)
-	result = append(result, NodeJSExceptionLogs...)
 	result = append(result, OtherNormalLogs...)
 	return result
 }
 
-func ProcessNodeJSMultiLines(originData *[]LokiLogData) ([]LokiLogData, []LokiLogData) {
-	// TODO: Implement the multiline algorithm for NodeJS
-	//normalLogs := make([]LokiLogData, 0)
-	exceptionLogs := make([]LokiLogData, 0)
-	return *originData, exceptionLogs
-}
-
-func ProcessJavaMultiLines(originData *[]LokiLogData) ([]LokiLogData, []LokiLogData) {
+func ProcessJavaMultiLines(originData []*LokiLogData) ([]LokiLogData, []LokiLogData) {
 
 	// Initialize the log cache
 	logCache := LokiLogData{}
@@ -59,9 +48,9 @@ func ProcessJavaMultiLines(originData *[]LokiLogData) ([]LokiLogData, []LokiLogD
 	var NormalLogs []LokiLogData
 	var ExceptionLogs []LokiLogData
 
-	for _, logData := range *originData {
+	for _, logData := range originData {
 		if logCache.IsEmpty() {
-			logCache = logData
+			logCache = *logData
 			continue
 		}
 
@@ -69,7 +58,7 @@ func ProcessJavaMultiLines(originData *[]LokiLogData) ([]LokiLogData, []LokiLogD
 		if (javaStackTraceAtRegex.MatchString(logData.Text) ||
 			javaStackTraceCausedByRegex.MatchString(logData.Text) ||
 			javaStackTraceExceptionRegex.MatchString(logData.Text)) &&
-			(logCache.IsSamePodAs(logData) && WithinTimeRange(logCache.Timestamp, logData.Timestamp, time.Second*1)) {
+			(logCache.IsSamePodAs(*logData) && WithinTimeRange(logCache.Timestamp, logData.Timestamp, time.Second*1)) {
 			logCache.Text += "\n" + logData.Text
 			ExceptionMode = true
 			continue
@@ -83,7 +72,7 @@ func ProcessJavaMultiLines(originData *[]LokiLogData) ([]LokiLogData, []LokiLogD
 				// Send the previous normal log cache
 				NormalLogs = append(NormalLogs, logCache)
 			}
-			logCache = logData
+			logCache = *logData
 		}
 
 	}

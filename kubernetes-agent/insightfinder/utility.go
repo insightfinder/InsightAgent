@@ -83,7 +83,7 @@ func ToString(inputVar interface{}) string {
 }
 
 func ToBool(inputVar interface{}) (boolValue bool) {
-	if inputVar == nil {
+	if inputVar == nil || inputVar == "" {
 		return false
 	}
 	switch castedVal := inputVar.(type) {
@@ -179,7 +179,7 @@ func GetInsightFinderConfig(p *configparser.ConfigParser) map[string]interface{}
 	var projectName = ToString(GetConfigValue(p, IF_SECTION_NAME, "project_name", true))
 	// We use uppercase for project log type.
 	var projectType = strings.ToUpper(ToString(GetConfigValue(p, IF_SECTION_NAME, "project_type", true)))
-	var runInterval = ToString(GetConfigValue(p, IF_SECTION_NAME, "run_interval", true))
+	var runInterval = ToString(GetConfigValue(p, IF_SECTION_NAME, "run_interval", false))
 	// Optional parameters
 	var token = ToString(GetConfigValue(p, IF_SECTION_NAME, "token", false))
 	var systemName = ToString(GetConfigValue(p, IF_SECTION_NAME, "system_name", false))
@@ -199,30 +199,30 @@ func GetInsightFinderConfig(p *configparser.ConfigParser) map[string]interface{}
 	if !IsValidProjectType(projectType) {
 		panic("[ERROR] Non-existing project type: " + projectType + "! Please use the supported project types. ")
 	}
-	// if len(samplingInterval) == 0 {
-	// 	if strings.Contains(projectType, "METRIC") {
-	// 		panic("[ERROR] InsightFinder configuration [sampling_interval] is required for METRIC project!")
-	// 	} else {
-	// 		// Set default for non-metric project
-	// 		samplingInterval = "10"
-	// 		samplingIntervalInSeconds = "600"
-	// 	}
-	// }
+	if len(samplingInterval) == 0 {
+		if strings.Contains(projectType, "METRIC") {
+			panic("[ERROR] InsightFinder configuration [sampling_interval] is required for METRIC project!")
+		} else {
+			// Set default for non-metric project
+			samplingInterval = "10"
+			samplingIntervalInSeconds = "600"
+		}
+	}
 
-	//if strings.HasSuffix(samplingInterval, "s") {
-	//	samplingIntervalInSeconds = samplingInterval[:len(samplingInterval)-1]
-	//	samplingIntervalInt, err := strconv.ParseFloat(samplingIntervalInSeconds, 32)
-	//	if err != nil {
-	//		panic(err)
-	//	}
-	//	samplingInterval = fmt.Sprint(samplingIntervalInt / 60.0)
-	//} else {
-	//	samplingIntervalInt, err := strconv.Atoi(samplingInterval)
-	//	if err != nil {
-	//		panic(err)
-	//	}
-	//	samplingIntervalInSeconds = fmt.Sprint(int64(samplingIntervalInt * 60))
-	//}
+	if strings.HasSuffix(samplingInterval, "s") {
+		samplingIntervalInSeconds = samplingInterval[:len(samplingInterval)-1]
+		samplingIntervalInt, err := strconv.ParseFloat(samplingIntervalInSeconds, 32)
+		if err != nil {
+			panic(err)
+		}
+		samplingInterval = fmt.Sprint(samplingIntervalInt / 60.0)
+	} else {
+		samplingIntervalInt, err := strconv.Atoi(samplingInterval)
+		if err != nil {
+			panic(err)
+		}
+		samplingIntervalInSeconds = fmt.Sprint(int64(samplingIntervalInt * 60))
+	}
 	isReplay = strconv.FormatBool(strings.Contains(projectType, "REPLAY"))
 	if len(metaDataMaxInstance) == 0 {
 		metaDataMaxInstance = strconv.FormatInt(int64(DEFAULT_MATADATE_MAX_INSTANCE), 10)
@@ -272,6 +272,8 @@ func CheckProject(IFconfig map[string]interface{}) {
 	if len(projectName) > 0 {
 		if !isProjectExist(IFconfig) {
 			log.Output(1, fmt.Sprintf("Didn't find the project named %s. Start creating project in the InsightFinder.", projectName))
+			createProject(IFconfig)
+			log.Output(1, "Sleep for 5 seconds to wait for project creation and will check the project exisitense again.")
 			time.Sleep(time.Second * 5)
 			if !isProjectExist(IFconfig) {
 				panic("[ERROR] Fail to create project " + projectName)
@@ -309,4 +311,47 @@ func isProjectExist(IFconfig map[string]interface{}) bool {
 	}
 
 	return ToBool(result["isProjectExist"])
+}
+
+func createProject(IFconfig map[string]interface{}) {
+	projectName := ToString(IFconfig["projectName"])
+	projectType := ToString(IFconfig["projectType"])
+
+	log.Output(1, fmt.Sprintf("[LOG]Creating the project named %s in the InsightFinder.", projectName))
+	form := url.Values{}
+
+	form.Add("operation", "create")
+	form.Add("userName", ToString(IFconfig["userName"]))
+	form.Add("licenseKey", ToString(IFconfig["licenseKey"]))
+	form.Add("projectName", projectName)
+
+	if IFconfig["systemName"] != nil {
+		form.Add("systemName", ToString(IFconfig["systemName"]))
+	} else {
+		form.Add("systemName", projectName)
+	}
+	form.Add("instanceType", "PrivateCloud")
+	form.Add("projectCloudType", "PrivateCloud")
+	form.Add("dataType", ProjectTypeToDataType(projectType))
+	form.Add("insightAgentType", ProjectTypeToAgentType(projectType, false))
+	form.Add("samplingInterval", ToString(IFconfig["samplingInterval"]))
+	form.Add("samplingIntervalInSeconds", ToString(IFconfig["samplingInterval"]))
+	samplingIntervalINT, err := strconv.Atoi(ToString(IFconfig["samplingInterval"]))
+	if err != nil {
+		panic(err)
+	}
+	form.Add("samplingIntervalInSeconds", fmt.Sprint(samplingIntervalINT*60))
+	headers := map[string]string{
+		"Content-Type": "application/x-www-form-urlencoded",
+	}
+	response, _ := SendRequest(
+		http.MethodPost,
+		FormCompleteURL(ToString(IFconfig["ifURL"]), PROJECT_END_POINT),
+		strings.NewReader(form.Encode()),
+		headers,
+		AuthRequest{},
+	)
+	var result map[string]interface{}
+	json.Unmarshal(response, &result)
+	log.Output(1, ToString(result["message"]))
 }

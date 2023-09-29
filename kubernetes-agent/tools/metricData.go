@@ -5,26 +5,45 @@ import (
 	"kubernetes-agent/prometheus"
 )
 
-func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper) insightfinder.MetricDataReceivePayload {
+func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper, postProcessor *PostProcessor) insightfinder.MetricDataReceivePayload {
 
 	// Build InstanceDataMap
 	instanceDataMap := make(map[string]insightfinder.InstanceData)
-	for _, metricData := range *metricDataMap {
+	for metricType, metricData := range *metricDataMap {
 		for _, promMetricData := range metricData {
-			componentName := instanceNameMapper.GetInstanceName(promMetricData.NameSpace, promMetricData.Pod)
-			if componentName == "" {
+			var instanceName string
+			var componentName string
+			if promMetricData.Pod == "" && promMetricData.NameSpace == "" {
+				// Node level metric
+				instanceName = promMetricData.Node
+				componentName = promMetricData.Node
+			} else if promMetricData.NameSpace != "" && promMetricData.PVC != "" {
+				// PVC level metric
+				instanceName = promMetricData.PVC
+				componentName = removePVCNameSuffix(promMetricData.PVC)
+			} else {
+				// Pod level metric
+				instanceName, componentName = instanceNameMapper.GetInstanceMapping(promMetricData.NameSpace, promMetricData.Pod)
+			}
+
+			// Post process for component name
+			componentName = postProcessor.ProcessComponentName(componentName)
+
+			if instanceName == "" {
 				continue
 			}
-			if _, ok := instanceDataMap[componentName]; !ok {
-				instanceDataMap[componentName] = insightfinder.InstanceData{
-					InstanceName:       componentName,
+			if _, ok := instanceDataMap[instanceName]; !ok {
+				instanceDataMap[instanceName] = insightfinder.InstanceData{
+					InstanceName:       instanceName,
+					ComponentName:      componentName,
 					DataInTimestampMap: make(map[int64]insightfinder.DataInTimestamp),
 				}
 			}
-			dataInTimestampMap := instanceDataMap[componentName].DataInTimestampMap
+			dataInTimestampMap := instanceDataMap[instanceName].DataInTimestampMap
 
 			for _, promMetricPoint := range promMetricData.Data {
 				if _, ok := dataInTimestampMap[promMetricPoint.TimeStamp]; !ok {
+
 					dataInTimestampMap[promMetricPoint.TimeStamp] = insightfinder.DataInTimestamp{
 						TimeStamp:        promMetricPoint.TimeStamp,
 						MetricDataPoints: make([]insightfinder.MetricDataPoint, 0),
@@ -36,7 +55,7 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 				}
 				dataInTimestampEntry, _ := dataInTimestampMap[promMetricPoint.TimeStamp]
 				dataInTimestampEntry.MetricDataPoints = append(dataInTimestampEntry.MetricDataPoints, insightfinder.MetricDataPoint{
-					MetricName: promMetricData.Type,
+					MetricName: metricType,
 					Value:      promMetricPoint.Value,
 				})
 				dataInTimestampMap[promMetricPoint.TimeStamp] = dataInTimestampEntry
@@ -53,12 +72,4 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 		MaxTimestamp:     0,
 		InsightAgentType: insightfinder.ProjectTypeToAgentType(IFConfig["projectType"].(string), false),
 	}
-}
-
-func buildNamespacePodMap(promMetricDataList []prometheus.PromMetricData) *map[string]bool {
-	namespacePodMap := make(map[string]bool)
-	for _, promMetricData := range promMetricDataList {
-		namespacePodMap[promMetricData.NameSpace+"/"+promMetricData.Pod] = true
-	}
-	return &namespacePodMap
 }

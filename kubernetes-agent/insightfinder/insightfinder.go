@@ -12,7 +12,7 @@ import (
 )
 
 const METRIC_DATA_API = "/api/v2/metric-data-receive"
-const LOG_DATA_API = "/customprojectrawdata"
+const LOG_DATA_API = "/api/v1/customprojectrawdata"
 const LOG_DATA_AGENT_TYPE = "Stream"
 const CHUNK_SIZE = 2 * 1024 * 1024
 const MAX_PACKET_SIZE = 10000000
@@ -72,10 +72,10 @@ func SendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 	for instanceName, istData := range data.InstanceDataMap {
 		instanceData, ok := newPayload.InstanceDataMap[instanceName]
 		if !ok {
-			// Current Node didn't exist
+			// Current NodeInstance didn't exist
 			instanceData = InstanceData{
 				InstanceName:       istData.InstanceName,
-				ComponentName:      istData.InstanceName,
+				ComponentName:      istData.ComponentName,
 				DataInTimestampMap: make(map[int64]DataInTimestamp),
 			}
 			newPayload.InstanceDataMap[instanceName] = instanceData
