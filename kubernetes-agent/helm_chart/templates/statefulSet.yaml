@@ -37,10 +37,10 @@ spec:
               {{- end }}
   volumeClaimTemplates:
     - metadata:
-        name: if-k8s-agent-storage
+        name: if-k8s-agent-storage-{{ .Release.Name }}
       spec:
         accessModes: [ "ReadWriteOnce" ]
         resources:
           requests:
             storage: 1Gi
-  serviceName: if-kubernetes-agent-svc-name
+  serviceName: if-k8s-agent-service-name-{{ .Release.Name }}
