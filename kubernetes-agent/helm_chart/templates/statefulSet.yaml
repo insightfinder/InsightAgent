@@ -24,7 +24,7 @@ spec:
           volumeMounts:
             - name: if-k8s-agent-config
               mountPath: /app/conf.d
-            - name: if-k8s-agent-storage
+            - name: if-k8s-agent-storage-{{ .Release.Name }}
               mountPath: /app/storage
       volumes:
         - name: if-k8s-agent-config
