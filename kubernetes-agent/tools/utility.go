@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"regexp"
 )
 
 func ToString(inputVar interface{}) string {
@@ -37,7 +38,7 @@ func ToInt(inputVar interface{}) int {
 	panic("[ERROR] Wrong input type. Can not convert current input to int.")
 }
 
-func PrintStruct(v any, needPrint bool) {
+func PrintStruct(v any, needPrint bool, fileName string) {
 	jsonBytes, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		log.Fatalf("JSON marshaling failed: %s", err)
@@ -45,8 +46,13 @@ func PrintStruct(v any, needPrint bool) {
 	if needPrint {
 		fmt.Println(string(jsonBytes))
 	}
-	err = os.WriteFile("PrintStruct"+".json", jsonBytes, 0644)
+	err = os.WriteFile("PrintStruct-"+fileName+".json", jsonBytes, 0644)
 	if err != nil {
 		log.Fatalf("Writing to file failed: %s", err)
 	}
+}
+
+func removePVCNameSuffix(PVCName string) string {
+	re := regexp.MustCompile(`-\d+$`)
+	return re.ReplaceAllString(PVCName, "")
 }
