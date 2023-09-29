@@ -129,6 +129,8 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
         logger.error('Devices list is empty')
         return
 
+    logger.info('Device id and ip address mapping: {}'.format(json.dumps(devices_ips_map)))
+
     # parse sql string by params
     logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
     if agent_config_vars['his_time_range']:
@@ -192,11 +194,40 @@ def build_query_params(logger, if_config_vars, agent_config_vars, headers, devic
     return params
 
 
+def process_each_eda(logger, agent_config_vars, headers, first_metrics_resp):
+    data = []
+    xid = first_metrics_resp.get("xid")
+
+    if xid is not None:
+        # running on an ECA
+        eda_count = first_metrics_resp.get("num_results", 0)
+        for i in range(eda_count):
+            try:
+                logger.info('Requesting data from EDA {}/{}... Please Wait'.format(i+1, eda_count))
+
+                url = urllib.parse.urljoin(agent_config_vars['host'], '/api/v1/metrics/next/'+str(xid))
+                response = send_request(logger, url, mode='GET', headers=headers, verify=False, proxies=agent_config_vars['proxies'])
+                if response == -1:
+                    logger.error('Requesting data from EDA {}/{} failed'.format(i+1, eda_count))
+                else:
+                    result = response.json()
+                    if result.get("stats"):
+                        data.extend(result["stats"] or [])
+                    else:
+                        logger.error('Get invalid response from {}: {}'.format(url, result))
+            except Exception as e:
+                logger.warn('Requesting data from EDA {}/{} failed'.format(i+1, eda_count))
+                logger.warn(e)
+                logger.debug(traceback.format_exc())
+    return data
+
+
 def query_messages_extrahop(args):
     logger, if_config_vars, agent_config_vars, metric, headers, params = args
     logger.info('Starting query metrics with params: {}'.format(str(json.dumps(params))))
 
     data = []
+
     try:
         # execute sql string
         url = urllib.parse.urljoin(agent_config_vars['host'], '/api/v1/metrics')
@@ -207,8 +238,13 @@ def query_messages_extrahop(args):
         else:
             result = response.json()
             # Check the result is Dict, and has field stats
-            data = result["stats"] or []
-
+            if result.get("stats"):
+                data = result["stats"] or []
+            elif result.get("xid"):
+                data = process_each_eda(logger, agent_config_vars, headers, result)
+            else:
+                logger.error('Got invalid or empty result from {} with params {}: {}'.format(
+                    url, json.dumps(params), result))
     except Exception as e:
         logger.error(e)
 
