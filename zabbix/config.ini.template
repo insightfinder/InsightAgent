@@ -42,7 +42,10 @@ agent_https_proxy =
 user_name =
 license_key =
 token =
+# Name of the project created in the InsightFinder UI. If this project does not exist, agent will create it automatically.
 project_name =
+# Name of system owned by project. If system_name does not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name =
 # metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
 project_type = metric
 sampling_interval = 1
