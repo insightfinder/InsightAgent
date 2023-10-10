@@ -2,6 +2,7 @@
 import configparser
 import json
 import logging
+import math
 import os
 import regex
 import socket
@@ -54,6 +55,8 @@ CACHE_NAME = 'cache.db'
 def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, metric_buffer, track, time_now):
     logger.info('Started......')
 
+    run_interval = if_config_vars['run_interval']
+
     # build ThreadPool
     pool_map = ThreadPool(agent_config_vars['thread_pool'])
 
@@ -80,6 +83,8 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     url = urllib.parse.urljoin(agent_config_vars['host'], '/api/v1/devices')
     result_list = []
     if device_ip_list:
+        active_from = '-' + str(math.ceil(run_interval / 60)) + 'm'
+
         def query_devices(args):
             ip, params = args
             logger.debug('Starting query device ip: {}'.format(ip))
@@ -98,7 +103,8 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
 
         params_list = [(ip, {
             "search_type": 'ip address',
-            "value": ip
+            "value": ip,
+            "active_from": active_from,
         }) for ip in device_ip_list]
         results = pool_map.map(query_devices, params_list)
         result_list = list(chain(*results))
