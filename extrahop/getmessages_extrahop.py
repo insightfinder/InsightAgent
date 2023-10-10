@@ -124,10 +124,15 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             logger.error('Query device list error')
 
     # parse device list
-    for device in result_list:
+    # Sort the result list by ip address. If multiple ip addresses are found for a device, use the first one.
+    for device in sorted(result_list, key=lambda x: x['ipaddr4']):
         device_id = device['id']
         devices_ids.append(device_id)
-        devices_ids_map[device_id] = device['ipaddr4']
+        if device_id not in devices_ids_map:
+            devices_ids_map[device_id] = device['ipaddr4']
+        else:
+            logger.warn('Same device id: {} with different ip address {} found, using first ip address {}'.format(
+                device_id, device['ipaddr4'], devices_ids_map[device_id]))
         devices_ips_map[device['ipaddr4']] = device_id
 
     # filter devices ids
