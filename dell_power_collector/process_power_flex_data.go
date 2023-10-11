@@ -278,8 +278,11 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 		if cfg["version"] == "" || cfg["version"] == "3.0" {
 			token := getToken_V3(cfg)
 			token = strings.ReplaceAll(token, "\"", "")
-			log.Output(1, "[LOG] Successful get the token from Gateway API")
-			log.Output(1, "[LOG] token: "+token)
+			log.Output(1, "[LOG] Get the token from Gateway API: "+token)
+			if token == "" {
+				log.Output(1, "[Warning] No token can be retrieved. Skip this host: "+connUrl)
+				continue
+			}
 			cfg["token"] = token
 			instances := getInstanceList(cfg)
 
@@ -297,6 +300,7 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 		} else if cfg["version"] == "4.0" {
 			token := getToken_V4(cfg)
 			if token == "" {
+				log.Output(1, "[Warning] No token can be retrieved. Skip this host: "+connUrl)
 				continue
 			}
 			token = strings.ReplaceAll(token, "\"", "")
