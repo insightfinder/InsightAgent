@@ -307,7 +307,7 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 	if IFConfig["projectType"] == "LOG" {
 		config := getPFMConfig(p)
 
-		connectionUrl := config["connectionUrl"].(string)
+		connectionUrl := config["connectionUrl"]
 		connectionUrlList := []string{}
 
 		if strings.Contains(connectionUrl, ",") {
@@ -317,7 +317,7 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 		}
 
 		for _, connUrl := range connectionUrlList {
-			cfg := copyAnyMap(config)
+			cfg := copyMap(config)
 			connUrl := strings.TrimSpace(connUrl)
 			cfg["connectionUrl"] = connUrl
 
