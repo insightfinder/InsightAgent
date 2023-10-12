@@ -455,6 +455,7 @@ def get_agent_config_vars(logger, config_ini):
                 ip_list.append(ip)
             device_ip_list = ip_list
             ip_device_prefer_map = prefer_map
+
         if metric_query_params:
             try:
                 metric_query_params = eval(metric_query_params)
@@ -468,6 +469,19 @@ def get_agent_config_vars(logger, config_ini):
         for param in metric_query_params:
             if param.get('device_ip_list') and not isinstance(param['device_ip_list'], list):
                 return config_error(logger, 'metric_query_params->device_ip_list')
+
+        # get device id from metric_query_params device_ip_list with format like:
+        # ["10.10.10.1:8589955732", "10.10.10.2:8589955734"]
+        for param in metric_query_params:
+            if param.get('device_ip_list') and isinstance(param['device_ip_list'], list):
+                ip_list = param['device_ip_list']
+                new_ip_list = []
+                for ip in ip_list:
+                    if ':' in ip:
+                        ip, device = ip.split(':')
+                        ip_device_prefer_map[ip] = device
+                    new_ip_list.append(ip)
+                param['device_ip_list'] = new_ip_list
 
         if len(instance_whitelist) != 0:
             try:
