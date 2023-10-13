@@ -118,7 +118,7 @@ func getPFMLogData(reqHeader map[string]string, config map[string]string, offset
 	return
 }
 
-func getPFMLogData_V4(config map[string]string, instanceList []string, offset int, limit int) (result []map[string]interface{}) {
+func getPFMLogData_V4(config map[string]string, instance string, offset int, limit int) (result []map[string]interface{}) {
 	params := url.Values{}
 	//params.Add("sort", "-"+config["timeStampField"])
 	params.Add("offset", fmt.Sprint(offset))
@@ -127,8 +127,9 @@ func getPFMLogData_V4(config map[string]string, instanceList []string, offset in
 		"Content-Type": "application/json",
 		"Accept":       "application/json",
 	}
+	// TODO: get Log data from instanceList
 	headers["Authorization"] = "Bearer " + config["token"]
-	endpoint := FormCompleteURL(config["connectionUrl"], config["apiEndPoint"]) + "?" + params.Encode()
+	endpoint := FormCompleteURL(config["connectionUrl"], Depoyment_log_API_Endpoint) + "?" + params.Encode()
 	log.Output(2, "Getting log data from endpoint: "+endpoint)
 	body, _ := sendRequest(
 		http.MethodGet,
@@ -217,17 +218,21 @@ func PowerFlexManagerDataStream(cfg map[string]string, offset int, limit int) []
 	if cfg["version"] == "" || cfg["version"] == "3.0" {
 		authHeaders := authenticationPF(cfg)
 		rawLogData = getPFMLogData(authHeaders, cfg, offset, limit)
-	} else if cfg["version"] == "4.0" {
-		token := getPowerflexToken_V4(cfg)
-		if token == "" {
-			log.Output(2, "[ERROR]Can't get token for powerflex manager from "+cfg["connectionUrl"])
-		}
-		log.Output(1, "[LOG] Successful get the token from Gateway API")
-		cfg["token"] = token
-		instanceList := getPowerFlexManagerDeploymentInstanceList_V4(cfg)
-		rawLogData = getPFMLogData_V4(cfg, instanceList, offset, limit)
+		log.Output(1, "The number of log entries being processed is: "+fmt.Sprint(len(rawLogData)))
+		return processPFMLogData(rawLogData, cfg)
 	}
-
-	log.Output(1, "The number of log entries being processed is: "+fmt.Sprint(len(rawLogData)))
-	return processPFMLogData(rawLogData, cfg)
+	res := []LogData{}
+	token := getPowerflexToken_V4(cfg)
+	if token == "" {
+		log.Output(2, "[ERROR]Can't get token for powerflex manager from "+cfg["connectionUrl"])
+	}
+	log.Output(1, "[LOG] Successful get the token from Gateway API")
+	cfg["token"] = token
+	instanceList := getPowerFlexManagerDeploymentInstanceList_V4(cfg)
+	for i := 0; i < len(instanceList); i++ {
+		rawLogData = getPFMLogData_V4(cfg, instanceList[i], offset, limit)
+		res = append(res, processPFMLogData(rawLogData, cfg)...)
+	}
+	log.Output(1, "The number of log entries being processed is: "+fmt.Sprint(len(res)))
+	return res
 }
