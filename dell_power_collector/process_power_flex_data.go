@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -97,8 +98,10 @@ func getInstanceList_V4(config map[string]string) (instanceList []string) {
 	getInstanceEndpoint := FormCompleteURL(
 		config["connectionUrl"], config["idEndPoint"],
 	)
-	headers := map[string]string{}
-	log.Output(1, "the token used in instance HTTP call: "+config["token"])
+	headers := map[string]string{
+		"Content-Type": "application/json",
+		"Accept":       "application/json",
+	}
 	headers["Authorization"] = "Bearer " + config["token"]
 	res, _ := sendRequest(
 		http.MethodGet,
@@ -113,19 +116,16 @@ func getInstanceList_V4(config map[string]string) (instanceList []string) {
 	json.Unmarshal(res, &result)
 
 	log.Output(1, "[LOG] Getting instances")
-	log.Output(1, string(res))
 	log.Output(1, "[LOG] There are total "+fmt.Sprint(len(result))+" instances")
 
 	for _, x := range result {
 		dict, ok := x.(map[string]interface{})
 		log.Output(1, "[LOG] The instance id: "+ToString(dict["id"]))
 		if !ok {
-			panic("[ERROR] Can't convert the result instance to map.")
+			log.Output(2, "[ERROR] Can't convert the result instance to map.")
 		}
 		instanceList = append(instanceList, ToString(dict["id"]))
 	}
-	// Fake data
-	// instanceList = GetInstList()
 	log.Output(1, "total instance returned "+fmt.Sprint(len(instanceList)))
 	return
 }
@@ -150,7 +150,7 @@ func getDataFromInstances(instance string, config map[string]string, endpoint st
 	)
 
 	log.Output(1, "[LOG] Getting instances data")
-	log.Output(1, "[LOG] Data from server: "+string(res))
+	log.Output(1, "[LOG] Data counts from server: "+string(res))
 
 	// Fake data for testing
 	// res := GetFakeMetricData()
@@ -164,7 +164,10 @@ func getDataFromInstances_V4(instance string, config map[string]string, endpoint
 	InstanceRe := regexp.MustCompile(instanceTypeRegex)
 	endpoint = string(IdRE.ReplaceAll([]byte(endpoint), []byte(instance)))
 	endpoint = string(InstanceRe.ReplaceAll([]byte(endpoint), []byte(config["instanceType"])))
-	headers := map[string]string{}
+	headers := map[string]string{
+		"Content-Type": "application/json",
+		"Accept":       "application/json",
+	}
 	headers["Authorization"] = "Bearer " + config["token"]
 	form := url.Values{}
 	res, _ := sendRequest(
@@ -177,12 +180,11 @@ func getDataFromInstances_V4(instance string, config map[string]string, endpoint
 	)
 
 	log.Output(1, "[LOG] Getting instances data")
-	log.Output(1, "[LOG] Data from server: "+string(res))
 
-	// Fake data for testing
-	// res := GetFakeMetricData()
 	var result map[string]interface{}
 	json.Unmarshal([]byte(res), &result)
+
+	log.Output(1, "[LOG] Data counts from server: "+fmt.Sprint(len(result)))
 	return result
 }
 
@@ -225,11 +227,16 @@ func getToken_V3(config map[string]string) string {
 	return string(token)
 }
 
-func getToken_V4(config map[string]string) string {
+func getPowerflexToken_V4(config map[string]string) string {
 	authEndPoint := FormCompleteURL(
 		config["connectionUrl"], AUTHAPI_V4,
 	)
-	var headers map[string]string
+	log.Output(1, "URL: "+authEndPoint)
+
+	headers := map[string]string{
+		"Content-Type": "application/json",
+		"Accept":       "application/json",
+	}
 
 	authData, err := json.Marshal(map[string]interface{}{
 		"username": config["userName"],
@@ -239,18 +246,18 @@ func getToken_V4(config map[string]string) string {
 		fmt.Println("Error:", err)
 		return ""
 	}
-	authPayload := string(authData)
 
 	token, _ := sendRequest(
-		http.MethodGet,
+		http.MethodPost,
 		authEndPoint,
-		strings.NewReader(authPayload),
+		bytes.NewBuffer(authData),
 		headers,
 		AuthRequest{},
 		true,
 	)
 	var res map[string]string
 	json.Unmarshal(token, &res)
+	log.Output(1, "Token string: "+res["access_token"])
 	return res["access_token"]
 }
 
@@ -276,11 +283,12 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 		cfg := copyMap(config)
 		cfg["connectionUrl"] = strings.TrimSpace(connUrl)
 		if cfg["version"] == "" || cfg["version"] == "3.0" {
+			log.Output(1, "[LOG] Get Version 3.0 powerflex data")
 			token := getToken_V3(cfg)
 			token = strings.ReplaceAll(token, "\"", "")
 			log.Output(1, "[LOG] Get the token from Gateway API: "+token)
 			if token == "" {
-				log.Output(1, "[Warning] No token can be retrieved. Skip this host: "+connUrl)
+				log.Output(1, "[ERROR] No token can be retrieved. Skip this host: "+connUrl)
 				continue
 			}
 			cfg["token"] = token
@@ -298,14 +306,14 @@ func PowerFlexDataStream(p *configparser.ConfigParser, IFconfig map[string]inter
 				}
 			}
 		} else if cfg["version"] == "4.0" {
-			token := getToken_V4(cfg)
+			log.Output(1, "[LOG] Get Version 4.0 powerflex data")
+			token := getPowerflexToken_V4(cfg)
 			if token == "" {
 				log.Output(1, "[Warning] No token can be retrieved. Skip this host: "+connUrl)
 				continue
 			}
 			token = strings.ReplaceAll(token, "\"", "")
 			log.Output(1, "[LOG] Successful get the token from Gateway API")
-			log.Output(1, "[LOG] token: "+token)
 
 			cfg["token"] = token
 			instances := getInstanceList_V4(cfg)

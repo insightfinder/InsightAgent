@@ -15,7 +15,9 @@ import (
 	"github.com/forgoer/openssl"
 )
 
-const FLEX_MANAGER_API_PREFIX = "/Api/V1/Authenticate"
+const FLEX_MANAGER_V3_Auth_API_PREFIX = "/Api/V1/Authenticate"
+const InstanceType_API_Endpoint = "/Api/V1/Deployement"
+const Depoyment_log_API_Endpoint = "/Api/V1/Deployment/asmdeployerogs/"
 
 func getPFMConfig(p *configparser.ConfigParser) map[string]string {
 	// required fields
@@ -49,7 +51,7 @@ func getPFMConfig(p *configparser.ConfigParser) map[string]string {
 
 func authenticationPF(config map[string]string) map[string]string {
 	endPoint := FormCompleteURL(
-		config["connectionUrl"], FLEX_MANAGER_API_PREFIX,
+		config["connectionUrl"], FLEX_MANAGER_V3_Auth_API_PREFIX,
 	)
 	headers := map[string]string{
 		"Content-Type": "application/json",
@@ -116,12 +118,15 @@ func getPFMLogData(reqHeader map[string]string, config map[string]string, offset
 	return
 }
 
-func getPFMLogData_V4(config map[string]string, offset int, limit int) (result []map[string]interface{}) {
+func getPFMLogData_V4(config map[string]string, instanceList []string, offset int, limit int) (result []map[string]interface{}) {
 	params := url.Values{}
 	//params.Add("sort", "-"+config["timeStampField"])
 	params.Add("offset", fmt.Sprint(offset))
 	params.Add("limit", fmt.Sprint(limit))
-	headers := map[string]string{}
+	headers := map[string]string{
+		"Content-Type": "application/json",
+		"Accept":       "application/json",
+	}
 	headers["Authorization"] = "Bearer " + config["token"]
 	endpoint := FormCompleteURL(config["connectionUrl"], config["apiEndPoint"]) + "?" + params.Encode()
 	log.Output(2, "Getting log data from endpoint: "+endpoint)
@@ -170,21 +175,57 @@ func processPFMLogData(rawData []map[string]interface{}, config map[string]strin
 	return
 }
 
+func getPowerFlexManagerDeploymentInstanceList_V4(config map[string]string) (instanceList []string) {
+	form := url.Values{}
+	getInstanceEndpoint := FormCompleteURL(
+		config["connectionUrl"], InstanceType_API_Endpoint,
+	)
+	headers := map[string]string{
+		"Content-Type": "application/json",
+		"Accept":       "application/json",
+	}
+	headers["Authorization"] = "Bearer " + config["token"]
+	res, _ := sendRequest(
+		http.MethodGet,
+		getInstanceEndpoint,
+		strings.NewReader(form.Encode()),
+		headers,
+		AuthRequest{},
+		true,
+	)
+
+	var result []interface{}
+	json.Unmarshal(res, &result)
+
+	log.Output(1, "[LOG] Getting instances")
+	log.Output(1, "[LOG] There are total "+fmt.Sprint(len(result))+" instances")
+
+	for _, x := range result {
+		dict, ok := x.(map[string]interface{})
+		log.Output(1, "[LOG] The instance id: "+ToString(dict["id"]))
+		if !ok {
+			log.Output(2, "[ERROR] Can't convert the result instance to map.")
+		}
+		instanceList = append(instanceList, ToString(dict["id"]))
+	}
+	log.Output(1, "total instance returned "+fmt.Sprint(len(instanceList)))
+	return
+}
+
 func PowerFlexManagerDataStream(cfg map[string]string, offset int, limit int) []LogData {
 	var rawLogData []map[string]interface{}
 	if cfg["version"] == "" || cfg["version"] == "3.0" {
 		authHeaders := authenticationPF(cfg)
 		rawLogData = getPFMLogData(authHeaders, cfg, offset, limit)
 	} else if cfg["version"] == "4.0" {
-		token := getToken_V4(cfg)
+		token := getPowerflexToken_V4(cfg)
 		if token == "" {
 			log.Output(2, "[ERROR]Can't get token for powerflex manager from "+cfg["connectionUrl"])
 		}
 		log.Output(1, "[LOG] Successful get the token from Gateway API")
-		log.Output(1, "[LOG] token: "+token)
-
 		cfg["token"] = token
-		rawLogData = getPFMLogData_V4(cfg, offset, limit)
+		instanceList := getPowerFlexManagerDeploymentInstanceList_V4(cfg)
+		rawLogData = getPFMLogData_V4(cfg, instanceList, offset, limit)
 	}
 
 	log.Output(1, "The number of log entries being processed is: "+fmt.Sprint(len(rawLogData)))
