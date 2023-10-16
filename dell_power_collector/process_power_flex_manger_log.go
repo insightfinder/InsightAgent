@@ -129,7 +129,7 @@ func getPFMLogData_V4(config map[string]string, instance string, offset int, lim
 	}
 	// TODO: get Log data from instanceList
 	headers["Authorization"] = "Bearer " + config["token"]
-	endpoint := FormCompleteURL(config["connectionUrl"], Depoyment_log_API_Endpoint) + "?" + params.Encode()
+	endpoint := FormCompleteURL(config["connectionUrl"], Depoyment_log_API_Endpoint+instance) + "?" + params.Encode()
 	log.Output(2, "Getting log data from endpoint: "+endpoint)
 	body, _ := sendRequest(
 		http.MethodGet,
@@ -199,7 +199,7 @@ func getPowerFlexManagerDeploymentInstanceList_V4(config map[string]string) (ins
 	json.Unmarshal(res, &result)
 
 	log.Output(1, "[LOG] Getting instances")
-	log.Output(1, "[LOG] There are total "+fmt.Sprint(len(result))+" instances")
+	log.Output(1, "[LOG] There are total "+fmt.Sprint(len(result))+" instances in the array")
 
 	for _, x := range result {
 		dict, ok := x.(map[string]interface{})
@@ -209,7 +209,7 @@ func getPowerFlexManagerDeploymentInstanceList_V4(config map[string]string) (ins
 		}
 		instanceList = append(instanceList, ToString(dict["id"]))
 	}
-	log.Output(1, "total instance returned "+fmt.Sprint(len(instanceList)))
+	log.Output(1, "Total instance id returned "+fmt.Sprint(len(instanceList)))
 	return
 }
 
