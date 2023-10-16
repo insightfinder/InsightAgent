@@ -375,6 +375,14 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 					}
 					break
 				}
+				if count > 0 {
+					oldData := PowerFlexManagerDataStream(config, 0, 1)
+					if oldData[0].TimeStamp == data[0].TimeStamp {
+						// There's no new data
+						log.Output(1, "[LOG] There's no new data. Skip the sending logic.")
+						break
+					}
+				}
 				sendLogData(data, IFConfig)
 				writeIndexFile(indexName, fmt.Sprint(offset)+"$"+fmt.Sprint(data[count-1].TimeStamp))
 				offset += count

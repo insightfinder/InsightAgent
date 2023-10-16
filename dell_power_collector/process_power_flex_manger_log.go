@@ -16,8 +16,9 @@ import (
 )
 
 const FLEX_MANAGER_V3_Auth_API_PREFIX = "/Api/V1/Authenticate"
-const InstanceType_API_Endpoint = "/Api/V1/Deployement"
+const InstanceType_API_Endpoint = "/Api/V1/Deployment"
 const Depoyment_log_API_Endpoint = "/Api/V1/Deployment/asmdeployerogs/"
+const Deployment_timestamp_format = "2006-01-02 15:04:05 -0700"
 
 func getPFMConfig(p *configparser.ConfigParser) map[string]string {
 	// required fields
@@ -155,7 +156,7 @@ func processPFMLogData(rawData []map[string]interface{}, config map[string]strin
 
 	for _, logObj := range rawData {
 
-		ts, err := time.Parse(time.RFC3339, logObj[tsField].(string))
+		ts, err := time.Parse(Deployment_timestamp_format, logObj[tsField].(string))
 		if err != nil {
 			log.Output(2, "Error parsing timestamp: "+fmt.Sprint(logObj[tsField]))
 			continue
@@ -225,6 +226,7 @@ func PowerFlexManagerDataStream(cfg map[string]string, offset int, limit int) []
 	token := getPowerflexToken_V4(cfg)
 	if token == "" {
 		log.Output(2, "[ERROR]Can't get token for powerflex manager from "+cfg["connectionUrl"])
+		return res
 	}
 	log.Output(1, "[LOG] Successful get the token from Gateway API")
 	cfg["token"] = token
