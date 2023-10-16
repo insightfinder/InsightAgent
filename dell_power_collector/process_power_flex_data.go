@@ -257,7 +257,6 @@ func getPowerflexToken_V4(config map[string]string) string {
 	)
 	var res map[string]string
 	json.Unmarshal(token, &res)
-	log.Output(1, "Token string: "+res["access_token"])
 	return res["access_token"]
 }
 
