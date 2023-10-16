@@ -18,6 +18,7 @@ import (
 const FLEX_MANAGER_V3_Auth_API_PREFIX = "/Api/V1/Authenticate"
 const InstanceType_API_Endpoint = "/Api/V1/Deployment"
 const Depoyment_log_API_Endpoint = "/Api/V1/Deployment/asmdeployerogs/"
+const EVENT_API_ENDPOINT = "/rest/v1/events"
 const Deployment_timestamp_format = "2006-01-02 15:04:05 -0700"
 
 func getPFMConfig(p *configparser.ConfigParser) map[string]string {
@@ -100,7 +101,7 @@ func authenticationPF(config map[string]string) map[string]string {
 	return resHeader
 }
 
-func getPFMLogData(reqHeader map[string]string, config map[string]string, offset int, limit int) (result []map[string]interface{}) {
+func getPFMLogData(reqHeader map[string]string, config map[string]string, offset int, limit int) (result []interface{}) {
 	params := url.Values{}
 	//params.Add("sort", "-"+config["timeStampField"])
 	params.Add("offset", fmt.Sprint(offset))
@@ -119,7 +120,7 @@ func getPFMLogData(reqHeader map[string]string, config map[string]string, offset
 	return
 }
 
-func getPFMLogData_V4(config map[string]string, instance string, offset int, limit int) (result []map[string]interface{}) {
+func getPFMLogData_V4(config map[string]string, offset int, limit int) (result []interface{}) {
 	params := url.Values{}
 	//params.Add("sort", "-"+config["timeStampField"])
 	params.Add("offset", fmt.Sprint(offset))
@@ -128,9 +129,8 @@ func getPFMLogData_V4(config map[string]string, instance string, offset int, lim
 		"Content-Type": "application/json",
 		"Accept":       "application/json",
 	}
-	// TODO: get Log data from instanceList
 	headers["Authorization"] = "Bearer " + config["token"]
-	endpoint := FormCompleteURL(config["connectionUrl"], Depoyment_log_API_Endpoint+instance) + "?" + params.Encode()
+	endpoint := FormCompleteURL(config["connectionUrl"], EVENT_API_ENDPOINT) + "?" + params.Encode()
 	log.Output(2, "Getting log data from endpoint: "+endpoint)
 	body, _ := sendRequest(
 		http.MethodGet,
@@ -140,11 +140,14 @@ func getPFMLogData_V4(config map[string]string, instance string, offset int, lim
 		AuthRequest{},
 		true,
 	)
-	json.Unmarshal(body, &result)
+	var tempRes map[string]interface{}
+	json.Unmarshal(body, &tempRes)
+	result = tempRes["results"].([]interface{})
+	log.Output(2, "[LOG] Total of the raw log data entries: "+fmt.Sprint(len(result)))
 	return
 }
 
-func processPFMLogData(rawData []map[string]interface{}, config map[string]string) (processedData []LogData) {
+func processPFMLogData(rawData []interface{}, config map[string]string) (processedData []LogData) {
 	var instanceName string
 	tsField := config["timeStampField"]
 	instField := config["instanceNameField"]
@@ -154,22 +157,32 @@ func processPFMLogData(rawData []map[string]interface{}, config map[string]strin
 		instanceName = "NO_INSTANCE_NAME"
 	}
 
-	for _, logObj := range rawData {
-
-		ts, err := time.Parse(Deployment_timestamp_format, logObj[tsField].(string))
+	for _, logInterface := range rawData {
+		logObj := logInterface.(map[string]interface{})
+		ts, err := time.Parse(time.RFC3339, logObj[tsField].(string))
 		if err != nil {
 			log.Output(2, "Error parsing timestamp: "+fmt.Sprint(logObj[tsField]))
 			continue
 		}
 
-		if len(instField) != 0 {
+		if len(instField) != 0 && logObj[instField] != nil {
 			instanceName = logObj[instField].(string)
+		} else {
+			instanceName = "NO_INSTANCE_NAME"
+		}
+		componentName := ""
+		if logObj["service_name"] != nil {
+			componentName = logObj["service_name"].(string)
 		}
 
+		if logObj["severity"] == "INFORMATION" {
+			continue
+		}
 		processedData = append(processedData, LogData{
-			TimeStamp: ts.UnixMilli(),
-			Tag:       instanceName,
-			Data:      logObj,
+			TimeStamp:     ts.UnixMilli(),
+			Tag:           instanceName,
+			ComponentName: componentName,
+			Data:          logObj,
 		})
 	}
 
@@ -214,27 +227,26 @@ func getPowerFlexManagerDeploymentInstanceList_V4(config map[string]string) (ins
 	return
 }
 
-func PowerFlexManagerDataStream(cfg map[string]string, offset int, limit int) []LogData {
-	var rawLogData []map[string]interface{}
+func PowerFlexManagerDataStream(cfg map[string]string, offset int, limit int) ([]LogData, int) {
+	var rawLogData []interface{}
 	if cfg["version"] == "" || cfg["version"] == "3.0" {
 		authHeaders := authenticationPF(cfg)
 		rawLogData = getPFMLogData(authHeaders, cfg, offset, limit)
 		log.Output(1, "The number of log entries being processed is: "+fmt.Sprint(len(rawLogData)))
-		return processPFMLogData(rawLogData, cfg)
+		return processPFMLogData(rawLogData, cfg), len(rawLogData)
 	}
 	res := []LogData{}
 	token := getPowerflexToken_V4(cfg)
 	if token == "" {
 		log.Output(2, "[ERROR]Can't get token for powerflex manager from "+cfg["connectionUrl"])
-		return res
+		return res, 0
 	}
-	log.Output(1, "[LOG] Successful get the token from Gateway API")
 	cfg["token"] = token
-	instanceList := getPowerFlexManagerDeploymentInstanceList_V4(cfg)
-	for i := 0; i < len(instanceList); i++ {
-		rawLogData = getPFMLogData_V4(cfg, instanceList[i], offset, limit)
-		res = append(res, processPFMLogData(rawLogData, cfg)...)
-	}
+	// instanceList := getPowerFlexManagerDeploymentInstanceList_V4(cfg)
+	// for i := 0; i < len(instanceList); i++ {
+	rawLogData = getPFMLogData_V4(cfg, offset, limit)
+	res = append(res, processPFMLogData(rawLogData, cfg)...)
+	// }
 	log.Output(1, "The number of log entries being processed is: "+fmt.Sprint(len(res)))
-	return res
+	return res, len(rawLogData)
 }
