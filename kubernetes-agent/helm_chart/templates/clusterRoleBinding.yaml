@@ -1,5 +1,5 @@
-kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
 metadata:
   name: if-k8s-agent-crb-{{ .Release.Name }}
 subjects:
@@ -7,6 +7,6 @@ subjects:
     name: if-k8s-agent-sa-{{ .Release.Name }}
     namespace: {{ .Release.Namespace }}
 roleRef:
-  kind: ClusterRole
-  name: view
   apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: if-k8s-agent-cr-{{ .Release.Name }}

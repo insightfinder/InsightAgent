@@ -10,13 +10,15 @@ func BuildEventsPayload(events *[]kubernetes.EventEntity, instanceNameMapper *In
 
 	// Build logDataList
 	for _, event := range *events {
-		instanceName, componentName := instanceNameMapper.GetInstanceMapping(event.Namespace, event.Regarding.Name)
-		if instanceName == "" || componentName == "" {
-			defaultName := event.Regarding.Kind + "/" + event.Regarding.Name
-			instanceName = defaultName
-			componentName = defaultName
+		var instanceName, componentName string
+		if event.Regarding.Kind == "Pod" || event.Regarding.Kind == "ReplicaSet" {
+			componentName = removePodNameSuffix(event.Regarding.Name)
+			componentName = postProcessor.ProcessComponentName(componentName)
+			instanceName = componentName
+		} else {
+			instanceName = event.Regarding.Kind + "/" + event.Regarding.Name
+			componentName = instanceName
 		}
-		componentName = postProcessor.ProcessComponentName(componentName)
 
 		eventDataList = append(eventDataList, insightfinder.LogData{
 			TimeStamp:     event.Time.UnixMilli(),
