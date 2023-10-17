@@ -2,7 +2,9 @@ package kubernetes
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -63,7 +65,7 @@ func (k *KubernetesServer) VerifyConnection() {
 	}
 }
 
-func (k *KubernetesServer) GetTargetReplicas(namespace string) map[string]map[string]int32 {
+func (k *KubernetesServer) GetTargetReplicas(namespace string) *map[string]map[string]int32 {
 	targetReplicas := make(map[string]map[string]int32)
 
 	deployments, _ := k.Client.AppsV1().Deployments(namespace).List(context.Background(), metav1.ListOptions{})
@@ -86,11 +88,42 @@ func (k *KubernetesServer) GetTargetReplicas(namespace string) map[string]map[st
 
 	}
 
-	return targetReplicas
+	return &targetReplicas
 
 }
 
-func (k *KubernetesServer) GetPods(namespace string) map[string]map[string]map[string]bool {
+func (k *KubernetesServer) GetEvents(namespace string, startTime time.Time, endTime time.Time) *[]EventEntity {
+	results := make([]EventEntity, 0)
+	events, err := k.Client.EventsV1().Events(namespace).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		fmt.Println(err)
+	}
+	for _, event := range events.Items {
+
+		if event.CreationTimestamp.Time.Before(startTime) || event.CreationTimestamp.Time.After(endTime) {
+			continue
+		}
+
+		result := EventEntity{
+			Name:      event.Name,
+			Namespace: event.Namespace,
+			Time:      event.CreationTimestamp.Time,
+			Type:      event.Type,
+			Note:      event.Note,
+			Reason:    event.Reason,
+			Regarding: RegardingEntity{
+				Name:      event.Regarding.Name,
+				Namespace: event.Regarding.Namespace,
+				Kind:      event.Regarding.Kind,
+			},
+		}
+		results = append(results, result)
+
+	}
+	return &results
+}
+
+func (k *KubernetesServer) GetPods(namespace string) *map[string]map[string]map[string]bool {
 	result := make(map[string]map[string]map[string]bool)
 	allPods, _ := k.Client.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{})
 	for _, pod := range allPods.Items {
@@ -125,5 +158,5 @@ func (k *KubernetesServer) GetPods(namespace string) map[string]map[string]map[s
 		// Add the pod to the result
 		result[resourceKind][resourceName][pod.Name] = true
 	}
-	return result
+	return &result
 }

@@ -5,7 +5,7 @@ import (
 	"kubernetes-agent/loki"
 )
 
-func BuildLogDataList(lokiLogData *[]loki.LokiLogData, instanceNameMapper *InstanceMapper, postProcessor *PostProcessor) []insightfinder.LogData {
+func BuildLogDataList(lokiLogData *[]loki.LokiLogData, instanceNameMapper *InstanceMapper, postProcessor *PostProcessor) *[]insightfinder.LogData {
 	logDataList := make([]insightfinder.LogData, 0)
 
 	// Build logDataList
@@ -27,5 +27,5 @@ func BuildLogDataList(lokiLogData *[]loki.LokiLogData, instanceNameMapper *Insta
 		})
 	}
 
-	return logDataList
+	return &logDataList
 }

@@ -22,6 +22,7 @@ data:
 
     [general]
     target = {{$project.target}}
+    type = {{ $project.type }}
 
     {{- if eq $project.target "pvc" }}
     namespace={{ $project.namespace | default "default" }}
@@ -45,7 +46,12 @@ data:
     license_key = {{ $.Values.insightfinder.license_key }}
     project_name = {{ $project.name }}
     system_name = {{ $.Values.insightfinder.system_name }}
+    {{- if eq $project.type "event" }}
+    project_type = log
+    {{- else }}
     project_type = {{ $project.type }}
+    {{- end }}
+
     if_url = {{ $.Values.insightfinder.url }}
     sampling_interval = 1
 
