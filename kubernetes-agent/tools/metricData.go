@@ -5,7 +5,7 @@ import (
 	"kubernetes-agent/prometheus"
 )
 
-func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper, postProcessor *PostProcessor) insightfinder.MetricDataReceivePayload {
+func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper, postProcessor *PostProcessor) *insightfinder.MetricDataReceivePayload {
 
 	// Build InstanceDataMap
 	instanceDataMap := make(map[string]insightfinder.InstanceData)
@@ -63,7 +63,7 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 		}
 
 	}
-	return insightfinder.MetricDataReceivePayload{
+	return &insightfinder.MetricDataReceivePayload{
 		ProjectName:      IFConfig["projectName"].(string),
 		UserName:         IFConfig["userName"].(string),
 		InstanceDataMap:  instanceDataMap,

@@ -19,10 +19,10 @@ const MAX_PACKET_SIZE = 10000000
 const HTTP_RETRY_TIMES = 15
 const HTTP_RETRY_INTERVAL = 60
 
-func SendLogData(data []LogData, IFConfig map[string]interface{}) {
+func SendLogData(data *[]LogData, IFConfig map[string]interface{}) {
 	curTotal := 0
 	curData := make([]LogData, 0)
-	for _, log := range data {
+	for _, logEntry := range *data {
 		if curTotal > CHUNK_SIZE {
 			jData, err := json.Marshal(
 				LogDataReceivePayload{
@@ -41,8 +41,8 @@ func SendLogData(data []LogData, IFConfig map[string]interface{}) {
 			curTotal = 0
 			curData = make([]LogData, 0)
 		}
-		curData = append(curData, log)
-		dataBytes, _ := json.Marshal(log)
+		curData = append(curData, logEntry)
+		dataBytes, _ := json.Marshal(logEntry)
 		curTotal += len(dataBytes)
 	}
 	jData, err := json.Marshal(
@@ -61,7 +61,7 @@ func SendLogData(data []LogData, IFConfig map[string]interface{}) {
 	SendDataToIF(jData, LOG_DATA_API, IFConfig)
 }
 
-func SendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface{}) {
+func SendMetricData(data *MetricDataReceivePayload, IFconfig map[string]interface{}) {
 	curTotal := 0
 	var newPayload = MetricDataReceivePayload{
 		ProjectName:     data.ProjectName,
@@ -94,7 +94,7 @@ func SendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 				request := IFMetricPostRequestPayload{
 					LicenseKey: ToString(IFconfig["licenseKey"]),
 					UserName:   ToString(IFconfig["userName"]),
-					Data:       data,
+					Data:       *data,
 				}
 				jData, err := json.Marshal(request)
 				if err != nil {
@@ -119,7 +119,7 @@ func SendMetricData(data MetricDataReceivePayload, IFconfig map[string]interface
 	request := IFMetricPostRequestPayload{
 		LicenseKey: ToString(IFconfig["licenseKey"]),
 		UserName:   ToString(IFconfig["userName"]),
-		Data:       data,
+		Data:       *data,
 	}
 	jData, err := json.Marshal(request)
 	if err != nil {

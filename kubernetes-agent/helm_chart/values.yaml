@@ -1,5 +1,5 @@
 # The image of the agent.
-image: "docker.io/insightfinderinc/kubernetes-agent:0.0.3"
+image: "docker.io/insightfinderinc/kubernetes-agent:0.0.4"
 
 # The main configuration for prometheus to get metric data.
 prometheus:
@@ -44,6 +44,11 @@ projects: []
   #   type: log
   #   target: pod
   #   namespace: namespace2
+
+  # - name: namespace-event
+  #   type: event
+  #   target: namespace
+  #   namespace: namespace3
 
   # - name: pvc-metric
   #   type: metric
