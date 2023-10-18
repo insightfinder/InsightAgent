@@ -161,7 +161,7 @@ def main():
 
         # add job
         scheduler.add_job(run_job, 'cron', (python_cmp, file_agent, config_ini, file_agent_log, config_vars),
-                          **cron_params, name=config_filename)
+                          **cron_params, name=config_filename, coalesce=True, misfire_grace_time=interval_seconds)
 
         # increment counter
         counter += 1
