@@ -28,7 +28,7 @@ data:
     namespace={{ $project.namespace | default "default" }}
     {{- end }}
 
-    {{- if eq $project.target "pod" }}
+    {{- if ne $project.target "node" }}
     namespace = {{ $project.namespace | default "default" }}
 
     {{- if $project.hide_component_name_prefix}}
