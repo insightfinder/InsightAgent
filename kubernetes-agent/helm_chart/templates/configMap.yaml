@@ -38,7 +38,7 @@ data:
     {{- end }}
 
     {{- if eq $project.target "node" }}
-    node_component_name = "k8s Hosts"
+    node_component_name = k8s Hosts
     {{- end }}
 
     [insightfinder]
