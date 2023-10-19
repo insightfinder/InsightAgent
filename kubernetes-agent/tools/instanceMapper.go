@@ -11,7 +11,7 @@ import (
 )
 
 type InstanceMapper struct {
-	KubernetesServer kubernetes.KubernetesServer
+	KubernetesServer *kubernetes.KubernetesServer
 
 	// Storage[Namespace][Deployment / StatefulSets][deployment-1]{0: pod-1, 1: pod-2, 2: pod-3}
 	Storage map[string]map[string]map[string]map[string]string
@@ -27,11 +27,9 @@ func (mapper *InstanceMapper) AddNamespace(namespaceFilter string) {
 	}
 }
 
-func (mapper *InstanceMapper) Initialize() {
+func (mapper *InstanceMapper) Initialize(kubernetesServer *kubernetes.KubernetesServer) {
 
 	// Initialize Kubernetes Server
-	kubernetesServer := kubernetes.KubernetesServer{}
-	kubernetesServer.Initialize()
 	mapper.KubernetesServer = kubernetesServer
 
 	// Initialize Storage
@@ -47,13 +45,13 @@ func (mapper *InstanceMapper) Initialize() {
 	}
 }
 
-func (mapper *InstanceMapper) UpdateSlots(namespace string, resourceKind string, resourceReplicas map[string]int32) {
+func (mapper *InstanceMapper) UpdateSlots(namespace string, resourceKind string, resourceReplicas *map[string]int32) {
 	// Create resourceKind record IfNotExist
 	if mapper.Storage[namespace][resourceKind] == nil {
 		mapper.Storage[namespace][resourceKind] = make(map[string]map[string]string)
 	}
 
-	for resource, replicas := range resourceReplicas {
+	for resource, replicas := range *resourceReplicas {
 		// Create resource record IfNotExist
 		if mapper.Storage[namespace][resourceKind][resource] == nil {
 			mapper.Storage[namespace][resourceKind][resource] = make(map[string]string)
@@ -81,8 +79,8 @@ func (mapper *InstanceMapper) UpdateSlots(namespace string, resourceKind string,
 	}
 }
 
-func (mapper *InstanceMapper) DeletePods(namespace string, resourceKind string, resources map[string]map[string]bool) {
-	for resource, pods := range resources {
+func (mapper *InstanceMapper) DeletePods(namespace string, resourceKind string, resources *map[string]map[string]bool) {
+	for resource, pods := range *resources {
 		for pod, _ := range pods {
 			slots := mapper.Storage[namespace][resourceKind][resource]
 			if slots != nil {
@@ -97,11 +95,11 @@ func (mapper *InstanceMapper) DeletePods(namespace string, resourceKind string, 
 	}
 }
 
-func (mapper *InstanceMapper) AddPods(namespace string, resourceKind string, resources map[string]map[string]bool) {
+func (mapper *InstanceMapper) AddPods(namespace string, resourceKind string, resources *map[string]map[string]bool) {
 	if resourceKind == "DaemonSet" {
 		return
 	}
-	for resource, pods := range resources {
+	for resource, pods := range *resources {
 		slots := mapper.Storage[namespace][resourceKind][resource]
 		if slots != nil {
 			for pod, _ := range pods {
@@ -124,27 +122,27 @@ func (mapper *InstanceMapper) Update() {
 
 	for namespace, _ := range mapper.Storage {
 		podsCreated, podsDeleted := mapper.GetDiffMap(namespace)
-		targetReplicas := mapper.KubernetesServer.GetTargetReplicas(namespace)
+		targetReplicas := *mapper.KubernetesServer.GetTargetReplicas(namespace)
 
 		// Delete pods in slots
-		for resourceKind, resources := range podsDeleted {
+		for resourceKind, resources := range *podsDeleted {
 			// Create resourceKind record IfNotExist
 			if mapper.Storage[namespace][resourceKind] == nil {
 				mapper.Storage[namespace][resourceKind] = make(map[string]map[string]string)
 			}
 
 			// Remove deleted pods from slots
-			mapper.DeletePods(namespace, resourceKind, resources)
+			mapper.DeletePods(namespace, resourceKind, &resources)
 		}
 
 		// Scale Slots based on targetReplicas
 		for resourceKind, resources := range targetReplicas {
-			mapper.UpdateSlots(namespace, resourceKind, resources)
+			mapper.UpdateSlots(namespace, resourceKind, &resources)
 		}
 
 		// Add newlyCreatedPods to slots
-		for resourceKind, resources := range podsCreated {
-			mapper.AddPods(namespace, resourceKind, resources)
+		for resourceKind, resources := range *podsCreated {
+			mapper.AddPods(namespace, resourceKind, &resources)
 		}
 	}
 	mapper.Save()
@@ -196,11 +194,11 @@ func (mapper *InstanceMapper) Save() {
 }
 
 // GetDiffMap returns the createdPods and deletedPods
-func (mapper *InstanceMapper) GetDiffMap(namespace string) (map[string]map[string]map[string]bool, map[string]map[string]map[string]bool) {
+func (mapper *InstanceMapper) GetDiffMap(namespace string) (*map[string]map[string]map[string]bool, *map[string]map[string]map[string]bool) {
 	// Initial the diff maps
 	deletePods := make(map[string]map[string]map[string]bool)
 	createPods := make(map[string]map[string]map[string]bool)
-	K8sCurrentPods := mapper.KubernetesServer.GetPods(namespace)
+	K8sCurrentPods := *mapper.KubernetesServer.GetPods(namespace)
 
 	// Get the deleted pods by comparing the current pods and the storage
 	for resourceKind, resources := range mapper.Storage[namespace] {
@@ -236,7 +234,7 @@ func (mapper *InstanceMapper) GetDiffMap(namespace string) (map[string]map[strin
 		}
 	}
 
-	return createPods, deletePods
+	return &createPods, &deletePods
 }
 
 func (mapper *InstanceMapper) ListPods(namespace string) []string {

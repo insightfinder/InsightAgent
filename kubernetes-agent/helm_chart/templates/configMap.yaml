@@ -22,12 +22,13 @@ data:
 
     [general]
     target = {{$project.target}}
+    type = {{ $project.type }}
 
     {{- if eq $project.target "pvc" }}
     namespace={{ $project.namespace | default "default" }}
     {{- end }}
 
-    {{- if eq $project.target "pod" }}
+    {{- if ne $project.target "node" }}
     namespace = {{ $project.namespace | default "default" }}
 
     {{- if $project.hide_component_name_prefix}}
@@ -37,7 +38,7 @@ data:
     {{- end }}
 
     {{- if eq $project.target "node" }}
-    node_component_name = "k8s Hosts"
+    node_component_name = k8s Hosts
     {{- end }}
 
     [insightfinder]
@@ -45,7 +46,12 @@ data:
     license_key = {{ $.Values.insightfinder.license_key }}
     project_name = {{ $project.name }}
     system_name = {{ $.Values.insightfinder.system_name }}
+    {{- if eq $project.type "event" }}
+    project_type = log
+    {{- else }}
     project_type = {{ $project.type }}
+    {{- end }}
+
     if_url = {{ $.Values.insightfinder.url }}
     sampling_interval = 1
 

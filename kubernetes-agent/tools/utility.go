@@ -56,3 +56,8 @@ func removePVCNameSuffix(PVCName string) string {
 	re := regexp.MustCompile(`-\d+$`)
 	return re.ReplaceAllString(PVCName, "")
 }
+
+func removePodNameSuffix(podName string) string {
+	regex := regexp.MustCompile(`(-[a-z0-9]{8,10}-[a-z0-9]{5}|-\d)$`)
+	return regex.ReplaceAllString(podName, "")
+}

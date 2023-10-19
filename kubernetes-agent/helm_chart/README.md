@@ -61,15 +61,21 @@ projects:
     type: metric
     target: pvc
     namespace: namespace3
+  
+  # Collect events data from a namespace and stream to `demo-events` project in InsightFinder.
+  - name: demo-events
+    type: event
+    target: namespace
+    namespace: namespace4
 ```
 
 ### Project Entry Configuration Fields
-| Field      | Description                                                             | Required                             | Available Values               |
-|------------|-------------------------------------------------------------------------|--------------------------------------|--------------------------------|
-| `name`     | The name of the project in InsightFinder. This name needs to be unique. | Yes                                  | Any string                     |
-| `type`     | The type of data that will be collected.                                | Yes                                  | `metric`, `log`                |
-| `target`   | The target from which data will be collected.                           | Yes                                  | `node`, `pod`, `pvc`           |
-| `namespace`| The Kubernetes namespace from which to collect data.                    | Yes (For Namespace-Scoped resources) | Any valid Kubernetes namespace |
+| Field      | Description                                                             | Required                             | Available Values                  |
+|------------|-------------------------------------------------------------------------|--------------------------------------|-----------------------------------|
+| `name`     | The name of the project in InsightFinder. This name needs to be unique. | Yes                                  | Any string                        |
+| `type`     | The type of data that will be collected.                                | Yes                                  | `metric`, `log` , `event`         |
+| `target`   | The target from which data will be collected.                           | Yes                                  | `node`, `pod`, `pvc`, `namespace` |
+| `namespace`| The Kubernetes namespace from which to collect data.                    | Yes (For Namespace-Scoped resources) | Any valid Kubernetes namespace    |
 
 ## Installation
 After editing the `values.yaml` file, run the following command to install the agent:

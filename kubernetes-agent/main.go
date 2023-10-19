@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/bigkevmcd/go-configparser"
 	"kubernetes-agent/insightfinder"
+	"kubernetes-agent/kubernetes"
 	"kubernetes-agent/loki"
 	"kubernetes-agent/prometheus"
 	"kubernetes-agent/tools"
@@ -56,9 +57,14 @@ func main() {
 		configFiles = append(configFiles, configFile)
 	}
 
+	// Initialize Kubernetes Server
+	kubernetesServer := kubernetes.KubernetesServer{}
+	kubernetesServer.Initialize()
+
 	// Initialize InstanceName DB
 	instanceMapper := tools.InstanceMapper{}
-	instanceMapper.Initialize()
+	instanceMapper.Initialize(&kubernetesServer)
+
 	for _, configFile := range configFiles {
 		// Add Namespaces from all config files
 		namespaceFilter, _ := configFile.Get(GENERAL_SECTION, "namespace")
@@ -80,7 +86,7 @@ func main() {
 
 		// Process data collection based each config file
 		for _, configFile := range configFiles {
-			go dataCollectionRoutine(configFile, &instanceMapper, StartTime, EndTime)
+			go dataCollectionRoutine(configFile, &kubernetesServer, &instanceMapper, StartTime, EndTime)
 		}
 
 		// Prepare for next 10 seconds time range
@@ -90,7 +96,7 @@ func main() {
 	}
 }
 
-func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper *tools.InstanceMapper, Before time.Time, Now time.Time) {
+func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServer *kubernetes.KubernetesServer, instanceMapper *tools.InstanceMapper, Before time.Time, Now time.Time) {
 
 	// Get InsightFinder config
 	IFConfig := insightfinder.GetInsightFinderConfig(configFile)
@@ -99,11 +105,12 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 	// Get General config
 	namespaceFilter, _ := configFile.Get(GENERAL_SECTION, "namespace")
 	collectionTarget, _ := configFile.Get(GENERAL_SECTION, "target")
+	collectionType, _ := configFile.Get(GENERAL_SECTION, "type")
 	postProcessor := tools.PostProcessor{}
 	postProcessor.Initialize(configFile)
 
 	// Process other sections
-	if IFConfig["projectType"] == "LOG" {
+	if collectionType == "log" {
 		// Create connection to Loki
 		lokiServer := createLokiServer(configFile)
 		lokiServer.Initialize()
@@ -120,13 +127,13 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 
 			// Send data
 			logDataList := tools.BuildLogDataList(&logData, instanceMapper, &postProcessor)
-			tools.PrintStruct(logDataList, false, IFConfig["projectName"].(string))
+			tools.PrintStruct(*logDataList, false, IFConfig["projectName"].(string))
 			log.Output(2, fmt.Sprintf("Start sending log data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 			insightfinder.SendLogData(logDataList, IFConfig)
 			log.Output(2, "Finished sending log data.")
 		}
 
-	} else if IFConfig["projectType"] == "METRIC" {
+	} else if collectionType == "metric" {
 
 		// Create connection to Prometheus
 		prometheusServer := createPrometheusServer(configFile)
@@ -165,9 +172,19 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, instanceMapper
 		log.Output(2, fmt.Sprintf("Finished collecting metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 
 		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper, &postProcessor)
-		tools.PrintStruct(metricPayload, false, IFConfig["projectName"].(string))
+		tools.PrintStruct(*metricPayload, false, IFConfig["projectName"].(string))
 		log.Output(2, fmt.Sprintf("Start sending metic data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 		insightfinder.SendMetricData(metricPayload, IFConfig)
 		log.Output(2, "Finished sending metric data.")
+	} else if collectionType == "event" {
+		events := kubernetesServer.GetEvents(namespaceFilter, Before, Now)
+		eventPayload := tools.BuildEventsPayload(events, instanceMapper, &postProcessor)
+		tools.PrintStruct(*eventPayload, false, IFConfig["projectName"].(string))
+		log.Output(2, fmt.Sprintf("Start sending event data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
+		insightfinder.SendLogData(eventPayload, IFConfig)
+		log.Output(2, "Finished sending event data.")
+
+	} else {
+		log.Output(2, "Unknown collection type.")
 	}
 }
