@@ -142,7 +142,9 @@ func getPFMLogData_V4(config map[string]string, offset int, limit int) (result [
 	)
 	var tempRes map[string]interface{}
 	json.Unmarshal(body, &tempRes)
-	result = tempRes["results"].([]interface{})
+	if tempRes["results"] != nil {
+		result = tempRes["results"].([]interface{})
+	}
 	log.Output(2, "[LOG] Total of the raw log data entries: "+fmt.Sprint(len(result)))
 	return
 }
