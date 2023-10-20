@@ -15,6 +15,9 @@ func BuildEventsPayload(events *[]kubernetes.EventEntity, instanceNameMapper *In
 			componentName = removePodNameSuffix(event.Regarding.Name)
 			componentName = postProcessor.ProcessComponentName(componentName)
 			instanceName = componentName
+		} else if event.Regarding.Kind == "Deployment" {
+			componentName = postProcessor.ProcessComponentName(event.Regarding.Name)
+			instanceName = componentName
 		} else {
 			instanceName = event.Regarding.Kind + "/" + event.Regarding.Name
 			componentName = instanceName
