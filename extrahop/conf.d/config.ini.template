@@ -5,7 +5,7 @@ api_key = 123456789abcdefghijklmnop
 
 # this field is used for query metrics, only support "device" for now.
 object_type = device
-# device ip list. Multiple ips split with ','. If this options is empty, all active devices will be used. If need to specific device, append device ip to the ip with ':'.
+# device ip list. Multiple ips split with ','. If this options is empty, all active devices will be used. If need to specific device, append device id to the ip with ':'.
 # Example: 10.10.10.1:8589955732,10.10.10.2:8589955734
 device_ip_list = 10.10.10.1,10.10.10.2:8589955734
 # metrics query params, support multiple metric_category.
