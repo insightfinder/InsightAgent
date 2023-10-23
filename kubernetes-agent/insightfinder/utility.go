@@ -177,6 +177,7 @@ func GetInsightFinderConfig(p *configparser.ConfigParser) map[string]interface{}
 	var userName = ToString(GetConfigValue(p, IF_SECTION_NAME, "user_name", true))
 	var licenseKey = ToString(GetConfigValue(p, IF_SECTION_NAME, "license_key", true))
 	var projectName = ToString(GetConfigValue(p, IF_SECTION_NAME, "project_name", true))
+	var cloudType = ToString(GetConfigValue(p, IF_SECTION_NAME, "cloud_type", true))
 	// We use uppercase for project log type.
 	var projectType = strings.ToUpper(ToString(GetConfigValue(p, IF_SECTION_NAME, "project_type", true)))
 	var runInterval = ToString(GetConfigValue(p, IF_SECTION_NAME, "run_interval", false))
@@ -255,6 +256,7 @@ func GetInsightFinderConfig(p *configparser.ConfigParser) map[string]interface{}
 		"systemName":                systemName,
 		"projectNamePrefix":         projectNamePrefix,
 		"projectType":               projectType,
+		"cloudType":                 cloudType,
 		"metaDataMaxInstance":       metaDataMaxInstance,
 		"samplingInterval":          samplingInterval,
 		"samplingIntervalInSeconds": samplingIntervalInSeconds,
@@ -330,8 +332,17 @@ func createProject(IFconfig map[string]interface{}) {
 	} else {
 		form.Add("systemName", projectName)
 	}
+
+	// Add default values for CloudType
+	if IFconfig["cloudType"] != nil {
+		form.Add("projectCloudType", ToString(IFconfig["cloudType"]))
+	} else {
+		form.Add("projectCloudType", "PrivateCloud")
+	}
+
+	fmt.Println(ToString(IFconfig["cloudType"]))
+
 	form.Add("instanceType", "PrivateCloud")
-	form.Add("projectCloudType", "PrivateCloud")
 	form.Add("dataType", ProjectTypeToDataType(projectType))
 	form.Add("insightAgentType", ProjectTypeToAgentType(projectType, false))
 	form.Add("samplingInterval", ToString(IFconfig["samplingInterval"]))

@@ -46,10 +46,19 @@ data:
     license_key = {{ $.Values.insightfinder.license_key }}
     project_name = {{ $project.name }}
     system_name = {{ $.Values.insightfinder.system_name }}
+
     {{- if eq $project.type "event" }}
-    project_type = log
+    project_type = alert
     {{- else }}
     project_type = {{ $project.type }}
+    {{- end }}
+
+    {{- if eq $project.target "node" }}
+    cloud_type = KubernetesNode
+    {{- else if eq $project.target "pod" }}
+    cloud_type = KubernetesPod
+    {{- else }}
+    cloud_type = Kubernetes
     {{- end }}
 
     if_url = {{ $.Values.insightfinder.url }}
