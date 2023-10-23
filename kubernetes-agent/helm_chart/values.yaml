@@ -1,6 +1,3 @@
-# The image of the agent.
-image: "docker.io/insightfinderinc/kubernetes-agent:0.0.4"
-
 # The main configuration for prometheus to get metric data.
 prometheus:
   

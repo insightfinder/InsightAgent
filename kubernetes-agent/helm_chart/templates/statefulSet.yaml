@@ -20,7 +20,7 @@ spec:
         - name: agent
           tty: true
           imagePullPolicy: Always
-          image: {{.Values.image}}
+          image: "docker.io/insightfinderinc/kubernetes-agent:{{.Chart.AppVersion}}"
           volumeMounts:
             - name: if-k8s-agent-config
               mountPath: /app/conf.d
