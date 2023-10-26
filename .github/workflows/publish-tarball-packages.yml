@@ -39,14 +39,17 @@ jobs:
       matrix: ${{ fromJSON(needs.changed-files.outputs.matrix) }}
       fail-fast: false
     steps:
+      - name: Set env
+        run: echo "NOW=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
+
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Create tarball
-        run: tar zcf ${{ matrix.dirs }}-$(date +%Y%m%d%H%M).tgz ${{ matrix.dirs }}
+        run: tar zcf ${{ matrix.dirs }}.tar.gz ${{ matrix.dirs }}
 
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ${{ matrix.dirs }}-*.tgz
-          tag_name: ${{ matrix.dirs }}
+          files: ${{ matrix.dirs }}.tgz
+          tag_name: ${{ matrix.dirs }}-${{ env.NOW }}
