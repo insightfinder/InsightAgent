@@ -4,13 +4,9 @@ on:
   push:
     branches:
       - master
-    paths-ignore:
-      - '.github/**'
   pull_request:
     branches:
       - master
-    paths-ignore:
-      - '.github/**'
 
 jobs:
   changed-files:
@@ -30,6 +26,7 @@ jobs:
         with:
           json: true
           dir_names: true
+          files_ignore: '.github/**'
 
       - name: List all changed files
         run: echo '${{ steps.changed-files.outputs.all_changed_files }}'
