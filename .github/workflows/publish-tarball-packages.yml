@@ -32,8 +32,7 @@ jobs:
     needs: changed_files
     runs-on: ubuntu-latest
     strategy:
-      matrix:
-        dir: ${{ fromJson(needs.changed_files.outputs.dirs) }}
+      matrix: ${{ fromJson(needs.changed_files.outputs.dirs) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
