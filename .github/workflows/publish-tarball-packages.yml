@@ -20,10 +20,9 @@ jobs:
 
       - name: Get changed files
         id: changed-files
-        uses: ./
+        uses: tj-actions/changed-files@v40
         with:
           json: true
-          quotepath: false
           dir_names: true
 
       - name: List all changed files
