@@ -36,7 +36,7 @@ jobs:
 
   tarball-release:
     needs: changed-files
-    if: fromJSON(needs.changed-files.outputs.matrix).dirs != '[]'
+    if: fromJSON(needs.changed-files.outputs.matrix).dirs[0] != null
     name: Release tarball for each changed dir
     runs-on: ubuntu-latest
     strategy:
