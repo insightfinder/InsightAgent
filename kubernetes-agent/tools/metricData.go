@@ -32,7 +32,9 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 			} else {
 				// Pod level metric
 				instanceName, componentName = instanceNameMapper.GetInstanceMapping(promMetricData.NameSpace, promMetricData.Pod)
-				instanceName = promMetricData.Container + "_" + instanceName
+				if promMetricData.Container != "" {
+					instanceName = promMetricData.Container + "_" + instanceName
+				}
 			}
 
 			// Post process for component name
