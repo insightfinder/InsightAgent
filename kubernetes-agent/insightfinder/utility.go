@@ -131,7 +131,12 @@ func ProjectTypeToAgentType(projectType string, isReplay bool, isContainer bool)
 		}
 	}
 	if isContainer {
-		return "ContainerCustom"
+		if strings.Contains(projectType, "METRIC") {
+			return "containerStreaming"
+		} else {
+			return "ContainerCustom"
+		}
+
 	}
 
 	return "Custom"
