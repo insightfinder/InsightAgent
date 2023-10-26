@@ -10,6 +10,7 @@ type LokiLogData struct {
 	Pod       string    `validate:"required"`
 	Text      string    `validate:"required"`
 	Node      string    `validate:"required"`
+	Container string    `validate:"required"`
 }
 
 func (logData *LokiLogData) Empty() {
