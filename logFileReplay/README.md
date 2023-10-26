@@ -17,4 +17,3 @@ InsightAgent supports replay mode of json log files in which the data from the j
 
 You can try the agent code with the demo data demo.json, which is a IF-format data to replay on IF system.
 
-
