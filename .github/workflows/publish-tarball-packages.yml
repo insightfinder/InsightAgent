@@ -1,6 +1,9 @@
 name: Publish Tarball Packages
 run-name: Running on ${{ github.ref }}
-on: push
+on:
+  push:
+    paths-ignore:
+      - '.github/**'
 
 jobs:
   changed-files:
