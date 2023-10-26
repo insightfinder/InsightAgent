@@ -11,6 +11,8 @@ func BuildLogDataList(lokiLogData *[]loki.LokiLogData, instanceNameMapper *Insta
 	// Build logDataList
 	for _, logData := range *lokiLogData {
 		instanceName, componentName := instanceNameMapper.GetInstanceMapping(logData.Namespace, logData.Pod)
+		instanceName = logData.Container + "_" + instanceName
+
 		componentName = postProcessor.ProcessComponentName(componentName)
 		if instanceName == "" {
 			continue
