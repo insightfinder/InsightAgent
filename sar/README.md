@@ -99,3 +99,4 @@ sudo ./setup/cron-config.sh
 * `if_url`: URL for InsightFinder. Default is `https://app.insightfinder.com`.
 * `if_http_proxy`: HTTP proxy used to connect to InsightFinder.
 * `if_https_proxy`: As above, but HTTPS.
+
