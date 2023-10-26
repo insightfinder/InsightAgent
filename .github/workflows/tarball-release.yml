@@ -2,9 +2,13 @@ name: Tarball Release
 run-name: Running on ${{ github.ref }}
 on:
   push:
+    branches:
+      - master
     paths-ignore:
       - '.github/**'
   pull_request:
+    branches:
+      - master
     paths-ignore:
       - '.github/**'
 
