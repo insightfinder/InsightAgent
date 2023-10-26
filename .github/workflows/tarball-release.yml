@@ -1,0 +1,57 @@
+name: Tarball Release
+run-name: Running on ${{ github.ref }}
+on:
+  push:
+    paths-ignore:
+      - '.github/**'
+  pull_request:
+    paths-ignore:
+      - '.github/**'
+
+jobs:
+  changed-files:
+    name: Get changes
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v40
+        with:
+          json: true
+          dir_names: true
+
+      - name: List all changed files
+        run: echo '${{ steps.changed-files.outputs.all_changed_files }}'
+
+      - id: set-matrix
+        run: echo "matrix={\"dirs\":${{ steps.changed-files.outputs.all_changed_files }}}" >> "$GITHUB_OUTPUT"
+
+  tarball-release:
+    name: Release tarball for each changed dir
+    runs-on: ubuntu-latest
+    needs: changed-files
+    strategy:
+      matrix: ${{ fromJSON(needs.changed-files.outputs.matrix) }}
+      fail-fast: false
+    steps:
+      - name: Set env
+        run: echo "NOW=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create tarball
+        run: tar zcf ${{ matrix.dirs }}.tar.gz ${{ matrix.dirs }}
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ matrix.dirs }}.tar.gz
+          tag_name: ${{ matrix.dirs }}-${{ env.NOW }}
