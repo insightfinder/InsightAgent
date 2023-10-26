@@ -44,7 +44,9 @@ type PromMetricData struct {
 	Type      string // CPU, Memory, NetworkIn,NetworkOut , DiskRead, DiskWrite
 	NameSpace string
 	Pod       string
+	Container string
 	Node      string
-	PVC       string
-	Data      []Metric
+
+	PVC  string
+	Data []Metric
 }

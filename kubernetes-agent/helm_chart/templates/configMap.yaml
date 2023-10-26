@@ -57,9 +57,17 @@ data:
     cloud_type = KubernetesNode
     {{- else if eq $project.target "pod" }}
     cloud_type = KubernetesPod
+
     {{- else }}
-    cloud_type = Kubernetes
+    cloud_type = PrivateCloud
     {{- end }}
+
+
+    {{-if eq $project.target "pod" }}
+    is_container = true
+    {{-else}}
+    is_container = false
+    {{-end}}
 
     if_url = {{ $.Values.insightfinder.url }}
     sampling_interval = 1

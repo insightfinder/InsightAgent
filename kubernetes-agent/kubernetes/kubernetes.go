@@ -160,3 +160,17 @@ func (k *KubernetesServer) GetPods(namespace string) *map[string]map[string]map[
 	}
 	return &result
 }
+
+func (k *KubernetesServer) GetPVCPodsMapping(namespace string) *map[string]string {
+	var result map[string]string = make(map[string]string)
+	Pods, _ := k.Client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
+	for _, pod := range Pods.Items {
+		for _, volume := range pod.Spec.Volumes {
+			if volume.PersistentVolumeClaim != nil {
+				PVC := volume.PersistentVolumeClaim.ClaimName
+				result[PVC] = pod.Name
+			}
+		}
+	}
+	return &result
+}

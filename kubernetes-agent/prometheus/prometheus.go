@@ -16,15 +16,15 @@ const (
 )
 
 const (
-	POD_CPU_CORES_METRIC_QUERY                = "sum(rate(container_cpu_usage_seconds_total{namespace=~\"%s\",container!='POD',container!='',pod!=''}[3m])) by (pod,namespace,instance)"
-	POD_CPU_USAGE_PERCENTAGE                  = "sum(rate(container_cpu_usage_seconds_total{ namespace=~\"%s\",image!=\"\", container_name!=\"POD\"}[3m])) by (pod,namespace,instance) / sum(container_spec_cpu_quota{image!=\"\", container_name!=\"POD\"}/container_spec_cpu_period{ image!=\"\", container_name!=\"POD\"}) by  (pod,namespace,instance) * 100"
-	POD_MEMORY_METRIC_QUERY                   = "sum(container_memory_working_set_bytes{namespace=~\"%s\",container!='POD',container!='',pod!=''}) by (pod,namespace,instance)  / 1024 / 1024"
-	POD_MEMORY_USAGE_PERCENTAGE_METRIC_QUERY  = "100 *    sum(container_memory_working_set_bytes{namespace=~\"%s\",image!=\"\", container_name!=\"POD\"}) by (instance, pod, namespace) /  sum(container_spec_memory_limit_bytes{image!=\"\", container_name!=\"POD\"} > 0) by (instance, pod, namespace)"
-	POD_DISK_READ_METRIC_QUERY                = "sum(rate(container_fs_reads_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance) / 1024 / 1024"
-	POD_DISK_WRITE_METRIC_QUERY               = "sum(rate(container_fs_writes_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance) / 1024 / 1024"
+	POD_CPU_CORES_METRIC_QUERY                = "sum(rate(container_cpu_usage_seconds_total{namespace=~\"%s\",container!='POD',container!='',pod!=''}[3m])) by (pod,namespace,instance,container)"
+	POD_CPU_USAGE_PERCENTAGE                  = "sum(rate(container_cpu_usage_seconds_total{ namespace=~\"%s\",image!=\"\", container_name!=\"POD\",container!=''}[3m])) by (pod,namespace,instance,container) / sum(container_spec_cpu_quota{image!=\"\", container_name!=\"POD\"}/container_spec_cpu_period{ image!=\"\", container_name!=\"POD\"}) by  (pod,namespace,instance,container) * 100"
+	POD_MEMORY_METRIC_QUERY                   = "sum(container_memory_working_set_bytes{namespace=~\"%s\",container!='POD',container!='',pod!=''}) by (pod,namespace,instance,container)  / 1024 / 1024"
+	POD_MEMORY_USAGE_PERCENTAGE_METRIC_QUERY  = "100 *    sum(container_memory_working_set_bytes{namespace=~\"%s\",image!=\"\",container!='', container_name!=\"POD\"}) by (instance, pod, namespace,container) /  sum(container_spec_memory_limit_bytes{image!=\"\", container_name!=\"POD\",container!=''} > 0) by (instance, pod, namespace,container)"
+	POD_DISK_READ_METRIC_QUERY                = "sum(rate(container_fs_reads_bytes_total{namespace=~\"%s\",container!='POD',container!='',pod!=''}[3m])) by (pod, namespace,instance,container) / 1024 / 1024"
+	POD_DISK_WRITE_METRIC_QUERY               = "sum(rate(container_fs_writes_bytes_total{namespace=~\"%s\",container!='POD',container!='',pod!=''}[3m])) by (pod, namespace,instance,container) / 1024 / 1024"
 	POD_NETWORK_IN_METRIC_QUERY               = "sum(rate(container_network_receive_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance) / 1024 / 1024"
 	POD_NETWORK_OUT_METRIC_QUERY              = "sum(rate(container_network_transmit_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance) / 1024 / 1024"
-	POD_PROCESSES_QUERY                       = "sum (container_processes{namespace=~\"%s\"}) by (pod,namespace,instance)"
+	POD_PROCESSES_QUERY                       = "sum (container_processes{namespace=~\"%s\",container!=''}) by (pod,namespace,instance,container)"
 	NODE_CPU_USAGE_PERCENTAGE_METRIC_QUERY    = "(sum(rate(node_cpu_seconds_total{mode=~\"user|system\"}[2m])) by (node) / sum(rate(node_cpu_seconds_total[2m])) by (node)) * 100"
 	NODE_MEMORY_USAGE_MB_METRIC_QUERY         = "sum (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) by (node) / 1024 / 1024"
 	NODE_MEMORY_USAGE_PERCENTAGE_METRIC_QUERY = "sum((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))) by (node) * 100"
@@ -135,7 +135,10 @@ func (p *PrometheusServer) GetMetricData(Type string, namespaceFilter string, St
 	for _, Data := range QueryResult.Data.Result {
 		NameSpace := Data.Metric.Namespace
 		Pod := Data.Metric.Pod
+		Container := Data.Metric.Container
 		PVC := Data.Metric.PersistentVolumeClaim
+
+		// Process Node info
 		var Node string = ""
 		if Data.Metric.NodeInstance != "" {
 			Node = Data.Metric.NodeInstance
@@ -153,7 +156,7 @@ func (p *PrometheusServer) GetMetricData(Type string, namespaceFilter string, St
 			valueFloat64, _ := strconv.ParseFloat(Value, 64)
 			metrics = append(metrics, Metric{int64(Timestamp * 1000), valueFloat64})
 		}
-		promMetricData = append(promMetricData, PromMetricData{Type, NameSpace, Pod, Node, PVC, metrics})
+		promMetricData = append(promMetricData, PromMetricData{Type, NameSpace, Pod, Container, Node, PVC, metrics})
 	}
 	return promMetricData
 }
