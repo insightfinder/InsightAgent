@@ -1,6 +1,16 @@
 name: Container Publish
 run-name: Running on ${{ github.ref }}
-on: push
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '.github/**'
+  pull_request:
+    branches:
+      - master
+    paths-ignore:
+      - '.github/**'
 
 jobs:
   changed-files:
