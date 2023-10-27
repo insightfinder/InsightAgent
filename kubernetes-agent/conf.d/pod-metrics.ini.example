@@ -15,3 +15,4 @@ system_name = IF Staging
 project_type = metric
 if_url = https://app.insightfinder.com
 sampling_interval = 1
+
