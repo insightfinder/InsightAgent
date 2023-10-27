@@ -52,3 +52,4 @@ metrics_regex =
 thread_pool = 
 # Maximum size of a data chunk to be sent to IF, in kilobytes
 chunk_size_kb = 
+
