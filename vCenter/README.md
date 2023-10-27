@@ -49,3 +49,4 @@ python vCenter.py
 #### agent_vars
 * **`thread_pool`**: Number of threads to be used in the multiprocessing pool.
 * **`chunk_size_kb`**: Maximum size of a data chunk to be sent to IF, in kilobytes.
+
