@@ -7,6 +7,9 @@ import (
 
 func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper, PVCPodsMapping *map[string]string, postProcessor *PostProcessor) *insightfinder.MetricDataReceivePayload {
 
+	InsightAgentType := insightfinder.ProjectTypeToAgentType(IFConfig["projectType"].(string), false, ToBool(IFConfig["isContainer"]))
+	CloudType := IFConfig["cloudType"].(string)
+
 	// Build InstanceDataMap
 	instanceDataMap := make(map[string]insightfinder.InstanceData)
 	for metricType, metricData := range *metricDataMap {
@@ -74,6 +77,7 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 		}
 
 	}
+
 	return &insightfinder.MetricDataReceivePayload{
 		ProjectName:      IFConfig["projectName"].(string),
 		UserName:         IFConfig["userName"].(string),
@@ -81,6 +85,7 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 		SystemName:       IFConfig["systemName"].(string),
 		MinTimestamp:     0,
 		MaxTimestamp:     0,
-		InsightAgentType: insightfinder.ProjectTypeToAgentType(IFConfig["projectType"].(string), false, ToBool(IFConfig["is_container"])),
+		InsightAgentType: InsightAgentType,
+		CloudType:        CloudType,
 	}
 }
