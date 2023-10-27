@@ -37,18 +37,18 @@ jobs:
       matrix: ${{ fromJSON(needs.changed-files.outputs.matrix) }}
       fail-fast: false
     steps:
-      - name: Check file existence
-        id: check_files
-        uses: andstor/file-existence-action@v2
-        with:
-          files: "./${{ matrix.dirs }}/Dockerfile"
-          fail: true  # Makes the Action fail on missing files
-
       - name: Set env
         run: echo "NOW=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
 
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Check file existence
+        id: check_files
+        uses: andstor/file-existence-action@v2
+        with:
+          files: ${{ matrix.dirs }}/Dockerfile
+          fail: true  # Makes the Action fail on missing files
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
