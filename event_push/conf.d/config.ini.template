@@ -24,3 +24,4 @@ https_proxy =
 his_time_range =
 # For streaming data, this var is the interval with cron, could set to 60. For history data, this var is the time range of each api call, could set to 1440.
 run_interval = 60
+
