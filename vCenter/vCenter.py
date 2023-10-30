@@ -228,6 +228,7 @@ def collect_metric_data(vCenter_vars, agent_vars):
     logger.debug("Size of paramters in bytes {}".format(sys.getsizeof(params)))
     logger.info("Collecting the performance metrics.")
     metric_data = pool_map.map(query_single_metric, params)
+    log_data = pool_map.map(get_log_entries, params)
     
     metric_data = pd.concat(metric_data, axis=1, sort=True)
     if len(metric_data) == 0:
@@ -349,6 +350,17 @@ def query_single_metric(args):
     
     logger.debug("Retrieved {} metric for {} entity".format(metric, entity.name))
     return df
+
+def get_log_entries(args):
+    content, counter_info, entity, metric = args
+    try:
+        result = content.DiagnosticManager.BrowseDiagnosticLog(
+            host = entity,
+            start = 0,
+            lines = 100)
+    except:
+        logger.warning("Could not query the log for '{}' entity.".format(entity.name))
+        return pd.DataFrame()
 
 def get_metric_id(counter_info, metric):
     '''
