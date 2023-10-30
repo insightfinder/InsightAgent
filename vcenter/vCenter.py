@@ -189,8 +189,9 @@ def collect_metric_data(vCenter_vars, agent_vars):
     try:
         connection = connect_vmomi(vCenter_vars)
         content = connection.RetrieveContent()
-    except:
+    except Exception as e:
         logger.error('Could not connect to vCenter. Check the credentials/server state.')
+        logger.exception(e)
         sys.exit(1)
 
     counter_info = {}
@@ -330,8 +331,9 @@ def query_single_metric(args):
 
     try:
         result = content.perfManager.QueryStats(querySpec=[spec])
-    except:
+    except Exception as e:
         logger.warning("Could not query the '{}' metric for '{}' entity.".format(metric, entity.name))
+        logger.exception(e)
         return pd.DataFrame()
     
     if len(result) > 0 and len(result[0].value) > 0 and len(result[0].value[0].value) > 0:
