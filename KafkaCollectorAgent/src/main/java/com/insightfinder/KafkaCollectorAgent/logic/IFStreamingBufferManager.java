@@ -234,10 +234,22 @@ public class IFStreamingBufferManager {
 
     private String getIFProjectAndSystemInfo(JsonObject srcData){
         String ret = null;
-        for (String key : projectList.keySet()){
-            String[] keyArr = key.split(":");
-            if (keyArr.length == 2 && srcData.has(keyArr[0]) && srcData.get(keyArr[0]).getAsString().equalsIgnoreCase(keyArr[1])){
-                return String.format("%s@%s",projectList.get(key).get("project"), projectList.get(key).get("system")) ;
+        for (String keyStr : projectList.keySet()){
+            String[] keysArr = keyStr.split(",");
+            boolean bMatch = true;
+            for (String key : keysArr){
+                String[] keyArr = key.split(":");
+                if (keyArr.length == 2 && srcData.has(keyArr[0]) && srcData.get(keyArr[0]).getAsString().equalsIgnoreCase(keyArr[1])){
+                    bMatch = bMatch && true;
+                }else if (keyArr .length == 1 && srcData.has(keyArr[0])){
+                    bMatch = bMatch && true;
+                }else {
+                    bMatch = false;
+                }
+            }
+
+            if (bMatch){
+                return String.format("%s@%s",projectList.get(keyStr).get("project"), projectList.get(keyStr).get("system")) ;
             }
         }
         return  ret;

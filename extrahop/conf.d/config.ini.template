@@ -5,10 +5,12 @@ api_key = 123456789abcdefghijklmnop
 
 # this field is used for query metrics, only support "device" for now.
 object_type = device
-# device ip list. Multiple ips split with ','. If this options is empty, all active devices will be used.
-device_ip_list = 10.10.10.1,10.10.10.2
+# device ip list. Multiple ips split with ','. If this options is empty, all active devices will be used. If need to specific device, append device id to the ip with ':'.
+# Example: 10.10.10.1:8589955732,10.10.10.2:8589955734
+device_ip_list = 10.10.10.1,10.10.10.2:8589955734
 # metrics query params, support multiple metric_category.
-# device_ip_list in each metric_category is optional, if device_ip_list is not empty, agent will use these ip list to query for current metric_category
+# device_ip_list in each metric_category is optional, if device_ip_list is not empty, agent will use these ip list to query for current metric_category.
+# the device_ip_list can also contains device ip with format like ["10.10.10.1:8589955732","10.10.10.2:8589955734"]
 metric_query_params = [
         {
           "metric_category": "http_server",
@@ -17,7 +19,7 @@ metric_query_params = [
             {"name": "rsp1"},
           ],
           "cycle": "auto",
-          "device_ip_list": ["10.10.10.1","10.10.10.2"]
+          "device_ip_list": ["10.10.10.1:8589955732","10.10.10.2"]
         },
         {
           "metric_category": "http_client",

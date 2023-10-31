@@ -2,6 +2,7 @@
 import configparser
 import json
 import logging
+import math
 import os
 import regex
 import socket
@@ -54,6 +55,8 @@ CACHE_NAME = 'cache.db'
 def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, metric_buffer, track, time_now):
     logger.info('Started......')
 
+    run_interval = if_config_vars['run_interval']
+
     # build ThreadPool
     pool_map = ThreadPool(agent_config_vars['thread_pool'])
 
@@ -80,6 +83,8 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     url = urllib.parse.urljoin(agent_config_vars['host'], '/api/v1/devices')
     result_list = []
     if device_ip_list:
+        active_from = '-' + str(math.ceil(run_interval / 60)) + 'm'
+
         def query_devices(args):
             ip, params = args
             logger.debug('Starting query device ip: {}'.format(ip))
@@ -98,7 +103,8 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
 
         params_list = [(ip, {
             "search_type": 'ip address',
-            "value": ip
+            "value": ip,
+            "active_from": active_from,
         }) for ip in device_ip_list]
         results = pool_map.map(query_devices, params_list)
         result_list = list(chain(*results))
@@ -118,10 +124,15 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             logger.error('Query device list error')
 
     # parse device list
-    for device in result_list:
+    # Sort the result list by ip address. If multiple ip addresses are found for a device, use the first one.
+    for device in sorted(result_list, key=lambda x: x['ipaddr4']):
         device_id = device['id']
         devices_ids.append(device_id)
-        devices_ids_map[device_id] = device['ipaddr4']
+        if device_id not in devices_ids_map:
+            devices_ids_map[device_id] = device['ipaddr4']
+        else:
+            logger.warn('Same device id: {} with different ip address {} found, using first ip address {}'.format(
+                device_id, device['ipaddr4'], devices_ids_map[device_id]))
         devices_ips_map[device['ipaddr4']] = device_id
 
     # filter devices ids
@@ -129,6 +140,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
         logger.error('Devices list is empty')
         return
 
+    logger.info('Ip address and device id mapping: {}'.format(json.dumps(devices_ids_map)))
     logger.info('Device id and ip address mapping: {}'.format(json.dumps(devices_ips_map)))
 
     # parse sql string by params
@@ -168,11 +180,22 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
 def build_query_params(logger, if_config_vars, agent_config_vars, headers, devices_ips_map, devices_ids,
                        metric_query_params, start_time, end_time):
     params = []
+    ip_device_prefer_map = agent_config_vars['ip_device_prefer_map'] or {}
+
     for metric_query in metric_query_params:
         device_ip_list = metric_query['device_ip_list']
         current_devices_ids = devices_ids
         if device_ip_list and len(device_ip_list) > 0:
-            current_devices_ids = [devices_ips_map.get(ip) for ip in device_ip_list if devices_ips_map.get(ip)]
+            # Get the prefer device id for the ip address if configured, otherwise use the queried device id
+            prefer_devices_ids = []
+            for ip in device_ip_list:
+                if ip in ip_device_prefer_map:
+                    prefer_devices_ids.append(ip_device_prefer_map[ip])
+                    logger.info('Using configured device id {} for ip address {}'.format(ip_device_prefer_map[ip], ip))
+                elif ip in devices_ips_map:
+                    prefer_devices_ids.append(devices_ips_map[ip])
+
+            current_devices_ids = prefer_devices_ids if len(prefer_devices_ids) > 0 else devices_ids
 
         for metric_obj in metric_query['metric_specs']:
             metric = metric_obj['name']
@@ -370,6 +393,7 @@ def get_agent_config_vars(logger, config_ini):
         device_ip_list = None
         object_type = None
         his_time_range = None
+        ip_device_prefer_map = None
 
         instance_whitelist_regex = None
         try:
@@ -418,7 +442,20 @@ def get_agent_config_vars(logger, config_ini):
         if not object_type:
             return config_error(logger, 'object_type')
         if device_ip_list:
-            device_ip_list = [ip.strip() for ip in device_ip_list.split(',') if ip.strip()]
+            # the format might be: 10.10.10.1,10.10.10.2 or 10.10.10.1:8589955732,10.10.10.2:8589955734
+            ip_list = []
+            prefer_map = {}
+            for ip in device_ip_list.split(','):
+                ip = ip.strip()
+                if not ip:
+                    continue
+                if ':' in ip:
+                    ip, device = ip.split(':')
+                    prefer_map[ip] = device
+                ip_list.append(ip)
+            device_ip_list = ip_list
+            ip_device_prefer_map = prefer_map
+
         if metric_query_params:
             try:
                 metric_query_params = eval(metric_query_params)
@@ -432,6 +469,19 @@ def get_agent_config_vars(logger, config_ini):
         for param in metric_query_params:
             if param.get('device_ip_list') and not isinstance(param['device_ip_list'], list):
                 return config_error(logger, 'metric_query_params->device_ip_list')
+
+        # get device id from metric_query_params device_ip_list with format like:
+        # ["10.10.10.1:8589955732", "10.10.10.2:8589955734"]
+        for param in metric_query_params:
+            if param.get('device_ip_list') and isinstance(param['device_ip_list'], list):
+                ip_list = param['device_ip_list']
+                new_ip_list = []
+                for ip in ip_list:
+                    if ':' in ip:
+                        ip, device = ip.split(':')
+                        ip_device_prefer_map[ip] = device
+                    new_ip_list.append(ip)
+                param['device_ip_list'] = new_ip_list
 
         if len(instance_whitelist) != 0:
             try:
@@ -487,10 +537,9 @@ def get_agent_config_vars(logger, config_ini):
             'api_key': api_key,
             'object_type': object_type,
             'device_ip_list': device_ip_list,
+            'ip_device_prefer_map': ip_device_prefer_map,
             'metric_query_params': metric_query_params,
-
             'his_time_range': his_time_range,
-
             'proxies': agent_proxies,
             'data_format': data_format,
             'component_field': component_field,
