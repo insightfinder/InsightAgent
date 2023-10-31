@@ -5,7 +5,10 @@ import (
 	"kubernetes-agent/prometheus"
 )
 
-func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper, postProcessor *PostProcessor) *insightfinder.MetricDataReceivePayload {
+func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper, PVCPodsMapping *map[string]string, postProcessor *PostProcessor) *insightfinder.MetricDataReceivePayload {
+
+	InsightAgentType := insightfinder.ProjectTypeToAgentType(IFConfig["projectType"].(string), false, ToBool(IFConfig["isContainer"]))
+	CloudType := IFConfig["cloudType"].(string)
 
 	// Build InstanceDataMap
 	instanceDataMap := make(map[string]insightfinder.InstanceData)
@@ -20,10 +23,21 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 			} else if promMetricData.NameSpace != "" && promMetricData.PVC != "" {
 				// PVC level metric
 				instanceName = promMetricData.PVC
-				componentName = removePVCNameSuffix(promMetricData.PVC)
+
+				// Use parent Deployment/StatefulSet name for component name for PVC
+				if Pod, ok := (*PVCPodsMapping)[promMetricData.PVC]; ok {
+					componentName = removePodNameSuffix((*PVCPodsMapping)[promMetricData.PVC])
+
+				} else {
+					componentName = removePVCNameSuffix(Pod)
+				}
+
 			} else {
 				// Pod level metric
 				instanceName, componentName = instanceNameMapper.GetInstanceMapping(promMetricData.NameSpace, promMetricData.Pod)
+				if promMetricData.Container != "" {
+					instanceName = promMetricData.Container + "_" + instanceName
+				}
 			}
 
 			// Post process for component name
@@ -63,6 +77,7 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 		}
 
 	}
+
 	return &insightfinder.MetricDataReceivePayload{
 		ProjectName:      IFConfig["projectName"].(string),
 		UserName:         IFConfig["userName"].(string),
@@ -70,6 +85,7 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 		SystemName:       IFConfig["systemName"].(string),
 		MinTimestamp:     0,
 		MaxTimestamp:     0,
-		InsightAgentType: insightfinder.ProjectTypeToAgentType(IFConfig["projectType"].(string), false),
+		InsightAgentType: InsightAgentType,
+		CloudType:        CloudType,
 	}
 }

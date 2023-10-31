@@ -122,7 +122,7 @@ func Contains(s []interface{}, str interface{}) bool {
 
 // ------------------ Project Type transformation ------------------------
 
-func ProjectTypeToAgentType(projectType string, isReplay bool) string {
+func ProjectTypeToAgentType(projectType string, isReplay bool, isContainer bool) string {
 	if isReplay {
 		if strings.Contains(projectType, "METRIC") {
 			return "MetricFile"
@@ -130,7 +130,17 @@ func ProjectTypeToAgentType(projectType string, isReplay bool) string {
 			return "LogFile"
 		}
 	}
+	if isContainer {
+		if strings.Contains(projectType, "METRIC") {
+			return "containerStreaming"
+		} else {
+			return "ContainerCustom"
+		}
+
+	}
+
 	return "Custom"
+
 }
 
 func IsValidProjectType(projectType string) bool {
@@ -177,8 +187,10 @@ func GetInsightFinderConfig(p *configparser.ConfigParser) map[string]interface{}
 	var userName = ToString(GetConfigValue(p, IF_SECTION_NAME, "user_name", true))
 	var licenseKey = ToString(GetConfigValue(p, IF_SECTION_NAME, "license_key", true))
 	var projectName = ToString(GetConfigValue(p, IF_SECTION_NAME, "project_name", true))
+	var cloudType = ToString(GetConfigValue(p, IF_SECTION_NAME, "cloud_type", true))
 	// We use uppercase for project log type.
 	var projectType = strings.ToUpper(ToString(GetConfigValue(p, IF_SECTION_NAME, "project_type", true)))
+	var isContainer = ToBool(GetConfigValue(p, IF_SECTION_NAME, "is_container", true))
 	var runInterval = ToString(GetConfigValue(p, IF_SECTION_NAME, "run_interval", false))
 	// Optional parameters
 	var token = ToString(GetConfigValue(p, IF_SECTION_NAME, "token", false))
@@ -247,6 +259,7 @@ func GetInsightFinderConfig(p *configparser.ConfigParser) map[string]interface{}
 	if len(httpsProxy) > 0 {
 		ifProxies["https"] = httpsProxy
 	}
+
 	configIF := map[string]interface{}{
 		"userName":                  userName,
 		"licenseKey":                licenseKey,
@@ -255,6 +268,8 @@ func GetInsightFinderConfig(p *configparser.ConfigParser) map[string]interface{}
 		"systemName":                systemName,
 		"projectNamePrefix":         projectNamePrefix,
 		"projectType":               projectType,
+		"isContainer":               isContainer,
+		"cloudType":                 cloudType,
 		"metaDataMaxInstance":       metaDataMaxInstance,
 		"samplingInterval":          samplingInterval,
 		"samplingIntervalInSeconds": samplingIntervalInSeconds,
@@ -316,6 +331,7 @@ func isProjectExist(IFconfig map[string]interface{}) bool {
 func createProject(IFconfig map[string]interface{}) {
 	projectName := ToString(IFconfig["projectName"])
 	projectType := ToString(IFconfig["projectType"])
+	isContainer := ToBool(IFconfig["isContainer"])
 
 	log.Output(1, fmt.Sprintf("[LOG]Creating the project named %s in the InsightFinder.", projectName))
 	form := url.Values{}
@@ -330,10 +346,19 @@ func createProject(IFconfig map[string]interface{}) {
 	} else {
 		form.Add("systemName", projectName)
 	}
+
+	// Add default values for CloudType
+	if IFconfig["cloudType"] != nil {
+		form.Add("projectCloudType", ToString(IFconfig["cloudType"]))
+	} else {
+		form.Add("projectCloudType", "PrivateCloud")
+	}
+
+	fmt.Println(ToString(IFconfig["cloudType"]))
+
 	form.Add("instanceType", "PrivateCloud")
-	form.Add("projectCloudType", "PrivateCloud")
 	form.Add("dataType", ProjectTypeToDataType(projectType))
-	form.Add("insightAgentType", ProjectTypeToAgentType(projectType, false))
+	form.Add("insightAgentType", ProjectTypeToAgentType(projectType, false, isContainer))
 	form.Add("samplingInterval", ToString(IFconfig["samplingInterval"]))
 	form.Add("samplingIntervalInSeconds", ToString(IFconfig["samplingInterval"]))
 	samplingIntervalINT, err := strconv.Atoi(ToString(IFconfig["samplingInterval"]))

@@ -143,6 +143,9 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 		log.Output(2, fmt.Sprintf("Prepare to collect metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 		metricData := make(map[string][]prometheus.PromMetricData)
 
+		// Prepare some mapping
+		var PVCPodMapping *map[string]string
+
 		if collectionTarget == "node" {
 			metricData["CPU"] = prometheusServer.GetMetricData("NodeCPU", "", Before, Now)
 			metricData["Memory"] = prometheusServer.GetMetricData("NodeMemory", "", Before, Now)
@@ -158,6 +161,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 			metricData["Capacity"] = prometheusServer.GetMetricData("PVCCapacity", namespaceFilter, Before, Now)
 			metricData["Used"] = prometheusServer.GetMetricData("PVCUsed", namespaceFilter, Before, Now)
 			metricData["Usage"] = prometheusServer.GetMetricData("PVCUsage", namespaceFilter, Before, Now)
+			PVCPodMapping = kubernetesServer.GetPVCPodsMapping(namespaceFilter)
 		} else {
 			metricData["CPUCores"] = prometheusServer.GetMetricData("PodCPUCores", namespaceFilter, Before, Now)
 			metricData["CPU"] = prometheusServer.GetMetricData("PodCPUUsage", namespaceFilter, Before, Now)
@@ -171,7 +175,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 		}
 		log.Output(2, fmt.Sprintf("Finished collecting metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 
-		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper, &postProcessor)
+		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper, PVCPodMapping, &postProcessor)
 		tools.PrintStruct(*metricPayload, false, IFConfig["projectName"].(string))
 		log.Output(2, fmt.Sprintf("Start sending metic data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 		insightfinder.SendMetricData(metricPayload, IFConfig)
