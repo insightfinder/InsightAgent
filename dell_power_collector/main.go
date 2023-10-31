@@ -307,7 +307,7 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 	if IFConfig["projectType"] == "LOG" {
 		config := getPFMConfig(p)
 
-		connectionUrl := config["connectionUrl"].(string)
+		connectionUrl := config["connectionUrl"]
 		connectionUrlList := []string{}
 
 		if strings.Contains(connectionUrl, ",") {
@@ -317,7 +317,7 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 		}
 
 		for _, connUrl := range connectionUrlList {
-			cfg := copyAnyMap(config)
+			cfg := copyMap(config)
 			connUrl := strings.TrimSpace(connUrl)
 			cfg["connectionUrl"] = connUrl
 
@@ -364,19 +364,30 @@ func workerProcess(configPath string, wg *sync.WaitGroup) {
 			maxFetchCount := 50000
 
 			for fetchNext {
-				data := PowerFlexManagerDataStream(config, offset, 1000)
-				count := len(data)
+				data, count := PowerFlexManagerDataStream(config, offset, 1000)
 				if count == 0 {
-					oldData := PowerFlexManagerDataStream(config, 0, 1)
-					if len(oldData) > 0 && oldData[0].TimeStamp > int64(ts) {
+					oldData, oldcount := PowerFlexManagerDataStream(config, 0, 1)
+					if oldcount > 0 && oldData[0].TimeStamp > int64(ts) {
 						// The oldest data is after the recorded last timestamp
 						// A offset reset happened.
 						writeIndexFile(indexName, fmt.Sprint(0))
 					}
 					break
 				}
+				if len(data) > 0 && offset > 0 {
+					oldData, _ := PowerFlexManagerDataStream(config, 0, 1)
+					if len(oldData) > 0 && oldData[0].TimeStamp == data[0].TimeStamp {
+						// There's no new data
+						log.Output(1, "[LOG] There's no new data. Skip the sending logic.")
+						break
+					}
+				}
 				sendLogData(data, IFConfig)
-				writeIndexFile(indexName, fmt.Sprint(offset)+"$"+fmt.Sprint(data[count-1].TimeStamp))
+				if len(data) > 0 {
+					writeIndexFile(indexName, fmt.Sprint(offset)+"$"+fmt.Sprint(data[len(data)-1].TimeStamp))
+				} else {
+					writeIndexFile(indexName, fmt.Sprint(offset)+"$"+lastTS)
+				}
 				offset += count
 				totalCount += count
 				if count == 0 || (totalCount >= maxFetchCount) {

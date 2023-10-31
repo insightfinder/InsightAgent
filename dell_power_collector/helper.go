@@ -352,10 +352,11 @@ func sendRequest(operation string, endpoint string, form io.Reader, headers map[
 		}
 		client = &http.Client{Transport: tr}
 	}
-
+	log.Output(1, "Sending request to: "+endpoint)
 	res, err := client.Do(newRequest)
 	if err != nil {
-		panic(err)
+		log.Output(1, "[ERROR] Request to: "+endpoint+" failed.")
+		log.Output(2, err.Error())
 	}
 
 	defer res.Body.Close()
