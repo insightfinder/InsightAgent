@@ -32,6 +32,7 @@ type MetricDataReceivePayload struct {
 	MaxTimestamp     int64                   `json:"ma,omitempty"`
 	InsightAgentType string                  `json:"iat,omitempty"`
 	SamplingInterval string                  `json:"si,omitempty"`
+	CloudType        string                  `json:"ct,omitempty"`
 }
 
 type IFMetricPostRequestPayload struct {
