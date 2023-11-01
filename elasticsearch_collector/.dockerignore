@@ -1,0 +1,11 @@
+conf.d/
+!conf.d/config.ini.template
+.idea
+.DS_Store
+logs/
+venv/
+.dockerignore
+.python-version
+elasticsearch_collector.tar.gz
+nohup.out
+Dockerfile
