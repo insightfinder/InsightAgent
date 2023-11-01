@@ -141,11 +141,12 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
                     {timestamp_field: {"order": "asc"}}
                 ]
             }
-            logger.info('Getting data from ElasticSearch with query:' + str(query_body))
 
             # add user-defined query
             if isinstance(agent_config_vars['query_json'], dict):
                 merge(agent_config_vars['query_json'], query_body)
+
+            logger.info('Getting data from ElasticSearch with query:' + str(query_body))
 
             # build query with chunk
             query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn,
@@ -180,11 +181,12 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
                 {timestamp_field: {"order": "asc"}}
             ]
         }
-        logger.info('Getting data from ElasticSearch with query:' + str(query_body))
 
         # add user-defined query
         if isinstance(agent_config_vars['query_json'], dict):
             merge(agent_config_vars['query_json'], query_body)
+
+        logger.info('Getting data from ElasticSearch with query:' + str(query_body))
 
         # build query with chunk
         query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn, query_body,
@@ -248,6 +250,7 @@ def query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_
         return
 
     data = response.get('hits', {}).get('hits', [])
+
     if len(data) == 0:
         return
     for item in data:
@@ -290,15 +293,19 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
     logger.debug('Started data parse process ......')
 
     log_compression_interval = if_config_vars['log_compression_interval']
+    collector_process = cli_config_vars['collector']
 
     count = 0
+    collector_quit = 0
     while True:
         current_time = time.time()
         try:
             message = messages.get()
             if message == CLOSED_MESSAGE:
-                logger.debug('All logs parsed.')
-                break
+                collector_quit += 1
+                if collector_quit >= collector_process:
+                    logger.debug('All logs parsed.')
+                    break
 
             last_log_time = logCompressState.get('_parse_messages')
             needs_log_data = False
@@ -838,7 +845,7 @@ def get_cli_config_vars():
                       help='Number of processes for each agent to use for multithreading')
     parser.add_option('--timeout', action='store', dest='timeout', default=5 * 60,
                       help='Seconds of timeout for all worker processes')
-    parser.add_option('-l', '--collector', action='store', dest='collector', default=4,
+    parser.add_option('-l', '--collector', action='store', dest='collector', default=5,
                       help='Number of processes for each agent to collect data from elastic search')
     (options, args) = parser.parse_args()
 
@@ -1017,7 +1024,7 @@ def set_logger_config(level):
     logger_obj.addHandler(logging_handler_out)
 
     logging_handler_err = logging.StreamHandler(sys.stderr)
-    logging_handler_err.setLevel(logging.WARNING)
+    logging_handler_err.setLevel(logging.INFO)
     logger_obj.addHandler(logging_handler_err)
     return logger_obj
 
