@@ -8,19 +8,18 @@ RUN apt-get update && \
 # Set the timezone to the desired value
 ENV TZ=UTC
 
-# Copy agent package
-COPY elasticsearch_collector.tar.gz /
-
-# Extract the package in the root directory
-RUN tar -xzf /elasticsearch_collector.tar.gz -C /
+# Copy files
+RUN mkdir -p /elasticsearch_collector
+COPY . /elasticsearch_collector/
 
 # Set the working directory
 WORKDIR /elasticsearch_collector
 
 # Configure logs and setup python
 RUN mkdir -p /elasticsearch_collector/logs && \
-    touch /elasticsearch_collector/logs/cron.log && \
-    pip3 install -r requirements.txt --no-index --find-links=./offline/pip/packages/
+    touch /elasticsearch_collector/logs/cron.log
+#    && \
+#    pip3 install -r requirements.txt --no-index --find-links=./offline/pip/packages/
 
 # Set the config file as a volume
 VOLUME /elasticsearch_collector/conf.d/config.ini
