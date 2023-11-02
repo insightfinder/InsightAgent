@@ -64,7 +64,6 @@ func main() {
 	// Initialize InstanceName DB
 	instanceMapper := tools.InstanceMapper{}
 	instanceMapper.Initialize(&kubernetesServer)
-
 	for _, configFile := range configFiles {
 		// Add Namespaces from all config files
 		namespaceFilter, _ := configFile.Get(GENERAL_SECTION, "namespace")
@@ -74,10 +73,20 @@ func main() {
 		}
 	}
 
-	// Initialize time ranges
+	//// Start data listener routine to listen for containerStatus changes
+	//for _, configFile := range configFiles {
+	//	namespaceFilter, _ := configFile.Get(GENERAL_SECTION, "namespace")
+	//	collectionTarget, _ := configFile.Get(GENERAL_SECTION, "target")
+	//	collectionType, _ := configFile.Get(GENERAL_SECTION, "type")
+	//	if collectionType == "event" && collectionTarget == "pod" {
+	//		log.Output(2, "Start containerStatus listen routine for namespace: "+namespaceFilter)
+	//		go dataListenerRoutine(configFile, &kubernetesServer, &instanceMapper)
+	//	}
+	//}
+
+	// Start data collection routine
 	EndTime := time.Now()
 	StartTime := EndTime.Add(-time.Second * 10)
-
 	for {
 		log.Output(2, "Start...")
 
@@ -95,6 +104,11 @@ func main() {
 		EndTime = time.Now()
 	}
 }
+
+//
+//func dataListenerRoutine(configFile *configparser.ConfigParser, kubernetesServer *kubernetes.KubernetesServer, instanceMapper *tools.InstanceMapper) {
+//
+//}
 
 func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServer *kubernetes.KubernetesServer, instanceMapper *tools.InstanceMapper, Before time.Time, Now time.Time) {
 
@@ -167,6 +181,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 			metricData["CPU"] = prometheusServer.GetMetricData("PodCPUUsage", namespaceFilter, Before, Now)
 			metricData["Memory"] = prometheusServer.GetMetricData("PodMemory", namespaceFilter, Before, Now)
 			metricData["MemoryUsage"] = prometheusServer.GetMetricData("PodMemoryUsage", namespaceFilter, Before, Now)
+			metricData["MemoryRequestUsage"] = prometheusServer.GetMetricData("PodRequestMemoryUsage", namespaceFilter, Before, Now)
 			metricData["DiskRead"] = prometheusServer.GetMetricData("PodDiskRead", namespaceFilter, Before, Now)
 			metricData["DiskWrite"] = prometheusServer.GetMetricData("PodDiskWrite", namespaceFilter, Before, Now)
 			metricData["NetworkIn"] = prometheusServer.GetMetricData("PodNetworkIn", namespaceFilter, Before, Now)
