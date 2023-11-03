@@ -58,8 +58,6 @@ public class Registrar {
         map.add("system", ifConfig.getSystem());
         map.add("serverIp", ifConfig.getActionServerIp());
         map.add("serverPort", ifConfig.getActionServerPort());
-        map.add("serverId", ifConfig.getActionServerId());
-
         HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(map, headers);
         return request;
     }
