@@ -5,6 +5,8 @@ import com.google.gson.JsonObject;
 import com.insightfinder.kubeactions.config.IFConfig;
 import org.jetbrains.annotations.NotNull;
 import org.mapdb.DB;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -17,9 +19,12 @@ import org.springframework.web.client.RestTemplate;
 
 import javax.annotation.PostConstruct;
 import java.util.Map;
+import java.util.logging.Level;
 
 @Component
 public class Registrar {
+    private static final Logger log = LoggerFactory.getLogger(Registrar.class);
+
     @Autowired
     private DB mapDB;
     @Autowired
@@ -32,6 +37,7 @@ public class Registrar {
     @PostConstruct
     void init(){
         String url  = String.format("%s/api/v2/IFK8SActionServerServlet", ifConfig.getServerUrl());
+        log.info(url);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
         HttpEntity<MultiValueMap<String, String>> request = getMultiValueMapHttpEntity(headers);
