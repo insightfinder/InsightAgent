@@ -393,7 +393,7 @@ def get_agent_config_vars(logger, config_ini):
         device_ip_list = None
         object_type = None
         his_time_range = None
-        ip_device_prefer_map = None
+        ip_device_prefer_map = {}
 
         instance_whitelist_regex = None
         try:
