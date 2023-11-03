@@ -115,7 +115,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
         for timestamp in range(agent_config_vars['his_time_range'][0],
                                agent_config_vars['his_time_range'][1],
                                if_config_vars['sampling_interval']):
-            start_time = timestamp + collector_id * collector_interval
+            start_time = timestamp + (collector_id + 1) * collector_interval
             end_time = start_time + collector_interval
 
             # build query
@@ -155,7 +155,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
     else:
         logger.info('Using current time for streaming data on collector {} ...'.format(collector_id))
 
-        start_time = time_now - collector_id * collector_interval
+        start_time = time_now - (collector_id + 1) * collector_interval
         end_time = start_time + collector_interval
 
         # build query
