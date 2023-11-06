@@ -47,7 +47,7 @@ public class K8SManager {
             }
 
         } catch (IOException e) {
-            log.atError().log(e.getStackTrace().toString());
+            log.atError().log(e.getMessage());
         }
         Configuration.setDefaultApiClient(client);
         coreV1Api = new CoreV1Api();
@@ -66,7 +66,7 @@ public class K8SManager {
                             .collect(Collectors.toList());
             return list;
         }catch (ApiException exception){
-            log.atError().log(exception.getStackTrace().toString());
+            log.atError().log(exception.getMessage());
         }
         return null;
     }
@@ -78,7 +78,7 @@ public class K8SManager {
             v1podList = coreV1Api.listPodForAllNamespaces(
                     null, null, null, null, null, null, null, null, null, null);
         } catch (ApiException e) {
-            log.atError().log(e.getStackTrace().toString());
+            log.atError().log(e.getMessage());
         }
         List<String> podList =
                 v1podList.getItems().stream()
@@ -93,7 +93,7 @@ public class K8SManager {
         try {
             v1podList = coreV1Api.listNamespacedPod(namespace, null, null, null, null, null, null, null, null, null, null);
         } catch (ApiException e) {
-            log.atError().log(e.getStackTrace().toString());
+            log.atError().log(e.getMessage());
         }
         v1podList.getItems().stream().forEach(v1Pod -> {
             if (!nodeMap.containsKey(v1Pod.getSpec().getNodeName())){
@@ -110,7 +110,7 @@ public class K8SManager {
         try {
             v1podList = coreV1Api.listPodForAllNamespaces(null, null, null, null, null, null, null, null, null, null);
         } catch (ApiException e) {
-            log.atError().log(e.getStackTrace().toString());
+            log.atError().log(e.getMessage());
         }
         v1podList.getItems().stream().forEach(v1Pod -> {
             if (!nodeMap.containsKey(v1Pod.getSpec().getNodeName())){
@@ -130,7 +130,7 @@ public class K8SManager {
                 try {
                     v1Pod = coreV1Api.deleteNamespacedPod(podName, namespace, null, null, null, null, null, null);
                 } catch (ApiException e) {
-                    log.atError().log(e.getStackTrace().toString());
+                    log.atError().log(e.getMessage());
                 }
                 if (v1Pod != null){
                     log.atInfo().log("Deleted pod " + v1Pod.getMetadata().getName());
@@ -152,7 +152,7 @@ public class K8SManager {
                 try {
                     v1Pod = coreV1Api.deleteNamespacedPod(podName, "default", null, null, null, null, null, null);
                 } catch (ApiException e) {
-                    log.atError().log(e.getStackTrace().toString());
+                    log.atError().log(e.getMessage());
                 }
                 if (v1Pod != null){
                     log.atInfo().log("Deleted pod " + v1Pod.getMetadata().getName());
@@ -170,7 +170,7 @@ public class K8SManager {
         try {
             v1NodeList = coreV1Api.listNode(null, null, null, null, null, null, null, null, null, null);
         } catch (ApiException e) {
-            log.atError().log(e.getStackTrace().toString());
+            log.atError().log(e.getMessage());
         }
         return v1NodeList.getItems();
     }
@@ -180,7 +180,7 @@ public class K8SManager {
         try {
             v1Deployment = getDeployment(nameSpace, deploymentName);
         } catch (ApiException e) {
-            log.atError().log(e.getStackTrace().toString());
+            log.atError().log(e.getMessage());
         }
         int finalNum = v1Deployment.getSpec().getReplicas() + podNum;
         String jsonPatchStrTemplate =
@@ -194,7 +194,7 @@ public class K8SManager {
         try {
             v1Deployment = getDeployment(nameSpace, deploymentName);
         } catch (ApiException e) {
-            log.atError().log(e.getStackTrace().toString());
+            log.atError().log(e.getMessage());
         }
         String jsonPatchStrTemplate =
                 "[{\"op\":\"replace\",\"path\":\"/spec/replicas\",\"value\":%d}]";
@@ -207,7 +207,7 @@ public class K8SManager {
         try {
             v1Deployment = getDeployment(nameSpace, deploymentName);
         } catch (ApiException e) {
-            log.atError().log(e.getStackTrace().toString());
+            log.atError().log(e.getMessage());
         }
         JsonArray jsonArray = new JsonArray();
         v1Deployment.getSpec().getTemplate().getSpec().getContainers().forEach(v1Container -> {
@@ -222,7 +222,7 @@ public class K8SManager {
         try {
             v1Deployment = getDeployment(nameSpace, deploymentName);
         } catch (ApiException e) {
-            log.atError().log(e.getStackTrace().toString());
+            log.atError().log(e.getMessage());
         }
         AtomicLong retValue = new AtomicLong();
         v1Deployment.getSpec().getTemplate().getSpec().getContainers().forEach(v1Container -> {
@@ -242,7 +242,7 @@ public class K8SManager {
         try {
             v1Deployment = getDeployment(nameSpace, deploymentName);
         } catch (ApiException e) {
-            log.atError().log(e.getStackTrace().toString());
+            log.atError().log(e.getMessage());
         }
         AtomicLong retValue = new AtomicLong();
         v1Deployment.getSpec().getTemplate().getSpec().getContainers().forEach(v1Container -> {
@@ -262,7 +262,7 @@ public class K8SManager {
         try {
             v1Deployment = getDeployment(nameSpace, deploymentName);
         } catch (ApiException e) {
-            log.atError().log(e.getStackTrace().toString());
+            log.atError().log(e.getMessage());
         }
         JSONObject retValue = new JSONObject();
         v1Deployment.getSpec().getTemplate().getSpec().getContainers().forEach(v1Container -> {
@@ -287,7 +287,7 @@ public class K8SManager {
         try {
             v1Deployment = getDeployment(nameSpace, deploymentName);
         } catch (ApiException e) {
-            log.atError().log(e.getStackTrace().toString());
+            log.atError().log(e.getMessage());
         }
         JsonArray jsonArray = new JsonArray();
         AtomicInteger index = new AtomicInteger();
@@ -324,7 +324,7 @@ public class K8SManager {
         try {
             v1Deployment = getDeployment(nameSpace, deploymentName);
         } catch (ApiException e) {
-            log.atError().log(e.getStackTrace().toString());
+            log.atError().log(e.getMessage());
         }
         V1Deployment finalV1Deployment = v1Deployment;
         v1Deployment.getSpec().getTemplate().getSpec().getContainers().forEach(v1Container -> {
