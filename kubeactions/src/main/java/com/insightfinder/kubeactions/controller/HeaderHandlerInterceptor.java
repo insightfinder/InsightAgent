@@ -3,6 +3,8 @@ package com.insightfinder.kubeactions.controller;
 import com.insightfinder.kubeactions.config.IFConfig;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -10,6 +12,8 @@ import org.springframework.web.servlet.ModelAndView;
 
 @Component
 public class HeaderHandlerInterceptor implements HandlerInterceptor {
+    private static final Logger log = LoggerFactory.getLogger(HeaderHandlerInterceptor.class);
+
     @Autowired
     private IFConfig ifConfig;
     @Override
@@ -25,8 +29,14 @@ public class HeaderHandlerInterceptor implements HandlerInterceptor {
                              HttpServletResponse response, Object handler) throws Exception {
         String serverid = request.getHeader("serverid");
         if (serverid != null && serverid.length() > 0) {
-            return serverid.equalsIgnoreCase(ifConfig.getActionServerId());
+            String serverIdRecord = ifConfig.getActionServerId();
+            if (serverid.equalsIgnoreCase(serverIdRecord)){
+                log.info("serverId is matched with the server record");
+            }else {
+                log.info("serverId is not matched with the server record" + serverid);
+            }
         }
+        log.info("serverId is not matched with the server record");
         return false;
     }
 }
