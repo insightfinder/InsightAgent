@@ -3,6 +3,8 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/client-go/tools/cache"
 	"log"
 	"time"
 
@@ -173,4 +175,38 @@ func (k *KubernetesServer) GetPVCPodsMapping(namespace string) *map[string]strin
 		}
 	}
 	return &result
+}
+
+func testFun(oldObj, newObj interface{}) {
+
+	newPod := newObj.(*corev1.Pod)
+	for _, containerStatus := range newPod.Status.ContainerStatuses {
+		if containerStatus.State.Terminated != nil {
+			fmt.Printf("Pod Name: %s - Container Name: %s\n", newPod.Name, containerStatus.Name)
+			fmt.Printf("Exit Code: %d\n", containerStatus.State.Terminated.ExitCode)
+			fmt.Printf("Reason: %s\n", containerStatus.State.Terminated.Reason)
+			fmt.Printf("Message: %s\n", containerStatus.State.Terminated.Message)
+		}
+	}
+
+}
+
+func (k *KubernetesServer) WatchContainerStatus(namespace string) {
+	listWatch := cache.NewListWatchFromClient(
+		k.Client.CoreV1().RESTClient(),
+		"pods",
+		namespace,
+		fields.Everything(),
+	)
+	_, controller := cache.NewInformer(
+		listWatch,
+		&corev1.Pod{},
+		0,
+		cache.ResourceEventHandlerFuncs{
+			UpdateFunc: testFun,
+		},
+	)
+	stop := make(chan struct{})
+	defer close(stop)
+	controller.Run(stop)
 }
