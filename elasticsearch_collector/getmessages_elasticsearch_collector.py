@@ -251,6 +251,8 @@ def query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_
 
     data = response.get('hits', {}).get('hits', [])
 
+    print(data, len(data))
+
     if len(data) == 0:
         return
     for item in data:
@@ -306,6 +308,8 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                 if collector_quit >= collector_process:
                     logger.debug('All logs parsed.')
                     break
+                else:
+                    continue
 
             last_log_time = logCompressState.get('_parse_messages')
             needs_log_data = False
