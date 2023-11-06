@@ -73,16 +73,16 @@ func main() {
 		}
 	}
 
-	//// Start data listener routine to listen for containerStatus changes
-	//for _, configFile := range configFiles {
-	//	namespaceFilter, _ := configFile.Get(GENERAL_SECTION, "namespace")
-	//	collectionTarget, _ := configFile.Get(GENERAL_SECTION, "target")
-	//	collectionType, _ := configFile.Get(GENERAL_SECTION, "type")
-	//	if collectionType == "event" && collectionTarget == "pod" {
-	//		log.Output(2, "Start containerStatus listen routine for namespace: "+namespaceFilter)
-	//		go dataListenerRoutine(configFile, &kubernetesServer, &instanceMapper)
-	//	}
-	//}
+	// Start data listener routine to listen for containerStatus changes
+	for _, configFile := range configFiles {
+		namespaceFilter, _ := configFile.Get(GENERAL_SECTION, "namespace")
+		collectionTarget, _ := configFile.Get(GENERAL_SECTION, "target")
+		collectionType, _ := configFile.Get(GENERAL_SECTION, "type")
+		if collectionType == "event" && collectionTarget == "pod" {
+			log.Output(2, "Start containerStatus listen routine for namespace: "+namespaceFilter)
+			go dataListenerRoutine(namespaceFilter, configFile, &kubernetesServer, &instanceMapper)
+		}
+	}
 
 	// Start data collection routine
 	EndTime := time.Now()
@@ -95,7 +95,7 @@ func main() {
 
 		// Process data collection based each config file
 		for _, configFile := range configFiles {
-			go dataCollectionRoutine(configFile, &kubernetesServer, &instanceMapper, StartTime, EndTime)
+			dataCollectionRoutine(configFile, &kubernetesServer, &instanceMapper, StartTime, EndTime)
 		}
 
 		// Prepare for next 10 seconds time range
@@ -105,10 +105,10 @@ func main() {
 	}
 }
 
-//
-//func dataListenerRoutine(configFile *configparser.ConfigParser, kubernetesServer *kubernetes.KubernetesServer, instanceMapper *tools.InstanceMapper) {
-//
-//}
+func dataListenerRoutine(namespace string, configFile *configparser.ConfigParser, kubernetesServer *kubernetes.KubernetesServer, instanceMapper *tools.InstanceMapper) {
+	// Watch container status changes.
+	go kubernetesServer.WatchContainerStatus(namespace)
+}
 
 func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServer *kubernetes.KubernetesServer, instanceMapper *tools.InstanceMapper, Before time.Time, Now time.Time) {
 
