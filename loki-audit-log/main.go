@@ -176,10 +176,10 @@ func getLokiAuditLog(p *configparser.ConfigParser) (res []loki.LokiLogData) {
 	}
 	if EndTime.Before(StartTime) {
 		log.Output(1, "[WARNING] endTime is before startTime. Reset startTime to 1 minute before endTime")
-		StartTime = EndTime.Add(-time.Minute * 20)
+		StartTime = EndTime.Add(-time.Minute)
 	}
 	lokiServer.Initialize()
-	interval := time.Minute * 20
+	interval := time.Minute
 	for t := StartTime; t.Before(EndTime); t = t.Add(interval) {
 		fmt.Println("Current Time:", t)
 		res = append(res, lokiServer.GetLogData(lokiConfig["query"], t, t.Add(interval))...)
@@ -224,7 +224,6 @@ func main() {
 		processedData := processLokiLog(p, lokiData)
 		log.Output(1, "[INFO] Sucessfully processed log entries: "+fmt.Sprint(len(processedData)))
 		IFconfig := getIFConfigsSection(p)
-		println(IFconfig)
 		sendLogData(processedData, IFconfig)
 	}
 	log.Output(1, "[LOG] All workers have finsihed. The agent will terminate by itself.")
