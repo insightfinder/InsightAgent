@@ -67,7 +67,7 @@ public class K8SManager {
                             .collect(Collectors.toList());
             return list;
         }catch (ApiException exception){
-            log.info(exception.toString());
+            log.info(exception.getResponseBody());
             exception.printStackTrace();
         }
         return null;
