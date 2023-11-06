@@ -72,7 +72,7 @@ func (loki *LokiServer) getConfig() LogConfigResponseBody {
 	return configYaml
 }
 
-func (loki *LokiServer) GetLogData(namespace string, queryStr string, StartTime time.Time, EndTime time.Time) (resultList []LokiLogData) {
+func (loki *LokiServer) GetLogData(queryStr string, StartTime time.Time, EndTime time.Time) (resultList []LokiLogData) {
 	queryResult := loki.Query(queryStr, StartTime.Format(time.RFC3339), EndTime.Format(time.RFC3339))
 	for _, result := range queryResult.Data.Result {
 		for _, logData := range result.Values {
