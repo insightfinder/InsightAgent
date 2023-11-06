@@ -251,8 +251,6 @@ def query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_
 
     data = response.get('hits', {}).get('hits', [])
 
-    print(data, len(data))
-
     if len(data) == 0:
         return
     for item in data:
