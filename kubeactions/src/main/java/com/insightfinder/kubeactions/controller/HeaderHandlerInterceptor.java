@@ -32,8 +32,10 @@ public class HeaderHandlerInterceptor implements HandlerInterceptor {
             String serverIdRecord = ifConfig.getActionServerId();
             if (serverid.equalsIgnoreCase(serverIdRecord)){
                 log.info("serverId is matched with the server record");
+                return true;
             }else {
                 log.info("serverId is not matched with the server record" + serverid);
+                return false;
             }
         }
         log.info("serverId is not matched with the server record");
