@@ -119,7 +119,6 @@ func getLokiConfig(p *configparser.ConfigParser) map[string]string {
 	var username = ToString(GetConfigValue(p, LOKI_SECTION_NAME, "username", true))
 	var password = ToString(GetConfigValue(p, LOKI_SECTION_NAME, "password", true))
 	var endpoint = ToString(GetConfigValue(p, LOKI_SECTION_NAME, "endpoint", true))
-	var namespace = ToString(GetConfigValue(p, LOKI_SECTION_NAME, "namespace", true))
 	var query = ToString(GetConfigValue(p, LOKI_SECTION_NAME, "query", true))
 	// optional fields
 	var startTime = ToString(GetConfigValue(p, LOKI_SECTION_NAME, "startTime", false))
@@ -130,7 +129,6 @@ func getLokiConfig(p *configparser.ConfigParser) map[string]string {
 		"username":                username,
 		"password":                password,
 		"endpoint":                endpoint,
-		"namespace":               namespace,
 		"query":                   query,
 		"maxEntriesLimitPerQuery": maxEntriesLimitPerQuery,
 		"startTime":               startTime,
@@ -184,7 +182,7 @@ func getLokiAuditLog(p *configparser.ConfigParser) (res []loki.LokiLogData) {
 	interval := time.Minute * 20
 	for t := StartTime; t.Before(EndTime); t = t.Add(interval) {
 		fmt.Println("Current Time:", t)
-		res = append(res, lokiServer.GetLogData(lokiConfig["namespace"], lokiConfig["query"], t, t.Add(interval))...)
+		res = append(res, lokiServer.GetLogData(lokiConfig["query"], t, t.Add(interval))...)
 	}
 	return
 }
