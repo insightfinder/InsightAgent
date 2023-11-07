@@ -6,6 +6,5 @@ logs/
 venv/
 .dockerignore
 .python-version
-elasticsearch_collector.tar.gz
 nohup.out
 Dockerfile
