@@ -177,21 +177,7 @@ func (k *KubernetesServer) GetPVCPodsMapping(namespace string) *map[string]strin
 	return &result
 }
 
-func testFun(oldObj, newObj interface{}) {
-
-	newPod := newObj.(*corev1.Pod)
-	for _, containerStatus := range newPod.Status.ContainerStatuses {
-		if containerStatus.State.Terminated != nil {
-			fmt.Printf("Pod Name: %s - Container Name: %s\n", newPod.Name, containerStatus.Name)
-			fmt.Printf("Exit Code: %d\n", containerStatus.State.Terminated.ExitCode)
-			fmt.Printf("Reason: %s\n", containerStatus.State.Terminated.Reason)
-			fmt.Printf("Message: %s\n", containerStatus.State.Terminated.Message)
-		}
-	}
-
-}
-
-func (k *KubernetesServer) WatchContainerStatus(namespace string) {
+func (k *KubernetesServer) StreamContainerStatus(namespace string, chn *chan *EventEntity) {
 	listWatch := cache.NewListWatchFromClient(
 		k.Client.CoreV1().RESTClient(),
 		"pods",
@@ -203,7 +189,27 @@ func (k *KubernetesServer) WatchContainerStatus(namespace string) {
 		&corev1.Pod{},
 		0,
 		cache.ResourceEventHandlerFuncs{
-			UpdateFunc: testFun,
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				newPod := newObj.(*corev1.Pod)
+				for _, containerStatus := range newPod.Status.ContainerStatuses {
+					if containerStatus.State.Terminated != nil {
+						event := EventEntity{
+							Name:      newPod.Name,
+							Namespace: newPod.Namespace,
+							Time:      newPod.Status.ContainerStatuses[0].State.Terminated.FinishedAt.Time,
+							Type:      "Warning",
+							Reason:    newPod.Status.ContainerStatuses[0].State.Terminated.Reason,
+							Note:      fmt.Sprintf("Container %s Terminated with exit code %d.", containerStatus.Name, containerStatus.State.Terminated.ExitCode),
+							Regarding: RegardingEntity{
+								Name:      newPod.Name,
+								Namespace: newPod.Namespace,
+								Kind:      "Pod",
+							},
+						}
+						*chn <- &event
+					}
+				}
+			},
 		},
 	)
 	stop := make(chan struct{})

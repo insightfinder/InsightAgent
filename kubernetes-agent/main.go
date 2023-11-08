@@ -106,8 +106,14 @@ func main() {
 }
 
 func dataListenerRoutine(namespace string, configFile *configparser.ConfigParser, kubernetesServer *kubernetes.KubernetesServer, instanceMapper *tools.InstanceMapper) {
-	// Watch container status changes.
-	go kubernetesServer.WatchContainerStatus(namespace)
+	// Create postProcessor
+	postProcessor := tools.PostProcessor{}
+	postProcessor.Initialize(configFile)
+
+	// Stream container status changes.
+	containerStatusChn := make(chan *kubernetes.EventEntity)
+	go kubernetesServer.StreamContainerStatus(namespace, &containerStatusChn)
+	go tools.EventDataStreamingRoutine(&containerStatusChn, &postProcessor, configFile)
 }
 
 func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServer *kubernetes.KubernetesServer, instanceMapper *tools.InstanceMapper, Before time.Time, Now time.Time) {
@@ -197,7 +203,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 		log.Output(2, "Finished sending metric data.")
 	} else if collectionType == "event" {
 		events := kubernetesServer.GetEvents(namespaceFilter, Before, Now)
-		eventPayload := tools.BuildEventsPayload(events, instanceMapper, &postProcessor)
+		eventPayload := tools.BuildEventsPayload(events, &postProcessor)
 		tools.PrintStruct(*eventPayload, false, IFConfig["projectName"].(string))
 		log.Output(2, fmt.Sprintf("Start sending event data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 		insightfinder.SendLogData(eventPayload, IFConfig)

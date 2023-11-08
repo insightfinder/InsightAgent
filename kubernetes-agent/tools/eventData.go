@@ -1,11 +1,12 @@
 package tools
 
 import (
+	"github.com/bigkevmcd/go-configparser"
 	"kubernetes-agent/insightfinder"
 	"kubernetes-agent/kubernetes"
 )
 
-func BuildEventsPayload(events *[]kubernetes.EventEntity, instanceNameMapper *InstanceMapper, postProcessor *PostProcessor) *[]insightfinder.LogData {
+func BuildEventsPayload(events *[]kubernetes.EventEntity, postProcessor *PostProcessor) *[]insightfinder.LogData {
 	eventDataList := make([]insightfinder.LogData, 0)
 
 	// Build logDataList
@@ -32,4 +33,13 @@ func BuildEventsPayload(events *[]kubernetes.EventEntity, instanceNameMapper *In
 	}
 
 	return &eventDataList
+}
+
+func EventDataStreamingRoutine(chn *chan *kubernetes.EventEntity, postProcessor *PostProcessor, configFile *configparser.ConfigParser) {
+	IFConfig := insightfinder.GetInsightFinderConfig(configFile)
+	for {
+		event := <-*chn
+		eventPayload := BuildEventsPayload(&[]kubernetes.EventEntity{*event}, postProcessor)
+		insightfinder.SendLogData(eventPayload, IFConfig)
+	}
 }
