@@ -26,6 +26,7 @@ const (
 	POD_NETWORK_IN_METRIC_QUERY                      = "sum(rate(container_network_receive_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance) / 1024 / 1024"
 	POD_NETWORK_OUT_METRIC_QUERY                     = "sum(rate(container_network_transmit_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance) / 1024 / 1024"
 	POD_PROCESSES_QUERY                              = "sum (container_processes{namespace=~\"%s\",container!=''}) by (pod,namespace,instance,container)"
+	POD_CONTAINER_RESTART_QUERY                      = "sum (kube_pod_container_status_restarts_total{namespace=~'%s',container!='POD',container!='',pod!=''}) by (namespace,pod,container,instance)"
 	NODE_CPU_USAGE_PERCENTAGE_METRIC_QUERY           = "(sum(rate(node_cpu_seconds_total{mode=~\"user|system\"}[2m])) by (node) / sum(rate(node_cpu_seconds_total[2m])) by (node)) * 100"
 	NODE_MEMORY_USAGE_MB_METRIC_QUERY                = "sum (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) by (node) / 1024 / 1024"
 	NODE_MEMORY_USAGE_PERCENTAGE_METRIC_QUERY        = "sum((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))) by (node) * 100"
@@ -105,6 +106,8 @@ func (p *PrometheusServer) GetMetricData(Type string, namespaceFilter string, St
 		QueryStr = POD_NETWORK_OUT_METRIC_QUERY
 	case "PodProcesses":
 		QueryStr = POD_PROCESSES_QUERY
+	case "PodContainerRestart":
+		QueryStr = POD_CONTAINER_RESTART_QUERY
 	case "NodeCPU":
 		QueryStr = NODE_CPU_USAGE_PERCENTAGE_METRIC_QUERY
 	case "NodeMemory":
