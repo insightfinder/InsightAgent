@@ -174,12 +174,12 @@ func (k *KubernetesServer) GetPodsContainerExitEvents(namespace string, startTim
 		for _, containerStatus := range Pod.Status.ContainerStatuses {
 			if containerStatus.LastTerminationState.Terminated != nil {
 				containerLastTerminated := containerStatus.LastTerminationState.Terminated
-				if containerLastTerminated.StartedAt.Time.After(startTime) && containerLastTerminated.StartedAt.Time.Before(endTime) {
+				if containerLastTerminated.FinishedAt.Time.After(startTime) && containerLastTerminated.FinishedAt.Time.Before(endTime) {
 					// Save the same event to cache to avoid duplicate events
-					cache[fmt.Sprint(Pod.Name, containerStatus.Name, containerLastTerminated.StartedAt.Time.UnixMilli(), containerLastTerminated.Reason)] = EventEntity{
+					cache[fmt.Sprint(Pod.Name, containerStatus.Name, containerLastTerminated.FinishedAt.Time.UnixMilli(), containerLastTerminated.Reason)] = EventEntity{
 						Name:      Pod.Name,
 						Namespace: Pod.Namespace,
-						Time:      containerLastTerminated.StartedAt.Time,
+						Time:      containerLastTerminated.FinishedAt.Time,
 						Type:      "Warning",
 						Reason:    containerLastTerminated.Reason,
 						Note:      fmt.Sprintf("Container %s Terminated with exit code %d.", containerStatus.Name, containerLastTerminated.ExitCode),
