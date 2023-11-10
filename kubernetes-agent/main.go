@@ -73,17 +73,6 @@ func main() {
 		}
 	}
 
-	// Start data listener routine to listen for containerStatus changes
-	for _, configFile := range configFiles {
-		namespaceFilter, _ := configFile.Get(GENERAL_SECTION, "namespace")
-		collectionTarget, _ := configFile.Get(GENERAL_SECTION, "target")
-		collectionType, _ := configFile.Get(GENERAL_SECTION, "type")
-		if collectionType == "event" && collectionTarget == "pod" {
-			log.Output(2, "Start containerStatus listen routine for namespace: "+namespaceFilter)
-			go dataListenerRoutine(namespaceFilter, configFile, &kubernetesServer, &instanceMapper)
-		}
-	}
-
 	// Start data collection routine
 	EndTime := time.Now()
 	StartTime := EndTime.Add(-time.Second * 10)
@@ -103,17 +92,6 @@ func main() {
 		time.Sleep(time.Second * 10)
 		EndTime = time.Now()
 	}
-}
-
-func dataListenerRoutine(namespace string, configFile *configparser.ConfigParser, kubernetesServer *kubernetes.KubernetesServer, instanceMapper *tools.InstanceMapper) {
-	// Create postProcessor
-	postProcessor := tools.PostProcessor{}
-	postProcessor.Initialize(configFile)
-
-	// Stream container status changes.
-	containerStatusChn := make(chan *kubernetes.EventEntity)
-	go kubernetesServer.StreamContainerStatus(namespace, &containerStatusChn)
-	go tools.EventDataStreamingRoutine(&containerStatusChn, &postProcessor, configFile)
 }
 
 func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServer *kubernetes.KubernetesServer, instanceMapper *tools.InstanceMapper, Before time.Time, Now time.Time) {
@@ -202,11 +180,19 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 		insightfinder.SendMetricData(metricPayload, IFConfig)
 		log.Output(2, "Finished sending metric data.")
 	} else if collectionType == "event" {
-		events := kubernetesServer.GetEvents(namespaceFilter, Before, Now)
-		eventPayload := tools.BuildEventsPayload(events, &postProcessor)
-		tools.PrintStruct(*eventPayload, false, IFConfig["projectName"].(string))
+		// Collect normal events
+		generalEvents := kubernetesServer.GetEvents(namespaceFilter, Before, Now)
+		generalEventPayload := tools.BuildEventsPayload(generalEvents, &postProcessor)
+		tools.PrintStruct(*generalEventPayload, false, IFConfig["projectName"].(string)+"-general")
+
+		// Collect Pod Container Exit Events
+		containerExitEvents := kubernetesServer.GetPodsContainerExitEvents(namespaceFilter, Before, Now)
+		containerExitEventPayload := tools.BuildEventsPayload(containerExitEvents, &postProcessor)
+		tools.PrintStruct(*containerExitEventPayload, false, IFConfig["projectName"].(string)+"-containerExit")
+
 		log.Output(2, fmt.Sprintf("Start sending event data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-		insightfinder.SendLogData(eventPayload, IFConfig)
+		insightfinder.SendLogData(generalEventPayload, IFConfig)
+		insightfinder.SendLogData(containerExitEventPayload, IFConfig)
 		log.Output(2, "Finished sending event data.")
 
 	} else {
