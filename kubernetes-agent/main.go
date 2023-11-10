@@ -171,6 +171,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 			metricData["NetworkIn"] = prometheusServer.GetMetricData("PodNetworkIn", namespaceFilter, Before, Now)
 			metricData["NetworkOut"] = prometheusServer.GetMetricData("PodNetworkOut", namespaceFilter, Before, Now)
 			metricData["Processes"] = prometheusServer.GetMetricData("PodProcesses", namespaceFilter, Before, Now)
+			metricData["RestartCount"] = prometheusServer.GetMetricData("PodContainerRestart", namespaceFilter, Before, Now)
 		}
 		log.Output(2, fmt.Sprintf("Finished collecting metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 
