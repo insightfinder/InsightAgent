@@ -3,8 +3,6 @@ package kubernetes
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/client-go/tools/cache"
 	"log"
 	"time"
 
@@ -163,6 +161,47 @@ func (k *KubernetesServer) GetPods(namespace string) *map[string]map[string]map[
 	return &result
 }
 
+func (k *KubernetesServer) GetPodsContainerExitEvents(namespace string, startTime time.Time, endTime time.Time) *[]EventEntity {
+	results := make([]EventEntity, 0)
+	cache := make(map[string]EventEntity)
+
+	// Get All Pods
+	Pods, err := k.Client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		log.Output(2, "Failed to get pods in namespace: "+err.Error())
+	}
+	for _, Pod := range Pods.Items {
+		for _, containerStatus := range Pod.Status.ContainerStatuses {
+			if containerStatus.LastTerminationState.Terminated != nil {
+				containerLastTerminated := containerStatus.LastTerminationState.Terminated
+				if containerLastTerminated.StartedAt.Time.After(startTime) && containerLastTerminated.StartedAt.Time.Before(endTime) {
+					// Save the same event to cache to avoid duplicate events
+					cache[fmt.Sprint(Pod.Name, containerStatus.Name, containerLastTerminated.StartedAt.Time.UnixMilli(), containerLastTerminated.Reason)] = EventEntity{
+						Name:      Pod.Name,
+						Namespace: Pod.Namespace,
+						Time:      containerLastTerminated.StartedAt.Time,
+						Type:      "Warning",
+						Reason:    containerLastTerminated.Reason,
+						Note:      fmt.Sprintf("Container %s Terminated with exit code %d.", containerStatus.Name, containerLastTerminated.ExitCode),
+						Regarding: RegardingEntity{
+							Name:      Pod.Name,
+							Namespace: Pod.Namespace,
+							Kind:      "Pod",
+						},
+					}
+				}
+			}
+		}
+	}
+
+	// Add all events to result list.
+	for _, event := range cache {
+		results = append(results, event)
+	}
+
+	return &results
+}
+
 func (k *KubernetesServer) GetPVCPodsMapping(namespace string) *map[string]string {
 	var result map[string]string = make(map[string]string)
 	Pods, _ := k.Client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
@@ -175,44 +214,4 @@ func (k *KubernetesServer) GetPVCPodsMapping(namespace string) *map[string]strin
 		}
 	}
 	return &result
-}
-
-func (k *KubernetesServer) StreamContainerStatus(namespace string, chn *chan *EventEntity) {
-	listWatch := cache.NewListWatchFromClient(
-		k.Client.CoreV1().RESTClient(),
-		"pods",
-		namespace,
-		fields.Everything(),
-	)
-	_, controller := cache.NewInformer(
-		listWatch,
-		&corev1.Pod{},
-		0,
-		cache.ResourceEventHandlerFuncs{
-			UpdateFunc: func(oldObj, newObj interface{}) {
-				newPod := newObj.(*corev1.Pod)
-				for _, containerStatus := range newPod.Status.ContainerStatuses {
-					if containerStatus.State.Terminated != nil {
-						event := EventEntity{
-							Name:      newPod.Name,
-							Namespace: newPod.Namespace,
-							Time:      newPod.Status.ContainerStatuses[0].State.Terminated.FinishedAt.Time,
-							Type:      "Warning",
-							Reason:    newPod.Status.ContainerStatuses[0].State.Terminated.Reason,
-							Note:      fmt.Sprintf("Container %s Terminated with exit code %d.", containerStatus.Name, containerStatus.State.Terminated.ExitCode),
-							Regarding: RegardingEntity{
-								Name:      newPod.Name,
-								Namespace: newPod.Namespace,
-								Kind:      "Pod",
-							},
-						}
-						*chn <- &event
-					}
-				}
-			},
-		},
-	)
-	stop := make(chan struct{})
-	defer close(stop)
-	controller.Run(stop)
 }
