@@ -183,12 +183,12 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 	} else if collectionType == "event" {
 		// Collect normal events
 		generalEvents := kubernetesServer.GetEvents(namespaceFilter, Before, Now)
-		generalEventPayload := tools.BuildEventsPayload(generalEvents, &postProcessor)
+		generalEventPayload := tools.BuildEventsPayload(generalEvents, instanceMapper, &postProcessor)
 		tools.PrintStruct(*generalEventPayload, false, IFConfig["projectName"].(string)+"-general")
 
 		// Collect Pod Container Exit Events
 		containerExitEvents := kubernetesServer.GetPodsContainerExitEvents(namespaceFilter, Before, Now)
-		containerExitEventPayload := tools.BuildEventsPayload(containerExitEvents, &postProcessor)
+		containerExitEventPayload := tools.BuildEventsPayload(containerExitEvents, instanceMapper, &postProcessor)
 		tools.PrintStruct(*containerExitEventPayload, false, IFConfig["projectName"].(string)+"-containerExit")
 
 		log.Output(2, fmt.Sprintf("Start sending event data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
