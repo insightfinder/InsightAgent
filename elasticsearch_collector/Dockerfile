@@ -10,6 +10,7 @@ RUN apt-get update && \
     apt-get install -y tzdata && \
     python3 -m venv ./venv && \
     ./venv/bin/pip install -r requirements.txt && \
+    python3 -m pip install -r requirements.txt && \
     mkdir -p /elasticsearch_collector/logs && \
     touch /elasticsearch_collector/logs/cron.log
 
