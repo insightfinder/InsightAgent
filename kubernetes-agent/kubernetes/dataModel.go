@@ -16,4 +16,5 @@ type RegardingEntity struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
 	Kind      string `json:"kind"`
+	Container string `json:"container,omitempty"`
 }
