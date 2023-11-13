@@ -187,6 +187,7 @@ func (k *KubernetesServer) GetPodsContainerExitEvents(namespace string, startTim
 							Name:      Pod.Name,
 							Namespace: Pod.Namespace,
 							Kind:      "Pod",
+							Container: containerLastTerminated.ContainerID,
 						},
 					}
 				}
