@@ -13,7 +13,7 @@ func BuildEventsPayload(events *[]kubernetes.EventEntity, instanceNameMapper *In
 		var instanceName, componentName string
 		if event.Regarding.Kind == "Pod" {
 			instanceName, componentName = instanceNameMapper.GetInstanceMapping(event.Regarding.Namespace, event.Regarding.Name)
-			componentName = postProcessor.ProcessComponentName(event.Regarding.Name)
+			componentName = postProcessor.ProcessComponentName(componentName)
 
 		} else if event.Regarding.Kind == "StatefulSet" || event.Regarding.Kind == "ReplicaSet" {
 			componentName = removePodNameSuffix(event.Regarding.Name)
