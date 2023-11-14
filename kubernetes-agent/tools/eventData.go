@@ -13,25 +13,30 @@ func BuildEventsPayload(events *[]kubernetes.EventEntity, instanceNameMapper *In
 		var instanceName, componentName string
 		if event.Regarding.Kind == "Pod" {
 			instanceName, componentName = instanceNameMapper.GetInstanceMapping(event.Regarding.Namespace, event.Regarding.Name)
+			if instanceName == "" {
+				continue
+			}
+
 			componentName = postProcessor.ProcessComponentName(componentName)
 
-		} else if event.Regarding.Kind == "StatefulSet" || event.Regarding.Kind == "ReplicaSet" {
-			componentName = removePodNameSuffix(event.Regarding.Name)
-			componentName = postProcessor.ProcessComponentName(event.Regarding.Name)
-			instanceName = componentName
-		} else if event.Regarding.Kind == "Deployment" || event.Regarding.Kind == "" {
-			componentName = event.Regarding.Name
-			componentName = postProcessor.ProcessComponentName(event.Regarding.Name)
-			instanceName = componentName
+			if event.Regarding.Container != "" {
+				instanceName = event.Regarding.Container + "_" + instanceName
+			}
 		} else {
-			instanceName = event.Regarding.Kind + "/" + event.Regarding.Name
-			componentName = instanceName
-		}
-
-		// Skip empty instanceName
-		if instanceName == "" {
 			continue
 		}
+		//} else if event.Regarding.Kind == "StatefulSet" || event.Regarding.Kind == "ReplicaSet" {
+		//	componentName = removePodNameSuffix(event.Regarding.Name)
+		//	componentName = postProcessor.ProcessComponentName(event.Regarding.Name)
+		//	instanceName = componentName
+		//} else if event.Regarding.Kind == "Deployment" || event.Regarding.Kind == "" {
+		//	componentName = event.Regarding.Name
+		//	componentName = postProcessor.ProcessComponentName(event.Regarding.Name)
+		//	instanceName = componentName
+		//} else {
+		//	instanceName = event.Regarding.Kind + "/" + event.Regarding.Name
+		//	componentName = instanceName
+		//}
 
 		eventDataList = append(eventDataList, insightfinder.LogData{
 			TimeStamp:     event.Time.UnixMilli(),

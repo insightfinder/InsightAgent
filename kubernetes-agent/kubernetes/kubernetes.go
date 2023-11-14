@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -117,6 +118,18 @@ func (k *KubernetesServer) GetEvents(namespace string, startTime time.Time, endT
 				Kind:      event.Regarding.Kind,
 			},
 		}
+
+		// Extract Container from Pod events
+		if event.Regarding.Kind == "Pod" {
+			containerRegex := regexp.MustCompile(`(?i)containers\{(.*?)\}`)
+			containerNameMatched := containerRegex.FindStringSubmatch(event.Regarding.FieldPath)
+			if containerNameMatched != nil {
+				containerName := containerNameMatched[1]
+				result.Regarding.Container = containerName
+			}
+		}
+
+		// Add to the result list
 		results = append(results, result)
 
 	}
