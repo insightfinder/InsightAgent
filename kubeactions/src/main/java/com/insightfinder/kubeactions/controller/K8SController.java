@@ -75,10 +75,10 @@ public class K8SController {
         return k8SManager.getContainerMem(namespace, deployment, container);
     }
 
-    @GetMapping("/res/{namespace}/{podName}/{container}")
-    public JSONObject getContainerMemByPodName(@RequestHeader(required = true) String serverId, @PathVariable String namespace, @PathVariable String podName, @PathVariable String container) throws ApiException {
-        return k8SManager.getContainerMemByPodName(namespace, podName, container);
-    }
+//    @GetMapping("/res/{namespace}/{podName}/{container}")
+//    public JSONObject getContainerMemByPodName(@RequestHeader(required = true) String serverId, @PathVariable String namespace, @PathVariable String podName, @PathVariable String container) throws ApiException {
+//        return k8SManager.getContainerMemByPodName(namespace, podName, container);
+//    }
 
     @PostMapping("/res/{namespace}/{deployment}/{container}/limitMem/requestMem")
     public ResponseEntity<String> setContainerMem(@RequestHeader(required = true) String serverId, @PathVariable String namespace, @PathVariable String deployment, @PathVariable String container, long limitMem, long requestMem) throws ApiException {
