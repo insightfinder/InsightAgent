@@ -229,3 +229,28 @@ func (k *KubernetesServer) GetPVCPodsMapping(namespace string) *map[string]strin
 	}
 	return &result
 }
+
+func (k *KubernetesServer) GetOpenTelemetryMapping(namespace string) *map[string]string {
+	results := make(map[string]string)
+
+	// Get app.kubernetes.io/component label from all deployments
+	Deployments, err := k.Client.AppsV1().Deployments(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "app.kubernetes.io/component"})
+	if err != nil {
+		log.Output(2, "Failed to get deployments in namespace: "+err.Error())
+	}
+
+	// Get app.kubernetes.io/component label from all statefulSets
+	StatefulSets, err := k.Client.AppsV1().StatefulSets(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "app.kubernetes.io/component"})
+	if err != nil {
+		log.Output(2, "Failed to get statefulSets in namespace: "+err.Error())
+	}
+
+	for _, deployment := range Deployments.Items {
+		results[deployment.Labels["app.kubernetes.io/component"]] = deployment.Name
+	}
+
+	for _, statefulSet := range StatefulSets.Items {
+		results[statefulSet.Labels["app.kubernetes.io/component"]] = statefulSet.Name
+	}
+	return &results
+}

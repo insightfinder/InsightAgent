@@ -2,9 +2,11 @@ package insightfinder
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/carlmjohnson/requests"
 	"io"
 	"log"
 	"net/http"
@@ -160,6 +162,49 @@ func SendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 	var result map[string]interface{}
 	json.Unmarshal(response, &result)
 	log.Output(1, string(response))
+}
+
+func SendDependencyMap(data *[]map[string]string, IFconfig map[string]interface{}) {
+	componentRelationList := make([]DependencyRelationPair, 0)
+	for _, componentRelation := range *data {
+		source := DependencyRelationEntity{
+			Id:   componentRelation["Source"],
+			Type: "componentLevel",
+		}
+
+		target := DependencyRelationEntity{
+			Id:   componentRelation["Target"],
+			Type: "componentLevel",
+		}
+
+		pair := DependencyRelationPair{
+			S: source,
+			T: target,
+		}
+		componentRelationList = append(componentRelationList, pair)
+	}
+	componentRelationListStr, _ := json.Marshal(componentRelationList)
+
+	// Send the data to IF
+	req := DependencyRelationPayload{
+		SystemDisplayName:             ToString(IFconfig["systemName"]),
+		LicenseKey:                    ToString(IFconfig["licenseKey"]),
+		UserName:                      ToString(IFconfig["userName"]),
+		DailyTimestamp:                time.Now().UnixMilli(),
+		ProjectLevelAddRelationSetStr: string(componentRelationListStr),
+	}
+	var res string
+	url := ToString(IFconfig["ifURL"]) + "/api/v2/updaterelationdependency"
+
+	err := requests.
+		URL(url).
+		Post().
+		BodyJSON(&req).
+		ToString(&res).
+		Fetch(context.Background())
+	if err != nil {
+		println(err.Error())
+	}
 }
 
 func SendRequest(operation string, endpoint string, form io.Reader, headers map[string]string, auth AuthRequest) ([]byte, http.Header) {
