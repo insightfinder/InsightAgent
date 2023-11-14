@@ -10,6 +10,7 @@ import io.kubernetes.client.openapi.Configuration;
 import io.kubernetes.client.openapi.apis.AppsV1Api;
 import io.kubernetes.client.openapi.apis.CoreV1Api;
 import io.kubernetes.client.openapi.models.*;
+import io.kubernetes.client.proto.V1Apps;
 import io.kubernetes.client.util.ClientBuilder;
 import io.kubernetes.client.util.Config;
 import io.kubernetes.client.util.PatchUtils;
@@ -278,6 +279,38 @@ public class K8SManager {
             e.printStackTrace();
         }
         JSONObject retValue = new JSONObject();
+        retValue.put("deployment", deploymentName);
+        v1Deployment.getSpec().getTemplate().getSpec().getContainers().forEach(v1Container -> {
+            if (v1Container.getName().equalsIgnoreCase(container)){
+                Quantity quantity = v1Container.getResources().getRequests().get("memory");
+                if (quantity != null){
+                    BigDecimal ret = quantity.getNumber().divide(new BigDecimal(1024 * 1024));
+                    retValue.put("requestMem", ret.longValue());
+                }
+                Quantity quantity2 = v1Container.getResources().getLimits().get("memory");
+                if (quantity2 != null){
+                    BigDecimal ret = quantity2.getNumber().divide(new BigDecimal(1024 * 1024));
+                    retValue.put("limitMem", ret.longValue());
+                }
+            }
+        });
+        return retValue;
+    }
+
+    public JSONObject getContainerMemByPodName(String nameSpace, String podName, String container) {
+        try {
+            V1Deployment v1Deployment = getDeploymentByPodName(nameSpace, podName);
+            return getContainerMem(v1Deployment, container);
+        } catch (ApiException e) {
+            log.info(e.getResponseBody());
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public JSONObject getContainerMem(V1Deployment v1Deployment, String container) {
+        JSONObject retValue = new JSONObject();
+        retValue.put("deployment", v1Deployment.getMetadata().getName());
         v1Deployment.getSpec().getTemplate().getSpec().getContainers().forEach(v1Container -> {
             if (v1Container.getName().equalsIgnoreCase(container)){
                 Quantity quantity = v1Container.getResources().getRequests().get("memory");
@@ -312,7 +345,7 @@ public class K8SManager {
                     JsonObject jsonObject = new JsonObject();
                     jsonObject.addProperty("op", "replace");
                     jsonObject.addProperty("path", String.format("/spec/template/spec/containers/%d/resources/requests/memory", index.get()));
-                    jsonObject.addProperty("value", requestMem+"m");
+                    jsonObject.addProperty("value", requestMem+"Mi");
                     jsonArray.add(jsonObject);
                 }
                 Quantity quantity2 = v1Container.getResources().getLimits().get("memory");
@@ -320,7 +353,7 @@ public class K8SManager {
                     JsonObject jsonObject = new JsonObject();
                     jsonObject.addProperty("op", "replace");
                     jsonObject.addProperty("path", String.format("/spec/template/spec/containers/%d/resources/limits/memory", index.get()));
-                    jsonObject.addProperty("value", limitMem+"m");
+                    jsonObject.addProperty("value", limitMem+"Mi");
                     jsonArray.add(jsonObject);
                 }
             }
@@ -402,4 +435,33 @@ public class K8SManager {
         v1Deployment = appsV1Api.readNamespacedDeployment(deploymentName, nameSpace, null);
         return v1Deployment;
     }
+
+    private V1Deployment getDeploymentByPodName(String nameSpace, String podName) throws ApiException {
+        V1Pod pod = coreV1Api.readNamespacedPod(podName, nameSpace, null);
+        if (pod != null) {
+            V1OwnerReference v1OwnerReference = pod.getMetadata().getOwnerReferences().get(0);
+            if (v1OwnerReference == null) {
+                return null;
+            }
+            V1ReplicaSet v1ReplicaSet = appsV1Api.readNamespacedReplicaSet(v1OwnerReference.getName(),
+                    nameSpace, null);
+            if (v1ReplicaSet == null) {
+                return null;
+            }
+            v1OwnerReference = v1ReplicaSet.getMetadata().getOwnerReferences().get(0);
+            if (v1OwnerReference == null) {
+                return null;
+
+            }
+            V1Deployment v1Deployment = appsV1Api.readNamespacedDeployment(v1OwnerReference.getName(),
+                    nameSpace, null);
+            if (v1Deployment == null) {
+                return null;
+            }
+            return v1Deployment;
+        }
+        return null;
+    }
+
+
 }
