@@ -166,6 +166,8 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 			metricData["Memory"] = prometheusServer.GetMetricData("PodMemory", namespaceFilter, Before, Now)
 			metricData["MemoryUsage"] = prometheusServer.GetMetricData("PodMemoryUsage", namespaceFilter, Before, Now)
 			metricData["MemoryRequestUsage"] = prometheusServer.GetMetricData("PodRequestMemoryUsage", namespaceFilter, Before, Now)
+			metricData["MemoryRequests"] = prometheusServer.GetMetricData("PodMemoryRequests", namespaceFilter, Before, Now)
+			metricData["MemoryLimits"] = prometheusServer.GetMetricData("PodMemoryLimits", namespaceFilter, Before, Now)
 			metricData["DiskRead"] = prometheusServer.GetMetricData("PodDiskRead", namespaceFilter, Before, Now)
 			metricData["DiskWrite"] = prometheusServer.GetMetricData("PodDiskWrite", namespaceFilter, Before, Now)
 			metricData["NetworkIn"] = prometheusServer.GetMetricData("PodNetworkIn", namespaceFilter, Before, Now)
