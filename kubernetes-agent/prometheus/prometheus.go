@@ -21,7 +21,8 @@ const (
 	POD_MEMORY_METRIC_QUERY                          = "sum(container_memory_working_set_bytes{namespace=~\"%s\",container!='POD',container!='',pod!=''}) by (pod,namespace,instance,container)  / 1024 / 1024"
 	POD_MEMORY_USAGE_PERCENTAGE_METRIC_QUERY         = "100 *    sum(container_memory_working_set_bytes{namespace=~\"%s\",image!=\"\",container!='', container_name!=\"POD\"}) by (instance, pod, namespace,container) /  sum(container_spec_memory_limit_bytes{image!=\"\", container_name!=\"POD\",container!=''} > 0) by (instance, pod, namespace,container)"
 	POD_REQUEST_MEMORY_USAGE_PERCENTAGE_METRIC_QUERY = "((sum(container_memory_usage_bytes{namespace=~\"%s\",container!='POD',container!=''}) by (namespace, pod, container) * on(namespace, pod) group_left(node) kube_pod_info{})/sum by (namespace, pod, container,node) (kube_pod_container_resource_requests{resource='memory', container!='POD',container!=''})) * 100"
-	POD_MEMORY_REQUESTS_METRIC_QUERY                 = "sum(kube_pod_container_resource_requests{resource='memory', container!='POD',container!=''}) by (namespace, pod, container)"
+	POD_MEMORY_REQUESTS_METRIC_QUERY                 = "sum(kube_pod_container_resource_requests{namespace='%s',resource='memory', container!='POD',container!=''}) by (namespace, pod, container,instance) /1024 /1024"
+	POD_MEMORY_LIMITS_METRIC_QUERY                   = "sum(kube_pod_container_resource_limits{namespace='%s',resource='memory', container!='POD',container!=''}) by (namespace, pod, container,instance) / 1024 / 1024"
 	POD_DISK_READ_METRIC_QUERY                       = "sum(rate(container_fs_reads_bytes_total{namespace=~\"%s\",container!='POD',container!='',pod!=''}[3m])) by (pod, namespace,instance,container) / 1024 / 1024"
 	POD_DISK_WRITE_METRIC_QUERY                      = "sum(rate(container_fs_writes_bytes_total{namespace=~\"%s\",container!='POD',container!='',pod!=''}[3m])) by (pod, namespace,instance,container) / 1024 / 1024"
 	POD_NETWORK_IN_METRIC_QUERY                      = "sum(rate(container_network_receive_bytes_total{namespace=~\"%s\",container!='POD',pod!=''}[3m])) by (pod, namespace,instance) / 1024 / 1024"
@@ -97,6 +98,10 @@ func (p *PrometheusServer) GetMetricData(Type string, namespaceFilter string, St
 		QueryStr = POD_MEMORY_USAGE_PERCENTAGE_METRIC_QUERY
 	case "PodRequestMemoryUsage":
 		QueryStr = POD_REQUEST_MEMORY_USAGE_PERCENTAGE_METRIC_QUERY
+	case "PodMemoryRequests":
+		QueryStr = POD_MEMORY_REQUESTS_METRIC_QUERY
+	case "PodMemoryLimits":
+		QueryStr = POD_MEMORY_LIMITS_METRIC_QUERY
 	case "PodDiskRead":
 		QueryStr = POD_DISK_READ_METRIC_QUERY
 	case "PodDiskWrite":
