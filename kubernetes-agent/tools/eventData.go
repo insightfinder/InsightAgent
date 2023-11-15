@@ -25,18 +25,6 @@ func BuildEventsPayload(events *[]kubernetes.EventEntity, instanceNameMapper *In
 		} else {
 			continue
 		}
-		//} else if event.Regarding.Kind == "StatefulSet" || event.Regarding.Kind == "ReplicaSet" {
-		//	componentName = removePodNameSuffix(event.Regarding.Name)
-		//	componentName = postProcessor.ProcessComponentName(event.Regarding.Name)
-		//	instanceName = componentName
-		//} else if event.Regarding.Kind == "Deployment" || event.Regarding.Kind == "" {
-		//	componentName = event.Regarding.Name
-		//	componentName = postProcessor.ProcessComponentName(event.Regarding.Name)
-		//	instanceName = componentName
-		//} else {
-		//	instanceName = event.Regarding.Kind + "/" + event.Regarding.Name
-		//	componentName = instanceName
-		//}
 
 		eventDataList = append(eventDataList, insightfinder.LogData{
 			TimeStamp:     event.Time.UnixMilli(),
