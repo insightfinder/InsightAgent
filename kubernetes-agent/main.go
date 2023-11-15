@@ -84,7 +84,7 @@ func main() {
 
 		// Process data collection based each config file
 		for _, configFile := range configFiles {
-			dataCollectionRoutine(configFile, &kubernetesServer, &instanceMapper, StartTime, EndTime)
+			go dataCollectionRoutine(configFile, &kubernetesServer, &instanceMapper, StartTime, EndTime)
 		}
 
 		// Prepare for next 10 seconds time range
