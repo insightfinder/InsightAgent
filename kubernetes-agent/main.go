@@ -64,7 +64,6 @@ func main() {
 	// Initialize InstanceName DB
 	instanceMapper := tools.InstanceMapper{}
 	instanceMapper.Initialize(&kubernetesServer)
-
 	for _, configFile := range configFiles {
 		// Add Namespaces from all config files
 		namespaceFilter, _ := configFile.Get(GENERAL_SECTION, "namespace")
@@ -74,10 +73,9 @@ func main() {
 		}
 	}
 
-	// Initialize time ranges
+	// Start data collection routine
 	EndTime := time.Now()
 	StartTime := EndTime.Add(-time.Second * 10)
-
 	for {
 		log.Output(2, "Start...")
 
@@ -167,11 +165,15 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 			metricData["CPU"] = prometheusServer.GetMetricData("PodCPUUsage", namespaceFilter, Before, Now)
 			metricData["Memory"] = prometheusServer.GetMetricData("PodMemory", namespaceFilter, Before, Now)
 			metricData["MemoryUsage"] = prometheusServer.GetMetricData("PodMemoryUsage", namespaceFilter, Before, Now)
+			metricData["MemoryRequestUsage"] = prometheusServer.GetMetricData("PodRequestMemoryUsage", namespaceFilter, Before, Now)
+			metricData["MemoryRequests"] = prometheusServer.GetMetricData("PodMemoryRequests", namespaceFilter, Before, Now)
+			metricData["MemoryLimits"] = prometheusServer.GetMetricData("PodMemoryLimits", namespaceFilter, Before, Now)
 			metricData["DiskRead"] = prometheusServer.GetMetricData("PodDiskRead", namespaceFilter, Before, Now)
 			metricData["DiskWrite"] = prometheusServer.GetMetricData("PodDiskWrite", namespaceFilter, Before, Now)
 			metricData["NetworkIn"] = prometheusServer.GetMetricData("PodNetworkIn", namespaceFilter, Before, Now)
 			metricData["NetworkOut"] = prometheusServer.GetMetricData("PodNetworkOut", namespaceFilter, Before, Now)
 			metricData["Processes"] = prometheusServer.GetMetricData("PodProcesses", namespaceFilter, Before, Now)
+			metricData["RestartCount"] = prometheusServer.GetMetricData("PodContainerRestart", namespaceFilter, Before, Now)
 		}
 		log.Output(2, fmt.Sprintf("Finished collecting metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 
@@ -181,11 +183,19 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 		insightfinder.SendMetricData(metricPayload, IFConfig)
 		log.Output(2, "Finished sending metric data.")
 	} else if collectionType == "event" {
-		events := kubernetesServer.GetEvents(namespaceFilter, Before, Now)
-		eventPayload := tools.BuildEventsPayload(events, instanceMapper, &postProcessor)
-		tools.PrintStruct(*eventPayload, false, IFConfig["projectName"].(string))
+		// Collect normal events
+		generalEvents := kubernetesServer.GetEvents(namespaceFilter, Before, Now)
+		generalEventPayload := tools.BuildEventsPayload(generalEvents, instanceMapper, &postProcessor)
+		tools.PrintStruct(*generalEventPayload, false, IFConfig["projectName"].(string)+"-general")
+
+		// Collect Pod Container Exit Events
+		containerExitEvents := kubernetesServer.GetPodsContainerExitEvents(namespaceFilter, Before, Now)
+		containerExitEventPayload := tools.BuildEventsPayload(containerExitEvents, instanceMapper, &postProcessor)
+		tools.PrintStruct(*containerExitEventPayload, false, IFConfig["projectName"].(string)+"-containerExit")
+
 		log.Output(2, fmt.Sprintf("Start sending event data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-		insightfinder.SendLogData(eventPayload, IFConfig)
+		insightfinder.SendLogData(generalEventPayload, IFConfig)
+		insightfinder.SendLogData(containerExitEventPayload, IFConfig)
 		log.Output(2, "Finished sending event data.")
 
 	} else {
