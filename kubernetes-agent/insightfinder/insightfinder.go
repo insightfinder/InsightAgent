@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -193,6 +194,8 @@ func SendDependencyMap(data *[]map[string]string, IFconfig map[string]interface{
 		DailyTimestamp:                time.Now().UnixMilli(),
 		ProjectLevelAddRelationSetStr: string(componentRelationListStr),
 	}
+
+	PrintStruct(req, false, IFconfig["projectName"].(string)+".json")
 	var res string
 	url := ToString(IFconfig["ifURL"]) + "/api/v2/updaterelationdependency"
 
@@ -246,4 +249,18 @@ func SendRequest(operation string, endpoint string, form io.Reader, headers map[
 	defer res.Body.Close()
 	body, _ := io.ReadAll(res.Body)
 	return body, res.Header
+}
+
+func PrintStruct(v any, needPrint bool, fileName string) {
+	jsonBytes, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		log.Fatalf("JSON marshaling failed: %s", err)
+	}
+	if needPrint {
+		fmt.Println(string(jsonBytes))
+	}
+	err = os.WriteFile("PrintStruct-"+fileName+".json", jsonBytes, 0644)
+	if err != nil {
+		log.Fatalf("Writing to file failed: %s", err)
+	}
 }
