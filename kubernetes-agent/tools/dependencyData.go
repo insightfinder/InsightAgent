@@ -7,18 +7,18 @@ func ProcessDependencyData(dependencyData *[]jaeger.DependencyData, OTMapping *m
 	for _, dependency := range *dependencyData {
 		rawSource := dependency.Parent
 		rawTarget := dependency.Child
-		SourceComponent := (*OTMapping)[rawSource]
-		TargetComponent := (*OTMapping)[rawTarget]
+		CausalSourceComponent := (*OTMapping)[rawTarget]
+		CausalTargetComponent := (*OTMapping)[rawSource]
 
 		// Skip if source or target is not in OTMapping
-		if SourceComponent == "" || TargetComponent == "" {
+		if CausalSourceComponent == "" || CausalTargetComponent == "" {
 			println("Skip: " + rawSource + " -> " + rawTarget)
 			continue
 		}
 
 		result = append(result, map[string]string{
-			"Source": postProcessor.ProcessComponentName(SourceComponent),
-			"Target": postProcessor.ProcessComponentName(TargetComponent),
+			"Source": postProcessor.ProcessComponentName(CausalSourceComponent),
+			"Target": postProcessor.ProcessComponentName(CausalTargetComponent),
 		})
 	}
 	return &result
