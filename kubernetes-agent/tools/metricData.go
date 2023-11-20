@@ -69,7 +69,7 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 					dataInTimestampMap[promMetricPoint.TimeStamp] = insightfinder.DataInTimestamp{
 						TimeStamp:        promMetricPoint.TimeStamp,
 						MetricDataPoints: make([]insightfinder.MetricDataPoint, 0),
-						K8Identity: insightfinder.K8Identity{
+						K8Identity: &insightfinder.K8Identity{
 							HostId: promMetricData.Node,
 							PodId:  promMetricData.Pod,
 						},
