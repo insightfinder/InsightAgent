@@ -26,12 +26,14 @@ func BuildEventsPayload(events *[]kubernetes.EventEntity, instanceNameMapper *In
 			continue
 		}
 
-		eventDataList = append(eventDataList, insightfinder.LogData{
+		eventData := insightfinder.LogData{
 			TimeStamp:     event.Time.UnixMilli(),
 			Tag:           instanceName,
 			ComponentName: componentName,
 			Data:          event,
-		})
+		}
+
+		eventDataList = append(eventDataList, eventData)
 	}
 
 	return &eventDataList
