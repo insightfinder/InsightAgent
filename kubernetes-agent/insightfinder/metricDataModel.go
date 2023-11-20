@@ -7,8 +7,8 @@ type MetricDataPoint struct {
 }
 
 type K8Identity struct {
-	HostId string `json:"hostId" validate:"required"`
-	PodId  string `json:"podId" validate:"required"`
+	HostId string `json:"hostId" validate:"omitempty"`
+	PodId  string `json:"podId" validate:"omitempty"`
 }
 
 type DataInTimestamp struct {
