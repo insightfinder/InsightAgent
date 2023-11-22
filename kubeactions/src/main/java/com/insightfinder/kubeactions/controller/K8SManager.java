@@ -356,6 +356,9 @@ public class K8SManager {
                     jsonObject.addProperty("value", limitMem+"Mi");
                     jsonArray.add(jsonObject);
                 }
+                if (quantity != null && quantity2 != null){
+                    log.info(String.format("deployment: %s, container: %s, original limitMem: %s, new limitMem: %d, original requestMem: %s, new requestMem: %d", deploymentName, container, quantity2.getNumber().toString() ,limitMem, quantity.getNumber().toString(),requestMem));
+                }
             }
             index.set(index.get() + 1);
         });
