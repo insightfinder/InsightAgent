@@ -55,16 +55,22 @@ def start_data_processing(data_type):
 
     # get hosts
     hosts_map = {}
+    hosts_group_map = {}
     hosts_ids = []
-    hosts_res = zapi.do_request('host.get', {'output': 'extend', 'groupids': host_groups_ids,
-                                             'filter': {"host": agent_config_vars['hosts']}, })
+    hosts_res = zapi.do_request('host.get',
+                                {'output': 'extend', 'groupids': host_groups_ids, 'selectHostGroups': 'extend',
+                                 'filter': {"host": agent_config_vars['hosts']}, })
     for item in hosts_res['result']:
         host_id = item['hostid']
         name = item['name']
+        hostgroups = item.get('hostgroups') or []
+        host_group = hostgroups[len(hostgroups) - 1].get('name') or ''
         hosts_ids.append(host_id)
-        hosts_map[host_id] = name
 
-    logger.info("Zabbix hosts: %s" % hosts_map)
+        hosts_map[host_id] = name
+        hosts_group_map[host_id] = host_group
+
+    logger.info("Zabbix hosts: %s, hostGroups: %s" % (hosts_map, hosts_group_map))
     if len(hosts_ids) == 0:
         logger.error('Hosts list is empty')
         sys.exit(1)
@@ -92,7 +98,7 @@ def start_data_processing(data_type):
     logger.info("Zabbix item ids: %s" % items_ids)
 
     # build map by item field
-    all_field_map = {'hostid': hosts_map}
+    all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map}
 
     # if it's streaming with log type, use history.get api
     if agent_config_vars['his_time_range']:
@@ -147,6 +153,13 @@ def parse_messages_zabbix(data_type, result, all_field_map, items_map, replay_ty
                 agent_config_vars['instance_field']) > 0 else 'hostid'
             instance_id = items_map.get(item_id).get(instance_field)
             instance = all_field_map.get(instance_field).get(instance_id)
+
+            # set component
+            component_field = 'hostgroup'
+            component = None
+            if all_field_map.get(component_field):
+                component = all_field_map.get(component_field).get(instance_id)
+
             # add device info if has
             device = None
             device_field = agent_config_vars['device_field']
@@ -155,6 +168,9 @@ def parse_messages_zabbix(data_type, result, all_field_map, items_map, replay_ty
                 device_id = items_map.get(item_id).get(device_field)
                 device = all_field_map.get(device_field).get(device_id)
             full_instance = make_safe_instance_string(instance, device)
+
+            if component:
+                full_instance = '{}_{}'.format(component, full_instance)
 
             # set timestamp
             clock = message['lastclock'] if replay_type == 'live' else message['clock']
