@@ -18,6 +18,8 @@ import regex
 import requests
 from pyzabbix import ZabbixAPI
 
+LOG_GET_INTERVAL = 60
+
 """
 This script gathers data to send to Insightfinder
 """
@@ -118,7 +120,7 @@ def start_data_processing(data_type):
         if data_type != 'Metric':
             timestamp_end = int(arrow.now().floor('second').timestamp())
             timestamp_start = timestamp_end - if_config_vars["run_interval"]
-            for timestamp in range(timestamp_start, timestamp_end, if_config_vars['run_interval']):
+            for timestamp in range(timestamp_start, timestamp_end, LOG_GET_INTERVAL):
                 history_res = zapi.do_request('history.get',
                                               {'output': 'extend', "history": history_type, "hostids": hosts_ids,
                                                "itemids": items_ids, 'time_from': timestamp,
@@ -169,9 +171,6 @@ def parse_messages_zabbix(data_type, result, all_field_map, items_map, replay_ty
                 device = all_field_map.get(device_field).get(device_id)
             full_instance = make_safe_instance_string(instance, device)
 
-            if component:
-                full_instance = '{}_{}'.format(component, full_instance)
-
             # set timestamp
             clock = message['lastclock'] if replay_type == 'live' else message['clock']
             timestamp = int(clock) * 1000
@@ -196,6 +195,8 @@ def parse_messages_zabbix(data_type, result, all_field_map, items_map, replay_ty
                 data_buffer['buffer_dict'][key][data_key] = str(data_value)
             else:
                 data_buffer['buffer_dict'][key]['tag'] = full_instance
+                if component:
+                    data_buffer['buffer_dict'][key]['componentName'] = component
                 data_buffer['buffer_dict'][key]['data'] = str(data_value)
 
         except Exception as e:
@@ -636,7 +637,6 @@ def reset_track():
 def send_data_wrapper():
     """ wrapper to send data """
     logger.debug('--- Chunk creation time: {} seconds ---'.format(round(time.time() - track['start_time'], 2)))
-    print(track['current_row'])
     send_data_to_if(track['current_row'])
     track['chunk_count'] += 1
     reset_track()
