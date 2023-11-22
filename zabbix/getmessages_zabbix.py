@@ -57,7 +57,7 @@ def start_data_processing(data_type):
     hosts_map = {}
     hosts_ids = []
     hosts_res = zapi.do_request('host.get', {'output': 'extend', 'groupids': host_groups_ids,
-        'filter': {"host": agent_config_vars['hosts']}, })
+                                             'filter': {"host": agent_config_vars['hosts']}, })
     for item in hosts_res['result']:
         host_id = item['hostid']
         name = item['name']
@@ -77,12 +77,8 @@ def start_data_processing(data_type):
     items_ids = []
 
     # get data by hosts/applications
-    items_res = zapi.do_request('item.get', {
-        'output': 'extend', 'groupids': host_groups_ids, "hostids": hosts_ids,
-        'filter': {
-            'value_type': value_type_list
-        }
-    })
+    items_res = zapi.do_request('item.get', {'output': 'extend', 'groupids': host_groups_ids, "hostids": hosts_ids,
+                                             'filter': {'value_type': value_type_list}})
 
     for item in items_res['result']:
         item_id = item['itemid']
@@ -98,25 +94,36 @@ def start_data_processing(data_type):
     # build map by item field
     all_field_map = {'hostid': hosts_map}
 
+    # if it's streaming with log type, use history.get api
     if agent_config_vars['his_time_range']:
         logger.debug('Using time range for replay data: {}'.format(agent_config_vars['his_time_range']))
         for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
                                if_config_vars['sampling_interval']):
-            history_res = zapi.do_request('history.get', {
-                'output': 'extend', "history": history_type, "hostids": hosts_ids,
-                "itemids": items_ids,
-                'time_from': timestamp, 'time_till': timestamp + if_config_vars['sampling_interval'],
-            })
+            history_res = zapi.do_request('history.get',
+                                          {'output': 'extend', "history": history_type, "hostids": hosts_ids,
+                                           "itemids": items_ids, 'time_from': timestamp,
+                                           'time_till': timestamp + if_config_vars['sampling_interval'], })
             parse_messages_zabbix(data_type, history_res['result'], all_field_map, items_map, 'history')
 
             # clear data buffer when piece of time range end
             clear_data_buffer()
     else:
         logger.debug('Using current time for streaming data')
-        parse_messages_zabbix(data_type, items_res['result'], all_field_map, items_map, 'live')
-
-        # clear data buffer when piece of time range end
-        clear_data_buffer()
+        if data_type != 'Metric':
+            timestamp_end = int(arrow.now().floor('second').timestamp())
+            timestamp_start = timestamp_end - if_config_vars["run_interval"]
+            for timestamp in range(timestamp_start, timestamp_end, if_config_vars['run_interval']):
+                history_res = zapi.do_request('history.get',
+                                              {'output': 'extend', "history": history_type, "hostids": hosts_ids,
+                                               "itemids": items_ids, 'time_from': timestamp,
+                                               'time_till': timestamp + if_config_vars['sampling_interval'], })
+                parse_messages_zabbix(data_type, history_res['result'], all_field_map, items_map, 'history')
+                # clear data buffer when piece of time range end
+                clear_data_buffer()
+        else:
+            parse_messages_zabbix(data_type, items_res['result'], all_field_map, items_map, 'live')
+            # clear data buffer when piece of time range end
+            clear_data_buffer()
 
     logger.info('Closed......')
 
@@ -308,12 +315,12 @@ def get_agent_config_vars():
 
         # add parsed variables to a global
         config_vars = {'zabbix_kwargs': zabbix_kwargs, 'host_groups': host_groups, 'hosts': hosts,
-            'applications': applications, 'his_time_range': his_time_range,
+                       'applications': applications, 'his_time_range': his_time_range,
 
-            'proxies': agent_proxies, 'data_format': data_format, # 'project_field': project_fields,
-            'instance_field': instance_fields, 'device_field': device_fields, 'data_fields': data_fields,
-            'timestamp_field': timestamp_fields, 'target_timestamp_timezone': target_timestamp_timezone,
-            'timezone': timezone, 'timestamp_format': timestamp_format, }
+                       'proxies': agent_proxies, 'data_format': data_format,  # 'project_field': project_fields,
+                       'instance_field': instance_fields, 'device_field': device_fields, 'data_fields': data_fields,
+                       'timestamp_field': timestamp_fields, 'target_timestamp_timezone': target_timestamp_timezone,
+                       'timezone': timezone, 'timestamp_format': timestamp_format, }
 
         return config_vars
     else:
@@ -357,7 +364,7 @@ def get_if_config_vars():
             return config_error('project_type')
 
         if project_type not in {'METRIC', 'METRICREPLAY', 'LOG', 'LOGREPLAY', 'INCIDENT', 'INCIDENTREPLAY', 'ALERT',
-            'ALERTREPLAY', 'DEPLOYMENT', 'DEPLOYMENTREPLAY'}:
+                                'ALERTREPLAY', 'DEPLOYMENT', 'DEPLOYMENTREPLAY'}:
             return config_error('project_type')
 
         is_replay = 'REPLAY' in project_type
@@ -396,11 +403,11 @@ def get_if_config_vars():
             if_proxies['https'] = if_https_proxy
 
         config_vars = {'user_name': user_name, 'license_key': license_key, 'token': token, 'project_name': project_name,
-            'system_name': system_name, 'project_type': project_type, 'sampling_interval': int(sampling_interval),
-            # as seconds
-            'run_interval': int(run_interval),  # as seconds
-            'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
-            'if_url': if_url, 'if_proxies': if_proxies, 'is_replay': is_replay, }
+                       'system_name': system_name, 'project_type': project_type,
+                       'sampling_interval': int(sampling_interval),  # as seconds
+                       'run_interval': int(run_interval),  # as seconds
+                       'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
+                       'if_url': if_url, 'if_proxies': if_proxies, 'is_replay': is_replay, }
 
         return config_vars
     else:
@@ -443,7 +450,7 @@ def get_cli_config_vars():
     """
 
     config_vars = {'config': options.config if os.path.isfile(options.config) else abs_path_from_cur('config.ini'),
-        'threads': 1, 'testing': False, 'log_level': logging.INFO}
+                   'threads': 1, 'testing': False, 'log_level': logging.INFO}
 
     if options.testing:
         config_vars['testing'] = True
@@ -522,8 +529,9 @@ def set_logger_config(level):
     # create a logging format
     formatter = logging.Formatter(
         '{ts} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(ts='%(asctime)s', pid='%(process)d',
-            lvl='%(levelname)-8s', mod='%(module)s', func='%(funcName)s', line='%(lineno)d', msg='%(message)s'),
-        ISO8601[0])
+                                                                    lvl='%(levelname)-8s', mod='%(module)s',
+                                                                    func='%(funcName)s', line='%(lineno)d',
+                                                                    msg='%(message)s'), ISO8601[0])
     logging_handler_out.setFormatter(formatter)
     logger_obj.addHandler(logging_handler_out)
 
@@ -771,7 +779,7 @@ def check_project_exist():
     try:
         logger.info('Starting check project: ' + project_name)
         params = {'operation': 'check', 'userName': if_config_vars['user_name'],
-            'licenseKey': if_config_vars['license_key'], 'projectName': project_name, }
+                  'licenseKey': if_config_vars['license_key'], 'projectName': project_name, }
         url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
         response = send_request(url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
         if response == -1:
@@ -793,12 +801,12 @@ def check_project_exist():
         try:
             logger.info('Starting add project: {}/{}'.format(system_name, project_name))
             params = {'operation': 'create', 'userName': if_config_vars['user_name'],
-                'licenseKey': if_config_vars['license_key'], 'projectName': project_name,
-                'systemName': system_name or project_name, 'instanceType': 'Zabbix', 'projectCloudType': 'PrivateCloud',
-                'dataType': get_data_type_from_project_type(),
-                'insightAgentType': get_insight_agent_type_from_project_type(),
-                'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
-                'samplingIntervalInSeconds': if_config_vars['sampling_interval'], }
+                      'licenseKey': if_config_vars['license_key'], 'projectName': project_name,
+                      'systemName': system_name or project_name, 'instanceType': 'Zabbix',
+                      'projectCloudType': 'PrivateCloud', 'dataType': get_data_type_from_project_type(),
+                      'insightAgentType': get_insight_agent_type_from_project_type(),
+                      'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
+                      'samplingIntervalInSeconds': if_config_vars['sampling_interval'], }
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
             response = send_request(url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
             if response == -1:
@@ -821,7 +829,7 @@ def check_project_exist():
         try:
             logger.info('Starting check project: ' + project_name)
             params = {'operation': 'check', 'userName': if_config_vars['user_name'],
-                'licenseKey': if_config_vars['license_key'], 'projectName': project_name, }
+                      'licenseKey': if_config_vars['license_key'], 'projectName': project_name, }
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
             response = send_request(url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
             if response == -1:
