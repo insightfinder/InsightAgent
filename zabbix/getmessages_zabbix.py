@@ -18,8 +18,6 @@ import regex
 import requests
 from pyzabbix import ZabbixAPI
 
-LOG_GET_INTERVAL = 60
-
 """
 This script gathers data to send to Insightfinder
 """
@@ -54,6 +52,8 @@ def start_data_processing(data_type):
         host_groups_ids.append(group_id)
         host_groups_map[group_id] = name
     logger.info("Zabbix host groups: %s" % json.dumps(host_groups_map))
+    max_host_per_request = agent_config_vars['max_host_per_request']
+    log_request_interval = agent_config_vars['log_request_interval']
 
     # get hosts
     hosts_map = {}
@@ -85,53 +85,58 @@ def start_data_processing(data_type):
     items_ids = []
 
     # get data by hosts/applications
-    items_res = zapi.do_request('item.get', {'output': 'extend', 'groupids': host_groups_ids, "hostids": hosts_ids,
-                                             'filter': {'value_type': value_type_list}})
+    hosts_ids_list = [hosts_ids]
+    if len(hosts_ids) > max_host_per_request:
+        hosts_ids_list = [hosts_ids[i:i + max_host_per_request] for i in range(0, len(hosts_ids), max_host_per_request)]
 
-    for item in items_res['result']:
-        item_id = item['itemid']
-        items_ids.append(item_id)
-        items_map[item_id] = item
+    for hostids in hosts_ids_list:
+        items_res = zapi.do_request('item.get', {'output': 'extend', 'groupids': host_groups_ids, "hostids": hostids,
+                                                 'filter': {'value_type': value_type_list}})
 
-    if len(items_ids) == 0:
-        logger.error('Item list is empty')
-        sys.exit(1)
+        for item in items_res['result']:
+            item_id = item['itemid']
+            items_ids.append(item_id)
+            items_map[item_id] = item
 
-    logger.info("Zabbix item ids: %s" % items_ids)
+        if len(items_ids) == 0:
+            logger.error('Item list is empty')
+            sys.exit(1)
 
-    # build map by item field
-    all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map}
+        logger.info("Zabbix item ids: %s" % items_ids)
 
-    # if it's streaming with log type, use history.get api
-    if agent_config_vars['his_time_range']:
-        logger.debug('Using time range for replay data: {}'.format(agent_config_vars['his_time_range']))
-        for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
-                               if_config_vars['sampling_interval']):
-            history_res = zapi.do_request('history.get',
-                                          {'output': 'extend', "history": history_type, "hostids": hosts_ids,
-                                           "itemids": items_ids, 'time_from': timestamp,
-                                           'time_till': timestamp + if_config_vars['sampling_interval'], })
-            parse_messages_zabbix(data_type, history_res['result'], all_field_map, items_map, 'history')
+        # build map by item field
+        all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map}
 
-            # clear data buffer when piece of time range end
-            clear_data_buffer()
-    else:
-        logger.debug('Using current time for streaming data')
-        if data_type != 'Metric':
-            timestamp_end = int(arrow.now().floor('second').timestamp())
-            timestamp_start = timestamp_end - if_config_vars["run_interval"]
-            for timestamp in range(timestamp_start, timestamp_end, LOG_GET_INTERVAL):
+        # if it's streaming with log type, use history.get api
+        if agent_config_vars['his_time_range']:
+            logger.debug('Using time range for replay data: {}'.format(agent_config_vars['his_time_range']))
+            for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
+                                   if_config_vars['sampling_interval']):
                 history_res = zapi.do_request('history.get',
-                                              {'output': 'extend', "history": history_type, "hostids": hosts_ids,
+                                              {'output': 'extend', "history": history_type, "hostids": hostids,
                                                "itemids": items_ids, 'time_from': timestamp,
                                                'time_till': timestamp + if_config_vars['sampling_interval'], })
                 parse_messages_zabbix(data_type, history_res['result'], all_field_map, items_map, 'history')
+
                 # clear data buffer when piece of time range end
                 clear_data_buffer()
         else:
-            parse_messages_zabbix(data_type, items_res['result'], all_field_map, items_map, 'live')
-            # clear data buffer when piece of time range end
-            clear_data_buffer()
+            logger.debug('Using current time for streaming data')
+            if data_type != 'Metric':
+                timestamp_end = int(arrow.now().floor('second').timestamp())
+                timestamp_start = timestamp_end - if_config_vars["run_interval"]
+                for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
+                    history_res = zapi.do_request('history.get',
+                                                  {'output': 'extend', "history": history_type, "hostids": hostids,
+                                                   "itemids": items_ids, 'time_from': timestamp,
+                                                   'time_till': timestamp + if_config_vars['sampling_interval'], })
+                    parse_messages_zabbix(data_type, history_res['result'], all_field_map, items_map, 'history')
+                    # clear data buffer when piece of time range end
+                    clear_data_buffer()
+            else:
+                parse_messages_zabbix(data_type, items_res['result'], all_field_map, items_map, 'live')
+                # clear data buffer when piece of time range end
+                clear_data_buffer()
 
     logger.info('Closed......')
 
@@ -251,6 +256,10 @@ def get_agent_config_vars():
             host_groups = config_parser.get('zabbix', 'host_groups')
             hosts = config_parser.get('zabbix', 'hosts')
             applications = config_parser.get('zabbix', 'applications')
+            max_host_per_request = config_parser.get('zabbix', 'max_host_per_request')
+
+            # log
+            log_request_interval = config_parser.get('zabbix', 'log_request_interval')
 
             # time range
             his_time_range = config_parser.get('zabbix', 'his_time_range')
@@ -281,6 +290,16 @@ def get_agent_config_vars():
             hosts = [x for x in hosts.split(',') if x.strip()]
         if len(applications) != 0:
             applications = [x for x in applications.split(',') if x.strip()]
+
+        if len(max_host_per_request) != 0:
+            max_host_per_request = int(max_host_per_request)
+        else:
+            max_host_per_request = 100
+
+        if len(log_request_interval) != 0:
+            log_request_interval = int(log_request_interval)
+        else:
+            log_request_interval = 60
 
         if len(his_time_range) != 0:
             his_time_range = [x for x in his_time_range.split(',') if x.strip()]
@@ -332,9 +351,9 @@ def get_agent_config_vars():
 
         # add parsed variables to a global
         config_vars = {'zabbix_kwargs': zabbix_kwargs, 'host_groups': host_groups, 'hosts': hosts,
-                       'applications': applications, 'his_time_range': his_time_range,
-
-                       'proxies': agent_proxies, 'data_format': data_format,  # 'project_field': project_fields,
+                       'max_host_per_request': max_host_per_request, 'log_request_interval': log_request_interval,
+                       'applications': applications, 'his_time_range': his_time_range, 'proxies': agent_proxies,
+                       'data_format': data_format,  # 'project_field': project_fields,
                        'instance_field': instance_fields, 'device_field': device_fields, 'data_fields': data_fields,
                        'timestamp_field': timestamp_fields, 'target_timestamp_timezone': target_timestamp_timezone,
                        'timezone': timezone, 'timestamp_format': timestamp_format, }
