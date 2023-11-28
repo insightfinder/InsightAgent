@@ -59,18 +59,20 @@ jobs:
         uses: andstor/file-existence-action@v2
         with:
           files: ${{ matrix.dirs }}/Dockerfile
-          fail: true  # Makes the Action fail on missing files
 
       - name: Login to Docker Hub
+        if: steps.check_files.outputs.files_exists == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set up Docker Buildx
+        if: steps.check_files.outputs.files_exists == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push
+        if: steps.check_files.outputs.files_exists == 'true'
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.dirs }}
