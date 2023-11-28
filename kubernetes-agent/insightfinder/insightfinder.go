@@ -20,6 +20,12 @@ const HTTP_RETRY_TIMES = 15
 const HTTP_RETRY_INTERVAL = 60
 
 func SendLogData(data *[]LogData, IFConfig map[string]interface{}) {
+
+	// Skip sending if there's no data
+	if len(*data) == 0 {
+		return
+	}
+
 	curTotal := 0
 	curData := make([]LogData, 0)
 	for _, logEntry := range *data {

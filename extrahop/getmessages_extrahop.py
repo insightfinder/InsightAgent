@@ -125,7 +125,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
 
     # parse device list
     # Sort the result list by ip address. If multiple ip addresses are found for a device, use the first one.
-    for device in sorted(result_list, key=lambda x: x['ipaddr4']):
+    for device in sorted([x for x in result_list if x is None], key=lambda x: x['ipaddr4']):
         device_id = device['id']
         devices_ids.append(device_id)
         if device_id not in devices_ids_map:
@@ -190,8 +190,13 @@ def build_query_params(logger, if_config_vars, agent_config_vars, headers, devic
             prefer_devices_ids = []
             for ip in device_ip_list:
                 if ip in ip_device_prefer_map:
-                    prefer_devices_ids.append(ip_device_prefer_map[ip])
-                    logger.info('Using configured device id {} for ip address {}'.format(ip_device_prefer_map[ip], ip))
+                    try:
+                        device_ip_int = int(ip_device_prefer_map[ip])
+                        prefer_devices_ids.append(device_ip_int)
+                        logger.info(
+                            'Using configured device id {} for ip address {}'.format(ip_device_prefer_map[ip], ip))
+                    except ValueError:
+                        logger.warn('Invalid device id configured for ip address {}'.format(ip))
                 elif ip in devices_ips_map:
                     prefer_devices_ids.append(devices_ips_map[ip])
 
@@ -393,7 +398,7 @@ def get_agent_config_vars(logger, config_ini):
         device_ip_list = None
         object_type = None
         his_time_range = None
-        ip_device_prefer_map = None
+        ip_device_prefer_map = {}
 
         instance_whitelist_regex = None
         try:
@@ -479,7 +484,12 @@ def get_agent_config_vars(logger, config_ini):
                 for ip in ip_list:
                     if ':' in ip:
                         ip, device = ip.split(':')
-                        ip_device_prefer_map[ip] = device
+                        try:
+                            device_ip = int(device)
+                            ip_device_prefer_map[ip] = device_ip
+                        except ValueError:
+                            pass
+
                     new_ip_list.append(ip)
                 param['device_ip_list'] = new_ip_list
 
@@ -894,8 +904,8 @@ def send_request(logger, url, mode='GET', failure_message='Failure!', success_me
                 return response
             else:
                 logger.warn(failure_message)
-                logger.info('Response Code: {}\nTEXT: {}'.format(
-                    response.status_code, response.text))
+                logger.info('Request: {}\nResponse Code: {}\nTEXT: {}'.format(
+                    request_passthrough.get('data'), response.status_code, response.text))
         # handle various exceptions
         except requests.exceptions.Timeout:
             logger.exception('Timed out. Reattempting...')

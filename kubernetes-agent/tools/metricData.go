@@ -3,6 +3,7 @@ package tools
 import (
 	"kubernetes-agent/insightfinder"
 	"kubernetes-agent/prometheus"
+	"math"
 )
 
 func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper, PVCPodsMapping *map[string]string, postProcessor *PostProcessor) *insightfinder.MetricDataReceivePayload {
@@ -35,6 +36,13 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 			} else {
 				// Pod level metric
 				instanceName, componentName = instanceNameMapper.GetInstanceMapping(promMetricData.NameSpace, promMetricData.Pod)
+
+				// Skip if instanceName is empty
+				if instanceName == "" {
+					continue
+				}
+
+				// Add container name to instance name
 				if promMetricData.Container != "" {
 					instanceName = promMetricData.Container + "_" + instanceName
 				}
@@ -68,6 +76,12 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 					}
 				}
 				dataInTimestampEntry, _ := dataInTimestampMap[promMetricPoint.TimeStamp]
+
+				// Process Inf value.
+				if promMetricPoint.Value == math.Inf(1) || promMetricPoint.Value == math.Inf(-1) {
+					promMetricPoint.Value = 0
+				}
+
 				dataInTimestampEntry.MetricDataPoints = append(dataInTimestampEntry.MetricDataPoints, insightfinder.MetricDataPoint{
 					MetricName: metricType,
 					Value:      promMetricPoint.Value,
