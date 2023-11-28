@@ -1,7 +1,9 @@
 import configparser
+import glob
 import http.client
 import json
 import logging
+import multiprocessing
 import os
 import shlex
 import socket
@@ -9,7 +11,9 @@ import sys
 import time
 import traceback
 import urllib.parse
+from logging.handlers import QueueHandler
 from optparse import OptionParser
+from pathlib import Path
 from sys import getsizeof
 
 import arrow
@@ -18,12 +22,34 @@ import regex
 import requests
 from pyzabbix import ZabbixAPI
 
+# declare a few vars
+TRUE = regex.compile(r"T(RUE)?", regex.IGNORECASE)
+FALSE = regex.compile(r"F(ALSE)?", regex.IGNORECASE)
+SPACES = regex.compile(r"\s+")
+SLASHES = regex.compile(r"\/+")
+UNDERSCORE = regex.compile(r"\_+")
+COLONS = regex.compile(r"\:+")
+LEFT_BRACE = regex.compile(r"\[")
+RIGHT_BRACE = regex.compile(r"\]")
+PERIOD = regex.compile(r"\.")
+COMMA = regex.compile(r"\,")
+NON_ALNUM = regex.compile(r"[^a-zA-Z0-9]")
+FORMAT_STR = regex.compile(r"{(.*?)}")
+HOSTNAME = socket.gethostname().partition('.')[0]
+ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
+JSON_LEVEL_DELIM = '.'
+CSV_DELIM = r",|\t"
+ATTEMPTS = 3
+REQUESTS = dict()
+track = dict()
+data_buffer = dict()
+
 """
 This script gathers data to send to Insightfinder
 """
 
 
-def start_data_processing(data_type):
+def start_data_processing(logger, data_type, config_name, cli_config_vars, agent_config_vars, if_config_vars):
     logger.info('Starting fetch {} items......'.format(data_type))
 
     # Create ZabbixAPI class instance
@@ -116,10 +142,11 @@ def start_data_processing(data_type):
                 history_res = zapi.do_request(cmd, {'output': 'extend', "history": history_type, "hostids": hostids,
                                                     "itemids": items_ids, 'time_from': timestamp,
                                                     'time_till': timestamp + if_config_vars['sampling_interval'], })
-                parse_messages_zabbix(data_type, history_res['result'], all_field_map, items_map, 'history')
+                parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
+                                      agent_config_vars)
 
                 # clear data buffer when piece of time range end
-                clear_data_buffer()
+                clear_data_buffer(logger, cli_config_vars, if_config_vars)
         else:
             logger.debug('Using current time for streaming data')
             if data_type != 'Metric':
@@ -130,18 +157,20 @@ def start_data_processing(data_type):
                     history_res = zapi.do_request(cmd, {'output': 'extend', "history": history_type, "hostids": hostids,
                                                         "itemids": items_ids, 'time_from': timestamp,
                                                         'time_till': timestamp + if_config_vars['sampling_interval'], })
-                    parse_messages_zabbix(data_type, history_res['result'], all_field_map, items_map, 'history')
+                    parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
+                                          agent_config_vars)
                     # clear data buffer when piece of time range end
-                    clear_data_buffer()
+                    clear_data_buffer(logger, cli_config_vars, if_config_vars)
             else:
-                parse_messages_zabbix(data_type, items_res['result'], all_field_map, items_map, 'live')
+                parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
+                                      agent_config_vars)
                 # clear data buffer when piece of time range end
-                clear_data_buffer()
+                clear_data_buffer(logger, cli_config_vars, if_config_vars)
 
     logger.info('Closed......')
 
 
-def parse_messages_zabbix(data_type, result, all_field_map, items_map, replay_type):
+def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, replay_type, agent_config_vars):
     count = 0
     logger.info('Reading {} messages'.format(len(result)))
     is_metric = True if data_type == 'Metric' else False
@@ -217,12 +246,16 @@ def parse_messages_zabbix(data_type, result, all_field_map, items_map, replay_ty
     logger.info('Parse {0} messages'.format(count))
 
 
-def get_agent_config_vars():
+def get_agent_config_vars(logger, config_ini):
     """ Read and parse config.ini """
-    config_ini = config_ini_path()
-    if os.path.exists(config_ini):
+    """ get config.ini vars """
+    if not os.path.exists(config_ini):
+        logger.error('No config file found. Exiting...')
+        return False
+
+    with open(config_ini) as fp:
         config_parser = configparser.ConfigParser()
-        config_parser.read(config_ini)
+        config_parser.read_file(fp)
 
         zabbix_kwargs = {}
         host_groups = None
@@ -242,15 +275,15 @@ def get_agent_config_vars():
             if len(config_parser.get('zabbix', 'url')) != 0:
                 zabbix_kwargs['url'] = config_parser.get('zabbix', 'url')
             else:
-                config_error('url')
+                config_error(logger, 'url')
             if len(config_parser.get('zabbix', 'user')) != 0:
                 zabbix_kwargs['user'] = config_parser.get('zabbix', 'user')
             else:
-                config_error('user')
+                config_error(logger, 'user')
             if len(config_parser.get('zabbix', 'password')) != 0:
                 zabbix_kwargs['password'] = config_parser.get('zabbix', 'password')
             else:
-                config_error('password')
+                config_error(logger, 'password')
 
             # metrics
             host_groups = config_parser.get('zabbix', 'host_groups')
@@ -281,7 +314,7 @@ def get_agent_config_vars():
 
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
-            return config_error()
+            return config_error(logger, )
 
         # host_groups
         if len(host_groups) != 0:
@@ -308,11 +341,11 @@ def get_agent_config_vars():
         if len(target_timestamp_timezone) != 0:
             target_timestamp_timezone = int(arrow.now(target_timestamp_timezone).utcoffset().total_seconds())
         else:
-            config_error('target_timestamp_timezone')
+            config_error(logger, 'target_timestamp_timezone')
 
         if timezone:
             if timezone not in pytz.all_timezones:
-                config_error('timezone')
+                config_error(logger, 'timezone')
             else:
                 timezone = pytz.timezone(timezone)
 
@@ -320,7 +353,7 @@ def get_agent_config_vars():
         if data_format in {'JSON', 'JSONTAIL', 'AVRO', 'XML'}:
             pass
         else:
-            config_error('data_format')
+            config_error(logger, 'data_format')
 
         # proxies
         agent_proxies = dict()
@@ -359,19 +392,20 @@ def get_agent_config_vars():
                        'timezone': timezone, 'timestamp_format': timestamp_format, }
 
         return config_vars
-    else:
-        config_error_no_config()
 
 
 #########################
 #   START_BOILERPLATE   #
 #########################
-def get_if_config_vars():
+def get_if_config_vars(logger, config_ini):
     """ get config.ini vars """
-    config_ini = config_ini_path()
-    if os.path.exists(config_ini):
+    if not os.path.exists(config_ini):
+        logger.error('No config file found. Exiting...')
+        return False
+
+    with open(config_ini) as fp:
         config_parser = configparser.ConfigParser()
-        config_parser.read(config_ini)
+        config_parser.read_file(fp)
         try:
             user_name = config_parser.get('insightfinder', 'user_name')
             license_key = config_parser.get('insightfinder', 'license_key')
@@ -387,27 +421,27 @@ def get_if_config_vars():
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
-            return config_error()
+            return config_error(logger, )
 
         # check required variables
         if len(user_name) == 0:
-            return config_error('user_name')
+            return config_error(logger, 'user_name')
         if len(license_key) == 0:
-            return config_error('license_key')
+            return config_error(logger, 'license_key')
         if len(project_name) == 0:
-            return config_error('project_name')
+            return config_error(logger, 'project_name')
         if len(project_type) == 0:
-            return config_error('project_type')
+            return config_error(logger, 'project_type')
 
         if project_type not in {'METRIC', 'METRICREPLAY', 'LOG', 'LOGREPLAY', 'INCIDENT', 'INCIDENTREPLAY', 'ALERT',
                                 'ALERTREPLAY', 'DEPLOYMENT', 'DEPLOYMENTREPLAY'}:
-            return config_error('project_type')
+            return config_error(logger, 'project_type')
 
         is_replay = 'REPLAY' in project_type
 
         if len(sampling_interval) == 0:
             if 'METRIC' in project_type:
-                return config_error('sampling_interval')
+                return config_error(logger, 'sampling_interval')
             else:
                 # set default for non-metric
                 sampling_interval = 10
@@ -418,7 +452,7 @@ def get_if_config_vars():
             sampling_interval = int(sampling_interval) * 60
 
         if len(run_interval) == 0:
-            return config_error('run_interval')
+            return config_error(logger, 'run_interval')
 
         if run_interval.endswith('s'):
             run_interval = int(run_interval[:-1])
@@ -446,12 +480,6 @@ def get_if_config_vars():
                        'if_url': if_url, 'if_proxies': if_proxies, 'is_replay': is_replay, }
 
         return config_vars
-    else:
-        config_error_no_config()
-
-
-def config_ini_path():
-    return abs_path_from_cur(cli_config_vars['config'])
 
 
 def abs_path_from_cur(filename=''):
@@ -463,30 +491,20 @@ def get_cli_config_vars():
     usage = 'Usage: %prog [options]'
     parser = OptionParser(usage=usage)
     """
-    ## not ready.
-    parser.add_option('--threads', default=1, action='store', dest='threads',
-                      help='Number of threads to run')
     """
-    parser.add_option('-c', '--config', action='store', dest='config', default=abs_path_from_cur('config.ini'),
-                      help='Path to the config file to use. Defaults to {}'.format(abs_path_from_cur('config.ini')))
+    parser.add_option('-c', '--config', action='store', dest='config', default=abs_path_from_cur('conf.d'),
+                      help='Path to the config files to use. Defaults to {}'.format(abs_path_from_cur('conf.d')))
     parser.add_option('-q', '--quiet', action='store_true', dest='quiet', default=False,
                       help='Only display warning and error log messages')
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose', default=False,
                       help='Enable verbose logging')
     parser.add_option('-t', '--testing', action='store_true', dest='testing', default=False,
                       help='Set to testing mode (do not send data).' + ' Automatically turns on verbose logging')
+    parser.add_option('--timeout', action='store', dest='timeout', help='Minutes of timeout for all processes')
     (options, args) = parser.parse_args()
 
-    """
-    # not ready
-    try:
-        threads = int(options.threads)
-    except ValueError:
-        threads = 1
-    """
-
-    config_vars = {'config': options.config if os.path.isfile(options.config) else abs_path_from_cur('config.ini'),
-                   'threads': 1, 'testing': False, 'log_level': logging.INFO}
+    config_vars = {'config': options.config if os.path.isdir(options.config) else abs_path_from_cur('conf.d'),
+                   'testing': False, 'log_level': logging.INFO, }
 
     if options.testing:
         config_vars['testing'] = True
@@ -496,18 +514,15 @@ def get_cli_config_vars():
     elif options.quiet:
         config_vars['log_level'] = logging.WARNING
 
+    config_vars['timeout'] = int(options.timeout) * 60 if options.timeout else 0
+
     return config_vars
 
 
-def config_error(setting=''):
+def config_error(logger, setting=''):
     info = ' ({})'.format(setting) if setting else ''
     logger.error('Agent not correctly configured{}. Check config file.'.format(info))
     return False
-
-
-def config_error_no_config():
-    logger.error('No config file found. Exiting...')
-    sys.exit(1)
 
 
 def get_json_size_bytes(json_data):
@@ -580,7 +595,7 @@ def set_logger_config(level):
     return logger_obj
 
 
-def print_summary_info():
+def print_summary_info(logger, if_config_vars, agent_config_vars):
     # info to be sent to IF
     post_data_block = '\nIF settings:'
     for ik, iv in sorted(if_config_vars.items()):
@@ -593,31 +608,25 @@ def print_summary_info():
         agent_data_block += '\n\t{}: {}'.format(jk, jv)
     logger.debug(agent_data_block)
 
-    # variables from cli config
-    cli_data_block = '\nCLI settings:'
-    for kk, kv in sorted(cli_config_vars.items()):
-        cli_data_block += '\n\t{}: {}'.format(kk, kv)
-    logger.debug(cli_data_block)
 
-
-def initialize_data_gathering():
-    data_type = get_data_type_from_project_type()
+def initialize_data_gathering(logger, config_name, cli_config_vars, agent_config_vars, if_config_vars):
+    data_type = get_data_type_from_project_type(logger, if_config_vars)
 
     reset_data_buffer()
     reset_track()
     track['chunk_count'] = 0
     track['entry_count'] = 0
 
-    start_data_processing(data_type)
+    start_data_processing(logger, data_type, config_name, cli_config_vars, agent_config_vars, if_config_vars)
 
     # clear data buffer when data processing end
-    clear_data_buffer()
+    clear_data_buffer(logger, cli_config_vars, if_config_vars)
 
     logger.info('Total chunks created: ' + str(track['chunk_count']))
     logger.info('Total {} entries: {}'.format(if_config_vars['project_type'].lower(), track['entry_count']))
 
 
-def clear_data_buffer():
+def clear_data_buffer(logger, cli_config_vars, if_config_vars):
     # move all buffer data to current data, and send
     buffer_values = list(data_buffer['buffer_dict'].values())
 
@@ -627,12 +636,12 @@ def clear_data_buffer():
         count += 1
         if count % 1000 == 0 or get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
             logger.debug('Sending buffer chunk')
-            send_data_wrapper()
+            send_data_wrapper(logger, cli_config_vars, if_config_vars)
 
     # last chunk
     if len(track['current_row']) > 0:
         logger.debug('Sending last chunk')
-        send_data_wrapper()
+        send_data_wrapper(logger, cli_config_vars, if_config_vars)
 
     reset_data_buffer()
 
@@ -656,23 +665,23 @@ def reset_track():
 ################################
 # Functions to send data to IF #
 ################################
-def send_data_wrapper():
+def send_data_wrapper(logger, cli_config_vars, if_config_vars):
     """ wrapper to send data """
     logger.debug('--- Chunk creation time: {} seconds ---'.format(round(time.time() - track['start_time'], 2)))
-    send_data_to_if(track['current_row'])
+    send_data_to_if(logger, track['current_row'], cli_config_vars, if_config_vars)
     track['chunk_count'] += 1
     reset_track()
 
 
-def send_data_to_if(chunk_metric_data):
+def send_data_to_if(logger, chunk_metric_data, cli_config_vars, if_config_vars):
     send_data_time = time.time()
 
     # prepare data for metric streaming agent
-    data_to_post = initialize_api_post_data()
+    data_to_post = initialize_api_post_data(logger, if_config_vars)
     if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
         for chunk in chunk_metric_data:
             chunk['data'] = json.dumps(chunk['data'])
-    data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
+    data_to_post[get_data_field_from_project_type(if_config_vars)] = json.dumps(chunk_metric_data)
 
     logger.debug('First:\n' + str(chunk_metric_data[0]))
     logger.debug('Last:\n' + str(chunk_metric_data[-1]))
@@ -684,14 +693,15 @@ def send_data_to_if(chunk_metric_data):
         return
 
     # send the data
-    post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type())
-    send_request(post_url, 'POST', 'Could not send request to IF',
+    post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type(if_config_vars))
+    send_request(logger, post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
                  verify=False, proxies=if_config_vars['if_proxies'])
     logger.info('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
 
 
-def send_request(url, mode='GET', failure_message='Failure!', success_message='Success!', **request_passthrough):
+def send_request(logger, url, mode='GET', failure_message='Failure!', success_message='Success!',
+                 **request_passthrough):
     """ sends a request to the given url """
     # determine if post or get (default)
     requests.packages.urllib3.disable_warnings()
@@ -728,7 +738,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
     return -1
 
 
-def get_data_type_from_project_type():
+def get_data_type_from_project_type(logger, if_config_vars):
     if 'METRIC' in if_config_vars['project_type']:
         return 'Metric'
     elif 'LOG' in if_config_vars['project_type']:
@@ -744,7 +754,7 @@ def get_data_type_from_project_type():
         sys.exit(1)
 
 
-def get_insight_agent_type_from_project_type():
+def get_insight_agent_type_from_project_type(agent_config_vars, if_config_vars):
     if 'containerize' in agent_config_vars and agent_config_vars['containerize']:
         if if_config_vars['is_replay']:
             return 'containerReplay'
@@ -759,7 +769,7 @@ def get_insight_agent_type_from_project_type():
         return 'Custom'
 
 
-def get_agent_type_from_project_type():
+def get_agent_type_from_project_type(if_config_vars):
     """ use project type to determine agent type """
     if 'METRIC' in if_config_vars['project_type']:
         if if_config_vars['is_replay']:
@@ -772,7 +782,7 @@ def get_agent_type_from_project_type():
         return 'LogStreaming'  # INCIDENT and DEPLOYMENT don't use this
 
 
-def get_data_field_from_project_type():
+def get_data_field_from_project_type(if_config_vars):
     """ use project type to determine which field to place data in """
     # incident uses a different API endpoint
     if 'INCIDENT' in if_config_vars['project_type']:
@@ -783,7 +793,7 @@ def get_data_field_from_project_type():
         return 'metricData'
 
 
-def get_api_from_project_type():
+def get_api_from_project_type(if_config_vars):
     """ use project type to determine which API to post to """
     # incident uses a different API endpoint
     if 'INCIDENT' in if_config_vars['project_type']:
@@ -794,32 +804,31 @@ def get_api_from_project_type():
         return 'customprojectrawdata'
 
 
-def initialize_api_post_data():
+def initialize_api_post_data(logger, if_config_vars):
     """ set up the unchanging portion of this """
     to_send_data_dict = dict()
     to_send_data_dict['userName'] = if_config_vars['user_name']
     to_send_data_dict['licenseKey'] = if_config_vars['license_key']
     to_send_data_dict['projectName'] = if_config_vars['project_name']
     to_send_data_dict['instanceName'] = HOSTNAME
-    to_send_data_dict['agentType'] = get_agent_type_from_project_type()
+    to_send_data_dict['agentType'] = get_agent_type_from_project_type(if_config_vars)
     if 'METRIC' in if_config_vars['project_type'] and 'sampling_interval' in if_config_vars:
         to_send_data_dict['samplingInterval'] = str(if_config_vars['sampling_interval'])
     logger.debug(to_send_data_dict)
     return to_send_data_dict
 
 
-def check_project_exist():
+def check_project_exist(logger, agent_config_vars, if_config_vars, project_name, system_name):
     is_project_exist = False
-
-    system_name = if_config_vars['system_name']
-    project_name = if_config_vars['project_name']
+    if not system_name:
+        system_name = if_config_vars['system_name']
 
     try:
         logger.info('Starting check project: ' + project_name)
         params = {'operation': 'check', 'userName': if_config_vars['user_name'],
                   'licenseKey': if_config_vars['license_key'], 'projectName': project_name, }
         url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
-        response = send_request(url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
+        response = send_request(logger, url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
         if response == -1:
             logger.error('Check project error: ' + project_name)
         else:
@@ -841,12 +850,14 @@ def check_project_exist():
             params = {'operation': 'create', 'userName': if_config_vars['user_name'],
                       'licenseKey': if_config_vars['license_key'], 'projectName': project_name,
                       'systemName': system_name or project_name, 'instanceType': 'Zabbix',
-                      'projectCloudType': 'PrivateCloud', 'dataType': get_data_type_from_project_type(),
-                      'insightAgentType': get_insight_agent_type_from_project_type(),
+                      'projectCloudType': 'PrivateCloud',
+                      'dataType': get_data_type_from_project_type(logger, if_config_vars),
+                      'insightAgentType': get_insight_agent_type_from_project_type(agent_config_vars, if_config_vars),
                       'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
                       'samplingIntervalInSeconds': if_config_vars['sampling_interval'], }
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
-            response = send_request(url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
+            response = send_request(logger, url, 'POST', data=params, verify=False,
+                                    proxies=if_config_vars['if_proxies'])
             if response == -1:
                 logger.error('Add project error: ' + project_name)
             else:
@@ -869,7 +880,8 @@ def check_project_exist():
             params = {'operation': 'check', 'userName': if_config_vars['user_name'],
                       'licenseKey': if_config_vars['license_key'], 'projectName': project_name, }
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
-            response = send_request(url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
+            response = send_request(logger, url, 'POST', data=params, verify=False,
+                                    proxies=if_config_vars['if_proxies'])
             if response == -1:
                 logger.error('Check project error: ' + project_name)
             else:
@@ -887,41 +899,145 @@ def check_project_exist():
     return is_project_exist
 
 
-if __name__ == "__main__":
-    # declare a few vars
-    TRUE = regex.compile(r"T(RUE)?", regex.IGNORECASE)
-    FALSE = regex.compile(r"F(ALSE)?", regex.IGNORECASE)
-    SPACES = regex.compile(r"\s+")
-    SLASHES = regex.compile(r"\/+")
-    UNDERSCORE = regex.compile(r"\_+")
-    COLONS = regex.compile(r"\:+")
-    LEFT_BRACE = regex.compile(r"\[")
-    RIGHT_BRACE = regex.compile(r"\]")
-    PERIOD = regex.compile(r"\.")
-    COMMA = regex.compile(r"\,")
-    NON_ALNUM = regex.compile(r"[^a-zA-Z0-9]")
-    FORMAT_STR = regex.compile(r"{(.*?)}")
-    HOSTNAME = socket.gethostname().partition('.')[0]
-    ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
-    JSON_LEVEL_DELIM = '.'
-    CSV_DELIM = r",|\t"
-    ATTEMPTS = 3
-    REQUESTS = dict()
-    track = dict()
-    data_buffer = dict()
+def listener_configurer():
+    """ set up logging according to the defined log level """
+    # create a logging format
+    formatter = logging.Formatter(
+        '{ts} {name} [pid {pid}] {lvl} {func}:{line} {msg}'.format(ts='%(asctime)s', name='%(name)s', pid='%(process)d',
+                                                                   lvl='%(levelname)-8s', func='%(funcName)s',
+                                                                   line='%(lineno)d', msg='%(message)s'), ISO8601[0])
+
+    # Get the root logger
+    root = logging.getLogger()
+
+    # route INFO and DEBUG logging to stdout from stderr
+    logging_handler_out = logging.StreamHandler(sys.stdout)
+    logging_handler_out.setLevel(logging.DEBUG)
+    logging_handler_out.setFormatter(formatter)
+    root.addHandler(logging_handler_out)
+
+    logging_handler_err = logging.StreamHandler(sys.stderr)
+    logging_handler_err.setLevel(logging.WARNING)
+    logging_handler_err.setFormatter(formatter)
+    root.addHandler(logging_handler_err)
+
+
+def listener_process(q, c_config):
+    listener_configurer()
+    while True:
+        while not q.empty():
+            record = q.get()
+
+            if not record or record.name == 'KILL':
+                return
+
+            logger = logging.getLogger(record.name)
+            logger.handle(record)
+        time.sleep(1)
+
+
+def queue_configurer(q):
+    h = QueueHandler(q)  # Just the one handler needed
+    root = logging.getLogger()
+    root.addHandler(h)
+    # Default log level to info
+    root.setLevel(logging.INFO)
+
+
+def worker_process(args):
+    (config_file, c_config, time_now, q) = args
+
+    config_name = Path(config_file).stem
+    level = c_config['log_level']
+
+    # start sub process
+    logger = logging.getLogger('worker.' + config_name)
+    logger.setLevel(level)
+
+    logger.info("Setup logger in PID {}".format(os.getpid()))
+    logger.info("Process start with config: {}".format(config_file))
+
+    if_config_vars = get_if_config_vars(logger, config_file)
+    if not if_config_vars:
+        return
+
+    agent_config_vars = get_agent_config_vars(logger, config_file)
+    if not agent_config_vars:
+        return
+
+    print_summary_info(logger, if_config_vars, agent_config_vars)
+    if not c_config['testing']:
+        # check project first if project_name is set
+        project_name = if_config_vars['project_name']
+        if project_name:
+            check_success = check_project_exist(logger, agent_config_vars, if_config_vars, project_name, None)
+            if not check_success:
+                return
+
+    initialize_data_gathering(logger, config_name, c_config, agent_config_vars, if_config_vars)
+
+
+def main():
+    # capture warnings to logging system
+    logging.captureWarnings(True)
 
     # get config
     cli_config_vars = get_cli_config_vars()
-    logger = set_logger_config(cli_config_vars['log_level'])
-    logger.debug(cli_config_vars)
-    if_config_vars = get_if_config_vars()
-    agent_config_vars = get_agent_config_vars()
-    print_summary_info()
 
-    # Create project if we use project_name_prefix option
-    check_success = False
-    if not cli_config_vars['testing']:
-        check_success = check_project_exist()
+    # get all config file
+    files_path = os.path.join(cli_config_vars['config'], "*.ini")
+    config_files = glob.glob(files_path)
 
-    if check_success:
-        initialize_data_gathering()
+    if len(config_files) == 0:
+        logging.error("Config files not found")
+        sys.exit(1)
+
+    # logger
+    m = multiprocessing.Manager()
+    queue = m.Queue()
+    listener = multiprocessing.Process(target=listener_process, args=(queue, cli_config_vars))
+    listener.start()
+
+    # set up main logger following example from work_process
+    queue_configurer(queue)
+    main_logger = logging.getLogger('main')
+
+    # variables from cli config
+    cli_data_block = '\nCLI settings:'
+    for kk, kv in sorted(cli_config_vars.items()):
+        cli_data_block += '\n\t{}: {}'.format(kk, kv)
+    main_logger.info(cli_data_block)
+
+    # get args
+    utc_time_now = int(arrow.utcnow().float_timestamp)
+    arg_list = [(f, cli_config_vars, utc_time_now, queue) for f in config_files]
+
+    # start sub process by pool
+    pool = multiprocessing.Pool(len(arg_list))
+    pool_result = pool.map_async(worker_process, arg_list)
+    pool.close()
+
+    timeout = cli_config_vars['timeout']
+    need_timeout = timeout > 0
+    if need_timeout:
+        pool_result.wait(timeout=timeout)
+
+    try:
+        pool_result.get(timeout=1 if need_timeout else None)
+        pool.join()
+    except TimeoutError:
+        main_logger.error("We lacked patience and got a multiprocessing.TimeoutError")
+        pool.terminate()
+
+    # end
+    main_logger.info("Now the pool is closed and no longer available")
+
+    # send kill signal
+    time.sleep(1)
+    kill_logger = logging.getLogger('KILL')
+    kill_logger.info('KILL')
+    listener.join()
+
+
+if __name__ == "__main__":
+    main()
