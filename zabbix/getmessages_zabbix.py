@@ -92,7 +92,7 @@ def start_data_processing(logger, data_type, config_name, cli_config_vars, agent
         host_id = item['hostid']
         name = item['name']
         hostgroups = item.get('hostgroups') or []
-        host_group = hostgroups[len(hostgroups) - 1].get('name') or ''
+        host_group = ','.join([h.get('name') for h in hostgroups])
         hosts_ids.append(host_id)
 
         hosts_map[host_id] = name
