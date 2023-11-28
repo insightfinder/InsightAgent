@@ -41,14 +41,14 @@ func ToInt(inputVar interface{}) int {
 func PrintStruct(v any, needPrint bool, fileName string) {
 	jsonBytes, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
-		log.Fatalf("JSON marshaling failed: %s", err)
+		log.Fatalf("JSON marshaling failed: %s" + err.Error())
 	}
 	if needPrint {
 		fmt.Println(string(jsonBytes))
 	}
 	err = os.WriteFile("PrintStruct-"+fileName+".json", jsonBytes, 0644)
 	if err != nil {
-		log.Fatalf("Writing to file failed: %s", err)
+		log.Output(2, "Writing to file failed: %s"+err.Error())
 	}
 }
 

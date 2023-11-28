@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -117,6 +118,18 @@ func (k *KubernetesServer) GetEvents(namespace string, startTime time.Time, endT
 				Kind:      event.Regarding.Kind,
 			},
 		}
+
+		// Extract Container from Pod events
+		if event.Regarding.Kind == "Pod" {
+			containerRegex := regexp.MustCompile(`(?i)containers\{(.*?)\}`)
+			containerNameMatched := containerRegex.FindStringSubmatch(event.Regarding.FieldPath)
+			if containerNameMatched != nil {
+				containerName := containerNameMatched[1]
+				result.Regarding.Container = containerName
+			}
+		}
+
+		// Add to the result list
 		results = append(results, result)
 
 	}
@@ -159,6 +172,48 @@ func (k *KubernetesServer) GetPods(namespace string) *map[string]map[string]map[
 		result[resourceKind][resourceName][pod.Name] = true
 	}
 	return &result
+}
+
+func (k *KubernetesServer) GetPodsContainerExitEvents(namespace string, startTime time.Time, endTime time.Time) *[]EventEntity {
+	results := make([]EventEntity, 0)
+	cache := make(map[string]EventEntity)
+
+	// Get All Pods
+	Pods, err := k.Client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		log.Output(2, "Failed to get pods in namespace: "+err.Error())
+	}
+	for _, Pod := range Pods.Items {
+		for _, containerStatus := range Pod.Status.ContainerStatuses {
+			if containerStatus.LastTerminationState.Terminated != nil {
+				containerLastTerminated := containerStatus.LastTerminationState.Terminated
+				if containerLastTerminated.FinishedAt.Time.After(startTime) && containerLastTerminated.FinishedAt.Time.Before(endTime) {
+					// Save the same event to cache to avoid duplicate events
+					cache[fmt.Sprint(Pod.Name, containerStatus.Name, containerLastTerminated.FinishedAt.Time.UnixMilli(), containerLastTerminated.Reason)] = EventEntity{
+						Name:      Pod.Name,
+						Namespace: Pod.Namespace,
+						Time:      containerLastTerminated.FinishedAt.Time,
+						Type:      "Warning",
+						Reason:    containerLastTerminated.Reason,
+						Note:      fmt.Sprintf("Container %s Terminated with exit code %d.", containerStatus.Name, containerLastTerminated.ExitCode),
+						Regarding: RegardingEntity{
+							Name:      Pod.Name,
+							Namespace: Pod.Namespace,
+							Kind:      "Pod",
+							Container: containerStatus.Name,
+						},
+					}
+				}
+			}
+		}
+	}
+
+	// Add all events to result list.
+	for _, event := range cache {
+		results = append(results, event)
+	}
+
+	return &results
 }
 
 func (k *KubernetesServer) GetPVCPodsMapping(namespace string) *map[string]string {

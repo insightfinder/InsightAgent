@@ -113,7 +113,10 @@ func (mapper *InstanceMapper) AddPods(namespace string, resourceKind string, res
 				}
 			}
 		}
-		mapper.Storage[namespace][resourceKind][resource] = slots
+		if mapper.Storage[namespace][resourceKind][resource] != nil {
+			mapper.Storage[namespace][resourceKind][resource] = slots
+		}
+
 	}
 }
 
