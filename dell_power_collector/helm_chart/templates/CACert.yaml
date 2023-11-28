@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ .Release.Name }}-dell-root-ca-cert
-  namespace: {{ .Release.Namespace }}
-data:
-  cert.pem: |

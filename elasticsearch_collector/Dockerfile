@@ -26,4 +26,4 @@ RUN mkdir -p /elasticsearch_collector/logs && \
 VOLUME /elasticsearch_collector/conf.d/config.ini
 
 # Run the script when config.ini is provided as a volume
-CMD ["/bin/sh", "-c", "nohup python3 cron.py >> /elasticsearch_collector/logs/cron.log 2>&1 & tail -f /elasticsearch_collector/logs/cron.log"]
+CMD ["/bin/sh", "-c", "nohup python3 cron.py -g 1 -o 10 -p 4 >> /elasticsearch_collector/logs/cron.log 2>&1 & tail -f /elasticsearch_collector/logs/cron.log"]

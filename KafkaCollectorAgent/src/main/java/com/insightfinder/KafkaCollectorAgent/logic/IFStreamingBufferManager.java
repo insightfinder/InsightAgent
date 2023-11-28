@@ -29,6 +29,11 @@ import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -202,14 +207,23 @@ public class IFStreamingBufferManager {
     }
 
     public long getGMTinHourFromMillis(String date, String format) {
-        SimpleDateFormat sdf = new SimpleDateFormat(format);
-        sdf.setTimeZone(TimeZone.getTimeZone("GMT"));
-        try {
-            return sdf.parse(date).getTime();
-        } catch (ParseException e) {
-            logger.log(Level.SEVERE, e.toString(), e);
-            return -1;
+        //"yyyy-MM-dd'T'HH:mm:ssZZZZZ"
+        DateTimeFormatter rfc3339Formatter = DateTimeFormatter.ofPattern(format)
+                .withResolverStyle(ResolverStyle.LENIENT);
+        ZonedDateTime zonedDateTime = parseRfc3339(date, rfc3339Formatter);
+        if (zonedDateTime != null){
+            return zonedDateTime.toInstant().toEpochMilli();
         }
+        return -1;
+    }
+
+    public  ZonedDateTime parseRfc3339(String rfcDateTime, DateTimeFormatter rfc3339Formatter) {
+        try {
+            return ZonedDateTime.parse(rfcDateTime, rfc3339Formatter);
+        }catch (DateTimeParseException exception){
+            logger.log(Level.INFO, " can not pare date :" + rfcDateTime);
+        }
+        return null;
     }
 
     private JsonObject processMetadata(JsonObject srcData){
@@ -234,10 +248,22 @@ public class IFStreamingBufferManager {
 
     private String getIFProjectAndSystemInfo(JsonObject srcData){
         String ret = null;
-        for (String key : projectList.keySet()){
-            String[] keyArr = key.split(":");
-            if (keyArr.length == 2 && srcData.has(keyArr[0]) && srcData.get(keyArr[0]).getAsString().equalsIgnoreCase(keyArr[1])){
-                return String.format("%s@%s",projectList.get(key).get("project"), projectList.get(key).get("system")) ;
+        for (String keyStr : projectList.keySet()){
+            String[] keysArr = keyStr.split(",");
+            boolean bMatch = true;
+            for (String key : keysArr){
+                String[] keyArr = key.split(":");
+                if (keyArr.length == 2 && srcData.has(keyArr[0]) && srcData.get(keyArr[0]).getAsString().equalsIgnoreCase(keyArr[1])){
+                    bMatch = bMatch && true;
+                }else if (keyArr .length == 1 && srcData.has(keyArr[0])){
+                    bMatch = bMatch && true;
+                }else {
+                    bMatch = false;
+                }
+            }
+
+            if (bMatch){
+                return String.format("%s@%s",projectList.get(keyStr).get("project"), projectList.get(keyStr).get("system")) ;
             }
         }
         return  ret;
