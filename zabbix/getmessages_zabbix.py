@@ -532,6 +532,9 @@ def make_safe_data_key(metric):
     metric = LEFT_BRACE.sub('(', metric)
     metric = RIGHT_BRACE.sub(')', metric)
     metric = PERIOD.sub('/', metric)
+    metric = UNDERSCORE.sub('-', metric)
+    metric = COLONS.sub('-', metric)
+    metric = COMMA.sub('-', metric)
     return metric
 
 
