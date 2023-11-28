@@ -29,6 +29,11 @@ import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -202,14 +207,23 @@ public class IFStreamingBufferManager {
     }
 
     public long getGMTinHourFromMillis(String date, String format) {
-        SimpleDateFormat sdf = new SimpleDateFormat(format);
-        sdf.setTimeZone(TimeZone.getTimeZone("GMT"));
-        try {
-            return sdf.parse(date).getTime();
-        } catch (ParseException e) {
-            logger.log(Level.SEVERE, e.toString(), e);
-            return -1;
+        //"yyyy-MM-dd'T'HH:mm:ssZZZZZ"
+        DateTimeFormatter rfc3339Formatter = DateTimeFormatter.ofPattern(format)
+                .withResolverStyle(ResolverStyle.LENIENT);
+        ZonedDateTime zonedDateTime = parseRfc3339(date, rfc3339Formatter);
+        if (zonedDateTime != null){
+            return zonedDateTime.toInstant().toEpochMilli();
         }
+        return -1;
+    }
+
+    public  ZonedDateTime parseRfc3339(String rfcDateTime, DateTimeFormatter rfc3339Formatter) {
+        try {
+            return ZonedDateTime.parse(rfcDateTime, rfc3339Formatter);
+        }catch (DateTimeParseException exception){
+            logger.log(Level.INFO, " can not pare date :" + rfcDateTime);
+        }
+        return null;
     }
 
     private JsonObject processMetadata(JsonObject srcData){
