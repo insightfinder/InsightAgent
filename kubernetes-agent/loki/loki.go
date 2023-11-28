@@ -85,12 +85,13 @@ func (loki *LokiServer) GetLogData(namespace string, podList []string, StartTime
 				logMessage := logData[1]
 				logNamespace := result.Stream.Namespace
 				logNode := result.Stream.NodeName
+				logContainer := result.Stream.Container
 
 				// Save non-empty logs to the result list
 				tmpMsg := strings.ReplaceAll(logMessage, "\n", "")
 				tmpMsg = strings.ReplaceAll(tmpMsg, " ", "")
 				if tmpMsg != "" {
-					resultList = append(resultList, &LokiLogData{Namespace: logNamespace, Timestamp: logTimestampTime, Text: logMessage, Pod: logPod, Node: logNode})
+					resultList = append(resultList, &LokiLogData{Namespace: logNamespace, Timestamp: logTimestampTime, Text: logMessage, Pod: logPod, Container: logContainer, Node: logNode})
 				}
 			}
 		}

@@ -1,0 +1,82 @@
+name: Container Publish
+run-name: Running on ${{ github.ref }}
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '.github/**'
+  pull_request:
+    branches:
+      - master
+    paths-ignore:
+      - '.github/**'
+
+jobs:
+  changed-files:
+    name: Get changes
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v40
+        with:
+          json: true
+          dir_names: true
+          dir_names_max_depth: 1
+          files_ignore: '.github/**'
+
+      - name: List all changed files
+        run: echo '${{ steps.changed-files.outputs.all_changed_files }}'
+
+      - id: set-matrix
+        run: echo "matrix={\"dirs\":${{ steps.changed-files.outputs.all_changed_files }}}" >> "$GITHUB_OUTPUT"
+
+  container-publish:
+    needs: changed-files
+    if: fromJSON(needs.changed-files.outputs.matrix).dirs[0] != null
+    name: Publish container image for each changed dir in which Dockerfile exists
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.changed-files.outputs.matrix) }}
+      fail-fast: false
+    steps:
+      - name: Set env
+        run: echo "NOW=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check file existence
+        id: check_files
+        uses: andstor/file-existence-action@v2
+        with:
+          files: ${{ matrix.dirs }}/Dockerfile
+
+      - name: Login to Docker Hub
+        if: steps.check_files.outputs.files_exists == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        if: steps.check_files.outputs.files_exists == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        if: steps.check_files.outputs.files_exists == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.dirs }}
+          push: true
+          tags: |
+            insightfinderinc/${{ matrix.dirs }}:${{ env.NOW }},
+            insightfinderinc/${{ matrix.dirs }}:latest
