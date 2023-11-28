@@ -133,39 +133,65 @@ def start_data_processing(logger, data_type, config_name, cli_config_vars, agent
         # build map by item field
         all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map}
 
-        # if it's streaming with log type, use history.get api
-        if agent_config_vars['his_time_range']:
-            logger.debug('Using time range for replay data: {}'.format(agent_config_vars['his_time_range']))
-            cmd = 'problem.get' if data_type == 'Alert' else 'history.get'
-            for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
-                                   if_config_vars['sampling_interval']):
-                history_res = zapi.do_request(cmd, {'output': 'extend', "history": history_type, "hostids": hostids,
-                                                    "itemids": items_ids, 'time_from': timestamp,
-                                                    'time_till': timestamp + if_config_vars['sampling_interval'], })
+        if data_type == 'Alert':
+            if agent_config_vars['his_time_range']:
+                timestamp_end = agent_config_vars['his_time_range'][1]
+                timestamp_start = agent_config_vars['his_time_range'][0]
+            else:
+                timestamp_end = int(arrow.now().floor('second').timestamp())
+                timestamp_start = timestamp_end - if_config_vars["run_interval"]
+
+            for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
+                history_res = zapi.do_request('event.get',
+                                              {'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend',
+                                               'time_from': timestamp,
+                                               'time_till': timestamp + if_config_vars['sampling_interval'], })
                 parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
                                       agent_config_vars)
-
+                history_res = zapi.do_request('problem.get',
+                                              {'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend',
+                                               'time_from': timestamp,
+                                               'time_till': timestamp + if_config_vars['sampling_interval'], })
+                parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
+                                      agent_config_vars)
                 # clear data buffer when piece of time range end
                 clear_data_buffer(logger, cli_config_vars, if_config_vars)
         else:
-            logger.debug('Using current time for streaming data')
-            if data_type != 'Metric':
-                cmd = 'problem.get' if data_type == 'Alert' else 'history.get'
-                timestamp_end = int(arrow.now().floor('second').timestamp())
-                timestamp_start = timestamp_end - if_config_vars["run_interval"]
-                for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
-                    history_res = zapi.do_request(cmd, {'output': 'extend', "history": history_type, "hostids": hostids,
-                                                        "itemids": items_ids, 'time_from': timestamp,
-                                                        'time_till': timestamp + if_config_vars['sampling_interval'], })
+            if agent_config_vars['his_time_range']:
+                logger.debug('Using time range for replay data: {}'.format(agent_config_vars['his_time_range']))
+                for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
+                                       if_config_vars[
+                                           'sampling_interval'] if data_type == 'Metric' else log_request_interval):
+                    history_res = zapi.do_request('history.get',
+                                                  {'output': 'extend', "history": history_type, "hostids": hostids,
+                                                   "itemids": items_ids, 'time_from': timestamp,
+                                                   "selectHosts": "extend",
+                                                   'time_till': timestamp + if_config_vars['sampling_interval'], })
                     parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
                                           agent_config_vars)
+
                     # clear data buffer when piece of time range end
                     clear_data_buffer(logger, cli_config_vars, if_config_vars)
             else:
-                parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
-                                      agent_config_vars)
-                # clear data buffer when piece of time range end
-                clear_data_buffer(logger, cli_config_vars, if_config_vars)
+                logger.debug('Using current time for streaming data')
+                if data_type != 'Metric':
+                    # if it's streaming with log type, use history.get api
+                    timestamp_end = int(arrow.now().floor('second').timestamp())
+                    timestamp_start = timestamp_end - if_config_vars["run_interval"]
+                    for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
+                        history_res = zapi.do_request('history.get',
+                                                      {'output': 'extend', "history": history_type, "hostids": hostids,
+                                                       "itemids": items_ids, 'time_from': timestamp,
+                                                       'time_till': timestamp + if_config_vars['sampling_interval'], })
+                        parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map,
+                                              'history', agent_config_vars)
+                        # clear data buffer when piece of time range end
+                        clear_data_buffer(logger, cli_config_vars, if_config_vars)
+                else:
+                    parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
+                                          agent_config_vars)
+                    # clear data buffer when piece of time range end
+                    clear_data_buffer(logger, cli_config_vars, if_config_vars)
 
     logger.info('Closed......')
 
@@ -174,20 +200,29 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
     count = 0
     logger.info('Reading {} messages'.format(len(result)))
     is_metric = True if data_type == 'Metric' else False
+    is_alert = True if data_type == 'Alert' else False
 
     for message in result:
         try:
             logger.debug('Message received')
             logger.debug(message)
 
-            item_id = message['itemid']
-            if not items_map.get(item_id):
-                continue
-
-            # set instance and device
             instance_field = agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
                 agent_config_vars['instance_field']) > 0 else 'hostid'
-            instance_id = items_map.get(item_id).get(instance_field)
+
+            # set instance and device
+            item_id = message.get('itemid')
+            if item_id:
+                if not items_map.get(item_id):
+                    continue
+                instance_id = items_map.get(item_id).get(instance_field)
+            else:
+                hosts = message.get('hosts')
+                if hosts and len(hosts) > 0:
+                    instance_id = hosts[0].get(instance_field)
+                else:
+                    continue
+
             instance = all_field_map.get(instance_field).get(instance_id)
 
             # set component
@@ -199,7 +234,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             # add device info if has
             device = None
             device_field = agent_config_vars['device_field']
-            if device_field and len(device_field) > 0:
+            if item_id and device_field and len(device_field) > 0:
                 device_field = agent_config_vars['device_field'][0]
                 device_id = items_map.get(item_id).get(device_field)
                 device = all_field_map.get(device_field).get(device_id)
@@ -212,9 +247,13 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                 continue
 
             # set data field and value
-            data_field = items_map[item_id]['name']
-            data_field = make_safe_data_key(data_field)
-            data_value = message['lastvalue'] if replay_type == 'live' else message['value']
+            data_field = None
+            if is_metric:
+                data_field = items_map[item_id]['name']
+                data_field = make_safe_data_key(data_field)
+
+            data_value = message['name'] if is_alert else message['lastvalue'] if replay_type == 'live' else message[
+                'value']
 
             # set offset for timestamp
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
