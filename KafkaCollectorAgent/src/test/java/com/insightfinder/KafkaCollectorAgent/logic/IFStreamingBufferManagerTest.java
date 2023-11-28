@@ -29,6 +29,11 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.ResolverStyle;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -82,13 +87,16 @@ class IFStreamingBufferManagerTest {
     public void test2(){
         String timestamp =  ifStreamingBufferManager.convertToMS("10000000000");
         assert(timestamp.length() > 10);
-        String dateFormat = "yyyy-MM-dd'T'HH:mm:ss";
+        String dateFormat = "yyyy-MM-dd'T'HH:mm:ssZZZZZ";
         String dateTime = "2023-02-24T07:22:23-05:00";
         long time =  ifStreamingBufferManager.getGMTinHourFromMillis(dateTime, dateFormat);
         assert(time > -1);
-        String dateTime2 = "2023--24T07:22:23-05:00";
+        String dateTime2 = "yyyy-MM-dd'T'HH:mm:ssZZZZZ";
         time =  ifStreamingBufferManager.getGMTinHourFromMillis(dateTime2, dateFormat);
         assert(time == -1);
+        DateTimeFormatter rfc3339Formatter = DateTimeFormatter.ofPattern(dateFormat)
+                .withResolverStyle(ResolverStyle.LENIENT);
+        ZonedDateTime zonedDateTime = ifStreamingBufferManager.parseRfc3339(dateTime, rfc3339Formatter);
     }
 
     @Test
