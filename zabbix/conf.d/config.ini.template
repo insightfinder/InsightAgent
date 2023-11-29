@@ -9,6 +9,10 @@ password = zabbix
 host_groups =
 # hosts to query for. If none specified, all hosts will be used
 hosts =
+# max number of hosts to query per request, default is 100
+max_host_per_request =
+# the interval between two requests for retrieving log, in seconds, default is 60
+log_request_interval =
 # applications to query for. If none specified, all applications will be used
 applications =
 
