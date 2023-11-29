@@ -165,7 +165,6 @@ def start_data_processing(logger, data_type, config_name, cli_config_vars, agent
                     history_res = zapi.do_request('history.get',
                                                   {'output': 'extend', "history": history_type, "hostids": hostids,
                                                    "itemids": items_ids, 'time_from': timestamp,
-                                                   "selectHosts": "extend",
                                                    'time_till': timestamp + if_config_vars['sampling_interval'], })
                     parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
                                           agent_config_vars)
