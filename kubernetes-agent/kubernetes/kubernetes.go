@@ -147,6 +147,9 @@ func (k *KubernetesServer) GetPods(namespace string) *map[string]map[string]map[
 		}
 
 		// Determine the parent resourceKind of this pod
+		if pod.OwnerReferences == nil || len(pod.OwnerReferences) == 0 {
+			continue
+		}
 		resourceKind := pod.OwnerReferences[0].Kind
 		resourceName := pod.OwnerReferences[0].Name
 		if pod.OwnerReferences[0].Kind == "ReplicaSet" {
