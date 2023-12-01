@@ -1399,17 +1399,20 @@ def main():
         cli_data_block += '\n\t{}: {}'.format(kk, kv)
 
     # get config file
+    logger.info("Get Config File")
     config_file = config_ini_path(cli_config_vars)
     agent_config_vars = get_agent_config_vars(logger, config_file)
     if not agent_config_vars:
         time.sleep(1)
         sys.exit(1)
 
+    logger.info("Get IF Config Vars")
     if_config_vars = get_if_config_vars(logger, config_file, agent_config_vars)
     if not if_config_vars:
         time.sleep(1)
         sys.exit(1)
 
+    logger.info("Start listener process")
     listener = Process(target=listener_process, args=(log_queue, cli_config_vars, if_config_vars))
     listener.daemon = True
     listener.start()
