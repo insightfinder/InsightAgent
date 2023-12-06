@@ -8,5 +8,4 @@ public class SamlApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(SamlApplication.class, args);
 	}
-
 }

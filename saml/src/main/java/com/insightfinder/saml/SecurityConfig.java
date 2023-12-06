@@ -29,18 +29,11 @@ public class SecurityConfig{
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         DefaultRelyingPartyRegistrationResolver relyingPartyRegistrationResolver = new DefaultRelyingPartyRegistrationResolver(this.relyingPartyRegistrationRepository);
         Saml2MetadataFilter filter = new Saml2MetadataFilter((Converter<HttpServletRequest, RelyingPartyRegistration>) relyingPartyRegistrationResolver, new OpenSamlMetadataResolver());
-
         http.csrf(AbstractHttpConfigurer::disable).authorizeHttpRequests(authorize -> authorize.anyRequest().authenticated())
                 .saml2Login(withDefaults())
                 .saml2Logout(withDefaults())
                 .addFilterBefore(filter, Saml2WebSsoAuthenticationFilter.class);
         DefaultSecurityFilterChain chain = http.build();
         return chain;
-//        http
-//                .authorizeHttpRequests(authorize -> authorize
-//                        .anyRequest().authenticated()
-//                )
-//                .saml2Login(withDefaults());
-//        return http.build();
     }
 }
