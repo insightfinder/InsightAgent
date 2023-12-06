@@ -38,6 +38,9 @@ public class SamlV2View {
         String firstname = principal.getFirstAttribute("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname");
         String lastName = principal.getFirstAttribute("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname");
         String state = verify(email, firstname, lastName);
+        if (state == null || state.isEmpty()){
+            return new RedirectView(ifConfig.getServerUrl());
+        }
         return new RedirectView(ifConfig.getServerUrl() + "/auth/login2?state=" + state);
     }
 
@@ -64,7 +67,4 @@ public class SamlV2View {
         HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(map, headers);
         return request;
     }
-
-
-
 }
