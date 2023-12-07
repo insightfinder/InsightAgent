@@ -20,6 +20,8 @@ template_ids =
 # regex of the metric names to query
 metric_allowlist =
 
+# max number of workers to query and process data, default is cpu cores but max is 10 (connection pool size)
+max_workers =
 # request timeout in seconds, default is 60
 request_timeout =
 # max number of hosts to query per request, default is 100
