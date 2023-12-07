@@ -64,9 +64,10 @@ def is_matching_allow_regex(text, allow_regex_map):
     return False
 
 
-def is_matching_block_regex(text, block_regex_map):
+def is_matching_block_regex(item_id, name, block_regex_map):
     for block_regex in block_regex_map:
         if block_regex:
+            text = block_regex.isdigit() and item_id or name
             if block_regex.startswith('/') and block_regex.endswith('/'):
                 if regex.match(block_regex[1:-1], text):
                     return True
@@ -128,8 +129,8 @@ def start_data_processing(logger, data_type, config_name, cli_config_vars, agent
                                  'filter': {"host": agent_config_vars['hosts']}, })
     for item in hosts_res['result']:
         host_id = item['hostid']
-        name = item['name']
-        if not is_matching_block_regex(host_id, host_blocklist_map):
+        host_name = item['name']
+        if not is_matching_block_regex(host_id, host_name, host_blocklist_map):
             hostgroups = item.get('hostgroups') or []
             # use the last hostgroup as the component name
             host_group = hostgroups[len(hostgroups) - 1].get('name') or ''
@@ -141,7 +142,7 @@ def start_data_processing(logger, data_type, config_name, cli_config_vars, agent
 
             hosts_ids.append(host_id)
 
-            hosts_map[host_id] = name
+            hosts_map[host_id] = host_name
             hosts_group_map[host_id] = host_group
 
     template_ids = list(template_map.keys())
@@ -206,6 +207,7 @@ def start_data_processing(logger, data_type, config_name, cli_config_vars, agent
                     item_id = item['itemid']
                     items_ids_map[item_id] = item
                 items_ids = list(items_ids_map.keys())
+                print(items_ids)
 
                 for timestamp in range(timestamp_start, timestamp_end, sampling_interval):
                     time_now = arrow.now()

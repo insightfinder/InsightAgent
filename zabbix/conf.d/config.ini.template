@@ -5,13 +5,13 @@ url = http://127.0.0.1:80
 user = Admin
 password = zabbix
 
-# host groups to query for. If none specified, all host groups will be used
+# comma-separated host groups name to query for. If none specified, all host groups will be used
 host_groups =
 
 # hosts to query for. If none specified, all hosts will be used
 hosts =
 
-# comma-separated list of host id to ignore
+# comma-separated list of host to ignore, id, full name or regex are supported
 host_blocklist =
 
 # get metrics defined in these templates
