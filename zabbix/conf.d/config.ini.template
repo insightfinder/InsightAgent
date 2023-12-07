@@ -7,8 +7,21 @@ password = zabbix
 
 # host groups to query for. If none specified, all host groups will be used
 host_groups =
+
 # hosts to query for. If none specified, all hosts will be used
 hosts =
+
+# comma-separated list of host id to ignore
+host_blocklist =
+
+# get metrics defined in these templates
+template_ids =
+
+# regex of the metric names to query
+metric_allowlist =
+
+# request timeout in seconds, default is 30
+request_timeout =
 # max number of hosts to query per request, default is 100
 max_host_per_request =
 # the interval between two requests for retrieving log, in seconds, default is 60
@@ -34,6 +47,8 @@ timestamp_field =
 target_timestamp_timezone = UTC
 # if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
 instance_field = hostid
+# flag to indicate whether to gather component name from host group. If set to true, not send component name, default is false
+no_component_field =
 device_field =
 # multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>` or `<name>::==<value>`, where `<name>` and `<value>` can each be either a literal value (`name::value`) or formatted (`total time [{step}]::=={timing.end}-{timing.start}`). Use `::==` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `eval()`.
 data_fields =
