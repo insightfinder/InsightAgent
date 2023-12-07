@@ -197,18 +197,22 @@ def start_data_processing(logger, data_type, config_name, cli_config_vars, agent
         timestamp_start = timestamp_end - if_config_vars["run_interval"]
 
     for hostids in hosts_ids_list:
+
+        items_ids_map = {}
+        items_ids = []
+        if data_type == 'Log' or (data_type == 'Metric' and his_time_range):
+            items_res = zapi.do_request('item.get', {'output': ['key_', 'itemid', 'name'], "hostids": hostids,
+                                                     'selectHosts': ['hostId'],
+                                                     'filter': {'value_type': value_type_list, 'key_': items_keys}})
+            items_ids_map = {}
+            for item in items_res['result']:
+                item_id = item['itemid']
+                items_ids_map[item_id] = item
+            items_ids = list(items_ids_map.keys())
+
         if data_type == 'Metric':
             if his_time_range:
                 logger.debug('Using time range for replay data: {}'.format(his_time_range))
-                items_res = zapi.do_request('item.get', {'output': ['key_', 'itemid', 'name'], "hostids": hostids,
-                                                         'selectHosts': ['hostId'],
-                                                         'filter': {'value_type': value_type_list, 'key_': items_keys}})
-                items_ids_map = {}
-                for item in items_res['result']:
-                    item_id = item['itemid']
-                    items_ids_map[item_id] = item
-                items_ids = list(items_ids_map.keys())
-
                 for timestamp in range(timestamp_start, timestamp_end, sampling_interval):
                     time_now = arrow.now()
                     history_res = zapi.do_request('history.get',
@@ -240,56 +244,43 @@ def start_data_processing(logger, data_type, config_name, cli_config_vars, agent
                 # clear data buffer when piece of time range end
                 clear_data_buffer(logger, cli_config_vars, if_config_vars)
         elif data_type == 'Alert':
-            if agent_config_vars['his_time_range']:
-                timestamp_end = agent_config_vars['his_time_range'][1]
-                timestamp_start = agent_config_vars['his_time_range'][0]
-            else:
-                timestamp_end = int(arrow.now().floor('second').timestamp())
-                timestamp_start = timestamp_end - if_config_vars["run_interval"]
-
             for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
                 history_res = zapi.do_request('event.get',
                                               {'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend',
-                                               'time_from': timestamp,
-                                               'time_till': timestamp + if_config_vars['sampling_interval'], })
+                                               'time_from': timestamp, 'time_till': timestamp + sampling_interval})
                 parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
                                       agent_config_vars)
                 history_res = zapi.do_request('problem.get',
                                               {'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend',
-                                               'time_from': timestamp,
-                                               'time_till': timestamp + if_config_vars['sampling_interval'], })
+                                               'time_from': timestamp, 'time_till': timestamp + sampling_interval})
                 parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
                                       agent_config_vars)
                 # clear data buffer when piece of time range end
                 clear_data_buffer(logger, cli_config_vars, if_config_vars)
         else:
-            if agent_config_vars['his_time_range']:
-                logger.debug('Using time range for replay data: {}'.format(agent_config_vars['his_time_range']))
+            if his_time_range:
+                logger.debug('Using time range for replay data: {}'.format(his_time_range))
                 for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
                                        if_config_vars[
                                            'sampling_interval'] if data_type == 'Metric' else log_request_interval):
                     history_res = zapi.do_request('history.get',
                                                   {'output': 'extend', "history": history_type, "hostids": hostids,
-                                                   'time_from': timestamp,
+                                                   "itemids": items_ids, 'time_from': timestamp,
                                                    'time_till': timestamp + if_config_vars['sampling_interval'], })
-                    parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
-                                          agent_config_vars)
+                    parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map,
+                                          'history', agent_config_vars)
 
                     # clear data buffer when piece of time range end
                     clear_data_buffer(logger, cli_config_vars, if_config_vars)
             else:
                 logger.debug('Using current time for streaming data')
-                # if it's streaming with log type, use history.get api
-                timestamp_end = int(arrow.now().floor('second').timestamp())
-                timestamp_start = timestamp_end - if_config_vars["run_interval"]
                 for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
                     history_res = zapi.do_request('history.get',
                                                   {'output': 'extend', "history": history_type, "hostids": hostids,
-                                                   'time_from': timestamp,
-                                                   'time_till': timestamp + if_config_vars['sampling_interval'], })
-                    parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
-                                          agent_config_vars)
-                    # clear data buffer when piece of time range end
+                                                   "itemids": items_ids, 'time_from': timestamp,
+                                                   'time_till': timestamp + sampling_interval})
+                    parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map,
+                                          'history', agent_config_vars)
                     clear_data_buffer(logger, cli_config_vars, if_config_vars)
 
     logger.info('Closed......')
