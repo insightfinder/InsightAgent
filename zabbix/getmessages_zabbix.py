@@ -49,6 +49,33 @@ This script gathers data to send to Insightfinder
 """
 
 
+def is_matching_allow_regex(text, allow_regex_map):
+    if (not allow_regex_map) or len(allow_regex_map) == 0:
+        return True
+
+    for allow_regex in allow_regex_map:
+        if allow_regex:
+            if allow_regex.startswith('/') and allow_regex.endswith('/'):
+                if regex.match(allow_regex[1:-1], text):
+                    return True
+            else:
+                if text == allow_regex:
+                    return True
+    return False
+
+
+def is_matching_block_regex(text, block_regex_map):
+    for block_regex in block_regex_map:
+        if block_regex:
+            if block_regex.startswith('/') and block_regex.endswith('/'):
+                if regex.match(block_regex[1:-1], text):
+                    return True
+            else:
+                if text == block_regex:
+                    return True
+    return False
+
+
 def start_data_processing(logger, data_type, config_name, cli_config_vars, agent_config_vars, if_config_vars):
     logger.info('Starting fetch {} items......'.format(data_type))
 
@@ -57,13 +84,19 @@ def start_data_processing(logger, data_type, config_name, cli_config_vars, agent
     zabbix_url = zabbix_config['url']
     zabbix_user = zabbix_config['user']
     zabbix_password = zabbix_config['password']
-    zapi = ZabbixAPI(server=zabbix_url)
+    request_timeout = agent_config_vars['request_timeout']
+    zapi = ZabbixAPI(server=zabbix_url, timeout=request_timeout)
     zapi.login(user=zabbix_user, password=zabbix_password)
     logger.info("Connected to Zabbix API Version %s" % zapi.api_version())
 
     # get host groups
     host_groups_map = {}
     host_groups_ids = []
+    template_ids = agent_config_vars['template_ids'] or None
+    host_blocklist_map = agent_config_vars['host_blocklist_map'] or {}
+    metric_allowlist_map = agent_config_vars['metric_allowlist_map'] or {}
+    his_time_range = agent_config_vars['his_time_range']
+    device_field = agent_config_vars['device_field']
 
     if len(agent_config_vars['host_groups']) == 0:
         logger.info("Query all host_groups")
@@ -81,60 +114,130 @@ def start_data_processing(logger, data_type, config_name, cli_config_vars, agent
     max_host_per_request = agent_config_vars['max_host_per_request']
     log_request_interval = agent_config_vars['log_request_interval']
 
+    sampling_interval = if_config_vars['sampling_interval']
+
     # get hosts
     hosts_map = {}
     hosts_group_map = {}
+    template_map = {}
     hosts_ids = []
     hosts_res = zapi.do_request('host.get',
-                                {'output': 'extend', 'groupids': host_groups_ids, 'selectHostGroups': 'extend',
+                                {'output': ['name', 'hostid'], 'groupids': host_groups_ids, 'templateids': template_ids,
+                                 'selectHostGroups': ['groupid', 'name'],
+                                 'selectParentTemplates': ['templateid', 'name'],
                                  'filter': {"host": agent_config_vars['hosts']}, })
     for item in hosts_res['result']:
         host_id = item['hostid']
         name = item['name']
-        hostgroups = item.get('hostgroups') or []
-        # use the last hostgroup as the component name
-        host_group = hostgroups[len(hostgroups) - 1].get('name') or ''
-        hosts_ids.append(host_id)
+        if not is_matching_block_regex(host_id, host_blocklist_map):
+            hostgroups = item.get('hostgroups') or []
+            # use the last hostgroup as the component name
+            host_group = hostgroups[len(hostgroups) - 1].get('name') or ''
 
-        hosts_map[host_id] = name
-        hosts_group_map[host_id] = host_group
+            parent_templates = item.get('parentTemplates') or []
+            for template in parent_templates:
+                if template.get('templateid') not in template_map:
+                    template_map[template.get('templateid')] = template.get('name')
 
-    logger.info("Zabbix hosts: %s, hostGroups: %s" % (hosts_map, hosts_group_map))
+            hosts_ids.append(host_id)
+
+            hosts_map[host_id] = name
+            hosts_group_map[host_id] = host_group
+
+    template_ids = list(template_map.keys())
+    logger.info("Zabbix hosts count: %s, , template count: %s" % (len(hosts_map.keys()), len(template_ids)))
+
     if len(hosts_ids) == 0:
         logger.error('Hosts list is empty')
         sys.exit(1)
-
-    # value_type: 0 - FLOAT 1 - CHAR 2 - LOG 3 - UNSIGNED(default)
-    value_type_list = ['0', '3'] if data_type == 'Metric' else ['2']
-    history_type = 0 if data_type == 'Metric' else 2
-
-    items_map = {}
-    items_ids = []
 
     # get data by hosts/applications
     hosts_ids_list = [hosts_ids]
     if len(hosts_ids) > max_host_per_request:
         hosts_ids_list = [hosts_ids[i:i + max_host_per_request] for i in range(0, len(hosts_ids), max_host_per_request)]
 
-    for hostids in hosts_ids_list:
-        items_res = zapi.do_request('item.get', {'output': 'extend', 'groupids': host_groups_ids, "hostids": hostids,
-                                                 'filter': {'value_type': value_type_list}})
+    items_map = {}
+    items_keys = []
+    if data_type == 'Metric':
+        # get the items based on the keys
+        item_output = ['name', 'itemid', 'key_']
+        if device_field:
+            item_output.append(device_field)
 
-        for item in items_res['result']:
-            item_id = item['itemid']
-            items_ids.append(item_id)
-            items_map[item_id] = item
+        # get the item keys based on the template
+        templates_res = zapi.do_request('template.get',
+                                        {'output': ['name'], 'templateids': template_ids, 'selectItems': item_output})
+        for template in templates_res['result']:
+            items = template.get('items') or []
+            for item in items:
+                item_key = item['key_']
+                item_name = item['name']
+                if is_matching_allow_regex(item_name, metric_allowlist_map):
+                    items_map[item_key] = item
 
-        if len(items_ids) == 0:
+        items_keys = list(items_map.keys())
+
+        if len(items_keys) == 0:
             logger.error('Item list is empty')
             sys.exit(1)
 
-        logger.info("Zabbix item ids: %s" % items_ids)
+        logger.info("Zabbix item count: %s" % len(items_keys))
 
-        # build map by item field
-        all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map}
+    # value_type: 0 - FLOAT 1 - CHAR 2 - LOG 3 - UNSIGNED(default)
+    value_type_list = ['0', '3'] if data_type == 'Metric' else ['2']
+    history_type = 0 if data_type == 'Metric' else 2
 
-        if data_type == 'Alert':
+    all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map}
+    if his_time_range:
+        timestamp_end = his_time_range[1]
+        timestamp_start = his_time_range[0]
+    else:
+        timestamp_end = int(arrow.now().floor('second').timestamp())
+        timestamp_start = timestamp_end - if_config_vars["run_interval"]
+
+    for hostids in hosts_ids_list:
+        if data_type == 'Metric':
+            if his_time_range:
+                logger.debug('Using time range for replay data: {}'.format(his_time_range))
+                items_res = zapi.do_request('item.get', {'output': ['key_', 'itemid', 'name'], "hostids": hostids,
+                                                         'filter': {'value_type': value_type_list, 'key_': items_keys}})
+                items_ids_map = {}
+                for item in items_res['result']:
+                    item_id = item['itemid']
+                    items_ids_map[item_id] = item
+                items_ids = list(items_ids_map.keys())
+
+                for timestamp in range(timestamp_start, timestamp_end, sampling_interval):
+                    time_now = arrow.now()
+                    history_res = zapi.do_request('history.get',
+                                                  {'output': 'extend', "history": history_type, "hostids": hostids,
+                                                   "itemids": items_ids, 'time_from': timestamp,
+                                                   'time_till': timestamp + sampling_interval})
+                    logger.info(
+                        'Query {} items from {} hosts with {} metrics in {} seconds'.format(len(history_res['result']),
+                                                                                            len(hostids),
+                                                                                            len(items_keys), (
+                                                                                                    arrow.now() - time_now).total_seconds()))
+                    parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
+                                          agent_config_vars)
+
+                    clear_data_buffer(logger, cli_config_vars, if_config_vars)
+            else:
+                time_now = arrow.now()
+                metric_output = ['key_', 'itemid', 'lastclock', 'clock', 'lastvalue', 'value']
+                items_res = zapi.do_request('item.get',
+                                            {'output': metric_output, "hostids": hostids, "selectHosts": ['hostId'],
+                                             'filter': {'value_type': value_type_list, 'key_': items_keys}})
+                logger.info(
+                    'Query {} items from {} hosts with {} metrics in {} seconds'.format(len(items_res['result']),
+                                                                                        len(hostids), len(items_keys), (
+                                                                                                arrow.now() - time_now).total_seconds()))
+                parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
+                                      agent_config_vars)
+
+                # clear data buffer when piece of time range end
+                clear_data_buffer(logger, cli_config_vars, if_config_vars)
+        elif data_type == 'Alert':
             if agent_config_vars['his_time_range']:
                 timestamp_end = agent_config_vars['his_time_range'][1]
                 timestamp_start = agent_config_vars['his_time_range'][0]
@@ -165,7 +268,7 @@ def start_data_processing(logger, data_type, config_name, cli_config_vars, agent
                                            'sampling_interval'] if data_type == 'Metric' else log_request_interval):
                     history_res = zapi.do_request('history.get',
                                                   {'output': 'extend', "history": history_type, "hostids": hostids,
-                                                   "itemids": items_ids, 'time_from': timestamp,
+                                                   'time_from': timestamp,
                                                    'time_till': timestamp + if_config_vars['sampling_interval'], })
                     parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
                                           agent_config_vars)
@@ -174,21 +277,15 @@ def start_data_processing(logger, data_type, config_name, cli_config_vars, agent
                     clear_data_buffer(logger, cli_config_vars, if_config_vars)
             else:
                 logger.debug('Using current time for streaming data')
-                if data_type != 'Metric':
-                    # if it's streaming with log type, use history.get api
-                    timestamp_end = int(arrow.now().floor('second').timestamp())
-                    timestamp_start = timestamp_end - if_config_vars["run_interval"]
-                    for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
-                        history_res = zapi.do_request('history.get',
-                                                      {'output': 'extend', "history": history_type, "hostids": hostids,
-                                                       "itemids": items_ids, 'time_from': timestamp,
-                                                       'time_till': timestamp + if_config_vars['sampling_interval'], })
-                        parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map,
-                                              'history', agent_config_vars)
-                        # clear data buffer when piece of time range end
-                        clear_data_buffer(logger, cli_config_vars, if_config_vars)
-                else:
-                    parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
+                # if it's streaming with log type, use history.get api
+                timestamp_end = int(arrow.now().floor('second').timestamp())
+                timestamp_start = timestamp_end - if_config_vars["run_interval"]
+                for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
+                    history_res = zapi.do_request('history.get',
+                                                  {'output': 'extend', "history": history_type, "hostids": hostids,
+                                                   'time_from': timestamp,
+                                                   'time_till': timestamp + if_config_vars['sampling_interval'], })
+                    parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
                                           agent_config_vars)
                     # clear data buffer when piece of time range end
                     clear_data_buffer(logger, cli_config_vars, if_config_vars)
@@ -202,17 +299,22 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
     is_metric = True if data_type == 'Metric' else False
     is_alert = True if data_type == 'Alert' else False
 
+    instance_field = agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
+        agent_config_vars['instance_field']) > 0 else 'hostid'
+    device_field = agent_config_vars['device_field']
+    target_timestamp_timezone = agent_config_vars['target_timestamp_timezone']
+    no_component_field = agent_config_vars['no_component_field']
+
     for message in result:
         try:
             logger.debug('Message received')
             logger.debug(message)
 
-            instance_field = agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
-                agent_config_vars['instance_field']) > 0 else 'hostid'
+            item_key = message.get('key_')
+            item_id = message.get('itemid')
 
             # set instance and device
-            item_id = message.get('itemid')
-            if item_id:
+            if not message.get('hosts'):
                 if not items_map.get(item_id):
                     continue
                 instance_id = items_map.get(item_id).get(instance_field)
@@ -226,18 +328,20 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             instance = all_field_map.get(instance_field).get(instance_id)
 
             # set component
-            component_field = 'hostgroup'
             component = None
-            if all_field_map.get(component_field):
-                component = all_field_map.get(component_field).get(instance_id)
+            if not no_component_field:
+                component_field = 'hostgroup'
+                if all_field_map.get(component_field):
+                    component = all_field_map.get(component_field).get(instance_id)
 
-            # add device info if has
+            # add device info if it has
             device = None
-            device_field = agent_config_vars['device_field']
-            if item_id and device_field and len(device_field) > 0:
-                device_field = agent_config_vars['device_field'][0]
-                device_id = items_map.get(item_id).get(device_field)
-                device = all_field_map.get(device_field).get(device_id)
+            if (item_key or item_id) and device_field and len(device_field) > 0:
+                device_field = device_field[0]
+                if items_map.get(item_key) or items_map.get(item_id):
+                    item = items_map.get(item_key) or items_map.get(item_id)
+                    device_id = item.get(device_field)
+                    device = all_field_map.get(device_field).get(device_id)
             full_instance = make_safe_instance_string(instance, device)
 
             # set timestamp
@@ -249,14 +353,18 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             # set data field and value
             data_field = None
             if is_metric:
-                data_field = items_map[item_id]['name']
+                item = items_map.get(item_key)
+                if not item:
+                    continue
+
+                data_field = item['name']
                 data_field = make_safe_data_key(data_field)
 
             data_value = message['name'] if is_alert else message['lastvalue'] if replay_type == 'live' else message[
                 'value']
 
             # set offset for timestamp
-            timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
+            timestamp += target_timestamp_timezone * 1000
             timestamp = str(timestamp)
 
             key = '{}-{}'.format(timestamp, full_instance)
@@ -327,7 +435,12 @@ def get_agent_config_vars(logger, config_ini):
             # metrics
             host_groups = config_parser.get('zabbix', 'host_groups')
             hosts = config_parser.get('zabbix', 'hosts')
+            host_blocklist = config_parser.get('zabbix', 'host_blocklist')
+            template_ids = config_parser.get('zabbix', 'template_ids')
+            metric_allowlist = config_parser.get('zabbix', 'metric_allowlist')
             applications = config_parser.get('zabbix', 'applications')
+
+            request_timeout = config_parser.get('zabbix', 'request_timeout')
             max_host_per_request = config_parser.get('zabbix', 'max_host_per_request')
 
             # log
@@ -344,6 +457,7 @@ def get_agent_config_vars(logger, config_ini):
             data_format = config_parser.get('zabbix', 'data_format').upper()
             # project_field = config_parser.get('agent', 'project_field', raw=True)
             instance_field = config_parser.get('zabbix', 'instance_field', raw=True)
+            no_component_field = config_parser.get('zabbix', 'no_component_field') or False
             device_field = config_parser.get('zabbix', 'device_field', raw=True)
             timestamp_field = config_parser.get('zabbix', 'timestamp_field', raw=True) or 'timestamp'
             target_timestamp_timezone = config_parser.get('zabbix', 'target_timestamp_timezone', raw=True) or 'UTC'
@@ -360,8 +474,30 @@ def get_agent_config_vars(logger, config_ini):
             host_groups = [x for x in host_groups.split(',') if x.strip()]
         if len(hosts) != 0:
             hosts = [x for x in hosts.split(',') if x.strip()]
+        host_blocklist_map = {}
+        if len(host_blocklist) != 0:
+            for host_block in host_blocklist.split(','):
+                host_block = host_block.strip()
+                if len(host_block) != 0:
+                    host_blocklist_map[host_block] = host_block
+
+        if len(template_ids) != 0:
+            template_ids = [x for x in template_ids.split(',') if x.strip()]
+
+        metric_allowlist_map = {}
+        if len(metric_allowlist) != 0:
+            for metric_allow in metric_allowlist.split(','):
+                metric_allow = metric_allow.strip()
+                if len(metric_allow) != 0:
+                    metric_allowlist_map[metric_allow] = metric_allow
+
         if len(applications) != 0:
             applications = [x for x in applications.split(',') if x.strip()]
+
+        if len(request_timeout) != 0:
+            request_timeout = int(request_timeout)
+        else:
+            request_timeout = 120
 
         if len(max_host_per_request) != 0:
             max_host_per_request = int(max_host_per_request)
@@ -404,6 +540,8 @@ def get_agent_config_vars(logger, config_ini):
         # fields
         # project_fields = project_field.split(',')
         instance_fields = [x for x in instance_field.split(',') if x.strip()]
+        if no_component_field:
+            no_component_field = True if no_component_field.lower() == 'true' else False
         device_fields = [x for x in device_field.split(',') if x.strip()]
         timestamp_fields = timestamp_field.split(',')
         if len(data_fields) != 0:
@@ -423,12 +561,16 @@ def get_agent_config_vars(logger, config_ini):
 
         # add parsed variables to a global
         config_vars = {'zabbix_kwargs': zabbix_kwargs, 'host_groups': host_groups, 'hosts': hosts,
+                       'host_blocklist': host_blocklist, 'host_blocklist_map': host_blocklist_map,
+                       'template_ids': template_ids, 'metric_allowlist': metric_allowlist,
+                       'metric_allowlist_map': metric_allowlist_map, 'request_timeout': request_timeout,
                        'max_host_per_request': max_host_per_request, 'log_request_interval': log_request_interval,
                        'applications': applications, 'his_time_range': his_time_range, 'proxies': agent_proxies,
                        'data_format': data_format,  # 'project_field': project_fields,
-                       'instance_field': instance_fields, 'device_field': device_fields, 'data_fields': data_fields,
-                       'timestamp_field': timestamp_fields, 'target_timestamp_timezone': target_timestamp_timezone,
-                       'timezone': timezone, 'timestamp_format': timestamp_format, }
+                       'instance_field': instance_fields, 'no_component_field': no_component_field,
+                       'device_field': device_fields, 'data_fields': data_fields, 'timestamp_field': timestamp_fields,
+                       'target_timestamp_timezone': target_timestamp_timezone, 'timezone': timezone,
+                       'timestamp_format': timestamp_format, }
 
         return config_vars
 
@@ -725,7 +867,7 @@ def send_data_to_if(logger, chunk_metric_data, cli_config_vars, if_config_vars):
     logger.debug('First:\n' + str(chunk_metric_data[0]))
     logger.debug('Last:\n' + str(chunk_metric_data[-1]))
     logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
-    logger.info('Total Lines: ' + str(track['line_count']))
+    logger.info('Total Lines: ' + str(len(chunk_metric_data)))
 
     # do not send if only testing
     if cli_config_vars['testing']:
