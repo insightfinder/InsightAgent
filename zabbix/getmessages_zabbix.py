@@ -201,13 +201,13 @@ def start_data_processing(logger, data_type, config_name, cli_config_vars, agent
             if his_time_range:
                 logger.debug('Using time range for replay data: {}'.format(his_time_range))
                 items_res = zapi.do_request('item.get', {'output': ['key_', 'itemid', 'name'], "hostids": hostids,
+                                                         'selectHosts': ['hostId'],
                                                          'filter': {'value_type': value_type_list, 'key_': items_keys}})
                 items_ids_map = {}
                 for item in items_res['result']:
                     item_id = item['itemid']
                     items_ids_map[item_id] = item
                 items_ids = list(items_ids_map.keys())
-                print(items_ids)
 
                 for timestamp in range(timestamp_start, timestamp_end, sampling_interval):
                     time_now = arrow.now()
@@ -220,8 +220,8 @@ def start_data_processing(logger, data_type, config_name, cli_config_vars, agent
                                                                                             len(hostids),
                                                                                             len(items_keys), (
                                                                                                     arrow.now() - time_now).total_seconds()))
-                    parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
-                                          agent_config_vars)
+                    parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map,
+                                          'history', agent_config_vars)
 
                     clear_data_buffer(logger, cli_config_vars, if_config_vars)
             else:
@@ -317,9 +317,14 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
 
             # set instance and device
             if not message.get('hosts'):
-                if not items_map.get(item_id):
+                item = items_map.get(item_id)
+                if not item:
                     continue
-                instance_id = items_map.get(item_id).get(instance_field)
+                hosts = item.get('hosts')
+                if hosts and len(hosts) > 0:
+                    instance_id = hosts[0].get(instance_field)
+                else:
+                    continue
             else:
                 hosts = message.get('hosts')
                 if hosts and len(hosts) > 0:
@@ -355,7 +360,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             # set data field and value
             data_field = None
             if is_metric:
-                item = items_map.get(item_key)
+                item = items_map.get(item_key) or items_map.get(item_id)
                 if not item:
                     continue
 
