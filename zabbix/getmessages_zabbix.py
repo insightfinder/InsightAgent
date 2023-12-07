@@ -495,7 +495,7 @@ def get_agent_config_vars(logger, config_ini):
         if len(request_timeout) != 0:
             request_timeout = int(request_timeout)
         else:
-            request_timeout = 120
+            request_timeout = 60
 
         if len(max_host_per_request) != 0:
             max_host_per_request = int(max_host_per_request)
