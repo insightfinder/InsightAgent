@@ -1,7 +1,8 @@
+APScheduler==3.5.3
 arrow==0.15.5
+elasticsearch==7.17.4
 pytz==2019.3
 regex==2020.2.18
-requests==2.31.0
-statistics==1.0.3.5
-elasticsearch==7.17.4
-apscheduler==3.5.3
+requests==2.27.1
+urllib3==1.26.11
+backports.zoneinfo==0.2.1;python_version<"3.9"

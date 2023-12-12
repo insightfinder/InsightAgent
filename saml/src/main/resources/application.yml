@@ -1,0 +1,18 @@
+server:
+  port: 8080
+insight-finder:
+  serverUrl: https://app.insightfinder.com
+  samlUrl: https://saml.insightfinder.com
+spring:
+  security:
+    saml2:
+      relyingparty:
+        registration:
+          insightfinder:
+            assertingparty:
+              metadata-uri: https://login.microsoftonline.com/9edc902a-24c0-475e-8e0d-7fd62eb788a9/federationmetadata/2007-06/federationmetadata.xml?appid=c8ca165a-c83e-46e9-a198-e98f228258df
+          fairfaxcounty:
+            assertingparty:
+              metadata-uri: https://login.microsoftonline.com/9edc902a-24c0-475e-8e0d-7fd62eb788a9/federationmetadata/2007-06/federationmetadata.xml?appid=c8ca165a-c83e-46e9-a198-e98f228258df
+
+
