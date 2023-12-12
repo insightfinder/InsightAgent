@@ -3,12 +3,12 @@ import time
 import sys
 
 # Define the amount of memory to, exact duration to reach it and how long to hold
-memory_to_add_gb = 1
-increase_duration_seconds = 1200
-maintain_duration_seconds = 120
+memory_to_add_mb = 750
+increase_duration_seconds = 20000
+maintain_duration_seconds = 300
 
 # Calculate the amount of memory to consume in each iteration
-memory_to_add_bytes = memory_to_add_gb * (1024 ** 3)
+memory_to_add_bytes = memory_to_add_mb * (1024 ** 2)
 allocation_size = memory_to_add_bytes / increase_duration_seconds
 
 # Create a list to store memory allocations
