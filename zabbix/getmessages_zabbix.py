@@ -154,7 +154,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                                                         'time_from': timestamp,
                                                         'time_till': timestamp + sampling_interval})
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
-                                  agent_config_vars)
+                                  agent_config_vars, track, data_buffer)
 
             logger.info('Begin problem.get query from {} hosts'.format(len(hostids)))
             history_res = zapi.do_request('problem.get',
@@ -163,9 +163,9 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids),
                                                                             (arrow.now() - time_now).total_seconds()))
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
-                                  agent_config_vars)
+                                  agent_config_vars, track, data_buffer)
             # clear data buffer when piece of time range end
-            clear_data_buffer(logger, cli_config_vars, if_config_vars)
+            clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
     else:
         for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
             time_now = arrow.now()
