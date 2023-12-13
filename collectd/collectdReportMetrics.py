@@ -179,6 +179,8 @@ def getindex(col_name):
         return 7007
     elif "Process" in col_name:
         return 7008
+    elif col_name == "MemUsedPercentage":
+        return 7009
 
 
 def update_results(lists):
@@ -250,7 +252,7 @@ def send_data(metric_data_l, reporting_interval_l, hostname_l):
 
 def aggregate_results_into_raw_data(start_time_epoch_l, new_prev_endtime_epoch_l, date_l):
     raw_data_l = collections.OrderedDict()
-    filenames = {'cpu/percent-active-': ['CPU'], 'memory/memory-used-': ['MemUsed'],
+    filenames = {'cpu/percent-active-': ['CPU'], 'memory/memory-used-': ['MemUsed'], 'memory/percent-used-': ['MemUsedPercentage'],
                  'load/load-': ['LoadAvg1', 'LoadAvg5', 'LoadAvg15'], 'df-root/percent_bytes-used-': ['DiskUsed'],
                  'processes/ps_state-blocked-': ['BlockedProcess'], 'processes/ps_state-paging-': ['PagingProcess'],
                  'processes/ps_state-running-': ['RunningProcess'],
@@ -395,7 +397,7 @@ def is_str_in_keys(my_dict, my_str):
 
 def fill_metric_data_to_send(raw_data_l, hostname_short_l):
     metric_data_l = []
-    metric_list = ["CPU", "MemUsed", "DiskWrite", "DiskRead", "DiskUsed", "NetworkIn", "NetworkOut", "LoadAvg1",
+    metric_list = ["CPU", "MemUsed", "MemUsedPercentage", "DiskWrite", "DiskRead", "DiskUsed", "NetworkIn", "NetworkOut", "LoadAvg1",
                    "LoadAvg5", "LoadAvg15",
                    "BlockedProcess", "PagingProcess", "RunningProcess", "SleepingProcess", "StoppedProcess",
                    "ZombieProcess"]
