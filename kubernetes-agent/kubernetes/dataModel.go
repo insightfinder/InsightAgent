@@ -18,3 +18,10 @@ type RegardingEntity struct {
 	Kind      string `json:"kind"`
 	Container string `json:"container,omitempty"`
 }
+
+type PVCMountPoint struct {
+	PVC       string `json:"pvc"`
+	Container string `json:"container"`
+	MountName string `json:"mountName"`
+	MountPath string `json:"mountPath"`
+}

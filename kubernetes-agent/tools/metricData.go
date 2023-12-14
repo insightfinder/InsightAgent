@@ -6,7 +6,7 @@ import (
 	"math"
 )
 
-func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper, PVCPodsMapping *map[string]string, postProcessor *PostProcessor) *insightfinder.MetricDataReceivePayload {
+func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper, postProcessor *PostProcessor) *insightfinder.MetricDataReceivePayload {
 
 	InsightAgentType := insightfinder.ProjectTypeToAgentType(IFConfig["projectType"].(string), false, ToBool(IFConfig["isContainer"]))
 	CloudType := IFConfig["cloudType"].(string)
@@ -21,18 +21,6 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 				// Node level metric
 				instanceName = promMetricData.Node
 				componentName = promMetricData.Node
-			} else if promMetricData.NameSpace != "" && promMetricData.PVC != "" {
-				// PVC level metric
-				instanceName = promMetricData.PVC
-
-				// Use parent Deployment/StatefulSet name for component name for PVC
-				if Pod, ok := (*PVCPodsMapping)[promMetricData.PVC]; ok {
-					componentName = removePodNameSuffix((*PVCPodsMapping)[promMetricData.PVC])
-
-				} else {
-					componentName = removePVCNameSuffix(Pod)
-				}
-
 			} else {
 				// Pod level metric
 				instanceName, componentName = instanceNameMapper.GetInstanceMapping(promMetricData.NameSpace, promMetricData.Pod)
@@ -101,5 +89,34 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 		MaxTimestamp:     0,
 		InsightAgentType: InsightAgentType,
 		CloudType:        CloudType,
+	}
+}
+
+func MergePVCMetricsToPodMetrics(PVCMetrics *map[string][]prometheus.PromMetricData, PodMetrics *map[string][]prometheus.PromMetricData, PodPVCMapping *map[string]map[string]map[string][]string) {
+
+	// Build PVC metrics map:PVC -> []PromMetricData
+	PVCMetricsData := make(map[string][]prometheus.PromMetricData)
+	for _, PVCMetricData := range *PVCMetrics {
+		for _, PVCMetric := range PVCMetricData {
+			PVCMetricsData[PVCMetric.PVC] = append(PVCMetricsData[PVCMetric.PVC], PVCMetric)
+		}
+	}
+
+	// Merge PVC metrics to Pod metrics
+	for Pod, PodPVCs := range *PodPVCMapping {
+		for PVC, MountPoints := range PodPVCs {
+			for MountPoint, Containers := range MountPoints {
+				for _, Container := range Containers {
+					for _, PVCData := range PVCMetricsData[PVC] {
+						metricData := PVCData
+						metricData.Pod = Pod
+						metricData.Container = Container
+						metricData.PVC = PVC
+						metricName := PVCData.Type + "-" + MountPoint
+						(*PodMetrics)[metricName] = append((*PodMetrics)[metricName], metricData)
+					}
+				}
+			}
+		}
 	}
 }
