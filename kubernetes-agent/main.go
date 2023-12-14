@@ -149,9 +149,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 		// Collect Data
 		log.Output(2, fmt.Sprintf("Prepare to collect metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 		metricData := make(map[string][]prometheus.PromMetricData)
-
-		// Prepare some mapping
-		var PVCPodMapping *map[string]string
+		PVCMetricData := make(map[string][]prometheus.PromMetricData)
 
 		if collectionTarget == "node" {
 			metricData["CPU"] = prometheusServer.GetMetricData("NodeCPU", "", Before, Now)
@@ -165,10 +163,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 			metricData["Processes"] = prometheusServer.GetMetricData("NodeProcesses", "", Before, Now)
 			metricData["BlockedProcesses"] = prometheusServer.GetMetricData("NodeBlockedProcesses", "", Before, Now)
 		} else if collectionTarget == "pvc" {
-			metricData["Capacity"] = prometheusServer.GetMetricData("PVCCapacity", namespaceFilter, Before, Now)
-			metricData["Used"] = prometheusServer.GetMetricData("PVCUsed", namespaceFilter, Before, Now)
-			metricData["Usage"] = prometheusServer.GetMetricData("PVCUsage", namespaceFilter, Before, Now)
-			PVCPodMapping = kubernetesServer.GetPVCPodsMapping(namespaceFilter)
+			log.Output(2, "Skip: Collecting metric data from PVC.")
 		} else {
 			metricData["CPUCores"] = prometheusServer.GetMetricData("PodCPUCores", namespaceFilter, Before, Now)
 			metricData["CPU"] = prometheusServer.GetMetricData("PodCPUUsage", namespaceFilter, Before, Now)
@@ -183,10 +178,19 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 			metricData["NetworkOut"] = prometheusServer.GetMetricData("PodNetworkOut", namespaceFilter, Before, Now)
 			metricData["Processes"] = prometheusServer.GetMetricData("PodProcesses", namespaceFilter, Before, Now)
 			metricData["RestartCount"] = prometheusServer.GetMetricData("PodContainerRestart", namespaceFilter, Before, Now)
+
+			// Prepare PVC Metric data mapping
+
+			PVCMetricData["Capacity"] = prometheusServer.GetMetricData("PVCCapacity", namespaceFilter, Before, Now)
+			PVCMetricData["Used"] = prometheusServer.GetMetricData("PVCUsed", namespaceFilter, Before, Now)
+			PVCMetricData["Usage"] = prometheusServer.GetMetricData("PVCUsage", namespaceFilter, Before, Now)
+			PodPVCMapping := kubernetesServer.GetPodsPVCMapping(namespaceFilter)
+			tools.MergePVCMetricsToPodMetrics(&PVCMetricData, &metricData, PodPVCMapping)
+
 		}
 		log.Output(2, fmt.Sprintf("Finished collecting metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 
-		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper, PVCPodMapping, &postProcessor)
+		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper, &postProcessor)
 		tools.PrintStruct(*metricPayload, false, IFConfig["projectName"].(string))
 		log.Output(2, fmt.Sprintf("Start sending metic data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 		insightfinder.SendMetricData(metricPayload, IFConfig)
