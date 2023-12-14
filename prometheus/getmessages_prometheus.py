@@ -164,7 +164,7 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
             # instance name
             instance = 'Application'
             instance_field = agent_config_vars['instance_field']
-            if not instance_field or len(instance_field) == 0:
+            if query_instance_fields and len(query_instance_fields) > 0:
                 instance_field = query_instance_fields
 
             if instance_field and len(instance_field) > 0:
@@ -344,7 +344,7 @@ def get_agent_config_vars(logger, config_ini):
                     prometheus_query.append(
                         {'query': parts[2], 'metric_name': metric_name, 'instance_fields': instance_fields})
                 else:
-                    prometheus_query.append({'query': query})
+                    prometheus_query.append({'query': query, 'instance_fields': []})
 
         if len(prometheus_query_json) != 0:
             try:
