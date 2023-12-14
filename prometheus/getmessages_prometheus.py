@@ -597,7 +597,10 @@ def make_safe_instance_string(instance, device=''):
     """ make a safe instance name string, concatenated with device if appropriate """
     # strip underscores
     instance = UNDERSCORE.sub('.', instance)
+    instance = COMMA.sub('.', instance)
     instance = COLONS.sub('-', instance)
+    instance = LEFT_BRACE.sub('(', instance)
+    instance = RIGHT_BRACE.sub(')', instance)
     # if there's a device, concatenate it to the instance with an underscore
     if device:
         instance = '{}_{}'.format(make_safe_instance_string(device), instance)
