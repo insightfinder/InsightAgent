@@ -179,8 +179,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 			metricData["Processes"] = prometheusServer.GetMetricData("PodProcesses", namespaceFilter, Before, Now)
 			metricData["RestartCount"] = prometheusServer.GetMetricData("PodContainerRestart", namespaceFilter, Before, Now)
 
-			// Prepare PVC Metric data mapping
-
+			// Collect PVC Metrics and append to Pods
 			PVCMetricData["Capacity"] = prometheusServer.GetMetricData("PVCCapacity", namespaceFilter, Before, Now)
 			PVCMetricData["Used"] = prometheusServer.GetMetricData("PVCUsed", namespaceFilter, Before, Now)
 			PVCMetricData["Usage"] = prometheusServer.GetMetricData("PVCUsage", namespaceFilter, Before, Now)
