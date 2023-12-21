@@ -48,6 +48,13 @@ This script gathers data to send to Insightfinder
 """
 
 
+def align_timestamp(timestamp, sampling_interval):
+    if sampling_interval == 0 or not timestamp:
+        return timestamp
+    else:
+        return int(timestamp / (sampling_interval * 1000)) * sampling_interval * 1000
+
+
 def is_matching_allow_regex(text, allow_regex_map):
     if (not allow_regex_map) or len(allow_regex_map) == 0:
         return True
@@ -129,7 +136,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                                                                                         len(hostids), len(items_keys), (
                                                                                                 arrow.now() - time_now).total_seconds()))
                 parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map, 'history',
-                                      agent_config_vars, track, data_buffer)
+                                      agent_config_vars, track, data_buffer, sampling_interval)
 
                 clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
         else:
@@ -144,7 +151,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                                                                                             len(items_keys), (
                                                                                                     arrow.now() - time_now).total_seconds()))
             parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
-                                  agent_config_vars, track, data_buffer)
+                                  agent_config_vars, track, data_buffer, sampling_interval)
             clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
     elif data_type == 'Alert':
         for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
@@ -154,7 +161,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                                                         'time_from': timestamp,
                                                         'time_till': timestamp + sampling_interval})
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
-                                  agent_config_vars, track, data_buffer)
+                                  agent_config_vars, track, data_buffer, sampling_interval)
 
             logger.info('Begin problem.get query from {} hosts'.format(len(hostids)))
             history_res = zapi.do_request('problem.get',
@@ -163,7 +170,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids),
                                                                             (arrow.now() - time_now).total_seconds()))
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
-                                  agent_config_vars, track, data_buffer)
+                                  agent_config_vars, track, data_buffer, sampling_interval)
             # clear data buffer when piece of time range end
             clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
     else:
@@ -177,7 +184,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids),
                                                                             (arrow.now() - time_now).total_seconds()))
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map, 'history',
-                                  agent_config_vars, track, data_buffer)
+                                  agent_config_vars, track, data_buffer, sampling_interval)
             clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
     return idx + 1
 
@@ -300,7 +307,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
 
 
 def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, replay_type, agent_config_vars, track,
-                          data_buffer):
+                          data_buffer, sampling_interval):
     count = 0
     logger.info('Reading {} messages'.format(len(result)))
     is_metric = True if data_type == 'Metric' else False
@@ -377,7 +384,10 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
 
             # set offset for timestamp
             timestamp += target_timestamp_timezone * 1000
-            timestamp = str(timestamp)
+            if is_metric:
+                timestamp = str(align_timestamp(timestamp, sampling_interval))
+            else:
+                timestamp = str(timestamp)
 
             key = '{}-{}'.format(timestamp, full_instance)
             if key not in data_buffer['buffer_dict']:
