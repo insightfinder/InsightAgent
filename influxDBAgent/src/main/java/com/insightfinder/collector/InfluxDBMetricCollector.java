@@ -25,22 +25,22 @@ public class InfluxDBMetricCollector {
   String dbUrl;
   private final String userName;
   private final String password;
-  private final String queryURL;
+  private final String query;
   public static final String STARTTIMESTAMP = "startTimestamp";
   public static final String ENDTIMESTAMP = "endTimestamp";
 
-  public InfluxDBMetricCollector(String dbUrl, String userName, String password, String queryURL) {
+  public InfluxDBMetricCollector(String dbUrl, String userName, String password, String query) {
     this.dbUrl = dbUrl;
     this.userName = userName;
     this.password = password;
-    this.queryURL = queryURL;
+    this.query = query;
   }
 
   public Map<String, InstanceData> collectData(long fromTimeMillis, long toTimeMillis)
       throws NoSuchAlgorithmException, KeyManagementException {
     final InfluxDB influxDB = InfluxDBFactory.connect(dbUrl, userName, password,
         getInsecureOkHttpClientBuilder());
-    Query query = QueryBuilder.newQuery(queryURL).bind(STARTTIMESTAMP, fromTimeMillis)
+    Query query = QueryBuilder.newQuery(this.query).bind(STARTTIMESTAMP, fromTimeMillis)
         .bind(ENDTIMESTAMP, toTimeMillis).create();
     QueryResult queryResult = influxDB.query(query);
     influxDB.close();
