@@ -391,11 +391,15 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
 
             key = '{}-{}'.format(timestamp, full_instance)
             if key not in data_buffer['buffer_dict']:
-                data_buffer['buffer_dict'][key] = {"timestamp": timestamp}
+                data_buffer['buffer_dict'][key] = {"timestamp": timestamp, "data": {}}
 
             if is_metric:
-                data_key = '{}[{}]'.format(data_field, full_instance)
-                data_buffer['buffer_dict'][key][data_key] = str(data_value)
+                data_buffer['buffer_dict'][key]['instanceName'] = full_instance
+                if component:
+                    data_buffer['buffer_dict'][key]['componentName'] = component
+
+                # data_key = '{}[{}]'.format(data_field, full_instance)
+                data_buffer['buffer_dict'][key]['data'][data_field] = str(data_value)
             else:
                 data_buffer['buffer_dict'][key]['tag'] = full_instance
                 if component:
@@ -868,15 +872,63 @@ def send_data_wrapper(logger, cli_config_vars, if_config_vars, track, data_buffe
     reset_track(track)
 
 
+def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config_vars):
+    to_send_data_dict = dict()
+    to_send_data_dict['licenseKey'] = if_config_vars['license_key']
+    to_send_data_dict['userName'] = if_config_vars['user_name']
+
+    data_dict = dict()
+    data_dict['projectName'] = if_config_vars['project_name']
+    data_dict['userName'] = if_config_vars['user_name']
+    if 'system_name' in if_config_vars:
+        data_dict['systemName'] = if_config_vars['system_name']
+    data_dict['iat'] = get_agent_type_from_project_type(if_config_vars)
+    if 'sampling_interval' in if_config_vars:
+        data_dict['si'] = str(if_config_vars['sampling_interval'])
+
+    instance_data_map = dict()
+    for chunk in chunk_metric_data:
+        instance_name = chunk['instanceName']
+        component_name = chunk.get('componentName')
+        timestamp = chunk['timestamp']
+        data = chunk['data']
+        if data and timestamp and instance_name:
+            ts = int(timestamp)
+            if instance_name not in instance_data_map:
+                instance_data_map[instance_name] = {
+                    'in': instance_name,
+                    'cn': component_name,
+                    'dit': {},
+                }
+
+            if ts not in instance_data_map[instance_name]['dit']:
+                instance_data_map[instance_name]['dit'][ts] = {'t': ts, 'metricDataPointSet': []}
+
+            data_set = instance_data_map[instance_name]['dit'][ts]['metricDataPointSet']
+            for metric_name, metric_value in data.items():
+                data_set.append({'m': metric_name, 'v': metric_value})
+
+    data_dict['idm'] = instance_data_map
+    to_send_data_dict['data'] = data_dict
+
+    return to_send_data_dict
+
+
 def send_data_to_if(logger, chunk_metric_data, cli_config_vars, if_config_vars):
     send_data_time = time.time()
 
     # prepare data for metric streaming agent
-    data_to_post = initialize_api_post_data(logger, if_config_vars)
-    if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
-        for chunk in chunk_metric_data:
-            chunk['data'] = json.dumps(chunk['data'])
-    data_to_post[get_data_field_from_project_type(if_config_vars)] = json.dumps(chunk_metric_data)
+    data_to_post = None
+    if 'METRIC' in if_config_vars['project_type']:
+        data_to_post = convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config_vars)
+        post_url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v2/metric-data-receive')
+    else:
+        data_to_post = initialize_api_post_data(logger, if_config_vars)
+        if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
+            for chunk in chunk_metric_data:
+                chunk['data'] = json.dumps(chunk['data'])
+        data_to_post[get_data_field_from_project_type(if_config_vars)] = json.dumps(chunk_metric_data)
+        post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type(if_config_vars))
 
     logger.debug('First:\n' + str(chunk_metric_data[0]))
     logger.debug('Last:\n' + str(chunk_metric_data[-1]))
@@ -888,7 +940,6 @@ def send_data_to_if(logger, chunk_metric_data, cli_config_vars, if_config_vars):
         return
 
     # send the data
-    post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type(if_config_vars))
     send_request(logger, post_url, 'POST', 'Could not send request to IF',
                  str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
                  verify=False, proxies=if_config_vars['if_proxies'])
@@ -995,7 +1046,7 @@ def get_api_from_project_type(if_config_vars):
         return 'incidentdatareceive'
     elif 'DEPLOYMENT' in if_config_vars['project_type']:
         return 'deploymentEventReceive'
-    else:  # MERTIC, LOG, ALERT
+    else:  # LOG, ALERT
         return 'customprojectrawdata'
 
 
