@@ -34,6 +34,7 @@ LEFT_BRACE = regex.compile(r"\[")
 RIGHT_BRACE = regex.compile(r"\]")
 PERIOD = regex.compile(r"\.")
 COMMA = regex.compile(r"\,")
+PERCENT = regex.compile(r"\%")
 NON_ALNUM = regex.compile(r"[^a-zA-Z0-9]")
 FORMAT_STR = regex.compile(r"{(.*?)}")
 HOSTNAME = socket.gethostname().partition('.')[0]
@@ -766,6 +767,7 @@ def make_safe_data_key(metric):
     metric = UNDERSCORE.sub('-', metric)
     metric = COLONS.sub('-', metric)
     metric = COMMA.sub('-', metric)
+    metric = PERCENT.sub('', metric)
     return metric
 
 
@@ -872,6 +874,13 @@ def send_data_wrapper(logger, cli_config_vars, if_config_vars, track, data_buffe
     reset_track(track)
 
 
+def safe_string_to_float(s):
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
 def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config_vars):
     to_send_data_dict = dict()
     to_send_data_dict['licenseKey'] = if_config_vars['license_key']
@@ -895,18 +904,18 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
         if data and timestamp and instance_name:
             ts = int(timestamp)
             if instance_name not in instance_data_map:
-                instance_data_map[instance_name] = {
-                    'in': instance_name,
-                    'cn': component_name,
-                    'dit': {},
-                }
+                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'dit': {}, }
 
-            if ts not in instance_data_map[instance_name]['dit']:
-                instance_data_map[instance_name]['dit'][ts] = {'t': ts, 'metricDataPointSet': []}
+            if timestamp not in instance_data_map[instance_name]['dit']:
+                instance_data_map[instance_name]['dit'][timestamp] = {'t': ts, 'm': []}
 
-            data_set = instance_data_map[instance_name]['dit'][ts]['metricDataPointSet']
+            data_set = instance_data_map[instance_name]['dit'][timestamp]['m']
             for metric_name, metric_value in data.items():
-                data_set.append({'m': metric_name, 'v': metric_value})
+                float_value = safe_string_to_float(metric_value)
+                if float_value is not None:
+                    data_set.append({'m': metric_name, 'v': float_value})
+                else:
+                    data_set.append({'m': metric_name, 'v': 0.0})
 
     data_dict['idm'] = instance_data_map
     to_send_data_dict['data'] = data_dict
@@ -919,8 +928,9 @@ def send_data_to_if(logger, chunk_metric_data, cli_config_vars, if_config_vars):
 
     # prepare data for metric streaming agent
     data_to_post = None
+    json_to_post = None
     if 'METRIC' in if_config_vars['project_type']:
-        data_to_post = convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config_vars)
+        json_to_post = convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config_vars)
         post_url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v2/metric-data-receive')
     else:
         data_to_post = initialize_api_post_data(logger, if_config_vars)
@@ -930,19 +940,26 @@ def send_data_to_if(logger, chunk_metric_data, cli_config_vars, if_config_vars):
         data_to_post[get_data_field_from_project_type(if_config_vars)] = json.dumps(chunk_metric_data)
         post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type(if_config_vars))
 
-    logger.debug('First:\n' + str(chunk_metric_data[0]))
-    logger.debug('Last:\n' + str(chunk_metric_data[-1]))
-    logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
-    logger.info('Total Lines: ' + str(len(chunk_metric_data)))
-
     # do not send if only testing
     if cli_config_vars['testing']:
         return
 
     # send the data
-    send_request(logger, post_url, 'POST', 'Could not send request to IF',
-                 str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
-                 verify=False, proxies=if_config_vars['if_proxies'])
+    if data_to_post:
+        logger.debug('First:\n' + str(chunk_metric_data[0]))
+        logger.debug('Last:\n' + str(chunk_metric_data[-1]))
+        logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
+        logger.info('Total Lines: ' + str(len(chunk_metric_data)))
+
+        send_request(logger, post_url, 'POST', 'Could not send request to IF',
+                     str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
+                     verify=False, proxies=if_config_vars['if_proxies'])
+    elif json_to_post:
+        logger.info('Total Data (bytes): ' + str(get_json_size_bytes(json_to_post)))
+        send_request(logger, post_url, 'POST', 'Could not send request to IF',
+                     str(get_json_size_bytes(json_to_post)) + ' bytes of data are reported.', json=json_to_post,
+                     verify=False, proxies=if_config_vars['if_proxies'])
+
     logger.info('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
 
 
