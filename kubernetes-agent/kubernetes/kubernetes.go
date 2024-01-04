@@ -147,6 +147,9 @@ func (k *KubernetesServer) GetPods(namespace string) *map[string]map[string]map[
 		}
 
 		// Determine the parent resourceKind of this pod
+		if pod.OwnerReferences == nil || len(pod.OwnerReferences) == 0 {
+			continue
+		}
 		resourceKind := pod.OwnerReferences[0].Kind
 		resourceName := pod.OwnerReferences[0].Name
 		if pod.OwnerReferences[0].Kind == "ReplicaSet" {
@@ -216,16 +219,88 @@ func (k *KubernetesServer) GetPodsContainerExitEvents(namespace string, startTim
 	return &results
 }
 
-func (k *KubernetesServer) GetPVCPodsMapping(namespace string) *map[string]string {
-	var result map[string]string = make(map[string]string)
+func (k *KubernetesServer) GetPodsPVCMapping(namespace string) *map[string]map[string]map[string][]string {
+	// PVC -> Pod -> MountName -> [Containers]
+	var result = make(map[string]map[string]map[string][]string)
+
 	Pods, _ := k.Client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
+	ContainerVolumeMountMap := k.GetVolumeMountInfoFromPods(Pods)
 	for _, pod := range Pods.Items {
 		for _, volume := range pod.Spec.Volumes {
 			if volume.PersistentVolumeClaim != nil {
+				if _, ok := result[pod.Name]; !ok {
+					result[pod.Name] = make(map[string]map[string][]string)
+				}
+
 				PVC := volume.PersistentVolumeClaim.ClaimName
-				result[PVC] = pod.Name
+				mountPointName := volume.Name
+				for _, container := range (*ContainerVolumeMountMap)[pod.Name][mountPointName] {
+					if _, ok := result[pod.Name][PVC]; !ok {
+						result[pod.Name][PVC] = make(map[string][]string)
+					}
+					result[pod.Name][PVC][mountPointName] = append(result[pod.Name][PVC][mountPointName], container)
+				}
 			}
 		}
 	}
+
 	return &result
+}
+
+func (k *KubernetesServer) GetVolumeMountInfoFromPods(Pods *corev1.PodList) *map[string]map[string][]string {
+	var PodContainerMountMap = make(map[string]map[string]map[string]string)
+
+	// Build PodContainerMountMap: PodName -> ContainerName -> VolumeName -> MountPath
+	for _, pod := range Pods.Items {
+		if _, ok := PodContainerMountMap[pod.Name]; !ok {
+			PodContainerMountMap[pod.Name] = make(map[string]map[string]string)
+		}
+		for _, container := range pod.Spec.Containers {
+			if _, ok := PodContainerMountMap[pod.Name][container.Name]; !ok {
+				PodContainerMountMap[pod.Name][container.Name] = make(map[string]string)
+			}
+			for _, volumeMount := range container.VolumeMounts {
+				PodContainerMountMap[pod.Name][container.Name][volumeMount.Name] = volumeMount.MountPath
+			}
+		}
+	}
+
+	// Convert to MountPointMap: Pod -> MountPointName -> list[ContainerNames]
+	var MountPointMap = make(map[string]map[string][]string)
+	for podName, containerMountMap := range PodContainerMountMap {
+		for containerName, volumeMountMap := range containerMountMap {
+			for volumeName := range volumeMountMap {
+				if _, ok := MountPointMap[podName]; !ok {
+					MountPointMap[podName] = make(map[string][]string)
+				}
+				MountPointMap[podName][volumeName] = append(MountPointMap[podName][volumeName], containerName)
+			}
+		}
+	}
+	return &MountPointMap
+}
+
+func (k *KubernetesServer) GetOpenTelemetryMapping(namespace string) *map[string]string {
+	results := make(map[string]string)
+
+	// Get app.kubernetes.io/component label from all deployments
+	Deployments, err := k.Client.AppsV1().Deployments(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "app.kubernetes.io/component"})
+	if err != nil {
+		log.Output(2, "Failed to get deployments in namespace: "+err.Error())
+	}
+
+	// Get app.kubernetes.io/component label from all statefulSets
+	StatefulSets, err := k.Client.AppsV1().StatefulSets(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "app.kubernetes.io/component"})
+	if err != nil {
+		log.Output(2, "Failed to get statefulSets in namespace: "+err.Error())
+	}
+
+	for _, deployment := range Deployments.Items {
+		results[deployment.Labels["app.kubernetes.io/component"]] = deployment.Name
+	}
+
+	for _, statefulSet := range StatefulSets.Items {
+		results[statefulSet.Labels["app.kubernetes.io/component"]] = statefulSet.Name
+	}
+	return &results
 }
