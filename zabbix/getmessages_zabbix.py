@@ -34,7 +34,6 @@ LEFT_BRACE = regex.compile(r"\[")
 RIGHT_BRACE = regex.compile(r"\]")
 PERIOD = regex.compile(r"\.")
 COMMA = regex.compile(r"\,")
-PERCENT = regex.compile(r"\%")
 NON_ALNUM = regex.compile(r"[^a-zA-Z0-9]")
 FORMAT_STR = regex.compile(r"{(.*?)}")
 HOSTNAME = socket.gethostname().partition('.')[0]
@@ -767,7 +766,6 @@ def make_safe_data_key(metric):
     metric = UNDERSCORE.sub('-', metric)
     metric = COLONS.sub('-', metric)
     metric = COMMA.sub('-', metric)
-    metric = PERCENT.sub('', metric)
     return metric
 
 
