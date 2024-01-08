@@ -30,6 +30,9 @@ from urllib3.exceptions import InsecureRequestWarning
 from pprint import pformat
 from pathlib import Path
 
+import logging
+logging.basicConfig(level=logging.INFO)
+
 """
 This script gathers data to send to Insightfinder
 """
@@ -239,10 +242,11 @@ def query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_
     logger.debug('Starting query server es')
 
     # get total number of messages
-    response = es_conn.search(
-        body=query_body,
-        ignore_unavailable=False,
-    )
+    try:
+        response = es_conn.search(body=query_body, ignore_unavailable=False, )
+    except Exception as e:
+        logger.error('Query log error.\n{}'.format(str(e)))
+        return
 
     # validate successs
     if 'error' in response:
@@ -449,7 +453,7 @@ def process_build_buffer(args):
             if not c_config['testing']:
                 with project_create_lock:
                     if project not in meta_info['projects']:
-                        check_success = check_project_exist(logger, if_config_vars, project)
+                        check_success = check_project_exist(logger, if_config_vars, project, c_config)
                         if not check_success:
                             sys.exit(1)
                         meta_info['projects'][project] = True
@@ -1056,6 +1060,10 @@ def reset_track(track):
 # Functions to send data to IF #
 ################################
 def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data, project):
+    timeout = None
+    if c_config:
+        timeout = c_config['timeout'] if c_config['timeout'] > 0 else None
+
     send_data_time = time.time()
 
     # prepare data for metric/log streaming agent
@@ -1077,8 +1085,8 @@ def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data, 
     # send the data
     post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type(if_config_vars))
     send_request(logger, post_url, 'POST', 'Could not send request to IF',
-                 str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
-                 data=data_to_post, verify=False, proxies=if_config_vars['if_proxies'])
+                 str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
+                 verify=False, proxies=if_config_vars['if_proxies'], timeout=timeout)
     logger.debug('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
 
 
@@ -1205,7 +1213,11 @@ def initialize_api_post_data(logger, if_config_vars, project):
     return to_send_data_dict
 
 
-def check_project_exist(logger, if_config_vars, project):
+def check_project_exist(logger, if_config_vars, project, c_config):
+    timeout = None
+    if c_config:
+        timeout = c_config['timeout'] if c_config['timeout'] > 0 else None
+
     is_project_exist = False
     try:
         logger.info(f'Starting check project: {project or if_config_vars["project_name"]}')
@@ -1216,7 +1228,8 @@ def check_project_exist(logger, if_config_vars, project):
             'projectName': project or if_config_vars['project_name'],
         }
         url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
-        response = send_request(logger, url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
+        response = send_request(logger, url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'],
+                                timeout=timeout)
         if response == -1:
             logger.error(f'Check project error: {project or if_config_vars["project_name"]}')
         else:
@@ -1251,7 +1264,7 @@ def check_project_exist(logger, if_config_vars, project):
             }
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
             response = send_request(logger, url, 'POST', data=params, verify=False,
-                                    proxies=if_config_vars['if_proxies'])
+                                    proxies=if_config_vars['if_proxies'], timeout=timeout)
             if response == -1:
                 logger.error(f'Check project error: {project or if_config_vars["project_name"]}')
             else:
@@ -1279,7 +1292,7 @@ def check_project_exist(logger, if_config_vars, project):
             }
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
             response = send_request(logger, url, 'POST', data=params, verify=False,
-                                    proxies=if_config_vars['if_proxies'])
+                                    proxies=if_config_vars['if_proxies'], timeout=timeout)
             if response == -1:
                 logger.error(f'Check project error: {project or if_config_vars["project_name"]}')
             else:
