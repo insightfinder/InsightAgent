@@ -212,13 +212,17 @@ public class K8SManager {
         return execPatch(v1Deployment, jsonPatchStr, null);
     }
 
-    public V1Deployment getV1Deployment(String nameSpace, String deploymentName){
+    public V1Deployment getV1Deployment(String nameSpace, String deploymentName, StringBuilder stringBuilder){
         V1Deployment v1Deployment = null;
         try {
             v1Deployment = getDeployment(nameSpace, deploymentName);
         } catch (ApiException e) {
             log.info(e.getResponseBody());
             e.printStackTrace();
+            if (stringBuilder != null){
+                stringBuilder.append(e.getResponseBody());
+                stringBuilder.append(e.getStackTrace().toString());
+            }
         }
         return v1Deployment;
     }
@@ -293,15 +297,24 @@ public class K8SManager {
         retValue.put("deployment", deploymentName);
         v1Deployment.getSpec().getTemplate().getSpec().getContainers().forEach(v1Container -> {
             if (v1Container.getName().equalsIgnoreCase(container)){
-                Quantity quantity = v1Container.getResources().getRequests().get("memory");
-                if (quantity != null){
-                    BigDecimal ret = quantity.getNumber().divide(new BigDecimal(1024 * 1024));
-                    retValue.put("requestMem", ret.longValue());
+                if (v1Container.getResources().getRequests() != null){
+                    Quantity quantity = v1Container.getResources().getRequests().get("memory");
+                    if (quantity != null){
+                        BigDecimal ret = quantity.getNumber().divide(new BigDecimal(1024 * 1024));
+                        retValue.put("requestMem", ret.longValue());
+                    }
+                }else {
+                    retValue.put("requestMemError", "requestMem is not set");
                 }
-                Quantity quantity2 = v1Container.getResources().getLimits().get("memory");
-                if (quantity2 != null){
-                    BigDecimal ret = quantity2.getNumber().divide(new BigDecimal(1024 * 1024));
-                    retValue.put("limitMem", ret.longValue());
+
+                if (v1Container.getResources().getLimits() != null){
+                    Quantity quantity2 = v1Container.getResources().getLimits().get("memory");
+                    if (quantity2 != null){
+                        BigDecimal ret = quantity2.getNumber().divide(new BigDecimal(1024 * 1024));
+                        retValue.put("limitMem", ret.longValue());
+                    }
+                }else {
+                    retValue.put("limitMemError", "limitMem is not set");
                 }
             }
         });
