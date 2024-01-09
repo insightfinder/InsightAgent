@@ -5,7 +5,7 @@ type LogData struct {
 	Tag           string      `json:"tag" validate:"required"`
 	ComponentName string      `json:"componentName" validate:"required"`
 	Data          interface{} `json:"data" validate:"required"`
-	K8Identity    K8Identity  `json:"k,omitempty"`
+	K8Identity    *K8Identity `json:"k,omitempty"`
 }
 
 type LogDataReceivePayload struct {

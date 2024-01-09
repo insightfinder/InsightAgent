@@ -75,35 +75,29 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     prometheus_query = agent_config_vars['prometheus_query']
 
     thread_pool = ThreadPool(agent_config_vars['thread_pool'])
-    logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
     if agent_config_vars['his_time_range']:
-        logger.debug('Using time range for replay data')
-        for timestamp in range(agent_config_vars['his_time_range'][0],
-                               agent_config_vars['his_time_range'][1],
-                               if_config_vars['sampling_interval']):
-            params = [(logger, if_config_vars, agent_config_vars, None, {
-                'query': prometheus_query,
-                'time': timestamp,
-            })]
+        logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
+        for query in prometheus_query:
+            for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
+                                   if_config_vars['sampling_interval']):
+                params = [(logger, if_config_vars, agent_config_vars, None, {'query': query.query, 'time': timestamp})]
 
+                results = thread_pool.map(query_messages_prometheus, params)
+                result_list = list(chain(*results))
+                parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
+                                          cache_cur, result_list, query)
+
+                # clear metric buffer when piece of time range end
+                clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
+    else:
+        logger.debug('Using current time for streaming data')
+        for query in prometheus_query:
+            params = [
+                (logger, if_config_vars, agent_config_vars, None, {'query': query.get('query'), 'time': time_now, })]
             results = thread_pool.map(query_messages_prometheus, params)
             result_list = list(chain(*results))
             parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
-                                      cache_cur,
-                                      result_list)
-
-            # clear metric buffer when piece of time range end
-            clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
-    else:
-        logger.debug('Using current time for streaming data')
-        params = [(logger, if_config_vars, agent_config_vars, None, {
-            'query': prometheus_query,
-            'time': time_now,
-        })]
-        results = thread_pool.map(query_messages_prometheus, params)
-        result_list = list(chain(*results))
-        parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con, cache_cur,
-                                  result_list)
+                                      cache_cur, result_list, query)
 
     thread_pool.close()
     thread_pool.join()
@@ -139,9 +133,11 @@ def query_messages_prometheus(args):
 
 
 def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con, cache_cur,
-                              result):
-    prometheus_query = agent_config_vars['prometheus_query']
-    is_batch_mode = len(prometheus_query) > 0
+                              result, query):
+    is_batch_mode = len(query.get('query')) > 0
+
+    query_metric_name = query.get('metric_name')
+    query_instance_fields = query.get('instance_fields')
 
     count = 0
     logger.info('Reading {} messages'.format(len(result)))
@@ -162,10 +158,15 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
                 name_fields = [f for f in name_fields if f]
                 if len(name_fields) > 0:
                     date_field = '_'.join(name_fields)
+            if not date_field and query_metric_name:
+                date_field = query_metric_name
 
             # instance name
             instance = 'Application'
             instance_field = agent_config_vars['instance_field']
+            if query_instance_fields and len(query_instance_fields) > 0:
+                instance_field = query_instance_fields
+
             if instance_field and len(instance_field) > 0:
                 instances = [message.get('metric').get(d) for d in instance_field]
                 instance_list = []
@@ -175,9 +176,10 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
                     instance_list.append(i)
                 instance = agent_config_vars['instance_connector'].join(instance_list) if len(
                     instance_list) > 0 else None
+
             # filter by instance whitelist
-            if agent_config_vars['instance_whitelist_regex'] \
-                    and not agent_config_vars['instance_whitelist_regex'].match(instance):
+            if agent_config_vars['instance_whitelist_regex'] and not agent_config_vars[
+                'instance_whitelist_regex'].match(instance):
                 continue
 
             # add device info if has
@@ -259,14 +261,12 @@ def get_agent_config_vars(logger, config_ini):
         his_time_range = None
         try:
             # prometheus settings
-            prometheus_config = {
-                'user': config_parser.get('prometheus', 'user'),
-                'password': config_parser.get('prometheus', 'password'),
-                'verify_certs': config_parser.get('prometheus', 'verify_certs'),
-                'ca_certs': config_parser.get('prometheus', 'ca_certs'),
-                'client_cert': config_parser.get('prometheus', 'client_cert'),
-                'client_key': config_parser.get('prometheus', 'client_key')
-            }
+            prometheus_config = {'user': config_parser.get('prometheus', 'user'),
+                                 'password': config_parser.get('prometheus', 'password'),
+                                 'verify_certs': config_parser.get('prometheus', 'verify_certs'),
+                                 'ca_certs': config_parser.get('prometheus', 'ca_certs'),
+                                 'client_cert': config_parser.get('prometheus', 'client_cert'),
+                                 'client_key': config_parser.get('prometheus', 'client_key')}
             # only keep settings with values
             prometheus_kwargs = {k: v for (k, v) in list(prometheus_config.items()) if v}
 
@@ -297,8 +297,9 @@ def get_agent_config_vars(logger, config_ini):
                 return config_error(logger, 'prometheus_uri')
 
             # metrics
-            prometheus_query = config_parser.get('prometheus', 'prometheus_query') or '{__name__=~".+"}'
             metrics_name_field = config_parser.get('prometheus', 'metrics_name_field')
+            prometheus_query_str = config_parser.get('prometheus', 'prometheus_query')
+            prometheus_query_json = config_parser.get('prometheus', 'prometheus_query_json')
 
             # time range
             his_time_range = config_parser.get('prometheus', 'his_time_range')
@@ -327,6 +328,37 @@ def get_agent_config_vars(logger, config_ini):
             logger.error(ex)
             return config_error(logger)
 
+        prometheus_query = []
+        if len(prometheus_query_str) != 0:
+            queries = [x.strip() for x in prometheus_query_str.split(';') if x.strip()]
+            for query in queries:
+                if ':' in query:
+                    parts = query.split(':')
+                    if len(parts) != 3:
+                        return config_error(logger, 'prometheus_query')
+                    metric_name = parts[0]
+                    if len(metric_name) == 0:
+                        return config_error(logger, 'prometheus_query')
+
+                    instance_fields = [x.strip() for x in parts[1].split(',') if x.strip()] if parts[1] else []
+                    prometheus_query.append(
+                        {'query': parts[2], 'metric_name': metric_name, 'instance_fields': instance_fields})
+                else:
+                    prometheus_query.append({'query': query, 'instance_fields': []})
+
+        if len(prometheus_query_json) != 0:
+            try:
+                json_path = os.path.join(os.path.dirname(config_ini), prometheus_query_json)
+                with open(json_path, 'r') as json_path:
+                    data = json.load(json_path)
+                    prometheus_query.extend(data)
+            except Exception as ex:
+                logger.error(ex)
+                return config_error(logger, 'prometheus_query_json')
+
+        if len(prometheus_query) == 0:
+            prometheus_query = [{'query': '{__name__=~".+"}'}]
+
         # metrics
         if len(instance_whitelist) != 0:
             try:
@@ -354,10 +386,7 @@ def get_agent_config_vars(logger, config_ini):
                 timezone = pytz.timezone(timezone)
 
         # data format
-        if data_format in {'JSON',
-                           'JSONTAIL',
-                           'AVRO',
-                           'XML'}:
+        if data_format in {'JSON', 'JSONTAIL', 'AVRO', 'XML'}:
             pass
         else:
             return config_error(logger, 'data_format')
@@ -394,31 +423,17 @@ def get_agent_config_vars(logger, config_ini):
             agent_proxies['https'] = agent_https_proxy
 
         # add parsed variables to a global
-        config_vars = {
-            'prometheus_kwargs': prometheus_kwargs,
-            'auth_kwargs': auth_kwargs,
-            'ssl_kwargs': ssl_kwargs,
-            'api_url': api_url,
-            'prometheus_query': prometheus_query,
-            'metrics_name_field': metrics_name_field,
-            'his_time_range': his_time_range,
+        config_vars = {'prometheus_kwargs': prometheus_kwargs, 'auth_kwargs': auth_kwargs, 'ssl_kwargs': ssl_kwargs,
+                       'api_url': api_url, 'prometheus_query': prometheus_query,
+                       'metrics_name_field': metrics_name_field, 'his_time_range': his_time_range,
 
-            'proxies': agent_proxies,
-            'data_format': data_format,
-            # 'project_field': project_fields,
-            'component_field': component_field,
-            'instance_field': instance_fields,
-            "instance_whitelist_regex": instance_whitelist_regex,
-            'device_field': device_fields,
-            'timestamp_field': timestamp_fields,
-            'target_timestamp_timezone': target_timestamp_timezone,
-            'timezone': timezone,
-            'timestamp_format': timestamp_format,
-            'instance_connector': instance_connector,
-            'thread_pool': thread_pool,
-            'processes': processes,
-            'timeout': timeout,
-        }
+                       'proxies': agent_proxies, 'data_format': data_format,  # 'project_field': project_fields,
+                       'component_field': component_field, 'instance_field': instance_fields,
+                       "instance_whitelist_regex": instance_whitelist_regex, 'device_field': device_fields,
+                       'timestamp_field': timestamp_fields, 'target_timestamp_timezone': target_timestamp_timezone,
+                       'timezone': timezone, 'timestamp_format': timestamp_format,
+                       'instance_connector': instance_connector, 'thread_pool': thread_pool, 'processes': processes,
+                       'timeout': timeout, }
 
         return config_vars
 
@@ -456,19 +471,15 @@ def get_cli_config_vars():
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose', default=False,
                       help='Enable verbose logging')
     parser.add_option('-t', '--testing', action='store_true', dest='testing', default=False,
-                      help='Set to testing mode (do not send data).' +
-                           ' Automatically turns on verbose logging')
+                      help='Set to testing mode (do not send data).' + ' Automatically turns on verbose logging')
     # parser.add_option('--timeout', action='store', dest='timeout', default=5,
     #                   help='Minutes of timeout for all processes')
     (options, args) = parser.parse_args()
 
-    config_vars = {
-        'config': options.config if os.path.isdir(options.config) else abs_path_from_cur('conf.d'),
-        # 'processes': int(options.processes),
-        'testing': False,
-        'log_level': logging.INFO,
-        # 'timeout': int(options.timeout) * 60,
-    }
+    config_vars = {'config': options.config if os.path.isdir(options.config) else abs_path_from_cur('conf.d'),
+                   # 'processes': int(options.processes),
+                   'testing': False, 'log_level': logging.INFO,  # 'timeout': int(options.timeout) * 60,
+                   }
 
     if options.testing:
         config_vars['testing'] = True
@@ -517,20 +528,8 @@ def get_if_config_vars(logger, config_ini):
         if len(project_type) == 0:
             return config_error(logger, 'project_type')
 
-        if project_type not in {
-            'METRIC',
-            'METRICREPLAY',
-            'LOG',
-            'LOGREPLAY',
-            'INCIDENT',
-            'INCIDENTREPLAY',
-            'ALERT',
-            'ALERTREPLAY',
-            'DEPLOYMENT',
-            'DEPLOYMENTREPLAY',
-            'TRACE',
-            'TRACEREPLAY'
-        }:
+        if project_type not in {'METRIC', 'METRICREPLAY', 'LOG', 'LOGREPLAY', 'INCIDENT', 'INCIDENTREPLAY', 'ALERT',
+                                'ALERTREPLAY', 'DEPLOYMENT', 'DEPLOYMENTREPLAY', 'TRACE', 'TRACEREPLAY'}:
             return config_error(logger, 'project_type')
         is_replay = 'REPLAY' in project_type
 
@@ -567,21 +566,13 @@ def get_if_config_vars(logger, config_ini):
         if len(if_https_proxy) > 0:
             if_proxies['https'] = if_https_proxy
 
-        config_vars = {
-            'user_name': user_name,
-            'license_key': license_key,
-            'token': token,
-            'project_name': project_name,
-            'system_name': system_name,
-            'project_type': project_type,
-            'containerize': True if containerize == 'YES' else False,
-            'sampling_interval': int(sampling_interval),  # as seconds
-            'run_interval': int(run_interval),  # as seconds
-            'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
-            'if_url': if_url,
-            'if_proxies': if_proxies,
-            'is_replay': is_replay
-        }
+        config_vars = {'user_name': user_name, 'license_key': license_key, 'token': token, 'project_name': project_name,
+                       'system_name': system_name, 'project_type': project_type,
+                       'containerize': True if containerize == 'YES' else False,
+                       'sampling_interval': int(sampling_interval),  # as seconds
+                       'run_interval': int(run_interval),  # as seconds
+                       'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
+                       'if_url': if_url, 'if_proxies': if_proxies, 'is_replay': is_replay}
 
         return config_vars
 
@@ -592,8 +583,7 @@ def abs_path_from_cur(filename=''):
 
 def config_error(logger, setting=''):
     info = ' ({})'.format(setting) if setting else ''
-    logger.error('Agent not correctly configured{}. Check config file.'.format(
-        info))
+    logger.error('Agent not correctly configured{}. Check config file.'.format(info))
     return False
 
 
@@ -607,7 +597,10 @@ def make_safe_instance_string(instance, device=''):
     """ make a safe instance name string, concatenated with device if appropriate """
     # strip underscores
     instance = UNDERSCORE.sub('.', instance)
+    instance = COMMA.sub('.', instance)
     instance = COLONS.sub('-', instance)
+    instance = LEFT_BRACE.sub('(', instance)
+    instance = RIGHT_BRACE.sub(')', instance)
     # if there's a device, concatenate it to the instance with an underscore
     if device:
         instance = '{}_{}'.format(make_safe_instance_string(device), instance)
@@ -658,8 +651,7 @@ def initialize_data_gathering(logger, c_config, if_config_vars, agent_config_var
     clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
 
     logger.info('Total chunks created: ' + str(track['chunk_count']))
-    logger.info('Total {} entries: {}'.format(
-        if_config_vars['project_type'].lower(), track['entry_count']))
+    logger.info('Total {} entries: {}'.format(if_config_vars['project_type'].lower(), track['entry_count']))
 
     # close cache
     cache_con.close()
@@ -713,8 +705,7 @@ def reset_track(track):
 ################################
 def send_data_wrapper(logger, c_config, if_config_vars, track):
     """ wrapper to send data """
-    logger.debug('--- Chunk creation time: {} seconds ---'.format(
-        round(time.time() - track['start_time'], 2)))
+    logger.debug('--- Chunk creation time: {} seconds ---'.format(round(time.time() - track['start_time'], 2)))
     send_data_to_if(logger, c_config, if_config_vars, track, track['current_row'])
     track['chunk_count'] += 1
     reset_track(track)
@@ -746,8 +737,8 @@ def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data):
     # send the data
     post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type(if_config_vars))
     send_request(logger, post_url, 'POST', 'Could not send request to IF',
-                 str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.',
-                 data=data_to_post, verify=False, proxies=if_config_vars['if_proxies'])
+                 str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
+                 verify=False, proxies=if_config_vars['if_proxies'])
     logger.info('--- Send data to project: %s, time: %s seconds ---' % (
         if_config_vars['project_name'], round(time.time() - send_data_time, 2)))
 
@@ -769,8 +760,7 @@ def send_request(logger, url, mode='GET', failure_message='Failure!', success_me
                 return response
             else:
                 logger.warn(failure_message)
-                logger.info('Response Code: {}\nTEXT: {}'.format(
-                    response.status_code, response.text))
+                logger.info('Response Code: {}\nTEXT: {}'.format(response.status_code, response.text))
         # handle various exceptions
         except requests.exceptions.Timeout:
             logger.exception('Timed out. Reattempting...')
@@ -833,8 +823,7 @@ def get_agent_type_from_project_type(if_config_vars):
     elif if_config_vars['is_replay']:
         return 'LogFileReplay'
     else:
-        return 'LogStreaming'
-    # INCIDENT and DEPLOYMENT don't use this
+        return 'LogStreaming'  # INCIDENT and DEPLOYMENT don't use this
 
 
 def get_data_field_from_project_type(if_config_vars):
@@ -877,12 +866,8 @@ def check_project_exist(logger, if_config_vars):
     is_project_exist = False
     try:
         logger.info('Starting check project: ' + if_config_vars['project_name'])
-        params = {
-            'operation': 'check',
-            'userName': if_config_vars['user_name'],
-            'licenseKey': if_config_vars['license_key'],
-            'projectName': if_config_vars['project_name'],
-        }
+        params = {'operation': 'check', 'userName': if_config_vars['user_name'],
+                  'licenseKey': if_config_vars['license_key'], 'projectName': if_config_vars['project_name'], }
         url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
         response = send_request(logger, url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'])
         if response == -1:
@@ -903,19 +888,14 @@ def check_project_exist(logger, if_config_vars):
     if not is_project_exist:
         try:
             logger.info('Starting add project: ' + if_config_vars['project_name'])
-            params = {
-                'operation': 'create',
-                'userName': if_config_vars['user_name'],
-                'licenseKey': if_config_vars['license_key'],
-                'projectName': if_config_vars['project_name'],
-                'systemName': if_config_vars['system_name'] or if_config_vars['project_name'],
-                'instanceType': 'Prometheus',
-                'projectCloudType': 'Prometheus',
-                'dataType': get_data_type_from_project_type(if_config_vars),
-                'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
-                'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
-                'samplingIntervalInSeconds': if_config_vars['sampling_interval'],
-            }
+            params = {'operation': 'create', 'userName': if_config_vars['user_name'],
+                      'licenseKey': if_config_vars['license_key'], 'projectName': if_config_vars['project_name'],
+                      'systemName': if_config_vars['system_name'] or if_config_vars['project_name'],
+                      'instanceType': 'Prometheus', 'projectCloudType': 'Prometheus',
+                      'dataType': get_data_type_from_project_type(if_config_vars),
+                      'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
+                      'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
+                      'samplingIntervalInSeconds': if_config_vars['sampling_interval'], }
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
             response = send_request(logger, url, 'POST', data=params, verify=False,
                                     proxies=if_config_vars['if_proxies'])
@@ -938,12 +918,8 @@ def check_project_exist(logger, if_config_vars):
         time.sleep(10)
         try:
             logger.info('Starting check project: ' + if_config_vars['project_name'])
-            params = {
-                'operation': 'check',
-                'userName': if_config_vars['user_name'],
-                'licenseKey': if_config_vars['license_key'],
-                'projectName': if_config_vars['project_name'],
-            }
+            params = {'operation': 'check', 'userName': if_config_vars['user_name'],
+                      'licenseKey': if_config_vars['license_key'], 'projectName': if_config_vars['project_name'], }
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
             response = send_request(logger, url, 'POST', data=params, verify=False,
                                     proxies=if_config_vars['if_proxies'])
@@ -968,15 +944,10 @@ def listener_configurer():
     """ set up logging according to the defined log level """
     # create a logging format
     formatter = logging.Formatter(
-        '{ts} [{cfg}] [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
-            ts='%(asctime)s',
-            cfg='%(name)s',
-            pid='%(process)d',
-            lvl='%(levelname)-8s',
-            mod='%(module)s',
-            func='%(funcName)s',
-            line='%(lineno)d',
-            msg='%(message)s'),
+        '{ts} [{cfg}] [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(ts='%(asctime)s', cfg='%(name)s',
+                                                                            pid='%(process)d', lvl='%(levelname)-8s',
+                                                                            mod='%(module)s', func='%(funcName)s',
+                                                                            line='%(lineno)d', msg='%(message)s'),
         ISO8601[0])
 
     # Get the root logger
@@ -1058,8 +1029,7 @@ if __name__ == "__main__":
     # logger
     m = multiprocessing.Manager()
     queue = m.Queue()
-    listener = multiprocessing.Process(
-        target=listener_process, args=(queue, cli_config_vars))
+    listener = multiprocessing.Process(target=listener_process, args=(queue, cli_config_vars))
     listener.start()
 
     # set up main logger following example from work_process

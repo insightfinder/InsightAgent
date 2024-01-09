@@ -28,7 +28,7 @@ func BuildLogDataList(lokiLogData *[]loki.LokiLogData, instanceNameMapper *Insta
 			Tag:           instanceName,
 			ComponentName: componentName,
 			Data:          logData.Text,
-			K8Identity: insightfinder.K8Identity{
+			K8Identity: &insightfinder.K8Identity{
 				HostId: logData.Node,
 				PodId:  logData.Pod,
 			},

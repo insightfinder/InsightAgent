@@ -7,14 +7,14 @@ type MetricDataPoint struct {
 }
 
 type K8Identity struct {
-	HostId string `json:"hostId" validate:"required"`
-	PodId  string `json:"podId" validate:"required"`
+	HostId string `json:"hostId,omitempty"`
+	PodId  string `json:"podId,omitempty"`
 }
 
 type DataInTimestamp struct {
 	TimeStamp        int64             `json:"t" validate:"required"`
 	MetricDataPoints []MetricDataPoint `json:"metricDataPointSet" validate:"required"`
-	K8Identity       K8Identity        `json:"k,omitempty"`
+	K8Identity       *K8Identity       `json:"k,omitempty"`
 }
 
 type InstanceData struct {

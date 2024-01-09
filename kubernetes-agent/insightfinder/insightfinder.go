@@ -2,12 +2,15 @@ package insightfinder
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/carlmjohnson/requests"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -20,6 +23,12 @@ const HTTP_RETRY_TIMES = 15
 const HTTP_RETRY_INTERVAL = 60
 
 func SendLogData(data *[]LogData, IFConfig map[string]interface{}) {
+
+	// Skip sending if there's no data
+	if len(*data) == 0 {
+		return
+	}
+
 	curTotal := 0
 	curData := make([]LogData, 0)
 	for _, logEntry := range *data {
@@ -156,6 +165,51 @@ func SendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 	log.Output(1, string(response))
 }
 
+func SendDependencyMap(data *[]map[string]string, IFconfig map[string]interface{}) {
+	componentRelationList := make([]DependencyRelationPair, 0)
+	for _, componentRelation := range *data {
+		source := DependencyRelationEntity{
+			Id:   componentRelation["Source"],
+			Type: "componentLevel",
+		}
+
+		target := DependencyRelationEntity{
+			Id:   componentRelation["Target"],
+			Type: "componentLevel",
+		}
+
+		pair := DependencyRelationPair{
+			S: source,
+			T: target,
+		}
+		componentRelationList = append(componentRelationList, pair)
+	}
+	componentRelationListStr, _ := json.Marshal(componentRelationList)
+
+	// Send the data to IF
+	req := DependencyRelationPayload{
+		SystemDisplayName:             ToString(IFconfig["systemName"]),
+		LicenseKey:                    ToString(IFconfig["licenseKey"]),
+		UserName:                      ToString(IFconfig["userName"]),
+		DailyTimestamp:                time.Now().UnixMilli(),
+		ProjectLevelAddRelationSetStr: string(componentRelationListStr),
+	}
+
+	PrintStruct(req, false, IFconfig["projectName"].(string)+".json")
+	var res string
+	url := ToString(IFconfig["ifURL"]) + "/api/v2/updaterelationdependency"
+
+	err := requests.
+		URL(url).
+		Post().
+		BodyJSON(&req).
+		ToString(&res).
+		Fetch(context.Background())
+	if err != nil {
+		println(err.Error())
+	}
+}
+
 func SendRequest(operation string, endpoint string, form io.Reader, headers map[string]string, auth AuthRequest) ([]byte, http.Header) {
 	newRequest, err := http.NewRequest(
 		operation,
@@ -195,4 +249,18 @@ func SendRequest(operation string, endpoint string, form io.Reader, headers map[
 	defer res.Body.Close()
 	body, _ := io.ReadAll(res.Body)
 	return body, res.Header
+}
+
+func PrintStruct(v any, needPrint bool, fileName string) {
+	jsonBytes, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		log.Fatalf("JSON marshaling failed: %s", err)
+	}
+	if needPrint {
+		fmt.Println(string(jsonBytes))
+	}
+	err = os.WriteFile("PrintStruct-"+fileName+".json", jsonBytes, 0644)
+	if err != nil {
+		log.Fatalf("Writing to file failed: %s", err)
+	}
 }
