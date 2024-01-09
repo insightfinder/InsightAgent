@@ -195,7 +195,7 @@ public class K8SManager {
         String jsonPatchStrTemplate =
                 "[{\"op\":\"replace\",\"path\":\"/spec/replicas\",\"value\":%d}]";
         String jsonPatchStr = String.format(jsonPatchStrTemplate, finalNum);
-        return execPatch(v1Deployment, jsonPatchStr);
+        return execPatch(v1Deployment, jsonPatchStr, null);
     }
 
     public boolean scaleTo(String nameSpace, String deploymentName, int podNum){
@@ -209,7 +209,18 @@ public class K8SManager {
         String jsonPatchStrTemplate =
                 "[{\"op\":\"replace\",\"path\":\"/spec/replicas\",\"value\":%d}]";
         String jsonPatchStr = String.format(jsonPatchStrTemplate, podNum);
-        return execPatch(v1Deployment, jsonPatchStr);
+        return execPatch(v1Deployment, jsonPatchStr, null);
+    }
+
+    public V1Deployment getV1Deployment(String nameSpace, String deploymentName){
+        V1Deployment v1Deployment = null;
+        try {
+            v1Deployment = getDeployment(nameSpace, deploymentName);
+        } catch (ApiException e) {
+            log.info(e.getResponseBody());
+            e.printStackTrace();
+        }
+        return v1Deployment;
     }
 
     public boolean verticalScaleTo(String nameSpace, String deploymentName, float cpu, float mem)  {
@@ -328,13 +339,18 @@ public class K8SManager {
         return retValue;
     }
 
-    public boolean setContainerMem(String nameSpace, String deploymentName, String container, long limitMem, long requestMem) {
+    public boolean setContainerMem(String nameSpace, String deploymentName, String container, long limitMem, long requestMem, StringBuilder stringBuilder) {
         V1Deployment v1Deployment = null;
         try {
             v1Deployment = getDeployment(nameSpace, deploymentName);
         } catch (ApiException e) {
             log.info(e.getResponseBody());
+
             e.printStackTrace();
+            if (stringBuilder != null){
+                stringBuilder.append(e.getResponseBody());
+                stringBuilder.append(e.getStackTrace().toString());
+            }
         }
         JsonArray jsonArray = new JsonArray();
         AtomicInteger index = new AtomicInteger();
@@ -406,7 +422,7 @@ public class K8SManager {
         });
     }
 
-    private boolean execPatch(V1Deployment v1Deployment, String jsonPatchStr){
+    private boolean execPatch(V1Deployment v1Deployment, String jsonPatchStr, StringBuilder stringBuilder){
         try {
             V1Deployment deploy =
                     PatchUtils.patch(
@@ -424,13 +440,20 @@ public class K8SManager {
                             V1Patch.PATCH_FORMAT_JSON_PATCH,
                             appsV1Api.getApiClient());
         } catch (ApiException e) {
+            log.info(e.getResponseBody());
+            e.printStackTrace();
+            if (stringBuilder != null){
+                stringBuilder.append(e.getResponseBody());
+                stringBuilder.append(e.getStackTrace().toString());
+            }
+
             return false;
         }
         return true;
     }
 
-    private boolean execPatch(V1Deployment v1Deployment, JsonArray jsonPatchArr){
-        return execPatch(v1Deployment, jsonPatchArr.toString());
+    private boolean execPatch(V1Deployment v1Deployment, JsonArray jsonPatchArr, StringBuilder stringBuilder){
+        return execPatch(v1Deployment, jsonPatchArr.toString(), stringBuilder);
     }
 
     private V1Deployment getDeployment(String nameSpace, String deploymentName) throws ApiException {

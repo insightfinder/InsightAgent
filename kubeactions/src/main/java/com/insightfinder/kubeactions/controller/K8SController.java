@@ -1,6 +1,7 @@
 package com.insightfinder.kubeactions.controller;
 
 import io.kubernetes.client.openapi.ApiException;
+import io.kubernetes.client.openapi.models.V1Deployment;
 import io.kubernetes.client.openapi.models.V1Node;
 import org.jose4j.json.internal.json_simple.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -65,9 +66,12 @@ public class K8SController {
         return k8SManager.getContainerMemLimit(namespace, deployment, container);
     }
 
-    @GetMapping("/request/{namespace}/{deployment}/{container}")
-    public long getContainerMemRequest(@RequestHeader(required = true) String serverId, @PathVariable String namespace, @PathVariable String deployment, @PathVariable String container) throws ApiException {
-        return k8SManager.getContainerMemRequest(namespace, deployment, container);
+    @GetMapping("/res/{namespace}/{deployment}")
+    public JSONObject getContainerMemRequest(@RequestHeader(required = true) String serverId, @PathVariable String namespace, @PathVariable String deployment) throws ApiException {
+        V1Deployment v1Deployment = k8SManager.getV1Deployment(namespace, deployment);
+        JSONObject retValue = new JSONObject();
+        retValue.put("deployment", v1Deployment);
+        return retValue;
     }
 
     @GetMapping("/res/{namespace}/{deployment}/{container}")
@@ -82,10 +86,11 @@ public class K8SController {
 
     @PostMapping("/res/{namespace}/{deployment}/{container}/limitMem/requestMem")
     public ResponseEntity<String> setContainerMem(@RequestHeader(required = true) String serverId, @PathVariable String namespace, @PathVariable String deployment, @PathVariable String container, long limitMem, long requestMem) throws ApiException {
-        if (k8SManager.setContainerMem(namespace, deployment, container, limitMem, requestMem)){
+        StringBuilder stringBuilder = new StringBuilder();
+        if (k8SManager.setContainerMem(namespace, deployment, container, limitMem, requestMem, stringBuilder)){
             return new ResponseEntity<>(HttpStatus.OK);
+        }else {
+            return new ResponseEntity<>(stringBuilder.toString(), HttpStatus.FORBIDDEN);
         }
-        return new ResponseEntity<>(HttpStatus.FORBIDDEN);
     }
-
 }
