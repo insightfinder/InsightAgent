@@ -48,6 +48,13 @@ This script gathers data to send to Insightfinder
 """
 
 
+def align_timestamp(timestamp, sampling_interval):
+    if sampling_interval == 0 or not timestamp:
+        return timestamp
+    else:
+        return int(timestamp / (sampling_interval * 1000)) * sampling_interval * 1000
+
+
 def is_matching_allow_regex(text, allow_regex_map):
     if (not allow_regex_map) or len(allow_regex_map) == 0:
         return True
@@ -129,7 +136,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                                                                                         len(hostids), len(items_keys), (
                                                                                                 arrow.now() - time_now).total_seconds()))
                 parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map, 'history',
-                                      agent_config_vars, track, data_buffer)
+                                      agent_config_vars, track, data_buffer, sampling_interval)
 
                 clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
         else:
@@ -144,7 +151,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                                                                                             len(items_keys), (
                                                                                                     arrow.now() - time_now).total_seconds()))
             parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
-                                  agent_config_vars, track, data_buffer)
+                                  agent_config_vars, track, data_buffer, sampling_interval)
             clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
     elif data_type == 'Alert':
         for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
@@ -154,7 +161,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                                                         'time_from': timestamp,
                                                         'time_till': timestamp + sampling_interval})
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
-                                  agent_config_vars, track, data_buffer)
+                                  agent_config_vars, track, data_buffer, sampling_interval)
 
             logger.info('Begin problem.get query from {} hosts'.format(len(hostids)))
             history_res = zapi.do_request('problem.get',
@@ -163,7 +170,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids),
                                                                             (arrow.now() - time_now).total_seconds()))
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
-                                  agent_config_vars, track, data_buffer)
+                                  agent_config_vars, track, data_buffer, sampling_interval)
             # clear data buffer when piece of time range end
             clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
     else:
@@ -177,7 +184,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids),
                                                                             (arrow.now() - time_now).total_seconds()))
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map, 'history',
-                                  agent_config_vars, track, data_buffer)
+                                  agent_config_vars, track, data_buffer, sampling_interval)
             clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
     return idx + 1
 
@@ -300,7 +307,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
 
 
 def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, replay_type, agent_config_vars, track,
-                          data_buffer):
+                          data_buffer, sampling_interval):
     count = 0
     logger.info('Reading {} messages'.format(len(result)))
     is_metric = True if data_type == 'Metric' else False
@@ -377,15 +384,22 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
 
             # set offset for timestamp
             timestamp += target_timestamp_timezone * 1000
-            timestamp = str(timestamp)
+            if is_metric:
+                timestamp = str(align_timestamp(timestamp, sampling_interval))
+            else:
+                timestamp = str(timestamp)
 
             key = '{}-{}'.format(timestamp, full_instance)
             if key not in data_buffer['buffer_dict']:
-                data_buffer['buffer_dict'][key] = {"timestamp": timestamp}
+                data_buffer['buffer_dict'][key] = {"timestamp": timestamp, "data": {}}
 
             if is_metric:
-                data_key = '{}[{}]'.format(data_field, full_instance)
-                data_buffer['buffer_dict'][key][data_key] = str(data_value)
+                data_buffer['buffer_dict'][key]['instanceName'] = full_instance
+                if component:
+                    data_buffer['buffer_dict'][key]['componentName'] = component
+
+                # data_key = '{}[{}]'.format(data_field, full_instance)
+                data_buffer['buffer_dict'][key]['data'][data_field] = str(data_value)
             else:
                 data_buffer['buffer_dict'][key]['tag'] = full_instance
                 if component:
@@ -858,30 +872,92 @@ def send_data_wrapper(logger, cli_config_vars, if_config_vars, track, data_buffe
     reset_track(track)
 
 
+def safe_string_to_float(s):
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config_vars):
+    to_send_data_dict = dict()
+    to_send_data_dict['licenseKey'] = if_config_vars['license_key']
+    to_send_data_dict['userName'] = if_config_vars['user_name']
+
+    data_dict = dict()
+    data_dict['projectName'] = if_config_vars['project_name']
+    data_dict['userName'] = if_config_vars['user_name']
+    if 'system_name' in if_config_vars:
+        data_dict['systemName'] = if_config_vars['system_name']
+    data_dict['iat'] = get_agent_type_from_project_type(if_config_vars)
+    if 'sampling_interval' in if_config_vars:
+        data_dict['si'] = str(if_config_vars['sampling_interval'])
+
+    instance_data_map = dict()
+    for chunk in chunk_metric_data:
+        instance_name = chunk['instanceName']
+        component_name = chunk.get('componentName')
+        timestamp = chunk['timestamp']
+        data = chunk['data']
+        if data and timestamp and instance_name:
+            ts = int(timestamp)
+            if instance_name not in instance_data_map:
+                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'dit': {}, }
+
+            if timestamp not in instance_data_map[instance_name]['dit']:
+                instance_data_map[instance_name]['dit'][timestamp] = {'t': ts, 'm': []}
+
+            data_set = instance_data_map[instance_name]['dit'][timestamp]['m']
+            for metric_name, metric_value in data.items():
+                float_value = safe_string_to_float(metric_value)
+                if float_value is not None:
+                    data_set.append({'m': metric_name, 'v': float_value})
+                else:
+                    data_set.append({'m': metric_name, 'v': 0.0})
+
+    data_dict['idm'] = instance_data_map
+    to_send_data_dict['data'] = data_dict
+
+    return to_send_data_dict
+
+
 def send_data_to_if(logger, chunk_metric_data, cli_config_vars, if_config_vars):
     send_data_time = time.time()
 
     # prepare data for metric streaming agent
-    data_to_post = initialize_api_post_data(logger, if_config_vars)
-    if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
-        for chunk in chunk_metric_data:
-            chunk['data'] = json.dumps(chunk['data'])
-    data_to_post[get_data_field_from_project_type(if_config_vars)] = json.dumps(chunk_metric_data)
-
-    logger.debug('First:\n' + str(chunk_metric_data[0]))
-    logger.debug('Last:\n' + str(chunk_metric_data[-1]))
-    logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
-    logger.info('Total Lines: ' + str(len(chunk_metric_data)))
+    data_to_post = None
+    json_to_post = None
+    if 'METRIC' in if_config_vars['project_type']:
+        json_to_post = convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config_vars)
+        post_url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v2/metric-data-receive')
+    else:
+        data_to_post = initialize_api_post_data(logger, if_config_vars)
+        if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
+            for chunk in chunk_metric_data:
+                chunk['data'] = json.dumps(chunk['data'])
+        data_to_post[get_data_field_from_project_type(if_config_vars)] = json.dumps(chunk_metric_data)
+        post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type(if_config_vars))
 
     # do not send if only testing
     if cli_config_vars['testing']:
         return
 
     # send the data
-    post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type(if_config_vars))
-    send_request(logger, post_url, 'POST', 'Could not send request to IF',
-                 str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
-                 verify=False, proxies=if_config_vars['if_proxies'])
+    if data_to_post:
+        logger.debug('First:\n' + str(chunk_metric_data[0]))
+        logger.debug('Last:\n' + str(chunk_metric_data[-1]))
+        logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
+        logger.info('Total Lines: ' + str(len(chunk_metric_data)))
+
+        send_request(logger, post_url, 'POST', 'Could not send request to IF',
+                     str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
+                     verify=False, proxies=if_config_vars['if_proxies'])
+    elif json_to_post:
+        logger.info('Total Data (bytes): ' + str(get_json_size_bytes(json_to_post)))
+        send_request(logger, post_url, 'POST', 'Could not send request to IF',
+                     str(get_json_size_bytes(json_to_post)) + ' bytes of data are reported.', json=json_to_post,
+                     verify=False, proxies=if_config_vars['if_proxies'])
+
     logger.info('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
 
 
@@ -985,7 +1061,7 @@ def get_api_from_project_type(if_config_vars):
         return 'incidentdatareceive'
     elif 'DEPLOYMENT' in if_config_vars['project_type']:
         return 'deploymentEventReceive'
-    else:  # MERTIC, LOG, ALERT
+    else:  # LOG, ALERT
         return 'customprojectrawdata'
 
 
