@@ -360,12 +360,12 @@ public class K8SManager {
             v1Deployment = getDeployment(nameSpace, deploymentName);
         } catch (ApiException e) {
             log.info(e.getResponseBody());
-
             e.printStackTrace();
             if (stringBuilder != null){
                 stringBuilder.append(e.getResponseBody());
                 stringBuilder.append(e.getStackTrace().toString());
             }
+            return false;
         }
         JsonArray jsonArray = new JsonArray();
         AtomicInteger index = new AtomicInteger();
