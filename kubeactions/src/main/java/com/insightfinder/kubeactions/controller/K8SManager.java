@@ -74,7 +74,7 @@ public class K8SManager {
         return null;
     }
 
-    public List<String> getPods(){
+    public Map<String, List<String>>  getPods(){
         V1PodList v1podList =
                 null;
         try {
@@ -84,11 +84,33 @@ public class K8SManager {
             log.info(e.getResponseBody());
             e.printStackTrace();
         }
-        List<String> podList =
-                v1podList.getItems().stream()
-                        .map(v1Pod -> v1Pod.getMetadata().getName())
-                        .collect(Collectors.toList());
-        return podList;
+
+        Map<String, List<String>> result = new HashMap<>();
+
+        v1podList.getItems().forEach(v1Pod -> {
+            String namespace = v1Pod.getMetadata().getNamespace();
+            String podName = v1Pod.getMetadata().getName();
+            if (!result.containsKey(namespace)){
+                result.put(namespace, new ArrayList<>());
+            }
+            result.get(namespace).add(podName);
+        });
+        return result;
+    }
+
+    public V1Pod getPod(String namespace,  String podName, StringBuilder stringBuilder){
+        V1Pod v1Pod = null;
+        try {
+            v1Pod = coreV1Api.readNamespacedPod(podName, namespace, null);
+        } catch (ApiException e) {
+            log.info(e.getResponseBody());
+            e.printStackTrace();
+            if (stringBuilder != null){
+                stringBuilder.append(e.getResponseBody());
+                stringBuilder.append(e.getStackTrace().toString());
+            }
+        }
+        return v1Pod;
     }
 
     public Map<String, List<String>> getNodes(String namespace) {
@@ -98,7 +120,8 @@ public class K8SManager {
             v1podList = coreV1Api.listNamespacedPod(namespace, null, null, null, null, null, null, null, null, null, null);
         } catch (ApiException e) {
             log.info(e.getResponseBody());
-            e.printStackTrace();        }
+            e.printStackTrace();
+        }
         v1podList.getItems().stream().forEach(v1Pod -> {
             if (!nodeMap.containsKey(v1Pod.getSpec().getNodeName())){
                 nodeMap.put(v1Pod.getSpec().getNodeName(), new ArrayList<>());
@@ -172,17 +195,6 @@ public class K8SManager {
         }
     }
 
-    public List<V1Node> listNodes(){
-        V1NodeList v1NodeList = null;
-        try {
-            v1NodeList = coreV1Api.listNode(null, null, null, null, null, null, null, null, null, null);
-        } catch (ApiException e) {
-            log.info(e.getResponseBody());
-            e.printStackTrace();
-        }
-        return v1NodeList.getItems();
-    }
-
     public boolean scaleBy(String nameSpace, String deploymentName, int podNum) {
         V1Deployment v1Deployment = null;
         try {
@@ -241,48 +253,6 @@ public class K8SManager {
             jsonArray.add(jsonObject);
         });
         return execPatch(v1Deployment, jsonArray, null);
-    }
-
-    public long getContainerMemLimit(String nameSpace, String deploymentName, String container) {
-        V1Deployment v1Deployment = null;
-        try {
-            v1Deployment = getDeployment(nameSpace, deploymentName);
-        } catch (ApiException e) {
-            log.info(e.getResponseBody());
-            e.printStackTrace();
-        }
-        AtomicLong retValue = new AtomicLong();
-        v1Deployment.getSpec().getTemplate().getSpec().getContainers().forEach(v1Container -> {
-            if (v1Container.getName().equalsIgnoreCase(container)){
-                Quantity quantity = v1Container.getResources().getLimits().get("memory");
-                if (quantity != null){
-                    BigDecimal ret = quantity.getNumber().divide(new BigDecimal(1024 * 1024));
-                    retValue.set(ret.longValue());
-                }
-            }
-        });
-        return retValue.get();
-    }
-
-    public long getContainerMemRequest(String nameSpace, String deploymentName, String container) {
-        V1Deployment v1Deployment = null;
-        try {
-            v1Deployment = getDeployment(nameSpace, deploymentName);
-        } catch (ApiException e) {
-            log.info(e.getResponseBody());
-            e.printStackTrace();
-        }
-        AtomicLong retValue = new AtomicLong();
-        v1Deployment.getSpec().getTemplate().getSpec().getContainers().forEach(v1Container -> {
-            if (v1Container.getName().equalsIgnoreCase(container)){
-                Quantity quantity = v1Container.getResources().getRequests().get("memory");
-                if (quantity != null){
-                    BigDecimal ret = quantity.getNumber().divide(new BigDecimal(1024 * 1024));
-                    retValue.set(ret.longValue());
-                }
-            }
-        });
-        return retValue.get();
     }
 
     public JSONObject getContainerMem(String nameSpace, String deploymentName, String container) {
