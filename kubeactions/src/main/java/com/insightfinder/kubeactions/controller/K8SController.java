@@ -68,9 +68,14 @@ public class K8SController {
 
     @GetMapping("/res/{namespace}/{deployment}")
     public JSONObject getContainerMemRequest(@RequestHeader(required = true) String serverId, @PathVariable String namespace, @PathVariable String deployment) throws ApiException {
-        V1Deployment v1Deployment = k8SManager.getV1Deployment(namespace, deployment);
+        StringBuilder stringBuilder = new StringBuilder();
+        V1Deployment v1Deployment = k8SManager.getV1Deployment(namespace, deployment, stringBuilder);
         JSONObject retValue = new JSONObject();
-        retValue.put("deployment", v1Deployment);
+        if (v1Deployment != null){
+            retValue.put("deployment", v1Deployment.toString());
+        }else{
+            retValue.put("errors", stringBuilder.toString());
+        }
         return retValue;
     }
 
