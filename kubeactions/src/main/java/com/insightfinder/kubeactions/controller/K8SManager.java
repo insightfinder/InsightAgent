@@ -286,14 +286,16 @@ public class K8SManager {
     }
 
     public JSONObject getContainerMem(String nameSpace, String deploymentName, String container) {
+        JSONObject retValue = new JSONObject();
         V1Deployment v1Deployment = null;
         try {
             v1Deployment = getDeployment(nameSpace, deploymentName);
         } catch (ApiException e) {
             log.info(e.getResponseBody());
             e.printStackTrace();
+            retValue.put("deploymentError", deploymentName + " is not found under " + nameSpace);
+            return retValue;
         }
-        JSONObject retValue = new JSONObject();
         retValue.put("deployment", deploymentName);
         v1Deployment.getSpec().getTemplate().getSpec().getContainers().forEach(v1Container -> {
             if (v1Container.getName().equalsIgnoreCase(container)){
