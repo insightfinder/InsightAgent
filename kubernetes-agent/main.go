@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/bigkevmcd/go-configparser"
 	"kubernetes-agent/insightfinder"
+	"kubernetes-agent/jaeger"
 	"kubernetes-agent/kubernetes"
 	"kubernetes-agent/loki"
 	"kubernetes-agent/prometheus"
@@ -15,6 +16,7 @@ import (
 const GENERAL_SECTION = "general"
 const PROMETHEUS_SECTION = "prometheus"
 const LOKI_SECTION = "loki"
+const JAEGER_SECTION = "jaeger"
 
 func createPrometheusServer(config *configparser.ConfigParser) prometheus.PrometheusServer {
 	prometheusEndpoint, _ := config.Get(PROMETHEUS_SECTION, "endpoint")
@@ -43,6 +45,13 @@ func createLokiServer(config *configparser.ConfigParser) loki.LokiServer {
 	return loki.LokiServer{Endpoint: lokiEndpoint, Username: lokiUsername, Password: lokiPassword}
 }
 
+func createJaegerServer(config *configparser.ConfigParser) jaeger.Jaeger {
+	jaegerEndpoint, _ := config.Get(JAEGER_SECTION, "endpoint")
+	jaegerUsername, _ := config.Get(JAEGER_SECTION, "user")
+	jaegerPassword, _ := config.Get(JAEGER_SECTION, "password")
+	return jaeger.Jaeger{Endpoint: jaegerEndpoint, Username: jaegerUsername, Password: jaegerPassword}
+}
+
 func main() {
 
 	// Read configuration files
@@ -64,7 +73,6 @@ func main() {
 	// Initialize InstanceName DB
 	instanceMapper := tools.InstanceMapper{}
 	instanceMapper.Initialize(&kubernetesServer)
-
 	for _, configFile := range configFiles {
 		// Add Namespaces from all config files
 		namespaceFilter, _ := configFile.Get(GENERAL_SECTION, "namespace")
@@ -74,10 +82,9 @@ func main() {
 		}
 	}
 
-	// Initialize time ranges
+	// Start data collection routine
 	EndTime := time.Now()
 	StartTime := EndTime.Add(-time.Second * 10)
-
 	for {
 		log.Output(2, "Start...")
 
@@ -142,9 +149,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 		// Collect Data
 		log.Output(2, fmt.Sprintf("Prepare to collect metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 		metricData := make(map[string][]prometheus.PromMetricData)
-
-		// Prepare some mapping
-		var PVCPodMapping *map[string]string
+		PVCMetricData := make(map[string][]prometheus.PromMetricData)
 
 		if collectionTarget == "node" {
 			metricData["CPU"] = prometheusServer.GetMetricData("NodeCPU", "", Before, Now)
@@ -158,36 +163,60 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 			metricData["Processes"] = prometheusServer.GetMetricData("NodeProcesses", "", Before, Now)
 			metricData["BlockedProcesses"] = prometheusServer.GetMetricData("NodeBlockedProcesses", "", Before, Now)
 		} else if collectionTarget == "pvc" {
-			metricData["Capacity"] = prometheusServer.GetMetricData("PVCCapacity", namespaceFilter, Before, Now)
-			metricData["Used"] = prometheusServer.GetMetricData("PVCUsed", namespaceFilter, Before, Now)
-			metricData["Usage"] = prometheusServer.GetMetricData("PVCUsage", namespaceFilter, Before, Now)
-			PVCPodMapping = kubernetesServer.GetPVCPodsMapping(namespaceFilter)
+			log.Output(2, "Skip: Collecting metric data from PVC.")
 		} else {
 			metricData["CPUCores"] = prometheusServer.GetMetricData("PodCPUCores", namespaceFilter, Before, Now)
 			metricData["CPU"] = prometheusServer.GetMetricData("PodCPUUsage", namespaceFilter, Before, Now)
 			metricData["Memory"] = prometheusServer.GetMetricData("PodMemory", namespaceFilter, Before, Now)
 			metricData["MemoryUsage"] = prometheusServer.GetMetricData("PodMemoryUsage", namespaceFilter, Before, Now)
+			metricData["MemoryRequestUsage"] = prometheusServer.GetMetricData("PodRequestMemoryUsage", namespaceFilter, Before, Now)
+			metricData["MemoryRequests"] = prometheusServer.GetMetricData("PodMemoryRequests", namespaceFilter, Before, Now)
+			metricData["MemoryLimits"] = prometheusServer.GetMetricData("PodMemoryLimits", namespaceFilter, Before, Now)
 			metricData["DiskRead"] = prometheusServer.GetMetricData("PodDiskRead", namespaceFilter, Before, Now)
 			metricData["DiskWrite"] = prometheusServer.GetMetricData("PodDiskWrite", namespaceFilter, Before, Now)
 			metricData["NetworkIn"] = prometheusServer.GetMetricData("PodNetworkIn", namespaceFilter, Before, Now)
 			metricData["NetworkOut"] = prometheusServer.GetMetricData("PodNetworkOut", namespaceFilter, Before, Now)
 			metricData["Processes"] = prometheusServer.GetMetricData("PodProcesses", namespaceFilter, Before, Now)
+			metricData["RestartCount"] = prometheusServer.GetMetricData("PodContainerRestart", namespaceFilter, Before, Now)
+
+			// Collect PVC Metrics and append to Pods
+			PVCMetricData["Capacity"] = prometheusServer.GetMetricData("PVCCapacity", namespaceFilter, Before, Now)
+			PVCMetricData["Used"] = prometheusServer.GetMetricData("PVCUsed", namespaceFilter, Before, Now)
+			PVCMetricData["Usage"] = prometheusServer.GetMetricData("PVCUsage", namespaceFilter, Before, Now)
+			PodPVCMapping := kubernetesServer.GetPodsPVCMapping(namespaceFilter)
+			tools.MergePVCMetricsToPodMetrics(&PVCMetricData, &metricData, PodPVCMapping)
+
 		}
 		log.Output(2, fmt.Sprintf("Finished collecting metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 
-		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper, PVCPodMapping, &postProcessor)
+		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper, &postProcessor)
 		tools.PrintStruct(*metricPayload, false, IFConfig["projectName"].(string))
 		log.Output(2, fmt.Sprintf("Start sending metic data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 		insightfinder.SendMetricData(metricPayload, IFConfig)
 		log.Output(2, "Finished sending metric data.")
 	} else if collectionType == "event" {
-		events := kubernetesServer.GetEvents(namespaceFilter, Before, Now)
-		eventPayload := tools.BuildEventsPayload(events, instanceMapper, &postProcessor)
-		tools.PrintStruct(*eventPayload, false, IFConfig["projectName"].(string))
+		// Collect normal events
+		generalEvents := kubernetesServer.GetEvents(namespaceFilter, Before, Now)
+		generalEventPayload := tools.BuildEventsPayload(generalEvents, instanceMapper, &postProcessor)
+		tools.PrintStruct(*generalEventPayload, false, IFConfig["projectName"].(string)+"-general")
+
+		// Collect Pod Container Exit Events
+		containerExitEvents := kubernetesServer.GetPodsContainerExitEvents(namespaceFilter, Before, Now)
+		containerExitEventPayload := tools.BuildEventsPayload(containerExitEvents, instanceMapper, &postProcessor)
+		tools.PrintStruct(*containerExitEventPayload, false, IFConfig["projectName"].(string)+"-containerExit")
+
 		log.Output(2, fmt.Sprintf("Start sending event data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
-		insightfinder.SendLogData(eventPayload, IFConfig)
+		insightfinder.SendLogData(generalEventPayload, IFConfig)
+		insightfinder.SendLogData(containerExitEventPayload, IFConfig)
 		log.Output(2, "Finished sending event data.")
 
+	} else if collectionType == "trace" {
+		// Collect Dependency Graph
+		jaegerServer := createJaegerServer(configFile)
+		DAG := jaegerServer.GetDAG()
+		OTMapping := kubernetesServer.GetOpenTelemetryMapping(namespaceFilter)
+		dependencyMap := tools.ProcessDependencyData(DAG, OTMapping, instanceMapper, &postProcessor)
+		insightfinder.SendDependencyMap(dependencyMap, IFConfig)
 	} else {
 		log.Output(2, "Unknown collection type.")
 	}

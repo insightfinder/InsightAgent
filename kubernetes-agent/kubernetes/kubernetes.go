@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -117,6 +118,18 @@ func (k *KubernetesServer) GetEvents(namespace string, startTime time.Time, endT
 				Kind:      event.Regarding.Kind,
 			},
 		}
+
+		// Extract Container from Pod events
+		if event.Regarding.Kind == "Pod" {
+			containerRegex := regexp.MustCompile(`(?i)containers\{(.*?)\}`)
+			containerNameMatched := containerRegex.FindStringSubmatch(event.Regarding.FieldPath)
+			if containerNameMatched != nil {
+				containerName := containerNameMatched[1]
+				result.Regarding.Container = containerName
+			}
+		}
+
+		// Add to the result list
 		results = append(results, result)
 
 	}
@@ -134,6 +147,9 @@ func (k *KubernetesServer) GetPods(namespace string) *map[string]map[string]map[
 		}
 
 		// Determine the parent resourceKind of this pod
+		if pod.OwnerReferences == nil || len(pod.OwnerReferences) == 0 {
+			continue
+		}
 		resourceKind := pod.OwnerReferences[0].Kind
 		resourceName := pod.OwnerReferences[0].Name
 		if pod.OwnerReferences[0].Kind == "ReplicaSet" {
@@ -161,16 +177,130 @@ func (k *KubernetesServer) GetPods(namespace string) *map[string]map[string]map[
 	return &result
 }
 
-func (k *KubernetesServer) GetPVCPodsMapping(namespace string) *map[string]string {
-	var result map[string]string = make(map[string]string)
-	Pods, _ := k.Client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
-	for _, pod := range Pods.Items {
-		for _, volume := range pod.Spec.Volumes {
-			if volume.PersistentVolumeClaim != nil {
-				PVC := volume.PersistentVolumeClaim.ClaimName
-				result[PVC] = pod.Name
+func (k *KubernetesServer) GetPodsContainerExitEvents(namespace string, startTime time.Time, endTime time.Time) *[]EventEntity {
+	results := make([]EventEntity, 0)
+	cache := make(map[string]EventEntity)
+
+	// Get All Pods
+	Pods, err := k.Client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		log.Output(2, "Failed to get pods in namespace: "+err.Error())
+	}
+	for _, Pod := range Pods.Items {
+		for _, containerStatus := range Pod.Status.ContainerStatuses {
+			if containerStatus.LastTerminationState.Terminated != nil {
+				containerLastTerminated := containerStatus.LastTerminationState.Terminated
+				if containerLastTerminated.FinishedAt.Time.After(startTime) && containerLastTerminated.FinishedAt.Time.Before(endTime) {
+					// Save the same event to cache to avoid duplicate events
+					cache[fmt.Sprint(Pod.Name, containerStatus.Name, containerLastTerminated.FinishedAt.Time.UnixMilli(), containerLastTerminated.Reason)] = EventEntity{
+						Name:      Pod.Name,
+						Namespace: Pod.Namespace,
+						Time:      containerLastTerminated.FinishedAt.Time,
+						Type:      "Warning",
+						Reason:    containerLastTerminated.Reason,
+						Note:      fmt.Sprintf("Container %s Terminated with exit code %d.", containerStatus.Name, containerLastTerminated.ExitCode),
+						Regarding: RegardingEntity{
+							Name:      Pod.Name,
+							Namespace: Pod.Namespace,
+							Kind:      "Pod",
+							Container: containerStatus.Name,
+						},
+					}
+				}
 			}
 		}
 	}
+
+	// Add all events to result list.
+	for _, event := range cache {
+		results = append(results, event)
+	}
+
+	return &results
+}
+
+func (k *KubernetesServer) GetPodsPVCMapping(namespace string) *map[string]map[string]map[string][]string {
+	// PVC -> Pod -> MountName -> [Containers]
+	var result = make(map[string]map[string]map[string][]string)
+
+	Pods, _ := k.Client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
+	ContainerVolumeMountMap := k.GetVolumeMountInfoFromPods(Pods)
+	for _, pod := range Pods.Items {
+		for _, volume := range pod.Spec.Volumes {
+			if volume.PersistentVolumeClaim != nil {
+				if _, ok := result[pod.Name]; !ok {
+					result[pod.Name] = make(map[string]map[string][]string)
+				}
+
+				PVC := volume.PersistentVolumeClaim.ClaimName
+				mountPointName := volume.Name
+				for _, container := range (*ContainerVolumeMountMap)[pod.Name][mountPointName] {
+					if _, ok := result[pod.Name][PVC]; !ok {
+						result[pod.Name][PVC] = make(map[string][]string)
+					}
+					result[pod.Name][PVC][mountPointName] = append(result[pod.Name][PVC][mountPointName], container)
+				}
+			}
+		}
+	}
+
 	return &result
+}
+
+func (k *KubernetesServer) GetVolumeMountInfoFromPods(Pods *corev1.PodList) *map[string]map[string][]string {
+	var PodContainerMountMap = make(map[string]map[string]map[string]string)
+
+	// Build PodContainerMountMap: PodName -> ContainerName -> VolumeName -> MountPath
+	for _, pod := range Pods.Items {
+		if _, ok := PodContainerMountMap[pod.Name]; !ok {
+			PodContainerMountMap[pod.Name] = make(map[string]map[string]string)
+		}
+		for _, container := range pod.Spec.Containers {
+			if _, ok := PodContainerMountMap[pod.Name][container.Name]; !ok {
+				PodContainerMountMap[pod.Name][container.Name] = make(map[string]string)
+			}
+			for _, volumeMount := range container.VolumeMounts {
+				PodContainerMountMap[pod.Name][container.Name][volumeMount.Name] = volumeMount.MountPath
+			}
+		}
+	}
+
+	// Convert to MountPointMap: Pod -> MountPointName -> list[ContainerNames]
+	var MountPointMap = make(map[string]map[string][]string)
+	for podName, containerMountMap := range PodContainerMountMap {
+		for containerName, volumeMountMap := range containerMountMap {
+			for volumeName := range volumeMountMap {
+				if _, ok := MountPointMap[podName]; !ok {
+					MountPointMap[podName] = make(map[string][]string)
+				}
+				MountPointMap[podName][volumeName] = append(MountPointMap[podName][volumeName], containerName)
+			}
+		}
+	}
+	return &MountPointMap
+}
+
+func (k *KubernetesServer) GetOpenTelemetryMapping(namespace string) *map[string]string {
+	results := make(map[string]string)
+
+	// Get app.kubernetes.io/component label from all deployments
+	Deployments, err := k.Client.AppsV1().Deployments(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "app.kubernetes.io/component"})
+	if err != nil {
+		log.Output(2, "Failed to get deployments in namespace: "+err.Error())
+	}
+
+	// Get app.kubernetes.io/component label from all statefulSets
+	StatefulSets, err := k.Client.AppsV1().StatefulSets(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "app.kubernetes.io/component"})
+	if err != nil {
+		log.Output(2, "Failed to get statefulSets in namespace: "+err.Error())
+	}
+
+	for _, deployment := range Deployments.Items {
+		results[deployment.Labels["app.kubernetes.io/component"]] = deployment.Name
+	}
+
+	for _, statefulSet := range StatefulSets.Items {
+		results[statefulSet.Labels["app.kubernetes.io/component"]] = statefulSet.Name
+	}
+	return &results
 }
