@@ -236,7 +236,7 @@ public class K8SManager {
             JsonObject jsonObject = new JsonObject();
             jsonArray.add(jsonObject);
         });
-        return execPatch(v1Deployment, jsonArray);
+        return execPatch(v1Deployment, jsonArray, null);
     }
 
     public long getContainerMemLimit(String nameSpace, String deploymentName, String container) {
@@ -379,7 +379,7 @@ public class K8SManager {
             index.set(index.get() + 1);
         });
         if (!jsonArray.isEmpty()){
-           return execPatch(v1Deployment, jsonArray);
+           return execPatch(v1Deployment, jsonArray, stringBuilder);
         }
         return false;
     }
