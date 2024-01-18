@@ -1,0 +1,1 @@
+Mount a host path which has application.yml to /app/config
