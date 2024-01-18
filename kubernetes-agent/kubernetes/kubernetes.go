@@ -66,33 +66,31 @@ func (k *KubernetesServer) VerifyConnection() {
 	}
 }
 
-func (k *KubernetesServer) GetTargetReplicas(namespace string) *map[string]map[string]int32 {
-	targetReplicas := make(map[string]map[string]int32)
+func (k *KubernetesServer) GetCurrentReplicas(namespace string) *map[string]map[string]int32 {
+	currentReplicas := make(map[string]map[string]int32)
 
 	deployments, _ := k.Client.AppsV1().Deployments(namespace).List(context.Background(), metav1.ListOptions{})
 	statefulSets, _ := k.Client.AppsV1().StatefulSets(namespace).List(context.Background(), metav1.ListOptions{})
 
 	// Process replicaSets
 	for _, deployment := range deployments.Items {
-		if _, ok := targetReplicas["Deployment"]; !ok {
-			targetReplicas["Deployment"] = make(map[string]int32)
+		if _, ok := currentReplicas["Deployment"]; !ok {
+			currentReplicas["Deployment"] = make(map[string]int32)
 		}
-		targetReplicas["Deployment"][deployment.Name] = *deployment.Spec.Replicas
+		currentReplicas["Deployment"][deployment.Name] = deployment.Status.Replicas
 	}
 
 	// Process statefulSets
 	for _, statefulSet := range statefulSets.Items {
-		if _, ok := targetReplicas["StatefulSet"]; !ok {
-			targetReplicas["StatefulSet"] = make(map[string]int32)
+		if _, ok := currentReplicas["StatefulSet"]; !ok {
+			currentReplicas["StatefulSet"] = make(map[string]int32)
 		}
-		targetReplicas["StatefulSet"][statefulSet.Name] = *statefulSet.Spec.Replicas
+		currentReplicas["StatefulSet"][statefulSet.Name] = statefulSet.Status.Replicas
 
 	}
 
-	return &targetReplicas
-
+	return &currentReplicas
 }
-
 func (k *KubernetesServer) GetEvents(namespace string, startTime time.Time, endTime time.Time) *[]EventEntity {
 	results := make([]EventEntity, 0)
 	events, err := k.Client.EventsV1().Events(namespace).List(context.Background(), metav1.ListOptions{})
