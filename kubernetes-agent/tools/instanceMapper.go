@@ -125,7 +125,7 @@ func (mapper *InstanceMapper) Update() {
 
 	for namespace, _ := range mapper.Storage {
 		podsCreated, podsDeleted := mapper.GetDiffMap(namespace)
-		targetReplicas := *mapper.KubernetesServer.GetTargetReplicas(namespace)
+		targetReplicas := *mapper.KubernetesServer.GetCurrentReplicas(namespace)
 
 		// Delete pods in slots
 		for resourceKind, resources := range *podsDeleted {
