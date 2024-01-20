@@ -55,4 +55,4 @@ if __name__ == '__main__':
 
     if args.start:
         verify()
-        system("python3 -m flask run --cert=cert.pem --key=key.pem --host=0.0.0.0 --port=" + serverPort + "  > ./action-server.log 2>&1 &")
+        system("./venv/bin/python3 -m flask run --cert=cert.pem --key=key.pem --host=0.0.0.0 --port=" + serverPort + "  > ./action-server.log 2>&1 &")
