@@ -146,20 +146,21 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
         try:
             logger.debug(message)
 
-            date_field = message.get('metric_name')
-
-            # get metric name from `metrics_name_field`, use the default name __name__ if not set.
-            metrics_name_field = agent_config_vars['metrics_name_field']
-            if is_batch_mode and len(metrics_name_field) == 0:
-                metrics_name_field = ['__name__']
-
-            if metrics_name_field:
-                name_fields = [message.get('metric').get(f) for f in metrics_name_field or []]
-                name_fields = [f for f in name_fields if f]
-                if len(name_fields) > 0:
-                    date_field = '_'.join(name_fields)
-            if not date_field and query_metric_name:
+            if query_metric_name:
                 date_field = query_metric_name
+            else:
+                date_field = message.get('metric_name')
+
+                # get metric name from `metrics_name_field`, use the default name __name__ if not set.
+                metrics_name_field = agent_config_vars['metrics_name_field']
+                if is_batch_mode and len(metrics_name_field) == 0:
+                    metrics_name_field = ['__name__']
+
+                if metrics_name_field:
+                    name_fields = [message.get('metric').get(f) for f in metrics_name_field or []]
+                    name_fields = [f for f in name_fields if f]
+                    if len(name_fields) > 0:
+                        date_field = '_'.join(name_fields)
 
             # instance name
             instance = 'Application'
