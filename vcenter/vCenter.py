@@ -558,11 +558,6 @@ def check_project_exist(if_config_vars, project_name, system_name):
 
 def worker_process(path):
     if_vars, vCenter_vars, agent_vars = get_config_vars(path)
-    project_name = if_vars['project_name']
-    if project_name:
-        check_success = check_project_exist(if_vars, project_name, None)
-        if not check_success:
-            return
     try:
         metric_data = collect_metric_data(vCenter_vars, agent_vars)
         if not cli_config_vars['testing']:
@@ -584,9 +579,19 @@ if __name__ == '__main__':
         sys.exit(1)
 
     logger = set_logger_config()
+    valid_config_files = list()
 
-    pool = multiprocessing.Pool(len(config_files))
-    pool_result = pool.map_async(worker_process, config_files)
+    logger = set_logger_config()
+    for path in config_files:
+        if_vars, vCenter_vars, agent_vars = get_config_vars(path)
+        project_name = if_vars['project_name']
+        if project_name:
+            check_success = check_project_exist(if_vars, project_name, None)
+            if check_success:
+                valid_config_files.append(path)
+    
+    pool = multiprocessing.Pool(len(valid_config_files))
+    pool_result = pool.map_async(worker_process, valid_config_files)
     pool.close()
 
     try:
