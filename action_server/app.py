@@ -6,6 +6,7 @@ import sys
 import ssl
 from flask import Flask, make_response, request
 
+
 class ScriptFailWithCode(Exception):
     """Exception raised for script errors with an error code
     Attributes:
@@ -17,6 +18,7 @@ class ScriptFailWithCode(Exception):
         self.code = code
         self.message = message
 
+
 class ScriptFail(Exception):
     """Exception raised for failure without error code
     Attributes:
@@ -26,6 +28,7 @@ class ScriptFail(Exception):
     def __init__(self, message):
         self.message = message
 
+
 def runCommand(command):
     logger.debug(command)
     result = subprocess.run(command, shell=True)
@@ -33,6 +36,7 @@ def runCommand(command):
         raise ScriptFailWithCode(result.returncode, "failed to run script")
         return make_response("failed to run command ", result.returncode)
     return make_response("Success ", 200)
+
 
 class LessThanFilter(logging.Filter):
     def __init__(self, exclusive_maximum, name=""):
@@ -42,6 +46,8 @@ class LessThanFilter(logging.Filter):
     def filter(self, record):
         # non-zero return means we log this message
         return 1 if record.levelno < self.max_level else 0
+
+
 def setloggerConfig():
     # Get the root logger
     logger = logging.getLogger(__name__)
@@ -58,15 +64,18 @@ def setloggerConfig():
     logger.addHandler(logging_handler_err)
     return logger
 
+
 app = Flask(__name__)
 config = configparser.ConfigParser()
 config.read("asconfig.ini")
 cmdsJson = json.loads(config['DEFAULT']['cmds'])
 logger = setloggerConfig()
 
+
 @app.route('/run', methods=['Get'])
 def hello_get():
     return "hello"
+
 
 @app.route('/run', methods=['POST'])
 def hello_post():
@@ -77,18 +86,23 @@ def hello_post():
             isTargetAll = request.form.get('isTargetAll')
             instance = request.form.get('instance')
             ip = request.form.get('ip')
+            container = request.form.get('container')
+            command = cmdsJson[cmd]
+            if container:
+                command = command + " --container " + container
             if ip:
-                return runCommand(cmdsJson[cmd] + " --limit " + ip)
+                return runCommand(command + " --limit " + ip)
             elif instance:
-                return runCommand(cmdsJson[cmd] + " --limit " + instance)
+                return runCommand(command + " --limit " + instance)
             else:
-                return runCommand(cmdsJson[cmd])
+                return runCommand(command)
         else:
             msg = f'CMD not in whitelist!'
             return make_response(msg, 422)
     else:
         msg = f'Fail!'
         return make_response(msg, 422)
+
 
 if __name__ == "__main__":
     context = ssl.create_default_context()
