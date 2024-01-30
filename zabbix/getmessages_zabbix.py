@@ -318,6 +318,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
     device_field = agent_config_vars['device_field']
     target_timestamp_timezone = agent_config_vars['target_timestamp_timezone']
     no_component_field = agent_config_vars['no_component_field']
+    alert_data_fields = agent_config_vars['alert_data_fields']
 
     for message in result:
         try:
@@ -379,8 +380,18 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                 data_field = item['name']
                 data_field = make_safe_data_key(data_field)
 
-            data_value = message['name'] if is_alert else message['lastvalue'] if replay_type == 'live' else message[
-                'value']
+            data_value = None
+            if is_alert:
+                if alert_data_fields and len(alert_data_fields) == 1:
+                    data_value = message.get([alert_data_fields[0]])
+                elif alert_data_fields and len(alert_data_fields) > 1:
+                    data_value = {field: message.get(field) for field in alert_data_fields}
+                else:
+                    data_value = message
+            elif replay_type == 'live':
+                data_value = str(message['lastvalue'])
+            else:
+                data_value = str(message['value'])
 
             # set offset for timestamp
             timestamp += target_timestamp_timezone * 1000
@@ -399,12 +410,12 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                     data_buffer['buffer_dict'][key]['componentName'] = component
 
                 # data_key = '{}[{}]'.format(data_field, full_instance)
-                data_buffer['buffer_dict'][key]['data'][data_field] = str(data_value)
+                data_buffer['buffer_dict'][key]['data'][data_field] = data_value
             else:
                 data_buffer['buffer_dict'][key]['tag'] = full_instance
                 if component:
                     data_buffer['buffer_dict'][key]['componentName'] = component
-                data_buffer['buffer_dict'][key]['data'] = str(data_value)
+                data_buffer['buffer_dict'][key]['data'] = data_value
 
         except Exception as e:
             logger.warn('Error when parsing message')
@@ -491,6 +502,7 @@ def get_agent_config_vars(logger, config_ini):
             timestamp_format = config_parser.get('zabbix', 'timestamp_format', raw=True)
             timezone = config_parser.get('zabbix', 'timezone') or 'UTC'
             data_fields = config_parser.get('zabbix', 'data_fields', raw=True)
+            alert_data_fields = config_parser.get('zabbix', 'alert_data_fields', raw=True)
 
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
@@ -580,9 +592,6 @@ def get_agent_config_vars(logger, config_ini):
         timestamp_fields = timestamp_field.split(',')
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
-            # for project_field in project_fields:
-            #   if project_field in data_fields:
-            #       data_fields.pop(data_fields.index(project_field))
             for instance_field in instance_fields:
                 if instance_field in data_fields:
                     data_fields.pop(data_fields.index(instance_field))
@@ -592,6 +601,9 @@ def get_agent_config_vars(logger, config_ini):
             for timestamp_field in timestamp_fields:
                 if timestamp_field in data_fields:
                     data_fields.pop(data_fields.index(timestamp_field))
+
+        if len(alert_data_fields) != 0:
+            alert_data_fields = [x for x in alert_data_fields.split(',') if x.strip()]
 
         # add parsed variables to a global
         config_vars = {'zabbix_kwargs': zabbix_kwargs, 'host_groups': host_groups, 'hosts': hosts,
@@ -603,7 +615,8 @@ def get_agent_config_vars(logger, config_ini):
                        'his_time_range': his_time_range, 'proxies': agent_proxies, 'data_format': data_format,
                        # 'project_field': project_fields,
                        'instance_field': instance_fields, 'no_component_field': no_component_field,
-                       'device_field': device_fields, 'data_fields': data_fields, 'timestamp_field': timestamp_fields,
+                       'device_field': device_fields, 'data_fields': data_fields, 'alert_data_fields': alert_data_fields,
+                       'timestamp_field': timestamp_fields,
                        'target_timestamp_timezone': target_timestamp_timezone, 'timezone': timezone,
                        'timestamp_format': timestamp_format, }
 
@@ -948,12 +961,14 @@ def send_data_to_if(logger, chunk_metric_data, cli_config_vars, if_config_vars):
         logger.debug('Last:\n' + str(chunk_metric_data[-1]))
         logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
         logger.info('Total Lines: ' + str(len(chunk_metric_data)))
+        print(data_to_post)
 
         send_request(logger, post_url, 'POST', 'Could not send request to IF',
                      str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
                      verify=False, proxies=if_config_vars['if_proxies'])
     elif json_to_post:
         logger.info('Total Data (bytes): ' + str(get_json_size_bytes(json_to_post)))
+        print(json_to_post)
         send_request(logger, post_url, 'POST', 'Could not send request to IF',
                      str(get_json_size_bytes(json_to_post)) + ' bytes of data are reported.', json=json_to_post,
                      verify=False, proxies=if_config_vars['if_proxies'])
