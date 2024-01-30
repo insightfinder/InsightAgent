@@ -961,14 +961,12 @@ def send_data_to_if(logger, chunk_metric_data, cli_config_vars, if_config_vars):
         logger.debug('Last:\n' + str(chunk_metric_data[-1]))
         logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
         logger.info('Total Lines: ' + str(len(chunk_metric_data)))
-        print(data_to_post)
 
         send_request(logger, post_url, 'POST', 'Could not send request to IF',
                      str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
                      verify=False, proxies=if_config_vars['if_proxies'])
     elif json_to_post:
         logger.info('Total Data (bytes): ' + str(get_json_size_bytes(json_to_post)))
-        print(json_to_post)
         send_request(logger, post_url, 'POST', 'Could not send request to IF',
                      str(get_json_size_bytes(json_to_post)) + ' bytes of data are reported.', json=json_to_post,
                      verify=False, proxies=if_config_vars['if_proxies'])
