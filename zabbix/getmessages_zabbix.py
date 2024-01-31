@@ -99,7 +99,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
         timestamp_end = his_time_range[1]
         timestamp_start = his_time_range[0]
     else:
-        timestamp_end = int(arrow.now().floor('second').timestamp())
+        timestamp_end = int(arrow.utcnow().floor('second').timestamp())
         timestamp_start = timestamp_end - if_config_vars["run_interval"]
 
     items_ids_map = {}
@@ -125,7 +125,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
         if his_time_range:
             logger.debug('Using time range for replay data: {}'.format(his_time_range))
             for timestamp in range(timestamp_start, timestamp_end, sampling_interval):
-                time_now = arrow.now()
+                time_now = arrow.utcnow()
                 logger.info('Begin history.get query from {} hosts'.format(len(hostids)))
                 history_res = zapi.do_request('history.get',
                                               {'output': 'extend', "history": history_type, "hostids": hostids,
@@ -134,13 +134,13 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                 logger.info(
                     'Query {} items from {} hosts with {} metrics in {} seconds'.format(len(history_res['result']),
                                                                                         len(hostids), len(items_keys), (
-                                                                                                arrow.now() - time_now).total_seconds()))
+                                                                                                arrow.utcnow() - time_now).total_seconds()))
                 parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map, 'history',
                                       agent_config_vars, track, data_buffer, sampling_interval)
 
                 clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
         else:
-            time_now = arrow.now()
+            time_now = arrow.utcnow()
             metric_output = ['key_', 'itemid', 'lastclock', 'clock', 'lastvalue', 'value']
             params = {'output': metric_output, "hostids": hostids, "selectHosts": ['hostId'],
                       'filter': {'value_type': value_type_list, 'key_': items_keys}}
@@ -149,42 +149,58 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             logger.info('Query {} items from {} hosts with {} metrics in {} seconds'.format(len(items_res['result']),
                                                                                             len(hostids),
                                                                                             len(items_keys), (
-                                                                                                    arrow.now() - time_now).total_seconds()))
+                                                                                                    arrow.utcnow() - time_now).total_seconds()))
             parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
                                   agent_config_vars, track, data_buffer, sampling_interval)
             clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
     elif data_type == 'Alert':
         for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
-            time_now = arrow.now()
-            logger.info('Begin event.get query from {} hosts'.format(len(hostids)))
-            history_res = zapi.do_request('event.get', {'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend',
-                                                        'time_from': timestamp,
-                                                        'time_till': timestamp + sampling_interval})
-            parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
-                                  agent_config_vars, track, data_buffer, sampling_interval)
+            time_now = arrow.utcnow()
+            time_end = (timestamp + log_request_interval
+                        if timestamp + log_request_interval < timestamp_end else timestamp_end) - 1
+            query = {
+                'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend',
+                'time_from': timestamp, 'time_till': time_end,
+            }
+            logger.info('Begin event.get query from {} hosts: {}'.format(len(hostids), query))
 
-            logger.info('Begin problem.get query from {} hosts'.format(len(hostids)))
-            history_res = zapi.do_request('problem.get',
-                                          {'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend',
-                                           'time_from': timestamp, 'time_till': timestamp + sampling_interval})
-            logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids),
-                                                                            (arrow.now() - time_now).total_seconds()))
+            history_res = zapi.do_request('event.get', query)
+
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
-                                  agent_config_vars, track, data_buffer, sampling_interval)
+                                  agent_config_vars, track, data_buffer, log_request_interval)
+
+            query = {
+                'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend',
+                'time_from': timestamp, 'time_till': time_end,
+            }
+            logger.info('Begin problem.get query from {} hosts: {}'.format(len(hostids), query))
+
+            history_res = zapi.do_request('problem.get', query)
+
+            logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids),
+                                                                            (arrow.utcnow() - time_now).total_seconds()))
+            parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
+                                  agent_config_vars, track, data_buffer, log_request_interval)
             # clear data buffer when piece of time range end
             clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
     else:
         for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
-            time_now = arrow.now()
-            logger.info('Begin history.get query from {} hosts'.format(len(hostids)))
-            history_res = zapi.do_request('history.get',
-                                          {'output': 'extend', "history": history_type, "hostids": hostids,
-                                           "itemids": items_ids, 'time_from': timestamp,
-                                           'time_till': timestamp + if_config_vars['sampling_interval'], })
+            time_now = arrow.utcnow()
+            time_end = (timestamp + log_request_interval
+                        if timestamp + log_request_interval < timestamp_end else timestamp_end) - 1
+
+            query = {
+                'output': 'extend', "history": history_type, "hostids": hostids, "itemids": items_ids,
+                'time_from': timestamp, 'time_till': time_end
+            }
+            logger.info('Begin history.get query from {} hosts. {}'.format(len(hostids), query))
+
+            history_res = zapi.do_request('history.get', query)
+
             logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids),
-                                                                            (arrow.now() - time_now).total_seconds()))
+                                                                            (arrow.utcnow() - time_now).total_seconds()))
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map, 'history',
-                                  agent_config_vars, track, data_buffer, sampling_interval)
+                                  agent_config_vars, track, data_buffer, log_request_interval)
             clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
     return idx + 1
 
