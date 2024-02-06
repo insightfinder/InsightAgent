@@ -15,10 +15,6 @@ public class SamlV2Controller {
 
   @GetMapping("/registrations/{name}")
   public String getAllRegistrations(@PathVariable String name) {
-    if (name.equalsIgnoreCase("insightfinder")) {
-      return "http://localhost:9900/saml2/authenticate/insightfinder";
-    } else {
-      return "http://localhost:9900/saml2/authenticate/fairfaxcounty";
-    }
+    return name;
   }
 }
