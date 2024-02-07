@@ -2,6 +2,6 @@ FROM python:3
 RUN mkdir -p /usr/src/app
 WORKDIR /usr/src/app
 COPY main.py /usr/src/app
-ENV DATABASE_URL
+ENV DATABASE_URL=""
 RUN pip install psycopg2-binary
 CMD [“python”, “./main.py”]
