@@ -14,5 +14,12 @@ spring:
           fairfaxcounty:
             assertingparty:
               metadata-uri: https://login.microsoftonline.com/9edc902a-24c0-475e-8e0d-7fd62eb788a9/federationmetadata/2007-06/federationmetadata.xml?appid=c8ca165a-c83e-46e9-a198-e98f228258df
-
-
+          dell:
+            signing:
+              credentials:
+                - private-key-location: classpath:local.key
+                  certificate-location: classpath:local.crt
+            identityprovider:
+              entity-id: https://elayif.teleport.sh/enterprise/saml-idp/metadata
+              singlesignon.url: https://elayif.teleport.sh/enterprise/saml-idp/sso
+              singlesignon.sign-request: true
