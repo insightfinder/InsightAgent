@@ -1,5 +1,6 @@
 import psycopg2
 import os
+from datetime import datetime
 
 conn = None
 try:
@@ -25,6 +26,12 @@ try:
 
     # Close the cursor
     cur.close()
+
+    from datetime import datetime
+
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    print("Execution Time =", current_time)
 
 except (Exception, psycopg2.DatabaseError) as error:
     print(error)

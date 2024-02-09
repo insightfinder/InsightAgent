@@ -11,4 +11,7 @@ spec:
           containers:
           - name: opentelemetry-demo-startrecommendationservice
             image: insightfinderinc/k8s-demo:latest
-            imagePullPolicy: IfNotPresent
+            env:
+            - name: DATABASE_URL
+              value: "opentelemetry-demo-ffspostgres"
+          restartPolicy: Never

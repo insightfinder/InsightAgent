@@ -4,4 +4,4 @@ WORKDIR /usr/src/app
 COPY main.py /usr/src/app
 ENV DATABASE_URL=""
 RUN pip install psycopg2-binary
-CMD [“python”, “./main.py”]
+ENTRYPOINT ["python", "./main.py"]
