@@ -23,48 +23,55 @@ import java.util.Map;
 
 @Controller
 public class SamlV2View {
-    @Autowired
-    private Gson gson;
-    @Autowired
-    private RestTemplate restTemplate;
-    @Autowired
-    private IFConfig ifConfig;
-    @Autowired
-    private RelyingPartyRegistrationRepository relyingPartyRegistrationRepository;
 
-    @RequestMapping("/")
-    public RedirectView home(@AuthenticationPrincipal Saml2AuthenticatedPrincipal principal, Model model) {
-        String email =  principal.getFirstAttribute("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress");
-        String firstname = principal.getFirstAttribute("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname");
-        String lastName = principal.getFirstAttribute("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname");
-        String state = verify(email, firstname, lastName);
-        if (state == null || state.isEmpty()){
-            return new RedirectView(ifConfig.getServerUrl());
-        }
-        return new RedirectView(ifConfig.getServerUrl() + "/auth/login2?state=" + state);
-    }
+  @Autowired
+  private Gson gson;
+  @Autowired
+  private RestTemplate restTemplate;
+  @Autowired
+  private IFConfig ifConfig;
+  @Autowired
+  private RelyingPartyRegistrationRepository relyingPartyRegistrationRepository;
 
-    private String verify(String email, String firstName, String lastName){
-        String url  = String.format("%s/api/v1/saml-user-verify", ifConfig.getServerUrl());
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        HttpEntity<MultiValueMap<String, String>> request = getMultiValueMapHttpEntity(headers, email, firstName, lastName);
-        ResponseEntity<String> response = restTemplate.postForEntity(url, request , String.class);
-        if (response.getStatusCode().is2xxSuccessful()){
-            JsonObject resObj = gson.fromJson(response.getBody(), JsonObject.class);
-            if (resObj.has("state")){
-                return resObj.get("state").getAsString();
-            }
-        }
-        return null;
+  @RequestMapping("/")
+  public RedirectView home(@AuthenticationPrincipal Saml2AuthenticatedPrincipal principal,
+      Model model) {
+    String email = principal.getFirstAttribute(
+        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress");
+    String firstname = principal.getFirstAttribute(
+        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname");
+    String lastName = principal.getFirstAttribute(
+        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname");
+    String state = verify(email, firstname, lastName);
+    if (state == null || state.isEmpty()) {
+      return new RedirectView(ifConfig.getServerUrl());
     }
+    return new RedirectView(ifConfig.getServerUrl() + "/auth/login2?state=" + state);
+  }
 
-    private HttpEntity<MultiValueMap<String, String>> getMultiValueMapHttpEntity(HttpHeaders headers, String email, String firstName, String lastName) {
-        MultiValueMap<String, String> map= new LinkedMultiValueMap<>();
-        map.add("email", email);
-        map.add("firstName", firstName);
-        map.add("lastName", lastName);
-        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(map, headers);
-        return request;
+  private String verify(String email, String firstName, String lastName) {
+    String url = String.format("%s/api/v1/saml-user-verify", ifConfig.getServerUrl());
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+    HttpEntity<MultiValueMap<String, String>> request = getMultiValueMapHttpEntity(headers, email,
+        firstName, lastName);
+    ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+    if (response.getStatusCode().is2xxSuccessful()) {
+      JsonObject resObj = gson.fromJson(response.getBody(), JsonObject.class);
+      if (resObj.has("state")) {
+        return resObj.get("state").getAsString();
+      }
     }
+    return null;
+  }
+
+  private HttpEntity<MultiValueMap<String, String>> getMultiValueMapHttpEntity(HttpHeaders headers,
+      String email, String firstName, String lastName) {
+    MultiValueMap<String, String> map = new LinkedMultiValueMap<>();
+    map.add("email", email);
+    map.add("firstName", firstName);
+    map.add("lastName", lastName);
+    HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(map, headers);
+    return request;
+  }
 }
