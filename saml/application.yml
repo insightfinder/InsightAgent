@@ -3,3 +3,12 @@ server:
 insight-finder:
   serverUrl: https://app.insightfinder.com
   samlUrl: https://saml.insightfinder.com
+saml:
+  idp:
+    insightfinder:
+      entity-id: https://login.microsoftonline.com/9edc902a-24c0-475e-8e0d-7fd62eb788a9/federationmetadata/2007-06/federationmetadata.xml?appid=c8ca165a-c83e-46e9-a198-e98f228258df
+    fairfaxcounty:
+      entity-id: https://login.microsoftonline.com/9edc902a-24c0-475e-8e0d-7fd62eb788a9/federationmetadata/2007-06/federationmetadata.xml?appid=c8ca165a-c83e-46e9-a198-e98f228258df
+    dell:
+      entity-id: https://elayif.teleport.sh/enterprise/saml-idp/metadata
+      singlesignon-url: https://elayif.teleport.sh/enterprise/saml-idp/sso
