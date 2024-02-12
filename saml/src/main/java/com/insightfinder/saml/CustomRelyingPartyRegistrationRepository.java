@@ -1,5 +1,6 @@
 package com.insightfinder.saml;
 
+import com.insightfinder.saml.SamlProperties.IdpConfig;
 import java.io.InputStream;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
@@ -8,7 +9,10 @@ import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import javax.annotation.PostConstruct;
 import org.apache.commons.codec.binary.Base64;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.security.saml2.credentials.Saml2X509Credential;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
@@ -21,22 +25,33 @@ import org.springframework.stereotype.Service;
 public class CustomRelyingPartyRegistrationRepository implements
     RelyingPartyRegistrationRepository {
 
-  public static final String FFX_URL = "https://login.microsoftonline.com/9edc902a-24c0-475e-8e0d-7fd62eb788a9/federationmetadata/2007-06/federationmetadata.xml?appid=c8ca165a-c83e-46e9-a198-e98f228258df";
+  @Autowired
+  private SamlProperties samlProperties;
+
   private final List<RelyingPartyRegistration> registrations = new ArrayList<>();
 
   public CustomRelyingPartyRegistrationRepository() throws Exception {
+  }
+
+  @PostConstruct
+  private void init() throws Exception {
     addDefaultRegistrations();
   }
 
+
   private void addDefaultRegistrations() throws Exception {
-    RelyingPartyRegistration ffxRegistration = RelyingPartyRegistrations.fromMetadataLocation(
-        FFX_URL).registrationId("fairfaxcounty").build();
-    RelyingPartyRegistration ifRegistration = RelyingPartyRegistrations.fromMetadataLocation(
-        FFX_URL).registrationId("insightfinder").build();
-    RelyingPartyRegistration dellRegistration = createDellRelyingPartyRegistration();
-    add(ffxRegistration);
-    add(ifRegistration);
-    add(dellRegistration);
+    Map<String, IdpConfig> idpMap = samlProperties.getIdp();
+    for (String idp : idpMap.keySet()) {
+      RelyingPartyRegistration registration;
+      if (idp.equals("dell")) {
+        registration = createDellRelyingPartyRegistration(idpMap.get(idp));
+      } else {
+        String entityId = idpMap.get(idp).getEntityId();
+        registration = RelyingPartyRegistrations.fromMetadataLocation(
+            entityId).registrationId(idp).build();
+      }
+      add(registration);
+    }
   }
 
   @Override
@@ -54,7 +69,8 @@ public class CustomRelyingPartyRegistrationRepository implements
   }
 
 
-  public RelyingPartyRegistration createDellRelyingPartyRegistration() throws Exception {
+  public RelyingPartyRegistration createDellRelyingPartyRegistration(IdpConfig idpConfig)
+      throws Exception {
     X509Certificate verificationCertificate = loadCertificate("Teleport-SAML-IDP-X509.pem");
     Saml2X509Credential verificationCredential = new Saml2X509Credential(
         verificationCertificate, Saml2X509Credential.Saml2X509CredentialType.VERIFICATION);
@@ -67,9 +83,9 @@ public class CustomRelyingPartyRegistrationRepository implements
     return RelyingPartyRegistration.withRegistrationId("dell")
         .assertingPartyDetails(details -> details
             .entityId(
-                "https://elayif.teleport.sh/enterprise/saml-idp/metadata") // The IdP's Entity ID
+                idpConfig.getEntityId()) // The IdP's Entity ID
             .singleSignOnServiceLocation(
-                "https://elayif.teleport.sh/enterprise/saml-idp/sso") // The IdP's SSO URL
+                idpConfig.getSinglesignonUrl()) // The IdP's SSO URL
             .singleSignOnServiceBinding(Saml2MessageBinding.REDIRECT) // The SSO binding
             .wantAuthnRequestsSigned(true)) // Indicates you want to sign requests
         .credentials(c -> {
