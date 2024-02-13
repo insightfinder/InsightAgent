@@ -14,7 +14,7 @@ import java.util.Map;
 import javax.annotation.PostConstruct;
 import org.apache.commons.codec.binary.Base64;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.security.saml2.credentials.Saml2X509Credential;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
@@ -103,7 +103,7 @@ public class CustomRelyingPartyRegistrationRepository implements
 
   public PrivateKey loadPrivateKey(String path) throws Exception {
     // Adjust this method to read the key from your preferred location
-    InputStream inputStream = new ClassPathResource(path).getInputStream();
+    InputStream inputStream = new FileSystemResource(path).getInputStream();
     String key = new String(inputStream.readAllBytes());
 
     // Remove the first and last lines
@@ -122,7 +122,7 @@ public class CustomRelyingPartyRegistrationRepository implements
 
   private X509Certificate loadCertificate(String path) throws Exception {
     CertificateFactory factory = CertificateFactory.getInstance("X.509");
-    try (InputStream inputStream = new ClassPathResource(path).getInputStream()) {
+    try (InputStream inputStream = new FileSystemResource(path).getInputStream()) {
       return (X509Certificate) factory.generateCertificate(inputStream);
     }
   }
