@@ -6,8 +6,8 @@ insight-finder:
   samlUrl: https://saml.insightfinder.com
   # saml application acts as service provider, it uses the following credentials to sign the request to teleport
   # generate: openssl req -newkey rsa:2048 -nodes -keyout local.key -x509 -days 365 -out local.crt
-  sp-key: local.key
-  sp-cert: local.crt
+  sp-key: /app/saml_cert/local.key
+  sp-cert: /app/saml_cert/local.crt
 
 saml:
   idp:
@@ -28,4 +28,4 @@ saml:
       singlesignon-url: https://elayif.teleport.sh/enterprise/saml-idp/sso
       email-key: urn:oid:0.9.2342.19200300.100.1.1
       # certificate provided by idp
-      idp-cert: Teleport-SAML-IDP-X509.pem
+      idp-cert: /app/saml_cert/Teleport-SAML-IDP-X509.pem
