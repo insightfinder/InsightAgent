@@ -1,6 +1,7 @@
 package com.insightfinder.saml;
 
 import com.insightfinder.saml.SamlProperties.IdpConfig;
+import com.insightfinder.saml.config.IFConfig;
 import java.io.InputStream;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
@@ -25,9 +26,12 @@ import org.springframework.stereotype.Service;
 public class CustomRelyingPartyRegistrationRepository implements
     RelyingPartyRegistrationRepository {
 
+  public static final String TELEPORT = "teleport";
+
   @Autowired
   private SamlProperties samlProperties;
-
+  @Autowired
+  private IFConfig ifConfig;
   private final List<RelyingPartyRegistration> registrations = new ArrayList<>();
 
   public CustomRelyingPartyRegistrationRepository() throws Exception {
@@ -42,11 +46,12 @@ public class CustomRelyingPartyRegistrationRepository implements
   private void addDefaultRegistrations() throws Exception {
     Map<String, IdpConfig> idpMap = samlProperties.getIdp();
     for (String idp : idpMap.keySet()) {
+      IdpConfig idpConfig = idpMap.get(idp);
       RelyingPartyRegistration registration;
-      if (idp.equals("dell")) {
-        registration = createDellRelyingPartyRegistration(idpMap.get(idp));
+      if (idpConfig.getEntityId().contains(TELEPORT)) {
+        registration = createTeleportRelyingPartyRegistration(idp, idpConfig);
       } else {
-        String entityId = idpMap.get(idp).getEntityId();
+        String entityId = idpConfig.getEntityId();
         registration = RelyingPartyRegistrations.fromMetadataLocation(
             entityId).registrationId(idp).build();
       }
@@ -69,18 +74,19 @@ public class CustomRelyingPartyRegistrationRepository implements
   }
 
 
-  public RelyingPartyRegistration createDellRelyingPartyRegistration(IdpConfig idpConfig)
+  public RelyingPartyRegistration createTeleportRelyingPartyRegistration(String idp,
+      IdpConfig idpConfig)
       throws Exception {
-    X509Certificate verificationCertificate = loadCertificate("Teleport-SAML-IDP-X509.pem");
+    X509Certificate verificationCertificate = loadCertificate(idpConfig.getIdpCert());
     Saml2X509Credential verificationCredential = new Saml2X509Credential(
         verificationCertificate, Saml2X509Credential.Saml2X509CredentialType.VERIFICATION);
 
-    X509Certificate spCertificate = loadCertificate("local.crt");
-    PrivateKey spPrivateKey = loadPrivateKey("local.key");
+    X509Certificate spCertificate = loadCertificate(ifConfig.getSpCert());
+    PrivateKey spPrivateKey = loadPrivateKey(ifConfig.getSpKey());
     Saml2X509Credential signingCredential = new Saml2X509Credential(
         spPrivateKey, spCertificate, Saml2X509Credential.Saml2X509CredentialType.SIGNING);
 
-    return RelyingPartyRegistration.withRegistrationId("dell")
+    return RelyingPartyRegistration.withRegistrationId(idp)
         .assertingPartyDetails(details -> details
             .entityId(
                 idpConfig.getEntityId()) // The IdP's Entity ID
