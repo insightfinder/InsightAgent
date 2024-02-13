@@ -1,16 +1,22 @@
 server:
   port: 8080
 insight-finder:
+  # redirect url after authentication from identity provider
   serverUrl: https://app.insightfinder.com
   samlUrl: https://saml.insightfinder.com
+  # saml application acts as service provider, it uses the following credentials to sign the request to teleport
+  # generate: openssl req -newkey rsa:2048 -nodes -keyout local.key -x509 -days 365 -out local.crt
   sp-key: local.key
   sp-cert: local.crt
+
 saml:
   idp:
     insightfinder:
       entity-id: https://login.microsoftonline.com/9edc902a-24c0-475e-8e0d-7fd62eb788a9/federationmetadata/2007-06/federationmetadata.xml?appid=c8ca165a-c83e-46e9-a198-e98f228258df
+      # use firstname-key to extract first name info of the user from response of idp
       firstname-key: http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname
       lastname-key: http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname
+      # use email-key to extract email info of the user from response of idp
       email-key: http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress
     fairfaxcounty:
       entity-id: https://login.microsoftonline.com/9edc902a-24c0-475e-8e0d-7fd62eb788a9/federationmetadata/2007-06/federationmetadata.xml?appid=c8ca165a-c83e-46e9-a198-e98f228258df
@@ -21,4 +27,5 @@ saml:
       entity-id: https://elayif.teleport.sh/enterprise/saml-idp/metadata
       singlesignon-url: https://elayif.teleport.sh/enterprise/saml-idp/sso
       email-key: urn:oid:0.9.2342.19200300.100.1.1
+      # certificate provided by idp
       idp-cert: Teleport-SAML-IDP-X509.pem
