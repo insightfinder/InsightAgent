@@ -1,7 +1,7 @@
 server:
   port: 8080
 insight-finder:
-  serverUrl: https://stg.insightfinder.com
+  serverUrl: https://app.insightfinder.com
   samlUrl: https://saml.insightfinder.com
 saml:
   idp:
