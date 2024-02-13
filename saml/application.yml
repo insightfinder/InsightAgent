@@ -3,6 +3,8 @@ server:
 insight-finder:
   serverUrl: https://app.insightfinder.com
   samlUrl: https://saml.insightfinder.com
+  sp-key: local.key
+  sp-cert: local.crt
 saml:
   idp:
     insightfinder:
@@ -19,3 +21,4 @@ saml:
       entity-id: https://elayif.teleport.sh/enterprise/saml-idp/metadata
       singlesignon-url: https://elayif.teleport.sh/enterprise/saml-idp/sso
       email-key: urn:oid:0.9.2342.19200300.100.1.1
+      idp-cert: Teleport-SAML-IDP-X509.pem
