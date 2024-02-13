@@ -18,6 +18,15 @@ public class SamlProperties {
     private String firstnameKey;
     private String lastnameKey;
     private String emailKey;
+    private String idpCert;
+
+    public String getIdpCert() {
+      return idpCert;
+    }
+
+    public void setIdpCert(String idpCert) {
+      this.idpCert = idpCert;
+    }
 
     public String getEntityId() {
       return entityId;
