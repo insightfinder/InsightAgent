@@ -17,7 +17,7 @@ saml:
       firstname-key: http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname
       lastname-key: http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname
       # use email-key to extract email info of the user from response of idp
-      email-key: http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress
+      email-key: http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name
     fairfaxcounty:
       entity-id: https://login.microsoftonline.com/9edc902a-24c0-475e-8e0d-7fd62eb788a9/federationmetadata/2007-06/federationmetadata.xml?appid=c8ca165a-c83e-46e9-a198-e98f228258df
       firstname-key: http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname
