@@ -12,8 +12,12 @@ public class SamlProperties {
   private Map<String, IdpConfig> idp = new HashMap<>();
 
   public static class IdpConfig {
+
     private String entityId;
     private String singlesignonUrl;
+    private String firstnameKey;
+    private String lastnameKey;
+    private String emailKey;
 
     public String getEntityId() {
       return entityId;
@@ -29,6 +33,30 @@ public class SamlProperties {
 
     public void setSinglesignonUrl(String singlesignonUrl) {
       this.singlesignonUrl = singlesignonUrl;
+    }
+
+    public String getFirstnameKey() {
+      return firstnameKey;
+    }
+
+    public void setFirstnameKey(String firstnameKey) {
+      this.firstnameKey = firstnameKey;
+    }
+
+    public String getLastnameKey() {
+      return lastnameKey;
+    }
+
+    public void setLastnameKey(String lastnameKey) {
+      this.lastnameKey = lastnameKey;
+    }
+
+    public String getEmailKey() {
+      return emailKey;
+    }
+
+    public void setEmailKey(String emailKey) {
+      this.emailKey = emailKey;
     }
   }
 
