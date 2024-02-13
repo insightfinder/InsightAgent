@@ -56,6 +56,7 @@ public class SamlV2View {
   }
 
   private String verify(String email, String firstName, String lastName) {
+    LOGGER.info("First name: " + firstName + " last name: " + lastName + " email: " + email);
     String url = String.format("%s/api/v1/saml-user-verify", ifConfig.getServerUrl());
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
