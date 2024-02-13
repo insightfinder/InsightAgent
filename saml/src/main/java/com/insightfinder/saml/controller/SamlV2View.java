@@ -2,7 +2,11 @@ package com.insightfinder.saml.controller;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.insightfinder.saml.SamlProperties;
+import com.insightfinder.saml.SamlProperties.IdpConfig;
 import com.insightfinder.saml.config.IFConfig;
+import java.util.logging.Logger;
+import org.apache.http.util.TextUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -10,7 +14,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.saml2.provider.service.authentication.Saml2AuthenticatedPrincipal;
-import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.LinkedMultiValueMap;
@@ -18,8 +21,6 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.view.RedirectView;
-
-import java.util.Map;
 
 @Controller
 public class SamlV2View {
@@ -31,17 +32,22 @@ public class SamlV2View {
   @Autowired
   private IFConfig ifConfig;
   @Autowired
-  private RelyingPartyRegistrationRepository relyingPartyRegistrationRepository;
+  private SamlProperties samlProperties;
+  private static final Logger LOGGER = Logger.getLogger(SamlV2View.class.getName());
 
   @RequestMapping("/")
   public RedirectView home(@AuthenticationPrincipal Saml2AuthenticatedPrincipal principal,
       Model model) {
+    LOGGER.info("Principal attributes: " + principal.getAttributes());
+    IdpConfig idpConfig = samlProperties.getIdp().get(principal.getRelyingPartyRegistrationId());
     String email = principal.getFirstAttribute(
-        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress");
-    String firstname = principal.getFirstAttribute(
-        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname");
-    String lastName = principal.getFirstAttribute(
-        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname");
+        idpConfig.getEmailKey());
+    String firstname =
+        TextUtils.isEmpty(idpConfig.getFirstnameKey()) ? "John" : principal.getFirstAttribute(
+            idpConfig.getFirstnameKey());
+    String lastName =
+        TextUtils.isEmpty(idpConfig.getLastnameKey()) ? "Doe" : principal.getFirstAttribute(
+            idpConfig.getLastnameKey());
     String state = verify(email, firstname, lastName);
     if (state == null || state.isEmpty()) {
       return new RedirectView(ifConfig.getServerUrl());
