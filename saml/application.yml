@@ -1,18 +1,30 @@
 server:
   port: 8080
 insight-finder:
+  # The URL of the InsightFinder server
   serverUrl: https://app.insightfinder.com
+  # The URL of the this SAML server
   samlUrl: https://saml.insightfinder.com
-spring:
-  security:
-    saml2:
-      relyingparty:
-        registration:
-          insightfinder:
-            assertingparty:
-              metadata-uri: https://login.microsoftonline.com/9edc902a-24c0-475e-8e0d-7fd62eb788a9/federationmetadata/2007-06/federationmetadata.xml?appid=c8ca165a-c83e-46e9-a198-e98f228258df
-          fairfaxcounty:
-            assertingparty:
-              metadata-uri: https://login.microsoftonline.com/9edc902a-24c0-475e-8e0d-7fd62eb788a9/federationmetadata/2007-06/federationmetadata.xml?appid=c8ca165a-c83e-46e9-a198-e98f228258df
+  
+  # saml application acts as service provider, it uses the following credentials to sign the request to teleport
+  # generate: openssl req -newkey rsa:2048 -nodes -keyout local.key -x509 -days 365 -out local.crt
+  sp-key: /app/certs/sp.key
+  sp-cert: /app/certs/sp.crt
 
+saml:
+  idp:
+    # List of Identity Providers
+    teleport:
+      # The URL of the Identity Provider's SAML 2.0 metadata endpoint 
+      entity-id: https://xxx.teleport.sh/enterprise/saml-idp/metadata
+      
+      # The key in the principal that containers the first name, last name and email
+      firstname-key: firstname-field-in-the-principal
+      lastname-key: lastname-field-in-the-principal
+      email-key: email-field-in-the-principal
 
+      # (Optional) The URL of the Identity Provider's SAML 2.0 SSO service
+      singlesignon-url: https://xxx.teleport.sh/enterprise/saml-idp/sso
+      
+      # (Optional) The path of the certificate from the Identity Provider
+      idp-cert: /app/certs/SAML-IDP-X509.pem
