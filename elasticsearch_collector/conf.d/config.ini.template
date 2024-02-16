@@ -22,10 +22,10 @@ es_uris = http://localhost:9200
 #                }
 #              }
 #            }
-query_json =
+query_json = {}
 # The maximum messages number of each query, default is 5000, and max value id 10000.
 query_chunk_size = 5000
-# indexes to search over
+# indexes to search over, example indeces = metricbeat*
 indeces = filebeat*
 
 ## parameters for all hosts
@@ -77,8 +77,8 @@ instance_whitelist =
 device_field =
 # Optional regex to retrieve the device name using a capture group named 'device' (eg: '(?P<device>.*)') 
 device_field_regex = 
-# multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>`.
-data_fields = message
+# multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>`. Example: data_fields = ^(?!.*(?:event\.duration|metricset\.period)).*$
+data_fields =
 
 ## proxy
 agent_http_proxy =
