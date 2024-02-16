@@ -11,6 +11,7 @@ import socket
 import sys
 import threading
 import time
+import re
 import traceback
 import urllib.parse
 from logging.handlers import QueueHandler, TimedRotatingFileHandler
@@ -31,6 +32,7 @@ from pprint import pformat
 from pathlib import Path
 
 import logging
+
 logging.basicConfig(level=logging.INFO)
 
 """
@@ -67,6 +69,20 @@ LOG_DIR = "logs"
 AGENT_LOG_FILE = "./logs/agent.log"
 
 logCompressState = {}
+
+
+def align_timestamp(timestamp, sampling_interval):
+    if sampling_interval == 0 or not timestamp:
+        return timestamp
+    else:
+        return int(timestamp / (sampling_interval * 1000)) * sampling_interval * 1000
+
+
+def safe_string_to_float(s):
+    try:
+        return float(s)
+    except ValueError:
+        return None
 
 
 def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, worker_process,
@@ -239,6 +255,7 @@ def build_es_connection_hosts(logger, agent_config_vars):
 
 def query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn, query_body,
                                  messages):
+    is_metric = 'METRIC' in if_config_vars['project_type']
     logger.debug('Starting query server es')
 
     # get total number of messages
@@ -257,8 +274,15 @@ def query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_
 
     if len(data) == 0:
         return
-    for item in data:
-        messages.put(item)
+
+    # if it's metric data, put all data into one message
+    metric_message = []
+    if is_metric:
+        for item in data:
+            metric_message.append(item)
+    else:
+        for item in data:
+            messages.put(item)
 
     # next query
     last_time = response.get('hits').get('hits')[-1].get('sort')
@@ -279,8 +303,12 @@ def query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_
                 data = response.get('hits', {}).get('hits', [])
                 if len(data) == 0:
                     return
-                for item in data:
-                    messages.put(item)
+                if is_metric:
+                    for item in data:
+                        metric_message.append(item)
+                else:
+                    for item in data:
+                        messages.put(item)
 
                 # next query
                 last_time = response.get('hits').get('hits')[-1].get('sort')
@@ -290,6 +318,9 @@ def query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_
             logger.error('Query log error.\n{}'.format(str(e)))
             return
 
+    if len(metric_message) > 0:
+        messages.put(metric_message)
+
 
 def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, datas):
     worker_configurer(log_queue, cli_config_vars['log_level'])
@@ -298,6 +329,8 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
 
     log_compression_interval = if_config_vars['log_compression_interval']
     collector_process = cli_config_vars['collector']
+    is_metric = 'METRIC' in if_config_vars['project_type']
+    sampling_interval = if_config_vars['sampling_interval']
 
     count = 0
     collector_quit = 0
@@ -315,96 +348,160 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
 
             last_log_time = logCompressState.get('_parse_messages')
             needs_log_data = False
-            if cli_config_vars['testing'] and (not last_log_time or current_time - last_log_time > log_compression_interval):
+            if cli_config_vars['testing'] and (
+                    not last_log_time or current_time - last_log_time > log_compression_interval):
                 needs_log_data = True
                 logCompressState['_parse_messages'] = current_time
                 logger.info('Raw data:\n' + pformat(message))
 
-            # get source
-            message = message.get('_source', {})
+            if not isinstance(message, list):
+                data_messages_list = [message]
+            else:
+                data_messages_list = message
 
-            # get project
-            project = if_config_vars['project_name']
-            if agent_config_vars['project_field']:
-                project = message.get(agent_config_vars['project_field'])
-                if not project:
+            metric_data_entries = []
+            for data_message in data_messages_list:
+                # get source
+                message_source = data_message.get('_source', {})
+
+                # get project
+                project = if_config_vars['project_name']
+                if agent_config_vars['project_field']:
+                    project = message_source.get(agent_config_vars['project_field'])
+                    if not project:
+                        continue
+                    # filter by project whitelist
+                    if agent_config_vars['project_whitelist_regex'] \
+                            and not agent_config_vars['project_whitelist_regex'].match(project):
+                        continue
+                    project = make_safe_project_string(project)
+
+                # get timestamp
+                timestamp_field = agent_config_vars['timestamp_field']
+                timestamp_field = timestamp_field.split('.')
+                timestamp = safe_get(message_source, timestamp_field)
+                timestamp = int(arrow.get(timestamp).float_timestamp * 1000)
+
+                # set offset for timestamp
+                timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
+                if is_metric:
+                    timestamp = str(align_timestamp(timestamp, sampling_interval))
+                else:
+                    timestamp = str(timestamp)
+
+                # get component name
+                component_name = None
+                component_field = agent_config_vars['component_field'] if agent_config_vars['component_field'] and len(
+                    agent_config_vars['component_field']) > 0 else None
+                if component_field:
+                    component_field = component_field.split('.')
+                    component_name = safe_get(message_source, component_field)
+                    component_name = make_safe_instance_string(component_name)
+
+                # get instance name
+                instance = None
+                # If the instance_field_regex is set, then grab the first capture group to match and set as instance
+                # syntax:  <field1 >::<regex1>,<field2>::<regex2>
+                instance_field_regex = agent_config_vars['instance_field_regex']
+                if instance_field_regex:
+                    field_regex_list = instance_field_regex.split(',')
+                    for field_regex in field_regex_list:
+                        field_regex_vals = field_regex.split('::')
+                        if len(field_regex_vals) > 1:
+                            field_val = safe_get(message_source, field_regex_vals[0].split('.'))
+                            if field_val and field_regex_vals[1]:
+                                if not isinstance(field_val, str):
+                                    field_val = str(field_val)
+                                re = regex.compile(field_regex_vals[1])
+                                matches = re.search(field_val)
+                                if matches:
+                                    instance = matches.groups()[0]
+                                    break
+
+                if not instance:
+                    instance_field = agent_config_vars['instance_field'][0] if agent_config_vars[
+                                                                                   'instance_field'] and len(
+                        agent_config_vars['instance_field']) > 0 else 'agent.hostname'
+                    instance_field = instance_field.split('.')
+                    instance = safe_get(message_source, instance_field)
+
+                # filter by instance whitelist
+                if agent_config_vars['instance_whitelist_regex'] \
+                        and not agent_config_vars['instance_whitelist_regex'].match(instance):
                     continue
-                # filter by project whitelist
-                if agent_config_vars['project_whitelist_regex'] \
-                        and not agent_config_vars['project_whitelist_regex'].match(project):
-                    continue
-                project = make_safe_project_string(project)
 
-            # get timestamp
-            timestamp_field = agent_config_vars['timestamp_field']
-            timestamp_field = timestamp_field.split('.')
-            timestamp = safe_get(message, timestamp_field)
-            timestamp = int(arrow.get(timestamp).float_timestamp * 1000)
+                # add device info if has
+                device = None
+                device_field = agent_config_vars['device_field'][0] if agent_config_vars['device_field'] and len(
+                    agent_config_vars['device_field']) > 0 else ''
+                if device_field and len(device_field) > 0:
+                    device_field = device_field.split('.')
+                    device = safe_get(message_source, device_field)
+                if agent_config_vars['device_field_regex']:
+                    matches = agent_config_vars['device_field_regex'].match(device)
+                    if not matches or 'device' not in matches.groupdict().keys():
+                        logger.debug('Parse message failed with device_field_regex: {}'.format(device))
+                        continue
+                    device = matches.group('device')
+                full_instance = make_safe_instance_string(instance, device)
 
-            # set offset for timestamp
-            timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
-            timestamp = str(timestamp)
+                # get data
+                data_entry = None
+                if is_metric:
+                    data_fields = agent_config_vars['data_fields'] if agent_config_vars['data_fields'] and len(
+                        agent_config_vars['data_fields']) > 0 else []
+                    data = safe_get_metric_data(message_source, data_fields, logger)
+                    if bool(data):
+                        # build metric entry
+                        data_entry = prepare_data_entry(if_config_vars, str(int(timestamp)), data, component_name,
+                                                        full_instance)
+                else:
+                    data_fields = agent_config_vars['data_fields'] if agent_config_vars['data_fields'] and len(
+                        agent_config_vars['data_fields']) > 0 else ['message']
+                    data = safe_get_data(message_source, data_fields, logger)
 
-            # get instance name
-            instance = None
-            # If the instance_field_regex is set, then grab the first capture group to match and set as instance
-            # syntax:  <field1 >::<regex1>,<field2>::<regex2>
-            instance_field_regex = agent_config_vars['instance_field_regex']
-            if instance_field_regex:
-                field_regex_list = instance_field_regex.split(',')
-                for field_regex in field_regex_list:
-                    field_regex_vals = field_regex.split('::')
-                    if len(field_regex_vals) > 1:
-                        field_val = safe_get(message, field_regex_vals[0].split('.'))
-                        if field_val and field_regex_vals[1]:
-                            if not isinstance(field_val, str):
-                                field_val = str(field_val)
-                            re = regex.compile(field_regex_vals[1])
-                            matches = re.search(field_val)
-                            if matches:
-                                instance = matches.groups()[0]
-                                break
+                    # build log entry
+                    data_entry = prepare_data_entry(if_config_vars, str(int(timestamp)), data, component_name,
+                                                    full_instance)
 
-            if not instance:
-                instance_field = agent_config_vars['instance_field'][0] if agent_config_vars['instance_field'] and len(
-                    agent_config_vars['instance_field']) > 0 else 'agent.hostname'
-                instance_field = instance_field.split('.')
-                instance = safe_get(message, instance_field)
+                data_entry['project'] = project
+                data_entry['data_size'] = getsizeof(str(data))
+                if needs_log_data:
+                    logger.info('Parsed data:\n' + pformat(data_entry))
 
-            # filter by instance whitelist
-            if agent_config_vars['instance_whitelist_regex'] \
-                    and not agent_config_vars['instance_whitelist_regex'].match(instance):
-                continue
+                if is_metric:
+                    if data_entry:
+                        metric_data_entries.append(data_entry)
+                else:
+                    datas.put(data_entry)
 
-            # add device info if has
-            device = None
-            device_field = agent_config_vars['device_field'][0] if agent_config_vars['device_field'] and len(
-                agent_config_vars['device_field']) > 0 else ''
-            if device_field and len(device_field) > 0:
-                device_field = device_field.split('.')
-                device = safe_get(message, device_field)
-            if agent_config_vars['device_field_regex']:
-                matches = agent_config_vars['device_field_regex'].match(device)
-                if not matches or 'device' not in matches.groupdict().keys():
-                    logger.debug('Parse message failed with device_field_regex: {}'.format(device))
-                    continue
-                device = matches.group('device')
-            full_instance = make_safe_instance_string(instance, device)
+            # merge metric data
+            metric_data_dict = {}
+            for metric_data_entry in metric_data_entries:
+                timestamp = metric_data_entry['timestamp']
+                project = metric_data_entry['project']
+                component_name = metric_data_entry['componentName']
+                data_size = metric_data_entry['data_size']
+                if not component_name:
+                    component_name = ''
+                instance_name = metric_data_entry['instanceName']
+                key = project + '_' + component_name + '_' + instance_name + '_' + timestamp
+                data = metric_data_entry.get('data')
+                if key not in metric_data_dict:
+                    metric_data_dict[key] = {
+                        'timestamp': timestamp,
+                        'project': project,
+                        'componentName': component_name,
+                        'instanceName': instance_name,
+                        'data': data,
+                        'data_size': data_size
+                    }
+                else:
+                    metric_data_dict[key]['data'].update(data)
+                    metric_data_dict[key]['data_size'] += data_size
 
-            # get data
-            data_fields = agent_config_vars['data_fields'] if agent_config_vars['data_fields'] and len(
-                agent_config_vars['data_fields']) > 0 else ['message']
-            data = safe_get_data(message, data_fields, logger)
-
-            # build log entry
-            log_entry = prepare_log_entry(if_config_vars, str(int(timestamp)), data, full_instance)
-            log_entry['project'] = project
-
-            log_entry['data_size'] = getsizeof(str(data))
-            if needs_log_data:
-                logger.info('Parsed data:\n' + pformat(log_entry))
-
-            datas.put(log_entry)
+            for key, metric_data in metric_data_dict.items():
+                datas.put(metric_data)
 
         except Exception as e:
             msg = str(e)
@@ -627,6 +724,7 @@ def get_agent_config_vars(logger, config_ini):
 
         # fields
         project_field = project_field.strip() if project_field else None
+        component_field = component_field.strip() if component_field else None
         instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
         device_fields = [x.strip() for x in device_field.split(',') if x.strip()]
         if len(data_fields) != 0:
@@ -891,9 +989,50 @@ def safe_get(dct, keys):
     return dct
 
 
+def flatten_json(y):
+    out = {}
+
+    def flatten(x, name=''):
+        if type(x) is dict:
+            for a in x:
+                flatten(x[a], name + a + '.')
+        elif type(x) is list:
+            i = 0
+            for a in x:
+                flatten(a, name + str(i) + '.')
+                i += 1
+        else:
+            out[name[:-1]] = x
+
+    flatten(y)
+    return out
+
+
+def match_patterns(target, patterns):
+    for pattern in patterns:
+        is_match = pattern in target
+        if is_match:
+            return True
+        is_match = bool(re.search(pattern, target))
+        if is_match:
+            return True
+    return False
+
+
+def safe_get_metric_data(dct, keys, logger):
+    # flatten multiple level dict object into key value and ignore string values
+    flat_json = flatten_json(dct)
+    filtered_json = {k: v for k, v in flat_json.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+
+    if keys:
+        filtered_json = {k: v for k, v in filtered_json.items() if match_patterns(k, keys)}
+
+    return filtered_json
+
+
 def safe_get_data(dct, keys, logger):
     data = {}
-    no_value_ct = 0 # count of empty values
+    no_value_ct = 0  # count of empty values
     for key in keys:
         named_key = key.split('::')
         try:
@@ -919,16 +1058,20 @@ def safe_get_data(dct, keys, logger):
     return data
 
 
-def prepare_log_entry(if_config_vars, timestamp, data, instanceName):
+def prepare_data_entry(if_config_vars, timestamp, data, component_name, instance_name):
     """ creates the log entry """
     entry = dict()
     entry['data'] = data
     if 'INCIDENT' in if_config_vars['project_type'] or 'DEPLOYMENT' in if_config_vars['project_type']:
         entry['timestamp'] = timestamp
-        entry['instanceName'] = instanceName
+        entry['instanceName'] = instance_name
+    elif 'METRIC' in if_config_vars['project_type']:
+        entry['timestamp'] = timestamp
+        entry['componentName'] = component_name
+        entry['instanceName'] = instance_name
     else:  # LOG or ALERT
         entry['eventId'] = timestamp
-        entry['tag'] = instanceName
+        entry['tag'] = instance_name
     return entry
 
 
@@ -944,6 +1087,17 @@ def make_safe_project_string(project):
     project = PIPE.sub('', project)
     project = PROJECT_ALNUM.sub('-', project)
     return project
+
+
+def make_safe_component_string(component):
+    """ make a safe component name string"""
+    if not component:
+        return None
+
+    # strip underscores
+    component = UNDERSCORE.sub('.', component)
+    component = COLONS.sub('-', component)
+    return component
 
 
 def make_safe_instance_string(instance, device=''):
@@ -1059,6 +1213,48 @@ def reset_track(track):
 ################################
 # Functions to send data to IF #
 ################################
+def convert_to_metric_data(logger, chunk_metric_data, if_config_vars):
+    to_send_data_dict = dict()
+    to_send_data_dict['licenseKey'] = if_config_vars['license_key']
+    to_send_data_dict['userName'] = if_config_vars['user_name']
+
+    data_dict = dict()
+    data_dict['projectName'] = if_config_vars['project_name']
+    data_dict['userName'] = if_config_vars['user_name']
+    if 'system_name' in if_config_vars:
+        data_dict['systemName'] = if_config_vars['system_name']
+    data_dict['iat'] = get_agent_type_from_project_type(if_config_vars)
+    if 'sampling_interval' in if_config_vars:
+        data_dict['si'] = str(if_config_vars['sampling_interval'])
+
+    instance_data_map = dict()
+    for chunk in chunk_metric_data:
+        instance_name = chunk['instanceName']
+        component_name = chunk.get('componentName')
+        timestamp = chunk['timestamp']
+        data = chunk['data']
+        if data and timestamp and instance_name:
+            ts = int(timestamp)
+            if instance_name not in instance_data_map:
+                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'dit': {}, }
+
+            if timestamp not in instance_data_map[instance_name]['dit']:
+                instance_data_map[instance_name]['dit'][timestamp] = {'t': ts, 'm': []}
+
+            data_set = instance_data_map[instance_name]['dit'][timestamp]['m']
+            for metric_name, metric_value in data.items():
+                float_value = safe_string_to_float(metric_value)
+                if float_value is not None:
+                    data_set.append({'m': metric_name, 'v': float_value})
+                else:
+                    data_set.append({'m': metric_name, 'v': 0.0})
+
+    data_dict['idm'] = instance_data_map
+    to_send_data_dict['data'] = data_dict
+
+    return to_send_data_dict
+
+
 def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data, project):
     timeout = None
     if c_config:
@@ -1067,11 +1263,18 @@ def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data, 
     send_data_time = time.time()
 
     # prepare data for metric/log streaming agent
-    data_to_post = initialize_api_post_data(logger, if_config_vars, project)
-    if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
-        for chunk in chunk_metric_data:
-            chunk['data'] = json.dumps(chunk['data'])
-    data_to_post[get_data_field_from_project_type(if_config_vars)] = json.dumps(chunk_metric_data)
+    data_to_post = None
+    json_to_post = None
+    if 'METRIC' in if_config_vars['project_type']:
+        json_to_post = convert_to_metric_data(logger, chunk_metric_data, if_config_vars)
+        post_url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v2/metric-data-receive')
+    else:
+        data_to_post = initialize_api_post_data(logger, if_config_vars, project)
+        if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
+            for chunk in chunk_metric_data:
+                chunk['data'] = json.dumps(chunk['data'])
+        data_to_post[get_data_field_from_project_type(if_config_vars)] = json.dumps(chunk_metric_data)
+        post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type(if_config_vars))
 
     logger.debug('First:\n' + str(chunk_metric_data[0]))
     logger.debug('Last:\n' + str(chunk_metric_data[-1]))
@@ -1082,11 +1285,23 @@ def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data, 
     if c_config['testing']:
         return
 
+    logger.debug('First:\n' + str(chunk_metric_data[0]))
+    logger.debug('Last:\n' + str(chunk_metric_data[-1]))
+    logger.info('Total Lines: ' + str(len(chunk_metric_data)))
+
     # send the data
-    post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type(if_config_vars))
-    send_request(logger, post_url, 'POST', 'Could not send request to IF',
-                 str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
-                 verify=False, proxies=if_config_vars['if_proxies'], timeout=timeout)
+    if data_to_post:
+        logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
+
+        send_request(logger, post_url, 'POST', 'Could not send request to IF',
+                     str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
+                     verify=False, proxies=if_config_vars['if_proxies'])
+    elif json_to_post:
+        logger.info('Total Data (bytes): ' + str(get_json_size_bytes(json_to_post)))
+        send_request(logger, post_url, 'POST', 'Could not send request to IF',
+                     str(get_json_size_bytes(json_to_post)) + ' bytes of data are reported.', json=json_to_post,
+                     verify=False, proxies=if_config_vars['if_proxies'])
+
     logger.debug('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
 
 
