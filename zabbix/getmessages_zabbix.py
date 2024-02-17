@@ -99,8 +99,9 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
         timestamp_end = his_time_range[1]
         timestamp_start = his_time_range[0]
     else:
+        live_window = sampling_interval * 10
         timestamp_end = int(arrow.utcnow().floor('second').timestamp())
-        timestamp_start = timestamp_end - if_config_vars["run_interval"]
+        timestamp_start = timestamp_end - live_window
 
     items_ids_map = {}
     items_ids = []
@@ -121,16 +122,18 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             items_ids_map[item_id] = item
         items_ids = list(items_ids_map.keys())
 
+    use_history_api = True
     if data_type == 'Metric':
-        if his_time_range:
+        if use_history_api:
+            his_interval = sampling_interval * 10
             logger.debug('Using time range for replay data: {}'.format(his_time_range))
-            for timestamp in range(timestamp_start, timestamp_end, sampling_interval):
+            for timestamp in range(timestamp_start, timestamp_end, his_interval):
                 time_now = arrow.utcnow()
-                logger.info('Begin history.get query from {} hosts'.format(len(hostids)))
-                history_res = zapi.do_request('history.get',
-                                              {'output': 'extend', "history": history_type, "hostids": hostids,
-                                               "itemids": items_ids, 'time_from': timestamp,
-                                               'time_till': timestamp + sampling_interval})
+                query = {'output': 'extend', "history": history_type, "hostids": hostids, "itemids": items_ids,
+                         'time_from': timestamp, 'time_till': timestamp + his_interval}
+                logger.info('Begin history.get query {} from {} hosts'.format(query, len(hostids)))
+
+                history_res = zapi.do_request('history.get', query)
                 logger.info(
                     'Query {} items from {} hosts with {} metrics in {} seconds'.format(len(history_res['result']),
                                                                                         len(hostids), len(items_keys), (
@@ -156,12 +159,10 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
     elif data_type == 'Alert':
         for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
             time_now = arrow.utcnow()
-            time_end = (timestamp + log_request_interval
-                        if timestamp + log_request_interval < timestamp_end else timestamp_end) - 1
-            query = {
-                'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend',
-                'time_from': timestamp, 'time_till': time_end,
-            }
+            time_end = (
+                           timestamp + log_request_interval if timestamp + log_request_interval < timestamp_end else timestamp_end) - 1
+            query = {'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend', 'time_from': timestamp,
+                'time_till': time_end, }
             logger.info('Begin event.get query from {} hosts: {}'.format(len(hostids), query))
 
             history_res = zapi.do_request('event.get', query)
@@ -169,16 +170,14 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
                                   agent_config_vars, track, data_buffer, log_request_interval)
 
-            query = {
-                'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend',
-                'time_from': timestamp, 'time_till': time_end,
-            }
+            query = {'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend', 'time_from': timestamp,
+                'time_till': time_end, }
             logger.info('Begin problem.get query from {} hosts: {}'.format(len(hostids), query))
 
             history_res = zapi.do_request('problem.get', query)
 
-            logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids),
-                                                                            (arrow.utcnow() - time_now).total_seconds()))
+            logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids), (
+                        arrow.utcnow() - time_now).total_seconds()))
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
                                   agent_config_vars, track, data_buffer, log_request_interval)
             # clear data buffer when piece of time range end
@@ -186,19 +185,17 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
     else:
         for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
             time_now = arrow.utcnow()
-            time_end = (timestamp + log_request_interval
-                        if timestamp + log_request_interval < timestamp_end else timestamp_end) - 1
+            time_end = (
+                           timestamp + log_request_interval if timestamp + log_request_interval < timestamp_end else timestamp_end) - 1
 
-            query = {
-                'output': 'extend', "history": history_type, "hostids": hostids, "itemids": items_ids,
-                'time_from': timestamp, 'time_till': time_end
-            }
+            query = {'output': 'extend', "history": history_type, "hostids": hostids, "itemids": items_ids,
+                'time_from': timestamp, 'time_till': time_end}
             logger.info('Begin history.get query from {} hosts. {}'.format(len(hostids), query))
 
             history_res = zapi.do_request('history.get', query)
 
-            logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids),
-                                                                            (arrow.utcnow() - time_now).total_seconds()))
+            logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids), (
+                        arrow.utcnow() - time_now).total_seconds()))
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map, 'history',
                                   agent_config_vars, track, data_buffer, log_request_interval)
             clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
@@ -631,8 +628,8 @@ def get_agent_config_vars(logger, config_ini):
                        'his_time_range': his_time_range, 'proxies': agent_proxies, 'data_format': data_format,
                        # 'project_field': project_fields,
                        'instance_field': instance_fields, 'no_component_field': no_component_field,
-                       'device_field': device_fields, 'data_fields': data_fields, 'alert_data_fields': alert_data_fields,
-                       'timestamp_field': timestamp_fields,
+                       'device_field': device_fields, 'data_fields': data_fields,
+                       'alert_data_fields': alert_data_fields, 'timestamp_field': timestamp_fields,
                        'target_timestamp_timezone': target_timestamp_timezone, 'timezone': timezone,
                        'timestamp_format': timestamp_format, }
 
