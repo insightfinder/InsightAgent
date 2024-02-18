@@ -84,7 +84,7 @@ def is_matching_block_regex(item_id, name, block_regex_map):
 
 
 def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_field_map, items_map, items_keys,
-                           cli_config_vars, agent_config_vars, if_config_vars):
+                           cli_config_vars, agent_config_vars, if_config_vars, sampling_now):
     logger.info('Starting data processing worker {}/{}...'.format(idx + 1, total))
 
     log_request_interval = agent_config_vars['log_request_interval']
@@ -122,9 +122,8 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             items_ids_map[item_id] = item
         items_ids = list(items_ids_map.keys())
 
-    use_history_api = True
     if data_type == 'Metric':
-        if use_history_api:
+        if his_time_range:
             his_interval = sampling_interval * 10
             logger.debug('Using time range for replay data: {}'.format(his_time_range))
             for timestamp in range(timestamp_start, timestamp_end, his_interval):
@@ -139,7 +138,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                                                                                         len(hostids), len(items_keys), (
                                                                                                 arrow.utcnow() - time_now).total_seconds()))
                 parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map, 'history',
-                                      agent_config_vars, track, data_buffer, sampling_interval)
+                                      agent_config_vars, track, data_buffer, sampling_interval, sampling_now)
 
                 clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
         else:
@@ -154,7 +153,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                                                                                             len(items_keys), (
                                                                                                     arrow.utcnow() - time_now).total_seconds()))
             parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
-                                  agent_config_vars, track, data_buffer, sampling_interval)
+                                  agent_config_vars, track, data_buffer, sampling_interval, sampling_now)
             clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
     elif data_type == 'Alert':
         for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
@@ -162,24 +161,24 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             time_end = (
                            timestamp + log_request_interval if timestamp + log_request_interval < timestamp_end else timestamp_end) - 1
             query = {'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend', 'time_from': timestamp,
-                'time_till': time_end, }
+                     'time_till': time_end, }
             logger.info('Begin event.get query from {} hosts: {}'.format(len(hostids), query))
 
             history_res = zapi.do_request('event.get', query)
 
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
-                                  agent_config_vars, track, data_buffer, log_request_interval)
+                                  agent_config_vars, track, data_buffer, log_request_interval, sampling_now)
 
             query = {'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend', 'time_from': timestamp,
-                'time_till': time_end, }
+                     'time_till': time_end, }
             logger.info('Begin problem.get query from {} hosts: {}'.format(len(hostids), query))
 
             history_res = zapi.do_request('problem.get', query)
 
             logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids), (
-                        arrow.utcnow() - time_now).total_seconds()))
+                    arrow.utcnow() - time_now).total_seconds()))
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
-                                  agent_config_vars, track, data_buffer, log_request_interval)
+                                  agent_config_vars, track, data_buffer, log_request_interval, sampling_now)
             # clear data buffer when piece of time range end
             clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
     else:
@@ -189,20 +188,20 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                            timestamp + log_request_interval if timestamp + log_request_interval < timestamp_end else timestamp_end) - 1
 
             query = {'output': 'extend', "history": history_type, "hostids": hostids, "itemids": items_ids,
-                'time_from': timestamp, 'time_till': time_end}
+                     'time_from': timestamp, 'time_till': time_end}
             logger.info('Begin history.get query from {} hosts. {}'.format(len(hostids), query))
 
             history_res = zapi.do_request('history.get', query)
 
             logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids), (
-                        arrow.utcnow() - time_now).total_seconds()))
+                    arrow.utcnow() - time_now).total_seconds()))
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map, 'history',
-                                  agent_config_vars, track, data_buffer, log_request_interval)
+                                  agent_config_vars, track, data_buffer, log_request_interval, sampling_now)
             clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
     return idx + 1
 
 
-def start_data_processing(logger, config_name, cli_config_vars, agent_config_vars, if_config_vars):
+def start_data_processing(logger, config_name, cli_config_vars, agent_config_vars, if_config_vars, sampling_now):
     data_type = get_data_type_from_project_type(logger, if_config_vars)
     logger.info('Starting fetch {} items......'.format(data_type))
 
@@ -312,15 +311,15 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
     total = len(hosts_ids_list)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(data_processing_worker, idx, total, logger, zapi, hostids, data_type, all_field_map,
-                                   items_map, items_keys, cli_config_vars, agent_config_vars, if_config_vars) for
-                   idx, hostids in enumerate(hosts_ids_list)]
+                                   items_map, items_keys, cli_config_vars, agent_config_vars, if_config_vars,
+                                   sampling_now) for idx, hostids in enumerate(hosts_ids_list)]
         for future in as_completed(futures):
             logger.info('Data processing worker {}/{} finished'.format(future.result(), total))
     logger.info('Data processing done')
 
 
 def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, replay_type, agent_config_vars, track,
-                          data_buffer, sampling_interval):
+                          data_buffer, sampling_interval, sampling_now):
     count = 0
     logger.info('Reading {} messages'.format(len(result)))
     is_metric = True if data_type == 'Metric' else False
@@ -378,8 +377,15 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             full_instance = make_safe_instance_string(instance, device)
 
             # set timestamp
-            clock = message['lastclock'] if replay_type == 'live' else message['clock']
-            timestamp = int(clock) * 1000
+            if is_metric and replay_type == 'live':
+                timestamp = sampling_now
+            else:
+                clock = message['lastclock'] if replay_type == 'live' else message['clock']
+                timestamp = int(clock) * 1000
+                timestamp += target_timestamp_timezone * 1000
+                if is_metric:
+                    timestamp = align_timestamp(timestamp, sampling_interval)
+
             if timestamp == 0:
                 continue
 
@@ -406,12 +412,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             else:
                 data_value = str(message['value'])
 
-            # set offset for timestamp
-            timestamp += target_timestamp_timezone * 1000
-            if is_metric:
-                timestamp = str(align_timestamp(timestamp, sampling_interval))
-            else:
-                timestamp = str(timestamp)
+            timestamp = str(timestamp)
 
             key = '{}-{}'.format(timestamp, full_instance)
             if key not in data_buffer['buffer_dict']:
@@ -955,6 +956,7 @@ def send_data_to_if(logger, chunk_metric_data, cli_config_vars, if_config_vars):
     json_to_post = None
     if 'METRIC' in if_config_vars['project_type']:
         json_to_post = convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config_vars)
+        logger.debug(json_to_post)
         post_url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v2/metric-data-receive')
     else:
         data_to_post = initialize_api_post_data(logger, if_config_vars)
@@ -1232,7 +1234,7 @@ def queue_configurer(q):
 
 
 def worker_process(args):
-    (config_file, c_config, time_now, q) = args
+    (config_file, c_config, utc_now_time, q) = args
 
     config_name = Path(config_file).stem
     level = c_config['log_level']
@@ -1261,7 +1263,11 @@ def worker_process(args):
             if not check_success:
                 return
 
-    start_data_processing(logger, config_name, c_config, agent_config_vars, if_config_vars)
+    target_timestamp_timezone = agent_config_vars['target_timestamp_timezone']
+    sampling_interval = if_config_vars['sampling_interval']
+
+    sampling_now = align_timestamp((utc_now_time + target_timestamp_timezone) * 1000, sampling_interval)
+    start_data_processing(logger, config_name, c_config, agent_config_vars, if_config_vars, sampling_now)
 
 
 def main():
@@ -1296,8 +1302,8 @@ def main():
     main_logger.info(cli_data_block)
 
     # get args
-    utc_time_now = int(arrow.utcnow().float_timestamp)
-    arg_list = [(f, cli_config_vars, utc_time_now, queue) for f in config_files]
+    utc_now_time = int(arrow.utcnow().float_timestamp)
+    arg_list = [(f, cli_config_vars, utc_now_time, queue) for f in config_files]
 
     # start sub process by pool
     pool = multiprocessing.Pool(len(arg_list))
