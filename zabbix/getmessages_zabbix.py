@@ -99,9 +99,12 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
         timestamp_end = his_time_range[1]
         timestamp_start = his_time_range[0]
     else:
-        live_window = sampling_interval * 10
         timestamp_end = int(arrow.utcnow().floor('second').timestamp())
-        timestamp_start = timestamp_end - live_window
+        if data_type == 'Metric':
+            live_window = sampling_interval * 10
+            timestamp_start = timestamp_end - live_window
+        else:
+            timestamp_start = timestamp_end - if_config_vars["run_interval"]
 
     items_ids_map = {}
     items_ids = []
@@ -130,7 +133,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                 time_now = arrow.utcnow()
                 query = {'output': 'extend', "history": history_type, "hostids": hostids, "itemids": items_ids,
                          'time_from': timestamp, 'time_till': timestamp + his_interval}
-                logger.info('Begin history.get query {} from {} hosts'.format(query, len(hostids)))
+                logger.debug('Begin history.get query {} from {} hosts'.format(query, len(hostids)))
 
                 history_res = zapi.do_request('history.get', query)
                 logger.info(
