@@ -1,0 +1,17 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: opentelemetry-demo-startrecommendationservice
+spec:
+  schedule: "0 8 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: opentelemetry-demo-startrecommendationservice
+            image: insightfinderinc/k8s-demo:latest
+            env:
+            - name: DATABASE_URL
+              value: "opentelemetry-demo-ffspostgres"
+          restartPolicy: Never
