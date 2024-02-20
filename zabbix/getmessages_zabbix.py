@@ -88,6 +88,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
     logger.info('Starting data processing worker {}/{}...'.format(idx + 1, total))
 
     log_request_interval = agent_config_vars['log_request_interval']
+    metric_allowlist_map = agent_config_vars['metric_allowlist_map'] or {}
     his_time_range = agent_config_vars['his_time_range']
     sampling_interval = if_config_vars['sampling_interval']
 
@@ -115,15 +116,25 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
     track = {'chunk_count': 0, 'entry_count': 0}
     reset_track(track)
 
-    if data_type == 'Log' or (data_type == 'Metric' and his_time_range):
+    if data_type == 'Log' or data_type == 'Metric':
         items_res = zapi.do_request('item.get', {'output': ['key_', 'itemid', 'name'], "hostids": hostids,
-                                                 'selectHosts': ['hostId'],
-                                                 'filter': {'value_type': value_type_list, 'key_': items_keys}})
+                                                 'selectHosts': ['hostId'], 'filter': {'value_type': value_type_list}})
         items_ids_map = {}
+        items_keys_map = {}
         for item in items_res['result']:
             item_id = item['itemid']
-            items_ids_map[item_id] = item
+            item_key = item['key_']
+            item_name = item['name']
+            if data_type == 'Metric':
+                if is_matching_allow_regex(item_name, metric_allowlist_map):
+                    items_ids_map[item_id] = item
+                    items_keys_map[item_key] = item
+            else:
+                items_ids_map[item_id] = item
+                items_keys_map[item_key] = item
         items_ids = list(items_ids_map.keys())
+        items_keys = list(items_keys_map.keys())
+        logger.info("Zabbix item count: %s" % len(items_ids))
 
     if data_type == 'Metric':
         if his_time_range:
@@ -146,7 +157,8 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                 clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
         else:
             time_now = arrow.utcnow()
-            metric_output = ['key_', 'itemid', 'lastclock', 'clock', 'lastvalue', 'value']
+            metric_output = ['key_', 'itemid', 'lastclock', 'clock', 'lastvalue', 'value', 'name']
+
             params = {'output': metric_output, "hostids": hostids, "selectHosts": ['hostId'],
                       'filter': {'value_type': value_type_list, 'key_': items_keys}}
             logger.info('Begin item.get query from {} hosts'.format(len(hostids)))
@@ -307,7 +319,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
             logger.error('Item list is empty')
             sys.exit(1)
 
-        logger.info("Zabbix item count: %s" % len(items_keys))
+        # logger.info("Zabbix item count: %s" % len(items_keys))
 
     all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map}
 
@@ -337,11 +349,11 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
 
     for message in result:
         try:
-            logger.debug('Message received')
-            logger.debug(message)
+            logger.debug('Message received:' + str(message))
 
             item_key = message.get('key_')
             item_id = message.get('itemid')
+            item_name = message.get('name')
 
             # set instance and device
             if not message.get('hosts'):
@@ -395,11 +407,16 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             # set data field and value
             data_field = None
             if is_metric:
-                item = items_map.get(item_key) or items_map.get(item_id)
-                if not item:
+                if item_name:
+                    data_field = item_name
+                else:
+                    item = items_map.get(item_key) or items_map.get(item_id)
+                    if item:
+                        data_field = item['name']
+                if not data_field:
+                    logger.warn('cannot find item name from {}'.format(message))
                     continue
 
-                data_field = item['name']
                 data_field = make_safe_data_key(data_field)
 
             data_value = None
