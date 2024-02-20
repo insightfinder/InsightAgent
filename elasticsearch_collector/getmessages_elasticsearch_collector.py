@@ -464,16 +464,16 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                     data_entry = prepare_data_entry(if_config_vars, str(int(timestamp)), data, component_name,
                                                     full_instance)
 
-                data_entry['project'] = project
-                data_entry['data_size'] = getsizeof(str(data))
-                if needs_log_data:
-                    logger.info('Parsed data:\n' + pformat(data_entry))
+                if data_entry:
+                    data_entry['project'] = project
+                    data_entry['data_size'] = getsizeof(str(data))
+                    if needs_log_data:
+                        logger.info('Parsed data:\n' + pformat(data_entry))
 
-                if is_metric:
-                    if data_entry:
+                    if is_metric:
                         metric_data_entries.append(data_entry)
-                else:
-                    datas.put(data_entry)
+                    else:
+                        datas.put(data_entry)
 
             # merge metric data
             metric_data_dict = {}
@@ -1010,12 +1010,12 @@ def flatten_json(y):
 
 def match_patterns(target, patterns):
     for pattern in patterns:
-        is_match = pattern in target
-        if is_match:
-            return True
-        is_match = bool(re.search(pattern, target))
-        if is_match:
-            return True
+        if pattern.startswith('/') and pattern.endswith('/'):
+            if regex.match(pattern[1:-1], target):
+                return True
+        else:
+            if pattern == target:
+                return True
     return False
 
 
@@ -1292,12 +1292,14 @@ def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data, 
     # send the data
     if data_to_post:
         logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
+        logger.debug(data_to_post)
 
         send_request(logger, post_url, 'POST', 'Could not send request to IF',
                      str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
                      verify=False, proxies=if_config_vars['if_proxies'])
     elif json_to_post:
         logger.info('Total Data (bytes): ' + str(get_json_size_bytes(json_to_post)))
+        logger.debug(json_to_post)
         send_request(logger, post_url, 'POST', 'Could not send request to IF',
                      str(get_json_size_bytes(json_to_post)) + ' bytes of data are reported.', json=json_to_post,
                      verify=False, proxies=if_config_vars['if_proxies'])
