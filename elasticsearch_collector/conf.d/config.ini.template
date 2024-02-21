@@ -77,7 +77,7 @@ instance_whitelist =
 device_field =
 # Optional regex to retrieve the device name using a capture group named 'device' (eg: '(?P<device>.*)') 
 device_field_regex = 
-# multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>`. Example: data_fields = ^(?!.*(?:event\.duration|metricset\.period)).*$
+# multiple fields are separated by commas, a field can be `<name>` or regex. Example: data_fields = /^system\.filesystem.*/,system.process.cgroup.memory.memsw.events.max
 data_fields =
 
 ## proxy
