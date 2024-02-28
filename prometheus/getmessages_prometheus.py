@@ -138,6 +138,7 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
 
     query_metric_name = query.get('metric_name')
     query_instance_fields = query.get('instance_fields')
+    default_component_name = agent_config_vars['default_component_name']
 
     count = 0
     logger.info('Reading {} messages'.format(len(result)))
@@ -196,10 +197,13 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
 
             # get component, and build component instance map info
             component_map = None
+            component = None
             if agent_config_vars['component_field']:
                 component = message.get('metric').get(agent_config_vars['component_field'])
-                if component:
-                    component_map = {"instanceName": full_instance, "componentName": component}
+            if not component and default_component_name:
+                component = default_component_name
+            if component:
+                component_map = {"instanceName": full_instance, "componentName": component}
 
             vector_value = message.get('value')
             timestamp = int(vector_value[0]) * 1000
@@ -313,6 +317,7 @@ def get_agent_config_vars(logger, config_ini):
             data_format = config_parser.get('prometheus', 'data_format').upper()
             # project_field = config_parser.get('agent', 'project_field', raw=True)
             component_field = config_parser.get('prometheus', 'component_field', raw=True)
+            default_component_name = config_parser.get('prometheus', 'default_component_name', raw=True)
             instance_field = config_parser.get('prometheus', 'instance_field', raw=True)
             instance_whitelist = config_parser.get('prometheus', 'instance_whitelist')
             device_field = config_parser.get('prometheus', 'device_field', raw=True)
@@ -429,9 +434,10 @@ def get_agent_config_vars(logger, config_ini):
                        'metrics_name_field': metrics_name_field, 'his_time_range': his_time_range,
 
                        'proxies': agent_proxies, 'data_format': data_format,  # 'project_field': project_fields,
-                       'component_field': component_field, 'instance_field': instance_fields,
-                       "instance_whitelist_regex": instance_whitelist_regex, 'device_field': device_fields,
-                       'timestamp_field': timestamp_fields, 'target_timestamp_timezone': target_timestamp_timezone,
+                       'component_field': component_field, 'default_component_name': default_component_name,
+                       'instance_field': instance_fields, "instance_whitelist_regex": instance_whitelist_regex,
+                       'device_field': device_fields, 'timestamp_field': timestamp_fields,
+                       'target_timestamp_timezone': target_timestamp_timezone,
                        'timezone': timezone, 'timestamp_format': timestamp_format,
                        'instance_connector': instance_connector, 'thread_pool': thread_pool, 'processes': processes,
                        'timeout': timeout, }

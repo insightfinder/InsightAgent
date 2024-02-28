@@ -44,6 +44,8 @@ timestamp_field =
 # Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
 target_timestamp_timezone = UTC
 component_field =
+# Default component name if component_field is not set or field value is empty.
+default_component_name
 # if no instance given, will set to 'Application'. Can also set instance name from multiple fields which separated by commas. Ex: instance_name_part1,instance_name_part2.
 instance_field = instance
 # instance_whitelist is a regex string used to define which instances will be filtered.
