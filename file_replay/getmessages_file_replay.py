@@ -256,6 +256,7 @@ def get_agent_config_vars():
             device_field = config_parser.get('agent', 'device_field', raw=True)
             timestamp_field = config_parser.get('agent', 'timestamp_field', raw=True) or 'timestamp'
             timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
+            default_year = config_parser.get('agent', 'default_year', raw=True)
             timezone = config_parser.get('agent', 'timezone') or 'UTC'
             data_fields = config_parser.get('agent', 'data_fields', raw=True)
 
@@ -383,6 +384,7 @@ def get_agent_config_vars():
             'timestamp_field': timestamp_fields,
             'timezone': timezone,
             'timestamp_format': ts_format_info['timestamp_format'],
+            'default_year': default_year,
             'strip_tz': ts_format_info['strip_tz'],
             'strip_tz_fmt': ts_format_info['strip_tz_fmt']
         }
@@ -1100,7 +1102,7 @@ def parse_json_message_single(message):
 
     # hand off
     for timestamp, report_data in data.items():
-        ts = get_timestamp_from_date_string(timestamp)
+        ts = get_timestamp_from_date_string(timestamp,agent_config_vars['default_year'])
         if 'METRIC' in if_config_vars['project_type']:
             data_folded = fold_up(report_data, value_tree=True)  # put metric data in top level
             for data_field, data_value in data_folded.items():
@@ -1204,7 +1206,7 @@ def parse_csv_data(csv_data, instance, device=''):
 
 
 def parse_csv_row(row, field_names, instance, device=''):
-    timestamp = get_timestamp_from_date_string(row.pop(0))
+    timestamp = get_timestamp_from_date_string(row.pop(0),agent_config_vars['default_year'])
     if 'METRIC' in if_config_vars['project_type']:
         for i in range(len(row)):
             metric_handoff(timestamp, field_names[i], row[i], instance, device)
@@ -1215,13 +1217,16 @@ def parse_csv_row(row, field_names, instance, device=''):
         log_handoff(timestamp, json_message, instance, device)
 
 
-def get_timestamp_from_date_string(date_string):
+def get_timestamp_from_date_string(date_string,default_year):
     """ parse a date string into unix epoch (ms) """
-    timestamp_datetime = get_datetime_from_date_string(date_string.partition('.')[0])
+    timestamp_datetime = get_datetime_from_date_string(date_string.partition('.')[0],default_year)
     return get_timestamp_from_datetime(timestamp_datetime)
 
 
-def get_datetime_from_date_string(date_string):
+def get_datetime_from_date_string(date_string,default_year):
+    if default_year and default_year != "":
+        date_string = default_year + " " + date_string
+
     timestamp_datetime = date_string.partition('.')[0]
     if 'strip_tz' in agent_config_vars and agent_config_vars['strip_tz']:
         date_string = ''.join(agent_config_vars['strip_tz_fmt'].split(date_string))
