@@ -23,6 +23,8 @@ es_uris = http://localhost:9200
 #              }
 #            }
 query_json = {}
+# json file to add to the query body.
+query_json_file =
 # The maximum messages number of each query, default is 5000, and max value id 10000.
 query_chunk_size = 5000
 # indexes to search over, example indeces = metricbeat*
@@ -68,12 +70,14 @@ timestamp_field = @timestamp
 # Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
 target_timestamp_timezone = UTC
 component_field =
+default_component_name =
 # if no instance given, the agent server name will be used.
 instance_field = agent.hostname
 # instance_field_regex is a field name and a regex string used to get instance, syntax `<field1>::<regex1>,<field2>::<regex2>`.
 instance_field_regex = message::group=\"(.*?)\",message::deployment=\"(.*?)\"
 # instance_whitelist is a regex string used to define which instances will be filtered.
 instance_whitelist =
+default_instance_name =
 device_field =
 # Optional regex to retrieve the device name using a capture group named 'device' (eg: '(?P<device>.*)') 
 device_field_regex = 
