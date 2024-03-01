@@ -367,6 +367,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
     component_field = agent_config_vars['component_field']
     default_component_name = agent_config_vars['default_component_name']
     default_instance_name = agent_config_vars['default_instance_name']
+    aggregation_data_fields = agent_config_vars['aggregation_data_fields']
 
     count = 0
     collector_quit = 0
@@ -531,7 +532,9 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                     if full_instance and timestamp:
                         data = {}
                         for key, value in aggs_data.items():
-                            data[key] = value.get('doc_count', 0)
+                            val = safe_get_metric_value(value, aggregation_data_fields, logger)
+                            if val is not None:
+                                data[key] = val
 
                         timestamp = str(align_timestamp(timestamp, sampling_interval))
                         if bool(data):
@@ -735,6 +738,7 @@ def get_agent_config_vars(logger, config_ini):
             timestamp_format = config_parser.get('elasticsearch', 'timestamp_format', raw=True)
             timezone = config_parser.get('elasticsearch', 'timezone') or 'UTC'
             data_fields = config_parser.get('elasticsearch', 'data_fields', raw=True)
+            aggregation_data_fields = config_parser.get('elasticsearch', 'aggregation_data_fields', raw=True)
 
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
@@ -822,6 +826,11 @@ def get_agent_config_vars(logger, config_ini):
             if timestamp_field in data_fields:
                 data_fields.pop(data_fields.index(timestamp_field))
 
+        if len(aggregation_data_fields) != 0:
+            aggregation_data_fields = aggregation_data_fields.split(',')
+        else:
+            aggregation_data_fields = ['doc_count']
+
         if len(instance_field_regex) != 0:
             try:
                 for field_regex in instance_field_regex.split(','):
@@ -857,6 +866,7 @@ def get_agent_config_vars(logger, config_ini):
             'device_field': device_fields,
             'device_field_regex': device_field_regex,
             'data_fields': data_fields,
+            'aggregation_data_fields': aggregation_data_fields,
             'timestamp_field': timestamp_field,
             'target_timestamp_timezone': target_timestamp_timezone,
             'timezone': timezone,
@@ -1103,6 +1113,19 @@ def match_patterns(target, patterns):
             if pattern == target:
                 return True
     return False
+
+
+def safe_get_metric_value(dct, keys, logger):
+    # flatten multiple level dict object into key value and ignore string values
+    flat_json = flatten_json(dct)
+    filtered_json = {k: v for k, v in flat_json.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+
+    vals = []
+
+    if keys:
+        vals = [v for k, v in filtered_json.items() if match_patterns(k, keys)]
+
+    return vals[0] if len(vals) > 0 else None
 
 
 def safe_get_metric_data(dct, keys, logger):
