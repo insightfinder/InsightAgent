@@ -1753,6 +1753,9 @@ def main():
         time.sleep(1)
         sys.exit(1)
 
+    if 'METRIC' in if_config_vars['project_type']:
+        cli_config_vars['collector'] = 1
+
     logger.info("Start listener process")
     listener = Process(target=listener_process, args=(log_queue, cli_config_vars, if_config_vars))
     listener.daemon = True
