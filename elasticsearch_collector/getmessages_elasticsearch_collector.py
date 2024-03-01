@@ -533,8 +533,9 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                         data = {}
                         for key, value in aggs_data.items():
                             val = safe_get_metric_value(value, aggregation_data_fields, logger)
+                            metric_name = make_safe_metric_key(key)
                             if val is not None:
-                                data[key] = val
+                                data[metric_name] = val
 
                         timestamp = str(align_timestamp(timestamp, sampling_interval))
                         if bool(data):
@@ -1120,12 +1121,17 @@ def safe_get_metric_value(dct, keys, logger):
     flat_json = flatten_json(dct)
     filtered_json = {k: v for k, v in flat_json.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
 
-    vals = []
+    val = None
 
     if keys:
-        vals = [v for k, v in filtered_json.items() if match_patterns(k, keys)]
-
-    return vals[0] if len(vals) > 0 else None
+        for key in keys:
+            for k, v in filtered_json.items():
+                if match_patterns(k, [key]):
+                    val = v
+                    break
+            if val:
+                break
+    return val
 
 
 def safe_get_metric_data(dct, keys, logger):
