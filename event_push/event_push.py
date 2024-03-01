@@ -780,12 +780,14 @@ def worker_process(args):
         params = []
         for project_edge_data in edge_data:
             try:
-                if project_edge_data.get("noResult"):
+                if not isinstance(project_edge_data, dict):
+                    logger.warning("Invalid data:" + project_edge_data)
                     continue
 
+                if project_edge_data.get("noResult"):
+                    continue
                 params.append((logger, c_config, main_vars, project_edge_data))
             except Exception as e:
-                logger.error(project_edge_data)
                 logger.error(f'Parse project: {project_edge_data.get("projectName")} transfer_data error.')
                 logger.error(e)
         if len(params) > 0:
