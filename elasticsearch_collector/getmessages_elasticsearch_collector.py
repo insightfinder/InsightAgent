@@ -297,6 +297,11 @@ def query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_
         for item in hits_data:
             messages.put(item)
 
+    if len(hits_data) == 0:
+        if len(metric_message) > 0:
+            messages.put(metric_message)
+        return
+
     # next query
     last_time = response.get('hits').get('hits')[-1].get('sort')
     pit = response.get('pit_id')
