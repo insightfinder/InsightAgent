@@ -84,6 +84,9 @@ device_field_regex =
 # multiple fields are separated by commas, a field can be `<name>` or regex. Example: data_fields = /^system\.filesystem.*/,system.process.cgroup.memory.memsw.events.max
 data_fields =
 
+# multiple fields are separated by commas
+aggregation_data_fields = doc_count,value
+
 ## proxy
 agent_http_proxy =
 agent_https_proxy =
