@@ -277,7 +277,7 @@ def query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_
     aggs_data = response.get('aggregations', {})
 
     if is_metric:
-        if len(hits_data) == 0 or len(aggs_data) == 0:
+        if len(hits_data) == 0 and len(aggs_data) == 0:
             logger.info('No data found in hits or aggregations')
             return
     else:
