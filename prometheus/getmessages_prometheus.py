@@ -80,7 +80,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
         for query in prometheus_query:
             for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
                                    if_config_vars['sampling_interval']):
-                params = [(logger, if_config_vars, agent_config_vars, None, {'query': query.query, 'time': timestamp})]
+                params = [(logger, if_config_vars, agent_config_vars, None, {'query': query.get('query'), 'time': timestamp})]
 
                 results = thread_pool.map(query_messages_prometheus, params)
                 result_list = list(chain(*results))
