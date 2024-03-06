@@ -77,11 +77,10 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     thread_pool = ThreadPool(agent_config_vars['thread_pool'])
     if agent_config_vars['his_time_range']:
         logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
-        for query in prometheus_query:
-            for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
-                                   if_config_vars['sampling_interval']):
+        for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
+                               if_config_vars['sampling_interval']):
+            for query in prometheus_query:
                 params = [(logger, if_config_vars, agent_config_vars, None, {'query': query.get('query'), 'time': timestamp})]
-
                 results = thread_pool.map(query_messages_prometheus, params)
                 result_list = list(chain(*results))
                 parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
