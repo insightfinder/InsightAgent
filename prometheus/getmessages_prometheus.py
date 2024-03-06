@@ -86,8 +86,8 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
                 parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
                                           cache_cur, result_list, query)
 
-                # clear metric buffer when piece of time range end
-                clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
+            # clear metric buffer when piece of time range end
+            clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
     else:
         logger.debug('Using current time for streaming data')
         for query in prometheus_query:
