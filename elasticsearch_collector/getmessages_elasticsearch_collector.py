@@ -424,7 +424,10 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                     timestamp_field = agent_config_vars['timestamp_field']
                     timestamp_field = timestamp_field.split('.')
                     timestamp = safe_get(message_source, timestamp_field)
-                    timestamp = int(arrow.get(timestamp).float_timestamp * 1000)
+                    timestamp = int(arrow.get(timestamp).float_timestamp)
+                    # check whether timestamp is epoch second or epoch millisecond
+                    if len(str(timestamp)) == 10:
+                        timestamp *= 1000
 
                     # set offset for timestamp
                     timestamp += timestamp_timezone
