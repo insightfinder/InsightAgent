@@ -127,6 +127,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
 
     # time query
     timestamp_field = agent_config_vars['timestamp_field']
+    timestamp_field = timestamp_field.replace('_source.', '')
 
     # parse sql string by params
     logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
@@ -364,6 +365,8 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
 
     project_name = if_config_vars['project_name']
     timestamp_timezone = agent_config_vars['target_timestamp_timezone'] * 1000
+
+    document_root_field = agent_config_vars['document_root_field']
     component_field = agent_config_vars['component_field']
     default_component_name = agent_config_vars['default_component_name']
     default_instance_name = agent_config_vars['default_instance_name']
@@ -401,7 +404,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
             for data_message in data_messages_list:
 
                 # get source
-                message_source = data_message.get('_source', {})
+                message_source = data_message.get(document_root_field, {}) if document_root_field else data_message
                 aggs_data = data_message.get('_aggregations', {})
                 project = project_name
 
@@ -500,7 +503,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                                                             full_instance)
                     else:
                         data_fields = agent_config_vars['data_fields'] if agent_config_vars['data_fields'] and len(
-                            agent_config_vars['data_fields']) > 0 else ['message']
+                            agent_config_vars['data_fields']) > 0 else None
                         data = safe_get_data(message_source, data_fields, logger)
 
                         # build log entry
@@ -725,6 +728,7 @@ def get_agent_config_vars(logger, config_ini):
             project_whitelist = config_parser.get('elasticsearch', 'project_whitelist')
 
             # message parsing
+            document_root_field = config_parser.get('elasticsearch', 'document_root_field', raw=True)
             component_field = config_parser.get('elasticsearch', 'component_field', raw=True)
             default_component_name = config_parser.get('elasticsearch', 'default_component_name', raw=True)
             instance_field = config_parser.get('elasticsearch', 'instance_field', raw=True)
@@ -811,6 +815,10 @@ def get_agent_config_vars(logger, config_ini):
 
         # fields
         project_field = project_field.strip() if project_field else None
+        if document_root_field == '""':
+            document_root_field = None
+        else:
+            document_root_field = document_root_field.strip() if document_root_field else '_source'
         component_field = component_field.strip() if component_field else None
         default_component_name = default_component_name.strip() if default_component_name else None
         instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
@@ -858,6 +866,7 @@ def get_agent_config_vars(logger, config_ini):
             'his_time_range': his_time_range,
             'project_field': project_field,
             'project_whitelist_regex': project_whitelist_regex,
+            'document_root_field': document_root_field,
             'component_field': component_field,
             'default_component_name': default_component_name,
             'instance_field': instance_fields,
@@ -1146,6 +1155,9 @@ def safe_get_metric_data(dct, keys, logger):
 
 
 def safe_get_data(dct, keys, logger):
+    if not keys:
+        return dct
+
     data = {}
     no_value_ct = 0  # count of empty values
     for key in keys:
