@@ -734,7 +734,12 @@ def get_agent_config_vars(logger, config_ini):
             project_whitelist = config_parser.get('elasticsearch', 'project_whitelist')
 
             # message parsing
-            document_root_field = config_parser.get('elasticsearch', 'document_root_field', raw=True)
+            document_root_field = None
+            try:
+                document_root_field = config_parser.get('elasticsearch', 'document_root_field', raw=True)
+            except configparser.NoOptionError:
+                pass
+
             component_field = config_parser.get('elasticsearch', 'component_field', raw=True)
             default_component_name = config_parser.get('elasticsearch', 'default_component_name', raw=True)
             instance_field = config_parser.get('elasticsearch', 'instance_field', raw=True)
