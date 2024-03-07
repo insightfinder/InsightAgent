@@ -233,16 +233,19 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
 
 
 def get_alias_from_cache(cache_con, cache_cur, alias):
-    if cache_cur:
-        cache_cur.execute('select alias from cache where instance="%s"' % alias)
-        instance = cache_cur.fetchone()
-        if instance:
-            return instance[0]
-        else:
-            # Hard coded if alias hasn't been added to cache, add it 
-            cache_cur.execute('insert into cache (instance, alias) values ("%s", "%s")' % (alias, alias))
-            cache_con.commit()
-            return alias
+    try:
+        if cache_cur:
+            cache_cur.execute('select alias from cache where instance="%s"' % alias)
+            instance = cache_cur.fetchone()
+            if instance:
+                return instance[0]
+            else:
+                # Hard coded if alias hasn't been added to cache, add it
+                cache_cur.execute('insert into cache (instance, alias) values ("%s", "%s")' % (alias, alias))
+                cache_con.commit()
+                return alias
+    except Exception as e:
+        return alias
 
 
 def get_agent_config_vars(logger, config_ini):
