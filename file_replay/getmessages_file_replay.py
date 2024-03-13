@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import traceback
 import configparser
 import json
 import logging
@@ -6,6 +7,7 @@ import os
 import regex
 import socket
 import sys
+from sys import getsizeof
 import time
 import pytz
 from optparse import OptionParser
@@ -22,6 +24,7 @@ import xlrd
 import xml2dict
 import avro.datafile
 import avro.io
+import arrow
 
 '''
 This script gathers data to send to Insightfinder
@@ -109,6 +112,7 @@ def start_data_processing(thread_number):
                 except Exception as e:
                     logger.debug('Error when processing line {}'.format(line))
                     logger.warning(e)
+                    traceback.print_exc()
         # get last message
         if 'RAW' in data_format:
             try:
@@ -280,8 +284,17 @@ def get_agent_config_vars():
             json_top_level = config_parser.get('agent', 'json_top_level')
             # project_field = config_parser.get('agent', 'project_field', raw=True)
             instance_field = config_parser.get('agent', 'instance_field', raw=True)
+            default_instance_name = None
+            if config_parser.has_option('agent', 'default_instance_name'):
+                default_instance_name = config_parser.get('agent', 'default_instance_name', raw=True)
             device_field = config_parser.get('agent', 'device_field', raw=True)
             timestamp_field = config_parser.get('agent', 'timestamp_field', raw=True) or 'timestamp'
+            timestamp_default_year = None
+            if config_parser.has_option('agent', 'timestamp_default_year'):
+                timestamp_default_year = config_parser.get('agent', 'timestamp_default_year', raw=True)
+                timestamp_default_year = None if len(timestamp_default_year) == 0 else timestamp_default_year.strip()
+            timestamp_field_format = config_parser.get('agent', 'timestamp_field_format', raw=True,
+                                                       fallback='YYYY MMM DD HH:mm:ss')
             timestamp_format = config_parser.get('agent', 'timestamp_format', raw=True) or 'epoch'
             timezone = config_parser.get('agent', 'timezone') or 'UTC'
             data_fields = config_parser.get('agent', 'data_fields', raw=True)
@@ -385,8 +398,10 @@ def get_agent_config_vars():
                        'raw_start_regex': raw_start_regex, 'json_top_level': json_top_level,
                        'csv_field_names': csv_field_names, 'csv_field_delimiter': csv_field_delimiter,
                        # 'project_field': project_fields,
-                       'instance_field': instance_fields, 'device_field': device_fields, 'data_fields': data_fields,
-                       'timestamp_field': timestamp_fields, 'timezone': timezone,
+                       'instance_field': instance_fields, 'default_instance_name': default_instance_name,
+                       'device_field': device_fields, 'data_fields': data_fields, 'timestamp_field': timestamp_fields,
+                       'timestamp_default_year': timestamp_default_year,
+                       'timestamp_field_format': timestamp_field_format, 'timezone': timezone,
                        'timestamp_format': ts_format_info['timestamp_format'], 'strip_tz': ts_format_info['strip_tz'],
                        'strip_tz_fmt': ts_format_info['strip_tz_fmt']}
 
@@ -404,11 +419,16 @@ def get_if_config_vars():
     if os.path.exists(config_ini):
         config_parser = configparser.ConfigParser()
         config_parser.read(config_ini)
+        system_name = None
         try:
             user_name = config_parser.get('insightfinder', 'user_name')
             license_key = config_parser.get('insightfinder', 'license_key')
             token = config_parser.get('insightfinder', 'token')
             project_name = config_parser.get('insightfinder', 'project_name')
+            try:
+                system_name = config_parser.get('insightfinder', 'system_name')
+            except configparser.NoOptionError:
+                pass
             project_type = config_parser.get('insightfinder', 'project_type').upper()
             sampling_interval = config_parser.get('insightfinder', 'sampling_interval')
             run_interval = config_parser.get('insightfinder', 'run_interval')
@@ -468,7 +488,8 @@ def get_if_config_vars():
             if_proxies['https'] = if_https_proxy
 
         config_vars = {'user_name': user_name, 'license_key': license_key, 'token': token, 'project_name': project_name,
-                       'project_type': project_type, 'sampling_interval': int(sampling_interval),  # as seconds
+                       'system_name': system_name, 'project_type': project_type,
+                       'sampling_interval': int(sampling_interval),  # as seconds
                        'run_interval': int(run_interval),  # as seconds
                        'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
                        'if_url': if_url, 'if_proxies': if_proxies}
@@ -695,7 +716,7 @@ def should_exclude_per_config(setting, value):
 
 def get_json_size_bytes(json_data):
     """ get size of json object in bytes """
-    return len(bytearray(json.dumps(json_data)))
+    return getsizeof(json.dumps(json_data))
 
 
 def get_all_files(files, file_regex_c):
@@ -729,6 +750,7 @@ def parse_raw_line(message, line):
             message += line
     else:
         parse_raw_message(line)
+        message = line
     return message
 
 
@@ -783,7 +805,7 @@ def parse_formatted(message, setting_value, default='', allow_list=False, remove
 
 
 def get_data_values(timestamp, message):
-    setting_values = agent_config_vars['data_fields'] or message.keys()
+    setting_values = list(agent_config_vars['data_fields'] or message.keys())
     # reverse list so it's in priority order, as shared fields names will get overwritten
     setting_values.reverse()
     data = {x: dict() for x in timestamp}
@@ -880,9 +902,6 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     # check the next value
     if next_value is None:
         # no next value defined
-        return ''
-    elif len(bytes(next_value)) == 0:
-        # no next value set
         return ''
 
     # sometimes payloads come in formatted
@@ -1137,15 +1156,18 @@ def get_timestamp_from_date_string(date_string):
 
 def get_datetime_from_date_string(date_string):
     timestamp_datetime = date_string.partition('.')[0]
+
     if 'strip_tz' in agent_config_vars and agent_config_vars['strip_tz']:
         date_string = ''.join(agent_config_vars['strip_tz_fmt'].split(date_string))
+
     if 'timestamp_format' in agent_config_vars:
         for timestamp_format in agent_config_vars['timestamp_format']:
             try:
                 if timestamp_format == 'epoch':
                     timestamp_datetime = get_datetime_from_unix_epoch(date_string)
                 else:
-                    timestamp_datetime = datetime.strptime(date_string, timestamp_format)
+                    # timestamp_datetime = datetime.strptime(date_string, timestamp_format)
+                    timestamp_datetime = get_timestamp_from_datetime(timestamp_datetime)
                 break
             except Exception as e:
                 logger.info('timestamp {} does not match {}'.format(date_string, timestamp_format))
@@ -1161,10 +1183,35 @@ def get_datetime_from_date_string(date_string):
 
 
 def get_timestamp_from_datetime(timestamp_datetime):
-    timestamp_localize = agent_config_vars['timezone'].localize(timestamp_datetime)
+    timestamp_field_format = agent_config_vars['timestamp_field_format'] or None
+    timestamp_default_year = agent_config_vars['timestamp_default_year'] or None
+    timezone = agent_config_vars['timezone']
 
-    epoch = long((timestamp_localize - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()) * 1000
-    return epoch
+    def parse_timestamp(timestamp_value, time_format=None):
+
+        if isinstance(timestamp_value, int):
+            return timestamp_value
+
+        ts = None
+        try:
+            ts = int(arrow.get(timestamp_value, time_format, tzinfo=timezone).float_timestamp * 1000)
+        except Exception:
+            pass
+        return ts
+
+    timestamp = parse_timestamp(timestamp_datetime)
+
+    if timestamp is None and timestamp_default_year:
+        timestamp_datetime = '%s %s' % (timestamp_default_year, timestamp_datetime)
+        timestamp = parse_timestamp(timestamp_datetime)
+
+    if timestamp is None and timestamp_field_format:
+        timestamp = parse_timestamp(timestamp_datetime, timestamp_field_format)
+
+    if timestamp is None:
+        logger.warning('Could not parse timestamp: {}'.format(timestamp_datetime))
+
+    return timestamp
 
 
 def get_datetime_from_unix_epoch(date_string):
@@ -1295,6 +1342,10 @@ def initialize_data_gathering(thread_number, cli_config, if_config, agent_config
     global agent_config_vars
     agent_config_vars = agent_config
 
+    global HOSTNAME
+    if 'default_instance_name' in agent_config and agent_config['default_instance_name'] is not None:
+        HOSTNAME = agent_config['default_instance_name']
+
     global logger
     logger = set_logger_config(cli_config_vars['log_level'])
     logger.debug(cli_config_vars)
@@ -1406,7 +1457,7 @@ def append_metric_data_to_entry(timestamp, field_name, data, instance, device=''
 
     # use the next non-null value to overwrite the prev value
     # for the same metric in the same timestamp
-    if key in current_obj.keys():
+    if key in list(current_obj.keys()):
         if data is not None and len(str(data)) > 0:
             current_obj[key] += '|' + str(data)
     else:
@@ -1544,10 +1595,10 @@ def send_data_to_if(chunk_metric_data):
             chunk['data'] = json.dumps(chunk['data'])
     data_to_post[get_data_field_from_project_type()] = json.dumps(chunk_metric_data)
 
-    logger.debug('First:\n' + str(chunk_metric_data[0]))
-    logger.debug('Last:\n' + str(chunk_metric_data[-1]))
-    logger.debug('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
-    logger.debug('Total Lines: ' + str(track['line_count']))
+    logger.info('First:\n' + str(chunk_metric_data[0]))
+    logger.info('Last:\n' + str(chunk_metric_data[-1]))
+    logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
+    logger.info('Total Lines: ' + str(track['line_count']))
 
     # do not send if only testing
     if cli_config_vars['testing']:
@@ -1668,7 +1719,8 @@ def initialize_api_post_data():
     to_send_data_dict['userName'] = if_config_vars['user_name']
     to_send_data_dict['licenseKey'] = if_config_vars['license_key']
     to_send_data_dict['projectName'] = if_config_vars['project_name']
-    to_send_data_dict['instanceName'] = HOSTNAME
+    to_send_data_dict['systemName'] = if_config_vars['system_name']
+    # to_send_data_dict['instanceName'] = HOSTNAME
     to_send_data_dict['agentType'] = get_agent_type_from_project_type()
     if 'METRIC' in if_config_vars['project_type'] and 'sampling_interval' in if_config_vars:
         to_send_data_dict['samplingInterval'] = str(if_config_vars['sampling_interval'])
