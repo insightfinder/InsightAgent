@@ -25,6 +25,7 @@ import xml2dict
 import avro.datafile
 import avro.io
 import arrow
+from pathlib import Path
 
 '''
 This script gathers data to send to Insightfinder
@@ -56,6 +57,7 @@ logger = None
 cli_config_vars = None
 if_config_vars = None
 agent_config_vars = None
+current_file_timestamp = None
 
 
 def start_data_processing(thread_number):
@@ -87,7 +89,41 @@ def start_data_processing(thread_number):
             file_list.pop(file_list.index(_file))
     else:
         _file = file_list.pop(0)
+
     # while there's a file to read
+
+    def set_default_timestamp(file_path):
+        file_name_timestamp_regex = agent_config_vars['file_name_timestamp_regex']
+        timezone = agent_config_vars['timezone']
+
+        global current_file_timestamp
+        if not file_name_timestamp_regex or not file_path:
+            current_file_timestamp = None
+            return
+
+        try:
+            match = regex.search(file_name_timestamp_regex, Path(file_path).name)
+            if match:
+                groups = match.groupdict()
+                year = groups.get('year', None)
+                month = groups.get('month', None)
+                day = groups.get('day', None)
+                hour = groups.get('hour', None)
+                minute = groups.get('minute', None)
+                second = groups.get('second', 0)
+                if year and month and day and hour and minute:
+                    if second and int(second) > 59:
+                        second = int(second) % 60
+                    file_time = arrow.get(
+                        datetime(int(year), int(month), int(day), int(hour), int(minute), int(second)), tzinfo=timezone)
+                    if file_time:
+                        current_file_timestamp = int(file_time.float_timestamp * 1000)
+                        logger.info('Get file timestamp, use it as data timestamp: {}'.format(current_file_timestamp))
+                else:
+                    logger.warning('File name does not contain all required timestamp components: {}'.format(file_name))
+        except Exception as e:
+            logger.warning('Error when parsing timestamp from file name: {}'.format(e))
+
     while _file:
         logger.debug(_file)
         # get file info
@@ -98,6 +134,8 @@ def start_data_processing(thread_number):
             continue
         # read from the file
         message = ''
+
+        set_default_timestamp(file_name)
         for line in reader(data_format, file_name, st_ino_orig):
             if line:
                 logger.debug(line)
@@ -270,6 +308,7 @@ def get_agent_config_vars():
             # files
             file_path = config_parser.get('agent', 'file_path')
             file_name_regex = config_parser.get('agent', 'file_name_regex')
+            file_name_timestamp_regex = config_parser.get('agent', 'file_name_timestamp_regex', fallback=None)
 
             # filters
             filters_include = config_parser.get('agent', 'filters_include')
@@ -344,6 +383,14 @@ def get_agent_config_vars():
             file_name_regex = regex.compile(file_name_regex)
         except Exception as e:
             config_error('file_name_regex')
+
+        if file_name_timestamp_regex:
+            try:
+                file_name_timestamp_regex = regex.compile(file_name_timestamp_regex)
+            except Exception as e:
+                logger.warning(e)
+                config_error('file_name_timestamp_regex')
+
         if len(file_path) != 0:
             file_path = file_path.split(',')
         else:
@@ -393,11 +440,11 @@ def get_agent_config_vars():
                                  'current_file_offset': int(current_file_offset) if 'TAIL' in data_format else 0,
                                  'completed_files_st_ino': completed_files_st_ino.split(
                                      ',') if 'TAIL' in data_format else []}, 'file_path': file_path,
-                       'file_name_regex': file_name_regex, 'filters_include': filters_include,
-                       'filters_exclude': filters_exclude, 'data_format': data_format, 'raw_regex': raw_regex,
-                       'raw_start_regex': raw_start_regex, 'json_top_level': json_top_level,
-                       'csv_field_names': csv_field_names, 'csv_field_delimiter': csv_field_delimiter,
-                       # 'project_field': project_fields,
+                       'file_name_regex': file_name_regex, 'file_name_timestamp_regex': file_name_timestamp_regex,
+                       'filters_include': filters_include, 'filters_exclude': filters_exclude,
+                       'data_format': data_format, 'raw_regex': raw_regex, 'raw_start_regex': raw_start_regex,
+                       'json_top_level': json_top_level, 'csv_field_names': csv_field_names,
+                       'csv_field_delimiter': csv_field_delimiter,  # 'project_field': project_fields,
                        'instance_field': instance_fields, 'default_instance_name': default_instance_name,
                        'device_field': device_fields, 'data_fields': data_fields, 'timestamp_field': timestamp_fields,
                        'timestamp_default_year': timestamp_default_year,
@@ -1188,6 +1235,10 @@ def get_timestamp_from_datetime(timestamp_datetime):
     timezone = agent_config_vars['timezone']
 
     def parse_timestamp(timestamp_value, time_format=None):
+
+        global current_file_timestamp
+        if current_file_timestamp:
+            return current_file_timestamp
 
         if isinstance(timestamp_value, int):
             return timestamp_value
