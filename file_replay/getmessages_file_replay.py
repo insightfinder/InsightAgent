@@ -802,6 +802,8 @@ def parse_raw_line(message, line):
 
 
 def parse_raw_message(message):
+    if not message:
+        return
     logger.debug(message)
     matches = agent_config_vars['raw_regex'].match(message)
     if matches:
@@ -922,7 +924,7 @@ def get_json_field(message, setting_value, default='', allow_list=False, remove=
     return field_val
 
 
-class ListNotAllowedError():
+class ListNotAllowedError(Exception):
     pass
 
 
@@ -944,6 +946,8 @@ def _get_json_field_helper(nested_value, next_fields, allow_list=False, remove=F
     next_value = json.loads(json.dumps(nested_value.get(next_field)))
     if len(next_fields) == 0 and remove:
         # last field to grab, so remove it
+        if next_field not in nested_value:
+            return ''
         nested_value.pop(next_field)
 
     # check the next value
@@ -1079,7 +1083,8 @@ def parse_json_message_single(message):
     except ListNotAllowedError as lnae:
         timestamp = get_single_value(message, 'timestamp_field', remove=True, allow_list=True)
     except Exception as e:
-        logger.warn(e)
+        traceback.print_exc()
+        logger.warning(e)
         sys.exit(1)
 
     # get data
