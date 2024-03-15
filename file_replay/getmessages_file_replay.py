@@ -166,7 +166,7 @@ def start_data_processing(thread_number):
         new_files = [{str(os.stat(i).st_ino): i} for i in cur_files if (
                 {str(os.stat(i).st_ino): i} not in file_list and str(os.stat(i).st_ino) not in completed_files_st_ino)]
         file_list += new_files
-        file_list.sort(key=lambda x: os.path.getmtime(x.values()[0]))
+        file_list.sort(key=lambda x: os.path.getmtime(list(x.values())[0]))
         logger.debug(file_list)
         # dequeue next file
         _file = file_list.pop(0) if len(file_list) != 0 else None
