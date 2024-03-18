@@ -3,7 +3,6 @@ package insightfinder
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/bigkevmcd/go-configparser"
 	"log"
 	"net/http"
 	"net/url"
@@ -356,7 +355,7 @@ func createProject(IFconfig map[string]interface{}) {
 
 	fmt.Println(ToString(IFconfig["cloudType"]))
 
-	form.Add("instanceType", "PrivateCloud")
+	form.Add("instanceType", "Kubernetes")
 	form.Add("dataType", ProjectTypeToDataType(projectType))
 	form.Add("insightAgentType", ProjectTypeToAgentType(projectType, false, isContainer))
 	form.Add("samplingInterval", ToString(IFconfig["samplingInterval"]))
