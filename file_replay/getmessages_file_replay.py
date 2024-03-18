@@ -26,6 +26,7 @@ import avro.datafile
 import avro.io
 import arrow
 from pathlib import Path
+from urllib3.exceptions import InsecureRequestWarning
 
 '''
 This script gathers data to send to Insightfinder
@@ -1677,7 +1678,7 @@ def send_request(url, mode='GET', failure_message='Failure!', success_message='S
 
     for i in range(ATTEMPTS):
         try:
-            response = req(url, **request_passthrough)
+            response = req(url, **request_passthrough, verify=False)
             if response.status_code == http.client.OK:
                 logger.info(success_message)
                 return response
@@ -1785,6 +1786,9 @@ def initialize_api_post_data():
 
 
 if __name__ == "__main__":
+
+    requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+
     # get config
     cli_config_vars = get_cli_config_vars()
 
