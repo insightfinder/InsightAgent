@@ -61,7 +61,7 @@ ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 JSON_LEVEL_DELIM = '.'
 CSV_DELIM = r",|\t"
 ATTEMPTS = 3
-RETRY_WAIT_TIME_IN_SEC = 30
+RETRY_WAIT_TIME_IN_SEC = 10
 BUFFER_CHECK_COUNT = 1000
 PARSE_DATA_LOG_COUNT = 5000
 CLOSED_MESSAGE = "CLOSED_MESSAGE"
@@ -167,7 +167,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
             if isinstance(agent_config_vars['query_json'], dict):
                 merge(agent_config_vars['query_json'], query_body)
 
-            logger.info('Getting data from ElasticSearch with query:' + str(query_body))
+            logger.debug('Getting data from ElasticSearch with query:' + str(query_body))
 
             # build query with chunk
             query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn,
@@ -633,7 +633,7 @@ def process_build_buffer(args):
                     if project not in meta_info['projects']:
                         check_success = check_project_exist(logger, if_config_vars, project, c_config)
                         if not check_success:
-                            sys.exit(1)
+                            return
                         meta_info['projects'][project] = True
 
             if project not in project_tracks.keys():
@@ -1064,7 +1064,7 @@ def get_cli_config_vars():
                            ' Automatically turns on verbose logging')
     parser.add_option('-p', '--process', action='store', dest='process', default=2,
                       help='Number of processes for each agent to use for multithreading')
-    parser.add_option('--timeout', action='store', dest='timeout', default=5 * 60,
+    parser.add_option('--timeout', action='store', dest='timeout', default=60,
                       help='Seconds of timeout for all worker processes')
     parser.add_option('-l', '--collector', action='store', dest='collector', default=5,
                       help='Number of processes for each agent to collect data from elastic search')
@@ -1444,7 +1444,7 @@ def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data, 
                      str(get_json_size_bytes(json_to_post)) + ' bytes of data are reported.', json=json_to_post,
                      verify=False, proxies=if_config_vars['if_proxies'])
 
-    logger.debug('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
+    logger.info('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
 
 
 def send_request(logger, url, mode='GET', failure_message='Failure!', success_message='Success!',
@@ -1462,7 +1462,7 @@ def send_request(logger, url, mode='GET', failure_message='Failure!', success_me
             if response.status_code == http.client.OK:
                 return response
             else:
-                logger.warn(failure_message)
+                logger.warning(failure_message)
                 logger.info('Response Code: {}\nTEXT: {}'.format(
                     response.status_code, response.text))
         # handle various exceptions
@@ -1586,7 +1586,7 @@ def check_project_exist(logger, if_config_vars, project, c_config):
         }
         url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
         response = send_request(logger, url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'],
-                                timeout=timeout)
+                                timeout=10)
         if response == -1:
             logger.error(f'Check project error: {project or if_config_vars["project_name"]}')
         else:
@@ -1621,7 +1621,7 @@ def check_project_exist(logger, if_config_vars, project, c_config):
             }
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
             response = send_request(logger, url, 'POST', data=params, verify=False,
-                                    proxies=if_config_vars['if_proxies'], timeout=timeout)
+                                    proxies=if_config_vars['if_proxies'], timeout=10)
             if response == -1:
                 logger.error(f'Check project error: {project or if_config_vars["project_name"]}')
             else:
