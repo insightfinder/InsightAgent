@@ -60,8 +60,8 @@ HOSTNAME = socket.gethostname().partition('.')[0]
 ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 JSON_LEVEL_DELIM = '.'
 CSV_DELIM = r",|\t"
-ATTEMPTS = 3
-RETRY_WAIT_TIME_IN_SEC = 10
+ATTEMPTS = 2
+RETRY_WAIT_TIME_IN_SEC = 5
 BUFFER_CHECK_COUNT = 1000
 PARSE_DATA_LOG_COUNT = 5000
 CLOSED_MESSAGE = "CLOSED_MESSAGE"
@@ -1062,7 +1062,7 @@ def get_cli_config_vars():
     parser.add_option('-t', '--testing', action='store_true', dest='testing', default=False,
                       help='Set to testing mode (do not send data).' +
                            ' Automatically turns on verbose logging')
-    parser.add_option('-p', '--process', action='store', dest='process', default=2,
+    parser.add_option('-p', '--process', action='store', dest='process', default=1,
                       help='Number of processes for each agent to use for multithreading')
     parser.add_option('--timeout', action='store', dest='timeout', default=60,
                       help='Seconds of timeout for all worker processes')
@@ -1586,7 +1586,7 @@ def check_project_exist(logger, if_config_vars, project, c_config):
         }
         url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
         response = send_request(logger, url, 'POST', data=params, verify=False, proxies=if_config_vars['if_proxies'],
-                                timeout=10)
+                                timeout=5)
         if response == -1:
             logger.error(f'Check project error: {project or if_config_vars["project_name"]}')
         else:
@@ -1621,7 +1621,7 @@ def check_project_exist(logger, if_config_vars, project, c_config):
             }
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
             response = send_request(logger, url, 'POST', data=params, verify=False,
-                                    proxies=if_config_vars['if_proxies'], timeout=10)
+                                    proxies=if_config_vars['if_proxies'], timeout=5)
             if response == -1:
                 logger.error(f'Check project error: {project or if_config_vars["project_name"]}')
             else:
