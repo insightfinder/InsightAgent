@@ -1,8 +1,11 @@
 package insightfinder
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/bigkevmcd/go-configparser"
+	"github.com/carlmjohnson/requests"
 	"log"
 	"net/http"
 	"net/url"
@@ -328,54 +331,53 @@ func isProjectExist(IFconfig map[string]interface{}) bool {
 }
 
 func createProject(IFconfig map[string]interface{}) {
-	projectName := ToString(IFconfig["projectName"])
-	projectType := ToString(IFconfig["projectType"])
+
+	var requestBody ProjectCreationModel
+	var requestForm = make(url.Values)
 	isContainer := ToBool(IFconfig["isContainer"])
+	projectType := ToString(IFconfig["projectType"])
 
-	log.Output(1, fmt.Sprintf("[LOG]Creating the project named %s in the InsightFinder.", projectName))
-	form := url.Values{}
+	// Add data to body
+	requestBody.ProjectName = ToString(IFconfig["projectName"])
+	requestBody.Operation = "create"
+	requestBody.UserName = ToString(IFconfig["userName"])
+	requestBody.LicenseKey = ToString(IFconfig["licenseKey"])
+	requestBody.InstanceType = "Kubernetes"
+	requestBody.DataType = ProjectTypeToDataType(projectType)
+	requestBody.InsightAgentType = ProjectTypeToAgentType(ToString(IFconfig["projectType"]), false, isContainer)
+	samplingInterval, _ := strconv.Atoi(ToString(IFconfig["samplingInterval"]))
+	requestBody.SamplingInterval = samplingInterval
+	requestBody.SamplingIntervalInSeconds = samplingInterval * 60
 
-	form.Add("operation", "create")
-	form.Add("userName", ToString(IFconfig["userName"]))
-	form.Add("licenseKey", ToString(IFconfig["licenseKey"]))
-	form.Add("projectName", projectName)
+	// Add data to form
+	requestForm.Add("operation", "create")
+	requestForm.Add("samplingInterval", ToString(requestBody.SamplingInterval))
+	requestForm.Add("userName", requestBody.UserName)
+	requestForm.Add("projectName", requestBody.ProjectName)
+	requestForm.Add("licenseKey", requestBody.LicenseKey)
+	requestForm.Add("instanceType", requestBody.InstanceType)
+	requestForm.Add("samplingIntervalInSeconds", ToString(requestBody.SamplingIntervalInSeconds))
 
 	if IFconfig["systemName"] != nil {
-		form.Add("systemName", ToString(IFconfig["systemName"]))
+		requestBody.SystemName = ToString(IFconfig["systemName"])
 	} else {
-		form.Add("systemName", projectName)
+		requestBody.SystemName = requestBody.ProjectName
 	}
+	requestForm.Add("systemName", requestBody.SystemName)
 
 	// Add default values for CloudType
 	if IFconfig["cloudType"] != nil {
-		form.Add("projectCloudType", ToString(IFconfig["cloudType"]))
+		requestBody.ProjectCloudType = ToString(IFconfig["cloudType"])
 	} else {
-		form.Add("projectCloudType", "PrivateCloud")
+		requestBody.ProjectCloudType = "PrivateCloud"
 	}
 
-	fmt.Println(ToString(IFconfig["cloudType"]))
+	log.Output(1, fmt.Sprintf("[LOG]Creating the project named %s in the InsightFinder.", requestBody.ProjectName))
 
-	form.Add("instanceType", "Kubernetes")
-	form.Add("dataType", ProjectTypeToDataType(projectType))
-	form.Add("insightAgentType", ProjectTypeToAgentType(projectType, false, isContainer))
-	form.Add("samplingInterval", ToString(IFconfig["samplingInterval"]))
-	form.Add("samplingIntervalInSeconds", ToString(IFconfig["samplingInterval"]))
-	samplingIntervalINT, err := strconv.Atoi(ToString(IFconfig["samplingInterval"]))
+	//var result ProjectCheckModel
+	var resultStr string
+	err := requests.URL(FormCompleteURL(ToString(IFconfig["ifURL"]), PROJECT_END_POINT)).Header("agent-type", "Stream").BodyJSON(requestBody).Params(requestForm).ToString(&resultStr).Fetch(context.Background())
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
 	}
-	form.Add("samplingIntervalInSeconds", fmt.Sprint(samplingIntervalINT*60))
-	headers := map[string]string{
-		"Content-Type": "application/x-www-form-urlencoded",
-	}
-	response, _ := SendRequest(
-		http.MethodPost,
-		FormCompleteURL(ToString(IFconfig["ifURL"]), PROJECT_END_POINT),
-		strings.NewReader(form.Encode()),
-		headers,
-		AuthRequest{},
-	)
-	var result map[string]interface{}
-	json.Unmarshal(response, &result)
-	log.Output(1, ToString(result["message"]))
 }
