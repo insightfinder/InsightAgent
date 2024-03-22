@@ -342,21 +342,12 @@ func createProject(IFconfig map[string]interface{}) {
 	requestBody.Operation = "create"
 	requestBody.UserName = ToString(IFconfig["userName"])
 	requestBody.LicenseKey = ToString(IFconfig["licenseKey"])
-	requestBody.InstanceType = "Kubernetes"
+	requestBody.InstanceType = "PrivateCloud"
 	requestBody.DataType = ProjectTypeToDataType(projectType)
 	requestBody.InsightAgentType = ProjectTypeToAgentType(ToString(IFconfig["projectType"]), false, isContainer)
 	samplingInterval, _ := strconv.Atoi(ToString(IFconfig["samplingInterval"]))
 	requestBody.SamplingInterval = samplingInterval
 	requestBody.SamplingIntervalInSeconds = samplingInterval * 60
-
-	// Add data to form
-	requestForm.Add("operation", "create")
-	requestForm.Add("samplingInterval", ToString(requestBody.SamplingInterval))
-	requestForm.Add("userName", requestBody.UserName)
-	requestForm.Add("projectName", requestBody.ProjectName)
-	requestForm.Add("licenseKey", requestBody.LicenseKey)
-	requestForm.Add("instanceType", requestBody.InstanceType)
-	requestForm.Add("samplingIntervalInSeconds", ToString(requestBody.SamplingIntervalInSeconds))
 
 	if IFconfig["systemName"] != nil {
 		requestBody.SystemName = ToString(IFconfig["systemName"])
@@ -371,6 +362,19 @@ func createProject(IFconfig map[string]interface{}) {
 	} else {
 		requestBody.ProjectCloudType = "PrivateCloud"
 	}
+
+	// Add data to form
+	requestForm.Add("operation", "create")
+	requestForm.Add("samplingInterval", ToString(requestBody.SamplingInterval))
+	requestForm.Add("userName", requestBody.UserName)
+	requestForm.Add("projectName", requestBody.ProjectName)
+	requestForm.Add("licenseKey", requestBody.LicenseKey)
+	requestForm.Add("instanceType", requestBody.InstanceType)
+	requestForm.Add("samplingIntervalInSeconds", ToString(requestBody.SamplingIntervalInSeconds))
+	requestForm.Add("dataType", requestBody.DataType)
+	requestForm.Add("insightAgentType", requestBody.InsightAgentType)
+	requestForm.Add("projectCloudType", requestBody.ProjectCloudType)
+	requestForm.Add("systemName", requestBody.SystemName)
 
 	log.Output(1, fmt.Sprintf("[LOG]Creating the project named %s in the InsightFinder.", requestBody.ProjectName))
 
