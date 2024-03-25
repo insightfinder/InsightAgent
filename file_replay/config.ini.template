@@ -3,7 +3,10 @@
 # comma-delimited list of absolute file paths. If any are a directory, all files in that directory will be loaded.
 file_path = 
 # regex for file names (does not include the file path)
-file_name_regex = 
+file_name_regex =
+
+# regex for to get timestamp from the file name (does not include the file path)
+file_name_timestamp_regex =
 
 ## filters
 # define a list of filters to use as field:allowed values|field:allowed values
@@ -44,9 +47,17 @@ timestamp_format = epoch
 # timezone, as per pytz
 timezone = 
 timestamp_field = timestamp
-# if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
+
+# the default year for timestamps that don't include a year. If the year is included, it will be used.
+timestamp_default_year =
+# the default time format for timestamp field, default is YYYY MMM DD HH:mm:ss
+timestamp_field_format =
+# if no instance given, the default instance name will be used, and then the local hostname will be used. Can also use {field} formatting or a priority list.
 instance_field = host
-device_field = 
+# default instance name
+default_instance_name =
+
+device_field =
 # multiple fields are separated by commas. a field can be named with the syntax `<name>:<value>` or `<name>:=<value>`, where `<name>` and `<value>` can each be either a literal value (`name:value`) or formatted (`Total Time [{step}]:={timing.end}-{timing.start}`). Use `:=` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `eval()`.
 data_fields =
 
