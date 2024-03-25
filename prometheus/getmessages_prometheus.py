@@ -54,6 +54,13 @@ ATTEMPTS = 3
 CACHE_NAME = 'cache.db'
 
 
+def align_timestamp(timestamp, sampling_interval):
+    if sampling_interval == 0 or not timestamp:
+        return timestamp
+    else:
+        return int(timestamp / (sampling_interval * 1000)) * sampling_interval * 1000
+
+
 def initialize_cache_connection():
     # connect to local cache
     cache_loc = abs_path_from_cur(CACHE_NAME)
@@ -77,18 +84,18 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     thread_pool = ThreadPool(agent_config_vars['thread_pool'])
     if agent_config_vars['his_time_range']:
         logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
-        for query in prometheus_query:
-            for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
-                                   if_config_vars['sampling_interval']):
-                params = [(logger, if_config_vars, agent_config_vars, None, {'query': query.query, 'time': timestamp})]
-
+        for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
+                               if_config_vars['sampling_interval']):
+            for query in prometheus_query:
+                params = [
+                    (logger, if_config_vars, agent_config_vars, None, {'query': query.get('query'), 'time': timestamp})]
                 results = thread_pool.map(query_messages_prometheus, params)
                 result_list = list(chain(*results))
                 parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
-                                          cache_cur, result_list, query)
+                                          cache_cur, result_list, query, timestamp)
 
-                # clear metric buffer when piece of time range end
-                clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
+            # clear metric buffer when piece of time range end
+            clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
     else:
         logger.debug('Using current time for streaming data')
         for query in prometheus_query:
@@ -97,7 +104,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             results = thread_pool.map(query_messages_prometheus, params)
             result_list = list(chain(*results))
             parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
-                                      cache_cur, result_list, query)
+                                      cache_cur, result_list, query, time_now)
 
     thread_pool.close()
     thread_pool.join()
@@ -133,12 +140,14 @@ def query_messages_prometheus(args):
 
 
 def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con, cache_cur,
-                              result, query):
+                              result, query, sampling_time):
     is_batch_mode = len(query.get('query')) > 0
 
     query_metric_name = query.get('metric_name')
     query_instance_fields = query.get('instance_fields')
     default_component_name = agent_config_vars['default_component_name']
+    sampling_interval = if_config_vars['sampling_interval']
+    sampling_time = sampling_time * 1000 if len(str(sampling_time)) == 10 else sampling_time
 
     count = 0
     logger.info('Reading {} messages'.format(len(result)))
@@ -206,12 +215,17 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
                 component_map = {"instanceName": full_instance, "componentName": component}
 
             vector_value = message.get('value')
-            timestamp = int(vector_value[0]) * 1000
+            timestamp = int(vector_value[0]) * 1000 if len(str(vector_value[0])) == 10 else vector_value[0]
+            if sampling_time and abs(timestamp - sampling_time) > sampling_interval:
+                timestamp = sampling_time
+                logger.warn('Timestamp %s in the message is not in the sampling interval, using sampling time %s' % (
+                    timestamp, sampling_time))
+
             data_value = vector_value[1]
 
             # set offset for timestamp
             timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
-            timestamp = str(timestamp)
+            timestamp = str(align_timestamp(timestamp, sampling_interval))
 
             key = '{}-{}'.format(timestamp, full_instance)
             if key not in metric_buffer['buffer_dict']:
@@ -234,16 +248,19 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
 
 
 def get_alias_from_cache(cache_con, cache_cur, alias):
-    if cache_cur:
-        cache_cur.execute('select alias from cache where instance="%s"' % alias)
-        instance = cache_cur.fetchone()
-        if instance:
-            return instance[0]
-        else:
-            # Hard coded if alias hasn't been added to cache, add it 
-            cache_cur.execute('insert into cache (instance, alias) values ("%s", "%s")' % (alias, alias))
-            cache_con.commit()
-            return alias
+    try:
+        if cache_cur:
+            cache_cur.execute('select alias from cache where instance="%s"' % alias)
+            instance = cache_cur.fetchone()
+            if instance:
+                return instance[0]
+            else:
+                # Hard coded if alias hasn't been added to cache, add it
+                cache_cur.execute('insert into cache (instance, alias) values ("%s", "%s")' % (alias, alias))
+                cache_con.commit()
+                return alias
+    except Exception as e:
+        return alias
 
 
 def get_agent_config_vars(logger, config_ini):
@@ -437,10 +454,9 @@ def get_agent_config_vars(logger, config_ini):
                        'component_field': component_field, 'default_component_name': default_component_name,
                        'instance_field': instance_fields, "instance_whitelist_regex": instance_whitelist_regex,
                        'device_field': device_fields, 'timestamp_field': timestamp_fields,
-                       'target_timestamp_timezone': target_timestamp_timezone,
-                       'timezone': timezone, 'timestamp_format': timestamp_format,
-                       'instance_connector': instance_connector, 'thread_pool': thread_pool, 'processes': processes,
-                       'timeout': timeout, }
+                       'target_timestamp_timezone': target_timestamp_timezone, 'timezone': timezone,
+                       'timestamp_format': timestamp_format, 'instance_connector': instance_connector,
+                       'thread_pool': thread_pool, 'processes': processes, 'timeout': timeout, }
 
         return config_vars
 
@@ -732,10 +748,10 @@ def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data):
     track['component_map_list'] = list({v['instanceName']: v for v in track['component_map_list']}.values())
     data_to_post['instanceMetaData'] = json.dumps(track['component_map_list'] or [])
 
-    logger.debug('First:\n' + str(chunk_metric_data[0]))
-    logger.debug('Last:\n' + str(chunk_metric_data[-1]))
+    logger.info('First:\n' + str(chunk_metric_data[0]))
+    logger.info('Last:\n' + str(chunk_metric_data[-1]))
     logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
-    logger.info('Total Lines: ' + str(track['line_count']))
+    logger.info('Total Lines: ' + str(len(chunk_metric_data)))
 
     # do not send if only testing
     if c_config['testing']:
