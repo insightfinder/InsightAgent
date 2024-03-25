@@ -70,6 +70,21 @@ def is_matching_allow_regex(text, allow_regex_map):
     return False
 
 
+def is_matching_disallow_regex(text, disallow_regex_map):
+    if (not disallow_regex_map) or len(disallow_regex_map) == 0:
+        return False
+
+    for disallow_regex in disallow_regex_map:
+        if disallow_regex:
+            if disallow_regex.startswith('/') and disallow_regex.endswith('/'):
+                if regex.match(disallow_regex[1:-1], text):
+                    return True
+            else:
+                if text == disallow_regex:
+                    return True
+    return False
+
+
 def is_matching_block_regex(item_id, name, block_regex_map):
     for block_regex in block_regex_map:
         if block_regex:
@@ -89,6 +104,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
 
     log_request_interval = agent_config_vars['log_request_interval']
     metric_allowlist_map = agent_config_vars['metric_allowlist_map'] or {}
+    metric_disallowlist_map = agent_config_vars['metric_disallowlist_map'] or {}
     his_time_range = agent_config_vars['his_time_range']
     sampling_interval = if_config_vars['sampling_interval']
 
@@ -127,8 +143,9 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             item_name = item['name']
             if data_type == 'Metric':
                 if is_matching_allow_regex(item_name, metric_allowlist_map):
-                    items_ids_map[item_id] = item
-                    items_keys_map[item_key] = item
+                    if not is_matching_disallow_regex(item_name, metric_disallowlist_map):
+                        items_ids_map[item_id] = item
+                        items_keys_map[item_key] = item
             else:
                 items_ids_map[item_id] = item
                 items_keys_map[item_key] = item
@@ -234,6 +251,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
     template_ids = agent_config_vars['template_ids'] or []
     host_blocklist_map = agent_config_vars['host_blocklist_map'] or {}
     metric_allowlist_map = agent_config_vars['metric_allowlist_map'] or {}
+    metric_disallowlist_map = agent_config_vars['metric_disallowlist_map'] or {}
     device_field = agent_config_vars['device_field']
 
     # get host groups
@@ -311,7 +329,8 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
                 item_key = item['key_']
                 item_name = item['name']
                 if is_matching_allow_regex(item_name, metric_allowlist_map):
-                    items_map[item_key] = item
+                    if not is_matching_disallow_regex(item_name, metric_disallowlist_map):
+                        items_map[item_key] = item
 
         items_keys = list(items_map.keys())
 
@@ -509,6 +528,7 @@ def get_agent_config_vars(logger, config_ini):
             host_blocklist = config_parser.get('zabbix', 'host_blocklist')
             template_ids = config_parser.get('zabbix', 'template_ids')
             metric_allowlist = config_parser.get('zabbix', 'metric_allowlist')
+            metric_disallowlist = config_parser.get('zabbix', 'metric_disallowlist', fallback=None)
             applications = config_parser.get('zabbix', 'applications')
 
             max_workers = config_parser.get('zabbix', 'max_workers')
@@ -563,6 +583,13 @@ def get_agent_config_vars(logger, config_ini):
                 metric_allow = metric_allow.strip()
                 if len(metric_allow) != 0:
                     metric_allowlist_map[metric_allow] = metric_allow
+
+        metric_disallowlist_map = {}
+        if metric_disallowlist and len(metric_disallowlist) != 0:
+            for metric_disallow in metric_disallowlist.split(','):
+                metric_disallow = metric_disallow.strip()
+                if len(metric_disallow) != 0:
+                    metric_disallowlist_map[metric_disallow] = metric_disallow
 
         if len(applications) != 0:
             applications = [x for x in applications.split(',') if x.strip()]
@@ -643,7 +670,9 @@ def get_agent_config_vars(logger, config_ini):
         config_vars = {'zabbix_kwargs': zabbix_kwargs, 'host_groups': host_groups, 'hosts': hosts,
                        'host_blocklist': host_blocklist, 'host_blocklist_map': host_blocklist_map,
                        'template_ids': template_ids, 'metric_allowlist': metric_allowlist,
-                       'metric_allowlist_map': metric_allowlist_map, 'max_workers': max_workers,
+                       'metric_allowlist_map': metric_allowlist_map,
+                       'metric_disallowlist_map': metric_disallowlist_map,
+                       'max_workers': max_workers,
                        'request_timeout': request_timeout, 'max_host_per_request': max_host_per_request,
                        'log_request_interval': log_request_interval, 'applications': applications,
                        'his_time_range': his_time_range, 'proxies': agent_proxies, 'data_format': data_format,
