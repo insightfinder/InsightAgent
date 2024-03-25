@@ -23,6 +23,8 @@ es_uris = http://localhost:9200
 #              }
 #            }
 query_json = {}
+# json file to add to the query body.
+query_json_file =
 # The maximum messages number of each query, default is 5000, and max value id 10000.
 query_chunk_size = 5000
 # indexes to search over, example indeces = metricbeat*
@@ -64,21 +66,35 @@ project_whitelist =
 timestamp_format =
 # timezone, as per pytz
 timezone =
+# if document_root_field is "", need to set the full path. For example _source.@timestamp
 timestamp_field = @timestamp
 # Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
 target_timestamp_timezone = UTC
+
+# document root field, default is "_source". To use the whole document as the root, use ""
+document_root_field = ""
+
 component_field =
-# if no instance given, the agent server name will be used.
+default_component_name =
+# if no instance given, the agent server name will be used. If document_root_field is "", need to set the full path. For example _source.agent.hostname
 instance_field = agent.hostname
 # instance_field_regex is a field name and a regex string used to get instance, syntax `<field1>::<regex1>,<field2>::<regex2>`.
 instance_field_regex = message::group=\"(.*?)\",message::deployment=\"(.*?)\"
 # instance_whitelist is a regex string used to define which instances will be filtered.
 instance_whitelist =
+default_instance_name =
+
+# If document_root_field is "", need to set the full path. For example _source.device
 device_field =
 # Optional regex to retrieve the device name using a capture group named 'device' (eg: '(?P<device>.*)') 
-device_field_regex = 
-# multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>`. Example: data_fields = ^(?!.*(?:event\.duration|metricset\.period)).*$
+device_field_regex =
+
+# multiple fields are separated by commas, a field can be `<name>` or regex. Example: data_fields = /^system\.filesystem.*/,system.process.cgroup.memory.memsw.events.max
+# If it is empty, the whole document at the document root will be sent.
 data_fields =
+
+# multiple fields with string or regex, are separated by commas, like: /0-metric\.values\.99.0/,value,doc_count
+aggregation_data_fields =
 
 ## proxy
 agent_http_proxy =
