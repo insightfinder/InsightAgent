@@ -5,8 +5,17 @@ go 1.20
 require (
 	github.com/bigkevmcd/go-configparser v0.0.0-20230427073640-c6b631f70126
 	github.com/carlmjohnson/requests v0.23.4
+	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3
+	gorm.io/driver/sqlite v1.5.5
+	gorm.io/gorm v1.25.9
 	k8s.io/apimachinery v0.27.3
 	k8s.io/client-go v0.27.3
+)
+
+require (
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/mattn/go-sqlite3 v1.14.17 // indirect
 )
 
 require (
@@ -40,7 +49,7 @@ require (
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.27.3
 	k8s.io/klog/v2 v2.90.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20230501164219-8b0f38b5fd1f // indirect
