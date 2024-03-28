@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/bigkevmcd/go-configparser"
+	"kubernetes-agent/host_mapper"
 	"kubernetes-agent/insightfinder"
 	"kubernetes-agent/jaeger"
 	"kubernetes-agent/kubernetes"
@@ -81,6 +82,11 @@ func main() {
 			instanceMapper.AddNamespace(namespaceFilter)
 		}
 	}
+
+	// Initialize HostMapper DB
+	hostMapper := host_mapper.HostMapper{}
+	hostMapper.Initialize()
+	hostMapper.GetAvailIndexes(20)
 
 	// Start data collection routine
 	EndTime := time.Now()
