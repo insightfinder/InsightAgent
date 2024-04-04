@@ -86,7 +86,12 @@ func main() {
 	// Initialize HostMapper DB
 	hostMapper := host_mapper.HostMapper{}
 	hostMapper.Initialize()
-	hostMapper.GetAvailIndexes(20)
+	testList := make([]string, 0)
+	testList = append(testList, "a")
+	testList = append(testList, "b")
+	testList = append(testList, "c")
+	hostMapper.RemovedHostsIfNotExist(&testList)
+	hostMapper.InsertHosts(&testList)
 
 	// Start data collection routine
 	EndTime := time.Now()

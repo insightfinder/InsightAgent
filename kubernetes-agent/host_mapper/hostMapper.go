@@ -1,7 +1,6 @@
 package host_mapper
 
 import (
-	"github.com/golang-collections/collections/set"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"kubernetes-agent/host_mapper/models"
@@ -28,35 +27,60 @@ func (hostMapper *HostMapper) Initialize() {
 	hostMapper.db = db
 }
 
-func (hostMapper *HostMapper) GetAvailIndexes(maxIndex int) []int {
-	// get all Indexes in HostMapping table
-	// SELECT IndexID FROM HostMapping
-	var existingIndexesArray []int
-	hostMapper.db.Model(&models.HostMapping{}).Select("IndexID").Find(&existingIndexesArray)
+func (hostMapper *HostMapper) RemovedHostsIfNotExist(hosts *[]string) {
+	var toBeDeletedHosts []string
+	hostMapper.db.Model(&models.HostMapping{}).Where("host NOT IN ?", *hosts).Pluck("host", &toBeDeletedHosts)
 
-	// Convert to Set
-	existingIndexes := set.New()
-	for _, index := range existingIndexesArray {
-		existingIndexes.Insert(index)
+	for _, host := range toBeDeletedHosts {
+		slog.Debug("Removed host:", host)
+	}
+	hostMapper.db.Model(&models.HostMapping{}).Where("host NOT IN ?", *hosts).Delete(&models.HostMapping{})
+}
+
+func (hostMapper *HostMapper) InsertHosts(hosts *[]string) {
+	var existingIndexes []int
+	var existingHosts []string
+
+	// Assume all indexes and all hosts are available
+	availIndexes := make(map[int]bool)
+	availIndexesList := make([]int, 0)
+	newHosts := make(map[string]bool)
+	for i := 0; i < len(*hosts); i++ {
+		availIndexes[i] = true
+		newHosts[(*hosts)[i]] = true
 	}
 
-	// Generate an array from 0 to maxIndex
-	allIndexes := set.New()
-	for i := 0; i < maxIndex; i++ {
-		allIndexes.Insert(i)
+	// Get all used hosts and indexes from the db.
+	hostMapper.db.Model(&models.HostMapping{}).Select("host,index_id").Pluck("index_id", &existingIndexes).Pluck("host", &existingHosts)
+
+	// Mark them as false in availIndexes
+	for _, index := range existingIndexes {
+		availIndexes[index] = false
 	}
 
-	// Get available indexes using Difference
-	availIndexesSet := allIndexes.Difference(existingIndexes)
-
-	// Convert Set to Array
-	availIndexes := make([]int, availIndexesSet.Len())
-	availIndexesSet.Do(func(elem interface{}) {
-		// Assert the element's type to int
-		if value, ok := elem.(int); ok {
-			availIndexes = append(availIndexes, value)
+	// Convert available indexes to a list
+	for index, isAvailable := range availIndexes {
+		if isAvailable {
+			availIndexesList = append(availIndexesList, index)
 		}
-	})
+	}
 
-	return availIndexes
+	// Filter out existing hosts
+	for _, existingHost := range existingHosts {
+		newHosts[existingHost] = false
+	}
+
+	// Assign indexes to hosts
+	for host, isNewHost := range newHosts {
+		if isNewHost {
+			slog.Info("Prepare to insert new host:", host)
+
+			// Get an index from avail index
+			newIndex := availIndexesList[0]
+			availIndexesList = availIndexesList[1:]
+
+			slog.Info("Assign index", newIndex, "to host: ", host)
+			newHosts[host] = false
+		}
+	}
 }
