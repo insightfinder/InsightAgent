@@ -1,0 +1,10 @@
+[centerity]
+# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+target_timestamp_timezone = UTC
+
+# request timeout in seconds, default is 60
+request_timeout =
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
