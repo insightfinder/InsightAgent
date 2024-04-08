@@ -6,15 +6,15 @@ SERVER_URL = "server_url"
 START_TIME = "start_time"
 NORMAL_TIME = "normal_time"
 ABNORMAL_TIME = "abnormal_time"
-BUGGY_DEPLOY = "buggy_deploy"
-BUGGY_DEPLOY_TRUE = "true"
-BUGGY_DEPLOY_FALSE = "false"
-BUGGY_DP_START_TIME = "buggy_start_time"
 PROJECT_NAME = "project_name"
 DATA_TYPE = "data_type"
 TIME_ZONE = "time_zone"
 ACTION_TRIGGERED_MAP = "action_triggered_map"
 REVERSE_DEPLOYMENT = "reverse_deployment"
+BUGGY_DEPLOY = "buggy_deploy"
+BUGGY_DEPLOY_TRUE = "true"
+BUGGY_DEPLOY_FALSE = "false"
+BUGGY_DP_START_TIME = "buggy_start_time"
 LOG = "Log"
 DEPLOYMENT = "Deployment"
 WEB = "Web"
@@ -82,8 +82,7 @@ Author: Ariy <Ariy@insightfinder.com>\n
     Merge pull request #5015 from DEMO/II-6892_optimize_data_loading\n
     Add multithread support for data loading to enhance the performance
     Add paging support for loading large chunk of data''']
-
-DEPLOYMENT_DATA_INDEX = {0:0, 4:0, 8:1, 12:1, 16:2, 20:3}
+DEPLOYMENT_DATA_INDEX = {5:0, 9:0, 13:1, 17:1, 21:2, 23:3}
 
 # Web data
 WEB_INCIDENT_DATA = "Production 911: Checkout server returns 500 error"
@@ -94,6 +93,7 @@ WEB_API = ["api/v1/settingchange", "api/v1/checkout", "api/v1/shoppinglist", "ap
 WEB_ENV = ["NY", "WA", "NC"]
 WEB_ERROR_CODE = [500, 504, 404, 400]
 WEB_OK_CODE = 200
+
 
 # Alert data
 ALERT_INCIDENT_DATA = {"comments": "", "assignment group": "Software", "description": "", "close notes": "",
@@ -186,8 +186,7 @@ IF_CAT = 'InsightFinder'
 INSTANCE_CORE_SERVER = "core server"
 DEP_INSTANCE = 'Jenkins'
 # Put the ip address of the machine where the demo scripts exist, e.g. on stg the demo scripts are in the app-server node
-# WEB_INSTANCE = 'ip-172-31-52-141.ec2.internal'
-INSTANCE_ALERT = 'ip-172-31-52-141.ec2.internal'
+INSTANCE_ALERT = 'ip-172-31-6-130.ec2.internal'
 # Log data constant
 EVENT_ID = 'eventId'
 TAG = 'tag'
@@ -198,3 +197,13 @@ TIMESTAMP = "timestamp"
 MINUTE = 1000 * 60
 ONE_MINUTE_SEC = 60
 ONE_HOUR_SEC = ONE_MINUTE_SEC * 60
+#Pager duty
+PAGER_DUTY_URL = "https://events.pagerduty.com/generic/2010-04-15/create_event.json"
+PAGER_DUTY_SERVICE_KEY = ""
+PAGER_DUTY_DESC = "Checkout service exception"
+PAGER_DUTY_MSG = '''Checkout service exception\n
+java.io.IOException: File writing failed\n
+    at java.io.FileOutputStream.writeBytes(Native Method)\n
+    at java.io.FileOutputStream.write(Unknown Source)\n
+    at GHOST.GInputStream.readFile(GInputStream.java:79n\n
+    at GHOST.GInputStream.handleIncoming(GInputStream.java:29)'''
