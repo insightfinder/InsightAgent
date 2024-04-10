@@ -20,7 +20,6 @@ def get_agent_config_vars():
     parser = SafeConfigParser()
     try:
         if os.path.exists(os.path.join(os.getcwd(), config_file_name)):
-            parser = SafeConfigParser()
             parser.read(os.path.join(os.getcwd(), config_file_name))
             # DEMO user config
             license_key = parser.get(constant.IF, constant.LICENSE_KEY)
@@ -31,9 +30,9 @@ def get_agent_config_vars():
             abnormal_time_str = parser.get(constant.IF, constant.ABNORMAL_TIME)
             reverse_deployment = parser.getboolean(constant.IF, constant.REVERSE_DEPLOYMENT)
             time_zone = parser.get(constant.IF, constant.TIME_ZONE)
+            # DEMO project names config
             buggy_deploy = parser.get(constant.IF, constant.BUGGY_DEPLOY)
             buggy_deploy_start_time = parser.get(constant.IF, constant.BUGGY_DP_START_TIME)
-            # DEMO project names config
             log_project_name = parser.get(constant.LOG, constant.PROJECT_NAME)
             deployment_project_name = parser.get(constant.DEPLOYMENT, constant.PROJECT_NAME)
             web_project_name = parser.get(constant.WEB, constant.PROJECT_NAME)
@@ -60,16 +59,16 @@ def get_agent_config_vars():
             if len(metric_project_name) == 0:
                 logging.warning("Demo agent not correctly configured(Metric project name). Check config file.")
                 sys.exit(1)
+            if not time_zone:
+                time_zone = "GMT"
             if len(buggy_deploy_start_time) == 0:
                 # If there's no start time, set it to current time.
                 buggy_deploy_start_time = get_current_date_minute()
-            if not time_zone:
-                time_zone = "GMT"
             if not buggy_deploy or len(buggy_deploy)==0:
                 buggy_deploy = constant.BUGGY_DEPLOY_FALSE
-            configs[constant.TIME_ZONE] = time_zone
             configs[constant.BUGGY_DEPLOY] = buggy_deploy
             configs[constant.BUGGY_DP_START_TIME] = datetime.datetime.strptime(buggy_deploy_start_time, '%Y-%m-%dT%H:%M:%S')
+            configs[constant.TIME_ZONE] = time_zone
             configs[constant.LICENSE_KEY] = license_key
             configs[constant.USER_NAME] = user_name
             configs[constant.SERVER_URL] = server_url
@@ -140,64 +139,88 @@ def send_deployment_demo_data(time, is_abnormal):
     hour = time.hour
     if hour not in constant.DEPLOYMENT_DATA_INDEX:
         return
-    # buggy deployment happened 00：31, 08:31 and 16:31
+    # buggy deployment happened UTC 5:31 and 13:31
+    #                           EST 0:31 and 8:31
     index = constant.DEPLOYMENT_DATA_INDEX[hour]
-    if is_abnormal and hour in [0, 8, 16] and minute == 31:
+    if is_abnormal and hour in [5, 13] and minute == 31:
         data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_BUGGY[index])
         replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment buggy data")
-    # normal deployment happened 4:31, 12:31, and 20:31
-    elif hour in [4, 12, 20] and minute == 31:
+    # normal deployment happened UTC 9:31, 17:31, 21:31 and 23:31
+    #                            EST 4:31, 12:31, 16:31 and 18:31
+    elif hour in [9, 17, 21, 23] and minute == 31:
         data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA[index])
         replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment normal data")
 
 
 
+def send_error_web_log(timestamp, start, end):
+    data_array = []
+    for i in range(0, random.randint(start, end)):
+        data = get_log_data(timestamp + i * 100, constant.INSTANCE_ALERT,
+                            generate_error_web_data("James", "api/v1/settingchange", "NY"))
+        data_array.append(data)
+        data = get_log_data(timestamp + i * 100, constant.INSTANCE_ALERT,
+                            generate_error_web_data("Robert", "api/v1/checkout", "NY"))
+        data_array.append(data)
+
+    replay_log_data(configs[constant.WEB], data_array, "Web data")
+
+
+
 '''
-Send incident start from 01:25 to 01:29 or 09:25 to 09:29 or 17:25 to 17:29
+Send incident start from UTC 06:25 to 06:29 or 14:25 to 14:29
+                         EST 01:25 to 01:29 or 09:25 to 09:29
 '''
 def send_web_or_incident_data(time, is_abnormal):
     timestamp = to_epochtime_minute(time)
     minute = time.minute
     hour = time.hour
+    data_array = []
     if is_abnormal:
-        if hour in [1, 9, 17] and minute in [25, 26, 27, 28, 29]:
+        if hour in [6, 14] and minute in [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]:
+            # Send incident data
             data = get_log_data(timestamp, constant.INSTANCE_ALERT, constant.ALERT_INCIDENT_DATA)
             replay_log_data(configs[constant.ALERT], [data], "Alert incident data")
+
+            if minute in [25,26,27,28,29]:
+                # Send Web 500 data
+                send_error_web_log(timestamp, 99, 100)
+            elif minute in [20,21,22,23,24]:
+                send_error_web_log(timestamp, 40, 60)
+            elif minute in [15,16,17,18,19]:
+                send_error_web_log(timestamp, 10, 40)
+
+
+    # Send normal web log data
     normal_num = random.randint(100, 500)
     error_num = random.randint(0, 25)
-    data_array = []
-    status = is_abnormal and minute <= 25
     for i in range(0, normal_num):
         data = get_log_data(timestamp + i * 1000, constant.INSTANCE_ALERT, generate_web_data(False))
         data_array.append(data)
     for i in range(0, error_num):
-        data = get_log_data(timestamp + i * 1000, constant.INSTANCE_ALERT, generate_web_data(True))
+        data = get_log_data(timestamp + i * 1000, constant.INSTANCE_ALERT, generate_web_data(False))
         data_array.append(data)
-    if status:
-        # burst error
-        for i in range(0, random.randint(100, 150)):
-            data = get_log_data(timestamp + i * 100, constant.INSTANCE_ALERT, generate_error_web_data("James", "api/v1/settingchange", "NY"))
-            data_array.append(data)
-            data = get_log_data(timestamp + i * 100, constant.INSTANCE_ALERT, generate_error_web_data("Robert", "api/v1/checkout", "NY"))
-            data_array.append(data)
+
     replay_log_data(configs[constant.WEB], data_array, "Web data")
 
-
 '''
-Send exception data start at 1:05, 1:15, 1:25 or 9:05, 9:15, 9:25 or 17:05, 17:15, 17:25
+Send exception data start at UTC 6:05, 6:15, 6:25 or 14:05, 14:15, 14:25
+                          at EST 1:05, 1:15, 1:25 or 9:05, 9:15, 9:25
+                          at EDT 2:05, 2:15, 2:25 or 10:05, 10:15, 10:25
 '''
 def send_log_data(time, is_abnormal):
     timestamp = to_epochtime_minute(time)
     minute = time.minute
     hour = time.hour
     if is_abnormal:
-        if hour in [1, 9, 17] and minute in [5, 15, 25]:
+        if hour in [6, 14] and minute in [5, 15]:
             num_message = 1
             data_array = []
             for i in range(0, num_message):
                 data = get_log_data(timestamp + i, constant.INSTANCE_CORE_SERVER, constant.EXCEPTION_LOG_DATA)
                 data_array.append(data)
             replay_log_data(configs[constant.LOG], data_array, "Log exception data")
+            send_pager_duty_data()
     num_message = random.randint(1, 3)
     data_array = []
     for i in range(0, num_message):
@@ -233,15 +256,14 @@ def read_metric_data(timestamp, index, metric_file_name, msg):
             count += 1
 
 def send_metric_data(time, is_abnormal):
-    timestamp = to_epochtime_minute(time - datetime.timedelta(hours=3))
+    timestamp = to_epochtime_minute(time)
     minute = time.minute
     hour = time.hour
     if is_abnormal:
-        if hour in [0, 1, 8, 9, 16, 17]:
+        if hour in [5, 6, 13, 14]:
             index = (minute + 30) % 60
             read_metric_data(timestamp, index, constant.ABNORMAL_DATA_FILENAME, "Metric abnormal data")
     else:
-        # 180 lines in the normal data
         index = (hour * 60 + minute) % 180
         read_metric_data(timestamp, index, constant.NORMAL_DATA_FILENAME, "Metric normal data")
 
@@ -283,7 +305,7 @@ def replay_deployment_data(project_name, deployment_data, log_msg):
 def replay_log_data(project_name, data, log_msg):
     to_send_data = {"metricData": json.dumps(data), "licenseKey": configs[constant.LICENSE_KEY],
                     "projectName": project_name,
-                    "userName": user_name, "agentType": "LogFileReplay"}
+                    "userName": user_name, "agentType": "LogStreaming"}
     to_send_data = json.dumps(to_send_data)
     post_url = configs[constant.SERVER_URL] + "/customprojectrawdata"
     send_data_to_receiver(post_url, to_send_data, log_msg, len(data))
@@ -294,6 +316,7 @@ def replay_metric_data(project_name, data, msg):
                     "userName": user_name, "agentType": "MetricFileReplay"}
     to_send_data = json.dumps(to_send_data)
     post_url = configs[constant.SERVER_URL] + "/customprojectrawdata"
+    #logging.info(str(to_send_data))
     send_data_to_receiver(post_url, to_send_data, msg, len(data))
 
 
@@ -341,13 +364,13 @@ def is_abnormal_period(cur_time):
     config.read(config_file_name)
     is_abnormal = config[constant.IF][constant.DATA_TYPE] == 'abnormal'
     is_reverse = config[constant.IF][constant.REVERSE_DEPLOYMENT] == "True"
-    if (cur_time.hour == 8 and cur_time.minute >= 30) or (cur_time.hour == 9 and cur_time.minute < 30):
+    if (cur_time.hour == 5 and cur_time.minute >= 30) or (cur_time.hour == 6 and cur_time.minute < 30):
         if not is_abnormal:
             config[constant.IF][constant.DATA_TYPE] = 'abnormal'
             config[constant.IF][constant.REVERSE_DEPLOYMENT] = 'False'
             utility.save_config_file(config_file_name, config)
         is_abnormal = True
-    elif (cur_time.hour in [0, 16] and cur_time.minute >= 30) or (cur_time.hour in [1, 17] and cur_time.minute < 30):
+    elif (cur_time.hour == 13 and cur_time.minute >= 30) or (cur_time.hour == 14 and cur_time.minute < 30):
         if is_reverse:
             config[constant.IF][constant.DATA_TYPE] = 'normal'
             utility.save_config_file(config_file_name, config)
@@ -404,6 +427,7 @@ def send_abnormal_log_data(timestamp):
     data_array = []
     data = get_log_data(timestamp, constant.INSTANCE_CORE_SERVER, constant.EXCEPTION_LOG_DATA)
     data_array.append(data)
+    send_pager_duty_data()
     replay_log_data(configs[constant.LOG], data_array, "Log exception data")
 
 def send_web_data(timestamp):
@@ -465,12 +489,10 @@ def buggy_deploy(current_time):
         # Trigger the buggy deployment.
         data = get_deployment_data(timestamp, constant.DEP_INSTANCE, constant.DEPLOYMENT_DATA_BUGGY[0])
         replay_deployment_data(configs[constant.DEPLOYMENT], [data], "Deployment buggy data")
-    if lasting_time == 8:
+    if lasting_time == 5:
         logging.info("Trigger the metric detection and the prediction.")
         # Specify the query parameters.
         query_params = {
-            "startTime": to_epochtime_minute(current_time - datetime.timedelta(minutes=8)),
-            "endTime": timestamp,
             "userName": user_name,
             "projectName": "TD_metric"
         }
@@ -479,7 +501,7 @@ def buggy_deploy(current_time):
         retry_delay = 10  # seconds
         url = configs[constant.SERVER_URL] + "/api/v1/triggerMetricAndPrediction"
         make_get_request_with_retry(url, query_params, max_retries, retry_delay)
-    if lasting_time < 16:
+    if lasting_time>0 and lasting_time < 16:
         send_web_incident_data_for_buggy_dp(lasting_time,timestamp)
         # the normal and abnormal logs are streaming all the time
         send_log_data_for_buggy_dp(timestamp, lasting_time)
@@ -509,6 +531,27 @@ def make_get_request_with_retry(url, params, max_retries, retry_delay):
             time.sleep(retry_delay)
 
     logging.info("Failed to get a successful response.")
+
+
+def send_pager_duty_data():
+    try:
+        alert_data = {
+            "service_key": constant.PAGER_DUTY_SERVICE_KEY,
+            "event_type": "trigger",
+            "description": constant.PAGER_DUTY_DESC,
+            "details": {"alert": constant.PAGER_DUTY_MSG},
+            "contexts": [{"type": "link", "src": None}]
+        }
+        response = requests.post(constant.PAGER_DUTY_URL, data=json.dumps(alert_data), verify=False)
+        response_code = response.status_code
+        if response_code == 200:
+            logging.info("[PagerDuty] Successfully send the data.")
+        else:
+            logging.warning("[PagerDuty] Fail to send the data, error: " + str(response.json())
+                            + ", error code:" + str(response_code))
+    except Exception as e:
+        logging.error(e, exc_info=True)
+
 
 if __name__ == "__main__":
     logging_setting()
