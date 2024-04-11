@@ -2,6 +2,6 @@ package models
 
 type HostMapping struct {
 	ID      uint `gorm:"primaryKey"`
-	IndexID uint `gorm:"unique"`
+	IndexID int  `gorm:"unique"`
 	Host    string
 }
