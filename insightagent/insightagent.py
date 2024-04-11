@@ -14,7 +14,7 @@ from pathlib import Path
 import arrow
 import regex
 
-from utils import config_error, abs_path_from_cur, send_request
+from utils import config_error, abs_path_from_cur, send_request, align_timestamp
 
 # declare a few vars
 TRUE = regex.compile(r"T(RUE)?", regex.IGNORECASE)
@@ -296,6 +296,11 @@ def check_project_exist(logger, agent_config_vars, if_config_vars, project_name)
     return is_project_exist
 
 
+def start_data_processing(logger, config_name, cli_config_vars, agent_config_vars, if_config_vars, sampling_now):
+    data_type = get_data_type_from_project_type(logger, if_config_vars)
+    logger.info('Starting fetch {} items......'.format(data_type))
+
+
 def worker_process(args):
     (config_file, cli_config_vars, agent_start_time, logging_queue) = args
 
@@ -335,7 +340,11 @@ def worker_process(args):
             if not check_success:
                 return
 
-    time.sleep(60)
+    target_timestamp_timezone = agent_config_vars['target_timestamp_timezone']
+    sampling_interval = if_config_vars['sampling_interval']
+
+    sampling_now = align_timestamp((agent_start_time + target_timestamp_timezone) * 1000, sampling_interval)
+    start_data_processing(logger, config_name, cli_config_vars, agent_config_vars, if_config_vars, sampling_now)
 
 
 def main():
@@ -386,6 +395,7 @@ def main():
 
         try:
             pool_result.get(timeout=1 if need_timeout else None)
+            pool.close()
             pool.join()
         except multiprocessing.context.TimeoutError:
             logger_main.error("We lacked patience and got a multiprocessing.TimeoutError")

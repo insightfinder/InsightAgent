@@ -13,6 +13,13 @@ ATTEMPTS = 3
 RETRY_WAIT_TIME_IN_SEC = 10
 
 
+def align_timestamp(timestamp, sampling_interval):
+    if sampling_interval == 0 or not timestamp:
+        return timestamp
+    else:
+        return int(timestamp / (sampling_interval * 1000)) * sampling_interval * 1000
+
+
 def abs_path_from_cur(filename=''):
     return os.path.abspath(os.path.join(__file__, os.pardir, filename))
 
