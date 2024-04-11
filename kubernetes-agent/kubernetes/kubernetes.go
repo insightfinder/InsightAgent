@@ -217,6 +217,15 @@ func (k *KubernetesServer) GetPodsContainerExitEvents(namespace string, startTim
 	return &results
 }
 
+func (k *KubernetesServer) GetHostsNameList() []string {
+	var hosts []string
+	nodes, _ := k.Client.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	for _, node := range nodes.Items {
+		hosts = append(hosts, node.Name)
+	}
+	return hosts
+}
+
 func (k *KubernetesServer) GetPodsPVCMapping(namespace string) *map[string]map[string]map[string][]string {
 	// PVC -> Pod -> MountName -> [Containers]
 	var result = make(map[string]map[string]map[string][]string)

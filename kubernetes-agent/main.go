@@ -85,13 +85,7 @@ func main() {
 
 	// Initialize HostMapper DB
 	hostMapper := host_mapper.HostMapper{}
-	hostMapper.Initialize()
-	testList := make([]string, 0)
-	testList = append(testList, "a")
-	testList = append(testList, "b")
-	testList = append(testList, "c")
-	hostMapper.RemovedHostsIfNotExist(&testList)
-	hostMapper.InsertHosts(&testList)
+	hostMapper.Initialize(&kubernetesServer)
 
 	// Start data collection routine
 	EndTime := time.Now()
@@ -102,9 +96,12 @@ func main() {
 		// Process Pod Instance mapping during each run.
 		instanceMapper.Update()
 
+		// Process Host mapping during each run.
+		hostMapper.Update()
+
 		// Process data collection based each config file
 		for _, configFile := range configFiles {
-			go dataCollectionRoutine(configFile, &kubernetesServer, &instanceMapper, StartTime, EndTime)
+			go dataCollectionRoutine(configFile, &kubernetesServer, &instanceMapper, &hostMapper, StartTime, EndTime)
 		}
 
 		// Prepare for next 10 seconds time range
@@ -114,7 +111,7 @@ func main() {
 	}
 }
 
-func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServer *kubernetes.KubernetesServer, instanceMapper *tools.InstanceMapper, Before time.Time, Now time.Time) {
+func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServer *kubernetes.KubernetesServer, instanceMapper *tools.InstanceMapper, hostMapper *host_mapper.HostMapper, Before time.Time, Now time.Time) {
 
 	// Get InsightFinder config
 	IFConfig := insightfinder.GetInsightFinderConfig(configFile)
@@ -200,7 +197,7 @@ func dataCollectionRoutine(configFile *configparser.ConfigParser, kubernetesServ
 		}
 		log.Output(2, fmt.Sprintf("Finished collecting metric data from %s to %s", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 
-		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper, &postProcessor)
+		metricPayload := tools.BuildMetricDataPayload(&metricData, IFConfig, instanceMapper, hostMapper, &postProcessor)
 		tools.PrintStruct(*metricPayload, false, IFConfig["projectName"].(string))
 		log.Output(2, fmt.Sprintf("Start sending metic data from %s to %s.", Before.Format(time.RFC3339), Now.Format(time.RFC3339)))
 		insightfinder.SendMetricData(metricPayload, IFConfig)
