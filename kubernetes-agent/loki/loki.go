@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/carlmjohnson/requests"
 	"gopkg.in/yaml.v3"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -28,8 +28,8 @@ func (loki *LokiServer) Query(queryStr string, StartTime string, EndTime string)
 	var response LogQueryResponseBody
 	err := requests.URL(loki.Endpoint+RANGE_QUERY_API).BasicAuth(loki.Username, loki.Password).Param("query", queryStr).Param("start", StartTime).Param("end", EndTime).Param("direction", "forward").Param("limit", strconv.Itoa(loki.MaxEntriesLimitPerQuery)).ToJSON(&response).Fetch(context.Background())
 	if err != nil {
-		log.Output(2, "Failed to query loki server: "+loki.Endpoint)
-		fmt.Println(err.Error())
+		slog.Error("Failed to query loki server: " + loki.Endpoint)
+		slog.Error(err.Error())
 	}
 	return response
 }
@@ -40,10 +40,10 @@ func (loki *LokiServer) Initialize() {
 	var response string
 	err := requests.URL(loki.Endpoint+HEALTH_API).BasicAuth(loki.Username, loki.Password).ToString(&response).Fetch(context.Background())
 	if err != nil || strings.ReplaceAll(response, "\n", "") != "OK" {
-		log.Output(2, "Loki server is not ready: "+response)
-		fmt.Print(err)
+		slog.Error("Loki server is not ready: " + response)
+		slog.Error(err.Error())
 	} else {
-		log.Output(2, "Loki server response: "+response)
+		slog.Info("Loki server response: " + response)
 	}
 
 	// Setup config
@@ -55,9 +55,9 @@ func (loki *LokiServer) getConfig() LogConfigResponseBody {
 	var configResponse bytes.Buffer
 	err := requests.URL(loki.Endpoint + CONFIG_API).ToBytesBuffer(&configResponse).Fetch(context.Background())
 	if err != nil {
-		log.Output(2, "Failed to get config from Loki server.")
+		slog.Error("Failed to get config from Loki server.")
 	} else {
-		log.Output(2, "Read config from Loki server successfully.")
+		slog.Info("Read config from Loki server successfully.")
 	}
 
 	// Decode response to yaml struct
@@ -65,7 +65,7 @@ func (loki *LokiServer) getConfig() LogConfigResponseBody {
 	var configYaml LogConfigResponseBody
 	err = config.Decode(&configYaml)
 	if err != nil {
-		log.Output(2, "Failed to decode config from Loki server.")
+		slog.Error("Failed to decode config from Loki server.")
 		fmt.Print(configResponse)
 	}
 	return configYaml

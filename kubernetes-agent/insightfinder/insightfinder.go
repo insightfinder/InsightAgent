@@ -9,6 +9,7 @@ import (
 	"github.com/carlmjohnson/requests"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -138,7 +139,7 @@ func SendMetricData(data *MetricDataReceivePayload, IFconfig map[string]interfac
 }
 
 func SendDataToIF(data []byte, receiveEndpoint string, config map[string]interface{}) {
-	log.Output(1, "-------- Sending data to InsightFinder --------")
+	slog.Info("-------- Sending data to InsightFinder --------")
 
 	if len(data) > MAX_PACKET_SIZE {
 		panic("[ERROR]The packet size is too large.")
@@ -152,7 +153,7 @@ func SendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 	if receiveEndpoint == LOG_DATA_API {
 		headers["agent-type"] = LOG_DATA_AGENT_TYPE
 	}
-	log.Output(2, "[LOG] Prepare to send out "+fmt.Sprint(len(data))+" bytes data to IF:"+endpoint)
+	slog.Info("[LOG] Prepare to send out " + fmt.Sprint(len(data)) + " bytes data to IF:" + endpoint)
 	response, _ = SendRequest(
 		http.MethodPost,
 		endpoint,
@@ -162,7 +163,7 @@ func SendDataToIF(data []byte, receiveEndpoint string, config map[string]interfa
 	)
 	var result map[string]interface{}
 	json.Unmarshal(response, &result)
-	log.Output(1, string(response))
+	slog.Info(string(response))
 }
 
 func SendDependencyMap(data *[]map[string]string, IFconfig map[string]interface{}) {
@@ -242,7 +243,7 @@ func SendRequest(operation string, endpoint string, form io.Reader, headers map[
 		fmt.Printf("Sleep for " + fmt.Sprint(HTTP_RETRY_INTERVAL) + " seconds and retry .....")
 	}
 	if err != nil {
-		log.Output(1, "[ERROR] HTTP connection failure after 10 times of retry.")
+		slog.Info("[ERROR] HTTP connection failure after 10 times of retry.")
 		panic(err)
 	}
 
