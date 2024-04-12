@@ -3,7 +3,7 @@ package kubernetes
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"regexp"
 	"time"
 
@@ -28,7 +28,7 @@ func (k *KubernetesServer) Initialize() {
 	if err == nil {
 		k.Client, err = kubernetes.NewForConfig(config)
 		if err == nil {
-			log.Output(2, "Created Kubernetes config (from 'kubeconfig' file).")
+			slog.Info("Created Kubernetes config (from 'kubeconfig' file).")
 		} else {
 			k.Client = nil
 		}
@@ -38,12 +38,12 @@ func (k *KubernetesServer) Initialize() {
 
 	// Build connection from the in-cluster config
 	if k.Client == nil {
-		log.Output(2, "Try to connect to Kubernetes cluster (in-cluster).")
+		slog.Info("Try to connect to Kubernetes cluster (in-cluster).")
 		config, err := rest.InClusterConfig()
 		if err == nil {
 			k.Client, err = kubernetes.NewForConfig(config)
 			if err == nil {
-				log.Output(2, "Created Kubernetes config (from in-cluster).")
+				slog.Info("Created Kubernetes config (from in-cluster).")
 			} else {
 				k.Client = nil
 				panic(err.Error())
@@ -59,10 +59,10 @@ func (k *KubernetesServer) Initialize() {
 func (k *KubernetesServer) VerifyConnection() {
 	_, err := k.Client.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{})
 	if err != nil {
-		log.Output(2, "Failed to connect to Kubernetes cluster.")
+		slog.Info("Failed to connect to Kubernetes cluster.")
 		panic(err.Error())
 	} else {
-		log.Output(2, "Successfully connected to Kubernetes cluster.")
+		slog.Info("Successfully connected to Kubernetes cluster.")
 	}
 }
 
@@ -182,7 +182,7 @@ func (k *KubernetesServer) GetPodsContainerExitEvents(namespace string, startTim
 	// Get All Pods
 	Pods, err := k.Client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		log.Output(2, "Failed to get pods in namespace: "+err.Error())
+		slog.Error("Failed to get pods in namespace: " + err.Error())
 	}
 	for _, Pod := range Pods.Items {
 		for _, containerStatus := range Pod.Status.ContainerStatuses {
@@ -293,13 +293,13 @@ func (k *KubernetesServer) GetOpenTelemetryMapping(namespace string) *map[string
 	// Get app.kubernetes.io/component label from all deployments
 	Deployments, err := k.Client.AppsV1().Deployments(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "app.kubernetes.io/component"})
 	if err != nil {
-		log.Output(2, "Failed to get deployments in namespace: "+err.Error())
+		slog.Error("Failed to get deployments in namespace: " + err.Error())
 	}
 
 	// Get app.kubernetes.io/component label from all statefulSets
 	StatefulSets, err := k.Client.AppsV1().StatefulSets(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: "app.kubernetes.io/component"})
 	if err != nil {
-		log.Output(2, "Failed to get statefulSets in namespace: "+err.Error())
+		slog.Error("Failed to get statefulSets in namespace: " + err.Error())
 	}
 
 	for _, deployment := range Deployments.Items {

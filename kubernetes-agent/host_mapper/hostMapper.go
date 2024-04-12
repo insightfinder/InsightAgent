@@ -36,6 +36,7 @@ func (hostMapper *HostMapper) Initialize(kubernetesServer *kubernetes.Kubernetes
 func (hostMapper *HostMapper) Update() {
 	slog.Info("Update HostMapper")
 	allHosts := hostMapper.KubernetesServer.GetHostsNameList()
+	slog.Info("Prepare to update " + strconv.Itoa(len(allHosts)) + "hosts.")
 	hostMapper.RemovedHostsIfNotExist(&allHosts)
 	hostMapper.InsertHosts(&allHosts)
 	slog.Info("Update HostMapper Done")
@@ -68,7 +69,7 @@ func (hostMapper *HostMapper) RemovedHostsIfNotExist(hosts *[]string) {
 	hostMapper.db.Model(&models.HostMapping{}).Where("host NOT IN ?", *hosts).Pluck("host", &toBeDeletedHosts)
 
 	for _, host := range toBeDeletedHosts {
-		slog.Debug("Removed host:", host)
+		slog.Info("Removed host:", host)
 	}
 	hostMapper.db.Model(&models.HostMapping{}).Where("host NOT IN ?", *hosts).Delete(&models.HostMapping{})
 }
@@ -110,13 +111,12 @@ func (hostMapper *HostMapper) InsertHosts(hosts *[]string) {
 	// Assign indexes to hosts
 	for host, isNewHost := range newHosts {
 		if isNewHost {
-			slog.Debug("Prepare to insert new host:", host)
 
 			// Get an index from avail index
 			newIndex := availIndexesList[0]
 			availIndexesList = availIndexesList[1:]
 
-			slog.Debug("Assign index", newIndex, "to host: ", host)
+			slog.Info("Assign index", newIndex, "to host: ", host)
 
 			// Insert new host
 			newHost := models.HostMapping{
