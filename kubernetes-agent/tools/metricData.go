@@ -1,12 +1,13 @@
 package tools
 
 import (
+	"kubernetes-agent/host_mapper"
 	"kubernetes-agent/insightfinder"
 	"kubernetes-agent/prometheus"
 	"math"
 )
 
-func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper, postProcessor *PostProcessor) *insightfinder.MetricDataReceivePayload {
+func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricData, IFConfig map[string]interface{}, instanceNameMapper *InstanceMapper, hostMapper *host_mapper.HostMapper, postProcessor *PostProcessor) *insightfinder.MetricDataReceivePayload {
 
 	InsightAgentType := insightfinder.ProjectTypeToAgentType(IFConfig["projectType"].(string), false, ToBool(IFConfig["isContainer"]))
 	CloudType := IFConfig["cloudType"].(string)
@@ -19,7 +20,7 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 			var componentName string
 			if promMetricData.Pod == "" && promMetricData.NameSpace == "" {
 				// Node level metric
-				instanceName = promMetricData.Node
+				instanceName = hostMapper.GetHostInstanceName(promMetricData.Node)
 				componentName = promMetricData.Node
 			} else {
 				// Pod level metric

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"reflect"
 	"regexp"
@@ -48,7 +49,7 @@ func PrintStruct(v any, needPrint bool, fileName string) {
 	}
 	err = os.WriteFile("PrintStruct-"+fileName+".json", jsonBytes, 0644)
 	if err != nil {
-		log.Output(2, "Writing to file failed: %s"+err.Error())
+		slog.Error("Writing to file failed: %s" + err.Error())
 	}
 }
 

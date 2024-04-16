@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"kubernetes-agent/kubernetes"
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -121,7 +121,7 @@ func (mapper *InstanceMapper) AddPods(namespace string, resourceKind string, res
 }
 
 func (mapper *InstanceMapper) Update() {
-	log.Output(2, "Start updating Pod Instance Mapping...")
+	slog.Info("Start updating Pod Instance Mapping...")
 
 	for namespace, _ := range mapper.Storage {
 		podsCreated, podsDeleted := mapper.GetDiffMap(namespace)
@@ -149,7 +149,7 @@ func (mapper *InstanceMapper) Update() {
 		}
 	}
 	mapper.Save()
-	log.Output(2, "Pod Instance Mapping updated successfully!")
+	slog.Info("Pod Instance Mapping updated successfully!")
 }
 
 func (mapper *InstanceMapper) FindIndexByPodName(namespace string, resourceKind string, resource string, podName string) string {

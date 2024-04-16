@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/bigkevmcd/go-configparser"
 	"github.com/carlmjohnson/requests"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -45,7 +45,7 @@ func GetConfigFiles(configRelativePath string) []string {
 		configRelativePath = "conf.d"
 	}
 	configPath := AbsFilePath(configRelativePath)
-	log.Output(2, "Reading config files from directory: "+configPath)
+	slog.Info("Reading config files from directory: " + configPath)
 	allConfigs, err := filepath.Glob(configPath + "/*.ini")
 	if err != nil {
 		panic(err)
@@ -70,7 +70,7 @@ func GetConfigValue(p *configparser.ConfigParser, section string, param string, 
 func FormCompleteURL(link string, endpoint string) string {
 	postUrl, err := url.Parse(link)
 	if err != nil {
-		log.Output(1, "[ERROR] Fail to pares the URL. Please check your config.")
+		slog.Error("[ERROR] Fail to pares the URL. Please check your config.")
 		panic(err)
 	}
 	postUrl.Path = path.Join(postUrl.Path, endpoint)
@@ -243,8 +243,8 @@ func GetInsightFinderConfig(p *configparser.ConfigParser) map[string]interface{}
 	} else {
 		metaDataMaxInstanceInt, err := strconv.Atoi(metaDataMaxInstance)
 		if err != nil {
-			log.Output(2, err.Error())
-			log.Output(2, "[ERROR] Meta data max instance can only be integer number.")
+			slog.Error(err.Error())
+			slog.Error("[ERROR] Meta data max instance can only be integer number.")
 			os.Exit(1)
 		}
 		if metaDataMaxInstanceInt > DEFAULT_MATADATE_MAX_INSTANCE {
@@ -288,23 +288,23 @@ func CheckProject(IFconfig map[string]interface{}) {
 	projectName := ToString(IFconfig["projectName"])
 	if len(projectName) > 0 {
 		if !isProjectExist(IFconfig) {
-			log.Output(1, fmt.Sprintf("Didn't find the project named %s. Start creating project in the InsightFinder.", projectName))
+			slog.Warn(fmt.Sprintf("Didn't find the project named %s. Start creating project in the InsightFinder.", projectName))
 			createProject(IFconfig)
-			log.Output(1, "Sleep for 5 seconds to wait for project creation and will check the project exisitense again.")
+			slog.Info("Sleep for 5 seconds to wait for project creation and will check the project exisitense again.")
 			time.Sleep(time.Second * 5)
 			if !isProjectExist(IFconfig) {
 				panic("[ERROR] Fail to create project " + projectName)
 			}
-			log.Output(1, fmt.Sprintf("Create project %s successfully!", projectName))
+			slog.Info(fmt.Sprintf("Create project %s successfully!", projectName))
 		} else {
-			log.Output(1, fmt.Sprintf("Project named %s exist. Program will continue.", projectName))
+			slog.Info(fmt.Sprintf("Project named %s exist. Program will continue.", projectName))
 		}
 	}
 }
 
 func isProjectExist(IFconfig map[string]interface{}) bool {
 	projectName := ToString(IFconfig["projectName"])
-	log.Output(1, fmt.Sprintf("Check if the project named %s exists in the InsightFinder.", projectName))
+	slog.Info(fmt.Sprintf("Check if the project named %s exists in the InsightFinder.", projectName))
 	form := url.Values{}
 	form.Add("operation", "check")
 	form.Add("userName", ToString(IFconfig["userName"]))
@@ -324,7 +324,7 @@ func isProjectExist(IFconfig map[string]interface{}) bool {
 	var result map[string]interface{}
 	json.Unmarshal(response, &result)
 	if !ToBool(result["success"]) {
-		log.Output(2, "[ERROR] Check project exist failed. Please check your parameters.")
+		slog.Error("[ERROR] Check project exist failed. Please check your parameters.")
 	}
 
 	return ToBool(result["isProjectExist"])
@@ -376,7 +376,7 @@ func createProject(IFconfig map[string]interface{}) {
 	requestForm.Add("projectCloudType", requestBody.ProjectCloudType)
 	requestForm.Add("systemName", requestBody.SystemName)
 
-	log.Output(1, fmt.Sprintf("[LOG]Creating the project named %s in the InsightFinder.", requestBody.ProjectName))
+	slog.Info(fmt.Sprintf("[LOG]Creating the project named %s in the InsightFinder.", requestBody.ProjectName))
 
 	//var result ProjectCheckModel
 	var resultStr string
