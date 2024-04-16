@@ -164,6 +164,7 @@ def send_anomaly_data(args):
     system_name = data.get('DATA', {}).get("systemName")
     data_type = data.get('DATA', {}).get("dataType")
     agent_type = data.get('DATA', {}).get("insightAgentType")
+    large_project = data.get('DATA', {}).get("isLargeProject")
     sampling_interval = data.get('DATA', {}).get("sampleIntervalInMinutes")
 
     # do not send if only testing
@@ -178,6 +179,7 @@ def send_anomaly_data(args):
         "if_proxies": main_vars['if_proxies'],
         "system_name": system_name,
         "project_name": project_name,
+        "large_project": large_project or False,
         "dataType": data_type or 'Log',
         "insightAgentType": agent_type or 'Custom',
         "sampling_interval": int(sampling_interval or 10) * 60,
@@ -593,6 +595,7 @@ def check_project_exist(logger, if_config_vars):
                 'licenseKey': if_config_vars['license_key'],
                 'projectName': if_config_vars['project_name'],
                 'systemName': if_config_vars['system_name'] or if_config_vars['project_name'],
+                'largeProject': if_config_vars['large_project'] or False,
                 'instanceType': 'Shadow',
                 'projectCloudType': 'Shadow',
                 'dataType': if_config_vars.get('dataType') or get_data_type_from_project_type(if_config_vars),
