@@ -48,6 +48,8 @@ component_field =
 default_component_name
 # if no instance given, will set to 'Application'. Can also set instance name from multiple fields which separated by commas. Ex: instance_name_part1,instance_name_part2.
 instance_field = instance
+# field names used to get host id
+dynamic_host_field =
 # instance_whitelist is a regex string used to define which instances will be filtered.
 instance_whitelist =
 # Field name of device. Can also set device name from multiple fields which separated by commas. Ex: device_name_part1,device_name_part2.

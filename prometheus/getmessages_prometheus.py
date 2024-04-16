@@ -214,6 +214,10 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
             if component:
                 component_map = {"instanceName": full_instance, "componentName": component}
 
+            host_id = None
+            if agent_config_vars['dynamic_host_field']:
+                host_id = message.get('metric').get(agent_config_vars['dynamic_host_field'])
+
             vector_value = message.get('value')
             timestamp = int(vector_value[0]) * 1000 if len(str(vector_value[0])) == 10 else vector_value[0]
             if sampling_time and abs(timestamp - sampling_time) > sampling_interval:
@@ -229,7 +233,9 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
 
             key = '{}-{}'.format(timestamp, full_instance)
             if key not in metric_buffer['buffer_dict']:
-                metric_buffer['buffer_dict'][key] = {"timestamp": timestamp, "component_map": component_map}
+                metric_buffer['buffer_dict'][key] = {"timestamp": timestamp, "component_map": component_map,
+                                                     "host_id": host_id, "instanceName": full_instance,
+                                                     "componentName": component}
 
             metric_key = '{}[{}]'.format(date_field, full_instance)
             metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
@@ -334,6 +340,7 @@ def get_agent_config_vars(logger, config_ini):
             data_format = config_parser.get('prometheus', 'data_format').upper()
             # project_field = config_parser.get('agent', 'project_field', raw=True)
             component_field = config_parser.get('prometheus', 'component_field', raw=True)
+            dynamic_host_field = config_parser.get('prometheus', 'dynamic_host_field', raw=True, fallback=None)
             default_component_name = config_parser.get('prometheus', 'default_component_name', raw=True)
             instance_field = config_parser.get('prometheus', 'instance_field', raw=True)
             instance_whitelist = config_parser.get('prometheus', 'instance_whitelist')
@@ -452,11 +459,12 @@ def get_agent_config_vars(logger, config_ini):
 
                        'proxies': agent_proxies, 'data_format': data_format,  # 'project_field': project_fields,
                        'component_field': component_field, 'default_component_name': default_component_name,
-                       'instance_field': instance_fields, "instance_whitelist_regex": instance_whitelist_regex,
-                       'device_field': device_fields, 'timestamp_field': timestamp_fields,
-                       'target_timestamp_timezone': target_timestamp_timezone, 'timezone': timezone,
-                       'timestamp_format': timestamp_format, 'instance_connector': instance_connector,
-                       'thread_pool': thread_pool, 'processes': processes, 'timeout': timeout, }
+                       'instance_field': instance_fields, 'dynamic_host_field': dynamic_host_field,
+                       "instance_whitelist_regex": instance_whitelist_regex, 'device_field': device_fields,
+                       'timestamp_field': timestamp_fields, 'target_timestamp_timezone': target_timestamp_timezone,
+                       'timezone': timezone, 'timestamp_format': timestamp_format,
+                       'instance_connector': instance_connector, 'thread_pool': thread_pool, 'processes': processes,
+                       'timeout': timeout, }
 
         return config_vars
 
@@ -734,36 +742,104 @@ def send_data_wrapper(logger, c_config, if_config_vars, track):
     reset_track(track)
 
 
-def send_data_to_if(logger, c_config, if_config_vars, track, chunk_metric_data):
+def safe_string_to_float(s):
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config_vars):
+    to_send_data_dict = dict()
+    to_send_data_dict['licenseKey'] = if_config_vars['license_key']
+    to_send_data_dict['userName'] = if_config_vars['user_name']
+
+    data_dict = dict()
+    data_dict['projectName'] = if_config_vars['project_name']
+    data_dict['userName'] = if_config_vars['user_name']
+    if 'system_name' in if_config_vars:
+        data_dict['systemName'] = if_config_vars['system_name']
+    data_dict['iat'] = get_agent_type_from_project_type(if_config_vars)
+    if 'sampling_interval' in if_config_vars:
+        data_dict['si'] = str(if_config_vars['sampling_interval'])
+
+    instance_data_map = dict()
+    common_fields = {"instanceName", "componentName", "host_id", "timestamp"}
+    for chunk in chunk_metric_data:
+        instance_name = chunk['instanceName']
+        component_name = chunk.get('componentName')
+        host_id = chunk.get('host_id')
+        timestamp = chunk['timestamp']
+        data = {k: v for k, v in chunk.items() if k not in common_fields}
+        if data and timestamp and instance_name:
+            ts = int(timestamp)
+            if instance_name not in instance_data_map:
+                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'dit': {}, }
+
+            if timestamp not in instance_data_map[instance_name]['dit']:
+                instance_data_map[instance_name]['dit'][timestamp] = {'t': ts, 'm': []}
+
+            data_set = instance_data_map[instance_name]['dit'][timestamp]['m']
+            if host_id:
+                instance_data_map[instance_name]['dit'][timestamp]['k'] = {"hostId": host_id}
+            for metric_name, metric_value in data.items():
+                # remove instance name from the metric name
+                metric_name = metric_name.split('[')[0]
+                float_value = safe_string_to_float(metric_value)
+                if float_value is not None:
+                    data_set.append({'m': metric_name, 'v': float_value})
+                else:
+                    data_set.append({'m': metric_name, 'v': 0.0})
+
+    data_dict['idm'] = instance_data_map
+    to_send_data_dict['data'] = data_dict
+
+    return to_send_data_dict
+
+
+def send_data_to_if(logger, cli_config_vars, if_config_vars, track, chunk_metric_data):
     send_data_time = time.time()
 
     # prepare data for metric streaming agent
-    data_to_post = initialize_api_post_data(logger, if_config_vars)
-    if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
-        for chunk in chunk_metric_data:
-            chunk['data'] = json.dumps(chunk['data'])
-    data_to_post[get_data_field_from_project_type(if_config_vars)] = json.dumps(chunk_metric_data)
+    data_to_post = None
+    json_to_post = None
+    if 'METRIC' in if_config_vars['project_type']:
+        json_to_post = convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config_vars)
+        logger.debug(json_to_post)
+        post_url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v2/metric-data-receive')
+    else:
+        data_to_post = initialize_api_post_data(logger, if_config_vars)
+        if 'DEPLOYMENT' in if_config_vars['project_type'] or 'INCIDENT' in if_config_vars['project_type']:
+            for chunk in chunk_metric_data:
+                chunk['data'] = json.dumps(chunk['data'])
+        data_to_post[get_data_field_from_project_type(if_config_vars)] = json.dumps(chunk_metric_data)
+        # add component mapping to the post data
+        track['component_map_list'] = list({v['instanceName']: v for v in track['component_map_list']}.values())
+        data_to_post['instanceMetaData'] = json.dumps(track['component_map_list'] or [])
 
-    # add component mapping to the post data
-    track['component_map_list'] = list({v['instanceName']: v for v in track['component_map_list']}.values())
-    data_to_post['instanceMetaData'] = json.dumps(track['component_map_list'] or [])
-
-    logger.info('First:\n' + str(chunk_metric_data[0]))
-    logger.info('Last:\n' + str(chunk_metric_data[-1]))
-    logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
-    logger.info('Total Lines: ' + str(len(chunk_metric_data)))
+        post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type(if_config_vars))
 
     # do not send if only testing
-    if c_config['testing']:
+    if cli_config_vars['testing']:
         return
 
     # send the data
-    post_url = urllib.parse.urljoin(if_config_vars['if_url'], get_api_from_project_type(if_config_vars))
-    send_request(logger, post_url, 'POST', 'Could not send request to IF',
-                 str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
-                 verify=False, proxies=if_config_vars['if_proxies'])
-    logger.info('--- Send data to project: %s, time: %s seconds ---' % (
-        if_config_vars['project_name'], round(time.time() - send_data_time, 2)))
+    if data_to_post:
+        logger.debug('First:\n' + str(chunk_metric_data[0]))
+        logger.debug('Last:\n' + str(chunk_metric_data[-1]))
+        logger.info('Total Data (bytes): ' + str(get_json_size_bytes(data_to_post)))
+        logger.info('Total Lines: ' + str(len(chunk_metric_data)))
+
+        send_request(logger, post_url, 'POST', 'Could not send request to IF',
+                     str(get_json_size_bytes(data_to_post)) + ' bytes of data are reported.', data=data_to_post,
+                     verify=False, proxies=if_config_vars['if_proxies'])
+    elif json_to_post:
+        logger.info('Total Data (bytes): ' + str(get_json_size_bytes(json_to_post)))
+        send_request(logger, post_url, 'POST', 'Could not send request to IF',
+                     str(get_json_size_bytes(json_to_post)) + ' bytes of data are reported.', json=json_to_post,
+                     verify=False, proxies=if_config_vars['if_proxies'])
+
+    logger.info('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
 
 
 def send_request(logger, url, mode='GET', failure_message='Failure!', success_message='Success!',
