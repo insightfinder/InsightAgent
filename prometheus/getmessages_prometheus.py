@@ -90,9 +90,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             metric_batch_list = []
 
             if metric_batch_size:
-                metric_mql = {'query': 'group by(__name__) ({})'.format(query.get('query')), 'time': timestamp}
-                metric_data = query_messages_prometheus((logger, if_config_vars, agent_config_vars, None, metric_mql))
-                metric_list = [item.get('metric', {}).get('__name__') for item in metric_data]
+                metric_list = query_prometheus_labels((logger, if_config_vars, agent_config_vars))
                 if len(metric_list) > 0:
                     metric_batch_list = [metric_list[i:i + metric_batch_size] for i in
                                          range(0, len(metric_list), metric_batch_size)]
@@ -131,6 +129,30 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     thread_pool.close()
     thread_pool.join()
     logger.info('Closed......')
+
+
+def query_prometheus_labels(args):
+    logger, if_config_vars, agent_config_vars = args
+    logger.info('Starting query prometheus labels')
+
+    data = []
+    try:
+        # execute sql string
+        url = urllib.parse.urljoin(agent_config_vars['api_url'], 'label/__name__/values')
+        response = send_request(logger, url, proxies=agent_config_vars['proxies'],
+                                **agent_config_vars['auth_kwargs'], **agent_config_vars['ssl_kwargs'])
+        if response == -1:
+            logger.error('Query label error')
+        else:
+            result = response.json()
+            if result['status'] != 'success':
+                logger.error('Query label error: {}'.format(result))
+            else:
+                data = result.get('data', [])
+    except Exception as e:
+        logger.error(e)
+        logger.error('Query label error: {}')
+    return data
 
 
 def query_messages_prometheus(args):
