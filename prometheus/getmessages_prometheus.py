@@ -87,14 +87,21 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
         for query in prometheus_query:
             # If set batch size, first get all metrics
             metric_batch_size = query.get('metric_batch_size')
+            batch_metric_filter_regex = query.get('batch_metric_filter_regex')
             metric_batch_list = []
 
             if metric_batch_size:
-                metric_list = query_prometheus_labels((logger, if_config_vars, agent_config_vars))
+                all_metric_list = query_prometheus_labels((logger, if_config_vars, agent_config_vars))
+                metric_list = all_metric_list
+                if batch_metric_filter_regex:
+                    metric_list = [m for m in all_metric_list if regex.match(batch_metric_filter_regex, m)]
+                logger.info('Metrics found {} and filtered {}: {}'.format(
+                    len(all_metric_list), len(metric_list), metric_list))
                 if len(metric_list) > 0:
                     metric_batch_list = [metric_list[i:i + metric_batch_size] for i in
                                          range(0, len(metric_list), metric_batch_size)]
                 else:
+                    logger.info('No metrics found for batch mode, query all metrics')
                     metric_batch_list.append([])
             else:
                 metric_batch_list.append([])
@@ -374,6 +381,7 @@ def get_agent_config_vars(logger, config_ini):
             prometheus_query_json = config_parser.get('prometheus', 'prometheus_query_json', fallback=None)
             prometheus_query_metric_batch_size = config_parser.get('prometheus', 'prometheus_query_metric_batch_size',
                                                                    fallback=None)
+            batch_metric_filter_regex = config_parser.get('prometheus', 'batch_metric_filter_regex', fallback=None)
 
             # time range
             his_time_range = config_parser.get('prometheus', 'his_time_range')
@@ -426,6 +434,8 @@ def get_agent_config_vars(logger, config_ini):
 
                 if prometheus_query_metric_batch_size:
                     qml['metric_batch_size'] = prometheus_query_metric_batch_size
+                if batch_metric_filter_regex:
+                    qml['batch_metric_filter_regex'] = batch_metric_filter_regex
                 prometheus_query.append(qml)
 
         if prometheus_query_json:
