@@ -84,6 +84,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     thread_pool = ThreadPool(agent_config_vars['thread_pool'])
 
     def run_prometheus_query(timestamp):
+        query_list = []
         for query in prometheus_query:
             # If set batch size, first get all metrics
             metric_batch_size = query.get('metric_batch_size')
@@ -115,11 +116,13 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
                 else:
                     mql['query'] = '{}'.format(query.get('query'))
 
-                params = [(logger, if_config_vars, agent_config_vars, None, mql)]
-                results = thread_pool.map(query_messages_prometheus, params)
-                result_list = list(chain(*results))
-                parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
-                                          cache_cur, result_list, query, timestamp)
+                query_list.append(mql)
+
+            params = [(logger, if_config_vars, agent_config_vars, None, mql) for mql in query_list]
+            results = thread_pool.map(query_messages_prometheus, params)
+            result_list = list(chain(*results))
+            parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
+                                      cache_cur, result_list, query, timestamp)
 
         # clear metric buffer when piece of time range end
         clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
