@@ -615,6 +615,7 @@ def get_if_config_vars(logger, config_ini):
             if_url = config_parser.get('insightfinder', 'if_url')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
+            dynamic_metric_type = config_parser.get('insightfinder', 'dynamic_metric_type')
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             return config_error(logger)
@@ -673,7 +674,7 @@ def get_if_config_vars(logger, config_ini):
                        'sampling_interval': int(sampling_interval),  # as seconds
                        'run_interval': int(run_interval),  # as seconds
                        'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
-                       'if_url': if_url, 'if_proxies': if_proxies, 'is_replay': is_replay}
+                       'if_url': if_url, 'if_proxies': if_proxies, 'is_replay': is_replay, 'dynamic_metric_type': dynamic_metric_type}
 
         return config_vars
 
@@ -829,7 +830,7 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
     data_dict['userName'] = if_config_vars['user_name']
     if 'system_name' in if_config_vars:
         data_dict['systemName'] = if_config_vars['system_name']
-
+    #data_dict['iat'] = get_insight_agent_type_from_project_type(if_config_vars)
     instance_data_map = dict()
     common_fields = {"instanceName", "componentName", "host_id", "timestamp"}
     for chunk in chunk_metric_data:
@@ -975,6 +976,11 @@ def get_insight_agent_type_from_project_type(if_config_vars):
             return 'MetricFile'
         else:
             return 'LogFile'
+    elif if_config_vars['dynamic_metric_type']:
+        if if_config_vars['dynamic_metric_type'] == 'vm':
+            return 'DynamicVM'
+        else:
+            return 'DynamicHost'
     else:
         return 'Custom'
 
@@ -1062,6 +1068,7 @@ def check_project_exist(logger, if_config_vars):
                       'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
                       'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
                       'samplingIntervalInSeconds': if_config_vars['sampling_interval'], }
+            logger.debug("insightAgentType:", get_insight_agent_type_from_project_type(if_config_vars))
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
             response = send_request(logger, url, 'POST', data=params, verify=False,
                                     proxies=if_config_vars['if_proxies'])

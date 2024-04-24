@@ -86,6 +86,11 @@ system_name =
 project_type = metric
 # Set to `YES` if project is container.
 containerize = no
+
+# Set to empty to create normal projects
+# set to 'vm' to use 'DynamicVM' as the AgentType, set to 'host' to use 'DynamicHost' as the AgentType
+dynamic_metric_type = vm
+
 sampling_interval = 5
 run_interval = 5
 # what size to limit chunks sent to IF to, as kb
