@@ -199,6 +199,7 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
 
     query_metric_name = query.get('metric_name')
     query_instance_fields = query.get('instance_fields')
+    query_device_fields = query.get('device_fields')
     default_component_name = agent_config_vars['default_component_name']
     sampling_interval = if_config_vars['sampling_interval']
     sampling_time = sampling_time * 1000 if len(str(sampling_time)) == 10 else sampling_time
@@ -250,8 +251,12 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
             # add device info if has
             device = None
             device_field = agent_config_vars['device_field']
+            if query_device_fields and len(query_device_fields) > 0:
+                device_field = query_device_fields
+
             if device_field and len(device_field) > 0:
                 devices = [message.get('metric').get(d) for d in device_field]
+                devices = [d for d in devices if d]
                 device = agent_config_vars['instance_connector'].join(devices) if len(devices) > 0 else None
             full_instance = make_safe_instance_string(instance, device)
 
