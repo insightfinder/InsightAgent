@@ -21,7 +21,14 @@ client_key =
 # For example:
 # {__name__=~".+"};metric_bytes:instance:rate(windows_net_bytes_sent_total[5m]);cpu_time_total::sum by (mode,instance) (irate(windows_cpu_time_total[5m]))
 prometheus_query =
-# The json file contains the prometheus query. For each json object, it contains "query", optional "metric_name" and optional "instance_fields" string array.
+
+# If prometheus_query is set, this is the batch size of metrics to query in one request. Keep it empty if you want to query all metrics in one request.
+prometheus_query_metric_batch_size =
+
+# regex to filter metrics if batch size is set
+batch_metric_filter_regex =
+
+# The json file contains the prometheus query. For each json object, it contains "query", optional "metric_batch_size", optional "metric_name" and optional "instance_fields" string array.
 # For example: prometheus_query_json = prometheus_query.json
 prometheus_query_json =
 
@@ -79,6 +86,11 @@ system_name =
 project_type = metric
 # Set to `YES` if project is container.
 containerize = no
+
+# Set to empty to create normal projects
+# set to 'vm' to use 'DynamicVM' as the AgentType, set to 'host' to use 'DynamicHost' as the AgentType
+dynamic_metric_type = vm
+
 sampling_interval = 5
 run_interval = 5
 # what size to limit chunks sent to IF to, as kb

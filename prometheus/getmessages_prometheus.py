@@ -82,33 +82,87 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     prometheus_query = agent_config_vars['prometheus_query']
 
     thread_pool = ThreadPool(agent_config_vars['thread_pool'])
+
+    def run_prometheus_query(timestamp):
+        query_list = []
+        for query in prometheus_query:
+            # If set batch size, first get all metrics
+            metric_batch_size = query.get('metric_batch_size')
+            batch_metric_filter_regex = query.get('batch_metric_filter_regex')
+            metric_batch_list = []
+
+            if metric_batch_size:
+                all_metric_list = query_prometheus_labels((logger, if_config_vars, agent_config_vars))
+                metric_list = all_metric_list
+                if batch_metric_filter_regex:
+                    metric_list = [m for m in all_metric_list if regex.match(batch_metric_filter_regex, m)]
+                logger.info('Metrics found {} and filtered {}: {}'.format(
+                    len(all_metric_list), len(metric_list), metric_list))
+                if len(metric_list) > 0:
+                    metric_batch_list = [metric_list[i:i + metric_batch_size] for i in
+                                         range(0, len(metric_list), metric_batch_size)]
+                else:
+                    logger.info('No metrics found for batch mode, query all metrics')
+                    metric_batch_list.append([])
+            else:
+                metric_batch_list.append([])
+
+            for metric_batch in metric_batch_list:
+                query_str = query.get('query')
+                mql = {'time': timestamp}
+
+                if len(metric_batch) > 0:
+                    mql['query'] = ' or '.join(['{}{}'.format(m, query_str) for m in metric_batch])
+                else:
+                    mql['query'] = '{}'.format(query.get('query'))
+
+                query_list.append(mql)
+
+            params = [(logger, if_config_vars, agent_config_vars, None, mql) for mql in query_list]
+            results = thread_pool.map(query_messages_prometheus, params)
+            result_list = list(chain(*results))
+            parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
+                                      cache_cur, result_list, query, timestamp)
+
+        # clear metric buffer when piece of time range end
+        clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
+
     if agent_config_vars['his_time_range']:
         logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
         for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
                                if_config_vars['sampling_interval']):
-            for query in prometheus_query:
-                params = [
-                    (logger, if_config_vars, agent_config_vars, None, {'query': query.get('query'), 'time': timestamp})]
-                results = thread_pool.map(query_messages_prometheus, params)
-                result_list = list(chain(*results))
-                parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
-                                          cache_cur, result_list, query, timestamp)
-
-            # clear metric buffer when piece of time range end
-            clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
+            run_prometheus_query(timestamp)
     else:
         logger.debug('Using current time for streaming data')
-        for query in prometheus_query:
-            params = [
-                (logger, if_config_vars, agent_config_vars, None, {'query': query.get('query'), 'time': time_now, })]
-            results = thread_pool.map(query_messages_prometheus, params)
-            result_list = list(chain(*results))
-            parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
-                                      cache_cur, result_list, query, time_now)
+        run_prometheus_query(time_now)
 
     thread_pool.close()
     thread_pool.join()
     logger.info('Closed......')
+
+
+def query_prometheus_labels(args):
+    logger, if_config_vars, agent_config_vars = args
+    logger.info('Starting query prometheus labels')
+
+    data = []
+    try:
+        # execute sql string
+        url = urllib.parse.urljoin(agent_config_vars['api_url'], 'label/__name__/values')
+        response = send_request(logger, url, proxies=agent_config_vars['proxies'],
+                                **agent_config_vars['auth_kwargs'], **agent_config_vars['ssl_kwargs'])
+        if response == -1:
+            logger.error('Query label error')
+        else:
+            result = response.json()
+            if result['status'] != 'success':
+                logger.error('Query label error: {}'.format(result))
+            else:
+                data = result.get('data', [])
+    except Exception as e:
+        logger.error(e)
+        logger.error('Query label error: {}')
+    return data
 
 
 def query_messages_prometheus(args):
@@ -145,6 +199,7 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
 
     query_metric_name = query.get('metric_name')
     query_instance_fields = query.get('instance_fields')
+    query_device_fields = query.get('device_fields')
     default_component_name = agent_config_vars['default_component_name']
     sampling_interval = if_config_vars['sampling_interval']
     sampling_time = sampling_time * 1000 if len(str(sampling_time)) == 10 else sampling_time
@@ -196,8 +251,12 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
             # add device info if has
             device = None
             device_field = agent_config_vars['device_field']
+            if query_device_fields and len(query_device_fields) > 0:
+                device_field = query_device_fields
+
             if device_field and len(device_field) > 0:
                 devices = [message.get('metric').get(d) for d in device_field]
+                devices = [d for d in devices if d]
                 device = agent_config_vars['instance_connector'].join(devices) if len(devices) > 0 else None
             full_instance = make_safe_instance_string(instance, device)
 
@@ -327,7 +386,10 @@ def get_agent_config_vars(logger, config_ini):
             # metrics
             metrics_name_field = config_parser.get('prometheus', 'metrics_name_field')
             prometheus_query_str = config_parser.get('prometheus', 'prometheus_query')
-            prometheus_query_json = config_parser.get('prometheus', 'prometheus_query_json')
+            prometheus_query_json = config_parser.get('prometheus', 'prometheus_query_json', fallback=None)
+            prometheus_query_metric_batch_size = config_parser.get('prometheus', 'prometheus_query_metric_batch_size',
+                                                                   fallback=None)
+            batch_metric_filter_regex = config_parser.get('prometheus', 'batch_metric_filter_regex', fallback=None)
 
             # time range
             his_time_range = config_parser.get('prometheus', 'his_time_range')
@@ -358,6 +420,9 @@ def get_agent_config_vars(logger, config_ini):
             logger.error(ex)
             return config_error(logger)
 
+        if prometheus_query_metric_batch_size:
+            prometheus_query_metric_batch_size = int(prometheus_query_metric_batch_size)
+
         prometheus_query = []
         if len(prometheus_query_str) != 0:
             queries = [x.strip() for x in prometheus_query_str.split(';') if x.strip()]
@@ -371,12 +436,17 @@ def get_agent_config_vars(logger, config_ini):
                         return config_error(logger, 'prometheus_query')
 
                     instance_fields = [x.strip() for x in parts[1].split(',') if x.strip()] if parts[1] else []
-                    prometheus_query.append(
-                        {'query': parts[2], 'metric_name': metric_name, 'instance_fields': instance_fields})
+                    qml = {'query': parts[2], 'metric_name': metric_name, 'instance_fields': instance_fields}
                 else:
-                    prometheus_query.append({'query': query, 'instance_fields': []})
+                    qml = {'query': query, 'instance_fields': []}
 
-        if len(prometheus_query_json) != 0:
+                if prometheus_query_metric_batch_size:
+                    qml['metric_batch_size'] = prometheus_query_metric_batch_size
+                if batch_metric_filter_regex:
+                    qml['batch_metric_filter_regex'] = batch_metric_filter_regex
+                prometheus_query.append(qml)
+
+        if prometheus_query_json:
             try:
                 json_path = os.path.join(os.path.dirname(config_ini), prometheus_query_json)
                 with open(json_path, 'r') as json_path:
@@ -545,6 +615,7 @@ def get_if_config_vars(logger, config_ini):
             if_url = config_parser.get('insightfinder', 'if_url')
             if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
             if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
+            dynamic_metric_type = config_parser.get('insightfinder', 'dynamic_metric_type')
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
             return config_error(logger)
@@ -603,7 +674,7 @@ def get_if_config_vars(logger, config_ini):
                        'sampling_interval': int(sampling_interval),  # as seconds
                        'run_interval': int(run_interval),  # as seconds
                        'chunk_size': int(chunk_size_kb) * 1024,  # as bytes
-                       'if_url': if_url, 'if_proxies': if_proxies, 'is_replay': is_replay}
+                       'if_url': if_url, 'if_proxies': if_proxies, 'is_replay': is_replay, 'dynamic_metric_type': dynamic_metric_type}
 
         return config_vars
 
@@ -759,10 +830,7 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
     data_dict['userName'] = if_config_vars['user_name']
     if 'system_name' in if_config_vars:
         data_dict['systemName'] = if_config_vars['system_name']
-    data_dict['iat'] = get_agent_type_from_project_type(if_config_vars)
-    if 'sampling_interval' in if_config_vars:
-        data_dict['si'] = str(if_config_vars['sampling_interval'])
-
+    #data_dict['iat'] = get_insight_agent_type_from_project_type(if_config_vars)
     instance_data_map = dict()
     common_fields = {"instanceName", "componentName", "host_id", "timestamp"}
     for chunk in chunk_metric_data:
@@ -908,6 +976,11 @@ def get_insight_agent_type_from_project_type(if_config_vars):
             return 'MetricFile'
         else:
             return 'LogFile'
+    elif if_config_vars['dynamic_metric_type']:
+        if if_config_vars['dynamic_metric_type'] == 'vm':
+            return 'DynamicVM'
+        else:
+            return 'DynamicHost'
     else:
         return 'Custom'
 
@@ -995,6 +1068,7 @@ def check_project_exist(logger, if_config_vars):
                       'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
                       'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
                       'samplingIntervalInSeconds': if_config_vars['sampling_interval'], }
+            logger.debug("insightAgentType:", get_insight_agent_type_from_project_type(if_config_vars))
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
             response = send_request(logger, url, 'POST', data=params, verify=False,
                                     proxies=if_config_vars['if_proxies'])
