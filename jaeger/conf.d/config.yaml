@@ -1,0 +1,18 @@
+jaeger:
+  endpoint: "http://localhost:14268/api/traces"
+  service: "appserver"
+  operation: "appserver"
+  tags:
+    - key: "env"
+      value: "staging"
+  max_duration: "10s"
+  min_duration: "1ms"
+  step: "1s"
+  limit: 1500
+
+insightfinder:
+  endpoint: "https://stg.insightfinder.com"
+  username: "insightfinder"
+  license_key: "insightfinder"
+  project_name: "insightfinder"
+  system_name: "insightfinder"
