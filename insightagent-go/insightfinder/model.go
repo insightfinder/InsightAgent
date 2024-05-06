@@ -1,5 +1,8 @@
 package insightfinder
 
+// DataMessage represents a message collected from a data source by
+// an InsightFinder agent collector. For metric data, the message
+// contains one metric value.
 type DataMessage struct {
 	Timestamp     string
 	ComponentName string
@@ -48,9 +51,4 @@ type IFMetricPostRequestPayload struct {
 	LicenseKey string                   `json:"licenseKey" validate:"required"`
 	UserName   string                   `json:"userName" validate:"required"`
 	Data       MetricDataReceivePayload `json:"data" validate:"required"`
-}
-
-type AuthRequest struct {
-	Password string `json:"password" validate:"required"`
-	UserName string `json:"userName"`
 }
