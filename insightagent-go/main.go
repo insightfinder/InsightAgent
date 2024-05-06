@@ -62,7 +62,7 @@ func main() {
 	log.Info().Msg("InsightAgent all workers completed")
 }
 
-func startCollecting(ifConfig *InsightFinderConfig,
+func startCollecting(ifConfig *IFConfig,
 	configFile *configparser.ConfigParser,
 	samplingTime time.Time,
 ) {
@@ -96,7 +96,7 @@ func workerMain(configFilePath string, wg *sync.WaitGroup) {
 		return
 	}
 
-	ifConfig := GetInsightFinderConfig(configFile)
+	ifConfig := GetIFConfig(configFile)
 	ifConfigLog := *ifConfig
 	ifConfigLog.LicenseKey = "********"
 	ifConfigLog.Token = "********"

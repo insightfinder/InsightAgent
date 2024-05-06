@@ -254,7 +254,7 @@ func queryPrometheusLabels(config *Config) []string {
 }
 
 func runPrometheusQuery(
-	ifConfig *InsightFinderConfig,
+	ifConfig *IFConfig,
 	config *Config,
 	collectTime time.Time) {
 	timestamp := AlignTimestamp(collectTime.UnixMilli(), ifConfig.SamplingInterval*1000)
@@ -332,7 +332,7 @@ func runPrometheusQuery(
 	}
 }
 
-func Collect(ifConfig *InsightFinderConfig,
+func Collect(ifConfig *IFConfig,
 	configFile *configparser.ConfigParser,
 	samplingTime time.Time) {
 	defer func() {
