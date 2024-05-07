@@ -33,7 +33,8 @@ type Config struct {
 	MetricNameFields       []string
 	InstanceWhitelistRegex *regexp.Regexp
 
-	Queries []PrometheusQuery
+	TimezoneOffsetSeconds int
+	Queries               []PrometheusQuery
 }
 
 func getPrometheusConfig(p *configparser.ConfigParser) *Config {
@@ -153,17 +154,13 @@ func getPrometheusConfig(p *configparser.ConfigParser) *Config {
 	if metricNameFieldsStr != "" {
 		metricNameFields = SplitString(metricNameFieldsStr, ",")
 	}
+	var targetTimestampTimezone = GetConfigString(p, SECTION_NAME, "target_timestamp_timezone", false)
+	if targetTimestampTimezone == "" {
+		targetTimestampTimezone = "UTC"
+	}
+	location, _ := time.LoadLocation(targetTimestampTimezone)
+	_, timezoneOffset := time.Now().In(location).Zone()
 
-	/*
-		var data_format = insight.GetConfigString(p, SECTION_NAME, "data_format", false)
-		var project_field = insight.GetConfigString(p, SECTION_NAME, "project_field", false)
-
-		var timestamp_field = insight.GetConfigString(p, SECTION_NAME, "timestamp_field", false)
-		var target_timestamp_timezone = insight.GetConfigString(p, SECTION_NAME, "target_timestamp_timezone", false)
-		var timestamp_format = insight.GetConfigString(p, SECTION_NAME, "timestamp_format", false)
-		var timezone = insight.GetConfigString(p, SECTION_NAME, "timezone", false)
-		var timestamp_format = insight.GetConfigString(p, SECTION_NAME, "timestamp_format", false)
-	*/
 	config := Config{
 		ApiUrl:      BuildCompleteURL(prometheusUri, "api/v1/"),
 		User:        user,
@@ -184,7 +181,8 @@ func getPrometheusConfig(p *configparser.ConfigParser) *Config {
 		DeviceFields:           deviceFields,
 		MetricNameFields:       metricNameFields,
 
-		Queries: queries,
+		TimezoneOffsetSeconds: timezoneOffset,
+		Queries:               queries,
 	}
 
 	return &config

@@ -242,6 +242,7 @@ func SendMetricData(ifConfig *IFConfig, dataMessages *[]DataMessage) {
 				ComponentName:      msg.ComponentName,
 				DataInTimestampMap: make(map[int64]DataInTimestamp),
 			}
+			instanceDataMap[msg.Instance] = instanceData
 		}
 
 		dataInTimestampMap := instanceData.DataInTimestampMap
@@ -251,6 +252,12 @@ func SendMetricData(ifConfig *IFConfig, dataMessages *[]DataMessage) {
 				TimeStamp:        timestamp,
 				MetricDataPoints: make([]MetricDataPoint, 0),
 			}
+			if len(msg.HostId) > 0 {
+				dataInTimestamp.K8Identity = &K8Identity{
+					HostId: msg.HostId,
+				}
+			}
+			dataInTimestampMap[timestamp] = dataInTimestamp
 		}
 
 		metricDataPoints := dataInTimestamp.MetricDataPoints
@@ -259,6 +266,8 @@ func SendMetricData(ifConfig *IFConfig, dataMessages *[]DataMessage) {
 			MetricName: msg.MetricName,
 			Value:      value,
 		})
+		dataInTimestamp.MetricDataPoints = metricDataPoints
+		dataInTimestampMap[timestamp] = dataInTimestamp
 	}
 
 	dataPayload.InstanceDataMap = instanceDataMap
