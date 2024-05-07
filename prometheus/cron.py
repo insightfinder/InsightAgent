@@ -79,8 +79,9 @@ def main():
     # get python path
     python_cmp = os.path.abspath(os.path.join(__file__, os.pardir, './venv/bin/python3'))
     if not os.path.exists(python_cmp):
-        print('No python virtual env found. Exiting...')
-        return False
+        print('No python virtual env found, using default python3')
+        python_cmp = 'python3'
+        #return False
 
     # get agent script path
     file_agent = os.path.abspath(os.path.join(__file__, os.pardir, agent_config['script_name']))
