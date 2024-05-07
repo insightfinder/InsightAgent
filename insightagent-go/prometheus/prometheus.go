@@ -65,8 +65,10 @@ func getDataValues(data map[string]interface{}, keys []string) []string {
 }
 
 func processPrometheusMessages(
+	ifConfig *IFConfig,
 	config *Config,
 	query *PrometheusQuery,
+	collectTime time.Time,
 	message interface{}) *DataMessage {
 
 	msg := message.(map[string]interface{})
@@ -150,12 +152,15 @@ func processPrometheusMessages(
 		}
 	}
 
-	// Get the timestamp and value
-	timestamp := valueData[0].(float64)
-	timestampStr := fmt.Sprintf("%.0f", timestamp)
-	if len(timestampStr) == 10 {
+	// Get the timestamp and align it to the sampling interval
+	timestamp := int64(valueData[0].(float64))
+	if len(strconv.FormatInt(timestamp, 10)) == 10 {
 		timestamp = timestamp * 1000
 	}
+	if config.TimezoneOffsetSeconds != 0 {
+		timestamp = timestamp + int64(config.TimezoneOffsetSeconds*1000)
+	}
+	timestamp = AlignTimestamp(timestamp, ifConfig.SamplingInterval*1000)
 
 	dataValue := valueData[1].(string)
 
@@ -170,8 +175,10 @@ func processPrometheusMessages(
 }
 
 func queryPrometheusMessages(
+	ifConfig *IFConfig,
 	config *Config,
 	query *PrometheusQuery,
+	collectTime time.Time,
 	params map[string]string,
 ) *[]DataMessage {
 	defer func() {
@@ -212,7 +219,7 @@ func queryPrometheusMessages(
 	}
 
 	for _, item := range data["result"].([]interface{}) {
-		mdata := processPrometheusMessages(config, query, item)
+		mdata := processPrometheusMessages(ifConfig, config, query, collectTime, item)
 		if mdata != nil {
 			dataResult = append(dataResult, *mdata)
 		}
@@ -308,7 +315,7 @@ func runPrometheusQuery(
 			wg.Add(1)
 			go func(q map[string]string, results chan<- *[]DataMessage) {
 				defer wg.Done()
-				results <- queryPrometheusMessages(config, &query, q)
+				results <- queryPrometheusMessages(ifConfig, config, &query, collectTime, q)
 			}(mql, results)
 		}
 	}
