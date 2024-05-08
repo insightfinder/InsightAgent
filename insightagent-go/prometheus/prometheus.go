@@ -218,7 +218,10 @@ func queryPrometheusMessages(
 		return &dataResult
 	}
 
-	for _, item := range data["result"].([]interface{}) {
+	messages := data["result"].([]interface{})
+	log.Info().Msgf("Prometheus query found %d messages", len(messages))
+
+	for _, item := range messages {
 		mdata := processPrometheusMessages(ifConfig, config, query, collectTime, item)
 		if mdata != nil {
 			dataResult = append(dataResult, *mdata)
