@@ -221,6 +221,8 @@ func CheckProject(ifConfig *IFConfig) {
 }
 
 func SendMetricData(ifConfig *IFConfig, dataMessages *[]DataMessage) {
+	log.Info().Msgf("Sending metric data to the IF project %s", ifConfig.ProjectName)
+
 	payload := IFMetricPostRequestPayload{
 		UserName:   ifConfig.UserName,
 		LicenseKey: ifConfig.LicenseKey,
@@ -261,7 +263,12 @@ func SendMetricData(ifConfig *IFConfig, dataMessages *[]DataMessage) {
 		}
 
 		metricDataPoints := dataInTimestamp.MetricDataPoints
-		value, _ := strconv.ParseFloat(msg.Value, 64)
+		value, err := strconv.ParseFloat(msg.Value, 64)
+		if err != nil {
+			log.Warn().Msgf("Invalid metric value: %s, %v", msg.Value, err)
+			continue
+		}
+
 		metricDataPoints = append(metricDataPoints, MetricDataPoint{
 			MetricName: msg.MetricName,
 			Value:      value,
@@ -273,8 +280,32 @@ func SendMetricData(ifConfig *IFConfig, dataMessages *[]DataMessage) {
 	dataPayload.InstanceDataMap = instanceDataMap
 	payload.Data = dataPayload
 
+	log.Info().Msgf("Metric data contains %d instances", len(instanceDataMap))
+
 	client := createClient(ifConfig)
 	endPointUrl := BuildCompleteURL(ifConfig.IFUrl, "api/v2/metric-data-receive")
 
-	client.R().SetBody(payload).Post(endPointUrl)
+	client.RetryCount = 2
+	client.RetryWaitTime = 5
+
+	resp, err := client.R().SetBody(payload).Post(endPointUrl)
+	if err != nil {
+		panic(fmt.Sprintf("Error sending metric data: %+v\n%+v", err, payload))
+	}
+
+	if resp.StatusCode() == 200 {
+		var result map[string]interface{}
+		err := json.Unmarshal(resp.Body(), &result)
+		if err != nil {
+			panic(fmt.Sprintf("Error parsing response: %v", err.Error()))
+		}
+
+		if !ToBool(result["success"]) {
+			panic(fmt.Sprintf("Error sending metric data: %v", result))
+		}
+	} else {
+		panic(fmt.Sprintf("Error sending metric data: %v", resp.String()))
+	}
+
+	log.Info().Msg("Metric data has been sent successfully.")
 }

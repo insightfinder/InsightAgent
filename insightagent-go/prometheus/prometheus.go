@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
 	. "insightagent-go/insightfinder"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -35,7 +36,7 @@ func createClient(config *Config) *resty.Client {
 	}
 
 	if IsDebugMode {
-		//client.SetDebug(true)
+		client.SetDebug(true)
 	}
 
 	if config.User != "" && config.Password != "" {
@@ -165,8 +166,10 @@ func processPrometheusMessages(
 	timestamp = AlignTimestamp(timestamp, ifConfig.SamplingInterval*1000)
 
 	dataValue := valueData[1].(string)
-	if dataValue == "" {
-		log.Warn().Msgf("Invalid value, ignored, %v", msg)
+	dataNumber, err := strconv.ParseFloat(dataValue, 64)
+
+	if dataValue == "" || err != nil || math.IsNaN(dataNumber) {
+		log.Warn().Msgf("Invalid value or not number, ignored, %v", msg)
 		return nil
 	}
 
@@ -179,7 +182,7 @@ func processPrometheusMessages(
 		Value:         dataValue,
 	}
 
-	log.Debug().Msgf("Processed message: %v", dataMessage)
+	log.Debug().Msgf("Processed message: %+v", dataMessage)
 
 	return &dataMessage
 }
@@ -357,6 +360,8 @@ func runPrometheusQuery(
 
 	if len(dataResult) > 0 {
 		SendMetricData(ifConfig, &dataResult)
+	} else {
+		log.Info().Msg("No data collected from prometheus.")
 	}
 }
 
