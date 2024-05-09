@@ -29,7 +29,7 @@ func NewJaegerClient(endpoint string) JaegerClient {
 	return JaegerClient{Endpoint: endpoint}
 }
 
-func (jc *JaegerClient) QueryTrace(ctx context.Context, results chan<- *Span, startTime time.Time, endTime time.Time) {
+func (jc *JaegerClient) QueryTrace(startTime time.Time, endTime time.Time, spanChan chan *Span) {
 	responseBody := TraceResponseBody{}
 	startTimeStr := strconv.FormatInt(startTime.UnixMilli()*1000, 10)
 	endTimeStr := strconv.FormatInt(endTime.UnixMilli()*1000, 10)
@@ -49,34 +49,33 @@ func (jc *JaegerClient) QueryTrace(ctx context.Context, results chan<- *Span, st
 		params.Add("maxDuration", jc.MaxDuration)
 	}
 	queryEndpoint := jc.Endpoint + "/api/traces"
-	err := requests.URL(queryEndpoint).Params(params).ToJSON(&responseBody).Fetch(ctx)
+	err := requests.URL(queryEndpoint).Params(params).ToJSON(&responseBody).Fetch(context.Background())
 	if err != nil {
 		slog.Error("Error fetching traces", err)
 	}
-
 	// Send data back to the channel
 	for _, trace := range responseBody.Data {
 		for _, span := range trace.Spans {
-			results <- &span
+			spanChan <- &span
 		}
 	}
 }
 
-func (jc *JaegerClient) GetTraces(ctx context.Context, chn chan<- *Span) {
-
-	var queryWg sync.WaitGroup
+func (jc *JaegerClient) StreamTraces(spanChan chan *Span) {
 
 	rangeStartTime := jc.StartTime
 	rangeEndTime := jc.StartTime.Add(jc.Step)
 
+	wg := sync.WaitGroup{}
+
 	for rangeStartTime.Before(jc.EndTime) && rangeEndTime.Before(jc.EndTime) {
 
-		// Query for traces in the current range
-		queryWg.Add(1)
-		go func() {
-			defer queryWg.Done()
-			jc.QueryTrace(ctx, chn, rangeStartTime, rangeEndTime)
-		}()
+		wg.Add(1)
+		// Query Trace
+		go func(startTime time.Time, endTime time.Time) {
+			jc.QueryTrace(startTime, endTime, spanChan)
+			wg.Done()
+		}(rangeStartTime, rangeEndTime)
 
 		// Move to next Tick
 		rangeStartTime = rangeStartTime.Add(jc.Step)
@@ -85,6 +84,5 @@ func (jc *JaegerClient) GetTraces(ctx context.Context, chn chan<- *Span) {
 			rangeEndTime = jc.EndTime
 		}
 	}
-	queryWg.Wait()
-
+	wg.Wait()
 }
