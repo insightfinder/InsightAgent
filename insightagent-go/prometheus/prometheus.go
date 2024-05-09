@@ -73,13 +73,14 @@ func processPrometheusMessages(
 
 	msg := message.(map[string]interface{})
 	if msg == nil {
+		log.Warn().Msgf("invalid message type, ignored, %v", message)
 		return nil
 	}
 
 	var metricData = msg["metric"].(map[string]interface{})
 	var valueData = msg["value"].([]interface{})
 	if metricData == nil || valueData == nil || len(valueData) <= 1 {
-		log.Warn().Msgf("invalid message, ignored, %v", msg)
+		log.Warn().Msgf("invalid message without metric and value, ignored, %v", msg)
 		return nil
 	}
 
@@ -113,6 +114,7 @@ func processPrometheusMessages(
 	}
 	if config.InstanceWhitelistRegex != nil &&
 		!config.InstanceWhitelistRegex.MatchString(instance) {
+		log.Info().Msgf("Instance %s does not match whitelist regex, ignored", instance)
 		return nil
 	}
 
@@ -163,15 +165,23 @@ func processPrometheusMessages(
 	timestamp = AlignTimestamp(timestamp, ifConfig.SamplingInterval*1000)
 
 	dataValue := valueData[1].(string)
+	if dataValue == "" {
+		log.Warn().Msgf("Invalid value, ignored, %v", msg)
+		return nil
+	}
 
-	return &DataMessage{
-		Timestamp:     fmt.Sprintf("%.0f", timestamp),
+	dataMessage := DataMessage{
+		Timestamp:     strconv.FormatInt(timestamp, 10),
 		ComponentName: componentName,
 		Instance:      fullInstance,
 		MetricName:    dataField,
 		HostId:        hostId,
 		Value:         dataValue,
 	}
+
+	log.Debug().Msgf("Processed message: %v", dataMessage)
+
+	return &dataMessage
 }
 
 func queryPrometheusMessages(
@@ -227,6 +237,7 @@ func queryPrometheusMessages(
 			dataResult = append(dataResult, *mdata)
 		}
 	}
+	log.Info().Msgf("Processed got with %d messages", len(dataResult))
 
 	return &dataResult
 }
@@ -269,17 +280,24 @@ func runPrometheusQuery(
 	collectTime time.Time) {
 	timestamp := AlignTimestamp(collectTime.UnixMilli(), ifConfig.SamplingInterval*1000)
 
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error().Msgf("Failed to run prometheus query %v", r)
+			panic(r)
+		}
+	}()
+
 	log.Info().Msgf("Collecting prometheus data at time %d", timestamp)
 
 	// Run queries with the given timestamp and wait for all results
 	results := make(chan *[]DataMessage)
 	var wg sync.WaitGroup
 	for _, query := range config.Queries {
-		log.Info().Msgf("Running query: %s", query.Query)
-
 		metricBatchList := make([][]string, 0)
 
 		if query.BatchSize > 0 {
+			log.Info().Msgf("Running in batch mode with size %d", query.BatchSize)
+
 			allMetricList := queryPrometheusLabels(config)
 			metricList := allMetricList
 			if query.BatchMetricFilterRegex != "" {
@@ -288,7 +306,7 @@ func runPrometheusQuery(
 					return matched
 				})
 			}
-			log.Info().Msgf("Metrics found %d and filtered %d}", len(allMetricList), len(metricList))
+			log.Info().Msgf("Found %d metrics and filtered result %d metrics}", len(allMetricList), len(metricList))
 			log.Debug().Msgf("Metrics filtered: %v}", metricList)
 
 			if len(metricList) == 0 {
