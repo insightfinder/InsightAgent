@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"if-jaeger-agent/insightfinder"
 	"if-jaeger-agent/jaeger_client"
@@ -54,34 +53,57 @@ func main() {
 	ifapp := insightfinder.NewInsightFinder("https://stg.insightfinder.com",
 		"maoyuwang",
 		"",
-		"maoyu-test-trace-agent-1",
-		"maoyu-test-trace-agent")
+		"maoyu-test-trace-agent-2024-0509-3",
+		"Trace",
+		"maoyu-test-trace-agent-2024-0509-3",
+	)
 
-	result := ifapp.CreateProjectIfNotExist()
-	fmt.Print(result)
+	ifapp.CreateProjectIfNotExist()
 	jaegerClient := jaeger_client.JaegerClient{
-		Endpoint:  "http://18.212.200.99:16686",
+		Endpoint:  "http://:16686",
 		StartTime: time.Now().Add(-5 * time.Minute),
 		EndTime:   time.Now(),
 		Service:   "appserver",
-		Limit:     1500,
+		Limit:     1000,
 		Step:      time.Duration(1) * time.Minute,
 	}
-	spansChn := make(chan *jaeger_client.Span, 100)
-	var traceWg sync.WaitGroup
 
-	traceWg.Add(1)
+	spanChan := make(chan *jaeger_client.Span, 1000000) // Create a channel to hold spans
+	wg := sync.WaitGroup{}
+
+	// Start the Spans stream
+	wg.Add(1)
 	go func() {
-		defer traceWg.Done()
-		jaegerClient.GetTraces(context.Background(), spansChn)
+		defer wg.Done()
+		jaegerClient.StreamTraces(spanChan)
+		close(spanChan)
 	}()
 
-	for {
-		select {
-		case span := <-spansChn:
-			fmt.Print(span)
-		}
+	// Start workers
+	numWorkers := 10
+	for i := 0; i < numWorkers; i++ {
+		slog.Info(fmt.Sprintf("Starting worker %d", i))
+		wg.Add(1)
+		go func(workerId int) {
+			var count uint = 0
+			for {
+				select {
+				case span, ok := <-spanChan:
+					if !ok {
+						slog.Warn(fmt.Sprintf("Worker %d finished processing %d spans", workerId, count))
+						wg.Done()
+						return
+					} else {
+						count++
+						ifapp.SendLogData(time.UnixMicro(span.StartTime).UnixMilli(), jaeger_client.GetTagValue("http.hostname", &span.Tags), "appserver", &span)
+						if count%100 == 0 {
+							slog.Info(fmt.Sprintf("Worker %d processed %d spans", workerId, count))
+						}
+					}
+				}
+			}
+		}(i)
 	}
 
-	traceWg.Wait()
+	wg.Wait() // Wait for all processing to complete
 }
