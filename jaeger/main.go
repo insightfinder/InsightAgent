@@ -5,40 +5,9 @@ import (
 	"if-jaeger-agent/insightfinder"
 	"if-jaeger-agent/jaeger_client"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
-
-func createJaegerClientFromConfig(filename string) *jaeger_client.JaegerClient {
-	client := jaeger_client.NewJaegerClient("http://localhost:16686")
-	return &client
-}
-
-/**
- * Get all the config files under the directory conf.d
- */
-func getConfigFiles() []string {
-
-	currentFolder, err := os.Getwd()
-	if err != nil {
-		slog.Error("Error getting current directory")
-	}
-	configFolder := currentFolder + "/conf.d"
-	configFiles, err := filepath.Glob(configFolder + "/*.yaml")
-	if err != nil {
-		slog.Error("Error scanning config files")
-		panic(err)
-	}
-
-	if len(configFiles) == 0 {
-		slog.Error("No config file found in" + configFolder)
-		panic("Program exited 1")
-	}
-
-	return configFiles
-}
 
 func main() {
 	//configFiles := getConfigFiles()
@@ -49,6 +18,16 @@ func main() {
 	//	jaegerJob := createJaegerClientFromConfig(configFile)
 	//	jaegerJobList = append(jaegerJobList, jaegerJob)
 	//}
+	configFiles := getConfigFiles()
+	for _, configFile := range configFiles {
+		slog.Info("Processing config file: " + configFile)
+
+		// Create a new InsightFinder client from the YAML config file
+		// ifApp := insightfinder.NewInsightFinderFromYAML(configFile)
+		// fmt.Println(ifapp.CloudType)
+		jaegerApp := jaeger_client.CreateJaegerClientFromConfig(configFile)
+		fmt.Println(jaegerApp.Service)
+	}
 
 	ifapp := insightfinder.NewInsightFinder("https://stg.insightfinder.com",
 		"maoyuwang",
