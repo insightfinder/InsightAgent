@@ -2,13 +2,14 @@ package jaeger_client
 
 import (
 	"context"
-	"github.com/carlmjohnson/requests"
 	"log/slog"
 	"net/url"
 	"strconv"
 	"sync"
+	"time"
+
+	"github.com/carlmjohnson/requests"
 )
-import "time"
 
 type JaegerClient struct {
 	Endpoint    string
@@ -23,10 +24,6 @@ type JaegerClient struct {
 	Step        time.Duration
 	MaxDuration string
 	MinDuration string
-}
-
-func NewJaegerClient(endpoint string) JaegerClient {
-	return JaegerClient{Endpoint: endpoint}
 }
 
 func (jc *JaegerClient) QueryTrace(startTime time.Time, endTime time.Time, spanChan chan *Span) {

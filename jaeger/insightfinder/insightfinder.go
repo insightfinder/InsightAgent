@@ -3,12 +3,13 @@ package insightfinder
 import (
 	"context"
 	"fmt"
-	"github.com/carlmjohnson/requests"
-	"github.com/google/go-querystring/query"
 	if_request "if-jaeger-agent/insightfinder/models/request"
 	if_response "if-jaeger-agent/insightfinder/models/response"
 	"log/slog"
 	"net/url"
+
+	"github.com/carlmjohnson/requests"
+	"github.com/google/go-querystring/query"
 )
 
 const PROJECT_API = "/api/v1/check-and-add-custom-project"
@@ -54,7 +55,7 @@ func (ifclient *InsightFinder) Validate() bool {
 		return false
 	}
 	if ifclient.SystemName == "" {
-		slog.Warn("SystemName is not set, defaulting to ProjectName: ", ifclient.ProjectName)
+		slog.Warn("SystemName is not set, defaulting to ProjectName.") // Add missing argument ifclient.ProjectName
 		ifclient.SystemName = ifclient.ProjectName
 	}
 
