@@ -90,7 +90,7 @@ def main():
         return False
 
     # get log file path
-    file_agent_log = os.path.abspath(os.path.join(__file__, os.pardir, 'output.log'))
+    file_agent_log = os.path.abspath(os.path.join(__file__, os.pardir, 'logs/output.log'))
 
     # add job
     scheduler.add_job(run_job, 'cron', (python_cmp, file_agent, file_agent_log), **cron_params)
