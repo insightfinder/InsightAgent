@@ -51,7 +51,7 @@ ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 JSON_LEVEL_DELIM = '.'
 CSV_DELIM = r",|\t"
 ATTEMPTS = 3
-CACHE_NAME = 'cache.db'
+CACHE_NAME = 'cache/cache.db'
 
 
 def align_timestamp(timestamp, sampling_interval):
