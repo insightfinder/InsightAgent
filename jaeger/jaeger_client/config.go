@@ -10,15 +10,17 @@ import (
 
 type JaegerYAMLConfigFile struct {
 	Jaeger struct {
-		Endpoint    string            `yaml:"endpoint"`
-		Service     string            `yaml:"service"`
-		Operation   string            `yaml:"operation"`
-		Tags        []JaegerQueryTags `yaml:"tags"`
-		MaxDuration string            `yaml:"max_duration"`
-		MinDuration string            `yaml:"min_duration"`
-		Step        string            `yaml:"step"`
-		Limit       int               `yaml:"limit"`
-		Range       string            `yaml:"range"`
+		Endpoint      string            `yaml:"endpoint"`
+		Service       string            `yaml:"service"`
+		Operation     string            `yaml:"operation"`
+		Tags          []JaegerQueryTags `yaml:"tags"`
+		MaxDuration   string            `yaml:"max_duration"`
+		MinDuration   string            `yaml:"min_duration"`
+		Step          string            `yaml:"step"`
+		Limit         int               `yaml:"limit"`
+		Range         string            `yaml:"range"`
+		InstanceTags  []string          `yaml:"instance_tag"`
+		ComponentTags []string          `yaml:"component_tag"`
 	} `yaml:"jaeger"`
 }
 
@@ -67,15 +69,17 @@ func CreateJaegerClientFromConfig(filename string) *JaegerClient {
 
 	// Create a new Jaeger client from the YAML config file
 	newJC := &JaegerClient{
-		Endpoint:    config.Jaeger.Endpoint,
-		Service:     config.Jaeger.Service,
-		Operation:   config.Jaeger.Operation,
-		Limit:       config.Jaeger.Limit,
-		MaxDuration: config.Jaeger.MaxDuration,
-		MinDuration: config.Jaeger.MinDuration,
-		StartTime:   startTime,
-		EndTime:     endTime,
-		Step:        step,
+		Endpoint:      config.Jaeger.Endpoint,
+		Service:       config.Jaeger.Service,
+		Operation:     config.Jaeger.Operation,
+		Limit:         config.Jaeger.Limit,
+		MaxDuration:   config.Jaeger.MaxDuration,
+		MinDuration:   config.Jaeger.MinDuration,
+		StartTime:     startTime,
+		EndTime:       endTime,
+		Step:          step,
+		InstanceTags:  config.Jaeger.InstanceTags,
+		ComponentTags: config.Jaeger.ComponentTags,
 	}
 
 	return newJC

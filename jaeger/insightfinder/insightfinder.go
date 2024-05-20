@@ -123,6 +123,7 @@ func (ifclient *InsightFinder) CreateProject() bool {
 		return false
 	}
 
+	slog.Info(fmt.Sprintf("Project '%s' created in the InsightFinder.", ifclient.ProjectName))
 	return true
 }
 
