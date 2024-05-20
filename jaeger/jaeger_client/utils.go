@@ -8,3 +8,13 @@ func GetTagValue(key string, tags *[]Tag) string {
 	}
 	return ""
 }
+
+func GetFirstTagValue(tagsToSearch []string, allTags *[]Tag) string {
+	for _, tag := range tagsToSearch {
+		value := GetTagValue(tag, allTags)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}

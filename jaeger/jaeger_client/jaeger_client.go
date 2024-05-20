@@ -12,18 +12,20 @@ import (
 )
 
 type JaegerClient struct {
-	Endpoint    string
-	Username    string
-	Password    string
-	StartTime   time.Time
-	EndTime     time.Time
-	Tags        *map[string]string
-	Service     string
-	Operation   string
-	Limit       int
-	Step        time.Duration
-	MaxDuration string
-	MinDuration string
+	Endpoint      string
+	Username      string
+	Password      string
+	StartTime     time.Time
+	EndTime       time.Time
+	Tags          *map[string]string
+	Service       string
+	Operation     string
+	Limit         int
+	Step          time.Duration
+	MaxDuration   string
+	MinDuration   string
+	InstanceTags  []string
+	ComponentTags []string
 }
 
 func (jc *JaegerClient) QueryTrace(startTime time.Time, endTime time.Time, spanChan chan *Span) {
@@ -35,6 +37,17 @@ func (jc *JaegerClient) QueryTrace(startTime time.Time, endTime time.Time, spanC
 	params.Add("start", startTimeStr)
 	params.Add("end", endTimeStr)
 	params.Add("limit", strconv.Itoa(jc.Limit))
+
+	if jc.Tags != nil {
+		tagsParam := ""
+		for key, value := range *jc.Tags {
+			tagsParam += key + "=" + value + " "
+		}
+
+		if tagsParam != "" {
+			params.Add("tags", tagsParam)
+		}
+	}
 
 	if jc.Operation != "" {
 		params.Add("operation", jc.Operation)
