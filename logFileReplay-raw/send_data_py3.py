@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import glob
+from concurrent.futures import ThreadPoolExecutor
 import arrow
 import json
 import os
@@ -33,6 +35,8 @@ def get_cli_config_vars():
                            ' Automatically turns on verbose logging')
     parser.add_option('-f', '--file', action='store', dest='logfile', 
                       help='Full path to the log file to parse')
+    parser.add_option('--threads', default=5, action='store', dest='threads',
+                      help='Number of threads to run')
 
     (options, args) = parser.parse_args()
     
@@ -54,10 +58,17 @@ def get_cli_config_vars():
         print("Valid log file is missing (-f / --file).")
         sys.exit(1)
 
+    threads = 5
+    try:
+        threads = int(options.threads)
+    except ValueError:
+        pass
+
     config_vars = {
         'config': config_file,
         'log_file': log_file,
         'testing': False,
+        'threads': threads,
         'log_level': logging.INFO
     }
 
@@ -215,55 +226,44 @@ def make_safe_instance_string(instance, device=''):
         instance = '{}_{}'.format(make_safe_instance_string(device), instance)
     return instance
 
+
 def abs_path_from_cur(filename=''):
     return os.path.abspath(os.path.join(__file__, os.pardir, filename))
 
-if __name__ == "__main__":
-    # Declare constants
-    UNDERSCORE = regex.compile(r"\_+")
-    COLONS = regex.compile(r"\:+")
-    ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 
-    # Disable the InsecureRequestWarning which occurs when connecting to an SSL endpoint without verifying the certificate
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    importlib.reload(sys)
-
-    # Load configurations
-    cli_config_vars = get_cli_config_vars()
-    logger = set_logger_config(cli_config_vars['log_level'])
-    config_vars = get_agent_config_vars()
-
+def worker_main(file_name, config_vars, logger):
     # Process File
     CHUNK_SIZE = 1000
-    with open(cli_config_vars['log_file'], encoding='utf-8') as log_file:
+    with open(file_name, encoding='utf-8') as log_file:
         logs = log_file.readlines()
         data = []
         count = 0
         size = 0
         for line in logs:
-            entry = {'eventId': '','tag': config_vars['instance_name'], 'data': line}
+            entry = {'eventId': '', 'tag': config_vars['instance_name'], 'data': line}
 
             ts = config_vars['timestamp_regex'].findall(line)
-            
-            if len(ts) == 1: 
+
+            if len(ts) == 1:
                 try:
                     if isinstance(ts[0], tuple):
                         timestamp = ts[0][0]
-                    else: 
+                    else:
                         timestamp = ts[0]
-                    
+
                     if config_vars['timestamp_format']:
                         if config_vars['timestamp_timezone']:
-                            eventId = arrow.get(timestamp, config_vars['timestamp_format'], tzinfo=config_vars['timestamp_timezone'])
-                        else: 
+                            eventId = arrow.get(timestamp, config_vars['timestamp_format'],
+                                                tzinfo=config_vars['timestamp_timezone'])
+                        else:
                             eventId = arrow.get(timestamp, config_vars['timestamp_format'])
-                    else: 
+                    else:
                         if config_vars['timestamp_timezone']:
                             eventId = arrow.get(timestamp, tzinfo=config_vars['timestamp_timezone'])
-                        else: 
+                        else:
                             eventId = arrow.get(timestamp)
                     entry['eventId'] = int(eventId.to('utc').timestamp() * 1000)
-                except Exception as e: 
+                except Exception as e:
                     logger.warning("Timestamp error: {}".format(e))
                     continue
             else:
@@ -279,7 +279,7 @@ if __name__ == "__main__":
             if size + entry_size >= MAX_DATA_SIZE:
                 if not cli_config_vars['testing']:
                     send_data(data)
-                else: 
+                else:
                     logger.info("--- Data Chunk: {} entries ---".format(count))
                 size = 0
                 count = 0
@@ -294,7 +294,7 @@ if __name__ == "__main__":
             if count >= CHUNK_SIZE:
                 if not cli_config_vars['testing']:
                     send_data(data)
-                else: 
+                else:
                     logger.info("--- Data Chunk: {} entries ---".format(count))
                 size = 0
                 count = 0
@@ -302,6 +302,36 @@ if __name__ == "__main__":
         if count != 0:
             if not cli_config_vars['testing']:
                 send_data(data)
-            else: 
+            else:
                 logger.info("--- Data Chunk: {} entries ---".format(count))
 
+
+if __name__ == "__main__":
+    # Declare constants
+    UNDERSCORE = regex.compile(r"\_+")
+    COLONS = regex.compile(r"\:+")
+    ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
+
+    # Disable the InsecureRequestWarning which occurs when connecting to an SSL endpoint without verifying the
+    # certificate
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    importlib.reload(sys)
+
+    # Load configurations
+    cli_config_vars = get_cli_config_vars()
+    logger = set_logger_config(cli_config_vars['log_level'])
+    config_vars = get_agent_config_vars()
+
+    threads = cli_config_vars['threads']
+
+    # Get list of files using the glob funciton
+    log_file = cli_config_vars['log_file']
+    file_list = glob.glob(log_file, recursive=True)
+    logger.info("Processing {} files with {} workers: {}".format(len(file_list), threads, log_file))
+
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        for file_name in file_list:
+            if os.path.isfile(file_name):
+                executor.submit(worker_main, file_name, config_vars, logger)
+
+    logger.info("All files processed.")
