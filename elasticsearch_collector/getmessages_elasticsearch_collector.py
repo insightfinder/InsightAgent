@@ -701,6 +701,8 @@ def get_agent_config_vars(logger, config_ini):
             use_ssl = elasticsearch_kwargs.get('use_ssl')
             if use_ssl and use_ssl.lower() == 'true':
                 elasticsearch_kwargs['use_ssl'] = True
+            else:
+                elasticsearch_kwargs['use_ssl'] = False
 
             ssl_assert_hostname = elasticsearch_kwargs.get('ssl_assert_hostname')
             if ssl_assert_hostname and ssl_assert_hostname.lower() == 'true':
