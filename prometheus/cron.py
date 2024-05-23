@@ -79,8 +79,9 @@ def main():
     # get python path
     python_cmp = os.path.abspath(os.path.join(__file__, os.pardir, './venv/bin/python3'))
     if not os.path.exists(python_cmp):
-        print('No python virtual env found. Exiting...')
-        return False
+        print('No python virtual env found, using default python3')
+        python_cmp = 'python3'
+        #return False
 
     # get agent script path
     file_agent = os.path.abspath(os.path.join(__file__, os.pardir, agent_config['script_name']))
@@ -89,7 +90,7 @@ def main():
         return False
 
     # get log file path
-    file_agent_log = os.path.abspath(os.path.join(__file__, os.pardir, 'output.log'))
+    file_agent_log = os.path.abspath(os.path.join(__file__, os.pardir, 'logs/output.log'))
 
     # add job
     scheduler.add_job(run_job, 'cron', (python_cmp, file_agent, file_agent_log), **cron_params)

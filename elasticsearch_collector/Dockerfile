@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.6-buster
+FROM python:3.8-bookworm
 ENV TZ=UTC
 SHELL ["/bin/bash", "-c"]
 WORKDIR /elasticsearch_collector
@@ -7,12 +7,15 @@ COPY . /elasticsearch_collector/
 
 # Install system dependencies
 RUN apt-get update && \
+    apt-get upgrade -y && \
     apt-get install -y tzdata && \
-    python3 -m venv ./venv && \
-    ./venv/bin/pip install -r requirements.txt && \
+    python3 -m pip install --upgrade pip && python3 -m pip install --upgrade setuptools && \
     python3 -m pip install -r requirements.txt && \
-    mkdir -p /elasticsearch_collector/logs && \
-    touch /elasticsearch_collector/logs/cron.log
+    groupadd --gid 10001 es-agent && \
+    useradd -u 10001 -g es-agent es-agent && \
+    chown -R 10001:10001 /elasticsearch_collector
+
+USER 10001
 
 # Run the script when config.ini is provided as a volume
-CMD ["/bin/bash", "-c", "source ./venv/bin/activate && nohup python3 cron.py -g 1 -o 10 -p 4 >> /elasticsearch_collector/logs/cron.log 2>&1 & tail -f /elasticsearch_collector/logs/cron.log"]
+CMD ["/bin/bash", "-c", "python3 cron.py -g 1 -o 10 -p 4"]
