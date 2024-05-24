@@ -799,7 +799,7 @@ def get_agent_config_vars(logger, config_ini):
                 logger.error('Agent not correctly configured (query_chunk_size). Use 5000 by default.')
                 query_chunk_size = 5000
 
-        if len(query_time_offset_seconds) != 0:
+        if query_time_offset_seconds and len(query_time_offset_seconds) != 0:
             try:
                 query_time_offset_seconds = int(query_time_offset_seconds)
             except Exception as e:
