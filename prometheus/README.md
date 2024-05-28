@@ -75,47 +75,65 @@ kill -9 PID
 * **`ca_certs`**: Path to CA bundle.
 * **`client_cert`**: Path to certificate file.
 * **`client_key`**: Path to client key file.
-
 * **`prometheus_query`**: Prometheus query used to query all needed metrics.
   * If not set, it will use `{__name__=~".+"}` to query all metrics
-  * Example: {instance="$instance-name",__name__=~"$regex-for-metrics"}
+  * Example: `{instance="$instance-name",__name__=~"$regex-for-metrics"}`
   * Leave Blank if providing query json file
 * **`prometheus_query_metric_batch_size`**: If prometheus_query is set, this is the batch size of metrics to query in one request. Keep it empty if you want to query all metrics in one request
 * **`batch_metric_filter_regex`**: regex to filter metrics if batch size is set
 * **`prometheus_query_json`**: The json file containing the prometheus query. 
   * For each json object, it contains "query", optional "metric_batch_size", optional "metric_name" and optional "instance_fields" string array.
   * example: prometheus_query_json = prometheus_query.json
-
 * **`metrics_name_field`**: This field is used to get metric's name from response data field
   * Multiple fields are separated by commas. 
   * Example: `__name__, job`, the `metric name` =  `{__name__}_{job}`
-  * If none specified, agent will use the metric name from config var `metrics`.
-* **`his_time_range`**: History data time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00. If this option is set, the agent will query metric values by time range.
-* **`data_format`**: The format of the data to parse: RAW, RAWTAIL, CSV, CSVTAIL, XLS, XLSX, JSON, JSONTAIL, AVRO, or XML. \*TAIL formats keep track of the current file being read & the position in the file.
-* `timestamp_format`: Format of the timestamp, in python [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). If the timestamp is in Unix epoch, this can be set to `epoch`. If the timestamp is split over multiple fields, curlies can be used to indicate formatting, ie: `YYYY-MM-DD HH:mm:ss ZZ`; alternatively, if the timestamp can be in one of multiple fields, a priority list of field names can be given: `timestamp1,timestamp2`.
-* `timezone`: Timezone of the timestamp data stored in/returned by the DB. Note that if timezone information is not included in the data returned by the DB, then this field has to be specified. 
-* `timestamp_field`: Field name for the timestamp. Default is `timestamp`.
-* `target_timestamp_timezone`: Timezone of the timestamp data to be sent and stored in InsightFinder. Default value is UTC. Only if you wish to store data with a time zone other than UTC, this field should be specified to be the desired time zone.
-* `component_field`: Field name for the component name.
-* `instance_field`: Field name for the instance name. If not set or the field is not found, the instance name is the `Application`. Can also set instance name from multiple fields which separated by commas. Ex: instance_name_part1,instance_name_part2.
-* `instance_whitelist`: This field is a regex string used to define which instances will be filtered.
-* `device_field`: Field name for the device/container for containerized projects. Can also set device name from multiple fields which separated by commas. Ex: device_name_part1,device_name_part2.
-* `instance_connector`: The connector for build `instance_field` or `device_field` from multiple fields. Default is `-`.
-* `thread_pool`: Number of thread to used in the pool, default is 20.
-* `processes`: Number of processes to run
-* `timeout`: Minutes of timeout for all processes
-* `agent_http_proxy`: HTTP proxy used to connect to the agent.
-* `agent_https_proxy`: As above, but HTTPS.
+  * If nothing specified, agent will use the metric name from config var `metrics`.
+* **`his_time_range`**: Historical data time range
+  * If this option is set, the agent will query metric values by time range.
+  * Example: 2020-04-14 00:00:00,2020-04-15 00:00:00.
+* **`data_format`**: The format of the data to parse
+  * accepted values: `RAW, RAWTAIL, CSV, CSVTAIL, XLS, XLSX, JSON, JSONTAIL, AVRO, or XML`.
+  * TAIL formats keep track of the current file being read & the position in the file.
+* **`timestamp_format`**: Format of the timestamp, in python [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). If the timestamp is in Unix epoch, this can be set to `epoch`.
+  * If the timestamp is split over multiple fields, curlies can be used to indicate formatting, ie: `YYYY-MM-DD HH:mm:ss ZZ`
+  * If the timestamp can be in one of multiple fields, a priority list of field names can be given: `timestamp1,timestamp2`.
+* **`timezone`**: Timezone of the timestamp data stored in/returned by the DB.
+  * Note: if timezone information is not included in the data returned by the DB, then this field has to be specified. 
+* **`timestamp_field`**: Field name for the timestamp.
+  * Default is `timestamp`.
+* **`target_timestamp_timezone`**: Timezone of the timestamp data to be sent and stored in InsightFinder.
+  * Default value is UTC
+  * Only if you wish to store data with a time zone other than UTC, this field should be specified to be the desired time zone.
+* **`component_field`**: Field name for the component name.
+* **`instance_field`**: Field name for the instance name
+  * If not set or the field is not found, the instance name is the `Application`
+  * Can also set instance name from multiple fields which separated by commas. Ex: `instance_name_part1,instance_name_part2`.
+* **`instance_whitelist`**: This field is a regex string used to define which instances will be filtered.
+* **`device_field`**: Field name for the device/container for containerized projects
+  * Can also set device name from multiple fields separated by commas. Ex: `device_name_part1,device_name_part2`.
+* **`instance_connector`**: The connector for building `instance_field` or `device_field` from multiple fields
+  * Default is `-`.
+* **`thread_pool`**: Number of thread to used in the pool
+  * Default is 20.
+* **`processes`**: Number of processes to run
+* **`timeout`**: Minutes before which processes timeout
+* **`agent_http_proxy`**: HTTP proxy used to connect to the agent.
+* **`agent_https_proxy`**: HTTPS proxy used to connect to the agent.
 * **`user_name`**: User name in InsightFinder
 * **`license_key`**: License Key from your Account Profile in the InsightFinder UI. 
-* `token`: Token from your Account Profile in the InsightFinder UI. 
-* **`project_name`**: Name of the project created in the InsightFinder UI, If this project is not exist, agent will create it automatically.
-* `system_name`: Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name. 
-* **`project_type`**: Type of the project - one of `metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay`.
-* `containerize`: Set to `YES` if project is container.
+* **`token`**: Token from your Account Profile in the InsightFinder UI. 
+* **`project_name`**: Name of the project created in the InsightFinder UI.
+  * If this project does not exist, agent will create it automatically.
+* **`system_name`**: Name of System owning the project.
+  * If project_name does not exist in InsightFinder, agent will create a new system automatically from this field or project_name. 
+* **`project_type`**: Type of the project
+  * Accepted Values: `metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay`.
+* **`containerize`**: Set to `YES` if project is a container project.
 * **`sampling_interval`**: How frequently (in Minutes) data is collected. Should match the interval used in project settings.
-* **`run_interval`**: How frequently (in Minutes) the agent is ran. Should match the interval used in cron.
-* `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
-* `if_url`: URL for InsightFinder. Default is `https://app.insightfinder.com`.
+* **`run_interval`**: How frequently (in Minutes) the agent is run. Should match the interval used in cron.
+* **`chunk_size_kb`**: Size of chunks (in KB) to send to InsightFinder.
+  * Default is `2048`.
+* `if_url`: URL for InsightFinder.
+  * Default is `https://app.insightfinder.com`.
 * `if_http_proxy`: HTTP proxy used to connect to InsightFinder.
-* `if_https_proxy`: As above, but HTTPS.
+* `if_https_proxy`: HTTPS proxy used to connect to InsightFinder.
