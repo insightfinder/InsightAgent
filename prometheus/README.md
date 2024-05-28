@@ -1,4 +1,4 @@
-# prometheus
+# Prometheus
 This agent collects data from prometheus and sends it to Insightfinder.
 ## Installing the Agent
 
