@@ -67,6 +67,7 @@ kill -9 PID
 ``` 
 
 ### Config Variables
+**Prometheus Settings**
 * **`prometheus_uri`**: URI for Prometheus API as `scheme://host:port` (Required)
   * Defaults to `http://localhost:9090`
 * **`user`**: User name of Basic Authentication. (Required)
@@ -125,6 +126,8 @@ kill -9 PID
   * Default is 5 min.
 * **`agent_http_proxy`**: HTTP proxy used to connect to the agent. (Optional)
 * **`agent_https_proxy`**: HTTPS proxy used to connect to the agent. (Optional)
+
+**InsightFinder Settings**
 * **`user_name`**: User name in InsightFinder. (Required)
 * **`license_key`**: License Key from your Account Profile in the InsightFinder UI. (Required)
 * **`project_name`**: Name of the project created in the InsightFinder UI. (Required)
