@@ -67,17 +67,30 @@ kill -9 PID
 ``` 
 
 ### Config Variables
-* **`prometheus_uri`**: URI for Prometheus API as `scheme://host:port`
+* **`prometheus_uri`**: URI for Prometheus API as `scheme://host:port` (Requiere)
   * Defaults to `http://localhost:9090`
-* `user`: User name of Basic Authentication.
-* `password`: Password of Basic Authentication.
-* `verify_certs`: True or False if certificates should be verified.
-* `ca_certs`: Path to CA bundle.
-* `client_cert`: Path to certificate.
-* `client_key`: Path to client.
-* `prometheus_query`: Prometheus query used to query all the needed metrics. If not set, it will use `{__name__=~".+"}` to query all metrics. Format example: {instance="$instance-name",__name__=~"$regex-for-metrics"}
-* `metrics_name_field`: This field is used to get metric's name from response data field. Multiple fields are separated by commas. EX: `__name__, job`, the `metric name` =  `{__name__}_{job}`.  If none specified, agent will use the metric name from config var `metrics`.
-* `his_time_range`: History data time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00. If this option is set, the agent will query metric values by time range.
+* **`user`**: User name of Basic Authentication.
+* **`password`**: Password of Basic Authentication.
+* **`verify_certs`**: True or False if certificates should be verified.
+* **`ca_certs`**: Path to CA bundle.
+* **`client_cert`**: Path to certificate file.
+* **`client_key`**: Path to client key file.
+
+* **`prometheus_query`**: Prometheus query used to query all needed metrics.
+  * If not set, it will use `{__name__=~".+"}` to query all metrics
+  * Example: {instance="$instance-name",__name__=~"$regex-for-metrics"}
+  * Leave Blank if providing query json file
+* **`prometheus_query_metric_batch_size`**: If prometheus_query is set, this is the batch size of metrics to query in one request. Keep it empty if you want to query all metrics in one request
+* **`batch_metric_filter_regex`**: regex to filter metrics if batch size is set
+* **`prometheus_query_json`**: The json file containing the prometheus query. 
+  * For each json object, it contains "query", optional "metric_batch_size", optional "metric_name" and optional "instance_fields" string array.
+  * example: prometheus_query_json = prometheus_query.json
+
+* **`metrics_name_field`**: This field is used to get metric's name from response data field
+  * Multiple fields are separated by commas. 
+  * Example: `__name__, job`, the `metric name` =  `{__name__}_{job}`
+  * If none specified, agent will use the metric name from config var `metrics`.
+* **`his_time_range`**: History data time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00. If this option is set, the agent will query metric values by time range.
 * **`data_format`**: The format of the data to parse: RAW, RAWTAIL, CSV, CSVTAIL, XLS, XLSX, JSON, JSONTAIL, AVRO, or XML. \*TAIL formats keep track of the current file being read & the position in the file.
 * `timestamp_format`: Format of the timestamp, in python [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). If the timestamp is in Unix epoch, this can be set to `epoch`. If the timestamp is split over multiple fields, curlies can be used to indicate formatting, ie: `YYYY-MM-DD HH:mm:ss ZZ`; alternatively, if the timestamp can be in one of multiple fields, a priority list of field names can be given: `timestamp1,timestamp2`.
 * `timezone`: Timezone of the timestamp data stored in/returned by the DB. Note that if timezone information is not included in the data returned by the DB, then this field has to be specified. 
