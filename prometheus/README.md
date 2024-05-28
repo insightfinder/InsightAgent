@@ -67,7 +67,8 @@ kill -9 PID
 ``` 
 
 ### Config Variables
-* **`prometheus_uri`**: URI for Prometheus API as `scheme://host:port`. Defaults to `http://localhost:9090`
+* **`prometheus_uri`**: URI for Prometheus API as `scheme://host:port`
+  * Defaults to `http://localhost:9090`
 * `user`: User name of Basic Authentication.
 * `password`: Password of Basic Authentication.
 * `verify_certs`: True or False if certificates should be verified.
