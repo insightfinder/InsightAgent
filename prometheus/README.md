@@ -86,14 +86,14 @@ kill -9 PID
 * **`prometheus_query_json`**: The json file containing the prometheus query. (Optional)
   * Leave blank if providing **`prometheus_query`**
   * For each json object, it contains "query", optional "metric_batch_size", optional "metric_name" and optional "instance_fields" string array.
-  * Example: prometheus_query_json = prometheus_query.json
+  * Example: `prometheus_query_json = prometheus_query.json`
 * **`metrics_name_field`**: This field is used to get metric's name from response data field. (Optional)
   * Multiple fields are separated by commas. 
   * Example: `__name__, job`, the `metric name` =  `{__name__}_{job}`
   * If nothing specified, agent will use the metric name from config var `metrics`.
 * **`his_time_range`**: Historical data time range. (Optional)
   * If this option is set, the agent will query metric values by time range.
-  * Example: 2020-04-14 00:00:00,2020-04-15 00:00:00.
+  * Example: `2020-04-14 00:00:00,2020-04-15 00:00:00`
 * **`data_format`**: The format of the data to parse (Required)
   * accepted values: `RAW, RAWTAIL, CSV, CSVTAIL, XLS, XLSX, JSON, JSONTAIL, AVRO, or XML`.
   * TAIL formats keep track of the current file being read & the position in the file.
