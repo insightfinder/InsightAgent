@@ -32,7 +32,7 @@ type ChunkMessage struct {
 	LogDataList *[]LogData
 }
 
-func processFile(sem chan bool, fileName string,
+func processFile(sem chan bool, fileName string, lastPos int64,
 	indexFile *os.File, indexLock *sync.RWMutex, chunks chan<- Chunk, wg *sync.WaitGroup,
 	ifConfig *IFConfig, config *Config) {
 
@@ -46,22 +46,7 @@ func processFile(sem chan bool, fileName string,
 	}
 	defer file.Close()
 
-	var lastPos int64 = 0
 	var chunkSize = ifConfig.ChunkSizeKb * 1024
-
-	var index map[string]int64
-	indexLock.Lock()
-	indexFile.Seek(0, io.SeekStart)
-	raw, err := io.ReadAll(indexFile)
-	if err != nil {
-		log.Error().Msgf("Error reading index file: %s", config.IndexFile)
-		return
-	}
-	err = json.Unmarshal(raw, &index)
-	if err == nil {
-		lastPos, _ = index[fileName]
-	}
-	indexLock.Unlock()
 
 	_, err = file.Seek(lastPos, io.SeekStart)
 	if err != nil {
@@ -198,7 +183,7 @@ func sendData(ifConfig *IFConfig, message ChunkMessage) {
 func sendProcessed(processed <-chan ChunkMessage, wg *sync.WaitGroup,
 	ifConfig *IFConfig, config *Config,
 	indexFile *os.File, indexLock *sync.RWMutex,
-	fileName string, startTime time.Time, fileSize int64) {
+	fileName string, startTime time.Time, dataSize int64) {
 	defer wg.Done()
 
 	for message := range processed {
@@ -228,11 +213,11 @@ func sendProcessed(processed <-chan ChunkMessage, wg *sync.WaitGroup,
 
 	timeSpentSeconds := time.Since(startTime).Seconds()
 	timeSpent := float64(timeSpentSeconds) / 60
-	rate := float64(fileSize) / (1024 * 1024 * timeSpentSeconds)
+	rate := float64(dataSize) / (1024 * 1024 * timeSpentSeconds)
 
 	log.Info().Msgf(
 		"Finished processing file: %s: %d bytes, time spent %.2f minutes, rate %.2f M/s",
-		fileName, fileSize, timeSpent, rate)
+		fileName, dataSize, timeSpent, rate)
 }
 
 func Collect(ifConfig *IFConfig,
@@ -262,6 +247,20 @@ func Collect(ifConfig *IFConfig,
 
 	var indexLock sync.RWMutex
 
+	var indexMap map[string]int64
+	indexLock.Lock()
+	indexFile.Seek(0, io.SeekStart)
+	raw, err := io.ReadAll(indexFile)
+	if err != nil {
+		log.Error().Msgf("Error reading index file: %s", config.IndexFile)
+		return
+	}
+	err = json.Unmarshal(raw, &indexMap)
+	if err != nil {
+		indexMap = make(map[string]int64)
+	}
+	indexLock.Unlock()
+
 	var totalSize int64 = 0
 	var totalFiles = 0
 	var allStartTime = time.Now()
@@ -276,7 +275,10 @@ func Collect(ifConfig *IFConfig,
 		}
 
 		fileSize := fileInfo.Size()
-		totalSize += fileSize
+		lastPos := int64(0)
+		lastPos, _ = indexMap[fileName]
+		dataSize := fileSize - lastPos
+		totalSize += dataSize
 		totalFiles += 1
 
 		chunks := make(chan Chunk, MaxQueueSize)
@@ -285,13 +287,13 @@ func Collect(ifConfig *IFConfig,
 		startTime := time.Now()
 
 		wg.Add(1)
-		go processFile(sem, fileName, indexFile, &indexLock, chunks, &wg, ifConfig, config)
+		go processFile(sem, fileName, lastPos, indexFile, &indexLock, chunks, &wg, ifConfig, config)
 
 		wg.Add(1)
 		go processChunks(chunks, &wg, processed, ifConfig, config)
 
 		wg.Add(1)
-		go sendProcessed(processed, &wg, ifConfig, config, indexFile, &indexLock, fileName, startTime, fileSize)
+		go sendProcessed(processed, &wg, ifConfig, config, indexFile, &indexLock, fileName, startTime, dataSize)
 	}
 
 	wg.Wait()
