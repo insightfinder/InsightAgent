@@ -6,6 +6,7 @@ import (
 	"kubernetes-agent/kubernetes"
 	"log/slog"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -102,16 +103,29 @@ func (mapper *InstanceMapper) AddPods(namespace string, resourceKind string, res
 	for resource, pods := range *resources {
 		slots := mapper.Storage[namespace][resourceKind][resource]
 		if slots != nil {
-			for pod, _ := range pods {
-				if mapper.FindIndexByPodName(namespace, resourceKind, resource, pod) == "-1" {
-					for slot, podInSlot := range slots {
-						if podInSlot == "" {
-							slots[slot] = pod
-							break
+
+			// StatefulSet
+			if resourceKind == "StatefulSet" {
+				podNumRegex := regexp.MustCompile(`-(\d+)$`)
+				for pod, _ := range pods {
+					matches := podNumRegex.FindStringSubmatch(pod)
+					podNum := matches[1]
+					slots[podNum] = pod
+				}
+			} else {
+				// Deployment
+				for pod, _ := range pods {
+					if mapper.FindIndexByPodName(namespace, resourceKind, resource, pod) == "-1" {
+						for slot, podInSlot := range slots {
+							if podInSlot == "" {
+								slots[slot] = pod
+								break
+							}
 						}
 					}
 				}
 			}
+
 		}
 		if mapper.Storage[namespace][resourceKind][resource] != nil {
 			mapper.Storage[namespace][resourceKind][resource] = slots
