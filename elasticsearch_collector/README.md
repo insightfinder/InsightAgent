@@ -80,6 +80,8 @@ kill -9 PID
 * **`indeces`**: Indeces to search over. (Required)
   * can list multiple indeces seperated by commma
   * Regex/wildcards supported
+* **`query_time_offset_seconds`**: The time offset when querying live data w.r.t current time
+  * Default is `0`
 * **`port`**: Port to connect to where ElasticSearch is running. (Optional)
   * Overriden if port provided in URL
 * **`http_auth`**: `username:password` used to connect to ElasticSearch. (Optional)
