@@ -1,22 +1,31 @@
 # -*- coding: utf-8 -*-
-import arrow
+import glob
+import importlib
 import json
+import logging
 import os
 import sys
+import threading
 import time
-import urllib3
-import importlib
-import requests
+from concurrent.futures import ThreadPoolExecutor
 from configparser import ConfigParser
 from optparse import OptionParser
-import logging
+
+import arrow
 import regex
+import requests
+import urllib3
+
+lock = threading.Lock()
 
 MAX_RETRY_NUM = 10
 RETRY_WAIT_TIME_IN_SEC = 30
 MAX_MESSAGE_LENGTH = 10000
 MAX_DATA_SIZE = 4000000
 MAX_PACKET_SIZE = 5000000
+
+process_stats = {}
+
 
 def get_cli_config_vars():
     """ get CLI options """
@@ -29,17 +38,16 @@ def get_cli_config_vars():
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose', default=False,
                       help='Enable verbose logging')
     parser.add_option('-t', '--testing', action='store_true', dest='testing', default=False,
-                      help='Set to testing mode (do not send data).' +
-                           ' Automatically turns on verbose logging')
-    parser.add_option('-f', '--file', action='store', dest='logfile', 
-                      help='Full path to the log file to parse')
+                      help='Set to testing mode (do not send data).' + ' Automatically turns on verbose logging')
+    parser.add_option('-f', '--file', action='store', dest='logfile', help='Full path to the log file to parse')
+    parser.add_option('--threads', default=5, action='store', dest='threads', help='Number of threads to run')
 
     (options, args) = parser.parse_args()
-    
-    try: 
-        if os.path.isabs(options.config): 
+
+    try:
+        if os.path.isabs(options.config):
             config_file = options.config
-        else: 
+        else:
             config_file = abs_path_from_cur(options.config)
     except Exception:
         print("Valid configuration file is missing (-c / --config)")
@@ -54,12 +62,14 @@ def get_cli_config_vars():
         print("Valid log file is missing (-f / --file).")
         sys.exit(1)
 
-    config_vars = {
-        'config': config_file,
-        'log_file': log_file,
-        'testing': False,
-        'log_level': logging.INFO
-    }
+    threads = 5
+    try:
+        threads = int(options.threads)
+    except ValueError:
+        pass
+
+    config_vars = {'config': config_file, 'log_file': log_file, 'testing': False, 'threads': threads,
+                   'log_level': logging.INFO}
 
     if options.testing:
         config_vars['testing'] = True
@@ -70,6 +80,7 @@ def get_cli_config_vars():
         config_vars['log_level'] = logging.WARNING
 
     return config_vars
+
 
 def get_agent_config_vars():
     config_vars = {}
@@ -124,7 +135,7 @@ def get_agent_config_vars():
             config_vars['server_url'] = server_url
             config_vars['proxies'] = proxies
 
-            config_vars['instance_name'] =  make_safe_instance_string(instance_name)
+            config_vars['instance_name'] = make_safe_instance_string(instance_name)
             config_vars['timestamp_regex'] = regex.compile(timestamp_regex)
             config_vars['timestamp_format'] = timestamp_format
             config_vars['timestamp_timezone'] = timestamp_timezone
@@ -138,10 +149,8 @@ def send_data(log_data):
     """ Sends parsed metric data to InsightFinder """
     send_data_time = time.time()
     # prepare data for metric streaming agent
-    to_send_data_dict = {"metricData": json.dumps(log_data),
-                         "licenseKey": config_vars['license_key'],
-                         "projectName": config_vars['project_name'],
-                         "userName": config_vars['user_name'],
+    to_send_data_dict = {"metricData": json.dumps(log_data), "licenseKey": config_vars['license_key'],
+                         "projectName": config_vars['project_name'], "userName": config_vars['user_name'],
                          "agentType": "LogFileReplay"}
     to_send_data_json = json.dumps(to_send_data_dict)
 
@@ -160,7 +169,8 @@ def send_data_to_receiver(post_url, to_send_data, num_of_message):
         response_code = -1
         attempts += 1
         try:
-            response = requests.post(post_url, data=json.loads(to_send_data), proxies = config_vars['proxies'], verify=False)
+            response = requests.post(post_url, data=json.loads(to_send_data), proxies=config_vars['proxies'],
+                                     verify=False)
             response_code = response.status_code
         except:
             logger.error("Attempts: %d. Fail to send data, response code: %d wait %d sec to resend." % (
@@ -177,6 +187,7 @@ def send_data_to_receiver(post_url, to_send_data, num_of_message):
     if attempts == MAX_RETRY_NUM:
         sys.exit(1)
 
+
 def set_logger_config(level):
     """ set up logging according to the defined log level """
     # Get the root logger
@@ -188,15 +199,10 @@ def set_logger_config(level):
     logging_handler_out.setLevel(logging.DEBUG)
     # create a logging format
     formatter = logging.Formatter(
-        '{ts} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(
-            ts='%(asctime)s',
-            pid='%(process)d',
-            lvl='%(levelname)-8s',
-            mod='%(module)s',
-            func='%(funcName)s',
-            line='%(lineno)d',
-            msg='%(message)s'),
-        ISO8601[0])
+        '{ts} [pid {pid}] {lvl} {mod}.{func}():{line} {msg}'.format(ts='%(asctime)s', pid='%(process)d',
+                                                                    lvl='%(levelname)-8s', mod='%(module)s',
+                                                                    func='%(funcName)s', line='%(lineno)d',
+                                                                    msg='%(message)s'), ISO8601[0])
     logging_handler_out.setFormatter(formatter)
     logger_obj.addHandler(logging_handler_out)
 
@@ -204,6 +210,7 @@ def set_logger_config(level):
     logging_handler_err.setLevel(logging.WARNING)
     logger_obj.addHandler(logging_handler_err)
     return logger_obj
+
 
 def make_safe_instance_string(instance, device=''):
     """ make a safe instance name string, concatenated with device if appropriate """
@@ -215,55 +222,47 @@ def make_safe_instance_string(instance, device=''):
         instance = '{}_{}'.format(make_safe_instance_string(device), instance)
     return instance
 
+
 def abs_path_from_cur(filename=''):
     return os.path.abspath(os.path.join(__file__, os.pardir, filename))
 
-if __name__ == "__main__":
-    # Declare constants
-    UNDERSCORE = regex.compile(r"\_+")
-    COLONS = regex.compile(r"\:+")
-    ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
 
-    # Disable the InsecureRequestWarning which occurs when connecting to an SSL endpoint without verifying the certificate
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    importlib.reload(sys)
-
-    # Load configurations
-    cli_config_vars = get_cli_config_vars()
-    logger = set_logger_config(cli_config_vars['log_level'])
-    config_vars = get_agent_config_vars()
-
+def worker_main(file_name, config_vars, logger):
     # Process File
-    CHUNK_SIZE = 1000
-    with open(cli_config_vars['log_file'], encoding='utf-8') as log_file:
+
+    file_size = os.path.getsize(file_name)
+    CHUNK_SIZE = 10000
+    start_time = time.time()
+    with open(file_name, encoding='utf-8') as log_file:
         logs = log_file.readlines()
         data = []
         count = 0
         size = 0
         for line in logs:
-            entry = {'eventId': '','tag': config_vars['instance_name'], 'data': line}
+            entry = {'eventId': '', 'tag': config_vars['instance_name'], 'data': line}
 
             ts = config_vars['timestamp_regex'].findall(line)
-            
-            if len(ts) == 1: 
+
+            if len(ts) == 1:
                 try:
                     if isinstance(ts[0], tuple):
                         timestamp = ts[0][0]
-                    else: 
+                    else:
                         timestamp = ts[0]
-                    
+
                     if config_vars['timestamp_format']:
                         if config_vars['timestamp_timezone']:
-                            eventId = arrow.get(timestamp, config_vars['timestamp_format'], tzinfo=config_vars['timestamp_timezone'])
-                        else: 
+                            eventId = arrow.get(timestamp, config_vars['timestamp_format'],
+                                                tzinfo=config_vars['timestamp_timezone'])
+                        else:
                             eventId = arrow.get(timestamp, config_vars['timestamp_format'])
-                    else: 
+                    else:
                         if config_vars['timestamp_timezone']:
                             eventId = arrow.get(timestamp, tzinfo=config_vars['timestamp_timezone'])
-                        else: 
+                        else:
                             eventId = arrow.get(timestamp)
                     entry['eventId'] = int(eventId.to('utc').timestamp() * 1000)
-                except Exception as e: 
+                except Exception as e:
                     logger.warning("Timestamp error: {}".format(e))
                     continue
             else:
@@ -279,7 +278,7 @@ if __name__ == "__main__":
             if size + entry_size >= MAX_DATA_SIZE:
                 if not cli_config_vars['testing']:
                     send_data(data)
-                else: 
+                else:
                     logger.info("--- Data Chunk: {} entries ---".format(count))
                 size = 0
                 count = 0
@@ -294,7 +293,7 @@ if __name__ == "__main__":
             if count >= CHUNK_SIZE:
                 if not cli_config_vars['testing']:
                     send_data(data)
-                else: 
+                else:
                     logger.info("--- Data Chunk: {} entries ---".format(count))
                 size = 0
                 count = 0
@@ -302,6 +301,69 @@ if __name__ == "__main__":
         if count != 0:
             if not cli_config_vars['testing']:
                 send_data(data)
-            else: 
+            else:
                 logger.info("--- Data Chunk: {} entries ---".format(count))
+    end_time = time.time()
+    time_spend = end_time - start_time
+    rate = file_size / time_spend
+    logger.info("File: {} processed in {} seconds, rate: {} bytes/sec".format(file_name, time_spend, rate))
 
+    with lock:
+        process_stats[file_name] = {'time_spend': time_spend, 'file_size': file_size, 'rate': rate}
+
+
+if __name__ == "__main__":
+    # Declare constants
+    UNDERSCORE = regex.compile(r"\_+")
+    COLONS = regex.compile(r"\:+")
+    ISO8601 = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%SZ', 'epoch']
+
+    # Disable the InsecureRequestWarning which occurs when connecting to an SSL endpoint without verifying the
+    # certificate
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    importlib.reload(sys)
+
+    # Load configurations
+    cli_config_vars = get_cli_config_vars()
+    logger = set_logger_config(cli_config_vars['log_level'])
+    config_vars = get_agent_config_vars()
+
+    threads = cli_config_vars['threads']
+
+    # Get list of files using the glob funciton
+    log_file = cli_config_vars['log_file']
+    file_list = glob.glob(log_file, recursive=True)
+    logger.info("Processing {} files with {} workers: {}".format(len(file_list), threads, log_file))
+
+    start_time = time.time()
+
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        for file_name in file_list:
+            if os.path.isfile(file_name):
+                executor.submit(worker_main, file_name, config_vars, logger)
+
+    end_time = time.time()
+
+    max_rate = 0
+    min_rate = 0
+    avg_rate = 0
+    total_size = 0
+    for file_name in process_stats:
+        rate = process_stats[file_name]['rate']
+        total_size += process_stats[file_name]['file_size']
+        if min_rate == 0:
+            min_rate = rate
+        if rate > max_rate:
+            max_rate = rate
+        if rate < min_rate:
+            min_rate = rate
+        avg_rate += rate
+    avg_rate = avg_rate / len(process_stats)
+    total_rate = total_size / (end_time - start_time)
+    logger.info(
+        "Total files: {}, total size: {:.2f}K, total spent: {:.2f} seconds".format(len(file_list), total_size / 1000,
+                                                                                   end_time - start_time))
+    logger.info("Total Rate: {:.2f} K/sec".format(total_rate / 1000))
+    logger.info("Max Rate: {:.2f} K/sec, Min Rate: {:.2f} K/sec, Avg Rate: {:.2f} K/sec".format(max_rate / 1000,
+                                                                                                min_rate / 1000,
+                                                                                                avg_rate / 1000))
