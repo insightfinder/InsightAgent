@@ -176,7 +176,9 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
     else:
         logger.info('Using current time for streaming data on collector {} ...'.format(collector_id))
 
-        start_time = time_now - (collector_id + 1) * collector_interval
+        query_time_offset_seconds = agent_config_vars['query_time_offset_seconds']
+        start_time = time_now - query_time_offset_seconds
+        start_time = start_time - (collector_id + 1) * collector_interval
         end_time = start_time + collector_interval
 
         # build query
@@ -723,6 +725,7 @@ def get_agent_config_vars(logger, config_ini):
             query_json_file = config_parser.get('elasticsearch', 'query_json_file')
             query_chunk_size = config_parser.get('elasticsearch', 'query_chunk_size')
             indeces = config_parser.get('elasticsearch', 'indeces')
+            query_time_offset_seconds = config_parser.get('elasticsearch', 'query_time_offset_seconds', fallback=0)
 
             # time range
             his_time_range = config_parser.get('elasticsearch', 'his_time_range')
@@ -797,6 +800,15 @@ def get_agent_config_vars(logger, config_ini):
             except Exception as e:
                 logger.error('Agent not correctly configured (query_chunk_size). Use 5000 by default.')
                 query_chunk_size = 5000
+
+        if query_time_offset_seconds and len(query_time_offset_seconds) != 0:
+            try:
+                query_time_offset_seconds = int(query_time_offset_seconds)
+            except Exception as e:
+                logger.error('Agent not correctly configured (query_time_offset_seconds). Use 0 by default.')
+                query_time_offset_seconds = 0
+        else:
+            query_time_offset_seconds = 0
 
         if len(instance_whitelist) != 0:
             try:
@@ -876,6 +888,7 @@ def get_agent_config_vars(logger, config_ini):
             'query_json': query_json,
             'query_chunk_size': query_chunk_size,
             'indeces': indeces,
+            'query_time_offset_seconds': query_time_offset_seconds,
             'his_time_range': his_time_range,
             'project_field': project_field,
             'project_whitelist_regex': project_whitelist_regex,
