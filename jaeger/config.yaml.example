@@ -1,0 +1,64 @@
+# Jaeger configuration
+jaeger:
+  # The address of the Jaeger UI server (e.g. http://localhost:16686)
+  endpoint: "http://18.212.200.99:16686"
+
+  # The service name to query traces for
+  service: "appserver"
+
+  # The operation name to query traces for. If empty, all operations are queried
+  operation: ""
+
+  # The tags to filter traces by. If multiple tags are specified, all tags must match
+  tags: []
+#    - key: "error"
+#      value: "true"
+
+  # The max allowed duration for a single trace.
+  # If a trace exceeds this duration, it will be truncated.
+  # Leave empty to disable this filter.
+  max_duration:
+
+  # The min allowed duration for a single trace.
+  # If a trace is shorter than this duration, it will be truncated.
+  # Leave empty to disable this filter.
+  min_duration: 1s
+
+  # The max number of traces returned by a single query.
+  limit: 100
+
+  # The time range for the query. (e.g. 5m to query traces from the last 5 minutes)
+  range: "5m"
+
+  # The tags to use as the instance name in the InsightFinder data.
+  # If multiple tags are specified, the first tag that exists in the trace will be used.
+  instance_tag:
+    - "peer.ipv4"
+
+  # The tags to use as the component name in the InsightFinder data.
+  # If multiple tags are specified, the first tag that exists in the trace will be used.
+  component_tag:
+    - "component"
+
+# InsightFinder configuration
+insightfinder:
+  # The InsightFinder endpoint to send data to
+  endpoint: "https://stg.insightfinder.com"
+
+  # The InsightFinder username
+  username: "maoyuwang"
+
+  # The InsightFinder license key
+  license_key: ""
+
+  # The InsightFinder project name
+  project_name: "maoyu-test-jaeger-agent-0515"
+
+  # The InsightFinder system name
+  system_name: "maoyu-test-jaeger-agent-0151"
+
+  # The InsightFinder project type. (Metric, Log, Trace, Deployment, Incident)
+  project_type: "Trace"
+
+  # If the project is a container project
+  is_container: false
