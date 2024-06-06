@@ -29,6 +29,8 @@ query_json_file =
 query_chunk_size = 5000
 # indexes to search over, example indeces = metricbeat*
 indeces = filebeat*
+# The time offset when querying live data, default is 0.
+query_time_offset_seconds =
 
 ## parameters for all hosts
 # port to connect to (Can be parsed from url)
