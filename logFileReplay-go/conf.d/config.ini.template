@@ -1,0 +1,44 @@
+[logreplay]
+# Log files to parse, supports glob patterns and split by ;
+log_files = data/**/*.json
+
+# Default instance if instance_field is not set or cannot get
+default_instance = instance
+
+# Component field, optional
+component_field = _source.agent.type
+
+# Instance identifier for the system where the log file is from.
+instance_field = _source.agent.hostname
+
+# Field to extract the timestamp from
+timestamp_field = _source.@timestamp
+
+# Field to get the log data, if not set, the whole message will be used
+log_data_field =
+
+# Optional timezone of the timestamp if the log format is TZ naive (example: "Asia/Tokyo")
+timestamp_timezone = UTC
+
+# Worker count to parse log files, default is 1
+worker_count =
+
+[insightfinder]
+user_name =
+license_key =
+token =
+# Name of the project created in the InsightFinder UI, If this project is not exist, agent will create it automatically.
+project_name =
+# Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name =
+# metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
+project_type = log
+# Set to `YES` if project is container.
+containerize = no
+sampling_interval = 5
+run_interval = 5
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
