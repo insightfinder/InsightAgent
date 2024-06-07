@@ -23,12 +23,13 @@ type Span struct {
 		TraceID string `json:"traceID"`
 		SpanID  string `json:"spanID"`
 	} `json:"references"`
-	StartTime int64         `json:"startTime"`
-	Duration  int           `json:"duration"`
-	Tags      []Tag         `json:"tags"`
-	Logs      []interface{} `json:"logs"`
-	ProcessID string        `json:"processID"`
-	Warnings  interface{}   `json:"warnings"`
+	StartTime int64                   `json:"startTime"`
+	Duration  int                     `json:"duration"`
+	Tags      []Tag                   `json:"tags"`
+	TagMap    map[string]StringOrBool `json:"tagsMap"`
+	Logs      []interface{}           `json:"logs"`
+	ProcessID string                  `json:"processID"`
+	Warnings  interface{}             `json:"warnings"`
 }
 
 type Tag struct {

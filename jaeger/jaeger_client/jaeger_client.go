@@ -66,6 +66,12 @@ func (jc *JaegerClient) QueryTrace(startTime time.Time, endTime time.Time, spanC
 	// Send data back to the channel
 	for _, trace := range responseBody.Data {
 		for _, span := range trace.Spans {
+
+			// Create TagsMap from Tags
+			span.TagMap = make(map[string]StringOrBool)
+			for tag := range span.Tags {
+				span.TagMap[span.Tags[tag].Key] = span.Tags[tag].Value
+			}
 			spanChan <- &span
 		}
 	}

@@ -8,13 +8,14 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 )
 
 func main() {
 
-	var numWorkers = flag.Int("w", 10, "Number of workers")
+	var numWorkers = flag.Int("w", runtime.NumCPU(), "Number of workers")
 	var configFileName = flag.String("c", "config.yaml", "Config yaml file")
 	flag.Parse()
 
@@ -62,8 +63,18 @@ func main() {
 						count++
 
 						// Extract additional tags from the span
-						instanceValue := jaeger_client.GetFirstTagValue(jaegerApp.InstanceTags, &span.Tags)
-						componentValue := jaeger_client.GetFirstTagValue(jaegerApp.ComponentTags, &span.Tags)
+						instanceValue := jaeger_client.GetFirstTagValue(jaegerApp.InstanceTags, &span.TagMap)
+						componentValue := jaeger_client.GetFirstTagValue(jaegerApp.ComponentTags, &span.TagMap)
+						if instanceValue == "" {
+							// Skip this span if instance or component tag is not found
+							slog.Warn(fmt.Sprintf("Instance %s tags not found in span %s, trace: %s", jaegerApp.InstanceTags, span.SpanID, span.TraceID))
+							continue
+						}
+						if componentValue == "" {
+							// Skip this span if instance or component tag is not found
+							slog.Warn(fmt.Sprintf("Component %s tags not found in span %s, trace: %s", jaegerApp.ComponentTags, span.SpanID, span.TraceID))
+							continue
+						}
 
 						ifApp.SendLogData(time.UnixMicro(span.StartTime).UnixMilli(), instanceValue, componentValue, &span)
 						if count%100 == 0 {
