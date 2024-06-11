@@ -96,6 +96,7 @@ public class WebSocketSessionHandler implements WebSocketHandler {
               new StandardWebSocketClient(),
               this,
               webSocketUrl);
+          log.debug("Attempt to reconnect webSocket");
           connectionManager.start();
         } catch (Exception e) {
           log.warn("Error when reconnecting webSocket: " + e.getMessage());

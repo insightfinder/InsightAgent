@@ -3,6 +3,8 @@ package com.insightfinder.kubeactions.controller;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.insightfinder.kubeactions.config.IFConfig;
+import java.util.Map;
+import javax.annotation.PostConstruct;
 import org.jetbrains.annotations.NotNull;
 import org.mapdb.DB;
 import org.slf4j.Logger;
@@ -16,10 +18,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
-
-import javax.annotation.PostConstruct;
-import java.util.Map;
-import java.util.logging.Level;
 
 @Component
 public class Registrar {
@@ -44,8 +42,9 @@ public class Registrar {
         ResponseEntity<String> response = restTemplate.postForEntity(url, request , String.class);
         if (response.getStatusCode().is2xxSuccessful()){
             JsonObject resObj = gson.fromJson(response.getBody(), JsonObject.class);
+            System.out.println(resObj);
             Map map = mapDB.hashMap("map").createOrOpen();
-            map.put("serverId", resObj.get("serverId").getAsString());
+            map.put("serverId", "26185b8f-cfe9-45ef-a640-57e3baa3bea5");
             mapDB.commit();
         }
     }
