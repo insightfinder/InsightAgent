@@ -7,11 +7,11 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class KubeactionsApplication implements CommandLineRunner {
 
-	public static void main(String[] args) {
-		SpringApplication.run(KubeactionsApplication.class, args);
-	}
+  public static void main(String[] args) {
+    SpringApplication.run(KubeactionsApplication.class, args);
+  }
 
-	@Override
-	public void run(String... args) throws Exception {
-	}
+  @Override
+  public void run(String... args) throws Exception {
+  }
 }
