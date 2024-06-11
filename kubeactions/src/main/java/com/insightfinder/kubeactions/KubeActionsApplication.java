@@ -5,10 +5,10 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class KubeactionsApplication implements CommandLineRunner {
+public class KubeActionsApplication implements CommandLineRunner {
 
   public static void main(String[] args) {
-    SpringApplication.run(KubeactionsApplication.class, args);
+    SpringApplication.run(KubeActionsApplication.class, args);
   }
 
   @Override
