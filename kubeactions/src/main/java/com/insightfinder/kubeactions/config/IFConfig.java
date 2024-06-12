@@ -1,11 +1,10 @@
 package com.insightfinder.kubeactions.config;
 
+import java.util.Map;
 import org.mapdb.DB;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
-
-import java.util.Map;
 
 @Configuration
 @ConfigurationProperties(prefix = "insight-finder")
@@ -20,6 +19,7 @@ public class IFConfig {
     private String actionServerId;
     private String actionServerName;
     private String serverUrl;
+    private String serverWebSocketUrl;
 
     public IFConfig() {
     }
@@ -62,6 +62,14 @@ public class IFConfig {
 
     public void setActionServerPort(String actionServerPort) {
         this.actionServerPort = actionServerPort;
+    }
+
+    public String getServerWebSocketUrl() {
+        return serverWebSocketUrl;
+    }
+
+    public void setServerWebSocketUrl(String serverWebSocketUrl) {
+        this.serverWebSocketUrl = serverWebSocketUrl;
     }
 
     public String getActionServerId() {

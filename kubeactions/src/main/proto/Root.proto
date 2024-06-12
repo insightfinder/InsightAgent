@@ -1,0 +1,12 @@
+syntax = "proto3";
+package proto;
+
+import "Ping.proto";
+option java_package = "com.insightfinder.InsightFinderAgent.proto";
+option java_outer_classname = "RootWrapper";
+
+message Root{
+  oneof inner_message{
+    Ping ping = 1;
+  }
+}
