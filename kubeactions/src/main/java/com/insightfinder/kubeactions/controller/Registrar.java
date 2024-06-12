@@ -43,7 +43,7 @@ public class Registrar {
         if (response.getStatusCode().is2xxSuccessful()){
             JsonObject resObj = gson.fromJson(response.getBody(), JsonObject.class);
             Map map = mapDB.hashMap("map").createOrOpen();
-            map.put("serverId", "26185b8f-cfe9-45ef-a640-57e3baa3bea5");
+            map.put("serverId", resObj.get("serverId").getAsString());
             mapDB.commit();
         }
     }
