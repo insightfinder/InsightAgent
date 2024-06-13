@@ -74,7 +74,7 @@ public class IFConfig {
     }
 
     public String getActionServerId() {
-        if (actionServerId == null || actionServerId.length() == 0){
+        if (actionServerId == null || actionServerId.isEmpty()) {
             Map map = mapDB.hashMap("map").createOrOpen();
             if (map.containsKey("serverId")){
                 return map.get("serverId").toString();
