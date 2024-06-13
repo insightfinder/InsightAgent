@@ -9,5 +9,5 @@ public class WebSocketUtils {
 
   private static final Logger log = LoggerFactory.getLogger(WebSocketUtils.class);
   public static final String CLIENT_ID_HEADER = "Client-Id";
-  public static final String WEB_SOCKET_SERVER_URL_TEMPLATE = "wss://%s/agent";
+  public static final String WEB_SOCKET_SERVER_URL_TEMPLATE = "wss://%s/actionws";
 }
