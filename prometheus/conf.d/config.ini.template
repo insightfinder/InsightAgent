@@ -89,7 +89,7 @@ containerize = no
 
 # Set to empty to create normal projects
 # set to 'vm' to use 'DynamicVM' as the AgentType, set to 'host' to use 'DynamicHost' as the AgentType
-dynamic_metric_type = vm
+dynamic_metric_type =
 
 sampling_interval = 5
 run_interval = 5
