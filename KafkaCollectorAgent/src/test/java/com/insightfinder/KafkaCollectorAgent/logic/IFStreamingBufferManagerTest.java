@@ -5,6 +5,7 @@ import com.google.common.hash.Funnels;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
+import com.insightfinder.KafkaCollectorAgent.model.ProjectInfo;
 import org.apache.kafka.common.protocol.types.Field;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -170,8 +171,8 @@ class IFStreamingBufferManagerTest {
         ifStreamingBufferManager.setGson(gson);
         ifStreamingBufferManager.setIfConfig(ifConfig);
         ifStreamingBufferManager.setProjectList(ifStreamingBufferManager.getProjectMapping(ifConfig.getProjectList()));
-        Map<String, Set<JsonObject>> collectingDataMap = new HashMap<>();
-        collectingDataMap.put("p1@s1", new HashSet<>(Arrays.asList(new JsonObject(), new JsonObject())));
+        Map<ProjectInfo, Set<JsonObject>> collectingDataMap = new HashMap<>();
+        collectingDataMap.put(new ProjectInfo("p1", "s1"), new HashSet<>(Arrays.asList(new JsonObject(), new JsonObject())));
         ifStreamingBufferManager.mergeLogDataAndSendToIF2(collectingDataMap);
         Map<String, Set<JsonObject>> collectingMetaDataMap = new HashMap<>();
         collectingMetaDataMap.put("LogBenchmark1", new HashSet<>(Arrays.asList(new JsonObject(), new JsonObject())));

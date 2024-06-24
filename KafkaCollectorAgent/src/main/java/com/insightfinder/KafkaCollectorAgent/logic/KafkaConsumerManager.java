@@ -61,7 +61,7 @@ public class KafkaConsumerManager {
         Map<String, Map<String, String>> clusterInfo = kafkaConfig.getKafkaClusterInfo();
         int clusterIndex = 0;
         for (Map<String, String> cluster : clusterInfo.values()) {
-            ConsumerFactory consumerFactory = consumerFactory(cluster);
+            ConsumerFactory<String, String> consumerFactory = consumerFactory(cluster);
             customizers.orderedStream().forEach(customizer -> customizer.customize((DefaultKafkaConsumerFactory<?, ?>) consumerFactory));
             ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
             factory.setBatchListener(true);
@@ -105,6 +105,7 @@ public class KafkaConsumerManager {
 
         @Override
         public void onMessage(ConsumerRecord<Integer, String> data) {
+            System.out.println(data);
             ifStreamingBufferManager.parseString(data.topic() ,data.value(), System.currentTimeMillis());
         }
 
