@@ -630,17 +630,9 @@ public class IFStreamingBufferManager {
           .bodyToMono(String.class)
           .timeout(Duration.ofMillis(100000))
           .onErrorResume(throwable -> Mono.just("RETRY"))
-          .subscribe(res -> {
-            if (res.equalsIgnoreCase("RETRY")) {//retry 1 2
-              logger.log(Level.INFO,
-                  "sending metadata: request id : " + uuid + " data size: " + dataSize
-                      + " kb code: " + res);
-            } else {
-              logger.log(Level.INFO,
-                  "sending metadata: request id: " + uuid + " data size: " + dataSize + " kb code: "
-                      + res);
-            }
-          });
+          .subscribe(res -> logger.log(Level.INFO,
+              "sending metadata: request id: " + uuid + " data size: " + dataSize + " kb code: "
+                  + res));
     }
   }
 
@@ -663,17 +655,9 @@ public class IFStreamingBufferManager {
           .bodyToMono(String.class)
           .timeout(Duration.ofMillis(100000))
           .onErrorResume(throwable -> Mono.just("RETRY"))
-          .subscribe(res -> {
-            if (res.equalsIgnoreCase("RETRY")) {//retry 1 2
-              logger.log(Level.INFO,
-                  "sending data: request id: " + uuid + " data size: " + dataSize + " kb code: "
-                      + res);
-            } else {
-              logger.log(Level.INFO,
-                  "sending data: request id: " + uuid + " data size: " + dataSize + " kb code: "
-                      + res);
-            }
-          });
+          .subscribe(res -> logger.log(Level.INFO,
+              "sending data: request id: " + uuid + " data size: " + dataSize + " kb code: "
+                  + res));
     }
   }
 }
