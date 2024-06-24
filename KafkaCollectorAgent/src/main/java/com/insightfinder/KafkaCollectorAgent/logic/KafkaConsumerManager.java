@@ -105,7 +105,6 @@ public class KafkaConsumerManager {
 
         @Override
         public void onMessage(ConsumerRecord<Integer, String> data) {
-            System.out.println(data);
             ifStreamingBufferManager.parseString(data.topic() ,data.value(), System.currentTimeMillis());
         }
 

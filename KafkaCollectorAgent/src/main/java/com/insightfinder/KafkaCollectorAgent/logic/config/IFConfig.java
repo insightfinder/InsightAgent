@@ -4,11 +4,9 @@ import java.util.List;
 import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.PropertySource;
 
 @Configuration
 @ConfigurationProperties(prefix = "insight-finder")
-@PropertySource("classpath:config.properties")
 public class IFConfig {
     private String userName;
     private String serverUrl;
