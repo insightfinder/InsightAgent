@@ -102,7 +102,7 @@ public class IFStreamingBufferManager {
     Method namedGroupsMethod = Pattern.class.getDeclaredMethod("namedGroups");
     namedGroupsMethod.setAccessible(true);
 
-    Map<String, Integer> namedGroups = null;
+    Map<String, Integer> namedGroups;
     namedGroups = (Map<String, Integer>) namedGroupsMethod.invoke(regex);
 
     if (namedGroups == null) {
@@ -180,11 +180,9 @@ public class IFStreamingBufferManager {
           printMetricsTimer = ifConfig.getKafkaMetricLogInterval();
           registry.getMeters().forEach(meter -> {
             if (metricFilterSet.contains(meter.getId().getName())) {
-              meter.measure().forEach(measurement -> {
-                logger.log(Level.INFO,
-                    String.format("%s %s : %f", meter.getId().getTag("client.id"),
-                        meter.getId().getName(), measurement.getValue()));
-              });
+              meter.measure().forEach(measurement -> logger.log(Level.INFO,
+                  String.format("%s %s : %f", meter.getId().getTag("client.id"),
+                      meter.getId().getName(), measurement.getValue())));
             }
           });
         }
@@ -369,7 +367,7 @@ public class IFStreamingBufferManager {
   }
 
   public void parseString(String topic, String content, long receiveTime) {
-    JsonObject jsonObject = null;
+    JsonObject jsonObject;
     if (ifConfig.isLogProject()) {
       jsonObject = gson.fromJson(content, JsonObject.class);
       if (ifConfig.getLogMetadataTopics() != null && ifConfig.getLogMetadataTopics()
@@ -407,7 +405,7 @@ public class IFStreamingBufferManager {
         Matcher matcher = dataFormatPattern.matcher(content.trim());
         if (matcher.matches() && namedGroups != null) {
           List<String> projects = new ArrayList<>();
-          String projectNameStr = null, instanceName = null, timeStamp = null, metricName = null;
+          String projectNameStr, instanceName = null, timeStamp = null, metricName = null;
           double metricValue = 0.0;
           for (String key : namedGroups.keySet()) {
             if (key.equalsIgnoreCase(ifConfig.getProjectKey())) {
@@ -542,8 +540,6 @@ public class IFStreamingBufferManager {
 
   public void convertBackToOldFormat(Map<String, InstanceData> instanceDataMap, String project,
       String system, int splitNum) {
-    List<String> stringList = new ArrayList<>();
-    List<Map<Long, JsonObject>> sortByTimestampMaps = new ArrayList<>();
     Map<Long, JsonObject> sortByTimestampMap = new HashMap<>();
     int total = splitNum;
     for (String instanceName : instanceDataMap.keySet()) {
@@ -633,9 +629,7 @@ public class IFStreamingBufferManager {
           .retrieve()
           .bodyToMono(String.class)
           .timeout(Duration.ofMillis(100000))
-          .onErrorResume(throwable -> {
-            return Mono.just("RETRY");
-          })
+          .onErrorResume(throwable -> Mono.just("RETRY"))
           .subscribe(res -> {
             if (res.equalsIgnoreCase("RETRY")) {//retry 1 2
               logger.log(Level.INFO,
@@ -682,5 +676,4 @@ public class IFStreamingBufferManager {
           });
     }
   }
-
 }
