@@ -53,21 +53,20 @@ public class IFProjectManager {
     }
 
     boolean checkProject(String projectName, String systemName) {
-//        MultiValueMap<String, String> bodyValues = new LinkedMultiValueMap<>();
-//        bodyValues.add("userName", ifConfig.getUserName());
-//        bodyValues.add("licenseKey", ifConfig.getLicenseKey());
-//        bodyValues.add("projectName", projectName);
-//        bodyValues.add("operation", "check");
-//        String res = webClient.post()
-//                .uri("/api/v1/check-and-add-custom-project")
-//                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-//                .body(BodyInserters.fromFormData(bodyValues))
-//                .retrieve()
-//                .bodyToMono(String.class)
-//                .block();
-//        JsonObject resObject = new Gson().fromJson(res, JsonObject.class);
-//        return resObject.has("isProjectExist") && resObject.get("isProjectExist").getAsBoolean();
-        return true;
+        MultiValueMap<String, String> bodyValues = new LinkedMultiValueMap<>();
+        bodyValues.add("userName", ifConfig.getUserName());
+        bodyValues.add("licenseKey", ifConfig.getLicenseKey());
+        bodyValues.add("projectName", projectName);
+        bodyValues.add("operation", "check");
+        String res = webClient.post()
+                .uri("/api/v1/check-and-add-custom-project")
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .body(BodyInserters.fromFormData(bodyValues))
+                .retrieve()
+                .bodyToMono(String.class)
+                .block();
+        JsonObject resObject = new Gson().fromJson(res, JsonObject.class);
+        return resObject.has("isProjectExist") && resObject.get("isProjectExist").getAsBoolean();
     }
 
     boolean createProject(String projectName, String systemName, String dataType) {
