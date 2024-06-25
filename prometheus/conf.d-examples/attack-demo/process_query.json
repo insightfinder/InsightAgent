@@ -1,0 +1,62 @@
+[
+    {
+        "query": "sum by (groupname,instance) (namedprocess_namegroup_memory_bytes{job='attack',memtype='resident'}) / 1024 / 1024",
+        "metric_name": "process_memory_mb"
+    },
+    {
+        "query": "100 * (rate(namedprocess_namegroup_cpu_seconds_total{job='attack',mode='user'}[5m]))",
+        "metric_name": "process_cpu_usage"
+    },
+    {
+        "query": "rate(namedprocess_namegroup_read_bytes_total{job='attack'}[5m])",
+        "metric_name": "process_read_rate"
+    },
+    {
+        "query": "rate(namedprocess_namegroup_write_bytes_total{job='attack'}[5m])",
+        "metric_name": "process_write_rate"
+    },
+    {
+        "query": "rate(namedprocess_namegroup_major_page_faults_total{job='attack'}[5m])",
+        "metric_name": "process_major_page_faults_rate"
+    },
+    {
+        "query": "rate(namedprocess_namegroup_minor_page_faults_total{job='attack'}[5m])",
+        "metric_name": "process_minor_page_faults_rate"
+    },
+    {
+        "query": "sum by (groupname,instance) (rate(namedprocess_namegroup_context_switches_total{job='attack'}[5m]))",
+        "metric_name": "process_context_switches_rate"
+    },
+    {
+        "query": "namedprocess_namegroup_open_filedesc{job='attack'}",
+        "metric_name": "process_open_filedesc"
+    },
+    {
+        "query": "namedprocess_namegroup_num_procs{job='attack'}",
+        "metric_name": "process_num_procs"
+    },
+    {
+        "query": "namedprocess_namegroup_num_threads{job='attack'}",
+        "metric_name": "process_num_threads"
+    },
+    {
+        "query": "namedprocess_namegroup_states{job='attack', state='Running'}",
+        "metric_name": "process_states_running"
+    },
+    {
+        "query": "namedprocess_namegroup_states{job='attack', state='Sleeping'}",
+        "metric_name": "process_states_sleeping"
+    },
+    {
+        "query": "namedprocess_namegroup_states{job='attack', state='Waiting'}",
+        "metric_name": "process_states_waiting"
+    },
+    {
+        "query": "namedprocess_namegroup_states{job='attack', state='Zombie'}",
+        "metric_name": "process_states_zombie"
+    },
+    {
+        "query": "namedprocess_namegroup_states{job='attack', state='Other'}",
+        "metric_name": "process_states_other"
+    }
+]
