@@ -1,0 +1,54 @@
+[
+    {
+        "query": "sum by(instance, process) (rate(windows_process_cpu_time_total{process!='Idle'}[5m])) / on(instance) group_left sum by(instance) (rate(windows_cpu_time_total[5m])) * 100",
+        "metric_name": "process_cpu_usage"
+    },
+    {
+        "query": "sum by (instance, process) (windows_process_working_set_private_bytes) / on(instance) group_left windows_cs_physical_memory_bytes * 100",
+        "metric_name": "process_memory_usage"
+    },
+    {
+        "query": "sum by (instance, process) (windows_process_handles)",
+        "metric_name": "process_handles"
+    },
+    {
+        "query": "sum by (instance, process) (irate(windows_process_io_bytes_total[5m]))",
+        "metric_name": "process_io_rate"
+    },
+    {
+        "query": "sum by (instance, process) (irate(windows_process_page_faults_total[5m]))",
+        "metric_name": "process_page_faults_rate"
+    },
+    {
+        "query": "sum by (instance, process) (windows_process_page_file_bytes)",
+        "metric_name": "process_page_file_bytes"
+    },
+    {
+        "query": "sum by (instance, process) (windows_process_pool_bytes)",
+        "metric_name": "process_pool_bytes"
+    },
+    {
+        "query": "sum by (instance, process) (windows_process_private_bytes)",
+        "metric_name": "process_private_bytes"
+    },
+    {
+        "query": "sum by (instance, process) (windows_process_threads)",
+        "metric_name": "process_threads"
+    },
+    {
+        "query": "sum by (instance, process) (windows_process_virtual_bytes)",
+        "metric_name": "process_virtual_bytes"
+    },
+    {
+        "query": "sum by (instance, process) (windows_process_working_set_private_bytes)",
+        "metric_name": "process_working_set_private_bytes"
+    },
+    {
+        "query": "sum by (instance, process) (windows_process_working_set_peak_bytes)",
+        "metric_name": "process_working_set_peak_bytes"
+    },
+    {
+        "query": "sum by (instance, process) (windows_process_working_set_bytes)",
+        "metric_name": "process_working_set_bytes"
+    }
+]
