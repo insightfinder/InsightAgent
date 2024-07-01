@@ -21,7 +21,7 @@ function get_config_setting() {
   config_files=$(find conf.d/ -name "*.ini")
   for file in $config_files; do
     interval=$(cat "$file" | grep "$1" | awk -F '=' '{print $NF}' | tr -d [:space:])
-    [ $min -gt "$interval" ] && min=$interval
+    [ $min -gt "$interval" ] || min=$interval
   done
   echo "$min"
 }
@@ -83,8 +83,7 @@ cd $SCRIPT_DIR && cd ..
 # verify python has been set up, and *.ini is present
 configs_length=$(find conf.d/ -name "*.ini" | wc -l | sed 's/ //g')
 if [[ ! -f venv/bin/python3 ]]; then
-  echo "Missing virtual env. Please run configure_python.sh."
-  exit 1
+  echo "Missing virtual env. Please run configure_python.sh to set up venv, or install requirements to system globally."
 elif [ "$configs_length" == '0' ]; then
   # echo "$configs_length"
   echo "Missing conf.d/*.ini.  Please copy conf.d/config.ini.template to conf.d/*.ini and update the configuration file."
@@ -92,7 +91,11 @@ elif [ "$configs_length" == '0' ]; then
 fi
 
 # agent settings
+if [[ -f venv/bin/python3 ]]; then
 PY_CMD="$(abspath "./venv/bin/python3")"
+else
+PY_CMD="python3"
+fi
 AGENT="$(get_agent_setting ^name)"
 AGENT_FULL_PATH="$(abspath "./$(get_agent_setting ^script_name)")"
 AGENT_FULL_PATH_LOG="$(abspath "./")/log.out"
@@ -108,9 +111,9 @@ if [[ -z "${RUN_INTERVAL}" ]]; then
 fi
 
 # crontab settings
-CRON_FILE="/etc/cron.d/${AGENT}"
+CRON_FILE="/etc/cron.d/${PWD##*/}"
 CRON_USER="$(logname)"
-CRON_COMMAND="command -p ${PY_CMD} ${AGENT_FULL_PATH} > ${AGENT_FULL_PATH_LOG} 2>&1"
+CRON_COMMAND="${PY_CMD} ${AGENT_FULL_PATH} > ${AGENT_FULL_PATH_LOG} 2>&1"
 RUN_INTERVAL_VAL=${RUN_INTERVAL}
 RUN_INTERVAL_UNIT="${RUN_INTERVAL: -1}"
 
@@ -159,7 +162,7 @@ echo "" 2>&1 | if is_dry_run; then awk '{print}'; else tee -a ${CRON_FILE}; fi
 
 if is_dry_run; then
   echo "To create a cron config at ${CRON_FILE}, run this again as"
-  echo "  sudo ./setup/install.sh --create"
+  echo "  sudo ./setup/install_cron.sh -c"
 else
   echo "Cron config created at ${CRON_FILE}"
 fi
