@@ -1,34 +1,34 @@
 package com.insightfinder.KafkaCollectorAgent.logic;
 
+import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.convertTimestampToMS;
+
 import com.google.common.collect.Lists;
 import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import com.google.gson.reflect.TypeToken;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
+import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.LogProjectConfigParser;
+import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.LogMessageHandler;
+import com.insightfinder.KafkaCollectorAgent.logic.metricstreaming.MetricProjectConfigParser;
+import com.insightfinder.KafkaCollectorAgent.model.KafkaMessageId;
 import com.insightfinder.KafkaCollectorAgent.model.ProjectInfo;
+import com.insightfinder.KafkaCollectorAgent.model.ProjectListKey;
+import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessage;
+import com.insightfinder.KafkaCollectorAgent.model.logmetadatamessage.LogMetadataMessage;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.lang.reflect.Type;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.time.format.ResolverStyle;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -36,22 +36,21 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import javax.annotation.PostConstruct;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
-import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 @Component
+@RequiredArgsConstructor
+@Getter
+@Setter
 public class IFStreamingBufferManager {
 
-  public static Type PROJECT_LIST_TYPE = new TypeToken<Map<String, ProjectInfo>>() {
-  }.getType();
   private static final Set<String> metricFilterSet = new HashSet<>();
 
   static {
@@ -64,7 +63,7 @@ public class IFStreamingBufferManager {
 
   private final ConcurrentHashMap<String, IFStreamingBuffer> collectingDataMap = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<ProjectInfo, Set<JsonObject>> collectingLogDataMap = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, Set<JsonObject>> collectingLogMetadataMap = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<ProjectInfo, Set<JsonObject>> collectingLogMetadataMap = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, IFStreamingBuffer> collectedBufferMap = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Integer> sendingStatistics = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Long> sendingTimeStatistics = new ConcurrentHashMap<>();
@@ -73,68 +72,46 @@ public class IFStreamingBufferManager {
       100000000);
   private final Logger logger = Logger.getLogger(IFStreamingBufferManager.class.getName());
   @Autowired
-  private MeterRegistry registry;
+  private final MeterRegistry registry;
   @Autowired
-  private Gson gson;
+  private final Gson gson;
   @Autowired
-  private IFConfig ifConfig;
+  private final IFConfig ifConfig;
   @Autowired
-  private IFProjectManager projectManager;
+  private final IFProjectManager projectManager;
   @Autowired
-  private WebClient webClient;
+  private final WebClient webClient;
+  @Autowired
+  private final MetricProjectConfigParser metricProjectConfigParser;
+  @Autowired
+  private final LogProjectConfigParser logProjectConfigParser;
+  @Autowired
+  private final LogMessageHandler logMessageHandler;
+  @Autowired
+  private final WebClientEndpoints webClientEndpoints;
+  private Map<String, ProjectInfo> metricProjectList; // project name -> info
+  private Map<ProjectListKey, ProjectInfo> logProjectList; // datasetId -> info
+  private List<ProjectInfo> logMetadataProjectList;
   private boolean isJSON;
   private Pattern dataFormatPattern;
   private Map<String, Integer> namedGroups;
-  private Map<String, ProjectInfo> projectList;
-  private Set<String> instanceList;
   private Pattern metricPattern;
-  private final ExecutorService executorService = Executors.newFixedThreadPool(5);
-
-  public IFStreamingBufferManager() {
-  }
+  private Set<String> instanceList;
+  private ExecutorService executorService;
 
   @SuppressWarnings("unchecked")
   private static Map<String, Integer> getNamedGroups(Pattern regex)
       throws NoSuchMethodException, SecurityException,
       IllegalAccessException, IllegalArgumentException,
       InvocationTargetException {
-
     Method namedGroupsMethod = Pattern.class.getDeclaredMethod("namedGroups");
     namedGroupsMethod.setAccessible(true);
-
     Map<String, Integer> namedGroups;
     namedGroups = (Map<String, Integer>) namedGroupsMethod.invoke(regex);
-
     if (namedGroups == null) {
       throw new InternalError();
     }
-
     return Collections.unmodifiableMap(namedGroups);
-  }
-
-
-  public void setFilter(BloomFilter<String> filter) {
-    this.filter = filter;
-  }
-
-  public void setGson(Gson gson) {
-    this.gson = gson;
-  }
-
-  public void setIfConfig(IFConfig ifConfig) {
-    this.ifConfig = ifConfig;
-  }
-
-  public void setProjectManager(IFProjectManager projectManager) {
-    this.projectManager = projectManager;
-  }
-
-  public void setWebClient(WebClient webClient) {
-    this.webClient = webClient;
-  }
-
-  public void setProjectList(Map<String, ProjectInfo> projectList) {
-    this.projectList = projectList;
   }
 
   @PostConstruct
@@ -150,28 +127,50 @@ public class IFStreamingBufferManager {
         namedGroups = getNamedGroups(dataFormatPattern);
       }
     }
-
     if (ifConfig.getMetricRegex() != null) {
       metricPattern = Pattern.compile(ifConfig.getMetricRegex());
     }
-    if (ifConfig.getProjectList() != null) {
-      projectList = getProjectMapping(ifConfig.getProjectList());
-    }
-
     instanceList = ifConfig.getInstanceList();
+    if (ifConfig.getProjectList() != null) {
+      if (ifConfig.isLogProject()) {
+        logProjectList = logProjectConfigParser.getLogProjectMapping();
+        logMetadataProjectList = logProjectList.entrySet().stream()
+            .filter(entry -> !entry.getKey().hasDatasetName())
+            .map(Entry::getValue)
+            .collect(Collectors.toList());
+        logMetadataProjectList.forEach(projectInfo -> collectingLogMetadataMap.put(projectInfo,
+            ConcurrentHashMap.newKeySet()));
+      } else {
+        metricProjectList = metricProjectConfigParser.getMetricProjectMapping();
+      }
+    }
     //timer thread
+    executorService = Executors.newFixedThreadPool(5);
     executorService.execute(() -> {
       int printMetricsTimer = ifConfig.getKafkaMetricLogInterval();
       int sentTimer = ifConfig.getBufferingTime();
+      int logMetadataSentTimer = ifConfig.getLogMetadataBufferingTime();
       while (true) {
         if (sentTimer <= 0) {
           sentTimer = ifConfig.getBufferingTime();
           //sending data thread
           executorService.execute(() -> {
             if (ifConfig.isLogProject()) {
-              mergeLogDataAndSendToIF2(collectingLogDataMap);
+              logger.info("sending log data");
+              mergeLogDataAndSendToIF(collectingLogDataMap);
             } else {
-              mergeDataAndSendToIF2(collectingDataMap);
+              logger.info("sending metric data");
+              mergeDataAndSendToIF(collectingDataMap);
+            }
+          });
+        }
+
+        if (logMetadataSentTimer <= 0) {
+          logMetadataSentTimer = ifConfig.getLogMetadataBufferingTime();
+          executorService.execute(() -> {
+            if (ifConfig.isLogProject()) {
+              logger.info("sending log metadata");
+              mergeLogMetaDataAndSendToIF(collectingLogMetadataMap);
             }
           });
         }
@@ -190,6 +189,7 @@ public class IFStreamingBufferManager {
           Thread.sleep(1000);
           printMetricsTimer--;
           sentTimer--;
+          logMetadataSentTimer--;
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
@@ -197,208 +197,29 @@ public class IFStreamingBufferManager {
     });
   }
 
-  public Map<String, ProjectInfo> getProjectMapping(String projectList) {
-    Map<String, ProjectInfo> mapping;
-    mapping = gson.fromJson(projectList, PROJECT_LIST_TYPE);
-    Map<String, ProjectInfo> resultMapping = new HashMap<>();
-    for (String projectKey : mapping.keySet()) {
-      String[] keys = projectKey.split(ifConfig.getProjectDelimiter());
-      for (String key : keys) {
-        resultMapping.put(key, mapping.get(projectKey));
-      }
-    }
-
-    return resultMapping;
-  }
-
-  public long getGMTinHourFromMillis(String date, String format) {
-    //"yyyy-MM-dd'T'HH:mm:ssZZZZZ"
-    DateTimeFormatter rfc3339Formatter = DateTimeFormatter.ofPattern(format)
-        .withResolverStyle(ResolverStyle.LENIENT);
-    ZonedDateTime zonedDateTime = parseRfc3339(date, rfc3339Formatter);
-    if (zonedDateTime != null) {
-      return zonedDateTime.toInstant().toEpochMilli();
-    }
-    return -1;
-  }
-
-  public ZonedDateTime parseRfc3339(String rfcDateTime, DateTimeFormatter rfc3339Formatter) {
-    try {
-      return ZonedDateTime.parse(rfcDateTime, rfc3339Formatter);
-    } catch (DateTimeParseException exception) {
-      logger.log(Level.INFO, " can not pare date :" + rfcDateTime);
-    }
-    return null;
-  }
-
-  private JsonObject processMetadata(JsonObject srcData) {
-    JsonObject data = new JsonObject();
-    String instanceStr = getKeyFromJson(srcData, ifConfig.getLogInstanceFieldPathList());
-    if (instanceStr == null) {
-      if (ifConfig.isLogParsingInfo()) {
-        logger.log(Level.INFO, " can not find instance in raw data:" + srcData);
-      }
-      return null;
-    }
-    data.addProperty("instanceName", instanceStr);
-    List<List<String>> logComponentList = getLogComponentList();
-    if (!logComponentList.isEmpty()) {
-      String componentName = getComponentName(srcData, logComponentList);
-      if (componentName != null) {
-        data.addProperty("componentName", componentName);
-      }
-    }
-    return data;
-  }
-
-  private ProjectInfo getIFProjectAndSystemInfo(JsonObject srcData) {
-    for (String keyStr : projectList.keySet()) {
-      String[] keysArr = keyStr.split(",");
-      boolean bMatch = true;
-      for (String key : keysArr) {
-        String[] keyArr = key.split(":");
-        if (keyArr.length == 2 && srcData.has(keyArr[0]) && srcData.get(keyArr[0]).getAsString()
-            .equalsIgnoreCase(keyArr[1])) {
-          bMatch = bMatch && true;
-        } else if (keyArr.length == 1 && srcData.has(keyArr[0])) {
-          bMatch = bMatch && true;
-        } else {
-          bMatch = false;
-        }
-      }
-
-      if (bMatch) {
-        return projectList.get(keyStr);
-      }
-    }
-    return null;
-  }
-
-  private JsonObject processLogData(JsonObject srcData) {
-    JsonObject data = new JsonObject();
-    String timestampStr = getKeyFromJson(srcData, ifConfig.getLogTimestampFieldPathList());
-    if (timestampStr == null) {
-      if (ifConfig.isLogParsingInfo()) {
-        logger.log(Level.INFO, " can not find timestamp in raw data: " + srcData);
-      }
-      return null;
-    }
-    Long timestamp = getGMTinHourFromMillis(timestampStr, ifConfig.getLogTimestampFormat());
-    if (timestamp < 0) {
-      if (ifConfig.isLogParsingInfo()) {
-        logger.log(Level.INFO, " can not parse timestamp from raw data: " + srcData);
-      }
-      return null;
-    }
-    String instanceStr = getKeyFromJson(srcData, ifConfig.getLogInstanceFieldPathList());
-    if (instanceStr == null) {
-      if (ifConfig.isLogParsingInfo()) {
-        logger.log(Level.INFO, " can not find instance in raw data:" + srcData);
-      }
-      return null;
-    }
-
-    data.addProperty("timestamp", timestamp.toString());
-    data.addProperty("tag", instanceStr);
-    data.add("data", srcData);
-    return data;
-  }
-
-  private String getComponentName(JsonObject srcData, List<List<String>> logComponentList) {
-    String componentName = null;
-    if (logComponentList != null) {
-      List<String> subComponents = new ArrayList<>();
-      for (List<String> componentPaths : logComponentList) {
-        componentPaths.forEach(componentPath -> {
-          String value = getKeyFromJson(srcData, Arrays.asList(componentPath));
-          if (value != null) {
-            subComponents.add(value);
-          }
-        });
-        if (subComponents.size() == componentPaths.size()) {
-          componentName = String.join("-", subComponents);
-          return componentName;
-        } else {
-          subComponents.clear();
-        }
-      }
-
-    }
-    return componentName;
-  }
-
-  private List<List<String>> getLogComponentList() {
-    List<String> logComponentFieldPathList = ifConfig.getLogComponentFieldPathList();
-    List<List<String>> ans = new ArrayList<>();
-    if (logComponentFieldPathList != null) {
-      logComponentFieldPathList.forEach(pathStr -> {
-        List<String> pathList = Arrays.asList(pathStr.split("&"));
-        if (!pathList.isEmpty()) {
-          ans.add(pathList);
-        }
-      });
-    }
-    return ans;
-  }
-
-  private String getKeyFromJson(JsonObject jsonObject, List<String> paths) {
-    String value;
-    if (jsonObject != null && paths != null) {
-      for (String pathStr : paths) {
-        JsonObject findValue = jsonObject;
-        String[] pathArr = pathStr.split("\\.");
-        for (int i = 0; i < pathArr.length; i++) {
-          if (findValue.has(pathArr[i])) {
-            if (findValue.get(pathArr[i]).isJsonObject()) {
-              findValue = findValue.get(pathArr[i]).getAsJsonObject();
-            } else {
-              if (i == pathArr.length - 1) {
-                value = findValue.get(pathArr[i]).getAsString();
-                return value;
-              } else {
-                break;
-              }
-            }
-          }
-        }
+  private ProjectInfo getIFProjectInfoFromLogMessageId(KafkaMessageId messageId) {
+    for (ProjectListKey projectListKey : logProjectList.keySet()) {
+      if (projectListKey.matchedMessageId(messageId)) {
+        return logProjectList.get(projectListKey);
       }
     }
     return null;
   }
 
   public void parseString(String topic, String content, long receiveTime) {
-    JsonObject jsonObject;
     if (ifConfig.isLogProject()) {
-      jsonObject = gson.fromJson(content, JsonObject.class);
-      if (ifConfig.getLogMetadataTopics() != null && ifConfig.getLogMetadataTopics()
-          .contains(topic)) {
-        JsonObject data = processMetadata(jsonObject);
-        if (data != null) {
-          if (!collectingLogMetadataMap.containsKey(topic)) {
-            collectingLogMetadataMap.put(topic, ConcurrentHashMap.newKeySet());
-          }
-          Set<JsonObject> jsonArray = collectingLogMetadataMap.get(topic);
-          if (jsonArray != null) {
-            jsonArray.add(data);
-          }
-        }
+      if (isLogMetadataMessage(topic)) {
+        // handle log metadata message
+        handleLogMetadataMessage(content);
       } else {
-        JsonObject data = processLogData(jsonObject);
-        ProjectInfo projectInfo = getIFProjectAndSystemInfo(jsonObject);
-        if (data != null && projectInfo != null) {
-          if (!collectingLogDataMap.containsKey(projectInfo)) {
-            collectingLogDataMap.put(projectInfo, ConcurrentHashMap.newKeySet());
-          }
-          Set<JsonObject> jsonArray = collectingLogDataMap.get(projectInfo);
-          if (jsonArray != null) {
-            jsonArray.add(data);
-          }
-        }
+        // handle log message
+        handleLogMessage(content);
       }
     } else {
       if (isJSON) {
         //to do
       } else {
+        // handle metric message
         if (content.startsWith("\"") && content.endsWith("\"")) {
           content = content.substring(1, content.length() - 1);
         }
@@ -412,7 +233,7 @@ public class IFStreamingBufferManager {
               projectNameStr = String.valueOf(matcher.group(key));
               String[] projectNames = projectNameStr.split(ifConfig.getProjectDelimiter());
               for (String projectName : projectNames) {
-                if (!projectList.containsKey(projectName)) {
+                if (!metricProjectList.containsKey(projectName)) {
                   if (ifConfig.isLogParsingInfo()) {
                     logger.log(Level.INFO, projectName + " not in the projectList ");
                   }
@@ -430,7 +251,7 @@ public class IFStreamingBufferManager {
                 return;
               }
             } else if (key.equalsIgnoreCase(ifConfig.getTimestampKey())) {
-              timeStamp = convertToMS(matcher.group(key));
+              timeStamp = convertTimestampToMS(matcher.group(key));
             } else if (key.equalsIgnoreCase(ifConfig.getMetricKey())) {
               Matcher metricMatcher = metricPattern.matcher(matcher.group(key));
               if (metricMatcher.matches()) {
@@ -457,15 +278,14 @@ public class IFStreamingBufferManager {
             }
 
             for (String projectName : projects) {
-              ProjectInfo ifProjectInfo = projectList.get(projectName);
+              ProjectInfo ifProjectInfo = metricProjectList.get(projectName);
               String ifProjectName = ifProjectInfo.getProject();
               String ifSystemName = ifProjectInfo.getSystem();
-              if (!collectingDataMap.containsKey(ifProjectName)) {
-                collectingDataMap.put(ifProjectName,
-                    new IFStreamingBuffer(ifProjectName, ifSystemName));
-              }
-              collectingDataMap.get(ifProjectName)
-                  .addData(instanceName, Long.parseLong(timeStamp), metricName, metricValue);
+              IFStreamingBuffer ifStreamingBuffer = collectedBufferMap.getOrDefault(ifProjectName,
+                  new IFStreamingBuffer(ifProjectName, ifSystemName));
+              ifStreamingBuffer.addData(instanceName, Long.parseLong(timeStamp), metricName,
+                  metricValue);
+              collectedBufferMap.put(ifSystemName, ifStreamingBuffer);
             }
           }
         } else {
@@ -477,43 +297,64 @@ public class IFStreamingBufferManager {
     }
   }
 
-  public String convertToMS(String timestamp) {
-    StringBuilder stringBuilder = new StringBuilder();
-    stringBuilder.append(timestamp);
-    if (stringBuilder.length() == 10) {
-      stringBuilder.append("000");
-    }
-    return stringBuilder.toString();
+  private boolean isLogMetadataMessage(String topic) {
+    return ifConfig.getLogMetadataTopics() != null && ifConfig.getLogMetadataTopics()
+        .contains(topic);
   }
 
-  public void mergeLogDataAndSendToIF2(Map<ProjectInfo, Set<JsonObject>> collectingDataMap) {
-    for (ProjectInfo projectInfo : collectingDataMap.keySet()) {
+  private void handleLogMetadataMessage(String message) {
+    LogMetadataMessage logMetadataMessage = logMessageHandler.processMetadataMessage(message);
+    if (logMetadataMessage != null && logMetadataMessage.getOutputMessage() != null) {
+      collectingLogMetadataMap.values()
+          .forEach(jsonObjects -> jsonObjects.add(logMetadataMessage.getOutputMessage()));
+    }
+  }
+
+  private void handleLogMessage(String message) {
+    LogMessage logMessage = logMessageHandler.processLogDataMessage(message);
+    if (logMessage != null) {
+      ProjectInfo projectInfo = getIFProjectInfoFromLogMessageId(logMessage.getId());
+      if (projectInfo != null) {
+        Set<JsonObject> jsonArray = collectingLogDataMap.getOrDefault(projectInfo,
+            ConcurrentHashMap.newKeySet());
+        if (jsonArray != null) {
+          jsonArray.add(logMessage.getOutputMessage());
+          collectingLogDataMap.put(projectInfo, jsonArray);
+        }
+      }
+    }
+  }
+
+  public void mergeLogDataAndSendToIF(Map<ProjectInfo, Set<JsonObject>> collectingLogDataMap) {
+    for (ProjectInfo projectInfo : collectingLogDataMap.keySet()) {
       if (projectInfo.getProject() != null && projectInfo.getSystem() != null) {
         String ifProjectName = projectInfo.getProject();
         String ifSystemName = projectInfo.getSystem();
-        Lists.partition(Lists.newArrayList(collectingDataMap.get(projectInfo)), 1000)
-            .forEach(subData -> sendToIF(gson.toJson(subData), ifProjectName, ifSystemName));
-        collectingDataMap.remove(projectInfo);
+        Lists.partition(Lists.newArrayList(collectingLogDataMap.get(projectInfo)), 1000)
+            .forEach(subData -> webClientEndpoints.sendDataToIF(gson.toJson(subData), ifProjectName,
+                ifSystemName));
+        collectingLogDataMap.remove(projectInfo);
       }
     }
-    mergeLogMetaDataAndSendToIF2(collectingLogMetadataMap);
   }
 
-  public void mergeLogMetaDataAndSendToIF2(Map<String, Set<JsonObject>> collectingLogMetadataMap) {
-    if (!collectingLogMetadataMap.isEmpty()) {
-      for (String key : collectingLogMetadataMap.keySet()) {
-        projectList.values().forEach(ifProjectInfo -> {
-          String ifProjectName = ifProjectInfo.getProject();
-          String ifSystemName = ifProjectInfo.getProject();
-          sendMetadataToIF(gson.toJson(collectingLogMetadataMap.get(key)), ifProjectName,
+  public void mergeLogMetaDataAndSendToIF(
+      Map<ProjectInfo, Set<JsonObject>> collectingLogMetadataMap) {
+    for (ProjectInfo projectInfo : collectingLogMetadataMap.keySet()) {
+      if (projectInfo.getProject() != null && projectInfo.getSystem() != null) {
+        String ifProjectName = projectInfo.getProject();
+        String ifSystemName = projectInfo.getSystem();
+        if (!collectingLogMetadataMap.get(projectInfo).isEmpty()) {
+          webClientEndpoints.sendMetadataToIF(
+              gson.toJson(collectingLogMetadataMap.get(projectInfo)), ifProjectName,
               ifSystemName);
-        });
-        collectingLogMetadataMap.remove(key);
+        }
       }
+      collectingLogMetadataMap.put(projectInfo, ConcurrentHashMap.newKeySet());
     }
   }
 
-  public void mergeDataAndSendToIF2(Map<String, IFStreamingBuffer> collectingDataMap) {
+  public void mergeDataAndSendToIF(Map<String, IFStreamingBuffer> collectingDataMap) {
     List<IFStreamingBuffer> sendingDataList = new ArrayList<>();
     for (String key : collectedBufferMap.keySet()) {
       if (collectingDataMap.containsKey(key)) {
@@ -608,56 +449,6 @@ public class IFStreamingBufferManager {
     for (JsonObject jsonObject : sortByTimestampMap.values()) {
       ret.add(jsonObject);
     }
-    sendToIF(ret.toString(), project, system);
-  }
-
-  public void sendMetadataToIF(String data, String ifProjectName, String ifSystemName) {
-    String dataType = ifConfig.isLogProject() ? "Log" : "Metric";
-    if (projectManager.checkAndCreateProject(ifProjectName, ifSystemName, dataType)) {
-      UUID uuid = UUID.randomUUID();
-      MultiValueMap<String, String> bodyValues = new LinkedMultiValueMap<>();
-      bodyValues.add("licenseKey", ifConfig.getLicenseKey());
-      bodyValues.add("projectName", ifProjectName);
-      bodyValues.add("userName", ifConfig.getUserName());
-      bodyValues.add("data", data);
-      bodyValues.add("agentType", ifConfig.getAgentType());
-      int dataSize = data.getBytes(StandardCharsets.UTF_8).length / 1024;
-      webClient.post()
-          .uri("/api/v1/agent-upload-instancemetadata")
-          .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-          .body(BodyInserters.fromFormData(bodyValues))
-          .retrieve()
-          .bodyToMono(String.class)
-          .timeout(Duration.ofMillis(100000))
-          .onErrorResume(throwable -> Mono.just("RETRY"))
-          .subscribe(res -> logger.log(Level.INFO,
-              "sending metadata: request id: " + uuid + " data size: " + dataSize + " kb code: "
-                  + res));
-    }
-  }
-
-  public void sendToIF(String data, String ifProjectName, String ifSystemName) {
-    String dataType = ifConfig.isLogProject() ? "Log" : "Metric";
-    if (projectManager.checkAndCreateProject(ifProjectName, ifSystemName, dataType)) {
-      UUID uuid = UUID.randomUUID();
-      MultiValueMap<String, String> bodyValues = new LinkedMultiValueMap<>();
-      bodyValues.add("licenseKey", ifConfig.getLicenseKey());
-      bodyValues.add("projectName", ifProjectName);
-      bodyValues.add("userName", ifConfig.getUserName());
-      bodyValues.add("metricData", data);
-      bodyValues.add("agentType", ifConfig.getAgentType());
-      int dataSize = data.getBytes(StandardCharsets.UTF_8).length / 1024;
-      webClient.post()
-          .uri("/api/v1/customprojectrawdata")
-          .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-          .body(BodyInserters.fromFormData(bodyValues))
-          .retrieve()
-          .bodyToMono(String.class)
-          .timeout(Duration.ofMillis(100000))
-          .onErrorResume(throwable -> Mono.just("RETRY"))
-          .subscribe(res -> logger.log(Level.INFO,
-              "sending data: request id: " + uuid + " data size: " + dataSize + " kb code: "
-                  + res));
-    }
+    webClientEndpoints.sendDataToIF(ret.toString(), project, system);
   }
 }
