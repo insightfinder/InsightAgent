@@ -194,15 +194,6 @@ public class IFStreamingBufferManager {
     });
   }
 
-  private ProjectInfo getIFProjectInfoFromLogMessageId(KafkaMessageId messageId) {
-    for (ProjectListKey projectListKey : logProjectList.keySet()) {
-      if (projectListKey.matchedMessageId(messageId)) {
-        return logProjectList.get(projectListKey);
-      }
-    }
-    return null;
-  }
-
   public void parseString(String topic, String content, long receiveTime) {
     if (ifConfig.isLogProject()) {
       if (isLogMetadataMessage(topic)) {
@@ -292,6 +283,15 @@ public class IFStreamingBufferManager {
         }
       }
     }
+  }
+
+  private ProjectInfo getIFProjectInfoFromLogMessageId(KafkaMessageId messageId) {
+    for (ProjectListKey projectListKey : logProjectList.keySet()) {
+      if (projectListKey.matchedMessageId(messageId)) {
+        return logProjectList.get(projectListKey);
+      }
+    }
+    return null;
   }
 
   private boolean isLogMetadataMessage(String topic) {
