@@ -156,10 +156,8 @@ public class IFStreamingBufferManager {
           //sending data thread
           executorService.execute(() -> {
             if (ifConfig.isLogProject()) {
-              logger.info("sending log data");
               mergeLogDataAndSendToIF(collectingLogDataMap);
             } else {
-              logger.info("sending metric data");
               mergeDataAndSendToIF(collectingDataMap);
             }
           });
@@ -169,7 +167,6 @@ public class IFStreamingBufferManager {
           logMetadataSentTimer = ifConfig.getLogMetadataBufferingTime();
           executorService.execute(() -> {
             if (ifConfig.isLogProject()) {
-              logger.info("sending log metadata");
               mergeLogMetaDataAndSendToIF(collectingLogMetadataMap);
             }
           });
