@@ -22,7 +22,7 @@ from optparse import OptionParser
 from sys import getsizeof
 from threading import Lock
 from time import sleep
-
+from datetime import datetime
 import arrow
 import pytz
 import regex
@@ -136,7 +136,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
         for timestamp in range(agent_config_vars['his_time_range'][0],
                                agent_config_vars['his_time_range'][1],
                                if_config_vars['sampling_interval']):
-            start_time = timestamp + (collector_id + 1) * collector_interval
+            start_time = timestamp + (collector_id) * collector_interval
             end_time = start_time + collector_interval
 
             # build query
