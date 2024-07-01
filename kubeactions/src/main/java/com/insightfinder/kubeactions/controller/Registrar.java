@@ -3,6 +3,8 @@ package com.insightfinder.kubeactions.controller;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.insightfinder.kubeactions.config.IFConfig;
+import java.util.Map;
+import javax.annotation.PostConstruct;
 import org.jetbrains.annotations.NotNull;
 import org.mapdb.DB;
 import org.slf4j.Logger;
@@ -16,10 +18,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
-
-import javax.annotation.PostConstruct;
-import java.util.Map;
-import java.util.logging.Level;
 
 @Component
 public class Registrar {
