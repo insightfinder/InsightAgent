@@ -25,8 +25,8 @@ class IFConfigTest {
     void testIFConfig(){
         assertThat(ifConfig.getUserName()).isEqualTo("username");
         assertThat(ifConfig.getServerUrl()).isEqualTo("https://stg.insightfinder.com");
-        assertThat(ifConfig.getServerUri()).isEqualTo("/api/v1/customprojectrawdata");
-        assertThat(ifConfig.getCheckAndCreateUri()).isEqualTo("/api/v1/check-and-add-custom-project");
+        assertThat(ifConfig.getServerUri()).isEqualTo("/api/v1/serverUri");
+        assertThat(ifConfig.getCheckAndCreateUri()).isEqualTo("/api/v1/checkAndCreateUri");
         assertThat(ifConfig.getLicenseKey()).isEqualTo("key");
         assertThat(ifConfig.getSamplingIntervalInSeconds()).isEqualTo(300);
         assertThat(ifConfig.getProjectKey()).isEqualTo("project");
@@ -36,9 +36,9 @@ class IFConfigTest {
         assertThat(ifConfig.getValueKey()).isEqualTo("value");
         assertThat(ifConfig.getProjectList()).isEqualTo(
             "{"
-                + "'dataset_id:326CE741-4E1F-404F-BDA2-0D0D48AE4039,item_id': {'project': 'LogBenchmark1','system': 'LogBenchmarkSys1'},"
-                + "'dataset_name:CrashEvent': {'project': 'LogBenchmark2','system': 'LogBenchmarkSys2'},"
-                + "'item_id:item_123': {'project': 'LogBenchmark3','system': 'LogBenchmarkSys3'}"
+                + "'dataset_id:dataset_id_123,item_id': {'project': 'project_name_1','system': 'system_name_1'},"
+                + "'dataset_name:dataset_name': {'project': 'project_name_2','system': 'system_name_2'},"
+                + "'item_id:item_123': {'project': 'project_name_3','system': 'system_name_3'}"
                 + "}"
         );
         assertThat(ifConfig.getInstanceList()).isEqualTo(new HashSet<>(Arrays.asList("100", "200")));
@@ -64,12 +64,12 @@ class IFConfigTest {
         assertThat(ifConfig.getLogTimestampFormat()).isEqualTo("yyyy-MM-dd'T'HH:mm:ss");
         assertThat(ifConfig.getLogTimestampFieldPathList()).isEqualTo(
             Collections.singletonList("item_time"));
-        assertThat(ifConfig.getLogComponentFieldPathList()).isEqualTo(new ArrayList<>(Arrays.asList("device_info.device_brand&device_info.device_modeltype", "device_info.device_name")));
-        assertThat(ifConfig.getLogInstanceFieldPathList()).isEqualTo(Collections.singletonList("device_context_id"));
+        assertThat(ifConfig.getLogComponentFieldPathList()).isEqualTo(new ArrayList<>(Arrays.asList("parent_path.child_path1&parent_path.child_path2", "parent_path.child_path3")));
+        assertThat(ifConfig.getLogInstanceFieldPathList()).isEqualTo(Collections.singletonList("instance_id"));
         assertThat(ifConfig.getLogMetadataTopics()).isEqualTo(new HashSet<>(Arrays.asList("metadata", "metadata1")));
         List<List<String>> componentList = new ArrayList<>();
-        componentList.add(Arrays.asList("device_info.device_brand", "device_info.device_modeltype"));
-        componentList.add(Collections.singletonList("device_info.device_name"));
+        componentList.add(Arrays.asList("parent_path.child_path1", "parent_path.child_path2"));
+        componentList.add(Collections.singletonList("parent_path.child_path3"));
         assertThat(ifConfig.getLogComponentList()).isEqualTo(componentList);
     }
 }
