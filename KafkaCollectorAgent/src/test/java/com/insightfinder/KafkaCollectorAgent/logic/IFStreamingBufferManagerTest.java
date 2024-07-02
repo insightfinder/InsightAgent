@@ -232,7 +232,7 @@ class IFStreamingBufferManagerTest {
           jsonArray
       );
       ifStreamingBufferManager.mergeLogDataAndSendToIF(collectingLogDataMap);
-      verify(webClientEndpoints, times(1)).sendDataToIF(messageCapture.capture(), projectName.capture(),
+      verify(webClientEndpoints, times(1)).sendLogDataToIF(messageCapture.capture(), projectName.capture(),
           systemName.capture());
       assertThat(collectingLogDataMap).isEmpty();
       assertThat(projectName.getValue()).isEqualTo("p");
@@ -254,14 +254,14 @@ class IFStreamingBufferManagerTest {
           jsonArray
       );
       ifStreamingBufferManager.mergeLogDataAndSendToIF(collectingLogDataMap);
-      verify(webClientEndpoints, times(2)).sendDataToIF(anyString(), anyString(), anyString());
+      verify(webClientEndpoints, times(2)).sendLogDataToIF(anyString(), anyString(), anyString());
     }
 
     @Test
     void testSendLogDataEmpty() {
       ConcurrentHashMap<ProjectInfo, Set<JsonObject>> collectingLogDataMap = new ConcurrentHashMap<>();
       ifStreamingBufferManager.mergeLogDataAndSendToIF(collectingLogDataMap);
-      verify(webClientEndpoints, times(0)).sendDataToIF(anyString(), anyString(), anyString());
+      verify(webClientEndpoints, times(0)).sendLogDataToIF(anyString(), anyString(), anyString());
     }
 
     @Test
@@ -274,7 +274,7 @@ class IFStreamingBufferManagerTest {
           jsonArray
       );
       ifStreamingBufferManager.mergeLogDataAndSendToIF(collectingLogDataMap);
-      verify(webClientEndpoints, times(0)).sendDataToIF(anyString(), anyString(), anyString());
+      verify(webClientEndpoints, times(0)).sendLogDataToIF(anyString(), anyString(), anyString());
     }
   }
 }

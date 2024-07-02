@@ -156,8 +156,10 @@ public class IFStreamingBufferManager {
           //sending data thread
           executorService.execute(() -> {
             if (ifConfig.isLogProject()) {
+              logger.info("sending log data");
               mergeLogDataAndSendToIF(collectingLogDataMap);
             } else {
+              logger.info("sending metric data");
               mergeDataAndSendToIF(collectingDataMap);
             }
           });
@@ -167,6 +169,7 @@ public class IFStreamingBufferManager {
           logMetadataSentTimer = ifConfig.getLogMetadataBufferingTime();
           executorService.execute(() -> {
             if (ifConfig.isLogProject()) {
+              logger.info("sending metadata");
               mergeLogMetaDataAndSendToIF(collectingLogMetadataMap);
             }
           });
@@ -198,9 +201,11 @@ public class IFStreamingBufferManager {
     if (ifConfig.isLogProject()) {
       if (isLogMetadataMessage(topic)) {
         // handle log metadata message
+        logger.info("received metadata: " + content);
         handleLogMetadataMessage(content);
       } else {
         // handle log message
+        logger.info("received log: " + content);
         handleLogMessage(content);
       }
     } else {
@@ -328,7 +333,7 @@ public class IFStreamingBufferManager {
         String ifProjectName = projectInfo.getProject();
         String ifSystemName = projectInfo.getSystem();
         Lists.partition(Lists.newArrayList(collectingLogDataMap.get(projectInfo)), 1000)
-            .forEach(subData -> webClientEndpoints.sendDataToIF(gson.toJson(subData), ifProjectName,
+            .forEach(subData -> webClientEndpoints.sendLogDataToIF(gson.toJson(subData), ifProjectName,
                 ifSystemName));
         collectingLogDataMap.remove(projectInfo);
       }
@@ -446,6 +451,6 @@ public class IFStreamingBufferManager {
     for (JsonObject jsonObject : sortByTimestampMap.values()) {
       ret.add(jsonObject);
     }
-    webClientEndpoints.sendDataToIF(ret.toString(), project, system);
+    webClientEndpoints.sendLogDataToIF(ret.toString(), project, system);
   }
 }

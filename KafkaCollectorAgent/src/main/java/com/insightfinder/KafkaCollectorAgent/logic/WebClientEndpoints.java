@@ -24,6 +24,7 @@ public class WebClientEndpoints {
   @Autowired private final IFConfig ifConfig;
   @Autowired private final WebClient webClient;
   private static final Logger logger = Logger.getLogger(WebClientEndpoints.class.getName());
+  private static final String REQUEST_ID = "Request-Id";
 
   public void sendMetadataToIF(String data, String ifProjectName, String ifSystemName) {
     String dataType = ifConfig.isLogProject() ? "Log" : "Metric";
@@ -39,6 +40,7 @@ public class WebClientEndpoints {
       webClient.post()
           .uri("/api/v1/agent-upload-instancemetadata")
           .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+          .header(REQUEST_ID, uuid.toString())
           .body(BodyInserters.fromFormData(bodyValues))
           .retrieve()
           .bodyToMono(String.class)
@@ -50,7 +52,7 @@ public class WebClientEndpoints {
     }
   }
 
-  public void sendDataToIF(String data, String ifProjectName, String ifSystemName) {
+  public void sendLogDataToIF(String data, String ifProjectName, String ifSystemName) {
     String dataType = ifConfig.isLogProject() ? "Log" : "Metric";
     if (projectManager.checkAndCreateProject(ifProjectName, ifSystemName, dataType)) {
       UUID uuid = UUID.randomUUID();
@@ -64,6 +66,7 @@ public class WebClientEndpoints {
       webClient.post()
           .uri("/api/v1/customprojectrawdata")
           .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+          .header(REQUEST_ID, uuid.toString())
           .body(BodyInserters.fromFormData(bodyValues))
           .retrieve()
           .bodyToMono(String.class)
