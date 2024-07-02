@@ -5,7 +5,6 @@ import (
 	"log"
 	"loki-audit-log/loki"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -16,7 +15,8 @@ import (
 const PROJECT_END_POINT = "api/v1/check-and-add-custom-project"
 const IF_SECTION_NAME = "insightfinder"
 const LOKI_SECTION_NAME = "loki"
-const LOKI_REGEX = `com.insightfinder.models.AuditLog - User: ([^,]+), Operation: (.*)`
+
+//const LOKI_REGEX = `com.insightfinder.models.AuditLog - User: ([^,]+), Operation: (.*)`
 
 func getIFConfigsSection(p *configparser.ConfigParser) map[string]interface{} {
 	// Required parameters
@@ -188,22 +188,29 @@ func getLokiAuditLog(p *configparser.ConfigParser) (res []loki.LokiLogData) {
 }
 
 func processLokiLog(p *configparser.ConfigParser, lokiData []loki.LokiLogData) (res []LogData) {
-	operationRegex := regexp.MustCompile(LOKI_REGEX)
+	//operationRegex := regexp.MustCompile(LOKI_REGEX)
 	for _, logEntry := range lokiData {
-		operationMatch := operationRegex.FindStringSubmatch(logEntry.Text)
+		//operationMatch := operationRegex.FindStringSubmatch(logEntry.Text)
 
-		if len(operationMatch) == 3 {
-			user := operationMatch[1]
-			operation := operationMatch[2]
-			fmt.Printf("User: %s, Operation: %s\n", user, operation)
-			res = append(res, LogData{
-				Tag:       user,
-				TimeStamp: logEntry.Timestamp.UnixMilli(),
-				Data:      operation,
-			})
-		} else {
-			log.Output(2, "[WARNING] No matched field found for currnet log record: "+logEntry.Text)
-		}
+		//if len(operationMatch) == 3 {
+		//	user := operationMatch[1]
+		//	operation := operationMatch[2]
+		//	fmt.Printf("User: %s, Operation: %s\n", user, operation)
+		//	res = append(res, LogData{
+		//		Tag:       user,
+		//		TimeStamp: logEntry.Timestamp.UnixMilli(),
+		//		Data:      operation,
+		//	})
+		//} else {
+		//	log.Output(2, "[WARNING] No matched field found for currnet log record: "+logEntry.Text)
+		//}
+
+		//fmt.Printf("User: %s, Operation: %s\n", user, operation)
+		res = append(res, LogData{
+			Tag:       logEntry.Container,
+			TimeStamp: logEntry.Timestamp.UnixMilli(),
+			Data:      logEntry.Text,
+		})
 	}
 	return
 }
