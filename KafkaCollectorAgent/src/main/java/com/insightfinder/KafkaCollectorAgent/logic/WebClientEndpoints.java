@@ -52,7 +52,7 @@ public class WebClientEndpoints {
     }
   }
 
-  public void sendLogDataToIF(String data, String ifProjectName, String ifSystemName) {
+  public void sendDataToIF(String data, String ifProjectName, String ifSystemName) {
     String dataType = ifConfig.isLogProject() ? "Log" : "Metric";
     if (projectManager.checkAndCreateProject(ifProjectName, ifSystemName, dataType)) {
       UUID uuid = UUID.randomUUID();

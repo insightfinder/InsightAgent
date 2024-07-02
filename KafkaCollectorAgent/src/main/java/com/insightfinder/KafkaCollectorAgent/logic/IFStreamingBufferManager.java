@@ -333,7 +333,7 @@ public class IFStreamingBufferManager {
         String ifProjectName = projectInfo.getProject();
         String ifSystemName = projectInfo.getSystem();
         Lists.partition(Lists.newArrayList(collectingLogDataMap.get(projectInfo)), 1000)
-            .forEach(subData -> webClientEndpoints.sendLogDataToIF(gson.toJson(subData), ifProjectName,
+            .forEach(subData -> webClientEndpoints.sendDataToIF(gson.toJson(subData), ifProjectName,
                 ifSystemName));
         collectingLogDataMap.remove(projectInfo);
       }
@@ -451,6 +451,6 @@ public class IFStreamingBufferManager {
     for (JsonObject jsonObject : sortByTimestampMap.values()) {
       ret.add(jsonObject);
     }
-    webClientEndpoints.sendLogDataToIF(ret.toString(), project, system);
+    webClientEndpoints.sendDataToIF(ret.toString(), project, system);
   }
 }
