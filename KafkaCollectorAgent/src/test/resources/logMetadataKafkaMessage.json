@@ -1,0 +1,52 @@
+{
+  "device_id": "0c7cf193e6a6426f2241a671822a5141a9b8b3f7fafc7c8707da0d68981d4466",
+  "dataset_id": "03d21916f27e41ebb8b377372521fbc7",
+  "device_info": {
+    "device_id": "0c7cf193e6a6426f2241a671822a5141a9b8b3f7fafc7c8707da0d68981d4466",
+    "device_id2": "",
+    "device_name": "20BTZ0A2US",
+    "device_display_name": "Jasons-PC",
+    "device_manufacturer": "LENOVO",
+    "device_brand": "Think",
+    "device_subbrand": "ThinkPad",
+    "device_family": "ThinkPad X1 Carbon 3rd",
+    "device_modeltype": "20BTZ0A2US",
+    "device_enclosuretype": "Notebook",
+    "device_bios_version": "N14ET33W (1.11 )",
+    "device_image_info": "ThinkPad",
+    "device_ec_version": "N14ET33W (1.11 )",
+    "device_smbios_version": "3.2",
+    "os_name": "Windows 10 Pro",
+    "os_version": "10.0.17134.228",
+    "os_language": "en-US",
+    "os_country": "US",
+    "os_update_title": "Intel Corporation - SoftwareComponent - 2.11.100.3",
+    "dos_update_description": "Intel Corporation SoftwareComponent driver update released in November 2020",
+    "device_info_datetime": "2018-08-15T12:51:21-04:00",
+    "device_path": "organization\\LenovoAutoclaimed",
+    "device_subscription": "0x1",
+    "device_extension_keyvalue": [
+      "key1",
+      "value1",
+      "key2",
+      "value2"
+    ]
+  },
+  "region_info": {
+    "region_name": "",
+    "country_name": "United States",
+    "country_code": "US",
+    "time_zone": "UTC+03:00",
+    "language_name": "English",
+    "language_code": "en-US",
+    "region_info_datetime": "2018-08-15T12:52:31-04:00"
+  },
+  "udc_info": {
+    "udc_id": "0f9c839cb36647fc925197b675dc39bb",
+    "udc_version": "1.0.0.156",
+    "udc_name": "Lenovo Universal Device Client",
+    "udc_info_datetime": "2018-08-15T12:52:31-04:00",
+    "udc_channel": "2018-08-15T12:52:31-04:00",
+    "udc_key": "2018-08-15T12:52:31-04:00"
+  }
+}
