@@ -1,11 +1,11 @@
 {
-  "tenant_id": "ququqacomtest",
-  "device_id": "23aba3616b8bd2c84ac22b59e97ccea8700ef0dac72c214c2707022d97de8123",
-  "dataset_context_id": "3243920D-6CF8-4E5E-9284-5BB28C92107A",
-  "item_id": "174C0422-C9BE-40FE-AB66-2965B73A4AB2",
-  "dataset_id": "1118F4A1-5F72-4175-8CCD-36F64DBE5133",
-  "device_context_id": "CD188F01-506C-4D50-8E7D-5553A87800EE",
-  "item_name": "DeviceStatus",
+  "tenant_id": "tenant_id",
+  "device_id": "device_id",
+  "dataset_context_id": "dataset_context_id",
+  "item_id": "item_id",
+  "dataset_id": "dataset_id",
+  "device_context_id": "device_context_id",
+  "item_name": "item_name",
   "schema_ver": "2.0",
   "item_data": {
     "DeviceManagementState": "1",
@@ -15,12 +15,12 @@
     "DeviceEnrollmentState": "1",
     "DeviceActionState": "255"
   },
-  "subscription_id": "770297f8-cd6a-11e9-a32f-2a2ae2dbcce4",
+  "subscription_id": "subscription_id",
   "subscription_ids": [
-    "770297f8-cd6a-11e9-a32f-2a2ae2dbcce4"
+    "subscription_ids"
   ],
   "item_context_id": "",
   "report_time": "2024-06-30T00:03:43.926Z",
-  "schema_id": "24250461-532b-47db-b284-93262121007e",
+  "schema_id": "schema_id",
   "item_time": "2024-06-30T03:00:16+03:00"
 }

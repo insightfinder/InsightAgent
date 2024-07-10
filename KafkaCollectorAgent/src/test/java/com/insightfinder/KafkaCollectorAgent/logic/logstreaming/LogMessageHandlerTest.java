@@ -61,8 +61,8 @@ public class LogMessageHandlerTest {
     when(ifConfig.getLogComponentList()).thenReturn(componentList);
     JsonObject outputJson = new JsonObject();
     outputJson.addProperty("instanceName",
-        "0c7cf193e6a6426f2241a671822a5141a9b8b3f7fafc7c8707da0d68981d4466");
-    outputJson.addProperty("componentName", "Think-20BTZ0A2US");
+        "device_id");
+    outputJson.addProperty("componentName", "device_brand-device_modeltype");
     LogMetadataMessage expectedMessage = LogMetadataMessage.builder()
         .outputMessage(outputJson)
         .build();
@@ -77,10 +77,10 @@ public class LogMessageHandlerTest {
     when(ifConfig.getLogInstanceFieldPathList()).thenReturn(Collections.singletonList("device_context_id"));
     JsonObject outputJson = new JsonObject();
     outputJson.addProperty("timestamp", "1719705616000");
-    outputJson.addProperty("tag", "CD188F01-506C-4D50-8E7D-5553A87800EE");
+    outputJson.addProperty("tag", "device_context_id");
     outputJson.add("data", gson.fromJson(rawMessage, JsonObject.class));
     LogMessage expectedOutput = LogMessage.builder()
-        .id(LogMessageId.builder().name("dataset_id").id("1118F4A1-5F72-4175-8CCD-36F64DBE5133").build())
+        .id(LogMessageId.builder().name("dataset_id").id("dataset_id").build())
         .outputMessage(outputJson)
         .build();
     assertThat(logMessageHandler.processLogDataMessage(rawMessage)).isEqualTo(expectedOutput);
