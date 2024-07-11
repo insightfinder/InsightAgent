@@ -68,7 +68,7 @@ func (jc *JaegerClient) QueryTrace(startTime time.Time, endTime time.Time, spanC
 		for _, span := range trace.Spans {
 
 			// Create TagsMap from Tags
-			span.TagMap = make(map[string]StringOrBool)
+			span.TagMap = make(map[string]any)
 			for tag := range span.Tags {
 				span.TagMap[span.Tags[tag].Key] = span.Tags[tag].Value
 			}
