@@ -10,6 +10,7 @@ type LokiLogData struct {
 	Pod       string    `validate:"required"`
 	Text      string    `validate:"required"`
 	Node      string    `validate:"required"`
+	Container string
 }
 
 func (logData *LokiLogData) Empty() {
@@ -18,6 +19,7 @@ func (logData *LokiLogData) Empty() {
 	logData.Pod = ""
 	logData.Text = ""
 	logData.Node = ""
+	logData.Container = ""
 }
 
 func (logData *LokiLogData) IsEmpty() bool {
