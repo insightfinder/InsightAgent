@@ -1,4 +1,4 @@
-[logreplay]
+[logfilereplay]
 # Log files to parse, supports glob patterns and split by ;
 log_files = data/**/*.json
 
@@ -14,7 +14,9 @@ instance_field = _source.agent.hostname
 # Field to extract the timestamp from
 timestamp_field = _source.@timestamp
 
-# Field to get the log data, if not set, the whole message will be used
+# The field that needs to stream, if not set, the whole message will be used
+# Put more than one field by separating them with comma
+# log_data_field = _source.log.file.path,_source.message
 log_data_field =
 
 # Optional timezone of the timestamp if the log format is TZ naive (example: "Asia/Tokyo")
@@ -42,3 +44,4 @@ chunk_size_kb = 2048
 if_url = https://app.insightfinder.com
 if_http_proxy =
 if_https_proxy =
+collector_type = logfilereplay
