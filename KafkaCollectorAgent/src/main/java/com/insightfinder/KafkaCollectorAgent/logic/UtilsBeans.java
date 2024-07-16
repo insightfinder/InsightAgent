@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
+import java.nio.file.Files;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.client.reactive.ClientHttpConnector;
@@ -43,7 +44,9 @@ public class UtilsBeans {
                 logger.log(Level.INFO, "key store algorithm <ssl.KeyManagerFactory.algorithm>: " + KeyManagerFactory.getDefaultAlgorithm());
                 loadKeys = true;
                 KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-                keyStore.load(new FileInputStream(ResourceUtils.getFile(ifConfig.getKeystoreFile())), ifConfig.getKeystorePassword().toCharArray());
+                keyStore.load(
+                    Files.newInputStream(
+                        ResourceUtils.getFile(ifConfig.getKeystoreFile()).toPath()), ifConfig.getKeystorePassword().toCharArray());
                 KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
                 keyManagerFactory.init(keyStore, ifConfig.getKeystorePassword().toCharArray());
                 sslContextBuilder = sslContextBuilder.keyManager(keyManagerFactory);
@@ -56,7 +59,8 @@ public class UtilsBeans {
                 logger.log(Level.INFO, "trust store algorithm <ssl.KeyManagerFactory.algorithm>: " + KeyManagerFactory.getDefaultAlgorithm());
                 loadKeys = true;
                 KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
-                trustStore.load(new FileInputStream((ResourceUtils.getFile(ifConfig.getTruststoreFile()))), ifConfig.getTruststorePassword().toCharArray());
+                trustStore.load(Files.newInputStream(
+                    ResourceUtils.getFile(ifConfig.getTruststoreFile()).toPath()), ifConfig.getTruststorePassword().toCharArray());
                 TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
                 trustManagerFactory.init(trustStore);
                 sslContextBuilder = sslContextBuilder.trustManager(trustManagerFactory);
@@ -66,7 +70,6 @@ public class UtilsBeans {
             } else {
                 return null;
             }
-
         } catch (Exception e) {
             throw new RuntimeException("Error creating SSL context.");
         }
