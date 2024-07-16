@@ -1,0 +1,52 @@
+{
+  "device_id": "device_id",
+  "dataset_id": "dataset_id",
+  "device_info": {
+    "device_id": "device_info.device_id",
+    "device_id2": "",
+    "device_name": "device_name",
+    "device_display_name": "device_display_name",
+    "device_manufacturer": "device_manufacturer",
+    "device_brand": "device_brand",
+    "device_subbrand": "device_subbrand",
+    "device_family": "device_family",
+    "device_modeltype": "device_modeltype",
+    "device_enclosuretype": "device_enclosuretype",
+    "device_bios_version": "device_bios_version",
+    "device_image_info": "device_image_info",
+    "device_ec_version": "device_ec_version",
+    "device_smbios_version": "1.0",
+    "os_name": "os_name",
+    "os_version": "os_version",
+    "os_language": "en-US",
+    "os_country": "US",
+    "os_update_title": "os_update_title",
+    "dos_update_description": "dos_update_description",
+    "device_info_datetime": "2018-08-15T12:51:21-04:00",
+    "device_path": "organization\\device_path",
+    "device_subscription": "0x1",
+    "device_extension_keyvalue": [
+      "key1",
+      "value1",
+      "key2",
+      "value2"
+    ]
+  },
+  "region_info": {
+    "region_name": "",
+    "country_name": "United States",
+    "country_code": "US",
+    "time_zone": "UTC+03:00",
+    "language_name": "English",
+    "language_code": "en-US",
+    "region_info_datetime": "2018-08-15T12:52:31-04:00"
+  },
+  "udc_info": {
+    "udc_id": "udc_id",
+    "udc_version": "1.0.0.0",
+    "udc_name": "udc_name",
+    "udc_info_datetime": "2018-08-15T12:52:31-04:00",
+    "udc_channel": "2018-08-15T12:52:31-04:00",
+    "udc_key": "2018-08-15T12:52:31-04:00"
+  }
+}

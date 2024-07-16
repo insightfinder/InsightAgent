@@ -1,0 +1,26 @@
+{
+  "tenant_id": "tenant_id",
+  "device_id": "device_id",
+  "dataset_context_id": "dataset_context_id",
+  "item_id": "item_id",
+  "dataset_id": "dataset_id",
+  "device_context_id": "device_context_id",
+  "item_name": "item_name",
+  "schema_ver": "2.0",
+  "item_data": {
+    "DeviceManagementState": "1",
+    "DeviceState": "1",
+    "DeviceComplianceState": "255",
+    "EDMSubscriptionState": "255",
+    "DeviceEnrollmentState": "1",
+    "DeviceActionState": "255"
+  },
+  "subscription_id": "subscription_id",
+  "subscription_ids": [
+    "subscription_ids"
+  ],
+  "item_context_id": "",
+  "report_time": "2024-06-30T00:03:43.926Z",
+  "schema_id": "schema_id",
+  "item_time": "2024-06-30T03:00:16+03:00"
+}
