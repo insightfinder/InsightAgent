@@ -8,6 +8,7 @@ import (
 	"github.com/golang-module/carbon/v2"
 	"github.com/rs/zerolog/log"
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 	. "insightagent-go/insightfinder"
 	"io"
 	"os"
@@ -143,8 +144,19 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 				continue
 			}
 
+			// Only Save selected fields
 			if config.logDataField != "" {
-				data = gjson.Get(line, config.logDataField).String()
+				filteredData := `{}`
+				var err error
+				dataFields := strings.Split(config.logDataField, ",")
+				for _, field := range dataFields {
+					value := gjson.Get(data, field)
+					filteredData, err = sjson.SetRaw(filteredData, field, value.Raw)
+					if err != nil {
+						log.Error().Msgf("Error filtering data field: %s", field)
+					}
+				}
+				data = filteredData
 			}
 
 			LogDataList = append(LogDataList, LogData{
