@@ -1,0 +1,17 @@
+syntax = "proto3";
+package proto;
+option java_package = "com.insightfinder.InsightFinderAgent.proto";
+option java_outer_classname = "IfAgentInstructionWrapper";
+
+message IfAgentInstruction {
+  oneof instruction {
+    HPAAction HPA_action = 1;
+  }
+}
+
+message HPAAction {
+  string agent_id = 1;
+  string namespace = 2;
+  string deployment = 3;
+  uint32 replica = 4;
+}

@@ -16,6 +16,42 @@
 	<properties>
 		<java.version>21</java.version>
 	</properties>
+	<build>
+		<extensions>
+			<extension>
+				<artifactId>os-maven-plugin</artifactId>
+				<groupId>kr.motd.maven</groupId>
+				<version>1.6.2</version>
+			</extension>
+		</extensions>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<artifactId>protobuf-maven-plugin</artifactId>
+				<configuration>
+					<pluginArtifact>io.grpc:protoc-gen-grpc-java:1.42.1:exe:${os.detected.classifier}
+					</pluginArtifact>
+					<pluginId>grpc-java</pluginId>
+					<protocArtifact>com.google.protobuf:protoc:3.21.1:exe:${os.detected.classifier}
+					</protocArtifact>
+				</configuration>
+				<executions>
+					<execution>
+						<goals>
+							<goal>compile</goal>
+							<goal>compile-custom</goal>
+						</goals>
+					</execution>
+				</executions>
+				<groupId>org.xolstice.maven.plugins</groupId>
+				<version>0.6.1</version>
+			</plugin>
+		</plugins>
+	</build>
+
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -80,15 +116,35 @@
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-	</dependencies>
 
-	<build>
-		<plugins>
-			<plugin>
-				<groupId>org.springframework.boot</groupId>
-				<artifactId>spring-boot-maven-plugin</artifactId>
-			</plugin>
-		</plugins>
-	</build>
+		<dependency>
+			<artifactId>protobuf-java-util</artifactId>
+			<groupId>com.google.protobuf</groupId>
+			<version>3.19.4</version>
+		</dependency>
+		<dependency>
+			<artifactId>protobuf-java</artifactId>
+			<groupId>com.google.protobuf</groupId>
+			<version>3.19.6</version>
+		</dependency>
+		<dependency>
+			<artifactId>spring-boot-starter-websocket</artifactId>
+			<groupId>org.springframework.boot</groupId>
+		</dependency>
+		<dependency>
+			<artifactId>javax.websocket-api</artifactId>
+			<groupId>javax.websocket</groupId>
+			<version>1.1</version>
+		</dependency>
+		<dependency>
+			<artifactId>tyrus-standalone-client</artifactId>
+			<groupId>org.glassfish.tyrus.bundles</groupId>
+			<version>1.15</version>
+		</dependency>
+		<dependency>
+			<artifactId>spring-messaging</artifactId>
+			<groupId>org.springframework</groupId>
+		</dependency>
+	</dependencies>
 
 </project>
