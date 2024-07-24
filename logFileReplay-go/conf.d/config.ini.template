@@ -3,7 +3,7 @@
 log_files = data/**/*.json
 
 # Default instance if instance_field is not set or cannot get
-default_instance = instance
+default_instance =
 
 # Component field, optional
 component_field = _source.agent.type
