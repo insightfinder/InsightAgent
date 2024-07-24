@@ -115,7 +115,7 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 
 			// Get the component, instance and timestamp from the json data
 			component := ""
-			instance := config.defaultInstance
+			instance := ""
 			timestamp := int64(0)
 			data := line
 
@@ -159,10 +159,23 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 				}
 			}
 
-			if timestamp == 0 || instance == "" {
-				log.Info().Msgf("Cannot get timestamp and instance from log line, ignored")
+			if timestamp == 0 {
+				log.Error().Msgf("Timestamp field %s is missing in the log", config.timestampField)
 				log.Debug().Msgf(line)
 				continue
+			}
+
+			if instance == "" {
+				// Try default instance
+				if config.defaultInstance != "" {
+					instance = config.defaultInstance
+					log.Warn().Msgf("Instance field %s is missing in the log, default to %s", config.timestampField, instance)
+					log.Debug().Msgf(line)
+				} else {
+					log.Error().Msgf("Instance field %s is missing in the log", config.instanceField)
+					log.Debug().Msgf(line)
+					continue
+				}
 			}
 
 			// Only Save selected fields
