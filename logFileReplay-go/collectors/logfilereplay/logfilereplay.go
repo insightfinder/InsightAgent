@@ -11,8 +11,10 @@ import (
 	"github.com/tidwall/sjson"
 	. "insightagent-go/insightfinder"
 	"io"
+	"math"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -113,7 +115,7 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 
 			// Get the component, instance and timestamp from the json data
 			component := ""
-			instance := config.defaultInstance
+			instance := ""
 			timestamp := int64(0)
 			data := line
 
@@ -128,20 +130,52 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 			if config.timestampField != "" {
 				timestampStr := gjson.Get(line, config.timestampField).String()
 				if timestampStr != "" {
-					cts := carbon.Parse(timestampStr)
-					if cts.Error == nil {
-						timestamp = cts.TimestampMilli()
-						if config.TimezoneOffsetSeconds != 0 {
-							timestamp = timestamp + int64(config.TimezoneOffsetSeconds*1000)
+					// Try to parse the timestamp as a number first
+					timestampNum, err := strconv.ParseInt(timestampStr, 10, 64)
+					if err == nil {
+
+						// If the digits are not 13. Adjust the timestamp
+						if len(timestampStr) != 13 {
+							lengthDiff := 13 - len(timestampStr)
+							if lengthDiff > 0 {
+								// If the digits are less than 13, add 0s to the end
+								timestampNum = timestampNum * int64(math.Pow10(lengthDiff))
+							} else {
+								// If the digits are more than 13, remove the extra digits
+								timestampNum = timestampNum / int64(math.Pow10(-lengthDiff))
+							}
+						}
+						timestamp = timestampNum
+					} else {
+						// Try to parse the timestamp as a date string
+						cts := carbon.Parse(timestampStr)
+						if cts.Error == nil {
+							timestamp = cts.TimestampMilli()
+							if config.TimezoneOffsetSeconds != 0 {
+								timestamp = timestamp + int64(config.TimezoneOffsetSeconds*1000)
+							}
 						}
 					}
 				}
 			}
 
-			if timestamp == 0 || instance == "" {
-				log.Info().Msgf("Cannot get timestamp and instance from log line, ignored")
+			if timestamp == 0 {
+				log.Error().Msgf("Timestamp field %s is missing in the log", config.timestampField)
 				log.Debug().Msgf(line)
 				continue
+			}
+
+			if instance == "" {
+				// Try default instance
+				if config.defaultInstance != "" {
+					instance = config.defaultInstance
+					log.Warn().Msgf("Instance field %s is missing in the log, default to %s", config.timestampField, instance)
+					log.Debug().Msgf(line)
+				} else {
+					log.Error().Msgf("Instance field %s is missing in the log", config.instanceField)
+					log.Debug().Msgf(line)
+					continue
+				}
 			}
 
 			// Only Save selected fields
