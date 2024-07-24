@@ -11,8 +11,10 @@ import (
 	"github.com/tidwall/sjson"
 	. "insightagent-go/insightfinder"
 	"io"
+	"math"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -128,11 +130,30 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 			if config.timestampField != "" {
 				timestampStr := gjson.Get(line, config.timestampField).String()
 				if timestampStr != "" {
-					cts := carbon.Parse(timestampStr)
-					if cts.Error == nil {
-						timestamp = cts.TimestampMilli()
-						if config.TimezoneOffsetSeconds != 0 {
-							timestamp = timestamp + int64(config.TimezoneOffsetSeconds*1000)
+					// Try to parse the timestamp as a number first
+					timestampNum, err := strconv.ParseInt(timestampStr, 10, 64)
+					if err == nil {
+
+						// If the digits are not 13. Adjust the timestamp
+						if len(timestampStr) != 13 {
+							lengthDiff := 13 - len(timestampStr)
+							if lengthDiff > 0 {
+								// If the digits are less than 13, add 0s to the end
+								timestampNum = timestampNum * int64(math.Pow10(lengthDiff))
+							} else {
+								// If the digits are more than 13, remove the extra digits
+								timestampNum = timestampNum / int64(math.Pow10(-lengthDiff))
+							}
+						}
+						timestamp = timestampNum
+					} else {
+						// Try to parse the timestamp as a date string
+						cts := carbon.Parse(timestampStr)
+						if cts.Error == nil {
+							timestamp = cts.TimestampMilli()
+							if config.TimezoneOffsetSeconds != 0 {
+								timestamp = timestamp + int64(config.TimezoneOffsetSeconds*1000)
+							}
 						}
 					}
 				}
