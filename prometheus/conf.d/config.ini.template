@@ -55,6 +55,8 @@ component_field =
 default_component_name
 # if no instance given, will set to 'Application'. Can also set instance name from multiple fields which separated by commas. Ex: instance_name_part1,instance_name_part2.
 instance_field = instance
+# Instance name suffix, if want to add on to instance name obtained from labels
+instance_name_suffix =
 # field names used to get host id
 dynamic_host_field =
 # instance_whitelist is a regex string used to define which instances will be filtered.
