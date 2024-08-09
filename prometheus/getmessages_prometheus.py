@@ -532,7 +532,6 @@ def get_agent_config_vars(logger, config_ini):
         config_vars = {'prometheus_kwargs': prometheus_kwargs, 'auth_kwargs': auth_kwargs, 'ssl_kwargs': ssl_kwargs,
                        'api_url': api_url, 'prometheus_query': prometheus_query,
                        'metrics_name_field': metrics_name_field, 'his_time_range': his_time_range,
-
                        'proxies': agent_proxies, 'data_format': data_format,  # 'project_field': project_fields,
                        'component_field': component_field, 'default_component_name': default_component_name,
                        'instance_field': instance_fields, 'instance_name_suffix': instance_name_suffix, 'dynamic_host_field': dynamic_host_field,
