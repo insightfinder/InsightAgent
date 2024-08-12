@@ -229,6 +229,7 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
 
             # instance name
             instance = 'Application'
+            instance_name_suffix = str(agent_config_vars['instance_name_suffix'])
             instance_field = agent_config_vars['instance_field']
             if query_instance_fields and len(query_instance_fields) > 0:
                 instance_field = query_instance_fields
@@ -247,6 +248,10 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
             if agent_config_vars['instance_whitelist_regex'] and not agent_config_vars[
                 'instance_whitelist_regex'].match(instance):
                 continue
+
+            # append instance suffix
+            if instance_name_suffix and len(instance_name_suffix) > 0:
+                instance = instance + instance_name_suffix
 
             # add device info if has
             device = None
@@ -415,6 +420,7 @@ def get_agent_config_vars(logger, config_ini):
             thread_pool = config_parser.get('prometheus', 'thread_pool', raw=True)
             processes = config_parser.get('prometheus', 'processes', raw=True)
             timeout = config_parser.get('prometheus', 'timeout', raw=True)
+            instance_name_suffix = config_parser.get('prometheus', 'instance_name_suffix', fallback='') or ''
 
         except Exception as ex:
             logger.error(ex)
@@ -526,10 +532,9 @@ def get_agent_config_vars(logger, config_ini):
         config_vars = {'prometheus_kwargs': prometheus_kwargs, 'auth_kwargs': auth_kwargs, 'ssl_kwargs': ssl_kwargs,
                        'api_url': api_url, 'prometheus_query': prometheus_query,
                        'metrics_name_field': metrics_name_field, 'his_time_range': his_time_range,
-
                        'proxies': agent_proxies, 'data_format': data_format,  # 'project_field': project_fields,
                        'component_field': component_field, 'default_component_name': default_component_name,
-                       'instance_field': instance_fields, 'dynamic_host_field': dynamic_host_field,
+                       'instance_field': instance_fields, 'instance_name_suffix': instance_name_suffix, 'dynamic_host_field': dynamic_host_field,
                        "instance_whitelist_regex": instance_whitelist_regex, 'device_field': device_fields,
                        'timestamp_field': timestamp_fields, 'target_timestamp_timezone': target_timestamp_timezone,
                        'timezone': timezone, 'timestamp_format': timestamp_format,
