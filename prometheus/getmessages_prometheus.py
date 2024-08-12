@@ -420,7 +420,7 @@ def get_agent_config_vars(logger, config_ini):
             thread_pool = config_parser.get('prometheus', 'thread_pool', raw=True)
             processes = config_parser.get('prometheus', 'processes', raw=True)
             timeout = config_parser.get('prometheus', 'timeout', raw=True)
-            instance_name_suffix = config_parser.get('prometheus', 'instance_name_suffix') or ''
+            instance_name_suffix = config_parser.get('prometheus', 'instance_name_suffix', fallback='') or ''
 
         except Exception as ex:
             logger.error(ex)
