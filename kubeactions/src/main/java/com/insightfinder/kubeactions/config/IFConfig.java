@@ -1,11 +1,15 @@
 package com.insightfinder.kubeactions.config;
 
+import static com.insightfinder.kubeactions.client.websocket.WebSocketUtils.WEB_SOCKET_SERVER_URL_TEMPLATE;
+
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.Map;
+import javax.annotation.PostConstruct;
 import org.mapdb.DB;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
-
-import java.util.Map;
 
 @Configuration
 @ConfigurationProperties(prefix = "insight-finder")
@@ -20,6 +24,7 @@ public class IFConfig {
     private String actionServerId;
     private String actionServerName;
     private String serverUrl;
+    private String serverWebSocketUrl;
 
     public IFConfig() {
     }
@@ -64,8 +69,12 @@ public class IFConfig {
         this.actionServerPort = actionServerPort;
     }
 
+    public String getServerWebSocketUrl() {
+        return serverWebSocketUrl;
+    }
+
     public String getActionServerId() {
-        if (actionServerId == null || actionServerId.length() == 0){
+        if (actionServerId == null || actionServerId.isEmpty()) {
             Map map = mapDB.hashMap("map").createOrOpen();
             if (map.containsKey("serverId")){
                 return map.get("serverId").toString();
@@ -93,5 +102,12 @@ public class IFConfig {
 
     public void setActionServerName(String actionServerName) {
         this.actionServerName = actionServerName;
+    }
+
+    @PostConstruct
+    void postConstruct() throws URISyntaxException {
+        URI uri = new URI(getServerUrl());
+        String domain = uri.getHost();
+        serverWebSocketUrl = String.format(WEB_SOCKET_SERVER_URL_TEMPLATE, domain);
     }
 }
