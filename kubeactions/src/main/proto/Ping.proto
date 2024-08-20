@@ -1,0 +1,9 @@
+syntax = "proto3";
+package proto;
+option java_package = "com.insightfinder.InsightFinderAgent.proto";
+option java_outer_classname = "PingWrapper";
+
+// Heart beat sent to server every 10 seconds
+message Ping{
+  int64 pingNum = 1;
+}
