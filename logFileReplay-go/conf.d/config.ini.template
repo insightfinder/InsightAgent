@@ -14,6 +14,9 @@ instance_field = _source.agent.hostname
 # Field to extract the timestamp from
 timestamp_field = _source.@timestamp
 
+# Field to get the raw log data. This field will be used as the root of the data.
+log_raw_data_field = data
+
 # The field that needs to stream, if not set, the whole message will be used
 # Put more than one field by separating them with comma
 # log_data_field = _source.log.file.path,_source.message

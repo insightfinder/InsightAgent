@@ -178,27 +178,45 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 				}
 			}
 
-			// Only Save selected fields
-			if config.logDataField != "" {
-				filteredData := `{}`
-				var err error
-				dataFields := strings.Split(config.logDataField, ",")
-				for _, field := range dataFields {
-					value := gjson.Get(data, field)
-					filteredData, err = sjson.SetRaw(filteredData, field, value.Raw)
-					if err != nil {
-						log.Error().Msgf("Error filtering data field: %s", field)
-					}
+			if config.logRawDataField != "" {
+				// Use the raw data field as the root of the document
+				filteredData := gjson.Get(line, config.logRawDataField)
+				if filteredData.IsObject() {
+					LogDataList = append(LogDataList, LogData{
+						ComponentName: component,
+						Tag:           instance,
+						TimeStamp:     timestamp,
+						Data:          filteredData.Value().(map[string]any),
+					})
+				} else {
+					LogDataList = append(LogDataList, LogData{
+						ComponentName: component,
+						Tag:           instance,
+						TimeStamp:     timestamp,
+						Data:          filteredData.Value().(string),
+					})
 				}
-				data = filteredData
+			} else {
+				// Only Save selected fields
+				if config.logDataField != "" {
+					filteredData := `{}`
+					var err error
+					dataFields := strings.Split(config.logDataField, ",")
+					for _, field := range dataFields {
+						value := gjson.Get(data, field)
+						filteredData, err = sjson.SetRaw(filteredData, field, value.Raw)
+						if err != nil {
+							log.Error().Msgf("Error filtering data field: %s", field)
+						}
+					}
+					LogDataList = append(LogDataList, LogData{
+						ComponentName: component,
+						Tag:           instance,
+						TimeStamp:     timestamp,
+						Data:          filteredData,
+					})
+				}
 			}
-
-			LogDataList = append(LogDataList, LogData{
-				ComponentName: component,
-				Tag:           instance,
-				TimeStamp:     timestamp,
-				Data:          data,
-			})
 		}
 
 		processed <- ChunkMessage{
