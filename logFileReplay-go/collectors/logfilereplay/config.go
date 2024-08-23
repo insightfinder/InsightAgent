@@ -18,6 +18,7 @@ type Config struct {
 	componentField        string
 	instanceField         string
 	logDataField          string
+	logRawDataField       string
 	defaultInstance       string
 	timestampField        string
 	TimezoneOffsetSeconds int
@@ -34,6 +35,7 @@ func getLogReplayConfig(p *configparser.ConfigParser) *Config {
 	var timestampField = GetConfigString(p, SectionName, "timestamp_field", true)
 	var workerCount = GetConfigInt(p, SectionName, "worker_count", false, 1)
 	var logDataField = GetConfigString(p, SectionName, "log_data_field", false)
+	var logRawDataField = GetConfigString(p, SectionName, "log_raw_data_field", false)
 
 	if defaultInstance == "" && instanceField == "" {
 		panic("Either default_instance or instance_field must be set")
@@ -71,6 +73,7 @@ func getLogReplayConfig(p *configparser.ConfigParser) *Config {
 		logFiles:              logFiles,
 		componentField:        componentField,
 		logDataField:          logDataField,
+		logRawDataField:       logRawDataField,
 		defaultInstance:       defaultInstance,
 		instanceField:         instanceField,
 		timestampField:        timestampField,
