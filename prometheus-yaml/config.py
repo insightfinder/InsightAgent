@@ -1,6 +1,6 @@
 import yaml
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 
 # Config of prometheus section.
@@ -37,7 +37,6 @@ class Insightfinder:
 # Config of each project.
 @dataclass(frozen=True)
 class Project:
-    project_name: str = ""
     system_name: str = ""
     project_type: str = "metric"
     containerize: str = "NO"
@@ -68,7 +67,7 @@ class Project:
 class Config:
     prometheus: Optional[Prometheus] = None
     insightfinder: Optional[Insightfinder] = None
-    projects: List[Project] = field(default_factory=list)
+    projects: Dict[str, Project] = field(default_factory=dict)
 
     def load_yaml(self, file: str) -> bool:
         try:
@@ -76,7 +75,13 @@ class Config:
                 data = yaml.safe_load(f)
                 self.prometheus = Prometheus(**data["prometheus"])
                 self.insightfinder = Insightfinder(**data["insightfinder"])
-                self.projects = [Project(**p) for p in data["projects"]]
+                self.projects = {k: Project(**v) for k, v in data["projects"].items()}
             return True
         except Exception:
             return False
+
+
+if __name__ == "__main__":
+    config = Config()
+    config.load_yaml("conf.d/config.yaml")
+    print(config)

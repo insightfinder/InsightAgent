@@ -38,7 +38,7 @@ insightfinder:
   if_https_proxy: ""
 
 projects:
-  - project_name: ""
+  project_name:
     # Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
     system_name: ""
     # metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay

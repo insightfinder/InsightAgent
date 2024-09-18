@@ -432,7 +432,7 @@ def get_alias_from_cache(cache_con, cache_cur, alias):
         return alias
 
 
-def get_agent_config_vars(logger, config_yaml, project_index):
+def get_agent_config_vars(logger, config_yaml, project_name):
     """Read and parse config.ini"""
     """ get config.ini vars """
     if not os.path.exists(config_yaml):
@@ -444,7 +444,7 @@ def get_agent_config_vars(logger, config_yaml, project_index):
         print(f"Failed to load config file {config_yaml}. Exiting...")
         return False
 
-    project = config.projects[project_index]
+    project = config.projects[project_name]
 
     prometheus_kwargs = {}
     auth_kwargs = {}
@@ -772,7 +772,7 @@ def get_cli_config_vars():
     return config_vars
 
 
-def get_if_config_vars(logger, config_yaml, project_index):
+def get_if_config_vars(logger, config_yaml, project_name):
     """get config.ini vars"""
     if not os.path.exists(config_yaml):
         print(f"No config file {config_yaml} not found. Exiting...")
@@ -783,13 +783,12 @@ def get_if_config_vars(logger, config_yaml, project_index):
         print(f"Failed to load config file {config_yaml}. Exiting...")
         return False
 
-    project = config.projects[project_index]
+    project = config.projects[project_name]
 
     try:
         user_name = config.insightfinder.user_name
         license_key = config.insightfinder.license_key
         token = config.insightfinder.token
-        project_name = project.project_name
         system_name = project.system_name
         project_type = project.project_type.upper()
         containerize = project.containerize.upper()
@@ -1494,7 +1493,7 @@ def worker_configurer(q, level):
 
 
 def worker_process(args):
-    (config_file, project_index, c_config, time_now, q) = args
+    (config_file, project_name, c_config, time_now, q) = args
 
     # Get config file name
     config_name = os.path.basename(config_file)
@@ -1505,11 +1504,11 @@ def worker_process(args):
     logger.info("Setup logger in PID {}".format(os.getpid()))
     logger.info("Process start with config: {}".format(config_name))
 
-    if_config_vars = get_if_config_vars(logger, config_file, project_index)
+    if_config_vars = get_if_config_vars(logger, config_file, project_name)
     logger.debug(f"if_config_vars: {if_config_vars}")
     if not if_config_vars:
         return
-    agent_config_vars = get_agent_config_vars(logger, config_file, project_index)
+    agent_config_vars = get_agent_config_vars(logger, config_file, project_name)
     logger.debug(f"agent_config_vars: {agent_config_vars}")
     if not agent_config_vars:
         return
@@ -1555,22 +1554,26 @@ if __name__ == "__main__":
     # get config file
     config_file = cli_config_vars["config"]
 
+    config = Config()
+    if not config.load_yaml(config_file):
+        main_logger.error(f"Failed to load config file {config_file}. Exiting...")
+        sys.exit(1)
+
+    project_names = list(config.projects.keys())
+
     # get agent config from first config
-    agent_config_vars = get_agent_config_vars(main_logger, config_file, 0)
+    agent_config_vars = get_agent_config_vars(
+        main_logger, config_file, project_names[0]
+    )
     main_logger.debug(f"First agent_config_vars: {agent_config_vars}")
     if not agent_config_vars:
         main_logger.error("Failed to get agent config")
     else:
-        config = Config()
-        if not config.load_yaml(config_file):
-            main_logger.error(f"Failed to load config file {config_file}. Exiting...")
-            sys.exit(1)
-
         # get args
         utc_time_now = int(arrow.utcnow().float_timestamp)
         arg_list = [
-            (config_file, index, cli_config_vars, utc_time_now, queue)
-            for index, project in enumerate(config.projects)
+            (config_file, project_name, cli_config_vars, utc_time_now, queue)
+            for project_name in project_names
         ]
 
         # start sub process by pool
