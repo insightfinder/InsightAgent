@@ -1360,8 +1360,7 @@ def check_project_exist(logger, if_config_vars):
                 "insightAgentType": get_insight_agent_type_from_project_type(
                     if_config_vars
                 ),
-                "samplingInterval": int(if_config_vars["sampling_interval"] / 60),
-                "samplingIntervalInSeconds": if_config_vars["sampling_interval"],
+                "samplingInterval": int(if_config_vars["sampling_interval"]),
             }
             logger.debug(
                 "insightAgentType:",
