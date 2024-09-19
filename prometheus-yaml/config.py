@@ -15,7 +15,7 @@ class Prometheus:
     client_key: str = ""
     thread_pool: str = "20"
     processes: str = ""
-    timeout: str = ""
+    timeout: str = "5"
     agent_http_proxy: str = ""
     agent_https_proxy: str = ""
 
