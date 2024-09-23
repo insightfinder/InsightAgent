@@ -401,8 +401,8 @@ def parse_messages_prometheus(
             metric_buffer["buffer_dict"][key][metric_key] = str(data_value)
 
         except Exception as e:
-            logger.warn("Error when parsing message")
-            logger.warn(e)
+            logger.debug("Error when parsing message")
+            logger.debug(e)
             logger.debug(traceback.format_exc())
             continue
 
