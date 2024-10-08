@@ -74,8 +74,8 @@ project_name =
 system_name =
 # metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
 project_type = metric
-sampling_interval = 1
-run_interval = 1
+sampling_interval = 5
+run_interval = 5
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
 if_url = https://app.insightfinder.com
