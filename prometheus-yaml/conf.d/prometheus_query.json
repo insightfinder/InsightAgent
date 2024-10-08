@@ -1,0 +1,12 @@
+[
+  {
+    "query": "rate(windows_net_bytes_sent_total[5m])",
+    "metric_name": "net_bytes_sent_total_5m",
+    "instance_fields": [
+      "instance"
+    ],
+    "device_fields": [
+      "device"
+    ]
+  }
+]
