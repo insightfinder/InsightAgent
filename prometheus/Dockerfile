@@ -5,7 +5,10 @@ COPY conf.d conf.d
 
 RUN mkdir cache logs && \
     touch logs/output.log && \
-    pip install -r requirements.txt
+    pip install -r requirements.txt && \
+    chown -R 1001:1001 /app
+
+USER 1001
 
 CMD echo "Starting..." \
     && (python3 cron.py &) \
