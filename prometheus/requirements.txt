@@ -2,7 +2,4 @@ arrow
 pytz
 regex
 requests
-zipp
-backports.zoneinfo
-importlib_resources
 apscheduler
