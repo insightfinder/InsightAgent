@@ -6,7 +6,7 @@ COPY conf.d conf.d
 RUN mkdir cache logs && \
     touch logs/output.log && \
     pip install -r requirements.txt && \
-    chown -R 1001:1001 /app
+    chown -R 1001:1001 ./
 
 USER 1001
 
