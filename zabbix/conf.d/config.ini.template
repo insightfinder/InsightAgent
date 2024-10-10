@@ -18,7 +18,7 @@ host_blocklist =
 template_ids =
 
 # comma-separated list of regex or string of the metric names to query. For regex, should surround with /, e.g. /cpu/
-metric_allowlist =
+metric_allowlist = /.*Space utilization*/,/.*Used space.*/,/.*Total space.*/,/.*Disk read rate.*/,/.*Disk read request avg waiting time.*/,/.*Disk write rate.*/,/.*Disk write request avg waiting time.*/,/.*Available memory.*/,/.*Docker.*/,/^CPU.*/,/.*OOMKilled.*/,/.*Restart count.*/,/^Memory.*/,/.*Networks.*/,/^Interface.*/,/.*Load average.*/,/.*Network interfaces.*/,/.*Processor load.*/,/.*CPU percent usage.*/,/.*Memory usage.*/,/.*ICMP loss.*/,/.*Failed.*/,/(?i).*error.*/
 
 # comma-separated list of regex or string of the metric names to exclude from the result. For regex, should surround with /, e.g. /cpu/
 metric_disallowlist =
@@ -74,8 +74,8 @@ project_name =
 system_name =
 # metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
 project_type = metric
-sampling_interval = 1
-run_interval = 1
+sampling_interval = 5
+run_interval = 5
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
 if_url = https://app.insightfinder.com
