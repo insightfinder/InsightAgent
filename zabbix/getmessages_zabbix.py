@@ -965,7 +965,7 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
     data_dict['userName'] = if_config_vars['user_name']
     if 'system_name' in if_config_vars:
         data_dict['systemName'] = if_config_vars['system_name']
-    data_dict['iat'] = get_agent_type_from_project_type(if_config_vars)
+    data_dict['iat'] = 'zabbix'
     if 'sampling_interval' in if_config_vars:
         data_dict['si'] = str(if_config_vars['sampling_interval'])
 
@@ -1188,7 +1188,7 @@ def check_project_exist(logger, agent_config_vars, if_config_vars, project_name,
             params = {'operation': 'create', 'userName': if_config_vars['user_name'],
                       'licenseKey': if_config_vars['license_key'], 'projectName': project_name,
                       'systemName': system_name or project_name, 'instanceType': 'Zabbix',
-                      'projectCloudType': 'PrivateCloud',
+                      'projectCloudType': 'Zabbix',
                       'dataType': get_data_type_from_project_type(logger, if_config_vars),
                       'insightAgentType': get_insight_agent_type_from_project_type(agent_config_vars, if_config_vars),
                       'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
