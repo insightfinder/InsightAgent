@@ -1,21 +1,13 @@
-# Use an official Python runtime as a parent image
-FROM python:3.8-bookworm
+FROM bitnami/python:3.12
 ENV TZ=UTC
 SHELL ["/bin/bash", "-c"]
-WORKDIR /elasticsearch_collector
-COPY . /elasticsearch_collector/
+COPY . .
 
 # Install system dependencies
-RUN apt-get update && \
-    apt-get upgrade -y && \
-    apt-get install -y tzdata && \
-    python3 -m pip install --upgrade pip && python3 -m pip install --upgrade setuptools && \
-    python3 -m pip install -r requirements.txt && \
-    groupadd --gid 10001 es-agent && \
-    useradd -u 10001 -g es-agent es-agent && \
-    chown -R 10001:10001 /elasticsearch_collector
+RUN pip install -r requirements.txt && \
+    chown -R 1001:1001 ./
 
-USER 10001
+USER 1001
 
 # Run the script when config.ini is provided as a volume
 CMD ["/bin/bash", "-c", "python3 cron.py -g 1 -o 10 -p 4"]
