@@ -6,4 +6,4 @@ COPY local-cron.py .
 
 USER 1001
 
-ENTRYPOINT  [ "python3", "local-cron.py", "-n" ]
+ENTRYPOINT  [ "python3", "local-cron.py" ]
