@@ -89,7 +89,7 @@ ops = {
 }
 
 logfile = "/var/log/localcron.log"
-logging = True
+logging = False
 
 
 def logmsg(msg):
