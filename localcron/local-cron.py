@@ -155,9 +155,6 @@ parser.add_argument(
 parser.add_argument(
     "-u", "--url", default="https://webapp:8443", help="url of appserver"
 )
-parser.add_argument(
-    "-n", "--nologging", action="store_false", help="disable logging to file"
-)
 args = parser.parse_args()
 
 op = args.operation
@@ -168,7 +165,6 @@ if op not in ops:
 freq = args.frequency
 retry = args.retry if freq >= 600 else 1
 wait = args.wait
-logging = args.nologging
 
 op_params = f"?{'&'.join(args.parameters)}" if args.parameters else ""
 op_url = f"{args.url}/localcron/{args.operation}{op_params}"
