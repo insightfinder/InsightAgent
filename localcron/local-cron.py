@@ -8,85 +8,6 @@ import sys
 import time
 from time import gmtime, strftime
 
-ops = {
-    "addlogmetadata",
-    "aggregatemetricdata",
-    "anomalytransfer",
-    "appbehaviorstats",
-    "appforecast",
-    "baseline",
-    "bootstrapcheckagent",
-    "bootstrapchecknonagent",
-    "checkdeletedincident",
-    "checkqueuestatus",
-    "cleanUpChunks",
-    "cleanresultcache",
-    "cleanusertoken",
-    "collect",
-    "createglobalview",
-    "createglobalviewsnapshot",
-    "croncollectpredictionstats",
-    "crondelete",
-    "croneventflush",
-    "cronfrequencyepisodemining",
-    "cronfrequencyminingupdate",
-    "cronlogcollection",
-    "cronlogforcedcollection",
-    "cronlogtrainmaster",
-    "cronpredictionerrorcalculation",
-    "cronretention",
-    "cronsecondintervaldetect",
-    "detect",
-    "detectfixedincidents",
-    "email",
-    "eventsupport",
-    "freeFormatParser",
-    "healthviewexport",
-    "incidentalert",
-    "incidentpredictiontimeline",
-    "insightSummary",
-    "insightsreport",
-    "kpiliveprediction",
-    "kpiprediction",
-    "liveappforecast",
-    "loadAllEC2Data",
-    "logcollectdata",
-    "logcommonpattern",
-    "logdetect",
-    "logeventfrequencyflush",
-    "logfeatureoutliermodel",
-    "logfrequencydetectiondata",
-    "logfrequentsequencedetection",
-    "loggooglepubsub",
-    "lograwdataflush",
-    "logsendsplunk",
-    "logtometricflush",
-    "logupdatecalendar",
-    "long-term-incidentpredictiontimeline",
-    "metricPrediction",
-    "metricoverviewstatus",
-    "metricprovision",
-    "predictedincidentalert",
-    "processrawdata",
-    "rawdatapreprocess",
-    "rawdatasplit",
-    "refresh-teams-tokens",
-    "relationpreprocess",
-    "rootcauseanalysis",
-    "secondintervaltrainmaster",
-    "systemautoshare",
-    "systemdown",
-    "systemstructure",
-    "trainmaster",
-    "triggersyscallanalysis",
-    "updateeventssecond",
-    "updateinstanceaddremove",
-    "updateinstanceaddremovesecond",
-    "updatemetricsettingandinstancemetadata",
-    "updateprojectinfo",
-    "webhookalert",
-    "*",
-}
 
 logfile = "/var/log/localcron.log"
 logging = False
@@ -100,13 +21,6 @@ def logmsg(msg):
         log.close()
     else:
         print(output)
-
-
-def usage():
-    print("Usage: ./local-cron.py <action>")
-    print("where the action must be one of the following:")
-    for op in sorted(ops):
-        print(op)
 
 
 def send_request(url, retry, wait, deadline):
@@ -158,10 +72,6 @@ parser.add_argument(
 args = parser.parse_args()
 
 op = args.operation
-if op not in ops:
-    logmsg("Invalid operation attempted")
-    usage()
-    quit()
 freq = args.frequency
 retry = args.retry if freq >= 600 else 1
 wait = args.wait
