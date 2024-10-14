@@ -52,7 +52,7 @@ timestamp_field =
 target_timestamp_timezone = UTC
 component_field =
 # Default component name if component_field is not set or field value is empty.
-default_component_name
+default_component_name =
 # if no instance given, will set to 'Application'. Can also set instance name from multiple fields which separated by commas. Ex: instance_name_part1,instance_name_part2.
 instance_field = instance
 # Instance name suffix, if want to add on to instance name obtained from labels
@@ -71,6 +71,11 @@ thread_pool = 20
 processes =
 # minutes the main process wait for workers to finish, default is 5
 timeout = 5
+
+
+# The seconds to delay for each prometheus query, default is 10 seconds
+# The agent will always query the metrics at (Current Timestamp - query_delay)
+query_delay = 10
 
 ## proxy
 agent_http_proxy =
