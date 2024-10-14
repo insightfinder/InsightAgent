@@ -134,6 +134,10 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             run_prometheus_query(timestamp)
     else:
         logger.debug('Using current time for streaming data')
+
+        # Add delay to query
+        time_now = time_now - agent_config_vars['query_delay']
+
         run_prometheus_query(time_now)
 
     thread_pool.close()
@@ -421,6 +425,7 @@ def get_agent_config_vars(logger, config_ini):
             processes = config_parser.get('prometheus', 'processes', raw=True)
             timeout = config_parser.get('prometheus', 'timeout', raw=True)
             instance_name_suffix = config_parser.get('prometheus', 'instance_name_suffix', fallback='') or ''
+            query_delay = config_parser.get('prometheus', 'query_delay', fallback=10) or 10
 
         except Exception as ex:
             logger.error(ex)
@@ -528,6 +533,10 @@ def get_agent_config_vars(logger, config_ini):
         if len(agent_https_proxy) > 0:
             agent_proxies['https'] = agent_https_proxy
 
+
+        # query delay
+        query_delay = int(query_delay)
+
         # add parsed variables to a global
         config_vars = {'prometheus_kwargs': prometheus_kwargs, 'auth_kwargs': auth_kwargs, 'ssl_kwargs': ssl_kwargs,
                        'api_url': api_url, 'prometheus_query': prometheus_query,
@@ -539,7 +548,7 @@ def get_agent_config_vars(logger, config_ini):
                        'timestamp_field': timestamp_fields, 'target_timestamp_timezone': target_timestamp_timezone,
                        'timezone': timezone, 'timestamp_format': timestamp_format,
                        'instance_connector': instance_connector, 'thread_pool': thread_pool, 'processes': processes,
-                       'timeout': timeout, }
+                       'timeout': timeout, 'query_delay': query_delay}
 
         return config_vars
 
