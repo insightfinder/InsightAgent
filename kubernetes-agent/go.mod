@@ -5,7 +5,6 @@ go 1.20
 require (
 	github.com/bigkevmcd/go-configparser v0.0.0-20230427073640-c6b631f70126
 	github.com/carlmjohnson/requests v0.23.4
-	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3
 	gorm.io/driver/sqlite v1.5.5
 	gorm.io/gorm v1.25.9
 	k8s.io/apimachinery v0.27.3
