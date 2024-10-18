@@ -1,4 +1,4 @@
-FROM bitnami/python:3.12
+FROM bitnami/python:3.13
 
 COPY agent.txt cron.py getmessages_prometheus.py requirements.txt ./
 COPY conf.d conf.d
