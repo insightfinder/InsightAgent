@@ -1,59 +1,46 @@
 insightfinder:
-  url: "https://stg.insightfinder.com"
+  # The url to InsightFinder
+  url: "https://app.insightfinder.com"
   userName: "maoyuwang"
   licenseKey: ""
+
+  # Sampling interval defines the interval between two consecutive data points.
   samplingInterval: "1m"
+
+  # Run interval defines the time range for data collection during each run.
   runInterval: "1m"
 
 grafana:
-  url: "https://grafana.insightfinder.com"
+  # URL of the Grafana instance
+  url: "https://grafana.xxx.com"
+
+  # API token for the Grafana service account
   token: ""
 
-  # (Optional)
+  # (Optional) Basic auth credentials for the Grafana instance
+  # Not needed if using API token
   username: "123"
   password: "123"
 
+  # The UID of the data source we want to query in Grafana
   dataSourceUID: "PBFA97CFB590B2093"
+
   queryDelay: "10s"
 
 projects:
+
   - name: "maoyu-test-grafana-agent-6"
     system: "maoyu-test-grafana-agent-6"
     isContainer: false
     type: "Metric" # Metric or Log
     query:
-    - "AllCPUMetrics"
-  - name: "maoyu-test-grafana-agent-4"
-    system: "maoyu-test-grafana-agent-3"
-    isContainer: false
-    type: "Metric" # Metric or Log
-    query:
-    - "Node CPU"
-  - name: "maoyu-test-grafana-agent-3-container"
-    system: "maoyu-test-grafana-agent-3-container"
-    isContainer: true
-    type: "Metric" # Metric or Log
-    query:
-      - "Container CPU Usage"
+    # Specify each of the query you want to stream to this project from the 'query section'
+    - "Container CPU Usage"
+
 query:
-  "Node CPU":
-    useRawMetricName: false
-    query: "node_cpu_hourly_cost"
-    instanceLabel:
-      - "instance"
-    containerLabel:
-      - ""
-    componentLabel:
-      - "instance_type"
-
-  "AllCPUMetrics":
-    useRawMetricName: true
-    query: '{__name__ =~ "node_cpu.*"}'
-    instanceLabel:
-      - "instance"
-
+  # The name of the query. It will become the metric name shown in InsightFinder
   "Container CPU Usage":
-    useRawMetricName: true
+    useRawMetricName: true # Set to true to use the raw metric data we queried from Prometheus.
     query: "container_cpu_user_seconds_total"
     instanceLabel:
       - "pod"
