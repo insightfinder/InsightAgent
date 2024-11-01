@@ -26,6 +26,8 @@ type GrafanaConfig struct {
 	Token         string `yaml:"token"`
 	DataSourceUID string `yaml:"dataSourceUID"`
 	QueryDelay    string `yaml:"queryDelay"`
+	Username      string `yaml:"username"`
+	Password      string `yaml:"password"`
 }
 
 type ProjectConfig struct {
