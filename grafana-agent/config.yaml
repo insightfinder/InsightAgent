@@ -1,0 +1,58 @@
+insightfinder:
+  url: "https://stg.insightfinder.com"
+  userName: "maoyuwang"
+  licenseKey: ""
+  samplingInterval: "1m"
+  runInterval: "1m"
+
+grafana:
+  url: "https://grafana.insightfinder.com"
+  token: ""
+  dataSourceUID: "PBFA97CFB590B2093"
+  queryDelay: "10s"
+
+projects:
+  - name: "maoyu-test-grafana-agent-6"
+    system: "maoyu-test-grafana-agent-6"
+    isContainer: false
+    type: "Metric" # Metric or Log
+    query:
+    - "AllCPUMetrics"
+  - name: "maoyu-test-grafana-agent-4"
+    system: "maoyu-test-grafana-agent-3"
+    isContainer: false
+    type: "Metric" # Metric or Log
+    query:
+    - "Node CPU"
+  - name: "maoyu-test-grafana-agent-3-container"
+    system: "maoyu-test-grafana-agent-3-container"
+    isContainer: true
+    type: "Metric" # Metric or Log
+    query:
+      - "Container CPU Usage"
+query:
+  "Node CPU":
+    useRawMetricName: false
+    query: "node_cpu_hourly_cost"
+    instanceLabel:
+      - "instance"
+    containerLabel:
+      - ""
+    componentLabel:
+      - "instance_type"
+
+  "AllCPUMetrics":
+    useRawMetricName: true
+    query: '{__name__ =~ "node_cpu.*"}'
+    instanceLabel:
+      - "instance"
+
+  "Container CPU Usage":
+    useRawMetricName: true
+    query: "container_cpu_user_seconds_total"
+    instanceLabel:
+      - "pod"
+    containerLabel:
+      - "container"
+    componentLabel:
+      - "namespace"
