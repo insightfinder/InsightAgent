@@ -40,7 +40,7 @@ projects:
 query:
   # The name of the query. It will become the metric name shown in InsightFinder
   "Container CPU Usage":
-    useRawMetricName: true # Set to true to use the raw metric data we queried from Prometheus.
+    # useRawMetricName: false   # Set to true to use the raw metric names we queried from Prometheus.
     query: "container_cpu_user_seconds_total"
     instanceLabel:
       - "pod"
