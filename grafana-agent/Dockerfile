@@ -17,4 +17,5 @@ ENV GRAFANA_AGENT_INTERVAL=60 \
 COPY --from=builder --chown=default:default /app/grafana-agent /app
 COPY --chown=default:default ./config.yaml ./start.sh /app/
 
+USER default
 ENTRYPOINT ["bash","/app/start.sh"]
