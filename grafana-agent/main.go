@@ -26,7 +26,7 @@ func main() {
 		return
 	}
 
-	grafanaService := GrafanaService.CreateGrafanaService(config.Grafana.URL, config.Grafana.Token, config.Grafana.DataSourceUID, grafanaQueryDelay)
+	grafanaService := GrafanaService.CreateGrafanaService(config.Grafana.URL, config.Grafana.Token, config.Grafana.Username, config.Grafana.Password, config.Grafana.DataSourceUID, grafanaQueryDelay)
 
 	dbService := DbService.CreateDbService()
 

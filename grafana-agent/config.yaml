@@ -8,6 +8,11 @@ insightfinder:
 grafana:
   url: "https://grafana.insightfinder.com"
   token: ""
+
+  # (Optional)
+  username: "123"
+  password: "123"
+
   dataSourceUID: "PBFA97CFB590B2093"
   queryDelay: "10s"
 
