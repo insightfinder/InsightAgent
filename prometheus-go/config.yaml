@@ -9,6 +9,7 @@ insightfinder:
   samplingInterval: "1m"
   runInterval: "1m"
 
+  # Insightfinder Proxy Settings
   ifHttpProxy:
   ifHttpsProxy:
 
@@ -29,29 +30,29 @@ prometheus:
   queryDelay: "10s"
 
   # General agent configuration
-  ## proxy
+  # Prometheus Proxy
   agentHttpProxy:
   agentHttpsProxy:
-  # number of thread to used in the pool, default is 20
-  threadPool: 20
-  # number of the worker processes, default is count_of_cpu * 4
-  processes:
+  # # number of thread to used in the pool, default is 20
+  # threadPool: 20
+  # # number of the worker processes, default is count_of_cpu * 4
+  # processes:
   # minutes the main process wait for workers to finish, default is 5
   timeout: 5
 
 projects:
   - name: "project-name"
     system: "system-name"
-    isContainer: false
     type: "Metric"
+    isContainer: false
     # dynamic_metric_type: Leave empty for normal projects. set to 'vm' to use 'DynamicVM' as the AgentType, set to 'host' to use 'DynamicHost' as the AgentType
     dynamicMetricType: 
     query:
     - "CPU Usage"
+
     # historical data time config. If these options is set, the agent will query results by time range
     # time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
     histTimeRange:
-
     # (Optional) Set default values if Label not found
     defaultInstanceName:
     defaultComponentName:
@@ -60,8 +61,10 @@ projects:
 query:
   "CPU Usage":
     queries:
-    - "container_cpu_user_seconds_total"
-    - "node_cpu_seconds_total"
+    # - "container_cpu_user_seconds_total"
+    - query: "node_cpu_seconds_total"
+    # useRawMetricName: false   # Set to true to use the raw metric names we queried from Prometheus.
+      metricName:
     instanceLabel:
       - "instance"
     componentLabel:

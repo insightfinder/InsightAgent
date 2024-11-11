@@ -20,6 +20,8 @@ type InsightFinderConfig struct {
 	LicenseKey       string `yaml:"licenseKey"`
 	SamplingInterval string `yaml:"samplingInterval"`
 	RunInterval      string `yaml:"runInterval"`
+	HttpProxy        string `yaml:"ifHttpProxy"`
+	HttpsProxy       string `yaml:"ifHttpsProxy"`
 }
 
 type PrometheusConfig struct {
@@ -31,23 +33,30 @@ type PrometheusConfig struct {
 	ClientCert  string `yaml:"clientCert"`
 	ClientKey   string `yaml:"clientKey"`
 	QueryDelay  string `yaml:"queryDelay"`
+	HttpProxy   string `yaml:"agentHttpProxy"`
+	HttpsProxy  string `yaml:"agentHttpsProxy"`
+	Timeout     string `yaml:"timeout"`
 }
 
 type ProjectConfig struct {
-	Name        string   `yaml:"name"`
-	Type        string   `yaml:"type"`
-	IsContainer bool     `yaml:"isContainer"`
-	System      string   `yaml:"system"`
-	Query       []string `yaml:"query"`
-	// QueryJson   string   `yaml:"queryJson"`
+	Name                 string   `yaml:"name"`
+	System               string   `yaml:"system"`
+	Type                 string   `yaml:"type"`
+	IsContainer          bool     `yaml:"isContainer"`
+	DynamicMetricType    string   `yaml:"dynamicMetricType"`
+	Query                []string `yaml:"query"`
+	HistTimeRange        string   `yaml:"histTimeRange"`
+	DefaultInsanceName   string   `yaml:"defaultInstanceName"`
+	DefaultComponentName string   `yaml:"defaultComponentName"`
+	DefaultContainerName string   `yaml:"defaultContainerName"`
 }
 
 type QueryConfig struct {
 	MetricName       string
-	Query            string   `yaml:"query"`
+	Queries          string   `yaml:"queries"`
 	InstanceLabel    []string `yaml:"instanceLabel"`
-	ContainerLabel   []string `yaml:"containerLabel"`
 	ComponentLabel   []string `yaml:"componentLabel"`
+	ContainerLabel   []string `yaml:"containerLabel"`
 	TimestampLabel   []string `yaml:"timestampLabel"`
 	UseRawMetricName bool     `yaml:"useRawMetricName"`
 }
