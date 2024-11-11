@@ -52,13 +52,13 @@ type ProjectConfig struct {
 }
 
 type QueryConfig struct {
-	MetricName       string
-	Queries          string   `yaml:"queries"`
-	InstanceLabel    []string `yaml:"instanceLabel"`
-	ComponentLabel   []string `yaml:"componentLabel"`
-	ContainerLabel   []string `yaml:"containerLabel"`
-	TimestampLabel   []string `yaml:"timestampLabel"`
-	UseRawMetricName bool     `yaml:"useRawMetricName"`
+	MetricName     string
+	Queries        string   `yaml:"queries"`
+	InstanceLabel  []string `yaml:"instanceLabel"`
+	ComponentLabel []string `yaml:"componentLabel"`
+	ContainerLabel []string `yaml:"containerLabel"`
+	TimestampLabel []string `yaml:"timestampLabel"`
+	// UseRawMetricName bool     `yaml:"useRawMetricName"`
 }
 
 func LoadConfig() *Config {
