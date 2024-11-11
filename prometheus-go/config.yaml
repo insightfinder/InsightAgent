@@ -1,0 +1,97 @@
+insightfinder:
+  # InsightFinder endpoint and credentials
+  url: "https://app.insightfinder.com"
+  userName: "user"
+  licenseKey: ""
+
+  # Sampling Interval - Interval between two consecutive data points in Project
+  # Run Interval - Frequency of data collection
+  samplingInterval: "1m"
+  runInterval: "1m"
+
+  ifHttpProxy:
+  ifHttpsProxy:
+
+prometheus:
+  # Prometheus endpoint
+  url: "https://prometheus.xxx.com"
+  # Authentication (Optional)
+  username:
+  password:
+
+  # TLS configuration
+  verifyCerts: 
+  caCerts: 
+  clientCert: 
+  clientKey: 
+
+  # Delay query from 0 second mark to avoid missing data
+  queryDelay: "10s"
+
+  # General agent configuration
+  ## proxy
+  agentHttpProxy:
+  agentHttpsProxy:
+  # number of thread to used in the pool, default is 20
+  threadPool: 20
+  # number of the worker processes, default is count_of_cpu * 4
+  processes:
+  # minutes the main process wait for workers to finish, default is 5
+  timeout: 5
+
+projects:
+  - name: "project-name"
+    system: "system-name"
+    isContainer: false
+    type: "Metric"
+    # dynamic_metric_type: Leave empty for normal projects. set to 'vm' to use 'DynamicVM' as the AgentType, set to 'host' to use 'DynamicHost' as the AgentType
+    dynamicMetricType: 
+    query:
+    - "CPU Usage"
+    # historical data time config. If these options is set, the agent will query results by time range
+    # time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
+    histTimeRange:
+
+    # (Optional) Set default values if Label not found
+    defaultInstanceName:
+    defaultComponentName:
+    defaultContainerName:
+
+query:
+  "CPU Usage":
+    queries:
+    - "container_cpu_user_seconds_total"
+    - "node_cpu_seconds_total"
+    instanceLabel:
+      - "instance"
+    componentLabel:
+      - "namespace"
+    containerLabel:
+      - "container"
+    timestampLabel:
+      - "timestamp"
+
+    # If prometheus_query is set, this is the batch size of metrics to query in one request. Keep it empty if you want to query all metrics in one request.
+    prometheusQueryMetricBatchSize:
+    # regex to filter metrics if batch size is set
+    batchMetricFilterRegex:
+    # metric's name field, Multiple fields are separated by commas. EX: __name__, job, the metric name:  {__name__}_{job}
+    metricsNameField: []
+    # timestamp format, as library [arrow]. multiple fields can be formatted together to create the timestamp a la `YYYY-MM-DD HH:mm:ss ZZ`. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
+    timestampFormat:
+    # timezone for the data timestamp stored in prometheus
+    timezone:
+    # Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+    targetTimestampTimezone: UTC
+    # Instance name suffix, if want to add on to instance name obtained from labels
+    instanceNameSuffix:
+    # field names used to get host id
+    dynamicHostLabel:
+    # instance_whitelist is a regex string used to define which instances will be filtered.
+    instanceWhitelist:
+    # The connector for build `instance_field` or `device_field` from multiple fields. Default is `-`.
+    instanceConnector:
+
+
+
+
