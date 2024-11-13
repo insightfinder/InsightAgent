@@ -93,7 +93,7 @@ def main():
     file_agent_log = os.path.abspath(os.path.join(__file__, os.pardir, 'logs/output.log'))
 
     # add job
-    scheduler.add_job(run_job, 'cron', (python_cmp, file_agent, file_agent_log), **cron_params)
+    scheduler.add_job(run_job, 'cron', (python_cmp, file_agent, file_agent_log), max_instances=5, **cron_params)
 
     # start scheduler
     try:
