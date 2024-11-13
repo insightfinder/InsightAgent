@@ -191,6 +191,10 @@ def query_messages_prometheus(args):
         logger.error(e)
         logger.error('Query error: {}'.format(params))
 
+    for item in data:
+        if item.get('value') and item.get('value')[1] == 'NaN' or item.get('value')[1] == '+Inf' or item.get('value')[1] == '-Inf':
+            item['value'][1] = 0
+
     # add metric name in the value. In batch mode, the metric is None, it will later read from metrics_name_field
     data = [{**item, 'metric_name': metric} for item in data]
 
