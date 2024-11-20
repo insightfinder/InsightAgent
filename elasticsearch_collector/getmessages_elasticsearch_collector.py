@@ -790,7 +790,7 @@ def get_agent_config_vars(logger, config_ini):
         else:
             if len(query_json_str) != 0:
                 try:
-                    query_json = json.loads(query_json)
+                    query_json = json.loads(query_json_str)
                 except Exception as e:
                     logger.error('Agent not correctly configured (query_json). Dropping.')
 
