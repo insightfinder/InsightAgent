@@ -268,9 +268,16 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
                 device_field = query_device_fields
 
             if device_field and len(device_field) > 0:
+
+                # Get device name from the query result if we provide a device field
                 devices = [message.get('metric').get(d) for d in device_field]
                 devices = [d for d in devices if d]
                 device = agent_config_vars['instance_connector'].join(devices) if len(devices) > 0 else None
+
+                # Skip the data point if device is not found in the data, but we require a device field
+                if device is None or device == '':
+                    continue
+
             full_instance = make_safe_instance_string(instance, device)
 
             # check cache for alias
