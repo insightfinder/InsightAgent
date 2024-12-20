@@ -98,8 +98,8 @@ containerize = no
 # set to 'vm' to use 'DynamicVM' as the AgentType, set to 'host' to use 'DynamicHost' as the AgentType
 dynamic_metric_type =
 
-sampling_interval = 5
-run_interval = 5
+sampling_interval = 15s
+run_interval = 60s
 # what size to limit chunks sent to IF to, as kb
 chunk_size_kb = 2048
 if_url = https://app.insightfinder.com
