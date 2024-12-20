@@ -109,7 +109,14 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
 
             for metric_batch in metric_batch_list:
                 query_str = query.get('query')
-                mql = {'time': timestamp}
+
+                # Range Query
+                end_time = timestamp
+                start_time = end_time - if_config_vars['run_interval']
+                step = if_config_vars['sampling_interval']
+
+                mql = {'start': start_time, 'end': end_time, 'step': step}
+
 
                 if len(metric_batch) > 0:
                     mql['query'] = ' or '.join(['{}{}'.format(m, query_str) for m in metric_batch])
@@ -130,7 +137,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     if agent_config_vars['his_time_range']:
         logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
         for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
-                               if_config_vars['sampling_interval']):
+                               if_config_vars['run_interval']):
             run_prometheus_query(timestamp)
     else:
         logger.debug('Using current time for streaming data')
@@ -176,7 +183,7 @@ def query_messages_prometheus(args):
     data = []
     try:
         # execute sql string
-        url = urllib.parse.urljoin(agent_config_vars['api_url'], 'query')
+        url = urllib.parse.urljoin(agent_config_vars['api_url'], 'query_range')
         response = send_request(logger, url, params=params, proxies=agent_config_vars['proxies'],
                                 **agent_config_vars['auth_kwargs'], **agent_config_vars['ssl_kwargs'])
         if response == -1:
@@ -192,8 +199,9 @@ def query_messages_prometheus(args):
         logger.error('Query error: {}'.format(params))
 
     for item in data:
-        if item.get('value') and item.get('value')[1] == 'NaN' or item.get('value')[1] == '+Inf' or item.get('value')[1] == '-Inf':
-            item['value'][1] = 0
+        for value in item.get('values'):
+            if value and value[1] == 'NaN' or value[1] == '+Inf' or value[1] == '-Inf':
+              item.get('values')['value'][1] = 0
 
     # add metric name in the value. In batch mode, the metric is None, it will later read from metrics_name_field
     data = [{**item, 'metric_name': metric} for item in data]
@@ -210,7 +218,6 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
     query_device_fields = query.get('device_fields')
     default_component_name = agent_config_vars['default_component_name']
     sampling_interval = if_config_vars['sampling_interval']
-    sampling_time = sampling_time * 1000 if len(str(sampling_time)) == 10 else sampling_time
 
     count = 0
     logger.info('Reading {} messages'.format(len(result)))
@@ -297,27 +304,24 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
             if agent_config_vars['dynamic_host_field']:
                 host_id = message.get('metric').get(agent_config_vars['dynamic_host_field'])
 
-            vector_value = message.get('value')
-            timestamp = int(vector_value[0]) * 1000 if len(str(vector_value[0])) == 10 else vector_value[0]
-            if sampling_time and abs(timestamp - sampling_time) > sampling_interval:
-                timestamp = sampling_time
-                logger.warn('Timestamp %s in the message is not in the sampling interval, using sampling time %s' % (
-                    timestamp, sampling_time))
+            vector_values = message.get('values')
+            for vector_value in vector_values:
 
-            data_value = vector_value[1]
+                data_value = vector_value[1]
 
-            # set offset for timestamp
-            timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
-            timestamp = str(align_timestamp(timestamp, sampling_interval))
+                # set offset for timestamp
+                timestamp = int(vector_value[0]) * 1000 if len(str(vector_value[0])) == 10 else vector_value[0]
+                timestamp += agent_config_vars['target_timestamp_timezone'] * 1000
+                # timestamp = str(align_timestamp(timestamp, sampling_interval))
 
-            key = '{}-{}'.format(timestamp, full_instance)
-            if key not in metric_buffer['buffer_dict']:
-                metric_buffer['buffer_dict'][key] = {"timestamp": timestamp, "component_map": component_map,
-                                                     "host_id": host_id, "instanceName": full_instance,
-                                                     "componentName": component}
+                key = '{}-{}'.format(timestamp, full_instance)
+                if key not in metric_buffer['buffer_dict']:
+                    metric_buffer['buffer_dict'][key] = {"timestamp": timestamp, "component_map": component_map,
+                                                         "host_id": host_id, "instanceName": full_instance,
+                                                         "componentName": component}
 
-            metric_key = '{}[{}]'.format(date_field, full_instance)
-            metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
+                metric_key = '{}[{}]'.format(date_field, full_instance)
+                metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
 
         except Exception as e:
             logger.warn('Error when parsing message')
@@ -1091,7 +1095,7 @@ def check_project_exist(logger, if_config_vars):
                       'instanceType': 'Prometheus', 'projectCloudType': 'Prometheus',
                       'dataType': get_data_type_from_project_type(if_config_vars),
                       'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
-                      'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
+                      'samplingInterval': int(if_config_vars['sampling_interval']),
                       'samplingIntervalInSeconds': if_config_vars['sampling_interval'], }
             logger.debug("insightAgentType:", get_insight_agent_type_from_project_type(if_config_vars))
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
