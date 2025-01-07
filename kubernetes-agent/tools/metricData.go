@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"fmt"
 	"kubernetes-agent/host_mapper"
 	"kubernetes-agent/insightfinder"
 	"kubernetes-agent/prometheus"
@@ -20,8 +21,16 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 			var componentName string
 			if promMetricData.Pod == "" && promMetricData.NameSpace == "" {
 				// Node level metric
-				instanceName = hostMapper.GetHostInstanceName(promMetricData.Node)
+				var err error
+				instanceName, err = hostMapper.GetHostInstanceName(promMetricData.Node)
 				componentName = promMetricData.Node
+
+				// Skip the metric data point if the host mapping is failing.
+				if err != nil {
+					fmt.Println(err.Error())
+					continue
+				}
+
 			} else {
 				// Pod level metric
 				instanceName, componentName = instanceNameMapper.GetInstanceMapping(promMetricData.NameSpace, promMetricData.Pod)

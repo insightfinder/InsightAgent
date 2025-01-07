@@ -1,6 +1,7 @@
 package host_mapper
 
 import (
+	"gopkg.in/errgo.v2/errors"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"kubernetes-agent/host_mapper/models"
@@ -55,12 +56,12 @@ func (hostMapper *HostMapper) GetHostIndex(host string) int {
 	}
 }
 
-func (hostMapper *HostMapper) GetHostInstanceName(host string) string {
+func (hostMapper *HostMapper) GetHostInstanceName(host string) (string, error) {
 	index := hostMapper.GetHostIndex(host)
 	if index == -1 {
-		return host
+		return host, errors.New("Unable to map host: " + host)
 	} else {
-		return "k8s-host-" + strconv.Itoa(index)
+		return "k8s-host-" + strconv.Itoa(index), nil
 	}
 }
 
