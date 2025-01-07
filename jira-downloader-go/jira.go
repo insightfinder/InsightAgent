@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/carlmjohnson/requests"
-	"github.com/thedevsaddam/gojsonq/v2"
 	"log"
 	"sync"
+
+	"github.com/carlmjohnson/requests"
+	"github.com/thedevsaddam/gojsonq/v2"
 )
 
 type Jira struct {
@@ -47,7 +48,7 @@ func (j *Jira) GetTickets(startDate, endDate string) {
 		}(&wg)
 	}
 	wg.Wait()
-	close(issuesChn)
+	//close(issuesChn)
 
 	// Start a new goroutine to write the results to files under ./data
 	go func() {
@@ -99,8 +100,8 @@ func (j *Jira) GetComments(issueKey string) *[]any {
 	var commentResponse JiraCommentResponse
 
 	err := requests.
-		URL(fmt.Sprintf("%s/rest/api/3/issue/%s/comment", j.Url, issueKey)).
-		BasicAuth(j.Username, j.ApiKey).
+		URL(fmt.Sprintf("%s/rest/api/2/issue/%s/comment", j.Url, issueKey)).
+		Bearer(j.ApiKey).
 		ToJSON(&commentResponse).
 		Fetch(context.Background())
 	if err != nil {
@@ -115,16 +116,19 @@ func (j *Jira) getIssues(startAt, maxResults int, startDate, endDate string, iss
 	var searchResponse JiraSearchResponse
 
 	searchPayload := map[string]string{
-		"jql":        fmt.Sprintf("project=%s AND created >= '%s' AND created <= '%s' ORDER BY created DESC", j.Project, startDate, endDate),
+		//"jql":        fmt.Sprintf("project=%s AND created >= '%s' AND created <= '%s' ORDER BY created DESC", j.Project, startDate, endDate),
+		"jql":        fmt.Sprintf("project=%s ORDER BY created DESC", j.Project),
 		"startAt":    fmt.Sprintf("%d", startAt),
 		"maxResults": fmt.Sprintf("%d", maxResults),
 	}
 
 	err := requests.
-		URL(fmt.Sprintf("%s/rest/api/3/search", j.Url)).
+		URL(fmt.Sprintf("%s/rest/api/2/search", j.Url)).
 		BasicAuth(j.Username, j.ApiKey).
+		Bearer(j.ApiKey).
 		BodyJSON(searchPayload).
 		ToJSON(&searchResponse).
+		Post().
 		Fetch(context.Background())
 	if err != nil {
 		log.Fatalf("Error querying Jira API: %v", err)
@@ -132,6 +136,7 @@ func (j *Jira) getIssues(startAt, maxResults int, startDate, endDate string, iss
 
 	// Send the issues to the channel
 	for _, issue := range searchResponse.Issues {
+		fmt.Println("Add one issue to process queue")
 		*issuesChn <- &issue
 	}
 
@@ -142,19 +147,22 @@ func (j *Jira) getTotalResultsNum(startDate, endDate string) int {
 	var searchResponse JiraSearchResponse
 
 	searchPayload := map[string]string{
-		"jql":        fmt.Sprintf("project=%s AND created >= '%s' AND created <= '%s' ORDER BY created DESC", j.Project, startDate, endDate),
+		//"jql":        fmt.Sprintf("project=%s AND created >= '%s' AND created <= '%s' ORDER BY created DESC", j.Project, startDate, endDate),
+		"jql":        fmt.Sprintf("project=%s ORDER BY created DESC", j.Project),
 		"startAt":    "0",
 		"maxResults": "0",
 	}
 
 	err := requests.
-		URL(fmt.Sprintf("%s/rest/api/3/search", j.Url)).
-		BasicAuth(j.Username, j.ApiKey).
+		URL(fmt.Sprintf("%s/rest/api/2/search", j.Url)).
+		Bearer(j.ApiKey).
 		BodyJSON(searchPayload).
 		ToJSON(&searchResponse).
+		Post().
 		Fetch(context.Background())
 	if err != nil {
 		log.Fatalf("Error querying Jira API: %v", err)
 	}
+	fmt.Println("Fetching resources: ", searchResponse.Total)
 	return searchResponse.Total
 }
