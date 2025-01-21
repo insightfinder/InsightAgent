@@ -4,7 +4,8 @@ SHELL ["/bin/bash", "-c"]
 COPY . .
 
 # Install system dependencies
-RUN pip install -r requirements.txt && \
+RUN apt-get update -y && apt-get upgrade -y && \
+    pip install -r requirements.txt && \
     chown -R 1001:1001 ./
 
 USER 1001
