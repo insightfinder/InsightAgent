@@ -451,6 +451,10 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             else:
                 data_value = str(message['value'])
 
+            # Special Case: Convert 'ICMP response time' to use ms instead of second
+            if data_value and data_field == 'ICMP response time':
+                data_value = str(float(data_value) * 1000)
+
             timestamp = str(timestamp)
 
             key = '{}-{}'.format(timestamp, full_instance)
