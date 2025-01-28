@@ -491,7 +491,7 @@ def get_agent_config_vars(logger, config_ini):
         return False
 
     with open(config_ini) as fp:
-        config_parser = configparser.ConfigParser()
+        config_parser = configparser.ConfigParser(interpolation=None)
         config_parser.read_file(fp)
 
         zabbix_kwargs = {}
