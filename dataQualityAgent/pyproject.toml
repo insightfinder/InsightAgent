@@ -1,0 +1,23 @@
+[project]
+name = "data-quality-agent"
+version = "0.1.0"
+description = "Agent to map source and target data with transformations"
+authors = [
+    {name = "Raja Shekar Reddy Siriganagari",email = "raja@insightfinder.com"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml (>=6.0.2,<7.0.0)",
+    "polars (>=1.21.0,<2.0.0)"
+]
+
+[project.scripts]
+data-quality-agent = "data_quality_agent.main:main"
+agent = "data_quality_agent.main:main"
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

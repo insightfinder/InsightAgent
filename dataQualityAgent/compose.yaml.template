@@ -1,0 +1,10 @@
+services:
+  ubs-data-agent:
+    image: data-quality-agent
+    container_name: ubs
+    volumes:
+      - /path/on/host/config.yaml:/etc/config/config.yaml
+      - /path/to/csv:/data
+
+    
+    

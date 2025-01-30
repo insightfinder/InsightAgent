@@ -1,0 +1,181 @@
+mappings:
+  
+  # Name of the mapping. Can be anything
+  source_to_target:
+    source: 'source_env_name'
+    target: 'target_env_name'
+    paths:
+      # Supports wildcards for source_data and target_data fields
+      source_data: "/path/to/source/*.csv" 
+      target_data: "/path/to/target/single.csv"
+      output: /path/to/output/dir/output.log
+
+    # List of identifying columns to match source and target data
+    id_columns:
+      - orderIntId
+      - buySellIndicator
+      - eventType
+      - datetime_epoch
+      - instrumentId
+      - initialQty
+    
+    # Timestamp column in source
+    sourceTimeStampCol: "datetime_epoch"
+
+    # Rules for each of the id_columns specified.
+    # Each entry is a function definition that applies a transformation
+    # on the source row and computes the value for the target column
+    # Make sure each function name is 'id_columnRule' where id_column is the name of the identifying column.
+    # Each function must contain a single argument 'row' and any column
+    # can be accessed using the notation row['column'].
+    # All values are strings and make sure the return value is also string.
+    # Some sample rules with id_columns are shown here.
+    rules:
+      orderIntId: |-
+        def orderIntIdRule(row):
+          if row['instrumentType'] == 'SWAP':
+            try:
+              return str(row['orderId']) + '_' + str(int(row['legId'])+1)
+            except Exception as e:
+              return ""
+          elif row['instrumentType'] == 'BLOCK':
+            comp = ''
+            if row['directionMatchesRequest'].lower() == "false":
+              comp = 's' if row['blockLegSide'] == 'BUY' else 'b'
+            else:
+              comp = 'b' if row['blockLegSide'] == 'BUY' else 's'
+            orderIntId = '_'.join([str(x) for x in [row['orderId'], comp, row['legId'], row['allocationId'], row['quoteId']]])
+            return orderIntId
+          else:
+            return str(row['orderId'])
+
+      datetime_epoch: |-
+        def datetime_epochRule(row):
+          try:
+            val = str(int(float(row['datetime_epoch'])))
+            return val
+          except Exception as e:
+            logger.debug(f"Caught an exception: {e}")
+            return ""
+
+      eventType: |-
+        def eventTypeRule(row):
+          eventType = str(row['eventType'])
+          eventTypeTransformations = {
+            "NEW": "NEWO",
+            "CONFIRMED": "CONF",
+            "CANCELLED": "CAMO",
+            "REJECTED": "REMO",
+            "TRADE": "FILL",
+            "TRADE_ACK": "PARF"
+          }
+          return eventTypeTransformations[eventType] if eventType in eventTypeTransformations else ""
+
+      instrumentId: |-
+        def instrumentIdRule(row):
+          fxpm = "PM" if str(row['sym'])[1:3] in ["AU", "AG", "PT", "PD"] else "FX"
+          symclean2 = 'X' + str(row['sym'])[1:] if fxpm == "PM" else str(row['sym'])
+          spotSettlementDate = str(row['spotSettlementDate'])
+          legSettlementDate = str(row['legSettlementDate'])
+          third_comp = legSettlementDate.replace('-', '') if not spotSettlementDate or spotSettlementDate == "None" else spotSettlementDate.replace('-', '')
+          return fxpm + 'SPOT' + symclean2 + third_comp
+
+      buySellIndicator: |-
+        def buySellIndicatorRule(row):
+          sym = str(row['sym'])
+          fxpm = "PM" if str(row['sym'])[1:3] in ["AU", "AG", "PT", "PD"] else "FX"
+          currOrder = ''
+          if ord(sym[:1]) < ord(sym[3:4]):
+            currOrder = 'left'
+          elif ord(sym[:1]) > ord(sym[3:4]):
+            currOrder = 'right'
+          else:
+            if ord(sym[1:2]) < ord(sym[4:5]):
+              currOrder = 'left'
+            elif ord(sym[1:2]) > ord(sym[4:5]):
+              currOrder = 'right'
+            else:
+              if ord(sym[2:3]) < ord(sym[5:6]):
+                currOrder = 'left'
+              elif ord(sym[2:3]) > ord(sym[5:6]):
+                currOrder = 'right'
+              else:
+                currOrder = 'equal'
+          
+          flip_ini = -1
+          if fxpm == "FX":
+            if (currOrder == "left" and str(row['quantityUnit']) == "BASE") or (currOrder == "right" and str(row['quantityUnit']) == "COUNTER"):
+              flip_ini =  1
+            else:
+              flip_ini = 0
+          else:
+            flip_ini = 1
+
+          side_modified1 = ''
+
+          side = str(row['side'])
+
+          if side == "BUY":
+            side_modified1 = "BUYI"
+          elif side == "SELL":
+            side_modified1 = "SELL"
+          else:
+            side_modified1 = ""
+
+          flip = -1
+          if str(row['instrumentType']) == 'SWAP':
+            legId = 0
+            try:
+              legId = int(row['legId'])
+            except Exception as e:
+              logger.debug("legId value is not integer. Returning blank instead")
+            if legId % 2 == 0:
+              flip = 1 - flip_ini
+            else:
+              flip = flip_ini
+          else:
+            flip = flip_ini
+
+          side_modified = ''
+          if flip == 1:
+            if side_modified1 == "BUYI":
+              side_modified = "SELL"
+            elif side_modified1 == "SELL":
+              side_modified == "BUYI"
+            else:
+              side_modified = ""
+          else:
+            side_modified = side_modified1
+          
+          return side_modified
+      
+      initialQty: |-
+        def initialQtyRule(row):
+          return '-' + str(row['allocQuantity']) if str(row['directionMatchesRequest']).lower() == "false" else str(row['allocQuantity'])
+    
+
+    # (Optional)      
+    # If there are any additional modifications required apart from the generic source to target modifications
+    # you can add a function here that has the function signature "additionalModifications(config, source_df, target_df)"
+    # This requires some experience with the polars library
+    # Return an iterable of rows that will be combined with matches from the initial modifications
+    # Remember the data frames are passed to this function after appending 'source_' and 'target_' to their respective column names
+    additionalModifications: |-
+      def additionalModifications(config, source_df, target_df):
+
+        block_id_key_generated = 'target_quoteId' in target_df.columns
+        if not block_id_key_generated:
+          return []
+
+        id_columns_block = ['target_'+col for col in config['id_columns']]
+        id_columns_block[id_columns_block.index('target_orderIntId')] = 'target_quoteId'
+        target_df = target_df.with_columns(
+            pl.concat_str(id_columns_block, separator='--').alias('target_id_key_block')
+        )
+
+        combined_df_block = source_df.join(target_df, left_on='source_id_key', right_on='target_id_key_block')
+
+        return combined_df_block.iter_rows(named=True)
+          
+        
+
