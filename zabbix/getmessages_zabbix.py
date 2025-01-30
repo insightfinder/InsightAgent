@@ -451,6 +451,10 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             else:
                 data_value = str(message['value'])
 
+            # Special Case: Convert 'ICMP response time' to use ms instead of second
+            if data_value and data_field == 'ICMP response time':
+                data_value = str(float(data_value) * 1000)
+
             timestamp = str(timestamp)
 
             key = '{}-{}'.format(timestamp, full_instance)
@@ -491,7 +495,7 @@ def get_agent_config_vars(logger, config_ini):
         return False
 
     with open(config_ini) as fp:
-        config_parser = configparser.ConfigParser()
+        config_parser = configparser.ConfigParser(interpolation=None)
         config_parser.read_file(fp)
 
         zabbix_kwargs = {}
