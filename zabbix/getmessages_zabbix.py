@@ -440,6 +440,11 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
 
             data_value = None
             if is_alert:
+
+                # Skip Alerts / Problems `resolved` or `ok` event
+                if 'value' in message and message['value'] == '0':
+                    continue
+
                 if alert_data_fields and len(alert_data_fields) == 1:
                     data_value = message.get([alert_data_fields[0]])
                 elif alert_data_fields and len(alert_data_fields) > 1:
