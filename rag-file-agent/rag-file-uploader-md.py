@@ -2,7 +2,6 @@ import os
 import re
 import requests
 import yaml
-import logging
 from langchain_community.document_loaders import UnstructuredMarkdownLoader
 
 with open("config.yaml", "r") as file:
