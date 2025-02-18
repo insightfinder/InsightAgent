@@ -32,7 +32,7 @@ def chunk_filename_list(dir: str, chunk_size: int):
 def main():
     """Main entry point for the Python agent."""
     # Get the input string from command-line arguments
-    required_keys = ["api", "logging"]
+    required_keys = ["api", "logging", z"agent"]
     if not all(key in config for key in required_keys):
         raise KeyError(f"Missing required config keys: {required_keys}")
     api_config = config["api"]
