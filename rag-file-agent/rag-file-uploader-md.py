@@ -23,7 +23,6 @@ def process_rag_files(dir: str, company_name: str, dataset_name: str):
                 else:
                     hex = filename
         rag_files.append({"filename":filename,"tags":hex,"content":documents[0].page_content})
-        break
     return {"company":company_name,"dataset":dataset_name,"doc_list":rag_files}
 
 
