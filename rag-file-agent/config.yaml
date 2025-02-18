@@ -11,6 +11,7 @@ api:
     Content-Type: "application/json"
   company: "_public"
   dataset: "Microsoft Documents"
+  dir: "/home/dir"
 
 logging:
   level: "INFO"
