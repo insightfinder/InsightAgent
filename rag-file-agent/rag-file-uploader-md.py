@@ -23,6 +23,7 @@ def process_rag_files(dir: str, company_name: str, dataset_name: str):
                 else:
                     hex = filename
         rag_files.append({"filename":filename,"tags":hex,"content":documents[0].page_content})
+        break
     return {"company":company_name,"dataset":dataset_name,"doc_list":rag_files}
 
 
@@ -42,7 +43,7 @@ def main():
     rag_dto = process_rag_files(dir, company_name, dataset_name)
     url = genAI_addr + "/rag-dataset-uploader/rag-dataset-uploader"
     response = requests.post(url, json=rag_dto, headers=headers)
-    logging.info("API Response: ", response.json())
+    logging.info("API Response status: %d, msg: %s", response.status_code, response.json()["detail"])
 
 
 if __name__ == "__main__":
