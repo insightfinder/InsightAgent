@@ -1,0 +1,6 @@
+confluence_url: "https://xxxxxx.atlassian.net"
+space_key: ""
+username: ""
+api_token: ""
+save_directory: "output"  # This is optional; defaults to 'confluence_pages_v2'
+page_limit: 25  # This is optional; defaults to 25
