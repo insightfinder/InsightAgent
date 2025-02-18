@@ -1,0 +1,9 @@
+# Agent Configuration
+agent:
+  chunk_size: 10
+  dir: "/home/tianren/Desktop/GAI-PGVector-Scripts/Microsoft_Documents"
+
+api:
+  GenAI_address: "http://localhost:8000"
+  company: "_public"
+  dataset: "Microsoft Documents"
