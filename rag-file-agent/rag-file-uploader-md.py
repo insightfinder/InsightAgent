@@ -32,18 +32,16 @@ def chunk_filename_list(dir: str, chunk_size: int):
 def main():
     """Main entry point for the Python agent."""
     # Get the input string from command-line arguments
-    required_keys = ["api", "logging", "agent"]
+    required_keys = ["api", "agent"]
     if not all(key in config for key in required_keys):
         raise KeyError(f"Missing required config keys: {required_keys}")
     api_config = config["api"]
-    dir = api_config["dir"]
+    agent_config = config["agent"]
+    dir = agent_config["dir"]
     company_name = api_config["company"]
     dataset_name = api_config["dataset"]
     genAI_addr = api_config["GenAI_address"]
-    log_config = config["logging"]
-    chunk_size = config["agent"]["chunk_size"]
-    logging.basicConfig(filename=log_config["file"], level=log_config["level"], 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+    chunk_size = agent_config["chunk_size"]
 
     headers = {"accept": "application/json","Content-Type": "application/json"}
     chunked_filename_list = chunk_filename_list(dir, chunk_size)
@@ -51,7 +49,7 @@ def main():
         rag_dto = process_rag_files(dir, company_name, dataset_name, filename_list)
         url = genAI_addr + "/rag-dataset-uploader/rag-dataset-uploader"
         response = requests.post(url, json=rag_dto, headers=headers)
-        logging.info("API Response status: %d, msg: %s", response.status_code, response.json()["detail"])
+        print("API Response status: %d, msg: %s", response.status_code, response.json()["detail"])
 
 
 if __name__ == "__main__":
