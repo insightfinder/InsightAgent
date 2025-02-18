@@ -1,0 +1,17 @@
+# Agent Configuration
+agent:
+  name: "Rag File Uploader"
+  version: "1.0"
+
+api:
+  GenAI_address: "http://3.92.182.139:8000"
+  method: "POST"
+  headers:
+    accept: "application/json"
+    Content-Type: "application/json"
+  company: "_public"
+  dataset: "Microsoft Documents"
+
+logging:
+  level: "INFO"
+  file: "agent.log"
