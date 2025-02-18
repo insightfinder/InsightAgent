@@ -1,7 +1,5 @@
 # Agent Configuration
 agent:
-  name: "Rag File Uploader"
-  version: "1.0"
   chunk_size: 10
   dir: "/home/tianren/Desktop/GAI-PGVector-Scripts/Microsoft_Documents"
 
