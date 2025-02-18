@@ -4,7 +4,7 @@ InsightFinder Kubernetes Agent is a tool to collect metrics and logs from Promet
 
 ## Deploy
 Deployment is done by helm chart.
-See [helm_chart/README.md](helm_chart/README.md) for more details.
+See [README.md](https://github.com/insightfinder/charts/tree/main/charts/kubernetes-agent) for more details.
 
 ## Develop
 ### Build
