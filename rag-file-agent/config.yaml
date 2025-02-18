@@ -2,16 +2,17 @@
 agent:
   name: "Rag File Uploader"
   version: "1.0"
+  chunk_size: 10
 
 api:
-  GenAI_address: "http://3.92.182.139:8000"
+  GenAI_address: "http://localhost:8000"
   method: "POST"
   headers:
     accept: "application/json"
     Content-Type: "application/json"
   company: "_public"
   dataset: "Microsoft Documents"
-  dir: "/home/dir"
+  dir: "/home/tianren/Desktop/GAI-PGVector-Scripts/Microsoft_Documents"
 
 logging:
   level: "INFO"
