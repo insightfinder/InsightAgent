@@ -5,6 +5,7 @@ import json
 import logging
 import multiprocessing
 import os
+import re
 import shlex
 import socket
 import sys
@@ -363,7 +364,9 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
         agent_config_vars['instance_field']) > 0 else 'hostid'
     device_field = agent_config_vars['device_field']
     target_timestamp_timezone = agent_config_vars['target_timestamp_timezone']
-    no_component_field = agent_config_vars['no_component_field']
+    component_from_host_group = agent_config_vars['component_from_host_group']
+    zone_from_host_group = agent_config_vars['zone_from_host_group']
+    component_from_instance_name_re_sub = agent_config_vars['component_from_instance_name_re_sub']
     alert_data_fields = agent_config_vars['alert_data_fields']
 
     for message in result:
@@ -393,12 +396,35 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
 
             instance = all_field_map.get(instance_field).get(instance_id)
 
+            # set zone
+            zone = None
+            if zone_from_host_group:
+                zone_field = 'hostgroup'
+                if all_field_map.get(zone_field):
+                    zone = all_field_map.get(zone_field).get(instance_id)
+
+
             # set component
             component = None
-            if not no_component_field:
+            if component_from_host_group:
                 component_field = 'hostgroup'
                 if all_field_map.get(component_field):
                     component = all_field_map.get(component_field).get(instance_id)
+            elif component_from_instance_name_re_sub:
+                re_sub_rules = component_from_instance_name_re_sub.split(",")
+                if len(re_sub_rules) % 2 != 0:
+                    logger.error("Unable to parse component_from_instance_name_re_sub")
+
+                re_rule_part1 = ""
+                re_rule_part2 = ""
+                component = instance
+
+                for rule_index in range(len(re_sub_rules)):
+                    if rule_index %2 == 0:
+                        re_rule_part1 = re_sub_rules[rule_index]
+                    else:
+                        re_rule_part2 = re_sub_rules[rule_index]
+                        component = re.sub(re_rule_part1, re_rule_part2, component)
 
             # add device info if it has
             device = None
@@ -470,6 +496,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                 data_buffer['buffer_dict'][key]['instanceName'] = full_instance
                 if component:
                     data_buffer['buffer_dict'][key]['componentName'] = component
+                    data_buffer['buffer_dict'][key]['zone'] = zone
 
                 # data_key = '{}[{}]'.format(data_field, full_instance)
                 data_buffer['buffer_dict'][key]['data'][data_field] = data_value
@@ -477,6 +504,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                 data_buffer['buffer_dict'][key]['tag'] = full_instance
                 if component:
                     data_buffer['buffer_dict'][key]['componentName'] = component
+                    data_buffer['buffer_dict'][key]['zone'] = zone
                 data_buffer['buffer_dict'][key]['data'] = data_value
 
         except Exception as e:
@@ -558,7 +586,9 @@ def get_agent_config_vars(logger, config_ini):
             data_format = config_parser.get('zabbix', 'data_format').upper()
             # project_field = config_parser.get('agent', 'project_field', raw=True)
             instance_field = config_parser.get('zabbix', 'instance_field', raw=True)
-            no_component_field = config_parser.get('zabbix', 'no_component_field') or False
+            component_from_host_group = config_parser.get('zabbix', 'component_from_host_group') or False
+            zone_from_host_group = config_parser.get('zabbix', 'zone_from_host_group') or False
+            component_from_instance_name_re_sub = config_parser.get('zabbix', 'component_from_instance_name_re_sub', fallback=None)
             device_field = config_parser.get('zabbix', 'device_field', raw=True)
             timestamp_field = config_parser.get('zabbix', 'timestamp_field', raw=True) or 'timestamp'
             target_timestamp_timezone = config_parser.get('zabbix', 'target_timestamp_timezone', raw=True) or 'UTC'
@@ -656,8 +686,12 @@ def get_agent_config_vars(logger, config_ini):
         # fields
         # project_fields = project_field.split(',')
         instance_fields = [x for x in instance_field.split(',') if x.strip()]
-        if no_component_field:
-            no_component_field = True if no_component_field.lower() == 'true' else False
+        if component_from_host_group:
+            component_from_host_group = True if component_from_host_group.lower() == 'true' else False
+
+        if zone_from_host_group:
+            zone_from_host_group = True if zone_from_host_group.lower() == 'true' else False
+
         device_fields = [x for x in device_field.split(',') if x.strip()]
         timestamp_fields = timestamp_field.split(',')
         if len(data_fields) != 0:
@@ -686,11 +720,12 @@ def get_agent_config_vars(logger, config_ini):
                        'log_request_interval': log_request_interval, 'applications': applications,
                        'his_time_range': his_time_range, 'proxies': agent_proxies, 'data_format': data_format,
                        # 'project_field': project_fields,
-                       'instance_field': instance_fields, 'no_component_field': no_component_field,
+                       'instance_field': instance_fields, 'component_from_host_group': component_from_host_group,
+                       'zone_from_host_group': zone_from_host_group,
                        'device_field': device_fields, 'data_fields': data_fields,
                        'alert_data_fields': alert_data_fields, 'timestamp_field': timestamp_fields,
                        'target_timestamp_timezone': target_timestamp_timezone, 'timezone': timezone,
-                       'timestamp_format': timestamp_format, }
+                       'timestamp_format': timestamp_format, 'component_from_instance_name_re_sub': component_from_instance_name_re_sub}
 
         return config_vars
 
@@ -982,12 +1017,13 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
     for chunk in chunk_metric_data:
         instance_name = chunk['instanceName']
         component_name = chunk.get('componentName')
+        zone = chunk.get('zone')
         timestamp = chunk['timestamp']
         data = chunk['data']
         if data and timestamp and instance_name:
             ts = int(timestamp)
             if instance_name not in instance_data_map:
-                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'dit': {}, }
+                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'z': zone, 'dit': {}, }
 
             if timestamp not in instance_data_map[instance_name]['dit']:
                 instance_data_map[instance_name]['dit'][timestamp] = {'t': ts, 'm': []}
