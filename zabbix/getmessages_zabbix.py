@@ -365,6 +365,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
     device_field = agent_config_vars['device_field']
     target_timestamp_timezone = agent_config_vars['target_timestamp_timezone']
     component_from_host_group = agent_config_vars['component_from_host_group']
+    zone_from_host_group = agent_config_vars['zone_from_host_group']
     component_from_instance_name_re_sub = agent_config_vars['component_from_instance_name_re_sub']
     alert_data_fields = agent_config_vars['alert_data_fields']
 
@@ -394,6 +395,14 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                     continue
 
             instance = all_field_map.get(instance_field).get(instance_id)
+
+            # set zone
+            zone = None
+            if zone_from_host_group:
+                zone_field = 'hostgroup'
+                if all_field_map.get(zone_field):
+                    zone = all_field_map.get(zone_field).get(instance_id)
+
 
             # set component
             component = None
@@ -487,6 +496,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                 data_buffer['buffer_dict'][key]['instanceName'] = full_instance
                 if component:
                     data_buffer['buffer_dict'][key]['componentName'] = component
+                    data_buffer['buffer_dict'][key]['zone'] = zone
 
                 # data_key = '{}[{}]'.format(data_field, full_instance)
                 data_buffer['buffer_dict'][key]['data'][data_field] = data_value
@@ -494,6 +504,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                 data_buffer['buffer_dict'][key]['tag'] = full_instance
                 if component:
                     data_buffer['buffer_dict'][key]['componentName'] = component
+                    data_buffer['buffer_dict'][key]['zone'] = zone
                 data_buffer['buffer_dict'][key]['data'] = data_value
 
         except Exception as e:
@@ -576,6 +587,7 @@ def get_agent_config_vars(logger, config_ini):
             # project_field = config_parser.get('agent', 'project_field', raw=True)
             instance_field = config_parser.get('zabbix', 'instance_field', raw=True)
             component_from_host_group = config_parser.get('zabbix', 'component_from_host_group') or False
+            zone_from_host_group = config_parser.get('zabbix', 'zone_from_host_group') or False
             component_from_instance_name_re_sub = config_parser.get('zabbix', 'component_from_instance_name_re_sub', fallback=None)
             device_field = config_parser.get('zabbix', 'device_field', raw=True)
             timestamp_field = config_parser.get('zabbix', 'timestamp_field', raw=True) or 'timestamp'
@@ -676,6 +688,10 @@ def get_agent_config_vars(logger, config_ini):
         instance_fields = [x for x in instance_field.split(',') if x.strip()]
         if component_from_host_group:
             component_from_host_group = True if component_from_host_group.lower() == 'true' else False
+
+        if zone_from_host_group:
+            zone_from_host_group = True if zone_from_host_group.lower() == 'true' else False
+
         device_fields = [x for x in device_field.split(',') if x.strip()]
         timestamp_fields = timestamp_field.split(',')
         if len(data_fields) != 0:
@@ -705,6 +721,7 @@ def get_agent_config_vars(logger, config_ini):
                        'his_time_range': his_time_range, 'proxies': agent_proxies, 'data_format': data_format,
                        # 'project_field': project_fields,
                        'instance_field': instance_fields, 'component_from_host_group': component_from_host_group,
+                       'zone_from_host_group': zone_from_host_group,
                        'device_field': device_fields, 'data_fields': data_fields,
                        'alert_data_fields': alert_data_fields, 'timestamp_field': timestamp_fields,
                        'target_timestamp_timezone': target_timestamp_timezone, 'timezone': timezone,
@@ -1000,12 +1017,13 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
     for chunk in chunk_metric_data:
         instance_name = chunk['instanceName']
         component_name = chunk.get('componentName')
+        zone = chunk.get('zone')
         timestamp = chunk['timestamp']
         data = chunk['data']
         if data and timestamp and instance_name:
             ts = int(timestamp)
             if instance_name not in instance_data_map:
-                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'dit': {}, }
+                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'z': zone, 'dit': {}, }
 
             if timestamp not in instance_data_map[instance_name]['dit']:
                 instance_data_map[instance_name]['dit'][timestamp] = {'t': ts, 'm': []}
