@@ -1236,7 +1236,7 @@ def check_project_exist(logger, agent_config_vars, if_config_vars, project_name,
                       'projectCloudType': 'Zabbix',
                       'dataType': get_data_type_from_project_type(logger, if_config_vars),
                       'insightAgentType': get_insight_agent_type_from_project_type(agent_config_vars, if_config_vars),
-                      'samplingInterval': int(if_config_vars['sampling_interval'] / 60),
+                      'samplingInterval': int(if_config_vars['sampling_interval']),
                       'samplingIntervalInSeconds': if_config_vars['sampling_interval'], }
             url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
             response = send_request(logger, url, 'POST', data=params, verify=False,
