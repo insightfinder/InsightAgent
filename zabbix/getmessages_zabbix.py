@@ -305,7 +305,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
     logger.info("Zabbix hosts count: %s" % len(hosts_ids))
     if len(hosts_ids) == 0:
         logger.error('Hosts list is empty, quit')
-        sys.exit(1)
+        return
 
     # get data by hosts/applications
     hosts_ids_list = [hosts_ids]
@@ -337,7 +337,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
 
         if len(items_keys) == 0:
             logger.error('Item list is empty')
-            sys.exit(1)
+            return
 
         # logger.info("Zabbix item count: %s" % len(items_keys))
 
