@@ -82,7 +82,9 @@ Author: Ariy <Ariy@insightfinder.com>\n
     Merge pull request #5015 from DEMO/II-6892_optimize_data_loading\n
     Add multithread support for data loading to enhance the performance
     Add paging support for loading large chunk of data''']
-DEPLOYMENT_DATA_INDEX = {5:0, 9:0, 13:1, 17:1, 21:2, 23:3}
+
+#DEPLOYMENT_DATA_INDEX = {0:0, 4:0, 8:1, 12:1, 16:1, 20:3}
+DEPLOYMENT_DATA_INDEX = {5:0, 9:0, 15:1, 17:1, 21:2, 23:3}
 
 # Web data
 WEB_INCIDENT_DATA = "Production 911: Checkout server returns 500 error"
@@ -116,41 +118,41 @@ NORMAL_LOG_DATA = ['''com.insightfinder.RabbitMQ.ConsumerTDLogStreaming processT
 '''com.insightfinder.utility.LogCollectResultUtility updateNidMetadata\nINFO: Finish updating log nid time interval''',
 '''com.insightfinder.utility.LogCollectResultUtility clusteringEvents\nINFO: Starting clustering events''']
 NORMAL_EXCEPTION_DATA = ['''java.lang.ClassCastException: com.insightfinder.datastore.ActiveAWSProject cannot be cast to com.insightfinder.datastore.ActiveCustomProject
-	at com.insightfinder.datastore.ActiveProject.getProjectFromCassandra(ActiveProject.java:329)
-	at com.insightfinder.models.payload.DetectedIncidentAlertPayload.getDetectedIncidentAnomalyTimeLine(DetectedIncidentAlertPayload.java:109)
-	at com.insightfinder.models.payload.DetectedIncidentAlertPayload.runTask(DetectedIncidentAlertPayload.java:94)
-	at com.insightfinder.RabbitMQ.ConsumerDetectedIncidentAlert.processTask(ConsumerDetectedIncidentAlert.java:31)
-	at com.insightfinder.RabbitMQ.IFARabbitmqConsumer.handleDelivery(IFARabbitmqConsumer.java:66)
-	at com.rabbitmq.client.impl.ConsumerDispatcher$5.run(ConsumerDispatcher.java:149)
-	at com.rabbitmq.client.impl.ConsumerWorkService$WorkPoolRunnable.run(ConsumerWorkService.java:104)
-	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
-	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
-	at java.lang.Thread.run(Thread.java:748)''',
+        at com.insightfinder.datastore.ActiveProject.getProjectFromCassandra(ActiveProject.java:329)
+        at com.insightfinder.models.payload.DetectedIncidentAlertPayload.getDetectedIncidentAnomalyTimeLine(DetectedIncidentAlertPayload.java:109)
+        at com.insightfinder.models.payload.DetectedIncidentAlertPayload.runTask(DetectedIncidentAlertPayload.java:94)
+        at com.insightfinder.RabbitMQ.ConsumerDetectedIncidentAlert.processTask(ConsumerDetectedIncidentAlert.java:31)
+        at com.insightfinder.RabbitMQ.IFARabbitmqConsumer.handleDelivery(IFARabbitmqConsumer.java:66)
+        at com.rabbitmq.client.impl.ConsumerDispatcher$5.run(ConsumerDispatcher.java:149)
+        at com.rabbitmq.client.impl.ConsumerWorkService$WorkPoolRunnable.run(ConsumerWorkService.java:104)
+        at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+        at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+        at java.lang.Thread.run(Thread.java:748)''',
     '''com.insightfinder.exception.DataCorruptionException: Data Corruption
-	at com.insightfinder.datastore.metric_data.InstanceMetricData$MetricMap.getMetricMap(InstanceMetricData.java:286)
-	at com.insightfinder.datastore.metric_data.InstanceMetricData$TimestampMetricMap.getTimestampMetricMap(InstanceMetricData.java:261)
-	at com.insightfinder.datastore.metric_data.aggregatedmetricdata.InstanceMetricDataAggregatedUtils.aggregateInstanceMetricDataByTimestamp(InstanceMetricDataAggregatedUtils.java:67)
-	at com.insightfinder.RabbitMQ.ConsumerCronAggregateMetricData.handleDelivery(ConsumerCronAggregateMetricData.java:59)
-	at com.rabbitmq.client.impl.ConsumerDispatcher$5.run(ConsumerDispatcher.java:149)
-	at com.rabbitmq.client.impl.ConsumerWorkService$WorkPoolRunnable.run(ConsumerWorkService.java:104)
-	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
-	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
-	at java.lang.Thread.run(Thread.java:748)''',
+        at com.insightfinder.datastore.metric_data.InstanceMetricData$MetricMap.getMetricMap(InstanceMetricData.java:286)
+        at com.insightfinder.datastore.metric_data.InstanceMetricData$TimestampMetricMap.getTimestampMetricMap(InstanceMetricData.java:261)
+        at com.insightfinder.datastore.metric_data.aggregatedmetricdata.InstanceMetricDataAggregatedUtils.aggregateInstanceMetricDataByTimestamp(InstanceMetricDataAggregatedUtils.java:67)
+        at com.insightfinder.RabbitMQ.ConsumerCronAggregateMetricData.handleDelivery(ConsumerCronAggregateMetricData.java:59)
+        at com.rabbitmq.client.impl.ConsumerDispatcher$5.run(ConsumerDispatcher.java:149)
+        at com.rabbitmq.client.impl.ConsumerWorkService$WorkPoolRunnable.run(ConsumerWorkService.java:104)
+        at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+        at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+        at java.lang.Thread.run(Thread.java:748)''',
     '''com.datastax.driver.core.exceptions.InvalidQueryException: Some partition key parts are missing: instancename
-	at com.datastax.driver.core.exceptions.InvalidQueryException.copy(InvalidQueryException.java:50)
-	at com.datastax.driver.core.DriverThrowables.propagateCause(DriverThrowables.java:35)
-	at com.datastax.driver.core.DefaultResultSetFuture.getUninterruptibly(DefaultResultSetFuture.java:293)
-	at com.datastax.driver.core.AbstractSession.execute(AbstractSession.java:58)
-	at com.datastax.driver.mapping.MappingSession.deleteByQuery(MappingSession.java:143)
-	at com.insightfinder.datastore.CassandraStore.deleteByQuery(CassandraStore.java:496)
-	at com.insightfinder.RabbitMQ.ConsumerCleanCron.cleanUpData(ConsumerCleanCron.java:67)
-	at com.insightfinder.RabbitMQ.ConsumerCleanCron.processTask(ConsumerCleanCron.java:49)
-	at com.insightfinder.RabbitMQ.IFARabbitmqConsumer.handleDelivery(IFARabbitmqConsumer.java:66)
-	at com.rabbitmq.client.impl.ConsumerDispatcher$5.run(ConsumerDispatcher.java:149)
-	at com.rabbitmq.client.impl.ConsumerWorkService$WorkPoolRunnable.run(ConsumerWorkService.java:104)
-	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
-	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
-	at java.lang.Thread.run(Thread.java:748)''']
+        at com.datastax.driver.core.exceptions.InvalidQueryException.copy(InvalidQueryException.java:50)
+        at com.datastax.driver.core.DriverThrowables.propagateCause(DriverThrowables.java:35)
+        at com.datastax.driver.core.DefaultResultSetFuture.getUninterruptibly(DefaultResultSetFuture.java:293)
+        at com.datastax.driver.core.AbstractSession.execute(AbstractSession.java:58)
+        at com.datastax.driver.mapping.MappingSession.deleteByQuery(MappingSession.java:143)
+        at com.insightfinder.datastore.CassandraStore.deleteByQuery(CassandraStore.java:496)
+        at com.insightfinder.RabbitMQ.ConsumerCleanCron.cleanUpData(ConsumerCleanCron.java:67)
+        at com.insightfinder.RabbitMQ.ConsumerCleanCron.processTask(ConsumerCleanCron.java:49)
+        at com.insightfinder.RabbitMQ.IFARabbitmqConsumer.handleDelivery(IFARabbitmqConsumer.java:66)
+        at com.rabbitmq.client.impl.ConsumerDispatcher$5.run(ConsumerDispatcher.java:149)
+        at com.rabbitmq.client.impl.ConsumerWorkService$WorkPoolRunnable.run(ConsumerWorkService.java:104)
+        at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+        at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+        at java.lang.Thread.run(Thread.java:748)''']
 EXCEPTION_LOG_DATA = '''Checkout service exception\n
 java.io.IOException: File uploading failed, retrying...\n
     at java.io.FileOutputStream.writeBytes(Native Method)\n
@@ -186,7 +188,8 @@ IF_CAT = 'InsightFinder'
 INSTANCE_CORE_SERVER = "core server"
 DEP_INSTANCE = 'Jenkins'
 # Put the ip address of the machine where the demo scripts exist, e.g. on stg the demo scripts are in the app-server node
-INSTANCE_ALERT = 'ip-172-31-6-130.ec2.internal'
+# WEB_INSTANCE = 'ip-172-31-52-141.ec2.internal'
+INSTANCE_ALERT = 'ip-172-31-52-141.ec2.internal'
 # Log data constant
 EVENT_ID = 'eventId'
 TAG = 'tag'
@@ -197,13 +200,3 @@ TIMESTAMP = "timestamp"
 MINUTE = 1000 * 60
 ONE_MINUTE_SEC = 60
 ONE_HOUR_SEC = ONE_MINUTE_SEC * 60
-#Pager duty
-PAGER_DUTY_URL = "https://events.pagerduty.com/generic/2010-04-15/create_event.json"
-PAGER_DUTY_SERVICE_KEY = ""
-PAGER_DUTY_DESC = "Checkout service exception"
-PAGER_DUTY_MSG = '''Checkout service exception\n
-java.io.IOException: File writing failed\n
-    at java.io.FileOutputStream.writeBytes(Native Method)\n
-    at java.io.FileOutputStream.write(Unknown Source)\n
-    at GHOST.GInputStream.readFile(GInputStream.java:79n\n
-    at GHOST.GInputStream.handleIncoming(GInputStream.java:29)'''
