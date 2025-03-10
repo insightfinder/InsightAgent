@@ -29,7 +29,7 @@ func BuildLogDataList(lokiLogData *[]loki.LokiLogData, instanceNameMapper *Insta
 		zone, ok := nodeRegionsMap[logData.Node]
 
 		if !ok {
-			zone = "unknown"
+			zone = ""
 		}
 
 		logDataList = append(logDataList, insightfinder.LogData{
