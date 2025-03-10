@@ -8,6 +8,8 @@ import (
 func BuildLogDataList(lokiLogData *[]loki.LokiLogData, instanceNameMapper *InstanceMapper, postProcessor *PostProcessor) *[]insightfinder.LogData {
 	logDataList := make([]insightfinder.LogData, 0)
 
+	nodeRegionsMap := *instanceNameMapper.GetNodeRegionMapping()
+
 	// Build logDataList
 	for _, logData := range *lokiLogData {
 		instanceName, componentName := instanceNameMapper.GetInstanceMapping(logData.Namespace, logData.Pod)
@@ -23,10 +25,18 @@ func BuildLogDataList(lokiLogData *[]loki.LokiLogData, instanceNameMapper *Insta
 		if instanceName == "" {
 			continue
 		}
+
+		zone, ok := nodeRegionsMap[logData.Node]
+
+		if !ok {
+			zone = "unknown"
+		}
+
 		logDataList = append(logDataList, insightfinder.LogData{
 			TimeStamp:     logData.Timestamp.UnixMilli(),
 			Tag:           instanceName,
 			ComponentName: componentName,
+			Zone:          zone,
 			Data:          logData.Text,
 			K8Identity: &insightfinder.K8Identity{
 				HostId: logData.Node,

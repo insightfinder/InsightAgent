@@ -13,6 +13,9 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 	InsightAgentType := insightfinder.ProjectTypeToAgentType(IFConfig["projectType"].(string), false, ToBool(IFConfig["isContainer"]))
 	CloudType := IFConfig["cloudType"].(string)
 
+	// Get node mappings to their specific regions
+	nodeRegionsMap := *instanceNameMapper.GetNodeRegionMapping()
+
 	// Build InstanceDataMap
 	instanceDataMap := make(map[string]insightfinder.InstanceData)
 	for metricType, metricData := range *metricDataMap {
@@ -52,10 +55,16 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 			if instanceName == "" {
 				continue
 			}
+
+			zone, ok := nodeRegionsMap[promMetricData.Node]
+			if !ok {
+				zone = "unknown"
+			}
 			if _, ok := instanceDataMap[instanceName]; !ok {
 				instanceDataMap[instanceName] = insightfinder.InstanceData{
 					InstanceName:       instanceName,
 					ComponentName:      componentName,
+					Zone:               zone,
 					DataInTimestampMap: make(map[int64]insightfinder.DataInTimestamp),
 				}
 			}
