@@ -135,6 +135,7 @@ func (mapper *InstanceMapper) AddPods(namespace string, resourceKind string, res
 }
 
 func (mapper *InstanceMapper) Update() {
+
 	slog.Info("Start updating Pod Instance Mapping...")
 
 	for namespace, _ := range mapper.Storage {
@@ -264,4 +265,14 @@ func (mapper *InstanceMapper) ListPods(namespace string) []string {
 		}
 	}
 	return allPods
+}
+
+func (mapper *InstanceMapper) GetNodeRegionMapping() *map[string]string {
+	slog.Info("Updating node names with regions")
+
+	nodeRegionMapping := mapper.KubernetesServer.GetNodeRegionMapping()
+
+	slog.Info("Updating node regions finished")
+
+	return nodeRegionMapping
 }

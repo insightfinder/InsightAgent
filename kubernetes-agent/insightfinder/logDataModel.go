@@ -4,6 +4,7 @@ type LogData struct {
 	TimeStamp     int64       `json:"timestamp" validate:"required"`
 	Tag           string      `json:"tag" validate:"required"`
 	ComponentName string      `json:"componentName" validate:"required"`
+	Zone          string      `json:"zoneName,omitempty"`
 	Data          interface{} `json:"data" validate:"required"`
 	K8Identity    *K8Identity `json:"k,omitempty"`
 }

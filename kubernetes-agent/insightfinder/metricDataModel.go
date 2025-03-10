@@ -20,6 +20,7 @@ type DataInTimestamp struct {
 type InstanceData struct {
 	InstanceName       string                    `json:"in" validate:"required"`
 	ComponentName      string                    `json:"cn,omitempty"`
+	Zone               string                    `json:"z,omitempty"`
 	DataInTimestampMap map[int64]DataInTimestamp `json:"dit" validate:"required"`
 }
 
