@@ -317,3 +317,28 @@ func (k *KubernetesServer) GetOpenTelemetryMapping(namespace string) *map[string
 	}
 	return &results
 }
+
+func (k *KubernetesServer) GetNodeRegionMapping() *map[string]string {
+
+	// Get all nodes in the cluster
+	nodes, err := k.Client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		slog.Error("Failed getting nodes: " + err.Error() + "\n")
+	}
+
+	// Create a map of node name to region
+	nodeRegions := make(map[string]string)
+	for _, node := range nodes.Items {
+		nodeName := node.Name
+		region := node.Labels["topology.kubernetes.io/region"]
+
+		if region == "" {
+			region = "unknown"
+		}
+
+		nodeRegions[nodeName] = region
+	}
+
+	return &nodeRegions
+
+}
