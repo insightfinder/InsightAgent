@@ -216,6 +216,7 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
     query_metric_name = query.get('metric_name')
     query_instance_fields = query.get('instance_fields')
     query_device_fields = query.get('device_fields')
+    query_device_type_field = query.get('device_type')
     default_component_name = agent_config_vars['default_component_name']
     sampling_interval = if_config_vars['sampling_interval']
 
@@ -274,6 +275,11 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
             if query_device_fields and len(query_device_fields) > 0:
                 device_field = query_device_fields
 
+            # Add Device Type info if it's in configs
+            device_type = agent_config_vars['device_type']
+            if query_device_type_field:
+                device_type = query_device_type_field
+
             if device_field and len(device_field) > 0:
 
                 # Get device name from the query result if we provide a device field
@@ -283,6 +289,7 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
 
                 # Skip the data point if device is not found in the data, but we require a device field
                 if device is None or device == '':
+                    device_type = None
                     continue
 
             full_instance = make_safe_instance_string(instance, device)
@@ -318,7 +325,7 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
                 if key not in metric_buffer['buffer_dict']:
                     metric_buffer['buffer_dict'][key] = {"timestamp": timestamp, "component_map": component_map,
                                                          "host_id": host_id, "instanceName": full_instance,
-                                                         "componentName": component}
+                                                         "componentName": component, "device_type": device_type}
 
                 metric_key = '{}[{}]'.format(date_field, full_instance)
                 metric_buffer['buffer_dict'][key][metric_key] = str(data_value)
@@ -431,6 +438,7 @@ def get_agent_config_vars(logger, config_ini):
             instance_field = config_parser.get('prometheus', 'instance_field', raw=True)
             instance_whitelist = config_parser.get('prometheus', 'instance_whitelist')
             device_field = config_parser.get('prometheus', 'device_field', raw=True)
+            device_type = config_parser.get('prometheus', 'device_type', raw=True, fallback=0)
             timestamp_field = config_parser.get('prometheus', 'timestamp_field', raw=True) or 'timestamp'
             target_timestamp_timezone = config_parser.get('prometheus', 'target_timestamp_timezone', raw=True) or 'UTC'
             timestamp_format = config_parser.get('prometheus', 'timestamp_format', raw=True)
@@ -541,6 +549,11 @@ def get_agent_config_vars(logger, config_ini):
         else:
             timeout = 5 * 60
 
+        if device_type == None:
+            device_type = 0
+        else:
+            device_type = int(device_type)
+
         # proxies
         agent_proxies = dict()
         if len(agent_http_proxy) > 0:
@@ -559,7 +572,7 @@ def get_agent_config_vars(logger, config_ini):
                        'proxies': agent_proxies, 'data_format': data_format,  # 'project_field': project_fields,
                        'component_field': component_field, 'default_component_name': default_component_name,
                        'instance_field': instance_fields, 'instance_name_suffix': instance_name_suffix, 'dynamic_host_field': dynamic_host_field,
-                       "instance_whitelist_regex": instance_whitelist_regex, 'device_field': device_fields,
+                       "instance_whitelist_regex": instance_whitelist_regex, 'device_field': device_fields,'device_type': device_type,
                        'timestamp_field': timestamp_fields, 'target_timestamp_timezone': target_timestamp_timezone,
                        'timezone': timezone, 'timestamp_format': timestamp_format,
                        'instance_connector': instance_connector, 'thread_pool': thread_pool, 'processes': processes,
@@ -871,7 +884,7 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
         if data and timestamp and instance_name:
             ts = int(timestamp)
             if instance_name not in instance_data_map:
-                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'dit': {}, }
+                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'ct': 0 , 'dit': {}, }
 
             if timestamp not in instance_data_map[instance_name]['dit']:
                 instance_data_map[instance_name]['dit'][timestamp] = {'t': ts, 'm': []}
