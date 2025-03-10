@@ -58,7 +58,7 @@ func BuildMetricDataPayload(metricDataMap *map[string][]prometheus.PromMetricDat
 
 			zone, ok := nodeRegionsMap[promMetricData.Node]
 			if !ok {
-				zone = "unknown"
+				zone = ""
 			}
 			if _, ok := instanceDataMap[instanceName]; !ok {
 				instanceDataMap[instanceName] = insightfinder.InstanceData{
