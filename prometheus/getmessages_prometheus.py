@@ -874,7 +874,7 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
         data_dict['systemName'] = if_config_vars['system_name']
     #data_dict['iat'] = get_insight_agent_type_from_project_type(if_config_vars)
     instance_data_map = dict()
-    common_fields = {"instanceName", "componentName", "host_id", "timestamp"}
+    common_fields = {"instanceName", "componentName", "host_id", "timestamp", "device_type"}
     for chunk in chunk_metric_data:
         instance_name = chunk['instanceName']
         component_name = chunk.get('componentName')
