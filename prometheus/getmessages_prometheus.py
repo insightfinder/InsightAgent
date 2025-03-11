@@ -549,7 +549,7 @@ def get_agent_config_vars(logger, config_ini):
         else:
             timeout = 5 * 60
 
-        if device_type == None or device_type.strip() == "":
+        if device_type == None or device_type == "":
             device_type = 0
         else:
             device_type = int(device_type)
