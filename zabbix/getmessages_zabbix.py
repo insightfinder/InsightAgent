@@ -496,6 +496,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                 data_buffer['buffer_dict'][key]['instanceName'] = full_instance
                 if component:
                     data_buffer['buffer_dict'][key]['componentName'] = component
+                if zone:
                     data_buffer['buffer_dict'][key]['zone'] = zone
 
                 # data_key = '{}[{}]'.format(data_field, full_instance)
@@ -504,7 +505,8 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                 data_buffer['buffer_dict'][key]['tag'] = full_instance
                 if component:
                     data_buffer['buffer_dict'][key]['componentName'] = component
-                    data_buffer['buffer_dict'][key]['zone'] = zone
+                if zone:
+                    data_buffer['buffer_dict'][key]['zoneName'] = zone
                 data_buffer['buffer_dict'][key]['data'] = data_value
 
         except Exception as e:
