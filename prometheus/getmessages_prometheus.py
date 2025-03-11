@@ -549,7 +549,7 @@ def get_agent_config_vars(logger, config_ini):
         else:
             timeout = 5 * 60
 
-        if device_type == None:
+        if device_type == None or device_type.strip() == "":
             device_type = 0
         else:
             device_type = int(device_type)
@@ -878,13 +878,14 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
     for chunk in chunk_metric_data:
         instance_name = chunk['instanceName']
         component_name = chunk.get('componentName')
+        device_type = chunk.get('device_type')
         host_id = chunk.get('host_id')
         timestamp = chunk['timestamp']
         data = {k: v for k, v in chunk.items() if k not in common_fields}
         if data and timestamp and instance_name:
             ts = int(timestamp)
             if instance_name not in instance_data_map:
-                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'ct': 0 , 'dit': {}, }
+                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'ct': device_type , 'dit': {}, }
 
             if timestamp not in instance_data_map[instance_name]['dit']:
                 instance_data_map[instance_name]['dit'][timestamp] = {'t': ts, 'm': []}
