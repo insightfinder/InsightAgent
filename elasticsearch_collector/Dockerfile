@@ -1,4 +1,4 @@
-FROM bitnami/python:3.12
+FROM bitnami/python:3.13
 ENV TZ=UTC
 SHELL ["/bin/bash", "-c"]
 COPY . .
