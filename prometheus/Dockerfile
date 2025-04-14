@@ -3,7 +3,8 @@ FROM bitnami/python:3.13
 COPY agent.txt cron.py getmessages_prometheus.py requirements.txt ./
 COPY conf.d conf.d
 
-RUN mkdir cache logs && \
+RUN apt-get update -y && apt-get upgrade -y && \
+    mkdir cache logs && \
     pip install -r requirements.txt && \
     chown -R 1001:1001 ./
 
