@@ -37,4 +37,4 @@ RUN chmod +x /app/start.sh && \
 USER appuser
 
 # Set the entrypoint to the startup script
-ENTRYPOINT ["/app/start.sh"]
+CMD ["sh","/app/start.sh"]
