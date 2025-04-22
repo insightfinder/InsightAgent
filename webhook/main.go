@@ -4,20 +4,53 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 const HTTP_RETRY_TIMES = 10
 const HTTP_RETRY_INTERVAL = 30
 const ENDPOINT = "/api/v1/webhookdata"
-const HOST_URL = "https://app.insightfinder.com"
+
+type Config struct {
+	Insightfinder struct {
+		URL string `yaml:"url"`
+	} `yaml:"insightfinder"`
+}
+
+func ReadConfig(filename string) (*Config, error) {
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	config := &Config{}
+	err = yaml.Unmarshal(data, config)
+	if err != nil {
+		return nil, err
+	}
+
+	return config, nil
+}
 
 func main() {
-	response, _ := SendRequest(http.MethodGet, HOST_URL+ENDPOINT, strings.NewReader(""), map[string]string{}, "")
+	config, err := ReadConfig("config.yaml")
+	if err != nil {
+		log.Fatalf("Error reading config: %v", err)
+	}
+
+	if config.Insightfinder.URL == "" {
+		log.Fatalf("Error: URL not specified in config.yaml")
+	}
+
+	hostURL := config.Insightfinder.URL
+	response, _ := SendRequest(http.MethodGet, hostURL+ENDPOINT, strings.NewReader(""), map[string]string{}, "")
 	var result []WebhookData
 	json.Unmarshal(response, &result)
 	log.Output(2, "There are total records "+fmt.Sprint(len(result)))
