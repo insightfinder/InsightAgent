@@ -1,0 +1,16 @@
+Thank you for installing {{ .Chart.Name }}.
+
+Your webhook application has been deployed with the following configuration:
+
+- Schedule: {{ .Values.schedule }}
+- Insightfinder URL: {{ .Values.config.insightfinder.url }}
+
+The application is running as a Deployment and will execute according to the configured schedule.
+
+To check the logs of the application:
+
+  kubectl logs -f -l app.kubernetes.io/name={{ include "webhook-app.name" . }},app.kubernetes.io/instance={{ .Release.Name }}
+
+To update the configuration, modify the values.yaml file and upgrade the Helm release:
+
+  helm upgrade {{ .Release.Name }} .
