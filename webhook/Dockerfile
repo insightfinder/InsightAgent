@@ -11,7 +11,7 @@ COPY *.go ./
 COPY config.yaml ./
 
 # Download dependencies
-RUN go mod download
+RUN go mod tidy
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o webhook-app .
