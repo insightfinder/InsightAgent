@@ -37,4 +37,4 @@ config:
   insightfinder:
     url: "https://stg.insightfinder.com"
 
-schedule: "*/10 * * * *"
+scheduleIntervalSeconds: 600  # 10 minutes in seconds

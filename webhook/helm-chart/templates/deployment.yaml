@@ -29,6 +29,9 @@ spec:
             runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: SCHEDULE_INTERVAL
+              value: {{ .Values.scheduleIntervalSeconds | default 600 | quote }}
           volumeMounts:
             - name: config-volume
               mountPath: /app/config.yaml

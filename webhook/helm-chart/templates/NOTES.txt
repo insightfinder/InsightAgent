@@ -2,10 +2,10 @@ Thank you for installing {{ .Chart.Name }}.
 
 Your webhook application has been deployed with the following configuration:
 
-- Schedule: {{ .Values.schedule }}
+- Schedule Interval: {{ .Values.scheduleIntervalSeconds | default 600 }} seconds
 - Insightfinder URL: {{ .Values.config.insightfinder.url }}
 
-The application is running as a Deployment and will execute according to the configured schedule.
+The application is running as a Deployment and will execute according to the configured schedule interval.
 
 To check the logs of the application:
 
