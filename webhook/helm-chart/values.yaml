@@ -4,9 +4,9 @@
 replicaCount: 1
 
 image:
-  repository: webhook-app
+  repository: docker.io/insightfinderinc/insightfinder-webhook-agent
   tag: latest
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 nameOverride: ""
 fullnameOverride: ""
@@ -35,6 +35,6 @@ securityContext:
 
 config:
   insightfinder:
-    url: "https://app.insightfinder.com"
+    url: "https://stg.insightfinder.com"
 
 schedule: "*/10 * * * *"
