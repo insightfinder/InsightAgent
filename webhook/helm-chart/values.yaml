@@ -29,6 +29,9 @@ affinity: {}
 
 securityContext:
   readOnlyRootFilesystem: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
 
 config:
   insightfinder:
