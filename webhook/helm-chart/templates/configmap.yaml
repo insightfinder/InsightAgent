@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "webhook-app.fullname" . }}-config
+  labels:
+    {{- include "webhook-app.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    insightfinder:
+      url: {{ .Values.config.insightfinder.url | quote }}
