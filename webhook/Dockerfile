@@ -4,11 +4,7 @@ FROM golang:1.24-alpine AS builder
 WORKDIR /app
 
 # Copy go module files
-COPY go.mod ./
-# Copy source code
-COPY *.go ./
-# Copy config file
-COPY config.yaml ./
+COPY . ./
 
 # Download dependencies
 RUN go mod tidy
@@ -26,20 +22,15 @@ RUN apk add --no-cache dcron tzdata ca-certificates && \
     addgroup -g 1000 appuser && \
     adduser -u 1000 -G appuser -s /bin/sh -D appuser
 
+# Copy start up script
+COPY --from=builder /app/start.sh .
 # Copy the binary from builder
 COPY --from=builder /app/webhook-app .
 # Copy the config file
 COPY --from=builder /app/config.yaml .
 
 # Create a startup script
-RUN echo '#!/bin/sh' > /app/start.sh && \
-    echo 'while true; do' >> /app/start.sh && \
-    echo '  echo "$(date): Running webhook-app"' >> /app/start.sh && \
-    echo '  /app/webhook-app &' >> /app/start.sh && \
-    echo '  echo "$(date): Sleeping for ${SCHEDULE_INTERVAL:-600} seconds"' >> /app/start.sh && \
-    echo '  sleep ${SCHEDULE_INTERVAL:-600}' >> /app/start.sh && \
-    echo 'done' >> /app/start.sh && \
-    chmod +x /app/start.sh && \
+RUN chmod +x /app/start.sh && \
     chown -R appuser:appuser /app
 
 # Switch to non-root user
