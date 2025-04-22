@@ -33,10 +33,9 @@ COPY --from=builder /app/config.yaml .
 
 # Create a startup script
 RUN echo '#!/bin/sh' > /app/start.sh && \
-    echo 'touch /tmp/cron.log' >> /app/start.sh && \
     echo 'while true; do' >> /app/start.sh && \
     echo '  echo "$(date): Running webhook-app"' >> /app/start.sh && \
-    echo '  /app/webhook-app >> /tmp/cron.log 2>&1 &' >> /app/start.sh && \
+    echo '  /app/webhook-app &' >> /app/start.sh && \
     echo '  echo "$(date): Sleeping for ${SCHEDULE_INTERVAL:-600} seconds"' >> /app/start.sh && \
     echo '  sleep ${SCHEDULE_INTERVAL:-600}' >> /app/start.sh && \
     echo 'done' >> /app/start.sh && \

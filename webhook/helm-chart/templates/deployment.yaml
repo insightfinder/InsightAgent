@@ -37,15 +37,10 @@ spec:
               mountPath: /app/config.yaml
               subPath: config.yaml
               readOnly: true
-            - name: tmp-volume
-              mountPath: /tmp
       volumes:
         - name: config-volume
           configMap:
             name: {{ include "webhook-app.fullname" . }}-config
-        - name: tmp-volume
-          emptyDir:
-            medium: Memory
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
