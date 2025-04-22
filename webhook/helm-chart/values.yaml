@@ -1,0 +1,40 @@
+# Default values for webhook-app.
+# This is a YAML-formatted file.
+
+replicaCount: 1
+
+image:
+  repository: docker.io/insightfinderinc/insightfinder-webhook-agent
+  tag: latest
+  pullPolicy: Always
+
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+securityContext:
+  readOnlyRootFilesystem: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+
+config:
+  insightfinder:
+    url: "https://stg.insightfinder.com"
+
+scheduleIntervalSeconds: 600  # 10 minutes in seconds
