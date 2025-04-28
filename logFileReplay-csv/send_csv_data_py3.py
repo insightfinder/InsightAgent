@@ -64,6 +64,7 @@ def get_agent_config_vars():
 
             instance_field = parser.get('csv', 'instance_field')
             timestamp_field = parser.get('csv', 'timestamp_field')
+            zone_field = parser.get('csv', 'zone_field')
             timestamp_format = parser.get('csv', 'timestamp_format')
             timestamp_timezone = parser.get('csv', 'timestamp_timezone') or 'UTC'
             omit_columns = parser.get('csv', 'omit_columns')
@@ -88,6 +89,7 @@ def get_agent_config_vars():
             
             csv_vars['instance_field'] = instance_field
             csv_vars['timestamp_field'] = timestamp_field
+            csv_vars['zone_field'] = zone_field
             csv_vars['timestamp_format'] = timestamp_format
             csv_vars['timestamp_timezone'] = timestamp_timezone
             csv_vars['omit_columns'] = omit_columns
@@ -100,6 +102,21 @@ def config_error(setting=''):
     info = ' ({})'.format(setting) if setting else ''
     print('Agent not correctly configured{}. Check config file.'.format(info))
     sys.exit(1)
+
+def parse_json_field(field_value):
+    """
+    Attempts to parse a field value as JSON if it appears to be a JSON string.
+    Returns the parsed JSON object if successful, otherwise returns the original string.
+    """
+    if isinstance(field_value, str):
+        field_value = field_value.strip()
+        if (field_value.startswith('{') and field_value.endswith('}')) or \
+           (field_value.startswith('[') and field_value.endswith(']')):
+            try:
+                return json.loads(field_value)
+            except json.JSONDecodeError:
+                pass
+    return field_value
 
 def send_data(log_data):
     """ Sends parsed metric data to InsightFinder """
@@ -158,6 +175,11 @@ if __name__ == "__main__":
         for row in reader:
             entry = {}
             entry['tag'] = row[csv_vars['instance_field']]
+
+            # Extract zone name from csv field
+            if csv_vars['zone_field'] and csv_vars['zone_field'] != "" and csv_vars['zone_field'] in row:
+                entry['zoneName'] = row[csv_vars['zone_field']]
+
             if len(csv_vars['timestamp_format']) == 0:
                 timestamp = arrow.get(int(row[csv_vars['timestamp_field']]))
                 timestamp = timestamp.to(pytz.utc)
@@ -170,7 +192,8 @@ if __name__ == "__main__":
             entry['data'] = {}
             for header in row:
                 if header not in omit:
-                    entry['data'][header] = row[header]
+                    # Parse potential JSON fields into Python objects
+                    entry['data'][header] = parse_json_field(row[header])
         
             new_entry = copy.deepcopy(entry)
 
