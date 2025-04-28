@@ -134,7 +134,6 @@ def send_data(log_data):
 
 
 def send_data_to_receiver(post_url, to_send_data, num_of_message):
-    print(json.loads(to_send_data))
     attempts = 0
     while attempts < MAX_RETRY_NUM:
         if sys.getsizeof(to_send_data) > MAX_PACKET_SIZE:
