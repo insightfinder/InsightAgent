@@ -101,6 +101,21 @@ def config_error(setting=''):
     print('Agent not correctly configured{}. Check config file.'.format(info))
     sys.exit(1)
 
+def parse_json_field(field_value):
+    """
+    Attempts to parse a field value as JSON if it appears to be a JSON string.
+    Returns the parsed JSON object if successful, otherwise returns the original string.
+    """
+    if isinstance(field_value, str):
+        field_value = field_value.strip()
+        if (field_value.startswith('{') and field_value.endswith('}')) or \
+           (field_value.startswith('[') and field_value.endswith(']')):
+            try:
+                return json.loads(field_value)
+            except json.JSONDecodeError:
+                pass
+    return field_value
+
 def send_data(log_data):
     """ Sends parsed metric data to InsightFinder """
     send_data_time = time.time()
@@ -119,6 +134,7 @@ def send_data(log_data):
 
 
 def send_data_to_receiver(post_url, to_send_data, num_of_message):
+    print(json.loads(to_send_data))
     attempts = 0
     while attempts < MAX_RETRY_NUM:
         if sys.getsizeof(to_send_data) > MAX_PACKET_SIZE:
@@ -170,7 +186,8 @@ if __name__ == "__main__":
             entry['data'] = {}
             for header in row:
                 if header not in omit:
-                    entry['data'][header] = row[header]
+                    # Parse potential JSON fields into Python objects
+                    entry['data'][header] = parse_json_field(row[header])
         
             new_entry = copy.deepcopy(entry)
 
