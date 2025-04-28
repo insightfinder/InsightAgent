@@ -64,6 +64,7 @@ def get_agent_config_vars():
 
             instance_field = parser.get('csv', 'instance_field')
             timestamp_field = parser.get('csv', 'timestamp_field')
+            zone_field = parser.get('csv', 'zone_field')
             timestamp_format = parser.get('csv', 'timestamp_format')
             timestamp_timezone = parser.get('csv', 'timestamp_timezone') or 'UTC'
             omit_columns = parser.get('csv', 'omit_columns')
@@ -88,6 +89,7 @@ def get_agent_config_vars():
             
             csv_vars['instance_field'] = instance_field
             csv_vars['timestamp_field'] = timestamp_field
+            csv_vars['zone_field'] = zone_field
             csv_vars['timestamp_format'] = timestamp_format
             csv_vars['timestamp_timezone'] = timestamp_timezone
             csv_vars['omit_columns'] = omit_columns
@@ -173,6 +175,11 @@ if __name__ == "__main__":
         for row in reader:
             entry = {}
             entry['tag'] = row[csv_vars['instance_field']]
+
+            # Extract zone name from csv field
+            if csv_vars['zone_field'] and csv_vars['zone_field'] != "" and csv_vars['zone_field'] in row:
+                entry['zoneName'] = row[csv_vars['zone_field']]
+
             if len(csv_vars['timestamp_format']) == 0:
                 timestamp = arrow.get(int(row[csv_vars['timestamp_field']]))
                 timestamp = timestamp.to(pytz.utc)
