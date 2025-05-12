@@ -1,0 +1,66 @@
+[redis]
+## redis info
+# Only explicitly provided nodes will be queried in cluster mode
+redis_hosts = localhost:6379
+# redis mode - either 'cluster' or 'single'
+redis_mode = single
+# authentication
+password = 
+# SSL/TLS configuration
+use_ssl = False
+ssl_ca_certs = 
+ssl_certfile = 
+ssl_keyfile = 
+# connection timeout in seconds
+connection_timeout = 5
+# connection pool
+max_connections = 10
+
+## key monitoring configuration
+# regex pattern to filter keys (leave empty to check all keys)
+key_pattern = *
+# Whether to scan keys or use KEYS command (scan is more efficient for large databases)
+use_scan = True
+# scan count parameter
+scan_count = 1000
+# If set to True, will also check TTL for keys (disabled by default as we only want idle time)
+check_ttl = False
+
+# sampling interval in minutes
+sampling_interval = 5
+# number of thread to use in the pool, default is 20
+thread_pool = 20
+# number of the worker processes, default is count_of_cpu * 4
+processes = 
+# minutes the main process wait for workers to finish, default is 5
+timeout = 1
+process_timeout = 5
+
+## proxy
+agent_http_proxy = 
+agent_https_proxy = 
+
+[insightfinder]
+user_name = 
+license_key = 
+token = 
+# Name of the project created in the InsightFinder UI, If this project is not exist, agent will create it automatically.
+project_name = 
+# Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name = 
+# metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
+project_type = METRIC
+# Set to `YES` if project is container.
+containerize = no
+
+# Set to empty to create normal projects
+# set to 'vm' to use 'DynamicVM' as the AgentType, set to 'host' to use 'DynamicHost' as the AgentType
+dynamic_metric_type = 
+
+sampling_interval = 5
+run_interval = 5
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy = 
+if_https_proxy =
