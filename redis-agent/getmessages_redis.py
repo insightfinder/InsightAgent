@@ -159,14 +159,13 @@ def scan_node_keys(redis_client, pattern, scan_count, check_ttl, time_now, insta
                 # Get key metadata
                 try:
                     idle_time = redis_client.object('IDLETIME', key)
-                    metrics = {'idle_seconds': idle_time}
+                    metrics = {'idle_minutes': idle_time / 60}
                     
                     # Only check TTL if configured
                     if check_ttl:
                         ttl = redis_client.ttl(key)
                         metrics['ttl_seconds'] = ttl
                         
-                    # Format data like Prometheus
                     metric_data = {
                         'metric': {
                             '__name__': 'redis_key',
@@ -232,7 +231,7 @@ def parse_messages_redis(logger, if_config_vars, agent_config_vars, metric_buffe
                 # Add each metric with proper naming
                 for metric_name, metric_value in metrics.items():
                     # Create metric name with key as prefix
-                    full_metric_name = f"{key}-{metric_name}"  # e.g. test:permanent_idle_seconds
+                    full_metric_name = f"{key}-{metric_name}"
                     float_value = safe_string_to_float(metric_value)
                     if float_value is not None:
                         metric_buffer['buffer_dict'][buffer_key][full_metric_name] = str(float_value)
