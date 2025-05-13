@@ -246,6 +246,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
     max_workers = agent_config_vars['max_workers']
     request_timeout = agent_config_vars['request_timeout']
     zapi = ZabbixAPI(server=zabbix_url, timeout=request_timeout)
+    zapi.session.verify=False
     zapi.login(user=zabbix_user, password=zabbix_password)
     logger.info("Connected to Zabbix API Version %s" % zapi.api_version())
 
@@ -333,13 +334,28 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
                     if not is_matching_disallow_regex(item_name, metric_disallowlist_map):
                         items_map[item_key] = item
 
+        # Get items on hosts directly
+        if agent_config_vars['collect_dedicated_items']:
+            logger.info("Collecting dedicated items other than those defined in templates.")
+            for host_id in hosts_ids_list:
+                items = zapi.item.get(
+                    hostids=host_id,
+                    output="extend",
+                )
+                for item in items:
+                    item_key = item['key_']
+                    item_name = item['name']
+                    if is_matching_allow_regex(item_name, metric_allowlist_map):
+                        if not is_matching_disallow_regex(item_name, metric_disallowlist_map):
+                            items_map[item_key] = item
+
         items_keys = list(items_map.keys())
 
         if len(items_keys) == 0:
             logger.error('Item list is empty')
             return
 
-        # logger.info("Zabbix item count: %s" % len(items_keys))
+        logger.info("Zabbix item count: %s" % len(items_keys))
 
     all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map}
 
@@ -566,6 +582,7 @@ def get_agent_config_vars(logger, config_ini):
             hosts = config_parser.get('zabbix', 'hosts')
             host_blocklist = config_parser.get('zabbix', 'host_blocklist')
             template_ids = config_parser.get('zabbix', 'template_ids')
+            collect_dedicated_items = config_parser.get('zabbix', 'collect_dedicated_items', fallback=False)
             metric_allowlist = config_parser.get('zabbix', 'metric_allowlist')
             metric_disallowlist = config_parser.get('zabbix', 'metric_disallowlist', fallback=None)
             applications = config_parser.get('zabbix', 'applications')
@@ -711,10 +728,15 @@ def get_agent_config_vars(logger, config_ini):
         if len(alert_data_fields) != 0:
             alert_data_fields = [x for x in alert_data_fields.split(',') if x.strip()]
 
+        if collect_dedicated_items.lower() == "true":
+            collect_dedicated_items = True
+        else:
+            collect_dedicated_items = False
+
         # add parsed variables to a global
         config_vars = {'zabbix_kwargs': zabbix_kwargs, 'host_groups': host_groups, 'hosts': hosts,
                        'host_blocklist': host_blocklist, 'host_blocklist_map': host_blocklist_map,
-                       'template_ids': template_ids, 'metric_allowlist': metric_allowlist,
+                       'template_ids': template_ids,'collect_dedicated_items': collect_dedicated_items, 'metric_allowlist': metric_allowlist,
                        'metric_allowlist_map': metric_allowlist_map,
                        'metric_disallowlist_map': metric_disallowlist_map,
                        'max_workers': max_workers,
@@ -1129,7 +1151,7 @@ def get_data_type_from_project_type(logger, if_config_vars):
     elif 'LOG' in if_config_vars['project_type']:
         return 'Log'
     elif 'ALERT' in if_config_vars['project_type']:
-        return 'Alert'
+        return 'Log'
     elif 'INCIDENT' in if_config_vars['project_type']:
         return 'Incident'
     elif 'DEPLOYMENT' in if_config_vars['project_type']:
