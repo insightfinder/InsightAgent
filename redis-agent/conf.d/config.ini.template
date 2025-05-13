@@ -26,7 +26,7 @@ scan_count = 1000
 # If set to True, will also check TTL for keys (disabled by default as we only want idle time)
 check_ttl = False
 
-# number of thread to use in the pool, default is 20
+# number of thread to use in the pool, default is 4
 thread_pool = 4
 # number of the worker processes, default is count_of_cpu * 4
 processes = 
