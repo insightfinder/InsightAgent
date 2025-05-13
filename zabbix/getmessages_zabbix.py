@@ -339,8 +339,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
             logger.info("Collecting dedicated items other than those defined in templates.")
             for host_id in hosts_ids_list:
                 items = zapi.item.get(
-                    hostids=host_id,
-                    output="extend",
+                    hostids=host_id
                 )
                 for item in items:
                     item_key = item['key_']
