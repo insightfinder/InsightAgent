@@ -24,7 +24,7 @@ type InsightFinder struct {
 	CloudType        string
 	InstanceType     string
 	SystemName       string
-	ProjectType      string // "Metric", "Log", "Trace", "Deployment", "Alert", "Incident"
+	ProjectType      string // "Metric", "Log", "Trace", "Deployment", "Incident"
 	DataType         string
 	Container        bool
 	InsightAgentType string

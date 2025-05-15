@@ -1503,7 +1503,7 @@ def get_data_type_from_project_type(if_config_vars):
     if 'METRIC' in if_config_vars['project_type']:
         return 'Metric'
     elif 'ALERT' in if_config_vars['project_type']:
-        return 'Alert'
+        return 'Log'
     elif 'INCIDENT' in if_config_vars['project_type']:
         return 'Incident'
     elif 'DEPLOYMENT' in if_config_vars['project_type']:
