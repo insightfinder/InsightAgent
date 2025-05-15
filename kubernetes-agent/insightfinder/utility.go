@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/bigkevmcd/go-configparser"
-	"github.com/carlmjohnson/requests"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -16,6 +14,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bigkevmcd/go-configparser"
+	"github.com/carlmjohnson/requests"
 )
 
 const DEFAULT_MATADATE_MAX_INSTANCE = 1500
@@ -172,7 +173,7 @@ func ProjectTypeToDataType(projectType string) string {
 	case "METRICREPLAY":
 		return "Metric"
 	case "ALERT":
-		return "log"
+		return "Log"
 	case "INCIDENT":
 		return "Incident"
 	case "DEPLOYMENT":
