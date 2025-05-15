@@ -4,11 +4,12 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/go-resty/resty/v2"
-	"github.com/rs/zerolog/log"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-resty/resty/v2"
+	"github.com/rs/zerolog/log"
 )
 
 const PROJECT_ENDPOINT = "api/v1/check-and-add-custom-project"
@@ -52,7 +53,7 @@ func getProjectDataType(projectType string) string {
 	case "METRICREPLAY":
 		return "Metric"
 	case "ALERT":
-		return "Alert"
+		return "Log"
 	case "INCIDENT":
 		return "Incident"
 	case "DEPLOYMENT":
