@@ -512,7 +512,7 @@ func ProjectTypeToDataType(projectType string) string {
 	case "METRICREPLAY":
 		return "Metric"
 	case "ALERT":
-		return "Alert"
+		return "Log"
 	case "INCIDENT":
 		return "Incident"
 	case "DEPLOYMENT":
