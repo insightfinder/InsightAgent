@@ -1,0 +1,3 @@
+name = redis
+script_name = getmessages_redis.py
+version = 20250516.1

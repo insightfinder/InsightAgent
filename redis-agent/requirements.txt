@@ -3,5 +3,5 @@ pytz
 regex
 requests
 apscheduler
-redis
+redis>=6.0.0
 redis-py-cluster
