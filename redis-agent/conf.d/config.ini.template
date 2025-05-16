@@ -1,6 +1,6 @@
 [redis]
 ## redis info
-# Only explicitly provided nodes will be queried in cluster mode
+# Only explicitly provided nodes will be queried in single mode
 redis_hosts = localhost:6379
 # redis mode - either 'cluster' or 'single'
 redis_mode = single
