@@ -202,7 +202,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
                                   agent_config_vars, track, data_buffer, log_request_interval, sampling_now)
 
-            query = {'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend', 'time_from': timestamp,
+            query = {'output': 'extend', 'hostids': hostids, 'time_from': timestamp,
                      'time_till': time_end, }
             logger.info('Begin problem.get query from {} hosts: {}'.format(len(hostids), query))
 
