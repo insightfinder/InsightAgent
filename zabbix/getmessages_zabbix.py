@@ -202,7 +202,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
                                   agent_config_vars, track, data_buffer, log_request_interval, sampling_now)
 
-            query = {'output': 'extend', 'hostids': hostids, 'selectHosts': 'extend', 'time_from': timestamp,
+            query = {'output': 'extend', 'hostids': hostids, 'time_from': timestamp,
                      'time_till': time_end, }
             logger.info('Begin problem.get query from {} hosts: {}'.format(len(hostids), query))
 
@@ -235,7 +235,15 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
 
 
 def start_data_processing(logger, config_name, cli_config_vars, agent_config_vars, if_config_vars, sampling_now):
-    data_type = get_data_type_from_project_type(logger, if_config_vars)
+
+    # Setup data_type
+    if 'METRIC' in if_config_vars['project_type']:
+        data_type = "Metric"
+    elif 'ALERT' in if_config_vars['project_type']:
+        data_type = "Alert"
+    else:
+        data_type = "Log"
+
     logger.info('Starting fetch {} items......'.format(data_type))
 
     # Create ZabbixAPI class instance
