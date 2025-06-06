@@ -29,7 +29,7 @@ func main() {
 
 	logrus.Info("Ruckus Agent starting...")
 	logrus.Infof("Controller: %s:%d", cfg.Ruckus.ControllerHost, cfg.Ruckus.ControllerPort)
-	logrus.Infof("Collection interval: %d seconds", cfg.Agent.CollectionInterval)
+	logrus.Infof("Sampling interval: %d seconds", cfg.InsightFinder.SamplingInterval)
 
 	// Initialize services
 	ruckusService := ruckus.NewService(cfg.Ruckus)
@@ -46,7 +46,7 @@ func main() {
 
 	// === ENABLE TEST MODE FOR DEVELOPMENT ===
 	// Comment out this line when ready for production
-	w.EnableTestMode()
+	// w.EnableTestMode()
 
 	// Graceful shutdown
 	var wg sync.WaitGroup
@@ -85,10 +85,5 @@ func setupLogging(level string) {
 		logrus.SetLevel(logrus.ErrorLevel)
 	default:
 		logrus.SetLevel(logrus.InfoLevel)
-	}
-
-	// Create logs directory if it doesn't exist
-	if err := os.MkdirAll("logs", 0755); err != nil {
-		logrus.Warn("Failed to create logs directory")
 	}
 }

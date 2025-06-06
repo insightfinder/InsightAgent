@@ -4,109 +4,86 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/sirupsen/logrus"
 	"gopkg.in/ini.v1"
 )
 
-type Config struct {
-	Agent         AgentConfig
-	Ruckus        RuckusConfig
-	InsightFinder InsightFinderConfig
-	State         StateConfig
-}
-
-type AgentConfig struct {
-	CollectionInterval int    `ini:"collection_interval"`
-	DataFormat         string `ini:"data_format"`
-	Timezone           string `ini:"timezone"`
-	LogLevel           string `ini:"log_level"`
-	FiltersInclude     string `ini:"filters_include"`
-	FiltersExclude     string `ini:"filters_exclude"`
-}
-
-type RuckusConfig struct {
-	ControllerHost        string `ini:"controller_host"`
-	ControllerPort        int    `ini:"controller_port"`
-	Username              string `ini:"username"`
-	Password              string `ini:"password"`
-	APIVersion            string `ini:"api_version"`
-	VerifySSL             bool   `ini:"verify_ssl"`
-	MaxConcurrentRequests int    `ini:"max_concurrent_requests"`
-}
-
-type InsightFinderConfig struct {
-	LicenseKey  string `ini:"license_key"`
-	ProjectName string `ini:"project_name"`
-	ProjectType string `ini:"project_type"`
-	UserName    string `ini:"user_name"`
-	ServerURL   string `ini:"server_url"`
-}
-
-type StateConfig struct {
-	LastCollectionTimestamp int64 `ini:"last_collection_timestamp"`
-}
-
 func LoadConfig(configPath string) (*Config, error) {
+	logrus.Infof("Loading configuration from: %s", configPath)
+
+	// Check if file exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("config file not found: %s", configPath)
+		return nil, fmt.Errorf("configuration file does not exist: %s", configPath)
 	}
 
+	// Load INI file
 	cfg, err := ini.Load(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load config file: %v", err)
+		return nil, fmt.Errorf("failed to load INI file: %v", err)
 	}
 
-	config := &Config{}
+	var config Config
 
-	// Map sections to structs
-	if err := cfg.Section("agent").MapTo(&config.Agent); err != nil {
-		return nil, fmt.Errorf("failed to load agent config: %v", err)
-	}
+	// Load Ruckus section
 	if err := cfg.Section("ruckus").MapTo(&config.Ruckus); err != nil {
-		return nil, fmt.Errorf("failed to load ruckus config: %v", err)
+		return nil, fmt.Errorf("failed to map ruckus section: %v", err)
 	}
+
+	// Load InsightFinder section
 	if err := cfg.Section("insightfinder").MapTo(&config.InsightFinder); err != nil {
-		return nil, fmt.Errorf("failed to load insightfinder config: %v", err)
-	}
-	if err := cfg.Section("state").MapTo(&config.State); err != nil {
-		return nil, fmt.Errorf("failed to load state config: %v", err)
+		return nil, fmt.Errorf("failed to map insightfinder section: %v", err)
 	}
 
-	// Set defaults
-	setDefaults(config)
-
-	// Validate required fields
-	if err := validateConfig(config); err != nil {
-		return nil, err
+	// Load Agent section
+	if err := cfg.Section("agent").MapTo(&config.Agent); err != nil {
+		return nil, fmt.Errorf("failed to map agent section: %v", err)
 	}
 
-	return config, nil
+	// Validate and set defaults
+	setDefaults(&config)
+	if err := validateConfig(&config); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %v", err)
+	}
+
+	logrus.Info("Configuration loaded successfully")
+	return &config, nil
 }
 
 func setDefaults(config *Config) {
-	if config.Agent.CollectionInterval == 0 {
-		config.Agent.CollectionInterval = 300
-	}
-	if config.Agent.DataFormat == "" {
-		config.Agent.DataFormat = "JSON"
-	}
-	if config.Agent.Timezone == "" {
-		config.Agent.Timezone = "UTC"
-	}
-	if config.Agent.LogLevel == "" {
-		config.Agent.LogLevel = "INFO"
-	}
+	// Ruckus defaults
 	if config.Ruckus.ControllerPort == 0 {
 		config.Ruckus.ControllerPort = 8443
 	}
 	if config.Ruckus.APIVersion == "" {
-		config.Ruckus.APIVersion = "v11_1"
+		config.Ruckus.APIVersion = "v10_0"
+	}
+	if config.Ruckus.MaxConcurrentRequests == 0 {
+		config.Ruckus.MaxConcurrentRequests = 20
+	}
+
+	// Agent defaults
+	if config.Agent.LogLevel == "" {
+		config.Agent.LogLevel = "info"
+	}
+
+	// InsightFinder defaults - sampling_interval is now the main collection interval
+	if config.InsightFinder.SamplingInterval == 0 {
+		config.InsightFinder.SamplingInterval = 300 // 5 minutes default
+	}
+	if config.InsightFinder.CloudType == "" {
+		config.InsightFinder.CloudType = "OnPremise"
+	}
+	if config.InsightFinder.InstanceType == "" {
+		config.InsightFinder.InstanceType = "OnPremise"
 	}
 	if config.InsightFinder.ProjectType == "" {
-		config.InsightFinder.ProjectType = "METRIC"
+		config.InsightFinder.ProjectType = "Metric"
 	}
-	if config.InsightFinder.ServerURL == "" {
-		config.InsightFinder.ServerURL = "https://app.insightfinder.com"
+	if config.InsightFinder.SystemName == "" {
+		config.InsightFinder.SystemName = config.InsightFinder.ProjectName
 	}
+
+	logrus.Debug("Default values applied to configuration")
 }
 
 func validateConfig(config *Config) error {
@@ -119,11 +96,16 @@ func validateConfig(config *Config) error {
 	if config.Ruckus.Password == "" {
 		return fmt.Errorf("ruckus password is required")
 	}
+
+	if config.InsightFinder.ServerURL == "" {
+		return fmt.Errorf("insightfinder server_url is required")
+	}
+	if config.InsightFinder.UserName == "" {
+		return fmt.Errorf("insightfinder username is required")
+	}
 	if config.InsightFinder.LicenseKey == "" {
 		return fmt.Errorf("insightfinder license_key is required")
 	}
-	if config.InsightFinder.ProjectName == "" {
-		return fmt.Errorf("insightfinder project_name is required")
-	}
+
 	return nil
 }

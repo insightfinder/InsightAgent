@@ -45,17 +45,18 @@ type APDetail struct {
 	LastSeen        int64  `json:"lastSeen"`
 
 	// Critical Fields (Must Monitor)
-	Status                 string  `json:"status"`
-	ConnectionStatus       string  `json:"connectionStatus"`
-	Uptime                 int64   `json:"uptime"`
-	NumClients             int     `json:"numClients"`
-	NumClients24G          int     `json:"numClients24G"`
-	NumClients5G           int     `json:"numClients5G"`
-	Airtime24G             float64 `json:"airtime24G"`
-	Airtime5G              float64 `json:"airtime5G"`
-	ConnectionFailure      float64 `json:"connectionFailure"`
-	IsOverallHealthFlagged bool    `json:"isOverallHealthStatusFlagged"`
-	IsAirtime24GFlagged    bool    `json:"isAirtimeUtilization24GFlagged"`
+	Status                       string  `json:"status"`
+	ConnectionStatus             string  `json:"connectionStatus"`
+	Uptime                       int64   `json:"uptime"`
+	Alerts                       int     `json:"alerts"`
+	NumClients                   int     `json:"numClients"`
+	NumClients24G                int     `json:"numClients24G"`
+	NumClients5G                 int     `json:"numClients5G"`
+	Airtime24G                   float64 `json:"airtime24G"`
+	Airtime5G                    float64 `json:"airtime5G"`
+	ConnectionFailure            float64 `json:"connectionFailure"`
+	IsOverallHealthStatusFlagged bool    `json:"isOverallHealthStatusFlagged"`
+	IsAirtime24GFlagged          bool    `json:"isAirtimeUtilization24GFlagged"`
 
 	// Performance Fields (High Priority)
 	TxRx       int64 `json:"txRx"`
@@ -69,8 +70,9 @@ type APDetail struct {
 	Latency50G int64 `json:"latency50G"`
 
 	// Additional useful fields
-	Capacity int    `json:"capacity"`
-	Serial   string `json:"serial"`
+	Capacity    int    `json:"capacity"`
+	Serial      string `json:"serial"`
+	APGroupName string `json:"apGroupName"`
 }
 
 // InsightFinder data structure
@@ -101,8 +103,9 @@ func (ap *APDetail) ToMetricData() *MetricData {
 			"airtime_24g_percent":     ap.Airtime24G,
 			"airtime_5g_percent":      ap.Airtime5G,
 			"connection_failure_rate": ap.ConnectionFailure,
-			"is_health_flagged":       ap.IsOverallHealthFlagged,
+			"is_health_flagged":       ap.IsOverallHealthStatusFlagged,
 			"is_airtime_24g_flagged":  ap.IsAirtime24GFlagged,
+			"alerts_total":            ap.Alerts,
 
 			// === PERFORMANCE FIELDS (High Priority) ===
 			"total_throughput_bytes": ap.TxRx,
@@ -123,6 +126,8 @@ func (ap *APDetail) ToMetricData() *MetricData {
 			"model":               ap.Model,
 			"firmware_version":    ap.FirmwareVersion,
 			"last_seen_timestamp": ap.LastSeen,
+			"ap_group_name":       ap.APGroupName,
+			"serial_number":       ap.Serial,
 
 			// === DERIVED METRICS ===
 			"capacity_utilization_pct": capacityUtil,
