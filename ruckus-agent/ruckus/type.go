@@ -9,12 +9,14 @@ import (
 )
 
 type Service struct {
-	config        config.RuckusConfig
-	httpClient    *http.Client
-	baseURL       string
-	sessionMutex  sync.RWMutex
-	lastAuthTime  time.Time
-	sessionExpiry time.Duration
+	Config        config.RuckusConfig
+	HttpClient    *http.Client
+	BaseURL       string
+	SessionExpiry time.Duration
+	LastAuthTime  time.Time
+	SessionMutex  sync.RWMutex
+	// MaxConcurrentRequests int
+	// RequestSemaphore chan struct{}
 }
 
 // Error response structure for API errors
@@ -26,4 +28,16 @@ type ErrorResponse struct {
 // Authentication response structure
 type AuthResponse struct {
 	ControllerVersion string `json:"controllerVersion"`
+}
+
+// Simplified structures for bulk query with pagination
+type APBulkQueryRequest struct {
+	Filters []Filter `json:"filters"`
+	Page    int      `json:"page"`
+	Limit   int      `json:"limit"`
+}
+
+type Filter struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
 }

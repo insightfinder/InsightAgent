@@ -24,12 +24,13 @@ type AgentConfig struct {
 }
 
 type RuckusConfig struct {
-	ControllerHost string `ini:"controller_host"`
-	ControllerPort int    `ini:"controller_port"`
-	Username       string `ini:"username"`
-	Password       string `ini:"password"`
-	APIVersion     string `ini:"api_version"`
-	VerifySSL      bool   `ini:"verify_ssl"`
+	ControllerHost        string `ini:"controller_host"`
+	ControllerPort        int    `ini:"controller_port"`
+	Username              string `ini:"username"`
+	Password              string `ini:"password"`
+	APIVersion            string `ini:"api_version"`
+	VerifySSL             bool   `ini:"verify_ssl"`
+	MaxConcurrentRequests int    `ini:"max_concurrent_requests"`
 }
 
 type InsightFinderConfig struct {
