@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/sirupsen/logrus"
-	"gopkg.in/ini.v1"
+	"gopkg.in/yaml.v3"
 )
 
 func LoadConfig(configPath string) (*Config, error) {
@@ -16,27 +16,17 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("configuration file does not exist: %s", configPath)
 	}
 
-	// Load INI file
-	cfg, err := ini.Load(configPath)
+	// Read YAML file
+	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load INI file: %v", err)
+		return nil, fmt.Errorf("failed to read YAML file: %v", err)
 	}
 
 	var config Config
 
-	// Load Ruckus section
-	if err := cfg.Section("ruckus").MapTo(&config.Ruckus); err != nil {
-		return nil, fmt.Errorf("failed to map ruckus section: %v", err)
-	}
-
-	// Load InsightFinder section
-	if err := cfg.Section("insightfinder").MapTo(&config.InsightFinder); err != nil {
-		return nil, fmt.Errorf("failed to map insightfinder section: %v", err)
-	}
-
-	// Load Agent section
-	if err := cfg.Section("agent").MapTo(&config.Agent); err != nil {
-		return nil, fmt.Errorf("failed to map agent section: %v", err)
+	// Parse YAML
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse YAML file: %v", err)
 	}
 
 	// Validate and set defaults

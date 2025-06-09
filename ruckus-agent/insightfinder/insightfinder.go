@@ -291,6 +291,7 @@ func (s *Service) SendMetricsBulk(metrics []models.MetricData) error {
 			}
 		}
 
+		instanceData.Zone = metric.Zone
 		instanceData.DataInTimestampMap[timestamp] = dataInTimestamp
 		instanceDataMap[instanceName] = instanceData
 	}

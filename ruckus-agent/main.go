@@ -19,7 +19,7 @@ func main() {
 	fmt.Println("Starting Ruckus Agent...")
 
 	// Load configuration
-	cfg, err := config.LoadConfig("configs/config.ini")
+	cfg, err := config.LoadConfig("configs/config.yaml")
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
