@@ -31,6 +31,15 @@ func (s *Service) GetAllAPDetailsBulk() ([]models.APDetail, error) {
 	totalPages := (totalCount + limit - 1) / limit
 	logrus.Infof("Total count: %d, Pages needed: %d", totalCount, totalPages)
 
+	// Determine batch size for concurrent fetching (max 10 concurrent requests)
+	maxConcurrent := s.Config.MaxConcurrentRequests
+	if maxConcurrent == 0 {
+		maxConcurrent = 10
+	}
+	if totalPages < maxConcurrent {
+		maxConcurrent = totalPages
+	}
+
 	// Create channels and wait group for concurrent processing
 	type pageResult struct {
 		page    int
@@ -38,14 +47,20 @@ func (s *Service) GetAllAPDetailsBulk() ([]models.APDetail, error) {
 		err     error
 	}
 
-	resultChan := make(chan pageResult, totalPages)
+	resultChan := make(chan pageResult, maxConcurrent)
 	var wg sync.WaitGroup
 
-	// Launch goroutines for all pages
+	// Launch goroutines for all pages with concurrency limit
+	semaphore := make(chan struct{}, maxConcurrent)
+
 	for page := 1; page <= totalPages; page++ {
 		wg.Add(1)
 		go func(p int) {
 			defer wg.Done()
+
+			// Acquire semaphore
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
 
 			details, _, err := s.fetchAPPage(p, limit)
 			resultChan <- pageResult{

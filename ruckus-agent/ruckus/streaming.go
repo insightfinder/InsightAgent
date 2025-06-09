@@ -36,7 +36,10 @@ func (s *Service) GetAllAPDetailsStreamingBulk(ctx context.Context,
 	logrus.Infof("Total count: %d, Pages needed: %d", totalCount, totalPages)
 
 	// Determine batch size for concurrent fetching (max 10 concurrent requests)
-	maxConcurrent := 10
+	maxConcurrent := s.Config.MaxConcurrentRequests
+	if maxConcurrent == 0 {
+		maxConcurrent = 10
+	}
 	if totalPages < maxConcurrent {
 		maxConcurrent = totalPages
 	}
