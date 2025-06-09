@@ -1,0 +1,14 @@
+Ruckus AP Collection Statistics - 2025-06-05 18:01:54   -- tested for 10 APs Only
+========================================
+
+Total APs: 10
+Online APs: 8 (80.0%)
+Flagged APs: 4 (40.0%)
+Total Clients: 57
+Average Clients per AP: 5.7
+
+High Airtime (>80%):
+  2.4GHz Band: 6 APs
+  5GHz Band: 0 APs
+
+Collection completed at: 2025-06-05 18:01:54
