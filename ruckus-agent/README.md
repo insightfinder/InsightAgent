@@ -22,7 +22,7 @@ Configure connection to your Ruckus Wireless Controller:
 | `password` | Yes | - | Password for Ruckus controller authentication |
 | `api_version` | No | v10_0 | Ruckus API version (v10_0, v11_0, v11_1, etc.) |
 | `verify_ssl` | No | false | Enable/disable SSL certificate verification |
-| `max_concurrent_requests` | No | 20 | Maximum concurrent API requests |
+| `max_concurrent_requests` | No | 10 | Maximum concurrent API requests |
 
 ### insightfinder - InsightFinder Settings
 
@@ -85,6 +85,7 @@ ruckus:
   password: your_ruckus_password
   api_version: v11_1
   verify_ssl: false
+  max_concurrent_requests: 10
 
 insightfinder:
   # InsightFinder Platform Configuration
