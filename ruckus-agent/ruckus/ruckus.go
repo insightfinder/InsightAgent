@@ -163,29 +163,35 @@ func (s *Service) executeRequest(req *http.Request) (*http.Response, error) {
 
 // Health check method to verify connectivity
 func (s *Service) HealthCheck() error {
-	// Simple test query to verify connectivity
-	request := APBulkQueryRequest{
-		Filters: []Filter{},
-		Page:    1,
-		Limit:   1,
-	}
-
-	url := fmt.Sprintf("%s/query/ap", s.BaseURL)
-	jsonPayload, err := json.Marshal(request)
+	// Use GetTotalAPCount as a light request to verify connectivity
+	_, err := s.GetTotalAPCount()
 	if err != nil {
-		return fmt.Errorf("health check failed to marshal request: %v", err)
-	}
-
-	resp, err := s.post(url, jsonPayload)
-	if err != nil {
-		return fmt.Errorf("health check request failed: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("health check failed with status: %d", resp.StatusCode)
+		return fmt.Errorf("health check failed: %v", err)
 	}
 
 	logrus.Debug("Health check passed")
 	return nil
+}
+
+// Get total AP count from the API
+func (s *Service) GetTotalAPCount() (int, error) {
+	url := fmt.Sprintf("%s/aps/totalCount", s.BaseURL)
+
+	resp, err := s.get(url)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get total AP count: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("total count API failed with status: %d", resp.StatusCode)
+	}
+
+	var totalCount int
+	if err := json.NewDecoder(resp.Body).Decode(&totalCount); err != nil {
+		return 0, fmt.Errorf("failed to decode total count response: %v", err)
+	}
+
+	logrus.Debugf("Total AP count: %d", totalCount)
+	return totalCount, nil
 }

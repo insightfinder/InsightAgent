@@ -1,0 +1,34 @@
+agent:
+  # Agent behavior settings
+  log_level: info
+  data_format: JSON
+  timezone: UTC
+  filters_include: ""
+  filters_exclude: ""
+
+ruckus:
+  # Ruckus Wireless Controller Configuration
+  controller_host: 192.168.1.100
+  controller_port: 8443
+  username: your_ruckus_username
+  password: your_ruckus_password
+  api_version: v11_1
+  verify_ssl: false
+  max_concurrent_requests: 20
+
+insightfinder:
+  # InsightFinder Platform Configuration
+  server_url: https://app.insightfinder.com
+  username: your_if_username
+  license_key: your_license_key_here
+  project_name: RuckusWiFiMonitoring
+  system_name: RuckusController
+  project_type: Metric
+  cloud_type: OnPremise
+  instance_type: OnPremise
+  is_container: false
+  sampling_interval: 300
+
+state:
+  # Internal state (automatically managed)
+  last_collection_timestamp: 0

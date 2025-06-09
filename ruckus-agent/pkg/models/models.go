@@ -80,6 +80,7 @@ type MetricData struct {
 	Timestamp    int64                  `json:"timestamp"`
 	InstanceName string                 `json:"instanceName"`
 	Data         map[string]interface{} `json:"data"`
+	Zone         string                 `json:"zone,omitempty"`
 }
 
 // Convert AP detail to metric data
@@ -122,15 +123,16 @@ func (ap *APDetail) ToMetricData() *MetricData {
 			"device_name":         ap.DeviceName,
 			"ap_mac":              ap.APMAC,
 			"ip_address":          ap.IP,
-			"zone_name":           ap.ZoneName,
 			"model":               ap.Model,
 			"firmware_version":    ap.FirmwareVersion,
 			"last_seen_timestamp": ap.LastSeen,
 			"ap_group_name":       ap.APGroupName,
 			"serial_number":       ap.Serial,
+			// "zone_name":           ap.ZoneName,
 
 			// === DERIVED METRICS ===
 			"capacity_utilization_pct": capacityUtil,
 		},
+		Zone: ap.ZoneName,
 	}
 }
