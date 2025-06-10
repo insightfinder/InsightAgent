@@ -65,6 +65,9 @@ component_from_instance_name_re_sub = ^([^-]+).*?([^-]+)$,\1-\2,      (.*)(-swt|
 # Set up zone field
 zone_from_host_group = false
 
+# Set up subzone
+subzone_from_instance_name_regex =
+
 device_field =
 # multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>` or `<name>::==<value>`, where `<name>` and `<value>` can each be either a literal value (`name::value`) or formatted (`total time [{step}]::=={timing.end}-{timing.start}`). Use `::==` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `eval()`.
 data_fields =
