@@ -249,6 +249,11 @@ func (s *Service) SendMetricsBulk(metrics []models.MetricData) error {
 		instanceName := metric.InstanceName
 		timestamp := metric.Timestamp
 
+		// Convert timestamp to epoch milliseconds if it's in seconds
+		if timestamp < 1e12 {
+			timestamp = timestamp * 1000
+		}
+
 		// Track min/max timestamps
 		if i == 0 {
 			minTimestamp = timestamp
