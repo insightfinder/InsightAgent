@@ -459,6 +459,8 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                     else:
                         re_rule_part2 = re_sub_rules[rule_index]
                         component = re.sub(re_rule_part1, re_rule_part2, component)
+            if component is not None and component != '':
+                component = re.sub(r'^[-_\W]+', '', component)  # remove leading non-alphanumeric characters
 
             # add device info if it has
             device = None
@@ -920,6 +922,10 @@ def make_safe_instance_string(instance, device=''):
     # strip underscores
     instance = UNDERSCORE.sub('.', instance)
     instance = COLONS.sub('-', instance)
+    
+    # remove leading special characters (hyphens, underscores, etc.)
+    instance = re.sub(r'^[-_\W]+', '', instance)
+    
     # if there's a device, concatenate it to the instance with an underscore
     if device:
         instance = '{}_{}'.format(make_safe_instance_string(device), instance)
