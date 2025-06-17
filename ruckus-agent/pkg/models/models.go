@@ -85,53 +85,47 @@ type MetricData struct {
 
 // Convert AP detail to metric data
 func (ap *APDetail) ToMetricData() *MetricData {
-	capacityUtil := 0.0
-	if ap.Capacity > 0 {
-		capacityUtil = float64(ap.NumClients) / float64(ap.Capacity) * 100
-	}
+	cleanDeviceName := cleanDeviceNamePrefix(ap.DeviceName)
 
 	return &MetricData{
 		Timestamp:    time.Now().Unix(),
-		InstanceName: ap.DeviceName,
+		InstanceName: cleanDeviceName,
 		Data: map[string]interface{}{
 			// === CRITICAL FIELDS (Must Monitor) ===
-			"status":                  ap.Status,
-			"connection_status":       ap.ConnectionStatus,
-			"uptime_seconds":          ap.Uptime,
-			"num_clients_total":       ap.NumClients,
-			"num_clients_24g":         ap.NumClients24G,
-			"num_clients_5g":          ap.NumClients5G,
-			"airtime_24g_percent":     ap.Airtime24G,
-			"airtime_5g_percent":      ap.Airtime5G,
-			"connection_failure_rate": ap.ConnectionFailure,
-			"is_health_flagged":       ap.IsOverallHealthStatusFlagged,
-			"is_airtime_24g_flagged":  ap.IsAirtime24GFlagged,
-			"alerts_total":            ap.Alerts,
+			"Status":                  ap.Status,
+			"Connection Status":       ap.ConnectionStatus,
+			"Uptime Seconds":          ap.Uptime,
+			"Num Clients Total":       ap.NumClients,
+			"Num Clients 24G":         ap.NumClients24G,
+			"Num Clients 5G":          ap.NumClients5G,
+			"Airtime 24G Percent":     ap.Airtime24G,
+			"Airtime 5G Percent":      ap.Airtime5G,
+			"Connection Failure Rate": ap.ConnectionFailure,
+			"Is Health Flagged":       ap.IsOverallHealthStatusFlagged,
+			"Is Airtime 24G Flagged":  ap.IsAirtime24GFlagged,
+			"Alerts Total":            ap.Alerts,
 
 			// === PERFORMANCE FIELDS (High Priority) ===
-			"total_throughput_bytes": ap.TxRx,
-			"tx_bytes_total":         ap.Tx,
-			"rx_bytes_total":         ap.Rx,
-			"noise_24g_dbm":          ap.Noise24G,
-			"noise_5g_dbm":           ap.Noise5G,
-			"retry_24g_total":        ap.Retry24G,
-			"retry_5g_total":         ap.Retry5G,
-			"latency_24g_microsec":   ap.Latency24G,
-			"latency_5g_microsec":    ap.Latency50G,
+			"Total Throughput Bytes": ap.TxRx,
+			"Tx Bytes Total":         ap.Tx,
+			"Rx Bytes Total":         ap.Rx,
+			"Noise 24G Dbm":          ap.Noise24G,
+			"Noise 5G Dbm":           ap.Noise5G,
+			"Retry 24G Total":        ap.Retry24G,
+			"Retry 5G Total":         ap.Retry5G,
+			"Latency 24G Microsec":   ap.Latency24G,
+			"Latency 5G Microsec":    ap.Latency50G,
 
 			// === CONTEXT FIELDS (Always Include) ===
-			"device_name":         ap.DeviceName,
-			"ap_mac":              ap.APMAC,
-			"ip_address":          ap.IP,
-			"model":               ap.Model,
-			"firmware_version":    ap.FirmwareVersion,
-			"last_seen_timestamp": ap.LastSeen,
-			"ap_group_name":       ap.APGroupName,
-			"serial_number":       ap.Serial,
-			// "zone_name":           ap.ZoneName,
-
-			// === DERIVED METRICS ===
-			"capacity_utilization_pct": capacityUtil,
+			// "Device Name":         cleanDeviceName,
+			// "Ap Mac":              ap.APMAC,
+			// "Ip Address":          ap.IP,
+			// "Model":               ap.Model,
+			// "Firmware Version":    ap.FirmwareVersion,
+			// "Ap Group Name":       ap.APGroupName,
+			// "Serial Number":       ap.Serial,
+			"Capacity":            ap.Capacity,
+			"Last Seen Timestamp": ap.LastSeen,
 		},
 		Zone: ap.ZoneName,
 	}
