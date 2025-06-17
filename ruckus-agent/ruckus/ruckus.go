@@ -29,7 +29,7 @@ func NewService(config config.RuckusConfig) *Service {
 
 	client := &http.Client{
 		Transport: tr,
-		Timeout:   30 * time.Second,
+		Timeout:   180 * time.Second,
 		Jar:       jar, // Enable cookie handling
 	}
 
