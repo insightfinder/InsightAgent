@@ -37,7 +37,7 @@ func NewService(config config.InsightFinderConfig) *Service {
 
 	client := &http.Client{
 		Transport: tr,
-		Timeout:   60 * time.Second,
+		Timeout:   180 * time.Second,
 	}
 
 	service := &Service{
