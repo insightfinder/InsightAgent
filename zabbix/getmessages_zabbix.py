@@ -390,6 +390,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
     component_from_host_group = agent_config_vars['component_from_host_group']
     zone_from_host_group = agent_config_vars['zone_from_host_group']
     component_from_instance_name_re_sub = agent_config_vars['component_from_instance_name_re_sub']
+    subzone_from_instance_name_regex = agent_config_vars['subzone_from_instance_name_regex']
     alert_data_fields = agent_config_vars['alert_data_fields']
 
     for message in result:
@@ -426,6 +427,16 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                 if all_field_map.get(zone_field):
                     zone = all_field_map.get(zone_field).get(instance_id)
 
+            # set subzone
+            subzone = None
+            if subzone_from_instance_name_regex and instance:
+                try:
+                    match = re.search(subzone_from_instance_name_regex, instance)
+                    if match:
+                        # If the regex has groups, use the first group, otherwise use the full match
+                        subzone = match.group(1) if match.groups() else match.group(0)
+                except re.error as e:
+                    logger.warn(f'Invalid subzone regex pattern: {subzone_from_instance_name_regex}, error: {e}')
 
             # set component
             component = None
@@ -448,6 +459,8 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                     else:
                         re_rule_part2 = re_sub_rules[rule_index]
                         component = re.sub(re_rule_part1, re_rule_part2, component)
+            if component is not None and component != '':
+                component = re.sub(r'^[-_\W]+', '', component)  # remove leading non-alphanumeric characters
 
             # add device info if it has
             device = None
@@ -521,6 +534,8 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                     data_buffer['buffer_dict'][key]['componentName'] = component
                 if zone:
                     data_buffer['buffer_dict'][key]['zone'] = zone
+                if subzone:
+                    data_buffer['buffer_dict'][key]['subzone'] = subzone
 
                 # data_key = '{}[{}]'.format(data_field, full_instance)
                 data_buffer['buffer_dict'][key]['data'][data_field] = data_value
@@ -530,6 +545,8 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                     data_buffer['buffer_dict'][key]['componentName'] = component
                 if zone:
                     data_buffer['buffer_dict'][key]['zoneName'] = zone
+                if subzone:
+                    data_buffer['buffer_dict'][key]['subzoneName'] = subzone
                 data_buffer['buffer_dict'][key]['data'] = data_value
 
         except Exception as e:
@@ -615,6 +632,7 @@ def get_agent_config_vars(logger, config_ini):
             component_from_host_group = config_parser.get('zabbix', 'component_from_host_group') or False
             zone_from_host_group = config_parser.get('zabbix', 'zone_from_host_group') or False
             component_from_instance_name_re_sub = config_parser.get('zabbix', 'component_from_instance_name_re_sub', fallback=None)
+            subzone_from_instance_name_regex = config_parser.get('zabbix', 'subzone_from_instance_name_regex', fallback=None)
             device_field = config_parser.get('zabbix', 'device_field', raw=True)
             timestamp_field = config_parser.get('zabbix', 'timestamp_field', raw=True) or 'timestamp'
             target_timestamp_timezone = config_parser.get('zabbix', 'target_timestamp_timezone', raw=True) or 'UTC'
@@ -753,6 +771,7 @@ def get_agent_config_vars(logger, config_ini):
                        # 'project_field': project_fields,
                        'instance_field': instance_fields, 'component_from_host_group': component_from_host_group,
                        'zone_from_host_group': zone_from_host_group,
+                       'subzone_from_instance_name_regex': subzone_from_instance_name_regex,
                        'device_field': device_fields, 'data_fields': data_fields,
                        'alert_data_fields': alert_data_fields, 'timestamp_field': timestamp_fields,
                        'target_timestamp_timezone': target_timestamp_timezone, 'timezone': timezone,
@@ -903,6 +922,10 @@ def make_safe_instance_string(instance, device=''):
     # strip underscores
     instance = UNDERSCORE.sub('.', instance)
     instance = COLONS.sub('-', instance)
+    
+    # remove leading special characters (hyphens, underscores, etc.)
+    instance = re.sub(r'^[-_\W]+', '', instance)
+    
     # if there's a device, concatenate it to the instance with an underscore
     if device:
         instance = '{}_{}'.format(make_safe_instance_string(device), instance)
@@ -1049,12 +1072,13 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
         instance_name = chunk['instanceName']
         component_name = chunk.get('componentName')
         zone = chunk.get('zone')
+        subzone = chunk.get('subzone')
         timestamp = chunk['timestamp']
         data = chunk['data']
         if data and timestamp and instance_name:
             ts = int(timestamp)
             if instance_name not in instance_data_map:
-                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'z': zone, 'dit': {}, }
+                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'z': zone, 'sz': subzone, 'dit': {}, }
 
             if timestamp not in instance_data_map[instance_name]['dit']:
                 instance_data_map[instance_name]['dit'][timestamp] = {'t': ts, 'm': []}
