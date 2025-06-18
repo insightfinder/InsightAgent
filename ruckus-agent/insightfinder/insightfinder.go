@@ -272,7 +272,7 @@ func (s *Service) SendMetricsBulk(metrics []models.MetricData) error {
 		if !exists {
 			instanceData = InstanceData{
 				InstanceName:       instanceName,
-				ComponentName:      instanceName,
+				ComponentName:      metric.ComponentName,
 				DataInTimestampMap: make(map[int64]DataInTimestamp),
 			}
 		}

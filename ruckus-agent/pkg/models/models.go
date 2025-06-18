@@ -77,15 +77,20 @@ type APDetail struct {
 
 // InsightFinder data structure
 type MetricData struct {
-	Timestamp    int64                  `json:"timestamp"`
-	InstanceName string                 `json:"instanceName"`
-	Data         map[string]interface{} `json:"data"`
-	Zone         string                 `json:"zone,omitempty"`
+	Timestamp     int64                  `json:"timestamp"`
+	InstanceName  string                 `json:"instanceName"`
+	Data          map[string]interface{} `json:"data"`
+	Zone          string                 `json:"zone,omitempty"`
+	ComponentName string                 `json:"componentName,omitempty"`
 }
 
 // Convert AP detail to metric data
-func (ap *APDetail) ToMetricData() *MetricData {
-	cleanDeviceName := cleanDeviceNamePrefix(ap.DeviceName)
+func (ap *APDetail) ToMetricData(componentNameAsAP bool) *MetricData {
+	cleanDeviceName := cleanDeviceName(ap.DeviceName)
+	componentName := ""
+	if componentNameAsAP {
+		componentName = "AP"
+	}
 
 	return &MetricData{
 		Timestamp:    time.Now().Unix(),
@@ -127,6 +132,7 @@ func (ap *APDetail) ToMetricData() *MetricData {
 			"Capacity":            ap.Capacity,
 			"Last Seen Timestamp": ap.LastSeen,
 		},
-		Zone: ap.ZoneName,
+		Zone:          ap.ZoneName,
+		ComponentName: componentName,
 	}
 }
