@@ -146,9 +146,12 @@ func (w *Worker) collectAndSendStreaming() {
 		// Convert to metrics
 		var chunkMetrics []models.MetricData
 		for _, ap := range apChunk {
-			metric := ap.ToMetricData()
+			metric := ap.ToMetricData(w.ruckusService.Config.SendComponentNameAsAP)
 			chunkMetrics = append(chunkMetrics, *metric)
 		}
+
+		// Process zone mappings
+		chunkMetrics = models.ProcessZoneMappings(chunkMetrics)
 
 		if w.testMode {
 			// Write chunk to test file

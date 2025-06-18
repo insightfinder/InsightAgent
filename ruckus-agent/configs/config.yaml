@@ -15,6 +15,7 @@ ruckus:
   api_version: v11_1
   verify_ssl: false
   max_concurrent_requests: 20
+  send_component_name_as_AP: true
 
 insightfinder:
   # InsightFinder Platform Configuration
