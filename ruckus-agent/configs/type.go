@@ -23,6 +23,7 @@ type RuckusConfig struct {
 	APIVersion            string `yaml:"api_version"`
 	VerifySSL             bool   `yaml:"verify_ssl"`
 	MaxConcurrentRequests int    `yaml:"max_concurrent_requests"`
+	SendComponentNameAsAP bool   `yaml:"send_component_name_as_AP"`
 }
 
 type InsightFinderConfig struct {

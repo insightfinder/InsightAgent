@@ -39,9 +39,12 @@ func (w *Worker) collectSpecificMACs(macAddresses []string) error {
 	// Convert to metrics and send
 	var metrics []models.MetricData
 	for _, ap := range details {
-		metric := ap.ToMetricData()
+		metric := ap.ToMetricData(w.ruckusService.Config.SendComponentNameAsAP)
 		metrics = append(metrics, *metric)
 	}
+
+	// zone mapping
+	metrics = models.ProcessZoneMappings(metrics)
 
 	if w.testMode {
 		// Save to test file
