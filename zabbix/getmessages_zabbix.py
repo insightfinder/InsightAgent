@@ -286,11 +286,13 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
     # get hosts
     hosts_map = {}
     hosts_group_map = {}
+    hosts_ip_map = {}
     host_template_map = {}
     hosts_ids = []
     hosts_res = zapi.do_request('host.get', {'output': ['name', 'hostid'], 'groupids': host_groups_ids,
                                              'selectHostGroups': ['groupid', 'name'],
                                              'selectParentTemplates': ['templateid', 'name'],
+                                             'selectInterfaces': ['ip', 'type', 'main'],
                                              'filter': {"host": agent_config_vars['hosts']}, })
     for item in hosts_res['result']:
         host_id = item['hostid']
@@ -300,6 +302,21 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
             # use the last hostgroup as the component name
             host_group = hostgroups[len(hostgroups) - 1].get('name') or ''
 
+            # get IP address from interfaces
+            interfaces = item.get('interfaces') or []
+            host_ip = ''
+            # Find the primary agent interface (type 1) or first available interface
+            for interface in interfaces:
+                if interface.get('main') == '1' and interface.get('type') == '1':  # Primary agent interface
+                    host_ip = interface.get('ip', '')
+                    break
+            # If no primary agent interface found, use the first interface with an IP
+            if not host_ip:
+                for interface in interfaces:
+                    if interface.get('ip'):
+                        host_ip = interface.get('ip', '')
+                        break
+
             parent_templates = item.get('parentTemplates') or []
             for template in parent_templates:
                 if template.get('templateid') not in host_template_map:
@@ -308,6 +325,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
             hosts_ids.append(host_id)
             hosts_map[host_id] = host_name
             hosts_group_map[host_id] = host_group
+            hosts_ip_map[host_id] = host_ip
 
     host_template_ids = list(host_template_map.keys())
 
@@ -364,7 +382,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
 
         logger.info("Zabbix item count: %s" % len(items_keys))
 
-    all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map}
+    all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map, 'hostip': hosts_ip_map}
 
     total = len(hosts_ids_list)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -419,7 +437,11 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                     continue
 
             instance = all_field_map.get(instance_field).get(instance_id)
-
+            
+            # set IP address
+            ip_address = None
+            if all_field_map.get('hostip'):
+                ip_address = all_field_map.get('hostip').get(instance_id)
             # set zone
             zone = None
             if zone_from_host_group:
@@ -536,6 +558,8 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                     data_buffer['buffer_dict'][key]['zone'] = zone
                 if subzone:
                     data_buffer['buffer_dict'][key]['subzone'] = subzone
+                if ip_address:
+                    data_buffer['buffer_dict'][key]['ipAddress'] = ip_address
 
                 # data_key = '{}[{}]'.format(data_field, full_instance)
                 data_buffer['buffer_dict'][key]['data'][data_field] = data_value
@@ -547,6 +571,8 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                     data_buffer['buffer_dict'][key]['zoneName'] = zone
                 if subzone:
                     data_buffer['buffer_dict'][key]['subzoneName'] = subzone
+                if ip_address:
+                    data_buffer['buffer_dict'][key]['ipAddress'] = ip_address
                 data_buffer['buffer_dict'][key]['data'] = data_value
 
         except Exception as e:
@@ -1073,12 +1099,15 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
         component_name = chunk.get('componentName')
         zone = chunk.get('zone')
         subzone = chunk.get('subzone')
+        ip_address = chunk.get('ipAddress')
         timestamp = chunk['timestamp']
         data = chunk['data']
         if data and timestamp and instance_name:
             ts = int(timestamp)
             if instance_name not in instance_data_map:
                 instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'z': zone, 'sz': subzone, 'dit': {}, }
+                if ip_address:
+                    instance_data_map[instance_name]['ip'] = ip_address
 
             if timestamp not in instance_data_map[instance_name]['dit']:
                 instance_data_map[instance_name]['dit'][timestamp] = {'t': ts, 'm': []}
