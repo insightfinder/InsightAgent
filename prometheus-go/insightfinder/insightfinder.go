@@ -163,7 +163,7 @@ func createProject(ifConfig *IFConfig) {
 		"dataType":         ifConfig.DataType,
 		"insightAgentType": ifConfig.AgentType,
 
-		"samplingInterval":          strconv.Itoa(ifConfig.SamplingInterval / 60),
+		"samplingInterval":          strconv.Itoa(ifConfig.SamplingInterval),
 		"samplingIntervalInSeconds": strconv.Itoa(ifConfig.SamplingInterval),
 	}
 
