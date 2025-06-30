@@ -772,6 +772,7 @@ def get_agent_config_vars(logger, config_ini):
             timezone = config_parser.get('elasticsearch', 'timezone') or 'UTC'
             data_fields = config_parser.get('elasticsearch', 'data_fields', raw=True)
             aggregation_data_fields = config_parser.get('elasticsearch', 'aggregation_data_fields', raw=True)
+            safe_instance_fields = config_parser.get('elasticsearch', 'safe_instance_fields', fallback='')
 
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
@@ -861,6 +862,8 @@ def get_agent_config_vars(logger, config_ini):
         instance_fields = [x.strip() for x in instance_field.split(',') if x.strip()]
         default_instance_name = default_instance_name.strip() if default_instance_name else None
         device_fields = [x.strip() for x in device_field.split(',') if x.strip()]
+        safe_instance_fields = [x.strip() for x in safe_instance_fields.split(',') if x.strip()]
+
         if len(data_fields) != 0:
             data_fields = data_fields.split(',')
             for instance_field in instance_fields:
@@ -895,7 +898,7 @@ def get_agent_config_vars(logger, config_ini):
 
         # safe instance fields
         safe_instance_fields = config_parser.get('elasticsearch', 'safe_instance_fields', fallback='')
-        safe_instance_fields = [x.strip() for x in safe_instance_fields.split(',') if x.strip()]
+        
 
         # add parsed variables to a global
         config_vars = {
