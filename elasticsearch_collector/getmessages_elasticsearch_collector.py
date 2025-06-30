@@ -1264,6 +1264,10 @@ def make_safe_instance_string(instance, device=''):
     # strip underscores
     instance = UNDERSCORE.sub('.', instance)
     instance = COLONS.sub('-', instance)
+
+    # remove leading special characters (hyphens, underscores, etc.)
+    instance = re.sub(r'^[-_\W]+', '', instance)
+
     # if there's a device, concatenate it to the instance with an underscore
     if device:
         instance = '{}_{}'.format(make_safe_instance_string(device), instance)
