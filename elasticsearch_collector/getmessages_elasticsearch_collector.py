@@ -896,10 +896,6 @@ def get_agent_config_vars(logger, config_ini):
                 logger.error(e)
                 return config_error(logger, 'device_field_regex')
 
-        # safe instance fields
-        safe_instance_fields = config_parser.get('elasticsearch', 'safe_instance_fields', fallback='')
-        
-
         # add parsed variables to a global
         config_vars = {
             'safe_instance_fields': safe_instance_fields,
