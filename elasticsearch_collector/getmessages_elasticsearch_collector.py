@@ -924,7 +924,6 @@ def get_agent_config_vars(logger, config_ini):
             'timezone': timezone,
             'timestamp_format': timestamp_format,
             'proxies': agent_proxies,
-            'safe_instance_fields': safe_instance_fields,
         }
 
         return config_vars
