@@ -410,6 +410,15 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                 aggs_data = data_message.get('_aggregations', {})
                 project = project_name
 
+                # Sanitize safe_instance_fields if configured
+                safe_instance_fields = agent_config_vars.get('safe_instance_fields', [])
+                if safe_instance_fields:
+                    for field in safe_instance_fields:
+                        field_path = field.split('.')
+                        val = safe_get(message_source, field_path)
+                        if val is not None:
+                            message_source[field] = make_safe_instance_string(str(val))
+
                 if len(message_source) > 0:
                     # get project
                     if agent_config_vars['project_field']:
@@ -884,8 +893,13 @@ def get_agent_config_vars(logger, config_ini):
                 logger.error(e)
                 return config_error(logger, 'device_field_regex')
 
+        # safe instance fields
+        safe_instance_fields = config_parser.get('elasticsearch', 'safe_instance_fields', fallback='')
+        safe_instance_fields = [x.strip() for x in safe_instance_fields.split(',') if x.strip()]
+
         # add parsed variables to a global
         config_vars = {
+            'safe_instance_fields': safe_instance_fields,
             'elasticsearch_kwargs': elasticsearch_kwargs,
             'es_uris': es_uris,
             'query_json': query_json,
@@ -911,6 +925,7 @@ def get_agent_config_vars(logger, config_ini):
             'timezone': timezone,
             'timestamp_format': timestamp_format,
             'proxies': agent_proxies,
+            'safe_instance_fields': safe_instance_fields,
         }
 
         return config_vars
