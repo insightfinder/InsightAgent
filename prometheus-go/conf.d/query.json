@@ -1,0 +1,8 @@
+[
+  {
+    "query": "{__name__=~'node_.*',job='kubernetes-service-endpoints'}",
+    "instance_fields": [
+      "instance"
+    ]
+  }
+]
