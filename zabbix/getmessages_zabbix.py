@@ -1126,9 +1126,7 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
         if data and timestamp and instance_name:
             ts = int(timestamp)
             if instance_name not in instance_data_map:
-                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'z': zone, 'sz': subzone, 'dit': {}, }
-                if ip_address:
-                    instance_data_map[instance_name]['ip'] = ip_address
+                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'i': ip_address, 'z': zone, 'sz': subzone, 'dit': {}, }
 
             if timestamp not in instance_data_map[instance_name]['dit']:
                 instance_data_map[instance_name]['dit'][timestamp] = {'t': ts, 'm': []}
