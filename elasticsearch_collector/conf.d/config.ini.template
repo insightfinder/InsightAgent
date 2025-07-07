@@ -102,6 +102,9 @@ aggregation_data_fields =
 agent_http_proxy =
 agent_https_proxy =
 
+# Comma-separated list of field names to be made safe for instance naming (values will be sanitized, but not used as instance name)
+safe_instance_fields =
+
 [insightfinder]
 user_name =
 license_key =
