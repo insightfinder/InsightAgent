@@ -199,9 +199,10 @@ def query_messages_prometheus(args):
         logger.error('Query error: {}'.format(params))
 
     for item in data:
-        for value in item.get('values'):
-            if value and value[1] == 'NaN' or value[1] == '+Inf' or value[1] == '-Inf':
-              item.get('values')['value'][1] = 0
+        values = item.get('values', [])
+        for i, value in enumerate(values):
+            if value and len(value) > 1 and (value[1] == 'NaN' or value[1] == '+Inf' or value[1] == '-Inf'):
+                values[i][1] = '0'  # Replace the invalid value with '0'
 
     # add metric name in the value. In batch mode, the metric is None, it will later read from metrics_name_field
     data = [{**item, 'metric_name': metric} for item in data]
