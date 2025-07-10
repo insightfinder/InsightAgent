@@ -1,0 +1,20 @@
+[Unit]
+Description=Zabbix Webhook Agent FastAPI Application
+After=network.target
+
+[Service]
+Type=exec
+User=USER_PLACEHOLDER
+Group=GROUP_PLACEHOLDER
+WorkingDirectory=WORKING_DIR_PLACEHOLDER
+Environment=PATH=WORKING_DIR_PLACEHOLDER/venv/bin
+EnvironmentFile=WORKING_DIR_PLACEHOLDER/.env
+ExecStart=WORKING_DIR_PLACEHOLDER/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=zabbix-webhook-agent
+
+[Install]
+WantedBy=multi-user.target
