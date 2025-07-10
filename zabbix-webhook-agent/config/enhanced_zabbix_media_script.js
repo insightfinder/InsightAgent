@@ -1,9 +1,9 @@
 // Enhanced Zabbix Media Type Script for Zabbix Webhook Agent
-// This script uses Parameters for macro resolution instead of hardcoded values
+// This script uses Parameters for macro resolution instead of hardcoded | SERVER_URL          | http://your-zabbix-webhook-agent:80/webhook/zabbix/zabbixtest |alues
 // Macros are resolved in Parameters section, not in JavaScript code
 
 // IMPORTANT: Configure these Parameters in your Zabbix Media Type:
-// SERVER_URL = http://your-zabbix-webhook-agent:8000/webhook/zabbix/zabbixtest
+// SERVER_URL = http://your-zabbix-webhook-agent:80/webhook/zabbix/zabbixtest
 // API_KEY = your_secret_api_key_here
 // alert_id = {ALERT.ID}
 // alert_subject = {ALERT.SUBJECT}

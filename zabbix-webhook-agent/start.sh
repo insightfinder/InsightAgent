@@ -255,7 +255,7 @@ run_dev() {
     
     # Start the server in development mode
     print_status "Starting FastAPI server in development mode..."
-    uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    uvicorn main:app --host 0.0.0.0 --port 80 --reload
 }
 
 # Main script logic

@@ -194,14 +194,14 @@ zabbix-webhook-agent/
 
 4. Run the development server:
    ```bash
-   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+   uvicorn main:app --host 0.0.0.0 --port 80 --reload
    ```
 
 ### API Documentation
 
 Once running, access the interactive API documentation at:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+- Swagger UI: `http://localhost:80/docs`
+- ReDoc: `http://localhost:80/redoc`
 
 ## Health Monitoring
 
