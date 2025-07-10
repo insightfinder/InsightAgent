@@ -253,8 +253,26 @@ run_dev() {
     # Activate virtual environment
     source venv/bin/activate
     
+    # Check if we can bind to port 80
+    if ! netstat -tuln 2>/dev/null | grep -q ":80 " && [[ $EUID -ne 0 ]]; then
+        print_warning "Port 80 is a privileged port. You have two options:"
+        print_status "1. Run with sudo: sudo ./start.sh dev"
+        print_status "2. Use a different port for development"
+        echo
+        read -p "Do you want to run on port 8080 instead for development? [y/N]: " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            print_status "Starting FastAPI server in development mode on port 8080..."
+            uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+            return
+        else
+            print_error "Cannot bind to port 80 without elevated privileges. Exiting."
+            exit 1
+        fi
+    fi
+    
     # Start the server in development mode
-    print_status "Starting FastAPI server in development mode..."
+    print_status "Starting FastAPI server in development mode on port 80..."
     uvicorn main:app --host 0.0.0.0 --port 80 --reload
 }
 
