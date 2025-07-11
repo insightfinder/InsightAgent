@@ -1,40 +1,75 @@
-// Enhanced Zabbix Media Type Script for Zabbix Webhook Agent
-// This script uses Parameters for macro resolution instead of hardcoded | SERVER_URL          | http://your-zabbix-webhook-agent:80/webhook/zabbix/zabbixtest |alues
-// Macros are resolved in Parameters section, not in JavaScript code
 
-// IMPORTANT: Configure these Parameters in your Zabbix Media Type:
-// SERVER_URL = http://your-zabbix-webhook-agent:80/webhook/zabbix/zabbixtest
-// API_KEY = your_secret_api_key_here
-// alert_id = {ALERT.ID}
-// alert_subject = {ALERT.SUBJECT}
-// alert_message = {ALERT.MESSAGE}
-// event_id = {EVENT.ID}
-// event_name = {EVENT.NAME}
-// event_severity = {EVENT.SEVERITY}
-// event_status = {EVENT.STATUS}
-// event_value = {EVENT.VALUE}
-// event_date = {EVENT.DATE}
-// event_time = {EVENT.TIME}
-// event_timestamp = {EVENT.TIMESTAMP}
-// host_name = {HOST.NAME}
-// host_ip = {HOST.IP}
-// host_description = {HOST.DESCRIPTION}
-// host_metadata = {HOST.METADATA}
-// hostgroup_name = {HOSTGROUP.NAME}
-// item_name = {ITEM.NAME}
-// item_key = {ITEM.KEY}
-// item_value = {ITEM.VALUE}
-// item_description = {ITEM.DESCRIPTION}
-// trigger_id = {TRIGGER.ID}
-// trigger_name = {TRIGGER.NAME}
-// trigger_description = {TRIGGER.DESCRIPTION}
-// trigger_severity = {TRIGGER.SEVERITY}
-// trigger_status = {TRIGGER.STATUS}
-// trigger_url = {TRIGGER.URL}
-// user_fullname = {USER.FULLNAME}
-// user_name = {USER.NAME}
-// event_recovery_id = {EVENT.RECOVERY.ID}
-// event_update_status = {EVENT.UPDATE.STATUS}
+/**
+ * Convert Zabbix date/time format to UTC ISO string
+ * @param {string} date - Date in format "YYYY.MM.DD"
+ * @param {string} time - Time in format "HH:MM:SS"
+ * @returns {object} - Object with UTC date and time strings
+ */
+function convertToUTC(date, time) {
+    if (!date || !time) {
+        return { date: null, time: null };
+    }
+    
+    try {
+        // Parse Zabbix date format (YYYY.MM.DD) and time (HH:MM:SS)
+        var dateParts = date.toString().split('.');
+        var timeParts = time.toString().split(':');
+        
+        if (dateParts.length !== 3 || timeParts.length !== 3) {
+            Zabbix.Log(1, "[UTC Conversion] Invalid date/time format: " + date + " " + time);
+            return { date: null, time: null };
+        }
+        
+        // Create Date object (Note: month is 0-indexed in JavaScript)
+        var localDate = new Date(
+            parseInt(dateParts[0]),           // year
+            parseInt(dateParts[1]) - 1,       // month (0-indexed)
+            parseInt(dateParts[2]),           // day
+            parseInt(timeParts[0]),           // hour
+            parseInt(timeParts[1]),           // minute
+            parseInt(timeParts[2])            // second
+        );
+        
+        // Convert to UTC
+        var utcDate = new Date(localDate.getTime() + (localDate.getTimezoneOffset() * 60000));
+        
+        // Format as ISO strings
+        var utcDateStr = utcDate.getFullYear() + '-' + 
+                        String(utcDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                        String(utcDate.getDate()).padStart(2, '0');
+        
+        var utcTimeStr = String(utcDate.getHours()).padStart(2, '0') + ':' + 
+                        String(utcDate.getMinutes()).padStart(2, '0') + ':' + 
+                        String(utcDate.getSeconds()).padStart(2, '0');
+        
+        Zabbix.Log(4, "[UTC Conversion] Local: " + date + " " + time + " -> UTC: " + utcDateStr + " " + utcTimeStr);
+        
+        return {
+            date: utcDateStr,
+            time: utcTimeStr
+        };
+    } catch (error) {
+        Zabbix.Log(1, "[UTC Conversion] Error converting to UTC: " + error);
+        return { date: null, time: null };
+    }
+}
+
+/**
+ * Add padding to string for consistent formatting
+ */
+String.prototype.padStart = String.prototype.padStart || function(targetLength, padString) {
+    targetLength = targetLength >> 0;
+    padString = String(padString || ' ');
+    if (this.length >= targetLength) {
+        return String(this);
+    } else {
+        targetLength = targetLength - this.length;
+        if (targetLength > padString.length) {
+            padString += padString.repeat(targetLength / padString.length);
+        }
+        return padString.slice(0, targetLength) + String(this);
+    }
+};
 
 try {
     // Parse parameters from Zabbix webhook
@@ -56,6 +91,17 @@ try {
     req.addHeader('Content-Type: application/json');
     req.addHeader('Authorization: Bearer ' + params.API_KEY);
 
+    // Convert event date/time to UTC
+    var eventUTC = convertToUTC(params.event_date, params.event_time);
+    
+    // Convert recovery date/time to UTC (if present)
+    var recoveryUTC = { date: null, time: null };
+    if (params.recovery_date && params.recovery_time) {
+        recoveryUTC = convertToUTC(params.recovery_date, params.recovery_time);
+        Zabbix.Log(4, "[Recovery UTC] Original: " + params.recovery_date + " " + params.recovery_time + 
+                    " -> UTC: " + recoveryUTC.date + " " + recoveryUTC.time);
+    }
+
     var payload = {
         // Core alert information
         "alert_subject": params.alert_subject,
@@ -67,8 +113,12 @@ try {
         "event_severity": params.event_severity,
         "event_status": params.event_status,
         "event_value": params.event_value,  // Important: 0=OK/resolved, 1=problem
-        "event_date": params.event_date,   // Format: YYYY.MM.DD or YYYY-MM-DD
-        "event_time": params.event_time,   // Format: HH:MM:SS
+        
+        // Event date/time in UTC format
+        "event_date": eventUTC.date,       // Format: YYYY-MM-DD (UTC)
+        "event_time": eventUTC.time,       // Format: HH:MM:SS (UTC)
+        "event_date_original": params.event_date, // Keep original for debugging
+        "event_time_original": params.event_time, // Keep original for debugging
         
         // Host information
         "host_name": params.host_name,
@@ -83,12 +133,25 @@ try {
         "trigger_id": params.trigger_id,
         "trigger_name": params.trigger_name,
         "trigger_status": params.trigger_status,
+
+        // Recovery information in UTC format (if available)
+        "recovery_date": recoveryUTC.date,     // Format: YYYY-MM-DD (UTC)
+        "recovery_time": recoveryUTC.time,     // Format: HH:MM:SS (UTC)
+        "recovery_date_original": params.recovery_date || null, // Keep original for debugging
+        "recovery_time_original": params.recovery_time || null, // Keep original for debugging
     };
     
-    // Log the operation
+    // Log the operation with timezone information
     Zabbix.Log(4, "[Zabbix Webhook Agent] Sending webhook to Zabbix Webhook Agent");
     Zabbix.Log(4, "[IF Agent] Host: " + payload.host_name + ", Event: " + payload.event_name);
     Zabbix.Log(4, "[IF Agent] Event Value: " + payload.event_value + " (0=resolved, 1=problem)");
+    Zabbix.Log(4, "[IF Agent] Event Time (Local->UTC): " + params.event_date + " " + params.event_time + 
+                 " -> " + eventUTC.date + " " + eventUTC.time);
+    
+    if (recoveryUTC.date && recoveryUTC.time) {
+        Zabbix.Log(4, "[IF Agent] Recovery Time (Local->UTC): " + params.recovery_date + " " + params.recovery_time + 
+                     " -> " + recoveryUTC.date + " " + recoveryUTC.time);
+    }
     
     // Send the request to Zabbix Webhook Agent (URL comes from SERVER_URL parameter)
     Zabbix.Log(3, "Sending webhook to Zabbix Webhook Agent");
@@ -133,7 +196,7 @@ PARAMETER CONFIGURATION REQUIRED IN ZABBIX MEDIA TYPE:
 
 | Parameter Name       | Parameter Value                                    |
 |---------------------|---------------------------------------------------|
-| SERVER_URL          | http://your-zabbix-webhook-agent:8000/webhook/zabbix/zabbixtest |
+| SERVER_URL          | http://your-zabbix-webhook-agent:80/webhook/zabbix/zabbixtest |
 | API_KEY             | your_secret_api_key_here                          |
 | alert_subject       | {ALERT.SUBJECT}                                   |
 | alert_message       | {ALERT.MESSAGE}                                   |
@@ -146,48 +209,13 @@ PARAMETER CONFIGURATION REQUIRED IN ZABBIX MEDIA TYPE:
 | event_time          | {EVENT.TIME}                                      |
 | host_name           | {HOST.NAME}                                       |
 | host_ip             | {HOST.IP}                                         |
-| hostgroup_name      | {TRIGGER.HOSTGROUP.NAME}                                  |
+| hostgroup_name      | {TRIGGER.HOSTGROUP.NAME}                          |
 | item_name           | {ITEM.NAME}                                       |
 | item_value          | {ITEM.VALUE}                                      |
 | trigger_id          | {TRIGGER.ID}                                      |
 | trigger_name        | {TRIGGER.NAME}                                    |
 | trigger_status      | {TRIGGER.STATUS}                                  |
+| recovery_time       | {EVENT.RECOVERY.TIME}                             |
+| recovery_date       | {EVENT.RECOVERY.DATE}                             |
 
-**CRITICAL**: The first two parameters (SERVER_URL and API_KEY) are REQUIRED!
-Without them, you'll get "undefined" errors.
-
-**IMPORTANT**: Parameter names must match EXACTLY (case-sensitive).
-Zabbix passes these as JSON object properties via the `value` variable.
-
-BENEFITS OF USING ZABBIX WEBHOOK AGENT vs DIRECT JAVASCRIPT:
-
-1. SESSION MANAGEMENT: Server handles login tokens and session cookies
-2. PROJECT MANAGEMENT: Automatic project creation and validation  
-3. ERROR HANDLING: Robust retry logic and error recovery
-4. INCIDENT INVESTIGATION: Automatic API calls for resolved events
-5. SCALABILITY: Can handle multiple Zabbix instances and projects
-6. MONITORING: Built-in metrics and health checks
-7. MAINTENANCE: Centralized configuration and updates
-8. SECURITY: API key authentication vs embedding credentials
-9. EXTENSIBILITY: Easy to add new destinations and processors
-10. DEBUGGING: Centralized logging and troubleshooting
-
-WHAT THE SERVER DOES AUTOMATICALLY:
-- Validates and transforms Zabbix webhook data
-- Creates safe instance names (host.name -> host-name)
-- Handles timestamp parsing and formatting
-- Determines event type (PROBLEM vs RESOLVED)
-- Sends both metric and log data to InsightFinder
-- Calls incident investigation API for resolved events
-- Manages InsightFinder sessions and authentication
-- Creates projects if they don't exist
-- Provides detailed logging and metrics
-- Handles errors gracefully without failing alerts
-
-CONFIGURATION ON ZABBIX WEBHOOK AGENT:
-- INSIGHTFINDER_USERNAME: Your InsightFinder username
-- INSIGHTFINDER_PASSWORD: Your InsightFinder password (for session management)
-- INSIGHTFINDER_LICENSE_KEY: Your license key
-- INSIGHTFINDER_PROJECT_NAME: Target project name
-- API_KEY: Authentication key for webhook access
 */
