@@ -44,6 +44,8 @@ class DataProcessor:
                 'trigger_status': raw_data.get('TRIGGER.STATUS') or raw_data.get('trigger_status'),
                 'timestamp': raw_data.get('EVENT.DATE') or raw_data.get('event_date') or raw_data.get('DATE'),
                 'hostgroup_name': raw_data.get('HOSTGROUP.NAME') or raw_data.get('hostgroup_name'),
+                'recovery_time': raw_data.get('RECOVERY.TIME') or raw_data.get('recovery_time'),
+                'recovery_date': raw_data.get('RECOVERY.DATE') or raw_data.get('recovery_date'),
                 'raw_data': raw_data
             }
             

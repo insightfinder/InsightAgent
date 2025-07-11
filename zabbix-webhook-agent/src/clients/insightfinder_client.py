@@ -8,12 +8,16 @@ import requests
 import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+import pytz
 
 logger = logging.getLogger(__name__)
 
 
 # Global session manager cache to share sessions across client instances
 _global_session_managers = {}
+
+# Global user timezone cache to avoid repeated API calls
+_global_user_timezone_cache = {}
 
 
 def get_session_manager(base_url: str, username: str, password: str) -> 'SessionManager':
@@ -123,8 +127,12 @@ class SessionManager:
         """
         Call incident investigation API for resolved events
         Matches the JavaScript SessionManager.incidentInvestigation function
+        
+        Args:
+            timestamp: Epoch timestamp in milliseconds
         """
         logger.info(f"Calling incident investigation API for project: {project_name}, instance: {instance_name}")
+        logger.debug(f"Using timestamp: {timestamp} (epoch milliseconds)")
         
         # Ensure we have a login token
         if not self.ensure_logged_in():
@@ -137,17 +145,24 @@ class SessionManager:
                                            timestamp: int, status: str) -> bool:
         """Make the actual incident investigation API request"""
         try:
+            # Convert timestamp to user's timezone
+            converted_timestamp = self.convert_timestamp_to_user_timezone(timestamp)
+            
             api_url = f"{self.base_url}/api/v1/incidentInvestigation"
             params = {'tzOffset': '-14400000'}
             
             form_data = {
                 'projectName': project_name,
                 'instanceName': instance_name,
-                'timestamp': str(timestamp),
+                'timestamp': str(converted_timestamp),  # timestamp converted to user's timezone
                 'status': status
             }
+            # # Print payload before sending
+            # print(f"Incident investigation payload: {form_data}")
+            # print(f"Original timestamp: {timestamp}ms -> Converted timestamp: {converted_timestamp}ms")
             
             logger.debug(f"Form data being sent: {form_data}")
+            logger.debug(f"Original timestamp: {timestamp} -> Converted timestamp: {converted_timestamp} (epoch milliseconds)")
             
             response = self.session.post(
                 api_url,
@@ -159,7 +174,9 @@ class SessionManager:
                 },
                 timeout=30
             )
-            
+            # print(f"API response status: {response.status_code}")
+            # print(f"API response data: {response.text}")
+
             logger.debug(f"API response status: {response.status_code}")
             logger.debug(f"API response data: {response.text}")
             
@@ -242,6 +259,119 @@ class SessionManager:
             logger.debug(f"Using cached token for {self.username}")
         return True
 
+    def get_user_info(self) -> Optional[Dict[str, Any]]:
+        """
+        Get user information including default timezone
+        Uses global cache to avoid repeated API calls
+        """
+        global _global_user_timezone_cache
+        
+        cache_key = f"{self.base_url}#{self.username}"
+        
+        # Check if we have cached user info
+        if cache_key in _global_user_timezone_cache:
+            logger.debug(f"Using cached user info for {self.username}")
+            return _global_user_timezone_cache[cache_key]
+        
+        logger.info(f"Fetching user information for {self.username}...")
+        
+        # Ensure we have a login token
+        if not self.ensure_logged_in():
+            logger.error("Unable to obtain login token for user info")
+            return None
+        
+        try:
+            user_info_url = f"{self.base_url}/api/v1/loadinitdata"
+            params = {
+                'customerName': self.username,
+                'skipProjectList': 'true',
+                'tzOffset': '-14400000'
+            }
+            
+            response = self.session.get(
+                user_info_url,
+                params=params,
+                headers={'X-CSRF-TOKEN': self.login_token},
+                timeout=30
+            )
+            
+            logger.debug(f"User info response status: {response.status_code}")
+            logger.debug(f"User info response data: {response.text}")
+            
+            if response.status_code != 200:
+                logger.error(f"Failed to get user info. Status: {response.status_code}")
+                return None
+            
+            user_data = response.json()
+            
+            if not user_data.get('success'):
+                logger.error(f"User info API returned success=false: {user_data}")
+                return None
+            
+            # Cache the user info
+            _global_user_timezone_cache[cache_key] = user_data
+            logger.info(f"Successfully fetched and cached user info for {self.username}")
+            logger.info(f"Default timezone: {user_data.get('defaultTimezone', 'Unknown')}")
+            
+            return user_data
+            
+        except Exception as e:
+            logger.error(f"Error fetching user info: {e}")
+            return None
+    
+    def get_user_timezone(self) -> Optional[str]:
+        """Get user's default timezone"""
+        user_info = self.get_user_info()
+        if user_info:
+            return user_info.get('defaultTimezone')
+        return None
+    
+    def convert_timestamp_to_user_timezone(self, timestamp_ms: int) -> int:
+        """
+        Convert timestamp from UTC to user's timezone
+        
+        Args:
+            timestamp_ms: Timestamp in epoch milliseconds (assumed to be in UTC)
+            
+        Returns:
+            Timestamp in epoch milliseconds with timezone offset applied
+        """
+        user_timezone = self.get_user_timezone()
+        if not user_timezone:
+            logger.warning("Could not get user timezone, using original timestamp")
+            return timestamp_ms
+        
+        try:
+            # Create UTC datetime from the timestamp
+            utc_dt = datetime.fromtimestamp(timestamp_ms / 1000, tz=pytz.UTC)
+            
+            # Get user's timezone
+            user_tz = pytz.timezone(user_timezone)
+            
+            # Convert to user's timezone
+            user_dt = utc_dt.astimezone(user_tz)
+            
+            # Create a new timestamp that represents the local time as if it were UTC
+            # This effectively shifts the timestamp by the timezone offset
+            local_as_utc = user_dt.replace(tzinfo=pytz.UTC)
+            converted_timestamp_ms = int(local_as_utc.timestamp() * 1000)
+            
+            # Calculate offset for logging
+            utc_offset = user_dt.utcoffset()
+            offset_hours = utc_offset.total_seconds() / 3600 if utc_offset else 0
+            
+            logger.debug(f"Original UTC: {utc_dt}")
+            logger.debug(f"User timezone ({user_timezone}): {user_dt}")
+            logger.debug(f"Timezone offset: {offset_hours} hours")
+            logger.debug(f"Original timestamp: {timestamp_ms}ms -> Converted: {converted_timestamp_ms}ms")
+            logger.debug(f"Time shift: {converted_timestamp_ms - timestamp_ms}ms")
+            
+            return converted_timestamp_ms
+            
+        except Exception as e:
+            logger.error(f"Error converting timestamp to user timezone: {e}")
+            logger.warning("Using original timestamp")
+            return timestamp_ms
 
 class InsightFinderClient:
     """Enhanced InsightFinder client matching JavaScript webhook functionality"""
@@ -408,13 +538,14 @@ class InsightFinderClient:
             # Check and create project if necessary
             self.check_and_create_project()
             
-            # Parse timestamp from Zabbix data
-            timestamp = self._parse_zabbix_timestamp(zabbix_data)
-            
             # Determine event type (matches JavaScript logic)
             event_value = zabbix_data.get('event_value', '1')
             is_resolved = (event_value == '0' or event_value == 0)
             event_type = 'RESOLVED' if is_resolved else 'PROBLEM'
+            
+            # Parse timestamps - different for alert vs incident investigation
+            alert_timestamp = self._parse_alert_timestamp(zabbix_data, is_resolved)
+            incident_timestamp = self._parse_zabbix_timestamp(zabbix_data)  # Always use event time for incident investigation
             
             # Create safe instance name
             raw_instance_name = zabbix_data.get('host_name', 'unknown-host')
@@ -427,7 +558,7 @@ class InsightFinderClient:
             
             # Prepare alert data in InsightFinder format (matches JavaScript)
             alert_data = {
-                'timestamp': str(timestamp),
+                'timestamp': str(alert_timestamp),
                 'tag': safe_instance_name,
                 'data': {
                     'message': alert_message,
@@ -448,11 +579,16 @@ class InsightFinderClient:
                     'trigger_status': zabbix_data.get('trigger_status'),
                     'event_date': zabbix_data.get('event_date'),
                     'event_time': zabbix_data.get('event_time'),
+                    'recovery_date': zabbix_data.get('recovery_date'),
+                    'recovery_time': zabbix_data.get('recovery_time'),
                 },
                 'componentName': safe_instance_name,
                 'zoneName': zone_name,
                 'ipAddress': zabbix_data.get('host_ip'),
             }
+
+            # print(f'-------------------------event time and date: {zabbix_data.get("event_date")} {zabbix_data.get("event_time")}')
+            # print(f'-------------------------recovered time and date: {zabbix_data.get("recovery_date")} {zabbix_data.get("recovery_time")}')
 
             # Prepare post data exactly like JavaScript
             post_data = {
@@ -466,6 +602,10 @@ class InsightFinderClient:
             
             logger.info(f"Sending request to: {self.base_url}/api/v1/customprojectrawdata")
             logger.info(f"Instance: {safe_instance_name}")
+            logger.info(f"Event type: {event_type}")
+            logger.info(f"Alert timestamp: {alert_timestamp} ({'recovery time' if is_resolved and zabbix_data.get('recovery_time') else 'event time'})")
+            if is_resolved:
+                logger.info(f"Incident investigation timestamp: {incident_timestamp} (event time)")
             logger.info(f"Alert tag: {alert_data['tag']}")
             logger.info(f"Zone name: {zone_name}")
             logger.debug(f"Full alert data: {json.dumps(alert_data, indent=2)}")
@@ -502,7 +642,7 @@ class InsightFinderClient:
                     investigation_success = self.session_manager.incident_investigation(
                         self.project_name,
                         safe_instance_name,
-                        timestamp,
+                        incident_timestamp,
                         'closed'
                     )
                     
@@ -522,7 +662,7 @@ class InsightFinderClient:
             return False
     
     def _parse_zabbix_timestamp(self, zabbix_data: Dict[str, Any]) -> int:
-        """Parse timestamp from Zabbix data"""
+        """Parse timestamp from Zabbix data and return epoch milliseconds"""
         event_time = zabbix_data.get('event_time')
         event_date = zabbix_data.get('event_date')
         
@@ -533,12 +673,13 @@ class InsightFinderClient:
             
             try:
                 dt = datetime.fromisoformat(datetime_str)
-                return int(dt.timestamp() * 1000)  # milliseconds
+                timestamp_ms = int(dt.timestamp() * 1000)  # Convert to milliseconds
+                logger.debug(f"Parsed event timestamp: {datetime_str} -> {timestamp_ms} (epoch milliseconds)")
+                return timestamp_ms
             except ValueError:
                 logger.warning(f"Invalid date/time format: {datetime_str}")
         
-        # Fallback to current timestamp
-        return int(datetime.now().timestamp() * 1000)
+        return int(datetime.now().timestamp() * 1000)  # Fallback to current time if parsing fails
     
     def _create_alert_message(self, zabbix_data: Dict[str, Any], event_type: str) -> str:
         """Create comprehensive alert message"""
@@ -552,6 +693,13 @@ class InsightFinderClient:
         
         if zabbix_data.get('alert_message'):
             alert_message += f"\n{zabbix_data['alert_message']}"
+        
+        # Add recovery information for resolved events
+        if event_type == 'RESOLVED':
+            recovery_date = zabbix_data.get('recovery_date')
+            recovery_time = zabbix_data.get('recovery_time')
+            if recovery_date and recovery_time:
+                alert_message += f"\nRecovered on: {recovery_date} at {recovery_time}"
         
         return alert_message
     
@@ -567,18 +715,47 @@ class InsightFinderClient:
         """
         return self.send_log_data_enhanced(zabbix_data)
 
+    def _parse_alert_timestamp(self, zabbix_data: Dict[str, Any], is_resolved: bool) -> int:
+        """
+        Parse timestamp for alert data and return epoch milliseconds.
+        For RESOLVED events, use recovery_time and recovery_date if available.
+        For PROBLEM events, use event_time and event_date.
+        """
+        if is_resolved:
+            # For resolved events, try to use recovery time first
+            recovery_time = zabbix_data.get('recovery_time')
+            recovery_date = zabbix_data.get('recovery_date')
+            # print(f"Recovery time: {recovery_time}, Recovery date: {recovery_date}")
+            
+            if recovery_time and recovery_date:
+                # Normalize date format
+                normalized_date = recovery_date.replace('.', '-')
+                datetime_str = f"{normalized_date}T{recovery_time}"
+                
+                try:
+                    dt = datetime.fromisoformat(datetime_str)
+                    timestamp_ms = int(dt.timestamp() * 1000)  # Convert to milliseconds
+                    logger.debug(f"Using recovery timestamp for RESOLVED event: {datetime_str} -> {timestamp_ms} (epoch milliseconds)")
+                    return timestamp_ms
+                except ValueError:
+                    logger.warning(f"Invalid recovery date/time format: {datetime_str}, falling back to event time")
+        
+        # Fall back to event time (for PROBLEM events or when recovery time is not available)
+        return self._parse_zabbix_timestamp(zabbix_data)
+
 
 def clear_all_session_cache():
     """Clear all cached session managers and tokens"""
-    global _global_session_managers
+    global _global_session_managers, _global_user_timezone_cache
     
     # Clear tokens from all session managers
     for session_manager in _global_session_managers.values():
         session_manager._clear_cached_token()
     
-    # Clear the global cache
+    # Clear the global caches
     _global_session_managers.clear()
-    logger.info("Cleared all cached session managers and tokens")
+    _global_user_timezone_cache.clear()
+    logger.info("Cleared all cached session managers, tokens, and user timezone information")
 
 
 def get_cached_session_info() -> Dict[str, Any]:
@@ -589,5 +766,25 @@ def get_cached_session_info() -> Dict[str, Any]:
             'has_token': session_manager.is_logged_in(),
             'base_url': session_manager.base_url,
             'username': session_manager.username
+        }
+    return info
+
+
+def clear_timezone_cache():
+    """Clear all cached user timezone information"""
+    global _global_user_timezone_cache
+    _global_user_timezone_cache.clear()
+    logger.info("Cleared all cached user timezone information")
+
+
+def get_cached_timezone_info() -> Dict[str, Any]:
+    """Get information about cached user timezones for debugging"""
+    global _global_user_timezone_cache
+    info = {}
+    for cache_key, user_data in _global_user_timezone_cache.items():
+        info[cache_key] = {
+            'default_timezone': user_data.get('defaultTimezone', 'Unknown'),
+            'license_valid': user_data.get('licenseValid', False),
+            'expiration_date': user_data.get('expirationDate', None)
         }
     return info

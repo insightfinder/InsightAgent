@@ -27,6 +27,8 @@ class ZabbixAlert(BaseModel):
     trigger_status: Optional[str] = None
     timestamp: Optional[str] = None
     raw_data: Optional[Dict[str, Any]] = None
+    recovery_time: Optional[str] = None
+    recovery_date: Optional[str] = None
 
 
 class InsightFinderMetric(BaseModel):
