@@ -79,6 +79,11 @@ class InsightFinderConfig:
     def sampling_interval_in_seconds(self) -> str:
         return self.config.get('project_settings', 'sampling_interval_in_seconds', fallback='60')
     
+    @property
+    def stream_resolved_alerts(self) -> bool:
+        """Whether to stream resolved alerts to the API (default: True)"""
+        return self.config.getboolean('project_settings', 'stream_resolved_alerts', fallback=True)
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary"""
         return {
@@ -93,7 +98,8 @@ class InsightFinderConfig:
             'data_type': self.data_type,
             'insight_agent_type': self.insight_agent_type,
             'sampling_interval': self.sampling_interval,
-            'sampling_interval_in_seconds': self.sampling_interval_in_seconds
+            'sampling_interval_in_seconds': self.sampling_interval_in_seconds,
+            'stream_resolved_alerts': self.stream_resolved_alerts
         }
 
 

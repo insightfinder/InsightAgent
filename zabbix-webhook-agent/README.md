@@ -121,6 +121,43 @@ The server supports multiple InsightFinder configurations stored in the `config/
 - Username/Password or License Key
 - Other project-specific settings
 
+#### Stream Control Options
+
+The server provides fine-grained control over which types of alerts are sent to InsightFinder:
+
+- **`stream_resolved_alerts`** (boolean, default: `true`): Controls whether RESOLVED alerts are sent to the InsightFinder `/api/v1/customprojectrawdata` endpoint
+  - When set to `true`: Both PROBLEM and RESOLVED alerts are sent to InsightFinder
+  - When set to `false`: Only PROBLEM alerts are sent to InsightFinder, but incident investigation API is still called for RESOLVED events
+
+#### Configuration File Example
+
+```ini
+[insightfinder]
+base_url = https://app.insightfinder.com
+username = your_username
+password = your_password
+license_key = your_license_key
+project_name = your_project_name
+system_name = your_system_name
+
+[project_settings]
+instance_type = Zabbix
+project_cloud_type = Zabbix
+data_type = Log
+insight_agent_type = Custom
+sampling_interval = 60
+sampling_interval_in_seconds = 60
+# Control resolved alert streaming
+stream_resolved_alerts = true
+```
+
+#### Environment Variable Configuration
+
+For legacy `.env` file configuration, add:
+```bash
+STREAM_RESOLVED_ALERTS=true
+```
+
 ## API Endpoints
 
 ### Public Endpoints

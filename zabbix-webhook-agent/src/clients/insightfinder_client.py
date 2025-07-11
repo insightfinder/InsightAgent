@@ -398,6 +398,7 @@ class InsightFinderClient:
             self.insight_agent_type = if_config.get('insight_agent_type', 'Custom')
             self.sampling_interval = if_config.get('sampling_interval', '60')
             self.sampling_interval_in_seconds = if_config.get('sampling_interval_in_seconds', '60')
+            self.stream_resolved_alerts = if_config.get('stream_resolved_alerts', True)
         else:
             # Use configuration from files or fallback to legacy settings
             try:
@@ -417,6 +418,7 @@ class InsightFinderClient:
                 self.insight_agent_type = config_dict['insight_agent_type']
                 self.sampling_interval = config_dict['sampling_interval']
                 self.sampling_interval_in_seconds = config_dict['sampling_interval_in_seconds']
+                self.stream_resolved_alerts = config_dict['stream_resolved_alerts']
             except Exception as e:
                 # Fallback to legacy settings from .env
                 from src.core.config import settings
@@ -433,6 +435,7 @@ class InsightFinderClient:
                 self.insight_agent_type = 'Custom'
                 self.sampling_interval = '60'
                 self.sampling_interval_in_seconds = '60'
+                self.stream_resolved_alerts = settings.stream_resolved_alerts
         
         self.session = requests.Session()
         self.session_manager = None
@@ -542,6 +545,40 @@ class InsightFinderClient:
             event_value = zabbix_data.get('event_value', '1')
             is_resolved = (event_value == '0' or event_value == 0)
             event_type = 'RESOLVED' if is_resolved else 'PROBLEM'
+            
+            # Check if we should skip sending resolved alerts to API
+            if is_resolved and not self.stream_resolved_alerts:
+                logger.info(f"Skipping resolved alert streaming for host: {zabbix_data.get('host_name', 'unknown-host')} (stream_resolved_alerts=False)")
+                
+                # Still handle incident investigation for resolved events if session manager is available
+                if self.session_manager:
+                    logger.info("Event is RESOLVED, calling incident investigation API only...")
+                    try:
+                        # Parse timestamp for incident investigation (always use event time)
+                        incident_timestamp = self._parse_zabbix_timestamp(zabbix_data)
+                        
+                        # Create safe instance name for incident investigation
+                        raw_instance_name = zabbix_data.get('host_name', 'unknown-host')
+                        safe_instance_name = self.make_safe_instance_string(raw_instance_name)
+                        
+                        # Call incident investigation
+                        investigation_success = self.session_manager.incident_investigation(
+                            self.project_name,
+                            safe_instance_name,
+                            incident_timestamp,
+                            'closed'
+                        )
+                        
+                        if investigation_success:
+                            logger.info("✅ Successfully called incident investigation API")
+                        else:
+                            logger.warning("❌ Incident investigation API call failed")
+                            
+                    except Exception as e:
+                        logger.error(f"Error in incident investigation: {e}")
+                
+                # Return early - no data sent to customprojectrawdata API
+                return True
             
             # Parse timestamps - different for alert vs incident investigation
             alert_timestamp = self._parse_alert_timestamp(zabbix_data, is_resolved)
