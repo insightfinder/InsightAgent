@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     insightfinder_project_name: str = ""
     insightfinder_system_name: str = ""
     
+    # Stream control settings
+    stream_resolved_alerts: bool = True  # Whether to stream resolved alerts to the API
+    
     class Config:
         env_file = ".env"
         case_sensitive = False
