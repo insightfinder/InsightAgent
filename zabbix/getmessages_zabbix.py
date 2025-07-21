@@ -144,7 +144,6 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                                                          'selectHosts': ['hostId'], 'filter': {'value_type': value_type_list}})
                 items_ids_map = {}
                 items_keys_map = {}
-
                 for item in items_res['result']:
                     item_id = item['itemid']
                     item_key = item['key_']
@@ -157,10 +156,8 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                     else:
                         items_ids_map[item_id] = item
                         items_keys_map[item_key] = item
-
                 items_ids = list(items_ids_map.keys())
                 items_keys = list(items_keys_map.keys())
-
                 logger.info("Zabbix item count: %s" % len(items_ids))
 
             if data_type == 'Metric':
@@ -437,10 +434,6 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
     component_from_instance_name_re_sub = agent_config_vars['component_from_instance_name_re_sub']
     subzone_from_instance_name_regex = agent_config_vars['subzone_from_instance_name_regex']
     alert_data_fields = agent_config_vars['alert_data_fields']
-    
-    # Add metric filtering variables
-    # metric_allowlist_map = agent_config_vars.get('metric_allowlist_map', {})
-    # metric_disallowlist_map = agent_config_vars.get('metric_disallowlist_map', {})
 
     for message in result:
         try:
@@ -449,13 +442,6 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             item_key = message.get('key_')
             item_id = message.get('itemid')
             item_name = message.get('name')
-            
-            # Add filtering check for metrics at the message level
-            # if is_metric and item_name:
-            #     if not is_matching_allow_regex(item_name, metric_allowlist_map):
-            #         continue
-            #     if is_matching_disallow_regex(item_name, metric_disallowlist_map):
-            #         continue
 
             # set instance and device
             if not message.get('hosts'):
