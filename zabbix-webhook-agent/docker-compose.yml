@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  zabbix-webhook-agent:
+    build: .
+    ports:
+      - "80:80"
+    environment:
+      - API_KEY=${API_KEY:-default_api_key}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

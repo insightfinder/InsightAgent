@@ -1,0 +1,25 @@
+[Unit]
+Description=Zabbix Webhook Agent FastAPI Application
+After=network.target
+
+[Service]
+Type=exec
+User=USER_PLACEHOLDER
+Group=GROUP_PLACEHOLDER
+WorkingDirectory=WORKING_DIR_PLACEHOLDER
+Environment=PATH=WORKING_DIR_PLACEHOLDER/venv/bin
+EnvironmentFile=WORKING_DIR_PLACEHOLDER/.env
+ExecStart=WORKING_DIR_PLACEHOLDER/venv/bin/uvicorn main:app --host 0.0.0.0 --port 80
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=zabbix-webhook-agent
+
+# Allow binding to privileged ports (port 80)
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+SecureBits=keep-caps
+
+[Install]
+WantedBy=multi-user.target
