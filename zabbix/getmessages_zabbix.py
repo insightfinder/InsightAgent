@@ -144,7 +144,6 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                                                          'selectHosts': ['hostId'], 'filter': {'value_type': value_type_list}})
                 items_ids_map = {}
                 items_keys_map = {}
-                # item_name_map = {}
 
                 for item in items_res['result']:
                     item_id = item['itemid']
@@ -155,19 +154,12 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                             if not is_matching_disallow_regex(item_name, metric_disallowlist_map):
                                 items_ids_map[item_id] = item
                                 items_keys_map[item_key] = item
-                                # item_name_map[item_name] = item
                     else:
                         items_ids_map[item_id] = item
                         items_keys_map[item_key] = item
 
                 items_ids = list(items_ids_map.keys())
                 items_keys = list(items_keys_map.keys())
-
-                print("+++++++")
-                print(items_ids)
-                print("--------")
-                print(items_keys)
-                print("+++++++")
 
                 logger.info("Zabbix item count: %s" % len(items_ids))
 
@@ -205,13 +197,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                         if attempt > 0:
                             time.sleep(retry_delay * attempt)
 
-                        # if metric_allowlist_map and len(items_keys) == 0:
-                        #     continue
-
                         items_res = zapi.do_request('item.get', params)
-                        print("=======================")
-                        print(items_res)
-                        print("======================")
                         logger.info('Query {} items from {} hosts with {} metrics in {} seconds'.format(len(items_res['result']),
                                                                                                     len(hostids),
                                                                                                     len(items_keys), (
