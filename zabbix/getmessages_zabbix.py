@@ -144,6 +144,8 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                                                          'selectHosts': ['hostId'], 'filter': {'value_type': value_type_list}})
                 items_ids_map = {}
                 items_keys_map = {}
+                # item_name_map = {}
+
                 for item in items_res['result']:
                     item_id = item['itemid']
                     item_key = item['key_']
@@ -153,11 +155,20 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                             if not is_matching_disallow_regex(item_name, metric_disallowlist_map):
                                 items_ids_map[item_id] = item
                                 items_keys_map[item_key] = item
+                                # item_name_map[item_name] = item
                     else:
                         items_ids_map[item_id] = item
                         items_keys_map[item_key] = item
+
                 items_ids = list(items_ids_map.keys())
                 items_keys = list(items_keys_map.keys())
+
+                print("+++++++")
+                print(items_ids)
+                print("--------")
+                print(items_keys)
+                print("+++++++")
+
                 logger.info("Zabbix item count: %s" % len(items_ids))
 
             if data_type == 'Metric':
@@ -180,25 +191,34 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
 
                         clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
                 else:
-                    time_now = arrow.utcnow()
-                    metric_output = ['key_', 'itemid', 'lastclock', 'clock', 'lastvalue', 'value', 'name']
+                    if metric_allowlist_map and len(items_keys) == 0:
+                        continue
+                    else:
+                        time_now = arrow.utcnow()
+                        metric_output = ['key_', 'itemid', 'lastclock', 'clock', 'lastvalue', 'value', 'name']
 
-                    params = {'output': metric_output, "hostids": hostids, "selectHosts": ['hostId'],
-                              'filter': {'value_type': value_type_list, 'key_': items_keys}}
-                    logger.info('Begin item.get query from {} hosts (attempt {}/{})'.format(len(hostids), attempt + 1, max_retries))
+                        params = {'output': metric_output, "hostids": hostids, "selectHosts": ['hostId'],
+                                'filter': {'value_type': value_type_list, 'key_': items_keys}}
+                        logger.info('Begin item.get query from {} hosts (attempt {}/{})'.format(len(hostids), attempt + 1, max_retries))
 
-                    # Add delay between requests to reduce connection pressure
-                    if attempt > 0:
-                        time.sleep(retry_delay * attempt)
+                        # Add delay between requests to reduce connection pressure
+                        if attempt > 0:
+                            time.sleep(retry_delay * attempt)
 
-                    items_res = zapi.do_request('item.get', params)
-                    logger.info('Query {} items from {} hosts with {} metrics in {} seconds'.format(len(items_res['result']),
-                                                                                                len(hostids),
-                                                                                                len(items_keys), (
-                                                                                                        arrow.utcnow() - time_now).total_seconds()))
-                    parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
-                                          agent_config_vars, track, data_buffer, sampling_interval, sampling_now)
-                    clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
+                        # if metric_allowlist_map and len(items_keys) == 0:
+                        #     continue
+
+                        items_res = zapi.do_request('item.get', params)
+                        print("=======================")
+                        print(items_res)
+                        print("======================")
+                        logger.info('Query {} items from {} hosts with {} metrics in {} seconds'.format(len(items_res['result']),
+                                                                                                    len(hostids),
+                                                                                                    len(items_keys), (
+                                                                                                            arrow.utcnow() - time_now).total_seconds()))
+                        parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
+                                            agent_config_vars, track, data_buffer, sampling_interval, sampling_now)
+                        clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
             elif data_type == 'Alert':
                 for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
                     time_now = arrow.utcnow()
@@ -433,8 +453,8 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
     alert_data_fields = agent_config_vars['alert_data_fields']
     
     # Add metric filtering variables
-    metric_allowlist_map = agent_config_vars.get('metric_allowlist_map', {})
-    metric_disallowlist_map = agent_config_vars.get('metric_disallowlist_map', {})
+    # metric_allowlist_map = agent_config_vars.get('metric_allowlist_map', {})
+    # metric_disallowlist_map = agent_config_vars.get('metric_disallowlist_map', {})
 
     for message in result:
         try:
@@ -445,11 +465,11 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             item_name = message.get('name')
             
             # Add filtering check for metrics at the message level
-            if is_metric and item_name:
-                if not is_matching_allow_regex(item_name, metric_allowlist_map):
-                    continue
-                if is_matching_disallow_regex(item_name, metric_disallowlist_map):
-                    continue
+            # if is_metric and item_name:
+            #     if not is_matching_allow_regex(item_name, metric_allowlist_map):
+            #         continue
+            #     if is_matching_disallow_regex(item_name, metric_disallowlist_map):
+            #         continue
 
             # set instance and device
             if not message.get('hosts'):
