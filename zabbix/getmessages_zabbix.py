@@ -180,25 +180,28 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
 
                         clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
                 else:
-                    time_now = arrow.utcnow()
-                    metric_output = ['key_', 'itemid', 'lastclock', 'clock', 'lastvalue', 'value', 'name']
+                    if metric_allowlist_map and len(items_keys) == 0:
+                        continue
+                    else:
+                        time_now = arrow.utcnow()
+                        metric_output = ['key_', 'itemid', 'lastclock', 'clock', 'lastvalue', 'value', 'name']
 
-                    params = {'output': metric_output, "hostids": hostids, "selectHosts": ['hostId'],
-                              'filter': {'value_type': value_type_list, 'key_': items_keys}}
-                    logger.info('Begin item.get query from {} hosts (attempt {}/{})'.format(len(hostids), attempt + 1, max_retries))
+                        params = {'output': metric_output, "hostids": hostids, "selectHosts": ['hostId'],
+                                'filter': {'value_type': value_type_list, 'key_': items_keys}}
+                        logger.info('Begin item.get query from {} hosts (attempt {}/{})'.format(len(hostids), attempt + 1, max_retries))
 
-                    # Add delay between requests to reduce connection pressure
-                    if attempt > 0:
-                        time.sleep(retry_delay * attempt)
+                        # Add delay between requests to reduce connection pressure
+                        if attempt > 0:
+                            time.sleep(retry_delay * attempt)
 
-                    items_res = zapi.do_request('item.get', params)
-                    logger.info('Query {} items from {} hosts with {} metrics in {} seconds'.format(len(items_res['result']),
-                                                                                                len(hostids),
-                                                                                                len(items_keys), (
-                                                                                                        arrow.utcnow() - time_now).total_seconds()))
-                    parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
-                                          agent_config_vars, track, data_buffer, sampling_interval, sampling_now)
-                    clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
+                        items_res = zapi.do_request('item.get', params)
+                        logger.info('Query {} items from {} hosts with {} metrics in {} seconds'.format(len(items_res['result']),
+                                                                                                    len(hostids),
+                                                                                                    len(items_keys), (
+                                                                                                            arrow.utcnow() - time_now).total_seconds()))
+                        parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
+                                            agent_config_vars, track, data_buffer, sampling_interval, sampling_now)
+                        clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
             elif data_type == 'Alert':
                 for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
                     time_now = arrow.utcnow()
