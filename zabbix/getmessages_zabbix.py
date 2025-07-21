@@ -431,6 +431,10 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
     component_from_instance_name_re_sub = agent_config_vars['component_from_instance_name_re_sub']
     subzone_from_instance_name_regex = agent_config_vars['subzone_from_instance_name_regex']
     alert_data_fields = agent_config_vars['alert_data_fields']
+    
+    # Add metric filtering variables
+    metric_allowlist_map = agent_config_vars.get('metric_allowlist_map', {})
+    metric_disallowlist_map = agent_config_vars.get('metric_disallowlist_map', {})
 
     for message in result:
         try:
@@ -439,6 +443,13 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             item_key = message.get('key_')
             item_id = message.get('itemid')
             item_name = message.get('name')
+            
+            # Add filtering check for metrics at the message level
+            if is_metric and item_name:
+                if not is_matching_allow_regex(item_name, metric_allowlist_map):
+                    continue
+                if is_matching_disallow_regex(item_name, metric_disallowlist_map):
+                    continue
 
             # set instance and device
             if not message.get('hosts'):
