@@ -568,6 +568,13 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             if data_value and data_field == 'ICMP response time':
                 data_value = str(float(data_value) * 1000)
 
+            # Convert negative metric values to positive values
+            if is_metric and data_value:
+                numeric_value = float(data_value)
+                if numeric_value < 0:
+                    data_value = str(abs(numeric_value))
+                    logger.debug(f'Converted negative value {numeric_value} to positive {data_value} for metric {data_field}')
+
             timestamp = str(timestamp)
 
             key = '{}-{}'.format(timestamp, full_instance)
