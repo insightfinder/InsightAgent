@@ -7,7 +7,7 @@ import logging
 import requests
 import re
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import pytz
 
 logger = logging.getLogger(__name__)
@@ -555,7 +555,7 @@ class InsightFinderClient:
                     logger.info("Event is RESOLVED, calling incident investigation API only...")
                     try:
                         # Parse timestamp for incident investigation (always use event time)
-                        incident_timestamp = self._parse_zabbix_timestamp(zabbix_data)
+                        incident_timestamp = self._parse_zabbix_timestamp(zabbix_data, False)
                         
                         # Create safe instance name for incident investigation
                         raw_instance_name = zabbix_data.get('host_name', 'unknown-host')
@@ -581,9 +581,9 @@ class InsightFinderClient:
                 return True
             
             # Parse timestamps - different for alert vs incident investigation
-            alert_timestamp = self._parse_alert_timestamp(zabbix_data, is_resolved)
-            incident_timestamp = self._parse_zabbix_timestamp(zabbix_data)  # Always use event time for incident investigation
-            
+            alert_timestamp = self._parse_zabbix_timestamp(zabbix_data, is_resolved)
+            incident_timestamp = alert_timestamp if not is_resolved else self._parse_zabbix_timestamp(zabbix_data, False)  # Always use event time for incident investigation
+
             # Create safe instance name
             raw_instance_name = zabbix_data.get('host_name', 'unknown-host')
             safe_instance_name = self.make_safe_instance_string(raw_instance_name)
@@ -614,10 +614,10 @@ class InsightFinderClient:
                     'trigger_id': zabbix_data.get('trigger_id'),
                     'trigger_name': zabbix_data.get('trigger_name'),
                     'trigger_status': zabbix_data.get('trigger_status'),
-                    'event_date': zabbix_data.get('event_date'),
-                    'event_time': zabbix_data.get('event_time'),
-                    'recovery_date': zabbix_data.get('recovery_date'),
-                    'recovery_time': zabbix_data.get('recovery_time'),
+                    'event_date': zabbix_data.get('event_date_original'),
+                    'event_time': zabbix_data.get('event_time_original'),
+                    'recovery_date': zabbix_data.get('recovery_date_original'),
+                    'recovery_time': zabbix_data.get('recovery_time_original'),
                 },
                 'componentName': safe_instance_name,
                 'zoneName': zone_name,
@@ -697,21 +697,56 @@ class InsightFinderClient:
         except Exception as e:
             logger.error(f"Failed to send log data to InsightFinder: {e}")
             return False
-    
-    def _parse_zabbix_timestamp(self, zabbix_data: Dict[str, Any]) -> int:
-        """Parse timestamp from Zabbix data and return epoch milliseconds"""
-        event_time = zabbix_data.get('event_time')
-        event_date = zabbix_data.get('event_date')
-        
+
+    def _parse_zabbix_timestamp(self, zabbix_data: Dict[str, Any], is_resolved: bool) -> int:
+        """Parse timestamp from Zabbix data and return epoch milliseconds, converting from user timezone to UTC"""
+        event_time = zabbix_data.get('event_time_original')
+        event_date = zabbix_data.get('event_date_original')
+        if is_resolved:
+            # For resolved events, try to use recovery time first
+            event_time = zabbix_data.get('recovery_time_original')
+            event_date = zabbix_data.get('recovery_date_original')
+
         if event_time and event_date:
             # Normalize date format
             normalized_date = event_date.replace('.', '-')
             datetime_str = f"{normalized_date}T{event_time}"
             
             try:
-                dt = datetime.fromisoformat(datetime_str)
-                timestamp_ms = int(dt.timestamp() * 1000)  # Convert to milliseconds
-                logger.debug(f"Parsed event timestamp: {datetime_str} -> {timestamp_ms} (epoch milliseconds)")
+                # Parse the datetime string as naive (no timezone info)
+                dt_naive = datetime.fromisoformat(datetime_str)
+                
+                # Convert from user's local timezone to UTC
+                if self.session_manager is not None:
+                    user_timezone = self.session_manager.get_user_timezone()
+                    if user_timezone:
+                        try:
+                            # Create timezone-aware datetime in user's timezone
+                            user_tz = pytz.timezone(user_timezone)
+                            dt_user_tz = user_tz.localize(dt_naive)
+                            
+                            # Convert to UTC
+                            dt_utc = dt_user_tz.astimezone(pytz.UTC)
+                            timestamp_ms = int(dt_utc.timestamp() * 1000)
+                            
+                            # Calculate offset for logging
+                            utc_offset = dt_user_tz.utcoffset()
+                            offset_hours = utc_offset.total_seconds() / 3600 if utc_offset else 0
+                            
+                            logger.debug(f"Auto timezone conversion: {datetime_str} ({user_timezone}) -> UTC")
+                            logger.debug(f"Timezone offset: +{offset_hours} hours")
+                            logger.debug(f"Converted timestamp: {timestamp_ms} (epoch milliseconds)")
+                            print(f"Auto timezone convert: {datetime_str} ({user_timezone}) -> UTC (+{offset_hours}h) -> {timestamp_ms}ms")
+                            
+                            return timestamp_ms
+                        except Exception as e:
+                            logger.warning(f"Error converting timezone {user_timezone}: {e}, falling back to manual offset")
+                
+                # Fallback: treat as UTC and add manual offset (for backward compatibility)
+                timestamp_ms = int(dt_naive.timestamp() * 1000)
+                timestamp_ms += 5 * 60 * 60 * 1000  # Add 5 hours for Central Time
+                logger.debug(f"Fallback: Parsed event timestamp (+5h): {datetime_str} -> {timestamp_ms} (epoch milliseconds)")
+                print(f"Fallback timezone convert (+5h): {datetime_str} -> {timestamp_ms} (epoch milliseconds)")
                 return timestamp_ms
             except ValueError:
                 logger.warning(f"Invalid date/time format: {datetime_str}")
@@ -751,34 +786,6 @@ class InsightFinderClient:
         Send log data to InsightFinder
         """
         return self.send_log_data_enhanced(zabbix_data)
-
-    def _parse_alert_timestamp(self, zabbix_data: Dict[str, Any], is_resolved: bool) -> int:
-        """
-        Parse timestamp for alert data and return epoch milliseconds.
-        For RESOLVED events, use recovery_time and recovery_date if available.
-        For PROBLEM events, use event_time and event_date.
-        """
-        if is_resolved:
-            # For resolved events, try to use recovery time first
-            recovery_time = zabbix_data.get('recovery_time')
-            recovery_date = zabbix_data.get('recovery_date')
-            # print(f"Recovery time: {recovery_time}, Recovery date: {recovery_date}")
-            
-            if recovery_time and recovery_date:
-                # Normalize date format
-                normalized_date = recovery_date.replace('.', '-')
-                datetime_str = f"{normalized_date}T{recovery_time}"
-                
-                try:
-                    dt = datetime.fromisoformat(datetime_str)
-                    timestamp_ms = int(dt.timestamp() * 1000)  # Convert to milliseconds
-                    logger.debug(f"Using recovery timestamp for RESOLVED event: {datetime_str} -> {timestamp_ms} (epoch milliseconds)")
-                    return timestamp_ms
-                except ValueError:
-                    logger.warning(f"Invalid recovery date/time format: {datetime_str}, falling back to event time")
-        
-        # Fall back to event time (for PROBLEM events or when recovery time is not available)
-        return self._parse_zabbix_timestamp(zabbix_data)
 
 
 def clear_all_session_cache():
