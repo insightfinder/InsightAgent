@@ -35,6 +35,8 @@ class DataProcessor:
                 'event_value': raw_data.get('EVENT.VALUE') or raw_data.get('event_value'),
                 'event_date': raw_data.get('EVENT.DATE') or raw_data.get('event_date'),
                 'event_time': raw_data.get('EVENT.TIME') or raw_data.get('event_time'),
+                'event_time_original': raw_data.get('EVENT.TIME') or raw_data.get('event_time_original'),
+                'event_date_original': raw_data.get('EVENT.DATE') or raw_data.get('event_date_original'),
                 'host_name': raw_data.get('HOST.NAME') or raw_data.get('host_name'),
                 'host_ip': raw_data.get('HOST.IP') or raw_data.get('host_ip'),
                 'item_name': raw_data.get('ITEM.NAME') or raw_data.get('item_name'),
@@ -46,6 +48,8 @@ class DataProcessor:
                 'hostgroup_name': raw_data.get('HOSTGROUP.NAME') or raw_data.get('hostgroup_name'),
                 'recovery_time': raw_data.get('RECOVERY.TIME') or raw_data.get('recovery_time'),
                 'recovery_date': raw_data.get('RECOVERY.DATE') or raw_data.get('recovery_date'),
+                'recovery_time_original': raw_data.get('RECOVERY.TIME') or raw_data.get('recovery_time_original'),
+                'recovery_date_original': raw_data.get('RECOVERY.DATE') or raw_data.get('recovery_date_original'),
                 'raw_data': raw_data
             }
             
