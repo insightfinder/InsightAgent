@@ -130,8 +130,16 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 			if config.timestampField != "" {
 				timestampStr := gjson.Get(line, config.timestampField).String()
 				if timestampStr != "" {
+					var err error
+					var timestampNum int64
 					// Try to parse the timestamp as a number first
-					timestampNum, err := strconv.ParseInt(timestampStr, 10, 64)
+					if strings.Contains(timestampStr, ".") {
+						timestampNumFloat, _ := strconv.ParseFloat(timestampStr, 64)
+						timestampNum = int64(timestampNumFloat)
+					} else {
+						timestampNum, err = strconv.ParseInt(timestampStr, 10, 64)
+					}
+
 					if err == nil {
 
 						// If the digits are not 13. Adjust the timestamp
