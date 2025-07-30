@@ -61,6 +61,9 @@ type APDetail struct {
 	IsAirtime24GFlagged          bool    `json:"isAirtimeUtilization24GFlagged"`
 	IsAirtime5GFlagged           bool    `json:"isAirtimeUtilization50GFlagged"`
 	IsAirtime6GFlagged           bool    `json:"isAirtimeUtilization6GFlagged"`
+	Channel24GValue              int     `json:"channel24gValue"`
+	Channel5GValue               int     `json:"channel50gValue"`
+	Channel6GValue               int     `json:"channel6gValue"`
 
 	// Performance Fields (High Priority)
 	TxRx       int64 `json:"txRx"`
@@ -120,6 +123,9 @@ func (ap *APDetail) ToMetricData(componentNameAsAP bool) *MetricData {
 			"Is Airtime 5G Flagged":   ap.IsAirtime5GFlagged,
 			"Is Airtime 6G Flagged":   ap.IsAirtime6GFlagged,
 			"Alerts Total":            ap.Alerts,
+			"Channel 24G":             ap.Channel24GValue,
+			"Channel 5G":              ap.Channel5GValue,
+			"Channel 6G":              ap.Channel6GValue,
 
 			// === PERFORMANCE FIELDS (High Priority) ===
 			"Total Throughput Bytes": ap.TxRx,
