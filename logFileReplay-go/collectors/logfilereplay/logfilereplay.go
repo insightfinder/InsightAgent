@@ -57,44 +57,85 @@ func processFile(sem chan bool, fileName string, lastPos int64,
 		return
 	}
 
-	log.Info().Msgf("Start processig file %s, last position is %d", fileName, lastPos)
-	reader := bufio.NewReader(file)
+	log.Info().Msgf("Start processing file %s, last position is %d", fileName, lastPos)
 
-	var line []byte
+	// Use a buffered reader for the JSON decoder
+	reader := bufio.NewReader(file)
+	decoder := json.NewDecoder(reader)
+
 	var buffer bytes.Buffer
 	var chunk Chunk
+	var lines []string
 
 	for {
-		line, _, err = reader.ReadLine()
-		if err != nil && err != io.EOF {
-			log.Error().Msgf("Error reading file: %s", fileName)
-			return
-		}
+		// Read one complete JSON object
+		var jsonObj map[string]interface{}
+		err = decoder.Decode(&jsonObj)
 
-		if len(line) != 0 {
-			buffer.Write(line)
-			buffer.WriteByte('\n')
-		}
-
-		if buffer.Len() >= chunkSize || err == io.EOF {
-			chunk.FileName = fileName
-			chunk.Offset = lastPos
-			chunk.Content = buffer.String()
-
-			if buffer.Len() == 0 {
+		if err != nil {
+			if err == io.EOF {
 				break
 			}
+			log.Error().Msgf("Error decoding JSON from file %s: %v", fileName, err)
+			// Try to skip to next valid JSON by reading until newline
+			reader.ReadLine()
+			continue
+		}
 
-			log.Debug().Msgf("Read %d bytes at %s:%d, send to processing", buffer.Len(), fileName, lastPos)
+		// Convert back to JSON string
+		jsonBytes, err := json.Marshal(jsonObj)
+		if err != nil {
+			log.Error().Msgf("Error marshaling JSON object: %v", err)
+			continue
+		}
+
+		lineStr := string(jsonBytes)
+		buffer.Write(jsonBytes)
+		buffer.WriteByte('\n')
+		lines = append(lines, lineStr)
+
+		// Check if we should send the chunk
+		shouldSendChunk := buffer.Len() >= chunkSize
+
+		if shouldSendChunk {
+			// Create JSON array from lines
+			jsonArray, jsonErr := json.Marshal(lines)
+			if jsonErr != nil {
+				log.Error().Msgf("Error marshaling lines to JSON array: %v", jsonErr)
+				chunk.Content = buffer.String()
+			} else {
+				chunk.Content = string(jsonArray)
+			}
+
+			chunk.FileName = fileName
+			chunk.Offset = lastPos
+
+			log.Debug().Msgf("Read %d bytes (%d lines) at %s:%d, wrapped in JSON array, send to processing",
+				buffer.Len(), len(lines), fileName, lastPos)
 			chunks <- chunk
 
 			lastPos += int64(buffer.Len())
 			buffer.Reset()
+			lines = lines[:0]
+		}
+	}
+
+	// Send remaining data if any
+	if buffer.Len() > 0 {
+		jsonArray, jsonErr := json.Marshal(lines)
+		if jsonErr != nil {
+			log.Error().Msgf("Error marshaling remaining lines to JSON array: %v", jsonErr)
+			chunk.Content = buffer.String()
+		} else {
+			chunk.Content = string(jsonArray)
 		}
 
-		if err == io.EOF {
-			break
-		}
+		chunk.FileName = fileName
+		chunk.Offset = lastPos
+
+		log.Debug().Msgf("Read final %d bytes (%d lines) at %s:%d, wrapped in JSON array, send to processing",
+			buffer.Len(), len(lines), fileName, lastPos)
+		chunks <- chunk
 	}
 
 	close(chunks)
@@ -103,15 +144,27 @@ func processFile(sem chan bool, fileName string, lastPos int64,
 func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- ChunkMessage,
 	ifConfig *IFConfig, config *Config) {
 	defer wg.Done()
+	jsonLinesProcessed := 0
 
 	for chunk := range chunks {
 		LogDataList := make([]LogData, 0)
 
-		lines := strings.Split(chunk.Content, "\n")
+		// Parse the JSON array from chunk content
+		var lines []string
+		err := json.Unmarshal([]byte(chunk.Content), &lines)
+		if err != nil {
+			log.Error().Msgf("Error unmarshaling JSON array from chunk %s:%d: %v",
+				chunk.FileName, chunk.Offset, err)
+			// Fallback to original string splitting if JSON parsing fails
+			lines = strings.Split(chunk.Content, "\n")
+		}
+
 		for _, line := range lines {
 			if len(line) == 0 {
 				continue
 			}
+
+			jsonLinesProcessed++
 
 			// Get the component, instance and timestamp from the json data
 			component := ""
@@ -186,6 +239,9 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 				}
 			}
 
+			// Make safe instanceName
+			instance = makeSafeInstanceName(instance)
+
 			if config.logRawDataField != "" {
 				// Use the raw data field as the root of the document
 				filteredData := gjson.Get(line, config.logRawDataField)
@@ -232,6 +288,8 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 			LogDataList: &LogDataList,
 		}
 	}
+	log.Info().Msgf("Sent %d JSON lines from the file.",
+		jsonLinesProcessed)
 
 	close(processed)
 }
@@ -377,4 +435,8 @@ func Collect(ifConfig *IFConfig,
 		"Total size of all %d log files: %d bytes, time spent %.2f minutes, rate %.2f M/s",
 		totalFiles, totalSize, timeSpent, rate)
 	log.Info().Msg("LogFileReplay collector completed")
+}
+
+func makeSafeInstanceName(rawInstanceName string) string {
+	return strings.Replace(rawInstanceName, "_", "-", -1)
 }
