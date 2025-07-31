@@ -230,7 +230,7 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 				// Try default instance
 				if config.defaultInstance != "" {
 					instance = config.defaultInstance
-					log.Warn().Msgf("Instance field %s is missing in the log, default to %s", config.timestampField, instance)
+					log.Warn().Msgf("Instance field %s is missing in the log, default to %s", config.instanceField, instance)
 					log.Debug().Msgf(line)
 				} else {
 					log.Error().Msgf("Instance field %s is missing in the log", config.instanceField)
