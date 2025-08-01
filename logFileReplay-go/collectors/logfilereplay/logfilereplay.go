@@ -177,7 +177,13 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 			}
 
 			if config.instanceField != "" {
-				instance = gjson.Get(line, config.instanceField).String()
+				instanceFieldList := strings.Split(config.instanceField, "|")
+				for _, instanceField := range instanceFieldList {
+					instance = gjson.Get(line, instanceField).String()
+					if instance != "" {
+						break
+					}
+				}
 			}
 
 			if config.timestampField != "" {
