@@ -543,13 +543,13 @@ func worker(jobs <-chan Job, results chan<- Result) {
 			Timestamp:    time.Now().Unix(),
 			InstanceName: cleanName,
 			Data: map[string]interface{}{
-				"Status": func() int {
-					if device.Sys.Online {
-						return 1
-					} else {
-						return 0
-					}
-				}(),
+				// "Status": func() int {
+				// 	if device.Sys.Online {
+				// 		return 1
+				// 	} else {
+				// 		return 0
+				// 	}
+				// }(),
 				"Available Memory": device.Sys.Mem,
 				"CPU Utilization":  device.Sys.CPU,
 			},
@@ -562,13 +562,13 @@ func worker(jobs <-chan Job, results chan<- Result) {
 		logrus.Debugf("Device %s has %d radios", device.MAC, len(radios))
 
 		// Initialize all radio metrics with default/empty values
-		var radio24G, radio5G, radio6G *models.Radio
+		var radio5G, radio6G *models.Radio
 
 		// Parse radios by band
 		for _, radio := range radios {
 			switch radio.Band {
-			case "2.4 GHz":
-				radio24G = &radio
+			// case "2.4 GHz":
+			// 	radio24G = &radio
 			case "5 GHz":
 				radio5G = &radio
 			case "6 GHz":
@@ -576,33 +576,33 @@ func worker(jobs <-chan Job, results chan<- Result) {
 			}
 		}
 
-		// Add 2.4GHz metrics
-		if radio24G != nil {
-			metricData.Data["Num Clients 24G"] = radio24G.Mus
-			// metricData.Data["UL Throughput 24G"] = radio24G.UlTPut
-			// metricData.Data["DL Throughput 24G"] = radio24G.DlTPut
-			metricData.Data["Noise Floor 24G"] = radio24G.Nf
-			metricData.Data["Channel Utilization 24G"] = radio24G.TotalCu
-		} else {
-			metricData.Data["Num Clients 24G"] = 0
-			// metricData.Data["UL Throughput 24G"] = 0.0
-			// metricData.Data["DL Throughput 24G"] = 0.0
-			metricData.Data["Noise Floor 24G"] = 0.0
-			metricData.Data["Channel Utilization 24G"] = 0.0
-		}
+		// // Add 2.4GHz metrics
+		// if radio24G != nil {
+		// 	metricData.Data["Num Clients 24G"] = radio24G.Mus
+		// 	// metricData.Data["UL Throughput 24G"] = radio24G.UlTPut
+		// 	// metricData.Data["DL Throughput 24G"] = radio24G.DlTPut
+		// 	metricData.Data["Noise Floor 24G"] = radio24G.Nf
+		// 	metricData.Data["Channel Utilization 24G"] = radio24G.TotalCu
+		// } else {
+		// 	metricData.Data["Num Clients 24G"] = 0
+		// 	// metricData.Data["UL Throughput 24G"] = 0.0
+		// 	// metricData.Data["DL Throughput 24G"] = 0.0
+		// 	metricData.Data["Noise Floor 24G"] = 0.0
+		// 	metricData.Data["Channel Utilization 24G"] = 0.0
+		// }
 
 		// Add 5GHz metrics
 		if radio5G != nil {
 			metricData.Data["Num Clients 5G"] = radio5G.Mus
 			// metricData.Data["UL Throughput 5G"] = radio5G.UlTPut
 			// metricData.Data["DL Throughput 5G"] = radio5G.DlTPut
-			metricData.Data["Noise Floor 5G"] = radio5G.Nf
+			// metricData.Data["Noise Floor 5G"] = radio5G.Nf
 			metricData.Data["Channel Utilization 5G"] = radio5G.TotalCu
 		} else {
 			metricData.Data["Num Clients 5G"] = 0
 			// metricData.Data["UL Throughput 5G"] = 0.0
 			// metricData.Data["DL Throughput 5G"] = 0.0
-			metricData.Data["Noise Floor 5G"] = 0.0
+			// metricData.Data["Noise Floor 5G"] = 0.0
 			metricData.Data["Channel Utilization 5G"] = 0.0
 		}
 
@@ -611,13 +611,13 @@ func worker(jobs <-chan Job, results chan<- Result) {
 			metricData.Data["Num Clients 6G"] = radio6G.Mus
 			// metricData.Data["UL Throughput 6G"] = radio6G.UlTPut
 			// metricData.Data["DL Throughput 6G"] = radio6G.DlTPut
-			metricData.Data["Noise Floor 6G"] = radio6G.Nf
+			// metricData.Data["Noise Floor 6G"] = radio6G.Nf
 			metricData.Data["Channel Utilization 6G"] = radio6G.TotalCu
 		} else {
 			metricData.Data["Num Clients 6G"] = 0
 			// metricData.Data["UL Throughput 6G"] = 0.0
 			// metricData.Data["DL Throughput 6G"] = 0.0
-			metricData.Data["Noise Floor 6G"] = 0.0
+			// metricData.Data["Noise Floor 6G"] = 0.0
 			metricData.Data["Channel Utilization 6G"] = 0.0
 		}
 
