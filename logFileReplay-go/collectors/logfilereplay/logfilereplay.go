@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"github.com/araddon/dateparse"
 	"github.com/bigkevmcd/go-configparser"
 	"github.com/golang-module/carbon/v2"
 	"github.com/rs/zerolog/log"
@@ -192,43 +193,7 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 			}
 
 			if config.timestampField != "" {
-				timestampStr := gjson.Get(line, config.timestampField).String()
-				if timestampStr != "" {
-					var err error
-					var timestampNum int64
-					// Try to parse the timestamp as a number first
-					if strings.Contains(timestampStr, ".") {
-						timestampNumFloat, _ := strconv.ParseFloat(timestampStr, 64)
-						timestampNum = int64(timestampNumFloat)
-					} else {
-						timestampNum, err = strconv.ParseInt(timestampStr, 10, 64)
-					}
-
-					if err == nil {
-
-						// If the digits are not 13. Adjust the timestamp
-						if len(timestampStr) != 13 {
-							lengthDiff := 13 - len(timestampStr)
-							if lengthDiff > 0 {
-								// If the digits are less than 13, add 0s to the end
-								timestampNum = timestampNum * int64(math.Pow10(lengthDiff))
-							} else {
-								// If the digits are more than 13, remove the extra digits
-								timestampNum = timestampNum / int64(math.Pow10(-lengthDiff))
-							}
-						}
-						timestamp = timestampNum
-					} else {
-						// Try to parse the timestamp as a date string
-						cts := carbon.Parse(timestampStr)
-						if cts.Error == nil {
-							timestamp = cts.TimestampMilli()
-							if config.TimezoneOffsetSeconds != 0 {
-								timestamp = timestamp + int64(config.TimezoneOffsetSeconds*1000)
-							}
-						}
-					}
-				}
+				timestamp = parseTimestampStr(&line, config)
 			}
 
 			if timestamp == 0 {
@@ -450,4 +415,76 @@ func Collect(ifConfig *IFConfig,
 
 func makeSafeInstanceName(rawInstanceName string) string {
 	return strings.Replace(rawInstanceName, "_", "-", -1)
+}
+
+func parseTimestampStr(line *string, config *Config) int64 {
+	var timestamp int64 = 0
+	timestampFields := strings.Split(config.timestampField, "|")
+
+	for _, timestampField := range timestampFields {
+
+		timestampStr := gjson.Get(*line, timestampField).String()
+		if timestampStr != "" {
+			var err error
+			var timestampNum int64
+			// Try to parse the timestamp as a number first
+			if strings.Contains(timestampStr, ".") {
+				timestampNumFloat, _ := strconv.ParseFloat(timestampStr, 64)
+				timestampNum = int64(timestampNumFloat)
+			} else {
+				timestampNum, err = strconv.ParseInt(timestampStr, 10, 64)
+			}
+
+			if err == nil {
+
+				// If the digits are not 13. Adjust the timestamp
+				if len(timestampStr) != 13 {
+					lengthDiff := 13 - len(timestampStr)
+					if lengthDiff > 0 {
+						// If the digits are less than 13, add 0s to the end
+						timestampNum = timestampNum * int64(math.Pow10(lengthDiff))
+					} else {
+						// If the digits are more than 13, remove the extra digits
+						timestampNum = timestampNum / int64(math.Pow10(-lengthDiff))
+					}
+				}
+				timestamp = timestampNum
+			} else {
+				// Try to parse the timestamp as a date string using both carbon and dateparse library
+				carbonParser := carbon.SetTimezone(config.timestampTimezone)
+				cts := carbonParser.Parse(timestampStr)
+				if cts.Error == nil {
+					timestamp = cts.TimestampMilli()
+					return timestamp
+				} else {
+					timezoneConfig, err := time.LoadLocation(config.timestampTimezone)
+					if err != nil {
+						timezoneConfig, _ = time.LoadLocation("UTC")
+					}
+					parsedTime, err := dateparse.ParseIn(timestampStr, timezoneConfig)
+					if err == nil {
+						timestamp = parsedTime.UnixMilli()
+						return timestamp
+					} else {
+						// Try to use go reference time to parse
+						timestampFormatRefList := strings.Split(config.timestampFormatRef, "|")
+						for _, timeFormatRef := range timestampFormatRefList {
+							parsedTime, err := time.ParseInLocation(timeFormatRef, timestampStr, timezoneConfig)
+							if err == nil {
+								timestamp = parsedTime.UnixMilli()
+								return timestamp
+							}
+						}
+
+					}
+				}
+			}
+		}
+
+		if timestamp != 0 {
+			return timestamp
+		}
+	}
+
+	return 0
 }
