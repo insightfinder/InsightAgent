@@ -22,6 +22,8 @@ type Config struct {
 	defaultInstance       string
 	defaultComponent      string
 	timestampField        string
+	timestampTimezone     string
+	timestampFormatRef    string
 	TimezoneOffsetSeconds int
 	TrunkSize             int
 	WorkerCount           int
@@ -35,6 +37,7 @@ func getLogReplayConfig(p *configparser.ConfigParser) *Config {
 	var componentField = GetConfigString(p, SectionName, "component_field", false)
 	var instanceField = GetConfigString(p, SectionName, "instance_field", false)
 	var timestampField = GetConfigString(p, SectionName, "timestamp_field", true)
+	var timestampFormatRef = GetConfigString(p, SectionName, "timestamp_format_reference", false)
 	var workerCount = GetConfigInt(p, SectionName, "worker_count", false, 1)
 	var logDataField = GetConfigString(p, SectionName, "log_data_field", false)
 	var logRawDataField = GetConfigString(p, SectionName, "log_raw_data_field", false)
@@ -80,7 +83,9 @@ func getLogReplayConfig(p *configparser.ConfigParser) *Config {
 		defaultComponent:      defaultComponent,
 		instanceField:         instanceField,
 		timestampField:        timestampField,
+		timestampTimezone:     timestampTimezone,
 		TimezoneOffsetSeconds: timezoneOffset,
+		timestampFormatRef:    timestampFormatRef,
 		TrunkSize:             1024 * 64,
 		WorkerCount:           workerCount,
 		IndexFile:             "logfilereplay_index.json",
