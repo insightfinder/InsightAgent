@@ -17,6 +17,8 @@ class ZabbixAlert(BaseModel):
     event_value: Optional[str] = None
     event_date: Optional[str] = None
     event_time: Optional[str] = None
+    event_time_original: Optional[str] = None
+    event_date_original: Optional[str] = None
     host_name: Optional[str] = None
     host_ip: Optional[str] = None
     hostgroup_name: Optional[str] = None
@@ -29,6 +31,8 @@ class ZabbixAlert(BaseModel):
     raw_data: Optional[Dict[str, Any]] = None
     recovery_time: Optional[str] = None
     recovery_date: Optional[str] = None
+    recovery_time_original: Optional[str] = None
+    recovery_date_original: Optional[str] = None
 
 
 class InsightFinderMetric(BaseModel):

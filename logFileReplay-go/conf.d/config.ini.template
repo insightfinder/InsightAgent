@@ -8,8 +8,12 @@ default_instance =
 # Component field, optional
 component_field = _source.agent.type
 
+# Default component name if component_field is not found.
+default_component = 
+
 # Instance identifier for the system where the log file is from.
-instance_field = _source.agent.hostname
+# Separate different instance name by | to search instance name in the order
+instance_field = _source.agent.hostname|_source.agent.instance
 
 # Field to extract the timestamp from
 timestamp_field = _source.@timestamp
