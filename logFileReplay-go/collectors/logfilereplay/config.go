@@ -20,6 +20,7 @@ type Config struct {
 	logDataField          string
 	logRawDataField       string
 	defaultInstance       string
+	defaultComponent      string
 	timestampField        string
 	TimezoneOffsetSeconds int
 	TrunkSize             int
@@ -30,6 +31,7 @@ type Config struct {
 func getLogReplayConfig(p *configparser.ConfigParser) *Config {
 	var logFilesStr = GetConfigString(p, SectionName, "log_files", true)
 	var defaultInstance = GetConfigString(p, SectionName, "default_instance", false)
+	var defaultComponent = GetConfigString(p, SectionName, "default_component", false)
 	var componentField = GetConfigString(p, SectionName, "component_field", false)
 	var instanceField = GetConfigString(p, SectionName, "instance_field", false)
 	var timestampField = GetConfigString(p, SectionName, "timestamp_field", true)
@@ -75,6 +77,7 @@ func getLogReplayConfig(p *configparser.ConfigParser) *Config {
 		logDataField:          logDataField,
 		logRawDataField:       logRawDataField,
 		defaultInstance:       defaultInstance,
+		defaultComponent:      defaultComponent,
 		instanceField:         instanceField,
 		timestampField:        timestampField,
 		TimezoneOffsetSeconds: timezoneOffset,
