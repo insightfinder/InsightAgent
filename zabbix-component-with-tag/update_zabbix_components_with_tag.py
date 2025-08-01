@@ -184,7 +184,7 @@ def fetch_metadata(logger, zapi):
         return None
 
 def login(session: requests.Session):
-    # Perform login.py to retrieve token and session ID
+    # Perform login request to retrieve token and session ID
     login_url = f"{config.insightfinder_url}/api/v1/login-check"
     login_params = {
         "userName": config.insightfinder_username,
@@ -200,7 +200,7 @@ def login(session: requests.Session):
 
     login_data = login_response.json()
     if not login_data.get("valid", False):
-        print("Invalid login.py credentials.")
+        print("Invalid login credentials.")
         exit(1)
 
     # Extract required csrf_token from the login.py response
@@ -301,10 +301,10 @@ def batch_update_instance_component_name(project_name: str, instance_component_n
         'Content-Type': 'application/json'
     }
 
-    print(json_body)
+    logger.debug(json_body)
 
     response = requests.request("POST", url, headers=headers, data=json.dumps(json_body))
-    print(f'Successfully updated the component names for project {project_name} with status code: {response.status_code}')
+    logger.info(f'Successfully updated the component names for project {project_name} with status code: {response.status_code}')
 
     return True
 
@@ -431,7 +431,7 @@ def main():
     # Get project instances list for IF
     project_instances_list = []
     project_instances_list = list_instances_in_project(session, token, config.insightfinder_project)
-    print(project_instances_list)
+    logger.info(project_instances_list)
 
     # Match hostnames to component names
     logger.info("Matching hostnames to component names...")
