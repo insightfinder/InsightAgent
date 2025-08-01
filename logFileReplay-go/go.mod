@@ -3,6 +3,7 @@ module insightagent-go
 go 1.22
 
 require (
+	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de
 	github.com/bigkevmcd/go-configparser v0.0.0-20230427073640-c6b631f70126
 	github.com/bmatcuk/doublestar/v4 v4.6.1
 	github.com/go-resty/resty/v2 v2.12.0

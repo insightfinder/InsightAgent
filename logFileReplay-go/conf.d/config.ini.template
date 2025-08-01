@@ -15,8 +15,13 @@ default_component =
 # Separate different instance name by | to search instance name in the order
 instance_field = _source.agent.hostname|_source.agent.instance
 
-# Field to extract the timestamp from
+# Field to extract the timestamp from.
+# Separate different instance name by | to search instance name in the order
 timestamp_field = _source.@timestamp
+
+# Using the exact reference values from January 2, 2006 at 15:04:05 MST to specific the timestamp string format
+# Separate different instance name by | to search instance name in the order
+timestamp_format_reference=15:04 Jan 02, 2006 MST
 
 # Field to get the raw log data. This field will be used as the root of the data.
 log_raw_data_field = data
