@@ -176,6 +176,11 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 				component = gjson.Get(line, config.componentField).String()
 			}
 
+			if component == "" && config.defaultComponent != "" {
+				component = config.defaultComponent
+				log.Warn().Msgf("Component field %s is missing in the log, default to %s", config.componentField, component)
+			}
+
 			if config.instanceField != "" {
 				instanceFieldList := strings.Split(config.instanceField, "|")
 				for _, instanceField := range instanceFieldList {
