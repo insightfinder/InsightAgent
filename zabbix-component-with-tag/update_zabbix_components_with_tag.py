@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """
-Simple Zabbix metadata fetcher
-Fetches host information and their tags from Zabbix and saves to JSON file
-Uses minimal API calls to avoid server errors
+Agent to Update Zabbix metadata with tag appended
 """
 
 import json
