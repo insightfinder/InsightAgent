@@ -41,6 +41,7 @@ var (
 	BaseURL    string
 	DevicesAPI string
 	RadiosAPI  string
+	E2EAPI     string
 	LoginURL   string
 )
 
@@ -496,6 +497,55 @@ func FetchDevices(client *http.Client) (*models.DevicesResponse, error) {
 	return nil, fmt.Errorf("failed to fetch devices after %d attempts", MaxRetries)
 }
 
+// Test E2E API with retry and token update
+func fetchE2EDataWithRetry(client *http.Client, nid string) (*models.E2EData, error) {
+	url := fmt.Sprintf(E2EAPI, nid)
+
+	for attempt := 1; attempt <= MaxRetries; attempt++ {
+		resp, err := makeAuthenticatedRequest(client, url)
+		if err != nil {
+			if attempt == MaxRetries {
+				return nil, fmt.Errorf("failed after %d attempts: %v", MaxRetries, err)
+			}
+			logrus.Warnf("E2E request failed (attempt %d/%d): %v, retrying...", attempt, MaxRetries, err)
+			time.Sleep(time.Duration(attempt) * time.Second)
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == 200 {
+			// Read and decompress response body
+			bodyBytes, err := readResponseBody(resp)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read E2E response body: %v", err)
+			}
+
+			var e2eResp models.E2EData
+			if err := json.Unmarshal(bodyBytes, &e2eResp); err != nil {
+				return nil, fmt.Errorf("failed to decode E2E response: %v", err)
+			}
+			return &e2eResp, nil
+		}
+
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			logrus.Warnf("E2E authentication failed (status %d), attempting to update tokens...", resp.StatusCode)
+			if updateTokensFromHeaders(resp.Header) && attempt < MaxRetries {
+				logrus.Infof("Tokens updated, retrying E2E (attempt %d/%d)...", attempt+1, MaxRetries)
+				time.Sleep(time.Duration(attempt) * time.Second)
+				continue
+			}
+		}
+
+		if attempt == MaxRetries {
+			return nil, fmt.Errorf("E2E failed after %d attempts, last status: %d", MaxRetries, resp.StatusCode)
+		}
+		logrus.Warnf("E2E request failed with status %d (attempt %d/%d), retrying...", resp.StatusCode, attempt, MaxRetries)
+		time.Sleep(time.Duration(attempt) * time.Second)
+	}
+
+	return nil, fmt.Errorf("unexpected error in E2E retry logic")
+}
+
 // ===========================================
 // WORKER POOL FUNCTIONS
 // ===========================================
@@ -594,31 +644,80 @@ func worker(jobs <-chan Job, results chan<- Result) {
 		// Add 5GHz metrics
 		if radio5G != nil {
 			metricData.Data["Num Clients 5G"] = radio5G.Mus
+			metricData.Data["Channel Utilization 5G"] = radio5G.TotalCu
 			// metricData.Data["UL Throughput 5G"] = radio5G.UlTPut
 			// metricData.Data["DL Throughput 5G"] = radio5G.DlTPut
 			// metricData.Data["Noise Floor 5G"] = radio5G.Nf
-			metricData.Data["Channel Utilization 5G"] = radio5G.TotalCu
 		} else {
 			metricData.Data["Num Clients 5G"] = 0
+			metricData.Data["Channel Utilization 5G"] = 0.0
 			// metricData.Data["UL Throughput 5G"] = 0.0
 			// metricData.Data["DL Throughput 5G"] = 0.0
 			// metricData.Data["Noise Floor 5G"] = 0.0
-			metricData.Data["Channel Utilization 5G"] = 0.0
 		}
 
 		// Add 6GHz metrics
 		if radio6G != nil {
 			metricData.Data["Num Clients 6G"] = radio6G.Mus
+			metricData.Data["Channel Utilization 6G"] = radio6G.TotalCu
 			// metricData.Data["UL Throughput 6G"] = radio6G.UlTPut
 			// metricData.Data["DL Throughput 6G"] = radio6G.DlTPut
 			// metricData.Data["Noise Floor 6G"] = radio6G.Nf
-			metricData.Data["Channel Utilization 6G"] = radio6G.TotalCu
 		} else {
 			metricData.Data["Num Clients 6G"] = 0
+			metricData.Data["Channel Utilization 6G"] = 0.0
 			// metricData.Data["UL Throughput 6G"] = 0.0
 			// metricData.Data["DL Throughput 6G"] = 0.0
 			// metricData.Data["Noise Floor 6G"] = 0.0
-			metricData.Data["Channel Utilization 6G"] = 0.0
+		}
+
+		// Check if device is not Wi-Fi and has NID for E2E data
+		if (strings.ToLower(device.Mode) != "wi-fi" && strings.ToLower(device.Mode) != "wifi") && device.Nid != "" {
+			logrus.Debugf("Device %s is not Wi-Fi with NID %s, fetching E2E data...", device.MAC, device.Nid)
+
+			e2eResp, err := fetchE2EDataWithRetry(client, device.Nid)
+			if err != nil {
+				logrus.Warnf("Failed to get E2E data for device %s (NID: %s): %v", device.MAC, device.Nid, err)
+			} else if e2eResp != nil && len(e2eResp.Data.Links) > 0 {
+				logrus.Debugf("Device %s has %d E2E links", device.MAC, len(e2eResp.Data.Links))
+
+				// Process E2E link data - use first valid link encountered
+				var firstValidLink *models.Link
+				linkCount := len(e2eResp.Data.Links)
+
+				// Skip E2E metrics if no links available
+				if linkCount >= 1 {
+					// Find the first link with valid data
+					for _, link := range e2eResp.Data.Links {
+						// Check if link has valid data (non-zero values)
+						if link.RSSI != 0 || link.SNR != 0 {
+							firstValidLink = &link
+							break
+						}
+					}
+
+					// Add E2E metrics if we have valid link data
+					if firstValidLink != nil {
+						// Take absolute value of RSSI (ignore negative sign)
+						rssiValue := firstValidLink.RSSI
+						if rssiValue < 0 {
+							rssiValue = -rssiValue
+						}
+
+						metricData.Data["RSSI"] = rssiValue
+						metricData.Data["SNR"] = firstValidLink.SNR
+
+						// metricData.Data["RxMCS"] = firstValidLink.RxMCS
+						// metricData.Data["TxMCS"] = firstValidLink.TxMCS
+						// metricData.Data["Link Count"] = linkCount
+
+						// logrus.Debugf("Added E2E metrics for device %s: RSSI=%d, RxMCS=%d, TxMCS=%d, SNR=%d, Links=%d",
+						// 	device.MAC, rssiValue, firstValidLink.RxMCS, firstValidLink.TxMCS, firstValidLink.SNR, linkCount)
+					}
+				} else {
+					logrus.Debugf("Device %s has no E2E links, skipping E2E metrics", device.MAC)
+				}
+			}
 		}
 
 		logrus.Debugf("Successfully processed device %s", device.MAC)
@@ -772,6 +871,7 @@ func InitConfig(configPath string) error {
 	BaseURL = Cfg.Cambium.BaseURL
 	DevicesAPI = BaseURL + "/tree/devices"
 	RadiosAPI = BaseURL + "/stats/devices/%s/radios"
+	E2EAPI = BaseURL + "/stats/e2e/%s/links?fields=$e2e.links,amac,zmac,linkAvailable,rssi,rxMcs,snr,eirp,txMcs"
 	LoginURL = Cfg.Cambium.LoginURL
 	MaxRetries = Cfg.Cambium.MaxRetries
 	WorkerCount = Cfg.Cambium.WorkerCount
