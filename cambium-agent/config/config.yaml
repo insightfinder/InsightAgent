@@ -1,0 +1,30 @@
+agent:
+  # Agent behavior settings
+  log_level: INFO
+  data_format: JSON
+  timezone: UTC
+  filters_include: ""
+  filters_exclude: ""
+
+cambium:
+  # Cambium Network Configuration
+  email: 
+  password: 
+  base_url: 
+  login_url: https://cloud.cambiumnetworks.com/#/
+  max_retries: 3
+  worker_count: 30
+  collection_interval_seconds: 60
+
+insightfinder:
+  # InsightFinder Platform Configuration
+  server_url: https://app.insightfinder.com
+  username: 
+  license_key: 
+  project_name: Cambium-Metrics
+  system_name: Cambium Test
+  project_type: Metric
+  cloud_type: OnPremise
+  instance_type: OnPremise
+  is_container: false
+  sampling_interval: 60
