@@ -87,7 +87,147 @@ def test_mimosa_login(base_url, username, password, verify_certs=False):
     return False, None
 
 
-def test_authenticated_request(session, base_url, verify_certs=False):
+def discover_mimosa_networks(session, base_url, verify_certs=False):
+    """
+    Try to discover available networks/organizations and their IDs
+    """
+    print("\n" + "="*50)
+    print("Discovering Mimosa Networks:")
+    print("="*50)
+    
+    # Common endpoints that might reveal network information
+    discovery_endpoints = [
+        '/api/networks',
+        '/api/user/networks',
+        '/api/organizations',
+        '/api/user/organizations',
+        '/api/user/profile',
+        '/api/dashboard',
+        '/user/networks',
+        '/networks',
+        '/organizations'
+    ]
+    
+    networks_found = []
+    
+    for endpoint in discovery_endpoints:
+        try:
+            url = urljoin(base_url, endpoint)
+            print(f"\nTrying: {url}")
+            
+            response = session.get(url, verify=verify_certs, timeout=10)
+            print(f"Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    print(f"✅ Got JSON data from {endpoint}")
+                    print(f"Data structure: {type(data)}")
+                    
+                    if isinstance(data, dict):
+                        print(f"Keys: {list(data.keys())}")
+                        # Look for network/organization IDs
+                        for key, value in data.items():
+                            if 'network' in key.lower() or 'org' in key.lower() or 'id' in key.lower():
+                                print(f"  {key}: {value}")
+                                if isinstance(value, (list, dict)):
+                                    networks_found.append((key, value))
+                    elif isinstance(data, list):
+                        print(f"List with {len(data)} items")
+                        if data:
+                            print(f"First item: {data[0]}")
+                            networks_found.append(('networks_list', data))
+                    
+                    # Print first 300 chars of response for inspection
+                    print(f"Response preview: {str(data)[:300]}...")
+                    
+                except json.JSONDecodeError:
+                    print(f"Non-JSON response: {response.text[:200]}...")
+            else:
+                print(f"❌ {response.status_code} - {response.reason}")
+                
+        except Exception as e:
+            print(f"Error testing {endpoint}: {str(e)}")
+    
+    return networks_found
+
+
+def test_mimosa_api_with_network_id(session, base_url, network_id=None, verify_certs=False):
+    """
+    Test Mimosa API endpoints with a specific network ID
+    """
+    print("\n" + "="*50)
+    print(f"Testing Mimosa API with Network ID: {network_id or '6078 (default)'}")
+    print("="*50)
+    
+    # Use provided network_id or default to 6078
+    net_id = network_id or '6078'
+    
+    # Test various API endpoints with the network ID
+    api_endpoints = [
+        f'/{net_id}/deviceCount/',
+        f'/{net_id}/devices/',
+        f'/{net_id}/networks/',
+        f'/{net_id}/stats/',
+        f'/{net_id}/metrics/',
+        f'/{net_id}/dashboard/',
+        f'/api/{net_id}/devices',
+        f'/api/{net_id}/stats',
+        f'/api/networks/{net_id}/devices',
+        f'/api/networks/{net_id}/stats'
+    ]
+    
+    successful_endpoints = []
+    
+    for endpoint in api_endpoints:
+        try:
+            url = urljoin(base_url, endpoint)
+            print(f"\nTesting: {url}")
+            
+            response = session.get(url, verify=verify_certs, timeout=10)
+            print(f"Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                print(f"✅ SUCCESS! Content length: {len(response.text)} chars")
+                
+                # Try to parse as JSON
+                try:
+                    data = response.json()
+                    print(f"JSON Response:")
+                    print(f"  Type: {type(data)}")
+                    if isinstance(data, dict):
+                        print(f"  Keys: {list(data.keys())}")
+                    elif isinstance(data, list):
+                        print(f"  List length: {len(data)}")
+                    
+                    # Print formatted JSON (first 500 chars)
+                    json_str = json.dumps(data, indent=2)
+                    print(f"  Data preview:\n{json_str[:500]}{'...' if len(json_str) > 500 else ''}")
+                    
+                    successful_endpoints.append((endpoint, data))
+                    
+                except json.JSONDecodeError:
+                    print(f"  Non-JSON response: {response.text[:200]}...")
+                    successful_endpoints.append((endpoint, response.text))
+                    
+            elif response.status_code == 404:
+                print(f"❌ Not Found")
+            elif response.status_code == 403:
+                print(f"❌ Forbidden - might need different permissions")
+            elif response.status_code == 401:
+                print(f"❌ Unauthorized - session might have expired")
+            else:
+                print(f"❌ {response.status_code} - {response.reason}")
+                print(f"  Response: {response.text[:100]}...")
+                
+        except Exception as e:
+            print(f"❌ Error: {str(e)}")
+    
+    print(f"\n🎯 SUMMARY: Found {len(successful_endpoints)} working endpoints")
+    for endpoint, _ in successful_endpoints:
+        print(f"  ✅ {endpoint}")
+    
+    return successful_endpoints
     """
     Test an authenticated request to verify the session is working
     """
@@ -97,6 +237,7 @@ def test_authenticated_request(session, base_url, verify_certs=False):
     
     # Try to access a protected endpoint
     test_urls = [
+        '/6078/deviceCount/',
         '/api/stats',
         '/api/status',
         '/api/info',
@@ -126,10 +267,15 @@ def test_authenticated_request(session, base_url, verify_certs=False):
                         import json
                         data = response.json()
                         print(f"JSON keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+                        print(f"JSON data: {json.dumps(data, indent=2)}")
                     except:
                         print("Response is not valid JSON")
+                        print(f"Response content (first 200 chars): {response.text[:200]}")
+                else:
+                    print(f"Response content (first 200 chars): {response.text[:200]}")
             else:
-                print(f"Error: {response.reason}")
+                print(f"Error: {response.status_code} - {response.reason}")
+                print(f"Response content (first 200 chars): {response.text[:200]}")
                 
         except Exception as e:
             print(f"Failed to test {endpoint}: {str(e)}")

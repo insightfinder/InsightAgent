@@ -23,6 +23,10 @@ from optparse import OptionParser
 from sys import getsizeof
 from time import sleep
 from urllib.parse import urljoin
+import urllib3
+
+# Disable SSL warnings when verify_certs is False
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 """
 This script gathers metrics data from Mimosa devices and sends to InsightFinder
@@ -122,41 +126,87 @@ def mimosa_login(mimosa_uri, username, password, verify_certs=True):
         raise Exception(f"Failed to login to Mimosa: {str(e)}")
 
 
-def query_mimosa_metrics(session, mimosa_uri, metrics_config, verify_certs=True):
-    """Query metrics from Mimosa device"""
+def query_mimosa_metrics(session, mimosa_uri, network_id, verify_certs=True):
+    """Query metrics from Mimosa device using the discovered working endpoints"""
     metrics_data = []
     
-    for metric_name, metric_config in metrics_config.items():
-        try:
-            endpoint = metric_config.get('endpoint', '/api/stats')
-            params = metric_config.get('params', {})
+    try:
+        # Get device count first
+        device_count_url = urljoin(mimosa_uri, f'/{network_id}/deviceCount/')
+        response = session.get(device_count_url, verify=verify_certs, timeout=30)
+        response.raise_for_status()
+        
+        device_count_data = response.json()
+        device_count = device_count_data.get('numberOfElements', 0)
+        
+        # Add device count as a metric
+        metrics_data.append({
+            'metric_name': 'device_count',
+            'value': device_count,
+            'timestamp': int(time.time() * 1000),
+            'device_id': 'network',
+            'device_name': f'network_{network_id}'
+        })
+        
+        # Get devices list with pagination
+        devices_url = urljoin(mimosa_uri, f'/{network_id}/devices/')
+        response = session.get(devices_url, verify=verify_certs, timeout=30)
+        response.raise_for_status()
+        
+        devices_data = response.json()
+        print(devices_data)
+        devices = devices_data.get('content', [])
+        
+        # Extract metrics from each device
+        for device in devices:
+            device_id = device.get('id')
+            device_name = device.get('friendlyName', f'device_{device_id}')
             
-            url = urljoin(mimosa_uri, endpoint)
+            # Extract various metrics from device data
+            device_metrics = {
+                'alert_count': device.get('alertCount', 0),
+                'up_time': device.get('upTime', 0),
+                'down_time': device.get('downTime', 0),
+                'action_count': device.get('actionCount', 0),
+                'number_of_clients': device.get('numberOfClients', 0),
+                'connected_clients': device.get('connectedClients', 0),
+                'reconnect_count': device.get('reconnectCount', 0),
+                'device_age': device.get('deviceAge', 0),
+                'reconnect_per_day': device.get('reconnectPerDay', 0),
+                'latitude': device.get('latitude', 0.0),
+                'longitude': device.get('longitude', 0.0),
+                'elevation': device.get('elevation', 0.0),
+            }
             
-            response = session.get(
-                url,
-                params=params,
-                verify=verify_certs,
-                timeout=30
-            )
-            response.raise_for_status()
+            # Convert severity to numeric (for trending)
+            severity_map = {'OK': 0, 'WARNING': 1, 'CRITICAL': 2, 'UNKNOWN': 3}
+            severity = device.get('severity', 'UNKNOWN')
+            device_metrics['severity_level'] = severity_map.get(severity, 3)
             
-            data = response.json()
+            # Add boolean metrics (convert to 1/0)
+            device_metrics['monitored'] = 1 if device.get('monitored', False) else 0
             
-            # Extract the specific metric value based on configuration
-            metric_value = extract_metric_value(data, metric_config)
-            
-            if metric_value is not None:
-                metrics_data.append({
-                    'metric_name': metric_name,
-                    'value': metric_value,
-                    'timestamp': int(time.time() * 1000),
-                    'raw_data': data
-                })
-                
-        except Exception as e:
-            logging.error(f"Error querying metric {metric_name}: {str(e)}")
-            continue
+            # Add timestamp and device info to each metric
+            current_time = int(time.time() * 1000)
+            for metric_name, value in device_metrics.items():
+                if value is not None:  # Only add metrics with valid values
+                    metrics_data.append({
+                        'metric_name': metric_name,
+                        'value': value,
+                        'timestamp': current_time,
+                        'device_id': device_id,
+                        'device_name': device_name,
+                        'device_model': device.get('modelName', 'Unknown'),
+                        'device_type': device.get('deviceType', 'Unknown'),
+                        'ip_address': device.get('ipAddress', ''),
+                        'mac_address': device.get('macAddress', ''),
+                        'sw_version': device.get('swVersion', '')
+                    })
+        
+        logging.info(f'Successfully collected metrics from {len(devices)} devices in network {network_id}')
+        
+    except Exception as e:
+        logging.error(f"Error querying Mimosa metrics: {str(e)}")
     
     return metrics_data
 
@@ -206,8 +256,11 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             # Login to Mimosa
             session = mimosa_login(mimosa_uri, username, password, verify_certs)
             
-            # Query metrics
-            metrics_data = query_mimosa_metrics(session, mimosa_uri, metrics_config, verify_certs)
+            # Get network ID from config or use default
+            network_id = agent_config_vars.get('network_id', '6078')
+            
+            # Query metrics using the working endpoints
+            metrics_data = query_mimosa_metrics(session, mimosa_uri, network_id, verify_certs)
             
             # Process the collected data
             for metric_data in metrics_data:
@@ -296,8 +349,9 @@ def get_agent_config_vars(logger, config_ini):
         
         # Optional settings
         verify_certs = config_parser.getboolean(mimosa_section, 'verify_certs', fallback=True)
+        network_id = config_parser.get(mimosa_section, 'network_id', fallback='6078')
         
-        # Metrics configuration
+        # Metrics configuration (keeping for backward compatibility but not used with new API)
         metrics_config = {}
         if config_parser.has_section('metrics'):
             for metric_name, metric_def in config_parser.items('metrics'):
@@ -322,6 +376,7 @@ def get_agent_config_vars(logger, config_ini):
             'username': username,
             'password': password,
             'verify_certs': verify_certs,
+            'network_id': network_id,
             'metrics_config': metrics_config,
             'thread_pool': thread_pool,
             'default_component_name': default_component_name,
