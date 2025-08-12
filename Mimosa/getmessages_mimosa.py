@@ -126,65 +126,143 @@ def mimosa_login(mimosa_uri, username, password, verify_certs=True):
         raise Exception(f"Failed to login to Mimosa: {str(e)}")
 
 
-def query_mimosa_metrics(session, mimosa_uri, network_id, verify_certs=True):
+def query_mimosa_metrics(session, mimosa_uri, network_id, action_names, metrics_filter=None, verify_certs=True):
     """Query metrics from Mimosa device using the discovered working endpoints"""
     metrics_data = []
     
     try:
         # Get device count first
-        device_count_url = urljoin(mimosa_uri, f'/{network_id}/deviceCount/')
-        response = session.get(device_count_url, verify=verify_certs, timeout=30)
-        response.raise_for_status()
+        # device_count_url = urljoin(mimosa_uri, f'/{network_id}/deviceCount/')
+        # response = session.get(device_count_url, verify=verify_certs, timeout=30)
+        # response.raise_for_status()
         
-        device_count_data = response.json()
-        device_count = device_count_data.get('numberOfElements', 0)
+        # device_count_data = response.json()
+        # device_count = device_count_data.get('numberOfElements', 0)
         
         # Add device count as a metric
-        metrics_data.append({
-            'metric_name': 'device_count',
-            'value': device_count,
-            'timestamp': int(time.time() * 1000),
-            'device_id': 'network',
-            'device_name': f'network_{network_id}'
-        })
+        # metrics_data.append({
+        #     'metric_name': 'device_count',
+        #     'value': device_count,
+        #     'timestamp': int(time.time() * 1000),
+        #     'device_id': 'network',
+        #     'device_name': f'network_{network_id}'
+        # })
         
-        # Get devices list with pagination
-        devices_url = urljoin(mimosa_uri, f'/{network_id}/devices/')
-        response = session.get(devices_url, verify=verify_certs, timeout=30)
-        response.raise_for_status()
+        # Get devices list with pagination - collect ALL devices from all pages
+        all_devices = []
+        page = 0
+        page_size = 1000  # Increase page size for efficiency
         
-        devices_data = response.json()
-        print(devices_data)
-        devices = devices_data.get('content', [])
+        while True:
+            devices_url = urljoin(mimosa_uri, f'/{network_id}/devices/')
+            params = {
+                'pageNumber': page,
+                'pageSize': page_size
+            }
+            
+            response = session.get(devices_url, params=params, verify=verify_certs, timeout=30)
+            response.raise_for_status()
+            
+            devices_data = response.json()
+            current_devices = devices_data.get('content', [])
+            
+            if not current_devices:
+                break
+                
+            all_devices.extend(current_devices)
+            
+            # Log progress
+            total_elements = devices_data.get('totalElements', 0)
+            logging.info(f'Collected {len(all_devices)} of {total_elements} devices (page {page + 1})')
+            
+            # Check if this is the last page
+            if devices_data.get('last', True):
+                break
+                
+            page += 1
+        
+        devices = all_devices  # Now collect from all devices since API is working
+        logging.info(f'Successfully collected all {len(all_devices)} devices from {page + 1} pages')
+        
+        # # Log metrics filter information
+        # if metrics_filter and len(metrics_filter) > 0:
+        #     logging.info(f'Filtering metrics to only collect: {", ".join(metrics_filter)}')
+        # else:
+        #     logging.info('No metrics filter specified - collecting all available metrics')
         
         # Extract metrics from each device
         for device in devices:
             device_id = device.get('id')
             device_name = device.get('friendlyName', f'device_{device_id}')
             
-            # Extract various metrics from device data
-            device_metrics = {
-                'alert_count': device.get('alertCount', 0),
-                'up_time': device.get('upTime', 0),
-                'down_time': device.get('downTime', 0),
-                'action_count': device.get('actionCount', 0),
-                'number_of_clients': device.get('numberOfClients', 0),
-                'connected_clients': device.get('connectedClients', 0),
-                'reconnect_count': device.get('reconnectCount', 0),
-                'device_age': device.get('deviceAge', 0),
-                'reconnect_per_day': device.get('reconnectPerDay', 0),
-                'latitude': device.get('latitude', 0.0),
-                'longitude': device.get('longitude', 0.0),
-                'elevation': device.get('elevation', 0.0),
-            }
+            # Extract time-series metrics from Mimosa multiSeriesData API
+            all_device_metrics = {}
             
-            # Convert severity to numeric (for trending)
-            severity_map = {'OK': 0, 'WARNING': 1, 'CRITICAL': 2, 'UNKNOWN': 3}
-            severity = device.get('severity', 'UNKNOWN')
-            device_metrics['severity_level'] = severity_map.get(severity, 3)
+            try:
+                # Build the multiSeriesData API URL - using the correct format with device ID as parameter
+                multi_series_url = urljoin(mimosa_uri, f'/{network_id}/devices/multiSeriesData/')
+                
+                # Parameters for the API call - use device ID as parameter name with comma-separated action names
+                params = {
+                    'timeWindow': 'LAST_1_HOUR',
+                    str(device_id): ','.join(action_names)
+                }
+                
+                response = session.get(multi_series_url, params=params, verify=verify_certs, timeout=30)
+                response.raise_for_status()
+                
+                series_data = response.json()
+                
+                # Debug: log the actual response for troubleshooting
+                if len(metrics_data) < 3:  # Only log for first few devices to avoid spam
+                    logging.info(f'Raw API response size for {device_name}: {len(str(series_data))} chars')
+                elif len(metrics_data) == 3:
+                    logging.info('Reducing debug output - API is working correctly')
+                
+                # Parse the response which should contain data for both metrics
+                if isinstance(series_data, list) and len(series_data) > 0:
+                    # Response is an array of metric objects
+                    for metric_obj in series_data:
+                        if isinstance(metric_obj, dict):
+                            action_name = metric_obj.get('actionName', '')
+                            data_array = metric_obj.get('data', [])
+                            
+                            if isinstance(data_array, list) and len(data_array) > 0:
+                                # Get the last entry (most recent timestamp)
+                                latest_entry = data_array[-1]
+                                
+                                if isinstance(latest_entry, list) and len(latest_entry) >= 2:
+                                    # Extract timestamp and value
+                                    timestamp = latest_entry[0]  # First element is timestamp
+                                    value = latest_entry[1]      # Second element is value
+                                    
+                                    # Convert action name to safe metric name
+                                    metric_name = action_name.lower().replace('mimosa_', '').replace('_', '_')
+                                    all_device_metrics[metric_name] = value
+                                    
+                                    logging.debug(f'Collected {action_name} = {value} for device {device_name}')
+                else:
+                    logging.debug(f'No data returned for {device_name}')
+                    
+            except Exception as e:
+                logging.warning(f'Failed to collect metrics for device {device_name}: {str(e)}')
+                continue
             
-            # Add boolean metrics (convert to 1/0)
-            device_metrics['monitored'] = 1 if device.get('monitored', False) else 0
+            # Skip devices with no metrics
+            if not all_device_metrics:
+                logging.debug(f'No metrics collected for device {device_name}, skipping')
+                continue
+            
+            # Filter metrics based on configuration
+            if metrics_filter and len(metrics_filter) > 0:
+                # Only include metrics specified in the filter
+                device_metrics = {k: v for k, v in all_device_metrics.items() if k in metrics_filter}
+                if not device_metrics:
+                    logging.warning(f'No valid metrics found for device {device_name}. Available metrics: {list(all_device_metrics.keys())}')
+                    continue
+            else:
+                # Include all metrics if no filter specified
+                device_metrics = all_device_metrics
             
             # Add timestamp and device info to each metric
             current_time = int(time.time() * 1000)
@@ -204,6 +282,11 @@ def query_mimosa_metrics(session, mimosa_uri, network_id, verify_certs=True):
                     })
         
         logging.info(f'Successfully collected metrics from {len(devices)} devices in network {network_id}')
+        logging.info(f'Total metrics collected: {len(metrics_data)} from {len(devices)} devices')
+        
+        # Log friendly names of all devices for verification
+        friendly_names = [device.get('friendlyName', f'device_{device.get("id")}') for device in devices]
+        logging.info(f'Device friendly names: {", ".join(friendly_names[:10])}{"..." if len(friendly_names) > 10 else ""}')
         
     except Exception as e:
         logging.error(f"Error querying Mimosa metrics: {str(e)}")
@@ -260,7 +343,57 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             network_id = agent_config_vars.get('network_id', '6078')
             
             # Query metrics using the working endpoints
-            metrics_data = query_mimosa_metrics(session, mimosa_uri, network_id, verify_certs)
+            metrics_data = query_mimosa_metrics(session, mimosa_uri, network_id, agent_config_vars.get('action_names', ['Mimosa_B5_UL_Rate', 'Mimosa_B5_DL_Rate']), agent_config_vars.get('metrics_filter', []), verify_certs)
+
+            # Save metrics data to JSON file for inspection
+            timestamp = int(time.time())
+            filename = f"mimosa_metrics_data_{timestamp}.json"
+            
+            print(f"\n💾 Saving metrics data to {filename}...")
+            with open(filename, 'w') as f:
+                json.dump({
+                    'timestamp': timestamp,
+                    'network_id': network_id,
+                    'total_metrics': len(metrics_data),
+                    'metrics_data': metrics_data
+                }, f, indent=2)
+            print(f"✅ Saved {len(metrics_data)} metrics to {filename}")
+            
+            # Also save a summary for quick overview
+            summary_filename = f"mimosa_metrics_summary_{timestamp}.json"
+            device_summary = {}
+            metric_types = {}
+            
+            for metric in metrics_data:
+                device_name = metric.get('device_name', 'unknown')
+                metric_name = metric.get('metric_name', 'unknown')
+                
+                if device_name not in device_summary:
+                    device_summary[device_name] = {
+                        'device_id': metric.get('device_id'),
+                        'device_model': metric.get('device_model'),
+                        'device_type': metric.get('device_type'),
+                        'ip_address': metric.get('ip_address'),
+                        'mac_address': metric.get('mac_address'),
+                        'sw_version': metric.get('sw_version'),
+                        'metrics_count': 0
+                    }
+                device_summary[device_name]['metrics_count'] += 1
+                
+                if metric_name not in metric_types:
+                    metric_types[metric_name] = 0
+                metric_types[metric_name] += 1
+            
+            with open(summary_filename, 'w') as f:
+                json.dump({
+                    'timestamp': timestamp,
+                    'network_id': network_id,
+                    'total_devices': len(device_summary),
+                    'total_metrics': len(metrics_data),
+                    'metric_types': metric_types,
+                    'device_summary': device_summary
+                }, f, indent=2)
+            print(f"✅ Saved summary to {summary_filename}")
             
             # Process the collected data
             for metric_data in metrics_data:
@@ -306,8 +439,9 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
         # Align timestamp to sampling interval
         aligned_timestamp = align_timestamp(timestamp, sampling_interval)
         
-        # Create instance name
-        instance_name = agent_config_vars.get('instance_name', default_component_name)
+        # Create instance name using device name for better identification
+        device_name = metric_data.get('device_name', 'unknown_device')
+        instance_name = make_safe_instance_string(device_name)
         
         # Create safe metric key
         safe_metric_key = make_safe_metric_key(metric_name)
@@ -322,10 +456,12 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
         }
         
         # Add to metric buffer
+        if aligned_timestamp not in metric_buffer['buffer_dict']:
+            metric_buffer['buffer_dict'][aligned_timestamp] = []
         metric_buffer['buffer_dict'][aligned_timestamp].append(metric_data_point)
         track['entry_count'] += 1
         
-        logger.debug(f'Added metric: {metric_name} = {value} at {aligned_timestamp}')
+        logger.debug(f'Added metric: {metric_name} = {value} for {device_name} at {aligned_timestamp}')
         
     except Exception as e:
         logger.error(f'Error parsing Mimosa metric data: {str(e)}')
@@ -350,6 +486,16 @@ def get_agent_config_vars(logger, config_ini):
         # Optional settings
         verify_certs = config_parser.getboolean(mimosa_section, 'verify_certs', fallback=True)
         network_id = config_parser.get(mimosa_section, 'network_id', fallback='6078')
+        
+        # Get action names from config - comma-separated list
+        action_names_str = config_parser.get(mimosa_section, 'action_names', fallback='Mimosa_B5_UL_Rate,Mimosa_B5_DL_Rate').strip()
+        action_names = [action.strip() for action in action_names_str.split(',') if action.strip()]
+        
+        # Get metrics filter from config - comma-separated list or empty for all metrics
+        metrics_filter_str = config_parser.get(mimosa_section, 'metrics', fallback='').strip()
+        metrics_filter = []
+        if metrics_filter_str:
+            metrics_filter = [metric.strip() for metric in metrics_filter_str.split(',') if metric.strip()]
         
         # Metrics configuration (keeping for backward compatibility but not used with new API)
         metrics_config = {}
@@ -377,6 +523,8 @@ def get_agent_config_vars(logger, config_ini):
             'password': password,
             'verify_certs': verify_certs,
             'network_id': network_id,
+            'action_names': action_names,
+            'metrics_filter': metrics_filter,
             'metrics_config': metrics_config,
             'thread_pool': thread_pool,
             'default_component_name': default_component_name,
