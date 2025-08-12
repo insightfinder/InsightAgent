@@ -213,11 +213,13 @@ def query_mimosa_metrics(session, mimosa_uri, network_id, action_names, metrics_
                 
                 series_data = response.json()
                 
-                # Debug: log the actual response for troubleshooting
-                if len(metrics_data) < 3:  # Only log for first few devices to avoid spam
-                    logging.info(f'Raw API response size for {device_name}: {len(str(series_data))} chars')
-                elif len(metrics_data) == 3:
-                    logging.info('Reducing debug output - API is working correctly')
+                # # Debug: log the actual response for troubleshooting
+                # if len(metrics_data) < 3:  # Only log for first few devices to avoid spam
+                #     logging.info(f'Raw API response size for {device_name}: {len(str(series_data))} chars')
+                # elif len(metrics_data) == 3:
+                #     logging.info('Reducing debug output - API is working correctly')
+
+                logging.info(f'Raw API response size for {device_name}: {len(str(series_data))} chars')
                 
                 # Parse the response which should contain data for both metrics
                 if isinstance(series_data, list) and len(series_data) > 0:
