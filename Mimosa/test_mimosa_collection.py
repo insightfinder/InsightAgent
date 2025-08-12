@@ -3,11 +3,6 @@
 import sys
 import logging
 import os
-import urllib3
-
-# Disable SSL warnings
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
 sys.path.append('/home/ashvat/Documents/Github/InsightAgent/Mimosa')
 
 from getmessages_mimosa import (
@@ -50,7 +45,7 @@ def test_mimosa_collection():
         
         # Test metrics collection
         logger.info("Testing metrics collection...")
-        metrics_data = query_mimosa_metrics(session, mimosa_uri, network_id, verify_certs)
+        metrics_data = query_mimosa_metrics(session, mimosa_uri, network_id, [], verify_certs)
         
         logger.info(f"✅ Collected {len(metrics_data)} metrics")
         
