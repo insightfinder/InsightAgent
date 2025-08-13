@@ -355,6 +355,89 @@ def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_name
     multi_series_url = urljoin(mimosa_uri, f'/{network_id}/devices/multiSeriesData/')
     current_time = int(time.time() * 1000)
     
+    def fetch_single_metric_for_device(device, action_name):
+        """Fetch a single metric for a single device (ultimate fallback)"""
+        device_metrics = []
+        device_failures = []
+        device_id = device.get('id')
+        device_name = device.get('friendlyName', f'device_{device_id}')
+        
+        try:
+            # Parameters for single metric API call
+            params = {
+                'timeWindow': 'LAST_1_HOUR',
+                str(device_id): action_name
+            }
+            
+            response = session.get(multi_series_url, params=params, verify=verify_certs, timeout=10)
+            response.raise_for_status()
+            
+            series_data = response.json()
+            
+            # Parse the response for single metric
+            if isinstance(series_data, list) and len(series_data) > 0:
+                for metric_obj in series_data:
+                    if isinstance(metric_obj, dict):
+                        returned_action_name = metric_obj.get('actionName', '')
+                        data_array = metric_obj.get('data', [])
+                        
+                        if returned_action_name == action_name and isinstance(data_array, list) and len(data_array) > 0:
+                            # Get the latest N data points based on data_points_count
+                            num_points = min(data_points_count, len(data_array))
+                            latest_entries = data_array[-num_points:]  # Get last N entries
+                            
+                            # Process each data point
+                            for entry in latest_entries:
+                                if isinstance(entry, list) and len(entry) >= 2:
+                                    value = entry[1]
+                                    timestamp = entry[0]
+                                    metric_name = action_name.lower().replace('mimosa_', '').replace('_', '_')
+                                    
+                                    device_metrics.append({
+                                        'metric_name': metric_name,
+                                        'value': value,
+                                        'timestamp': timestamp,
+                                        'device_id': device_id,
+                                        'device_name': device_name,
+                                        'device_model': device.get('modelName', 'Unknown'),
+                                        'device_type': device.get('deviceType', 'Unknown'),
+                                        'ip_address': device.get('ipAddress', ''),
+                                        'mac_address': device.get('macAddress', ''),
+                                        'sw_version': device.get('swVersion', '')
+                                    })
+                            return device_metrics, device_failures
+            
+            # If we get here, no data was returned
+            device_failures.append({
+                'device_id': device_id,
+                'device_name': device_name,
+                'metric_name': action_name,
+                'failure_reason': 'No data returned for single metric call',
+                'timestamp': current_time,
+                'device_model': device.get('modelName', 'Unknown'),
+                'device_type': device.get('deviceType', 'Unknown'),
+                'ip_address': device.get('ipAddress', ''),
+                'mac_address': device.get('macAddress', ''),
+                'sw_version': device.get('swVersion', '')
+            })
+                    
+        except Exception as e:
+            logging.debug(f'Failed to collect single metric {action_name} for device {device_name}: {str(e)}')
+            device_failures.append({
+                'device_id': device_id,
+                'device_name': device_name,
+                'metric_name': action_name,
+                'failure_reason': f'Single metric API call failed: {str(e)}',
+                'timestamp': current_time,
+                'device_model': device.get('modelName', 'Unknown'),
+                'device_type': device.get('deviceType', 'Unknown'),
+                'ip_address': device.get('ipAddress', ''),
+                'mac_address': device.get('macAddress', ''),
+                'sw_version': device.get('swVersion', '')
+            })
+        
+        return device_metrics, device_failures
+    
     def fetch_single_device_metrics(device):
         """Fetch metrics for a single device"""
         device_metrics = []
@@ -424,14 +507,55 @@ def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_name
                                 'sw_version': device.get('swVersion', '')
                             })
             
-            # Track missing metrics
-            for action_name in action_names:
-                if action_name not in metrics_with_data:
+            # Check if we got any data at all - if not, try individual metric calls
+            if len(device_metrics) == 0:
+                logging.debug(f'No metrics collected for device {device_name}, trying individual metric calls')
+                # Try each metric individually as ultimate fallback
+                for action_name in action_names:
+                    single_metrics, single_failures = fetch_single_metric_for_device(device, action_name)
+                    device_metrics.extend(single_metrics)
+                    device_failures.extend(single_failures)
+                
+                # If we got some metrics from individual calls, remove the bulk failure entries
+                if len(device_metrics) > 0:
+                    # Remove previous failure entries for metrics that we successfully collected individually
+                    successful_metrics = set(m['metric_name'] for m in device_metrics)
+                    device_failures = [f for f in device_failures if f['metric_name'].lower().replace('mimosa_', '').replace('_', '_') not in successful_metrics]
+            else:
+                # Track missing metrics only (we got some data from the bulk call)
+                for action_name in action_names:
+                    if action_name not in metrics_with_data:
+                        device_failures.append({
+                            'device_id': device_id,
+                            'device_name': device_name,
+                            'metric_name': action_name,
+                            'failure_reason': 'Metric not returned by API (individual call)',
+                            'timestamp': current_time,
+                            'device_model': device.get('modelName', 'Unknown'),
+                            'device_type': device.get('deviceType', 'Unknown'),
+                            'ip_address': device.get('ipAddress', ''),
+                            'mac_address': device.get('macAddress', ''),
+                            'sw_version': device.get('swVersion', '')
+                        })
+                    
+        except Exception as e:
+            logging.debug(f'Failed to collect metrics for device {device_name}: {str(e)}')
+            # Try individual metric calls as fallback when device call completely fails
+            logging.debug(f'Trying individual metric calls for device {device_name} after bulk failure')
+            try:
+                for action_name in action_names:
+                    single_metrics, single_failures = fetch_single_metric_for_device(device, action_name)
+                    device_metrics.extend(single_metrics)
+                    device_failures.extend(single_failures)
+            except Exception as e2:
+                logging.debug(f'Individual metric calls also failed for device {device_name}: {str(e2)}')
+                # Track all metrics as failed for this device
+                for action_name in action_names:
                     device_failures.append({
                         'device_id': device_id,
                         'device_name': device_name,
                         'metric_name': action_name,
-                        'failure_reason': 'Metric not returned by API (individual call)',
+                        'failure_reason': f'All API calls failed: {str(e)} / {str(e2)}',
                         'timestamp': current_time,
                         'device_model': device.get('modelName', 'Unknown'),
                         'device_type': device.get('deviceType', 'Unknown'),
@@ -439,23 +563,6 @@ def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_name
                         'mac_address': device.get('macAddress', ''),
                         'sw_version': device.get('swVersion', '')
                     })
-                    
-        except Exception as e:
-            logging.debug(f'Failed to collect metrics for device {device_name}: {str(e)}')
-            # Track all metrics as failed for this device
-            for action_name in action_names:
-                device_failures.append({
-                    'device_id': device_id,
-                    'device_name': device_name,
-                    'metric_name': action_name,
-                    'failure_reason': f'Device API call failed: {str(e)}',
-                    'timestamp': current_time,
-                    'device_model': device.get('modelName', 'Unknown'),
-                    'device_type': device.get('deviceType', 'Unknown'),
-                    'ip_address': device.get('ipAddress', ''),
-                    'mac_address': device.get('macAddress', ''),
-                    'sw_version': device.get('swVersion', '')
-                })
         
         return device_metrics, device_failures
     
