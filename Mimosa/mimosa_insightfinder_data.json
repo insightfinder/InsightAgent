@@ -1,0 +1,162 @@
+{
+  "licenseKey": "fa28bf0a1a0f6e77c6eea446383b36d0b5a884d2",
+  "userName": "ashvat",
+  "data": {
+    "projectName": "mimosa-3",
+    "userName": "ashvat",
+    "idm": {
+      "PUE-RAD.C5x-Residence": {
+        "in": "PUE-RAD.C5x-Residence",
+        "cn": "",
+        "dit": {
+          "1755106740000": {
+            "t": 1755106740000,
+            "m": [
+              {
+                "m": "b5_ul_rate",
+                "v": 378.7
+              },
+              {
+                "m": "b5_dl_rate",
+                "v": 398.3
+              }
+            ]
+          }
+        }
+      },
+      "WCBY-Pole162-PTPtoUmqua": {
+        "in": "WCBY-Pole162-PTPtoUmqua",
+        "cn": "",
+        "dit": {
+          "1755106770000": {
+            "t": 1755106770000,
+            "m": [
+              {
+                "m": "b5_ul_rate",
+                "v": 1560.0
+              },
+              {
+                "m": "b5_dl_rate",
+                "v": 1560.0
+              }
+            ]
+          }
+        }
+      },
+      "NPS.C5.RES.553B": {
+        "in": "NPS.C5.RES.553B",
+        "cn": "",
+        "dit": {
+          "1755106560000": {
+            "t": 1755106560000,
+            "m": [
+              {
+                "m": "b5_ul_rate",
+                "v": 394.7
+              },
+              {
+                "m": "b5_dl_rate",
+                "v": 180.0
+              }
+            ]
+          }
+        }
+      },
+      "NP-Mead-CB-C5-Res-Reilly": {
+        "in": "NP-Mead-CB-C5-Res-Reilly",
+        "cn": "",
+        "dit": {
+          "1755106560000": {
+            "t": 1755106560000,
+            "m": [
+              {
+                "m": "b5_ul_rate",
+                "v": 386.7
+              },
+              {
+                "m": "b5_dl_rate",
+                "v": 179.0
+              }
+            ]
+          }
+        }
+      },
+      "MEAD-BB-RAD.C5-Res-Housing-410": {
+        "in": "MEAD-BB-RAD.C5-Res-Housing-410",
+        "cn": "",
+        "dit": {
+          "1755106680000": {
+            "t": 1755106680000,
+            "m": [
+              {
+                "m": "b5_ul_rate",
+                "v": 301.5
+              },
+              {
+                "m": "b5_dl_rate",
+                "v": 370.3
+              }
+            ]
+          }
+        }
+      },
+      "MEAD-WB-RAD.C5-Fishery": {
+        "in": "MEAD-WB-RAD.C5-Fishery",
+        "cn": "",
+        "dit": {
+          "1755106680000": {
+            "t": 1755106680000,
+            "m": [
+              {
+                "m": "b5_ul_rate",
+                "v": 298.5
+              },
+              {
+                "m": "b5_dl_rate",
+                "v": 399.3
+              }
+            ]
+          }
+        }
+      },
+      "MEAD-CWC-RAD.C5-Res-Staley-188": {
+        "in": "MEAD-CWC-RAD.C5-Res-Staley-188",
+        "cn": "",
+        "dit": {
+          "1755106500000": {
+            "t": 1755106500000,
+            "m": [
+              {
+                "m": "b5_ul_rate",
+                "v": 372.3
+              },
+              {
+                "m": "b5_dl_rate",
+                "v": 400.0
+              }
+            ]
+          }
+        }
+      },
+      "VL-Pole192-CPE": {
+        "in": "VL-Pole192-CPE",
+        "cn": "",
+        "dit": {
+          "1755106620000": {
+            "t": 1755106620000,
+            "m": [
+              {
+                "m": "b5_ul_rate",
+                "v": 344.9
+              },
+              {
+                "m": "b5_dl_rate",
+                "v": 775.1
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

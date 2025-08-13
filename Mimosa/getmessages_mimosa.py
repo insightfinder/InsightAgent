@@ -130,7 +130,6 @@ def fetch_device_metrics_batch(session, mimosa_uri, network_id, action_names, de
     """Fetch metrics for a batch of devices using a single API call"""
     metrics_data = []
     multi_series_url = urljoin(mimosa_uri, f'/{network_id}/devices/multiSeriesData/')
-    current_time = int(time.time() * 1000)
     
     # Create a device lookup dictionary for fast access
     device_lookup = {device.get('id'): device for device in devices_batch}
@@ -174,12 +173,13 @@ def fetch_device_metrics_batch(session, mimosa_uri, network_id, action_names, de
                         
                         if isinstance(latest_entry, list) and len(latest_entry) >= 2:
                             value = latest_entry[1]
-                            metric_name = action_name.lower().replace('mimosa_', '').replace('_', '_')
+                            timestamp = latest_entry[0]
+                            metric_name = action_name.lower().replace('mimosa_', '')
                             
                             metrics_data.append({
                                 'metric_name': metric_name,
                                 'value': value,
-                                'timestamp': current_time,
+                                'timestamp': timestamp,
                                 'device_id': device_id,
                                 'device_name': device_name,
                                 'device_model': device.get('modelName', 'Unknown'),
@@ -402,22 +402,23 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             api_batch_size = agent_config_vars.get('api_batch_size', 25)
             metrics_data = query_mimosa_metrics(session, mimosa_uri, network_id, agent_config_vars.get('action_names', ['Mimosa_B5_UL_Rate', 'Mimosa_B5_DL_Rate']), agent_config_vars.get('metrics_filter', []), verify_certs, max_devices, api_batch_size)
 
-            # # Save metrics data to file for inspection
-            # output_file = f'mimosa_metrics_data.json'
+            # Save metrics data to file for inspection
+            output_file = f'mimosa_metrics_data.json'
             
-            # try:
-            #     with open(output_file, 'w') as f:
-            #         json.dump(metrics_data, f, indent=2, default=str)
-            #     logger.info(f'Saved {len(metrics_data)} metrics to {output_file}')
-            # except Exception as e:
-            #     logger.error(f'Failed to save metrics data to file: {str(e)}')
+            try:
+                with open(output_file, 'w') as f:
+                    json.dump(metrics_data, f, indent=2, default=str)
+                logger.info(f'Saved {len(metrics_data)} metrics to {output_file}')
+            except Exception as e:
+                logger.error(f'Failed to save metrics data to file: {str(e)}')
 
             # Process the collected data
-            parse_messages_mimosa(
-                logger, if_config_vars, agent_config_vars, metric_buffer, track,
-                cache_con, cache_cur, metrics_data, time_now
-            )
-
+            for metric_data in metrics_data:
+                parse_messages_mimosa(
+                    logger, if_config_vars, agent_config_vars, metric_buffer, track,
+                    cache_con, cache_cur, metric_data, time_now
+                )
+            
             logger.info(f'Successfully collected {len(metrics_data)} metrics from Mimosa')
             
         except Exception as e:
@@ -437,48 +438,47 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
 
 
 def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buffer, track, cache_con, cache_cur,
-                          metrics_data, sampling_time):
+                          metric_data, sampling_time):
     """Parse Mimosa metric data and add to buffer"""
     
-    default_component_name = agent_config_vars.get('default_component_name', 'mimosa_device')
+    default_component_name = agent_config_vars.get('default_component_name', '')
     sampling_interval = if_config_vars['sampling_interval']
     
     try:
-        for metric_data in metrics_data:
-            # Extract metric information
-            metric_name = metric_data.get('metric_name')
-            value = metric_data.get('value')
-            timestamp = metric_data.get('timestamp', sampling_time)
-            
-            if value is None or metric_name is None:
-                return
-            
-            # Align timestamp to sampling interval
-            aligned_timestamp = align_timestamp(timestamp, sampling_interval)
-            
-            # Create instance name using device name for better identification
-            device_name = metric_data.get('device_name', 'unknown_device')
-            instance_name = make_safe_instance_string(device_name)
-            
-            # Create safe metric key
-            safe_metric_key = make_safe_metric_key(metric_name)
-            
-            # Prepare metric data point
-            metric_data_point = {
-                'instanceName': instance_name,
-                'componentName': default_component_name,
-                'metricName': safe_metric_key,
-                'data': value,
-                'timestamp': aligned_timestamp
-            }
-            
-            # Add to metric buffer
-            if aligned_timestamp not in metric_buffer['buffer_dict']:
-                metric_buffer['buffer_dict'][aligned_timestamp] = []
-            metric_buffer['buffer_dict'][aligned_timestamp].append(metric_data_point)
-            track['entry_count'] += 1
-            
-            logger.debug(f'Added metric: {metric_name} = {value} for {device_name} at {aligned_timestamp}')
+        # Extract metric information
+        metric_name = metric_data.get('metric_name')
+        value = metric_data.get('value')
+        timestamp = metric_data.get('timestamp', sampling_time)
+        
+        if value is None or metric_name is None:
+            return
+        
+        # Align timestamp to sampling interval
+        aligned_timestamp = align_timestamp(timestamp, sampling_interval)
+        
+        # Create instance name using device name for better identification
+        device_name = metric_data.get('device_name', 'unknown_device')
+        instance_name = make_safe_instance_string(device_name)
+        
+        # Create safe metric key
+        safe_metric_key = make_safe_metric_key(metric_name)
+        
+        # Prepare metric data point
+        metric_data_point = {
+            'instanceName': instance_name,
+            'componentName': default_component_name,
+            'metricName': safe_metric_key,
+            'data': value,
+            'timestamp': aligned_timestamp
+        }
+        
+        # Add to metric buffer
+        if aligned_timestamp not in metric_buffer['buffer_dict']:
+            metric_buffer['buffer_dict'][aligned_timestamp] = []
+        metric_buffer['buffer_dict'][aligned_timestamp].append(metric_data_point)
+        track['entry_count'] += 1
+        
+        logger.debug(f'Added metric: {metric_name} = {value} for {device_name} at {aligned_timestamp}')
         
     except Exception as e:
         logger.error(f'Error parsing Mimosa metric data: {str(e)}')
@@ -537,7 +537,7 @@ def get_agent_config_vars(logger, config_ini):
         # Agent settings
         agent_section = 'agent'
         thread_pool = config_parser.getint(agent_section, 'thread_pool', fallback=20)
-        default_component_name = config_parser.get(agent_section, 'default_component_name', fallback='mimosa_device')
+        default_component_name = config_parser.get(agent_section, 'default_component_name', fallback='')
         instance_name = config_parser.get(agent_section, 'instance_name', fallback='mimosa_instance')
         
         return {
@@ -690,21 +690,16 @@ def get_json_size_bytes(json_data):
 
 
 def make_safe_instance_string(instance, device=''):
-    """Make instance string safe for InsightFinder"""
-    # combine instance and device
-    if device:
-        instance = '{}_{}'.format(instance, device)
-    
-    # clean up
-    instance = SPACES.sub('_', instance)
-    instance = SLASHES.sub('-', instance)
-    instance = UNDERSCORE.sub('_', instance)
+    """ make a safe instance name string, concatenated with device if appropriate """
+    # strip underscores
+    instance = UNDERSCORE.sub('.', instance)
+    instance = COMMA.sub('.', instance)
     instance = COLONS.sub('-', instance)
     instance = LEFT_BRACE.sub('(', instance)
     instance = RIGHT_BRACE.sub(')', instance)
-    instance = PERIOD.sub('_', instance)
-    instance = COMMA.sub('_', instance)
-    
+    # if there's a device, concatenate it to the instance with an underscore
+    if device:
+        instance = '{}_{}'.format(make_safe_instance_string(device), instance)
     return instance
 
 
@@ -754,7 +749,10 @@ def initialize_data_gathering(logger, c_config, if_config_vars, agent_config_var
         'prev_endtime': time_now,
         'file_name': '',
         'data_type': get_data_type_from_project_type(if_config_vars),
-        'mode': 'LIVE'
+        'mode': 'LIVE',
+        'chunk_count': 0,
+        'start_time': time.time(),
+        'current_row': []
     }
     
     reset_metric_buffer(metric_buffer)
@@ -763,11 +761,22 @@ def initialize_data_gathering(logger, c_config, if_config_vars, agent_config_var
     return metric_buffer, track
 
 
-def clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track):
+def clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track, agent_config_vars=None):
     """Clear metric buffer and send data to InsightFinder"""
     if len(metric_buffer['buffer_dict']) > 0:
-        logger.debug('Sending data to InsightFinder')
-        send_data_wrapper(logger, c_config, if_config_vars, track)
+        # Move all buffer data to current_row for sending
+        buffer_values = list(metric_buffer['buffer_dict'].values())
+        
+        count = 0
+        for row in buffer_values:
+            for data_point in row:
+                track['current_row'].append(data_point)
+                count += 1
+        
+        # Send the data if we have any
+        if len(track['current_row']) > 0:
+            logger.debug('Sending {} data points to InsightFinder'.format(len(track['current_row'])))
+            send_data_wrapper(logger, c_config, if_config_vars, track, agent_config_vars)
         
     reset_metric_buffer(metric_buffer)
 
@@ -782,18 +791,19 @@ def reset_metric_buffer(metric_buffer):
 def reset_track(track):
     """Reset tracking variables"""
     track['entry_count'] = 0
+    track['start_time'] = time.time()
+    track['current_row'] = []
 
 
 ################################
 # Functions to send data to IF #
 ################################
-def send_data_wrapper(logger, c_config, if_config_vars, track):
+def send_data_wrapper(logger, c_config, if_config_vars, track, agent_config_vars=None):
     """Wrapper function to send data to InsightFinder"""
     logger.debug('--- Send data to IF ---')
-    
-    # placeholder for actual implementation
-    # This would include the logic to format and send data to InsightFinder
-    logger.info('Data sent to InsightFinder')
+    send_data_to_if(logger, c_config, if_config_vars, track, track['current_row'], agent_config_vars)
+    track['chunk_count'] += 1
+    reset_track(track)
 
 
 def safe_string_to_float(s):
@@ -802,6 +812,169 @@ def safe_string_to_float(s):
         return float(s)
     except (ValueError, TypeError):
         return 0.0
+
+
+def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config_vars, agent_config_vars=None):
+    """Convert metric data to InsightFinder format"""
+    to_send_data_dict = dict()
+    to_send_data_dict['licenseKey'] = if_config_vars['license_key']
+    to_send_data_dict['userName'] = if_config_vars['user_name']
+
+    data_dict = dict()
+    data_dict['projectName'] = if_config_vars['project_name']
+    data_dict['userName'] = if_config_vars['user_name']
+    if 'system_name' in if_config_vars and if_config_vars['system_name']:
+        data_dict['systemName'] = if_config_vars['system_name']
+    
+    instance_data_map = dict()
+    
+    # Get default component name from agent config
+    default_component_name = ''
+    if agent_config_vars and agent_config_vars.get('default_component_name'):
+        default_component_name = agent_config_vars['default_component_name']
+    
+    # Group data by instance and timestamp
+    for chunk in chunk_metric_data:
+        instance_name = chunk['instanceName']
+        component_name = chunk.get('componentName', default_component_name)
+        timestamp = str(chunk['timestamp'])
+        # device_type = chunk.get('device_type', 'mimosa_device')
+        host_id = chunk.get('host_id')
+        
+        if instance_name not in instance_data_map:
+            instance_data_map[instance_name] = {
+                'in': instance_name,
+                'cn': component_name,
+                # 'ct': 0,
+                'dit': {}
+            }
+        
+        if timestamp not in instance_data_map[instance_name]['dit']:
+            timestamp_entry = {
+                't': int(timestamp),
+                'm': []
+            }
+            if host_id:
+                timestamp_entry['k'] = {'hostId': host_id}
+            instance_data_map[instance_name]['dit'][timestamp] = timestamp_entry
+        
+        # Add metric to the metrics array
+        metric_entry = {
+            'm': chunk['metricName'],
+            'v': float(chunk['data'])
+        }
+        instance_data_map[instance_name]['dit'][timestamp]['m'].append(metric_entry)
+
+    data_dict['idm'] = instance_data_map
+    to_send_data_dict['data'] = data_dict
+
+    return to_send_data_dict
+
+
+def send_data_to_if(logger, cli_config_vars, if_config_vars, track, chunk_metric_data, agent_config_vars=None):
+    """Send data to InsightFinder"""
+    send_data_time = time.time()
+
+    # prepare data for metric streaming agent
+    data_to_post = None
+    json_to_post = None
+    
+    if 'METRIC' in if_config_vars['project_type'].upper():
+        data_to_post = convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config_vars, agent_config_vars)
+    else:
+        # For non-metric data types, use the raw chunk data
+        json_to_post = chunk_metric_data
+
+    # Save JSON data to file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_filename = f"mimosa_insightfinder_data.json"
+    try:
+        if data_to_post:
+            with open(json_filename, 'w') as f:
+                json.dump(data_to_post, f, indent=2)
+        elif json_to_post:
+            with open(json_filename, 'w') as f:
+                json.dump(json_to_post, f, indent=2)
+        logger.info(f"JSON data saved to {json_filename}")
+    except Exception as e:
+        logger.error(f"Failed to save JSON file: {e}")
+
+    # do not send if only testing
+    if cli_config_vars['testing']:
+        logger.info('Testing mode - would have sent {} data points to InsightFinder'.format(len(chunk_metric_data)))
+        if data_to_post:
+            logger.debug('Metric data sample: {}'.format(json.dumps(data_to_post, indent=2)[:500]))
+        elif json_to_post:
+            logger.debug('JSON data sample: {}'.format(json.dumps(json_to_post, indent=2)[:500]))
+        return
+
+    # send the data
+    if data_to_post:
+        logger.debug('Sending {} metric data points to InsightFinder'.format(len(chunk_metric_data)))
+        send_request(logger, if_config_vars['if_url'] + get_api_from_project_type(if_config_vars), 
+                    mode='POST', data=json.dumps(data_to_post),
+                    headers={'Content-Type': 'application/json'},
+                    proxies=get_proxy_dict(if_config_vars),
+                    verify=False)
+    elif json_to_post:
+        logger.debug('Sending {} JSON data points to InsightFinder'.format(len(chunk_metric_data)))
+        send_request(logger, if_config_vars['if_url'] + get_api_from_project_type(if_config_vars), 
+                    mode='POST', data=json.dumps(json_to_post),
+                    headers={'Content-Type': 'application/json'},
+                    proxies=get_proxy_dict(if_config_vars),
+                    verify=False)
+
+    logger.info('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
+
+
+def send_request(logger, url, mode='GET', failure_message='Failure!', success_message='Success!',
+                 **request_passthrough):
+    """Send a request to the given URL"""
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    
+    req = requests.get
+    if mode.upper() == 'POST':
+        req = requests.post
+
+    req_num = 0
+    for req_num in range(ATTEMPTS):
+        try:
+            response = req(url, **request_passthrough)
+            if response.status_code == requests.codes.ok:
+                logger.info(success_message)
+                return response
+            else:
+                logger.warning('Request failed with status code: {}'.format(response.status_code))
+                logger.warning('Response: {}'.format(response.text))
+        except Exception as e:
+            logger.warning('Request attempt {} failed: {}'.format(req_num + 1, str(e)))
+            if req_num < (ATTEMPTS - 1):
+                time.sleep(1)
+
+    logger.error('Failed! Gave up after {} attempts.'.format(req_num + 1))
+    return -1
+
+
+def get_proxy_dict(if_config_vars):
+    """Get proxy configuration dictionary"""
+    proxies = {}
+    if if_config_vars.get('if_http_proxy'):
+        proxies['http'] = if_config_vars['if_http_proxy']
+    if if_config_vars.get('if_https_proxy'):
+        proxies['https'] = if_config_vars['if_https_proxy']
+    return proxies
+
+
+def get_api_from_project_type(if_config_vars):
+    """Use project type to determine which API to post to"""
+    if 'INCIDENT' in if_config_vars['project_type'].upper():
+        return '/api/v1/incidentdatasenders'
+    elif 'DEPLOYMENT' in if_config_vars['project_type'].upper():
+        return '/api/v1/deploymentEventReceiver'
+    else:
+        # return '/api/v1/customprojectrawdata'
+        return '/api/v2/metric-data-receive'
 
 
 def get_data_type_from_project_type(if_config_vars):
@@ -850,7 +1023,7 @@ def main():
     start_data_processing(logger, cli_config_vars, if_config_vars, agent_config_vars, metric_buffer, track, cache_con, cache_cur, time_now)
     
     # clear remaining data
-    clear_metric_buffer(logger, cli_config_vars, if_config_vars, metric_buffer, track)
+    clear_metric_buffer(logger, cli_config_vars, if_config_vars, metric_buffer, track, agent_config_vars)
     
     # close cache connection
     cache_con.close()
