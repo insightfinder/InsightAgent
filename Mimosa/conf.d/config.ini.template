@@ -7,7 +7,7 @@ verify_certs = False
 network_id =
 action_names =
 ## Optional: Limit number of devices for faster processing (0 = no limit)
-max_devices =
+max_devices = 0
 ## Optional: Number of devices to query per API call (default: 25)
 api_batch_size = 50
 ## Optional: Number of data points to be streamed (default: 1)
