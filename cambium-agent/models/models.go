@@ -132,15 +132,15 @@ type RadiosResponse struct {
 
 // Link represents a single link in the E2E data
 type Link struct {
-	RSSI int `json:"rssi"`
-	SNR  int `json:"snr"`
+	RSSI  int `json:"rssi"`
+	SNR   int `json:"snr"`
+	RxMCS int `json:"rxMcs"`
 
 	// ZMAC          string `json:"zmac"`
 	// AMAC          string `json:"amac"`
 	// EIRP          int    `json:"eirp"`
 	// LinkAvailable int    `json:"linkAvailable"`
 	// Name          string `json:"name"`
-	// RxMCS         int    `json:"rxMcs"`
 	// TS            int64  `json:"ts"`
 	// TxMCS         int    `json:"txMcs"`
 	// Direction     int    `json:"direction"`
