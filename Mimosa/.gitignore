@@ -4,6 +4,7 @@ conf.d/config.ini
 # Mimosa Agent Generated Files
 mimosa_metrics_data.json
 mimosa_insightfinder_data*.json
+mimosa_failed_devices.json
 
 # Cache and temporary files
 cache/
