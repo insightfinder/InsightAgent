@@ -55,12 +55,10 @@ CACHE_NAME = 'cache/cache.db'
 
 
 def align_timestamp(timestamp, sampling_interval):
-    """Align timestamp to sampling interval"""
     if sampling_interval == 0 or not timestamp:
         return timestamp
     else:
-        return timestamp - (timestamp % sampling_interval)
-
+        return int(timestamp / (sampling_interval * 1000)) * sampling_interval * 1000
 
 def initialize_cache_connection():
     """Initialize SQLite cache connection"""
@@ -272,7 +270,7 @@ def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_name
     return metrics_data
 
 
-def query_mimosa_metrics(session, mimosa_uri, network_id, action_names, metrics_filter=None, verify_certs=True, max_devices=0, api_batch_size=25):
+def query_mimosa_metrics(session, mimosa_uri, network_id, action_names, verify_certs=True, max_devices=0, api_batch_size=25):
     """Query metrics from Mimosa device using optimized batch processing"""
     metrics_data = []
     
@@ -330,14 +328,6 @@ def query_mimosa_metrics(session, mimosa_uri, network_id, action_names, metrics_
                 session, mimosa_uri, network_id, action_names, devices_batch, verify_certs
             )
             
-            # Filter metrics if specified
-            if metrics_filter and len(metrics_filter) > 0:
-                filtered_metrics = []
-                for metric in batch_metrics:
-                    if metric['metric_name'] in metrics_filter:
-                        filtered_metrics.append(metric)
-                batch_metrics = filtered_metrics
-            
             metrics_data.extend(batch_metrics)
             logging.info(f'API batch {batch_num} collected {len(batch_metrics)} metrics from {len(devices_batch)} devices')
         
@@ -348,33 +338,6 @@ def query_mimosa_metrics(session, mimosa_uri, network_id, action_names, metrics_
     
     return metrics_data
 
-
-def extract_metric_value(data, metric_config):
-    """Extract metric value from response data based on configuration"""
-    value_path = metric_config.get('value_path', '')
-    
-    if not value_path:
-        return None
-    
-    # Navigate through nested JSON using dot notation
-    current_data = data
-    path_parts = value_path.split('.')
-    
-    try:
-        for part in path_parts:
-            if isinstance(current_data, dict):
-                current_data = current_data.get(part)
-            elif isinstance(current_data, list) and part.isdigit():
-                current_data = current_data[int(part)]
-            else:
-                return None
-        
-        return current_data
-        
-    except (KeyError, IndexError, TypeError):
-        return None
-
-
 def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
                           cache_cur, time_now):
     """Main data processing function"""
@@ -384,7 +347,6 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     username = agent_config_vars['username']
     password = agent_config_vars['password']
     verify_certs = agent_config_vars.get('verify_certs', True)
-    metrics_config = agent_config_vars['metrics_config']
     
     thread_pool = ThreadPool(agent_config_vars['thread_pool'])
 
@@ -400,7 +362,7 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             # Query metrics using the working endpoints
             max_devices = agent_config_vars.get('max_devices', 0)
             api_batch_size = agent_config_vars.get('api_batch_size', 25)
-            metrics_data = query_mimosa_metrics(session, mimosa_uri, network_id, agent_config_vars.get('action_names', ['Mimosa_B5_UL_Rate', 'Mimosa_B5_DL_Rate']), agent_config_vars.get('metrics_filter', []), verify_certs, max_devices, api_batch_size)
+            metrics_data = query_mimosa_metrics(session, mimosa_uri, network_id, agent_config_vars.get('action_names', ['Mimosa_B5_UL_Rate', 'Mimosa_B5_DL_Rate']), verify_certs, max_devices, api_batch_size)
 
             # Save metrics data to file for inspection
             output_file = f'mimosa_metrics_data.json'
@@ -469,7 +431,7 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
             'componentName': default_component_name,
             'metricName': safe_metric_key,
             'data': value,
-            'timestamp': aligned_timestamp
+            'timestamp': timestamp
         }
         
         # Add to metric buffer
@@ -508,12 +470,6 @@ def get_agent_config_vars(logger, config_ini):
         action_names_str = config_parser.get(mimosa_section, 'action_names', fallback='Mimosa_B5_UL_Rate,Mimosa_B5_DL_Rate').strip()
         action_names = [action.strip() for action in action_names_str.split(',') if action.strip()]
         
-        # Get metrics filter from config - comma-separated list or empty for all metrics
-        metrics_filter_str = config_parser.get(mimosa_section, 'metrics', fallback='').strip()
-        metrics_filter = []
-        if metrics_filter_str:
-            metrics_filter = [metric.strip() for metric in metrics_filter_str.split(',') if metric.strip()]
-        
         # Optional: Limit number of devices for testing/performance (0 = no limit)
         max_devices = config_parser.getint(mimosa_section, 'max_devices', fallback=0)
         
@@ -547,7 +503,6 @@ def get_agent_config_vars(logger, config_ini):
             'verify_certs': verify_certs,
             'network_id': network_id,
             'action_names': action_names,
-            'metrics_filter': metrics_filter,
             'max_devices': max_devices,
             'api_batch_size': api_batch_size,
             'metrics_config': metrics_config,
@@ -704,30 +659,22 @@ def make_safe_instance_string(instance, device=''):
 
 
 def make_safe_metric_key(metric):
-    """Make metric key safe for InsightFinder"""
-    metric = SPACES.sub('_', metric)
-    metric = SLASHES.sub('-', metric)
-    metric = UNDERSCORE.sub('_', metric)
-    metric = COLONS.sub('-', metric)
+    """ make safe string already handles this """
     metric = LEFT_BRACE.sub('(', metric)
     metric = RIGHT_BRACE.sub(')', metric)
-    metric = PERIOD.sub('_', metric)
-    metric = COMMA.sub('_', metric)
-    
+    metric = PERIOD.sub('/', metric)
     return metric
 
 
 def make_safe_string(string):
-    """Make string safe for InsightFinder"""
-    string = SPACES.sub('_', string)
-    string = SLASHES.sub('-', string)
-    string = UNDERSCORE.sub('_', string)
-    string = COLONS.sub('-', string)
-    string = LEFT_BRACE.sub('(', string)
-    string = RIGHT_BRACE.sub(')', string)
-    string = PERIOD.sub('_', string)
-    string = COMMA.sub('_', string)
-    
+    """
+    Take a single string and return the same string with spaces, slashes,
+    underscores, and non-alphanumeric characters subbed out.
+    """
+    string = SPACES.sub('-', string)
+    string = SLASHES.sub('.', string)
+    string = UNDERSCORE.sub('.', string)
+    string = NON_ALNUM.sub('', string)
     return string
 
 
