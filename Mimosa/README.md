@@ -119,7 +119,7 @@ When `data_points_count = 1`:
 When `data_points_count = 5`:
 - Collects the last 5 data points for each metric
 - Each data point includes its original timestamp
-- Useful for historical analysis and trend detection
+- Useful for historical analysis and trend detection, or if metrics are not updated every minute
 
 ### API Efficiency
 - **Batch Processing**: Groups multiple devices into single API calls
