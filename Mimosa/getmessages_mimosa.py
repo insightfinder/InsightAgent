@@ -60,6 +60,84 @@ def align_timestamp(timestamp, sampling_interval):
     else:
         return int(timestamp / (sampling_interval * 1000)) * sampling_interval * 1000
 
+
+def save_failed_devices_log(failed_devices):
+    """Save failed device metrics to JSON file for review"""
+    if not failed_devices:
+        return
+    
+    filename = 'mimosa_failed_devices.json'
+    
+    try:
+        # Load existing failures if file exists
+        existing_failures = []
+        
+        if os.path.exists(filename):
+            try:
+                with open(filename, 'r') as f:
+                    existing_data = json.load(f)
+                    if isinstance(existing_data, dict) and 'detailed_failures' in existing_data:
+                        existing_failures = existing_data['detailed_failures']
+                    elif isinstance(existing_data, list):
+                        existing_failures = existing_data
+            except:
+                existing_failures = []
+        
+        # Combine existing and new failures
+        all_failures = existing_failures + failed_devices
+        
+        # Create summary statistics
+        current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        failure_summary = {
+            'last_updated': current_timestamp,
+            'total_failed_requests': len(all_failures),
+            'unique_devices': len(set(f['device_id'] for f in all_failures)),
+            'unique_metrics': len(set(f['metric_name'] for f in all_failures)),
+            'failure_reasons': {},
+            'failed_devices_by_name': {},
+            'failed_metrics_by_type': {}
+        }
+        
+        # Analyze failure patterns
+        for failure in all_failures:
+            reason = failure['failure_reason']
+            device_name = failure['device_name']
+            metric_name = failure['metric_name']
+            
+            # Count failure reasons
+            failure_summary['failure_reasons'][reason] = failure_summary['failure_reasons'].get(reason, 0) + 1
+            
+            # Count failures by device
+            if device_name not in failure_summary['failed_devices_by_name']:
+                failure_summary['failed_devices_by_name'][device_name] = {
+                    'device_id': failure['device_id'],
+                    'failure_count': 0,
+                    'failed_metrics': []
+                }
+            failure_summary['failed_devices_by_name'][device_name]['failure_count'] += 1
+            if metric_name not in failure_summary['failed_devices_by_name'][device_name]['failed_metrics']:
+                failure_summary['failed_devices_by_name'][device_name]['failed_metrics'].append(metric_name)
+            
+            # Count failures by metric type
+            failure_summary['failed_metrics_by_type'][metric_name] = failure_summary['failed_metrics_by_type'].get(metric_name, 0) + 1
+        
+        # Save complete failure log to single file
+        failure_log = {
+            'summary': failure_summary,
+            'detailed_failures': all_failures
+        }
+        
+        # Save to single consolidated file
+        with open(filename, 'w') as f:
+            json.dump(failure_log, f, indent=2, default=str)
+        
+        logging.info(f'Updated failure log with {len(failed_devices)} new failures in {filename}')
+        logging.info(f'Total tracked failures: {len(all_failures)} ({failure_summary["unique_devices"]} devices, {failure_summary["unique_metrics"]} metrics)')
+        
+    except Exception as e:
+        logging.error(f'Failed to save device failure log: {str(e)}')
+
+
 def initialize_cache_connection():
     """Initialize SQLite cache connection"""
     cache_loc = abs_path_from_cur(CACHE_NAME)
@@ -127,6 +205,7 @@ def mimosa_login(mimosa_uri, username, password, verify_certs=True):
 def fetch_device_metrics_batch(session, mimosa_uri, network_id, action_names, devices_batch, verify_certs=True, data_points_count=1):
     """Fetch metrics for a batch of devices using a single API call"""
     metrics_data = []
+    failed_devices = []
     multi_series_url = urljoin(mimosa_uri, f'/{network_id}/devices/multiSeriesData/')
     
     # Create a device lookup dictionary for fast access
@@ -150,6 +229,9 @@ def fetch_device_metrics_batch(session, mimosa_uri, network_id, action_names, de
         
         series_data = response.json()
         
+        # Track which devices we got data for
+        devices_with_data = set()
+        
         # Parse the response which contains data for all devices
         if isinstance(series_data, list) and len(series_data) > 0:
             for metric_obj in series_data:
@@ -167,6 +249,7 @@ def fetch_device_metrics_batch(session, mimosa_uri, network_id, action_names, de
                     device_name = device.get('friendlyName', f'device_{device_id}')
                     
                     if isinstance(data_array, list) and len(data_array) > 0:
+                        devices_with_data.add(device_id)
                         # Get the latest N data points based on data_points_count
                         num_points = min(data_points_count, len(data_array))
                         latest_entries = data_array[-num_points:]  # Get last N entries
@@ -190,14 +273,75 @@ def fetch_device_metrics_batch(session, mimosa_uri, network_id, action_names, de
                                     'mac_address': device.get('macAddress', ''),
                                     'sw_version': device.get('swVersion', '')
                                 })
+                    else:
+                        # Track devices/metrics with no data
+                        failed_devices.append({
+                            'device_id': device_id,
+                            'device_name': device_name,
+                            'metric_name': action_name,
+                            'failure_reason': 'No data returned for metric',
+                            'timestamp': int(time.time() * 1000),
+                            'device_model': device.get('modelName', 'Unknown'),
+                            'device_type': device.get('deviceType', 'Unknown'),
+                            'ip_address': device.get('ipAddress', ''),
+                            'mac_address': device.get('macAddress', ''),
+                            'sw_version': device.get('swVersion', '')
+                        })
+        
+        # Track devices that had no data at all
+        for device in devices_batch:
+            device_id = device.get('id')
+            if device_id not in devices_with_data:
+                device_name = device.get('friendlyName', f'device_{device_id}')
+                for action_name in action_names:
+                    failed_devices.append({
+                        'device_id': device_id,
+                        'device_name': device_name,
+                        'metric_name': action_name,
+                        'failure_reason': 'No data returned for device',
+                        'timestamp': int(time.time() * 1000),
+                        'device_model': device.get('modelName', 'Unknown'),
+                        'device_type': device.get('deviceType', 'Unknown'),
+                        'ip_address': device.get('ipAddress', ''),
+                        'mac_address': device.get('macAddress', ''),
+                        'sw_version': device.get('swVersion', '')
+                    })
         
         logging.debug(f'Collected {len(metrics_data)} metrics from {len(devices_batch)} devices in single call')
+        if failed_devices:
+            logging.debug(f'Found {len(failed_devices)} failed metric requests in batch')
         
     except Exception as e:
+        # Track batch failure for all devices/metrics
+        for device in devices_batch:
+            device_id = device.get('id')
+            device_name = device.get('friendlyName', f'device_{device_id}')
+            for action_name in action_names:
+                failed_devices.append({
+                    'device_id': device_id,
+                    'device_name': device_name,
+                    'metric_name': action_name,
+                    'failure_reason': f'Batch API call failed: {str(e)}',
+                    'timestamp': int(time.time() * 1000),
+                    'device_model': device.get('modelName', 'Unknown'),
+                    'device_type': device.get('deviceType', 'Unknown'),
+                    'ip_address': device.get('ipAddress', ''),
+                    'mac_address': device.get('macAddress', ''),
+                    'sw_version': device.get('swVersion', '')
+                })
+        
         logging.warning(f'Failed to collect metrics for device batch: {str(e)}')
         # Fallback to individual device calls if batch fails
         logging.info('Falling back to individual device API calls')
-        return fetch_device_metrics_individual(session, mimosa_uri, network_id, action_names, devices_batch, verify_certs, data_points_count)
+        individual_metrics, individual_failures = fetch_device_metrics_individual(session, mimosa_uri, network_id, action_names, devices_batch, verify_certs, data_points_count)
+        
+        # Save failures from both batch and individual attempts
+        save_failed_devices_log(failed_devices + individual_failures)
+        return individual_metrics
+    
+    # Save any failures from successful batch
+    if failed_devices:
+        save_failed_devices_log(failed_devices)
     
     return metrics_data
 
@@ -207,12 +351,14 @@ def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_name
     from concurrent.futures import ThreadPoolExecutor, as_completed
     
     metrics_data = []
+    failed_devices = []
     multi_series_url = urljoin(mimosa_uri, f'/{network_id}/devices/multiSeriesData/')
     current_time = int(time.time() * 1000)
     
     def fetch_single_device_metrics(device):
         """Fetch metrics for a single device"""
         device_metrics = []
+        device_failures = []
         device_id = device.get('id')
         device_name = device.get('friendlyName', f'device_{device_id}')
         
@@ -228,6 +374,9 @@ def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_name
             
             series_data = response.json()
             
+            # Track which metrics we got data for
+            metrics_with_data = set()
+            
             # Parse the response
             if isinstance(series_data, list) and len(series_data) > 0:
                 for metric_obj in series_data:
@@ -236,6 +385,7 @@ def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_name
                         data_array = metric_obj.get('data', [])
                         
                         if isinstance(data_array, list) and len(data_array) > 0:
+                            metrics_with_data.add(action_name)
                             # Get the latest N data points based on data_points_count
                             num_points = min(data_points_count, len(data_array))
                             latest_entries = data_array[-num_points:]  # Get last N entries
@@ -259,10 +409,55 @@ def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_name
                                         'mac_address': device.get('macAddress', ''),
                                         'sw_version': device.get('swVersion', '')
                                     })
+                        else:
+                            # Track metric with no data
+                            device_failures.append({
+                                'device_id': device_id,
+                                'device_name': device_name,
+                                'metric_name': action_name,
+                                'failure_reason': 'No data returned for metric (individual call)',
+                                'timestamp': current_time,
+                                'device_model': device.get('modelName', 'Unknown'),
+                                'device_type': device.get('deviceType', 'Unknown'),
+                                'ip_address': device.get('ipAddress', ''),
+                                'mac_address': device.get('macAddress', ''),
+                                'sw_version': device.get('swVersion', '')
+                            })
+            
+            # Track missing metrics
+            for action_name in action_names:
+                if action_name not in metrics_with_data:
+                    device_failures.append({
+                        'device_id': device_id,
+                        'device_name': device_name,
+                        'metric_name': action_name,
+                        'failure_reason': 'Metric not returned by API (individual call)',
+                        'timestamp': current_time,
+                        'device_model': device.get('modelName', 'Unknown'),
+                        'device_type': device.get('deviceType', 'Unknown'),
+                        'ip_address': device.get('ipAddress', ''),
+                        'mac_address': device.get('macAddress', ''),
+                        'sw_version': device.get('swVersion', '')
+                    })
+                    
         except Exception as e:
             logging.debug(f'Failed to collect metrics for device {device_name}: {str(e)}')
+            # Track all metrics as failed for this device
+            for action_name in action_names:
+                device_failures.append({
+                    'device_id': device_id,
+                    'device_name': device_name,
+                    'metric_name': action_name,
+                    'failure_reason': f'Device API call failed: {str(e)}',
+                    'timestamp': current_time,
+                    'device_model': device.get('modelName', 'Unknown'),
+                    'device_type': device.get('deviceType', 'Unknown'),
+                    'ip_address': device.get('ipAddress', ''),
+                    'mac_address': device.get('macAddress', ''),
+                    'sw_version': device.get('swVersion', '')
+                })
         
-        return device_metrics
+        return device_metrics, device_failures
     
     # Use ThreadPoolExecutor for concurrent requests
     with ThreadPoolExecutor(max_workers=10) as executor:
@@ -270,13 +465,35 @@ def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_name
         
         for future in as_completed(future_to_device):
             try:
-                device_metrics = future.result()
+                device_metrics, device_failures = future.result()
                 metrics_data.extend(device_metrics)
+                failed_devices.extend(device_failures)
             except Exception as e:
                 device = future_to_device[future]
                 logging.debug(f'Device metrics fetch failed: {str(e)}')
+                # Track all metrics as failed for this device
+                device_id = device.get('id')
+                device_name = device.get('friendlyName', f'device_{device_id}')
+                for action_name in action_names:
+                    failed_devices.append({
+                        'device_id': device_id,
+                        'device_name': device_name,
+                        'metric_name': action_name,
+                        'failure_reason': f'Future execution failed: {str(e)}',
+                        'timestamp': current_time,
+                        'device_model': device.get('modelName', 'Unknown'),
+                        'device_type': device.get('deviceType', 'Unknown'),
+                        'ip_address': device.get('ipAddress', ''),
+                        'mac_address': device.get('macAddress', ''),
+                        'sw_version': device.get('swVersion', '')
+                    })
     
-    return metrics_data
+    # Save individual call failures
+    if failed_devices:
+        save_failed_devices_log(failed_devices)
+        logging.debug(f'Individual calls: {len(failed_devices)} failed metric requests')
+    
+    return metrics_data, failed_devices
 
 
 def query_mimosa_metrics(session, mimosa_uri, network_id, action_names, verify_certs=True, max_devices=0, api_batch_size=25, data_points_count=1):
