@@ -26,7 +26,6 @@ COMPONENT_REGEX_MAPPING = [
     (r'.*cpe.*', 'CPE'),
     (r'.*enb.*', 'eNB'),
     (r'.*esxi.*', 'ESXI'),
-    (r'.*gamc.*', 'GAMC'),
     (r'.*isp.*', 'ISP'),
     (r'.*olt.*', 'OLT'),
     (r'.*pdu.*', 'PDU'),
@@ -34,7 +33,7 @@ COMPONENT_REGEX_MAPPING = [
     (r'.*router.*', 'Router'),
     (r'.*smartbox.*', 'Smartbox'),
     (r'.*ups.*', 'UPS'),
-    (r'.*-gam$', 'GAM'),
+    (r'.*-gam.?$', 'GAM'),
     (r'.*wan.*', 'WAN'),
 ]
 
