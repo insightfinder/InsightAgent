@@ -1,93 +1,37 @@
 [mimosa]
 ## Mimosa device connection info
-# required - Mimosa device URI (e.g., http://192.168.1.100 or https://mimosa-device.local)
-mimosa_uri = http://192.168.1.100
-# required - Username for Mimosa device login
-username = admin
-# required - Password for Mimosa device login
-password = password123
-# True or False - Whether to verify SSL certificates
-verify_certs = True
-
-[metrics]
-## Define metrics to collect from Mimosa device
-## Format: metric_name = endpoint:value_path:params
-## 
-## Examples:
-## Signal strength metrics
-# rssi = /api/stats:wireless.rssi
-# snr = /api/stats:wireless.snr
-# noise_floor = /api/stats:wireless.noise_floor
-# 
-## Throughput metrics  
-# tx_rate = /api/stats:throughput.tx_rate
-# rx_rate = /api/stats:throughput.rx_rate
-# tx_bytes = /api/stats:counters.tx_bytes
-# rx_bytes = /api/stats:counters.rx_bytes
-#
-## System metrics
-# cpu_usage = /api/system:cpu.usage_percent
-# memory_usage = /api/system:memory.usage_percent
-# temperature = /api/system:temperature.celsius
-# uptime = /api/system:uptime.seconds
-#
-## Network interface metrics
-# ethernet_tx = /api/interfaces:ethernet.tx_bytes
-# ethernet_rx = /api/interfaces:ethernet.rx_bytes
-# wireless_tx = /api/interfaces:wireless.tx_bytes
-# wireless_rx = /api/interfaces:wireless.rx_bytes
-
-# Example metrics configuration (uncomment and modify as needed):
-rssi = /api/stats:wireless.rssi
-snr = /api/stats:wireless.snr
-tx_rate = /api/stats:throughput.tx_rate
-rx_rate = /api/stats:throughput.rx_rate
-cpu_usage = /api/system:cpu.usage_percent
+mimosa_uri = https://cloud.mimosa.co
+username =
+password =
+verify_certs = False
+network_id =
+action_names =
+## Optional: Limit number of devices for faster processing (0 = no limit)
+max_devices =
+## Optional: Number of devices to query per API call (default: 25)
+api_batch_size = 50
+## Optional: Number of data points to be streamed (default: 1)
+data_points_count = 5
 
 [agent]
-## Agent configuration
-# Default component name if not specified elsewhere
-default_component_name = mimosa_device
-# Instance name for this Mimosa device
-instance_name = mimosa_001
-# Number of threads to use for data collection
-thread_pool = 20
-# Historical time range (leave empty for real-time collection)
-# Format: 2020-04-14 00:00:00,2020-04-15 00:00:00
+default_component_name =
+thread_pool = 5
 his_time_range =
-
-## proxy settings for agent
 agent_http_proxy =
 agent_https_proxy =
 
 [insightfinder]
-## InsightFinder configuration
-# required - InsightFinder username
-user_name = your_username
-# required - InsightFinder license key
-license_key = your_license_key
-# optional - InsightFinder token (if using token-based auth)
+user_name =
+license_key =
 token =
-# required - Name of the project in InsightFinder
-project_name = Mimosa_Metrics
-# optional - System name (will use project_name if not specified)
-system_name = Mimosa_System
-# required - Project type: metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
+project_name =
+system_name = 
 project_type = metric
-# Set to 'yes' if this is a container project
 containerize = no
-
-# Set to empty to create normal projects
-# set to 'vm' to use 'DynamicVM' as the AgentType, set to 'host' to use 'DynamicHost' as the AgentType
 dynamic_metric_type =
-
-# Data collection intervals
-sampling_interval = 15s
+sampling_interval = 60s
 run_interval = 60s
-# Maximum chunk size to send to InsightFinder (in KB)
 chunk_size_kb = 2048
-# InsightFinder URL
 if_url = https://app.insightfinder.com
-# Proxy settings for InsightFinder communication
 if_http_proxy =
 if_https_proxy =
