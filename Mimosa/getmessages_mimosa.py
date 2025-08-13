@@ -124,7 +124,7 @@ def mimosa_login(mimosa_uri, username, password, verify_certs=True):
         raise Exception(f"Failed to login to Mimosa: {str(e)}")
 
 
-def fetch_device_metrics_batch(session, mimosa_uri, network_id, action_names, devices_batch, verify_certs=True):
+def fetch_device_metrics_batch(session, mimosa_uri, network_id, action_names, devices_batch, verify_certs=True, data_points_count=1):
     """Fetch metrics for a batch of devices using a single API call"""
     metrics_data = []
     multi_series_url = urljoin(mimosa_uri, f'/{network_id}/devices/multiSeriesData/')
@@ -167,25 +167,29 @@ def fetch_device_metrics_batch(session, mimosa_uri, network_id, action_names, de
                     device_name = device.get('friendlyName', f'device_{device_id}')
                     
                     if isinstance(data_array, list) and len(data_array) > 0:
-                        latest_entry = data_array[-1]
+                        # Get the latest N data points based on data_points_count
+                        num_points = min(data_points_count, len(data_array))
+                        latest_entries = data_array[-num_points:]  # Get last N entries
                         
-                        if isinstance(latest_entry, list) and len(latest_entry) >= 2:
-                            value = latest_entry[1]
-                            timestamp = latest_entry[0]
-                            metric_name = action_name.lower().replace('mimosa_', '')
-                            
-                            metrics_data.append({
-                                'metric_name': metric_name,
-                                'value': value,
-                                'timestamp': timestamp,
-                                'device_id': device_id,
-                                'device_name': device_name,
-                                'device_model': device.get('modelName', 'Unknown'),
-                                'device_type': device.get('deviceType', 'Unknown'),
-                                'ip_address': device.get('ipAddress', ''),
-                                'mac_address': device.get('macAddress', ''),
-                                'sw_version': device.get('swVersion', '')
-                            })
+                        # Process each data point
+                        for entry in latest_entries:
+                            if isinstance(entry, list) and len(entry) >= 2:
+                                value = entry[1]
+                                timestamp = entry[0]
+                                metric_name = action_name.lower().replace('mimosa_', '')
+                                
+                                metrics_data.append({
+                                    'metric_name': metric_name,
+                                    'value': value,
+                                    'timestamp': timestamp,
+                                    'device_id': device_id,
+                                    'device_name': device_name,
+                                    'device_model': device.get('modelName', 'Unknown'),
+                                    'device_type': device.get('deviceType', 'Unknown'),
+                                    'ip_address': device.get('ipAddress', ''),
+                                    'mac_address': device.get('macAddress', ''),
+                                    'sw_version': device.get('swVersion', '')
+                                })
         
         logging.debug(f'Collected {len(metrics_data)} metrics from {len(devices_batch)} devices in single call')
         
@@ -193,12 +197,12 @@ def fetch_device_metrics_batch(session, mimosa_uri, network_id, action_names, de
         logging.warning(f'Failed to collect metrics for device batch: {str(e)}')
         # Fallback to individual device calls if batch fails
         logging.info('Falling back to individual device API calls')
-        return fetch_device_metrics_individual(session, mimosa_uri, network_id, action_names, devices_batch, verify_certs)
+        return fetch_device_metrics_individual(session, mimosa_uri, network_id, action_names, devices_batch, verify_certs, data_points_count)
     
     return metrics_data
 
 
-def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_names, devices_batch, verify_certs=True):
+def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_names, devices_batch, verify_certs=True, data_points_count=1):
     """Fallback method: fetch metrics for devices individually (original method)"""
     from concurrent.futures import ThreadPoolExecutor, as_completed
     
@@ -232,24 +236,29 @@ def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_name
                         data_array = metric_obj.get('data', [])
                         
                         if isinstance(data_array, list) and len(data_array) > 0:
-                            latest_entry = data_array[-1]
+                            # Get the latest N data points based on data_points_count
+                            num_points = min(data_points_count, len(data_array))
+                            latest_entries = data_array[-num_points:]  # Get last N entries
                             
-                            if isinstance(latest_entry, list) and len(latest_entry) >= 2:
-                                value = latest_entry[1]
-                                metric_name = action_name.lower().replace('mimosa_', '').replace('_', '_')
-                                
-                                device_metrics.append({
-                                    'metric_name': metric_name,
-                                    'value': value,
-                                    'timestamp': current_time,
-                                    'device_id': device_id,
-                                    'device_name': device_name,
-                                    'device_model': device.get('modelName', 'Unknown'),
-                                    'device_type': device.get('deviceType', 'Unknown'),
-                                    'ip_address': device.get('ipAddress', ''),
-                                    'mac_address': device.get('macAddress', ''),
-                                    'sw_version': device.get('swVersion', '')
-                                })
+                            # Process each data point
+                            for entry in latest_entries:
+                                if isinstance(entry, list) and len(entry) >= 2:
+                                    value = entry[1]
+                                    timestamp = entry[0]
+                                    metric_name = action_name.lower().replace('mimosa_', '').replace('_', '_')
+                                    
+                                    device_metrics.append({
+                                        'metric_name': metric_name,
+                                        'value': value,
+                                        'timestamp': timestamp,
+                                        'device_id': device_id,
+                                        'device_name': device_name,
+                                        'device_model': device.get('modelName', 'Unknown'),
+                                        'device_type': device.get('deviceType', 'Unknown'),
+                                        'ip_address': device.get('ipAddress', ''),
+                                        'mac_address': device.get('macAddress', ''),
+                                        'sw_version': device.get('swVersion', '')
+                                    })
         except Exception as e:
             logging.debug(f'Failed to collect metrics for device {device_name}: {str(e)}')
         
@@ -270,7 +279,7 @@ def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_name
     return metrics_data
 
 
-def query_mimosa_metrics(session, mimosa_uri, network_id, action_names, verify_certs=True, max_devices=0, api_batch_size=25):
+def query_mimosa_metrics(session, mimosa_uri, network_id, action_names, verify_certs=True, max_devices=0, api_batch_size=25, data_points_count=1):
     """Query metrics from Mimosa device using optimized batch processing"""
     metrics_data = []
     
@@ -325,7 +334,7 @@ def query_mimosa_metrics(session, mimosa_uri, network_id, action_names, verify_c
             
             # Fetch metrics for this batch using single API call
             batch_metrics = fetch_device_metrics_batch(
-                session, mimosa_uri, network_id, action_names, devices_batch, verify_certs
+                session, mimosa_uri, network_id, action_names, devices_batch, verify_certs, data_points_count
             )
             
             metrics_data.extend(batch_metrics)
@@ -362,7 +371,8 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             # Query metrics using the working endpoints
             max_devices = agent_config_vars.get('max_devices', 0)
             api_batch_size = agent_config_vars.get('api_batch_size', 25)
-            metrics_data = query_mimosa_metrics(session, mimosa_uri, network_id, agent_config_vars.get('action_names', ['Mimosa_B5_UL_Rate', 'Mimosa_B5_DL_Rate']), verify_certs, max_devices, api_batch_size)
+            data_points_count = agent_config_vars.get('data_points_count', 1)
+            metrics_data = query_mimosa_metrics(session, mimosa_uri, network_id, agent_config_vars.get('action_names', ['Mimosa_B5_UL_Rate', 'Mimosa_B5_DL_Rate']), verify_certs, max_devices, api_batch_size, data_points_count)
 
             # Save metrics data to file for inspection
             output_file = f'mimosa_metrics_data.json'
@@ -476,6 +486,9 @@ def get_agent_config_vars(logger, config_ini):
         # Optional: Number of devices to query per API call (default: 25)
         api_batch_size = config_parser.getint(mimosa_section, 'api_batch_size', fallback=25)
         
+        # Optional: Number of data points to collect per metric (default: 1 - latest only)
+        data_points_count = config_parser.getint(mimosa_section, 'data_points_count', fallback=1)
+        
         # Metrics configuration (keeping for backward compatibility but not used with new API)
         metrics_config = {}
         if config_parser.has_section('metrics'):
@@ -505,6 +518,7 @@ def get_agent_config_vars(logger, config_ini):
             'action_names': action_names,
             'max_devices': max_devices,
             'api_batch_size': api_batch_size,
+            'data_points_count': data_points_count,
             'metrics_config': metrics_config,
             'thread_pool': thread_pool,
             'default_component_name': default_component_name,
