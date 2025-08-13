@@ -9,7 +9,7 @@ action_names =
 ## Optional: Limit number of devices for faster processing (0 = no limit)
 max_devices = 0
 ## Optional: Number of devices to query per API call (default: 25)
-api_batch_size = 50
+api_batch_size = 25
 ## Optional: Number of data points to be streamed (default: 1)
 data_points_count = 5
 
