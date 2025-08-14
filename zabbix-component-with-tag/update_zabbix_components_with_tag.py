@@ -35,6 +35,8 @@ COMPONENT_REGEX_MAPPING = [
     (r'.*ups.*', 'UPS'),
     (r'.*-gam.?$', 'GAM'),
     (r'.*wan.*', 'WAN'),
+    (r'.*-dn$', 'DN'),
+    (r'.*-cn$', 'CN'),
 ]
 
 # declare a few vars
