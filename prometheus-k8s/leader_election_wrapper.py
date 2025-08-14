@@ -162,10 +162,8 @@ class LeaderElectionWrapper:
                 return False
 
     def _run_prometheus_agent(self):
-        """Run the original prometheus agent script"""
-        script_path = os.path.join(
-            os.path.dirname(__file__), "getmessages_prometheus.py"
-        )
+        """Run the original prometheus agent script (cron.py)"""
+        script_path = os.path.join(os.path.dirname(__file__), "cron.py")
         cmd = [sys.executable, script_path] + sys.argv[
             1:
         ]  # Pass through any command line arguments
