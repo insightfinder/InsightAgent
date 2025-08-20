@@ -1,0 +1,6 @@
+arrow
+pytz
+regex
+requests
+apscheduler
+kubernetes
