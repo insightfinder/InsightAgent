@@ -1,0 +1,115 @@
+[prometheus]
+## prometheus info
+# required
+prometheus_uri = http://prometheus-server.monitoring
+# Basic Authentication
+user =
+password =
+# True or False
+verify_certs =
+# path to ca bundle
+ca_certs =
+# path to client cert
+client_cert =
+# path to client key
+client_key =
+
+## metrics
+# Prometheus query used to query all the needed metrics. If not set, it will use `{__name__=~".+"}` to query all metrics. It has
+# two formats: 1. prometheus query used to query several metrics. 2. string format like <metric_name>:<instance_fields>:<prometheus_query>.
+# It can contains several queries, each query is separated by `;`.
+# For example:
+# {__name__=~".+"};metric_bytes:instance:rate(windows_net_bytes_sent_total[5m]);cpu_time_total::sum by (mode,instance) (irate(windows_cpu_time_total[5m]))
+prometheus_query =
+
+# If prometheus_query is set, this is the batch size of metrics to query in one request. Keep it empty if you want to query all metrics in one request.
+prometheus_query_metric_batch_size =
+
+# regex to filter metrics if batch size is set
+batch_metric_filter_regex =
+
+# The json file contains the prometheus query. For each json object, it contains "query", optional "metric_batch_size", optional "metric_name" and optional "instance_fields" string array.
+# For example: prometheus_query_json = prometheus_query.json
+prometheus_query_json =
+
+# metric's name field, Multiple fields are separated by commas. EX: __name__, job, the metric name =  {__name__}_{job}
+metrics_name_field =
+# history data time config. If these options is set, the agent will query results by time range
+# time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
+his_time_range =
+
+# raw, rawtail, csv, csvtail, xls, xlsx, json, jsontail, avro, or xml
+# *tail formats keep track of the current file & position + completed files in [state] below
+data_format = json
+
+## message parsing
+# timestamp format, as library [arrow]. multiple fields can be formatted together to create the timestamp a la `YYYY-MM-DD HH:mm:ss ZZ`. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
+timestamp_format =
+# timezone, as per pytz
+timezone =
+timestamp_field =
+# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+target_timestamp_timezone = UTC
+component_field =
+# Default component name if component_field is not set or field value is empty.
+default_component_name =
+# if no instance given, will set to 'Application'. Can also set instance name from multiple fields which separated by commas. Ex: instance_name_part1,instance_name_part2.
+instance_field = instance
+# Instance name suffix, if want to add on to instance name obtained from labels
+instance_name_suffix =
+# field names used to get host id
+dynamic_host_field =
+# instance_whitelist is a regex string used to define which instances will be filtered.
+instance_whitelist =
+# Field name of device. Can also set device name from multiple fields which separated by commas. Ex: device_name_part1,device_name_part2.
+device_field =
+
+# The type of this device.
+# 0: Default container.
+# 1: Process
+# 2: Disk
+# 3: Network Interface
+device_type = 0
+
+# The connector for build `instance_field` or `device_field` from multiple fields. Default is `-`.
+instance_connector =
+# number of thread to used in the pool, default is 20
+thread_pool = 20
+# number of the worker processes, default is count_of_cpu * 4
+processes =
+# minutes the main process wait for workers to finish, default is 5
+timeout = 5
+
+
+# The seconds to delay for each prometheus query, default is 10 seconds
+# The agent will always query the metrics at (Current Timestamp - query_delay)
+query_delay = 10
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
+[insightfinder]
+user_name =
+license_key =
+token =
+# Name of the project created in the InsightFinder UI, If this project is not exist, agent will create it automatically.
+project_name = prom-k8s
+# Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name = TST
+# metric, metricreplay, log, logreplay, alert, alertreplay, incident, incidentreplay, deployment, deploymentreplay, trace, tracereplay
+project_type = metric
+# Set to `YES` if project is container.
+containerize = no
+
+# Set to empty to create normal projects
+# set to 'vm' to use 'DynamicVM' as the AgentType, set to 'host' to use 'DynamicHost' as the AgentType
+dynamic_metric_type =
+
+sampling_interval = 15s
+run_interval = 60s
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://stg.insightfinder.com
+if_http_proxy =
+if_https_proxy =
