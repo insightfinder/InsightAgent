@@ -1,0 +1,5 @@
+requests>=2.25.1
+configparser>=5.0.0
+pytz>=2021.1
+arrow>=1.1.0
+regex>=2021.4.4

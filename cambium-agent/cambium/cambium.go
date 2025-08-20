@@ -707,7 +707,7 @@ func worker(jobs <-chan Job, results chan<- Result) {
 						metricData.Data["RSSI"] = rssiValue
 						metricData.Data["SNR"] = firstValidLink.SNR
 
-						// metricData.Data["RxMCS"] = firstValidLink.RxMCS
+						metricData.Data["RxMCS"] = firstValidLink.RxMCS
 						// metricData.Data["TxMCS"] = firstValidLink.TxMCS
 						// metricData.Data["Link Count"] = linkCount
 
