@@ -1,0 +1,37 @@
+[mimosa]
+## Mimosa device connection info
+mimosa_uri = https://cloud.mimosa.co
+username =
+password =
+verify_certs = False
+network_id =
+action_names =
+## Optional: Limit number of devices for faster processing (0 = no limit)
+max_devices = 0
+## Optional: Number of devices to query per API call (default: 25)
+api_batch_size = 25
+## Optional: Number of data points to be streamed (default: 1)
+data_points_count = 5
+
+[agent]
+default_component_name =
+thread_pool = 5
+his_time_range =
+agent_http_proxy =
+agent_https_proxy =
+
+[insightfinder]
+user_name =
+license_key =
+token =
+project_name =
+system_name = 
+project_type = metric
+containerize = no
+dynamic_metric_type =
+sampling_interval = 60s
+run_interval = 60s
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
