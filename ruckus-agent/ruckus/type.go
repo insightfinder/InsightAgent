@@ -37,6 +37,13 @@ type APBulkQueryRequest struct {
 	Limit   int      `json:"limit"`
 }
 
+// Client query request structure
+type ClientBulkQueryRequest struct {
+	Filters []Filter `json:"filters"`
+	Page    int      `json:"page"`
+	Limit   int      `json:"limit"`
+}
+
 type Filter struct {
 	Type  string `json:"type"`
 	Value string `json:"value"`
