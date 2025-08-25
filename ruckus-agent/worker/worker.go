@@ -115,6 +115,17 @@ func (w *Worker) collectAndSendStreaming() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
+	// First, fetch all client data for RSSI/SNR enrichment
+	logrus.Info("Fetching client data for RSSI/SNR enrichment...")
+	clientMap, clientErr := w.ruckusService.GetAllClientsWithRSSISNR(ctx)
+	if clientErr != nil {
+		logrus.Errorf("Failed to fetch client data: %v", clientErr)
+		logrus.Info("Continuing without client enrichment data...")
+		clientMap = make(map[string]models.ClientInfo)
+	} else {
+		logrus.Infof("Successfully fetched client data for %d APs", len(clientMap))
+	}
+
 	// Process metrics buffer
 	var metricsBuffer []models.MetricData
 	var bufferMutex sync.Mutex
@@ -140,12 +151,15 @@ func (w *Worker) collectAndSendStreaming() {
 
 	// Processor function for each chunk
 	processor := func(apChunk []models.APDetail) error {
+		// Enrich AP data with client metrics (RSSI/SNR)
+		enrichedChunk := ruckus.EnrichAPDataWithClientMetrics(apChunk, clientMap)
+
 		// Update stats
-		w.updateStats(apChunk)
+		w.updateStats(enrichedChunk)
 
 		// Convert to metrics
 		var chunkMetrics []models.MetricData
-		for _, ap := range apChunk {
+		for _, ap := range enrichedChunk {
 			metric := ap.ToMetricData(w.ruckusService.Config.SendComponentNameAsAP)
 			chunkMetrics = append(chunkMetrics, *metric)
 		}
@@ -155,7 +169,7 @@ func (w *Worker) collectAndSendStreaming() {
 
 		if w.testMode {
 			// Write chunk to test file
-			if err := w.writeChunkToTestFile(rawDataFile, apChunk, &firstChunk); err != nil {
+			if err := w.writeChunkToTestFile(rawDataFile, enrichedChunk, &firstChunk); err != nil {
 				return fmt.Errorf("failed to write test data: %v", err)
 			}
 		} else {

@@ -10,6 +10,26 @@ type APListResponse struct {
 	List       []APInfo `json:"list"`
 }
 
+// Client API Response structures for RSSI/SNR enrichment
+type ClientResponse struct {
+	TotalCount int          `json:"totalCount"`
+	HasMore    bool         `json:"hasMore"`
+	FirstIndex int          `json:"firstIndex"`
+	List       []ClientInfo `json:"list"`
+}
+
+type ClientInfo struct {
+	APMac     string `json:"apMac"`
+	ClientMac string `json:"clientMac"`
+	RSSI      int    `json:"rssi"`
+	SNR       int    `json:"snr"`
+	// Add other fields as needed for future use
+	// APName    string `json:"apName"`
+	// SSID      string `json:"ssid"`
+	// Status    string `json:"status"`
+	// IPAddress string `json:"ipAddress"`
+}
+
 type APInfo struct {
 	MAC       string `json:"mac"`
 	ZoneID    string `json:"zoneId"`
@@ -40,9 +60,9 @@ type APDetail struct {
 	APMAC           string `json:"apMac"`
 	IP              string `json:"ip"`
 	ZoneName        string `json:"zoneName"`
-	Model           string `json:"model"`
-	FirmwareVersion string `json:"firmwareVersion"`
-	LastSeen        int64  `json:"lastSeen"`
+	// Model           string `json:"model"`
+	// FirmwareVersion string `json:"firmwareVersion"`
+	// LastSeen        int64  `json:"lastSeen"`
 
 	// Critical Fields (Must Monitor)
 	Status                       string  `json:"status"`
@@ -83,6 +103,10 @@ type APDetail struct {
 	Capacity    int    `json:"capacity"`
 	Serial      string `json:"serial"`
 	APGroupName string `json:"apGroupName"`
+
+	// Client-derived metrics (enriched from client data)
+	RSSI *int `json:"rssi,omitempty"` // Average RSSI from first client (positive value)
+	SNR  *int `json:"snr,omitempty"`  // Average SNR from first client
 }
 
 // InsightFinder data structure
@@ -102,7 +126,7 @@ func (ap *APDetail) ToMetricData(componentNameAsAP bool) *MetricData {
 		componentName = "AP"
 	}
 
-	return &MetricData{
+	metric := &MetricData{
 		Timestamp:    time.Now().Unix(),
 		InstanceName: cleanDeviceName,
 		Data: map[string]interface{}{
@@ -142,17 +166,20 @@ func (ap *APDetail) ToMetricData(componentNameAsAP bool) *MetricData {
 			"Latency 6G Microsec":    ap.Latency6G,
 
 			// === CONTEXT FIELDS (Always Include) ===
-			// "Device Name":         cleanDeviceName,
-			// "Ap Mac":              ap.APMAC,
-			// "Ip Address":          ap.IP,
-			// "Model":               ap.Model,
-			// "Firmware Version":    ap.FirmwareVersion,
-			// "Ap Group Name":       ap.APGroupName,
-			// "Serial Number":       ap.Serial,
-			"Capacity":            ap.Capacity,
-			"Last Seen Timestamp": ap.LastSeen,
+			// "Capacity":            ap.Capacity,
+			// "Last Seen Timestamp": ap.LastSeen,
 		},
 		Zone:          ap.ZoneName,
 		ComponentName: componentName,
 	}
+
+	// Add client-derived metrics if available
+	if ap.RSSI != nil {
+		metric.Data["RSSI"] = *ap.RSSI
+	}
+	if ap.SNR != nil {
+		metric.Data["SNR"] = *ap.SNR
+	}
+
+	return metric
 }
