@@ -704,7 +704,7 @@ def get_agent_config_vars(logger, config_ini):
 
         # host_groups
         if len(host_groups) != 0:
-            host_groups = [x for x in host_groups.split(',') if x.strip()]
+            host_groups = [x.strip() for x in host_groups.split('|') if x.strip()]
         if len(hosts) != 0:
             hosts = [x for x in hosts.split(',') if x.strip()]
         host_blocklist_map = {}
