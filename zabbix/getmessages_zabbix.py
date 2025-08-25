@@ -619,6 +619,58 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
     logger.info('Parse {0} messages'.format(count))
 
 
+def parse_quoted_csv(value):
+    """ Parse comma-separated values while respecting quoted strings """
+    if not value or not value.strip():
+        return []
+    
+    # Use shlex to split while respecting quotes
+    try:
+        # Replace commas with spaces temporarily for shlex, then restore
+        # First, handle the case where we have quoted strings with commas
+        parts = []
+        current = ""
+        in_quotes = False
+        quote_char = None
+        
+        i = 0
+        while i < len(value):
+            char = value[i]
+            if char in ('"', "'") and (not in_quotes or char == quote_char):
+                if not in_quotes:
+                    in_quotes = True
+                    quote_char = char
+                elif char == quote_char:
+                    in_quotes = False
+                    quote_char = None
+                current += char
+            elif char == ',' and not in_quotes:
+                if current.strip():
+                    parts.append(current.strip())
+                current = ""
+            else:
+                current += char
+            i += 1
+        
+        # Add the last part
+        if current.strip():
+            parts.append(current.strip())
+        
+        # Clean up quotes from parts that are fully quoted
+        cleaned_parts = []
+        for part in parts:
+            part = part.strip()
+            if ((part.startswith('"') and part.endswith('"')) or 
+                (part.startswith("'") and part.endswith("'"))):
+                part = part[1:-1]
+            cleaned_parts.append(part)
+        
+        return cleaned_parts
+    except Exception:
+        # Fallback to simple split if parsing fails
+        return [x.strip() for x in value.split(',') if x.strip()]
+
+
 def get_agent_config_vars(logger, config_ini):
     """ Read and parse config.ini """
     """ get config.ini vars """
@@ -704,7 +756,7 @@ def get_agent_config_vars(logger, config_ini):
 
         # host_groups
         if len(host_groups) != 0:
-            host_groups = [x for x in host_groups.split(',') if x.strip()]
+            host_groups = parse_quoted_csv(host_groups)
         if len(hosts) != 0:
             hosts = [x for x in hosts.split(',') if x.strip()]
         host_blocklist_map = {}
