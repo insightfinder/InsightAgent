@@ -10,7 +10,10 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 
 
 def run_job(python_cmp, file_agent, file_agent_log):
-    subprocess.run("{} {} > {} 2>&1".format(python_cmp, file_agent, file_agent_log), shell=True)
+    print(f"[cron.py] Triggering: {python_cmp} {file_agent} (logs to {file_agent_log})")
+    with open(file_agent_log, 'a') as log_file:
+        result = subprocess.run([python_cmp, file_agent], stdout=log_file, stderr=subprocess.STDOUT)
+        print(f"[cron.py] event_push.py exited with code {result.returncode}")
 
 
 def get_cron_params(interval_seconds):
@@ -81,9 +84,10 @@ def main():
     cron_params = get_cron_params(interval_seconds)
 
     # get python path
-    python_cmp = os.path.abspath(os.path.join(__file__, os.pardir, './venv/bin/python3'))
+    import sys
+    python_cmp = sys.executable
     if not os.path.exists(python_cmp):
-        print('No python virtual env found. Exiting...')
+        print('Python executable not found. Exiting...')
         return False
 
     # get agent script path
