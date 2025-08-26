@@ -1,14 +1,14 @@
 FROM bitnami/python:3.13
 ENV TZ=UTC
-SHELL ["/bin/bash", "-c"]
 COPY . .
 
-# Install system dependencies
 RUN apt-get update -y && apt-get upgrade -y && \
-    pip install -r requirements.txt && \
+    pip install --no-cache-dir -r requirements.txt && \
     chown -R 1001:1001 ./
+
+RUN chmod +x leader_election_wrapper.py
+RUN chmod +x getmessages_elasticsearch_collector.py
 
 USER 1001
 
-# Run the script when config.ini is provided as a volume
-CMD ["/bin/bash", "-c", "python3 cron.py -g 1 -o 10 -p 4"]
+CMD ["python3", "leader_election_wrapper.py"]
