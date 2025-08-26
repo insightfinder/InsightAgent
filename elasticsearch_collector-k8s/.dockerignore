@@ -1,0 +1,10 @@
+conf.d/
+!conf.d/config.ini.template
+.idea
+.DS_Store
+logs/
+venv/
+.dockerignore
+.python-version
+nohup.out
+Dockerfile
