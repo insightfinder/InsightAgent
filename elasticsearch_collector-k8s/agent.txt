@@ -1,0 +1,2 @@
+name = elasticsearch_collector
+script_name = getmessages_elasticsearch_collector.py

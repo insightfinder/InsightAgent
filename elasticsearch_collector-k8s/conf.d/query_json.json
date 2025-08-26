@@ -1,0 +1,95 @@
+{
+  "aggs": {
+    "total_success": {
+      "filter": {
+        "bool": {
+          "must": [],
+          "filter": [
+            {
+              "bool": {
+                "should": [
+                  {
+                    "bool": {
+                      "should": [
+                        {
+                          "match_phrase": {
+                            "state": "executed"
+                          }
+                        }
+                      ],
+                      "minimum_should_match": 1
+                    }
+                  },
+                  {
+                    "bool": {
+                      "should": [
+                        {
+                          "match_phrase": {
+                            "state": "execution_not_needed"
+                          }
+                        }
+                      ],
+                      "minimum_should_match": 1
+                    }
+                  }
+                ],
+                "minimum_should_match": 1
+              }
+            }
+          ],
+          "should": [],
+          "must_not": []
+        }
+      }
+    },
+    "total_failure": {
+      "filter": {
+        "bool": {
+          "must": [],
+          "filter": [
+            {
+              "bool": {
+                "filter": [
+                  {
+                    "bool": {
+                      "must_not": {
+                        "bool": {
+                          "should": [
+                            {
+                              "match_phrase": {
+                                "state": "executed"
+                              }
+                            }
+                          ],
+                          "minimum_should_match": 1
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "bool": {
+                      "must_not": {
+                        "bool": {
+                          "should": [
+                            {
+                              "match_phrase": {
+                                "state": "execution_not_needed"
+                              }
+                            }
+                          ],
+                          "minimum_should_match": 1
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "should": [],
+          "must_not": []
+        }
+      }
+    }
+  }
+}
