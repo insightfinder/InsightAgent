@@ -22,8 +22,8 @@ from pyzabbix import ZabbixAPI
 # =============================================================================
 ZABBIX_CONFIG = {
     'url': 'http://localhost:9999/zabbix/',
-    'user': 'insight.finder', 
-    'password': '2ri2T*%HKxbs',
+    'user': '', 
+    'password': '',
     'request_timeout': 60
 }
 
