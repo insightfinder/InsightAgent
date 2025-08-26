@@ -140,22 +140,41 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             reset_track(track)
 
             if data_type == 'Log' or data_type == 'Metric':
-                items_res = zapi.do_request('item.get', {'output': ['key_', 'itemid', 'name'], "hostids": hostids,
-                                                         'selectHosts': ['hostId'], 'filter': {'value_type': value_type_list}})
-                items_ids_map = {}
-                items_keys_map = {}
-                for item in items_res['result']:
-                    item_id = item['itemid']
-                    item_key = item['key_']
-                    item_name = item['name']
-                    if data_type == 'Metric':
-                        if is_matching_allow_regex(item_name, metric_allowlist_map):
-                            if not is_matching_disallow_regex(item_name, metric_disallowlist_map):
-                                items_ids_map[item_id] = item
-                                items_keys_map[item_key] = item
-                    else:
+                # For Metric data type, use the pre-filtered items_map passed to this worker
+                # For Log data type, collect all items from hosts
+                if data_type == 'Metric':
+                    # Use pre-filtered items from the main collection phase
+                    items_ids_map = {}
+                    items_keys_map = {}
+                    
+                    # Filter items_map to only include items from the current hostids
+                    items_res = zapi.do_request('item.get', {'output': ['key_', 'itemid', 'name'], "hostids": hostids,
+                                                             'selectHosts': ['hostId'], 'filter': {'value_type': value_type_list}})
+                    
+                    # Build a set of valid item keys for these hosts
+                    host_item_keys = set()
+                    for item in items_res['result']:
+                        host_item_keys.add(item['key_'])
+                    
+                    # Only include pre-filtered items that belong to these hosts
+                    for item_key, item in items_map.items():
+                        if item_key in host_item_keys:
+                            item_id = item['itemid']
+                            items_ids_map[item_id] = item
+                            items_keys_map[item_key] = item
+                else:
+                    # For Log data type, collect all items and apply filtering
+                    items_res = zapi.do_request('item.get', {'output': ['key_', 'itemid', 'name'], "hostids": hostids,
+                                                             'selectHosts': ['hostId'], 'filter': {'value_type': value_type_list}})
+                    items_ids_map = {}
+                    items_keys_map = {}
+                    for item in items_res['result']:
+                        item_id = item['itemid']
+                        item_key = item['key_']
+                        item_name = item['name']
                         items_ids_map[item_id] = item
                         items_keys_map[item_key] = item
+                
                 items_ids = list(items_ids_map.keys())
                 items_keys = list(items_keys_map.keys())
                 logger.info("Zabbix item count: %s" % len(items_ids))
