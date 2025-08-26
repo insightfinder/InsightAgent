@@ -6,3 +6,4 @@ regex
 requests
 urllib3
 backports.zoneinfo;python_version<"3.9"
+kubernetes
