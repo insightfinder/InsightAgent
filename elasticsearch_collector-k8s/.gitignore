@@ -1,0 +1,4 @@
+config.ini
+logs
+k8s/
+skaffold.yaml

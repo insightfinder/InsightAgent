@@ -1,0 +1,131 @@
+[elasticsearch]
+# required
+# a comma delimited list of RFC-1738 formatted urls <scheme>://[<username>:<password>@]hostname:port
+es_uris = http://localhost:9200
+# json to add to the query body. For exclude DEBUG log, ie:
+# regexp-syntax: https://www.elastic.co/guide/en/elasticsearch/reference/current/regexp-syntax.html
+# query_json = {
+#              "query": {
+#                "bool": {
+#                  "filter": {
+#                    "bool": {
+#                      "must_not": {
+#                        "regexp": {
+#                          "message": {
+#                            "value": ".*DEBUG.*",
+#                            "flags": "ALL"
+#                          }
+#                        }
+#                      }
+#                    }
+#                  }
+#                }
+#              }
+#            }
+query_json = {}
+# json file to add to the query body.
+query_json_file =
+# The maximum messages number of each query, default is 5000, and max value id 10000.
+query_chunk_size = 5000
+# indexes to search over, example indeces = metricbeat*
+indeces = filebeat*
+# The time offset when querying live data, default is 0.
+query_time_offset_seconds =
+
+## parameters for all hosts
+# port to connect to (Can be parsed from url)
+port =
+# username:password (Can be parsed from url)
+http_auth =
+# True or False (True if uri scheme is https)
+use_ssl =
+# Version of SSL to use - one of SSLv23 (default), SSLv2, SSLv3, TLSv1
+ssl_version =
+# True or False - use hostname verification
+ssl_assert_hostname =
+# True or False - use fingerprint verification
+ssl_assert_fingerprint =
+# True or False
+verify_certs =
+# path to ca bundle
+ca_certs =
+# path to client cert
+client_cert =
+# path to client key
+client_key =
+
+# history data time config. If these options is set, the agent will query results by time range
+# time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
+his_time_range =
+
+# Field that contains the project name. If this field is empty, agent will use project_name in insightfinder section
+project_field =
+# project_whitelist is a regex string used to define which projects form project_field will be filtered.
+project_whitelist =
+
+## message parsing
+# timestamp format, as library [arrow]. multiple fields can be formatted together to create the timestamp a la `YYYY-MM-DD HH:mm:ss ZZ`. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
+timestamp_format =
+# timezone, as per pytz
+timezone =
+# if document_root_field is "", need to set the full path. For example _source.@timestamp
+timestamp_field = @timestamp
+# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+target_timestamp_timezone = UTC
+
+# document root field, default is "_source". To use the whole document as the root, use ""
+document_root_field = ""
+
+component_field =
+default_component_name =
+# if no instance given, the agent server name will be used. If document_root_field is "", need to set the full path. For example _source.agent.hostname
+instance_field = agent.hostname
+# instance_field_regex is a field name and a regex string used to get instance, syntax `<field1>::<regex1>,<field2>::<regex2>`.
+instance_field_regex = message::group=\"(.*?)\",message::deployment=\"(.*?)\"
+# instance_whitelist is a regex string used to define which instances will be filtered.
+instance_whitelist =
+default_instance_name =
+
+# If document_root_field is "", need to set the full path. For example _source.device
+device_field =
+# Optional regex to retrieve the device name using a capture group named 'device' (eg: '(?P<device>.*)') 
+device_field_regex =
+
+# multiple fields are separated by commas, a field can be `<name>` or regex. Example: data_fields = /^system\.filesystem.*/,system.process.cgroup.memory.memsw.events.max
+# If it is empty, the whole document at the document root will be sent.
+data_fields =
+
+# multiple fields with string or regex, are separated by commas, like: /0-metric\.values\.99.0/,value,doc_count
+aggregation_data_fields =
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
+# Comma-separated list of field names to be made safe for instance naming (values will be sanitized, but not used as instance name)
+safe_instance_fields =
+
+[insightfinder]
+user_name =
+license_key =
+token =
+project_name =
+# Name of system owned by project. If project_name is not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name =
+# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
+project_type = log
+# Set to `YES` if project is container.
+containerize = no
+enable_holistic_model = false
+sampling_interval = 1
+frequency_sampling_interval = 10
+log_compression_interval = 1
+enable_log_rotation = false
+log_backup_count = 14
+run_interval = 1
+worker_timeout =
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
