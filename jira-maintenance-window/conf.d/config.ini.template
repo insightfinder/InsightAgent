@@ -1,0 +1,63 @@
+[custom_field_map]
+# Map output field name to Jira custom field ID
+# Example: venue = customfield_10073
+Zone = customfield_10084
+planned_start_date = customfield_10055
+planned_end_date = customfield_10056
+
+[custom_field_mapping]
+# Map custom field values (YAML format)
+Zone = venue-mapping.yaml
+
+[jira]
+# Jira instance URL (e.g., https://your-company.atlassian.net)
+url = https://your-company.atlassian.net
+
+# Jira API token or password
+api_token =
+
+# Username (email for Atlassian Cloud)
+username =
+
+[filter]
+base_jql =
+
+[status_filter]
+# Status filtering mode: "exclude" or "include"
+# exclude: Get tickets that are NOT in the specified statuses
+# include: Get tickets that ARE in the specified statuses
+mode = exclude
+
+# List of statuses to filter by (comma-separated)
+# Common statuses: Closed, Cancelled, Done, Resolved, In Progress, To Do, etc.
+statuses =
+
+[type_filter]
+# Type filtering mode: "exclude" or "include" (optional, leave empty to disable)
+# exclude: Get tickets that are NOT of the specified types
+# include: Get tickets that ARE of the specified types
+mode = include
+
+# List of issue types to filter by (comma-separated)
+# Common types: Bug, Task, Story, Epic, Sub-task, etc.
+# For your system: "Onsite Service: Repair & Maintenance Project", "Device Incident", etc.
+types =
+
+[output]
+# Output format: json, csv, or console
+format = json
+
+# Output file path (optional, if not specified will print to console)
+output_file = jira_tickets.json
+
+# Include these fields in the output (comma-separated)
+# Common fields: key, summary, status, assignee, reporter, created, updated, priority, components, labels
+fields = key, summary, status, assignee, reporter, created, updated, priority, description, components, labels, issuetype, Zone, planned_start_date, planned_end_date
+
+[logging]
+# Log level: DEBUG, INFO, WARNING, ERROR
+level = INFO
+
+# Log file path (optional)
+log_file = jira_agent.log
+
