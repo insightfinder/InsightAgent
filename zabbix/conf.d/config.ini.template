@@ -5,7 +5,7 @@ url = http://127.0.0.1:80
 user = Admin
 password = zabbix
 
-# comma-separated host groups name to query for. If none specified, all host groups will be used
+# pipe-separated (|) host groups name to query for. If none specified, all host groups will be used
 host_groups =
 
 # hosts to query for. If none specified, all hosts will be used

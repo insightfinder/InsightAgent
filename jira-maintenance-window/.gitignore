@@ -1,0 +1,6 @@
+# Ignore sensitive and environment-specific files
+conf.d/config.ini
+*.log
+*.pyc
+__pycache__/
+.env
