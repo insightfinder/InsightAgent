@@ -1,0 +1,38 @@
+agent:
+  # Agent behavior settings
+  log_level: INFO
+  data_format: JSON
+  timezone: UTC
+  filters_include: ""
+  filters_exclude: ""
+
+positron:
+  # Positron Controller Configuration
+  controller_host: localhost
+  controller_port: 8443
+  username: admin
+  password: 123@123
+  verify_ssl: false
+  max_concurrent_requests: 20
+
+insightfinder:
+  # InsightFinder Platform Configuration
+  server_url: https://stg.insightfinder.com
+  username: 
+  license_key: 
+  
+  # Metrics Project Configuration
+  metrics_project_name: Positron-Metrics
+  metrics_system_name: Positron
+  metrics_project_type: Metric
+
+  # Logs Project Configuration
+  logs_project_name: Positron-Logs
+  logs_system_name: Positron
+  logs_project_type: Log
+  
+  # Common Configuration
+  cloud_type: OnPremise
+  instance_type: OnPremise
+  is_container: false
+  sampling_interval: 60

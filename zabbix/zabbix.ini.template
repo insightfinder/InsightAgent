@@ -1,0 +1,44 @@
+[zabbix]
+url = http://localhost:9999/zabbix
+user = user
+password = password
+host_groups = {{ host_group_name }}
+hosts = 
+host_blocklist = 
+template_ids = 
+metric_allowlist = /.*ICMP.*/, /.*RSSI.*/, /Latency/, /Ethernet.*Status/, /Packet Loss/, /.*Jitter.*/, /.*Total.*Phy.*/, /.*Phy.*Total.*/
+metric_disallowlist = 
+max_workers = 1
+request_timeout = 
+max_host_per_request = 
+log_request_interval = 
+applications = 
+his_time_range = 
+data_format = json
+timestamp_format = 
+timezone = 
+timestamp_field = 
+target_timestamp_timezone = UTC
+instance_field = hostid
+component_from_host_group = false
+component_from_instance_name_re_sub =
+zone_from_host_group = true
+device_field = 
+data_fields = 
+alert_data_fields = 
+agent_http_proxy = 
+agent_https_proxy = 
+
+[insightfinder]
+user_name =
+license_key =
+token = 
+project_name =
+system_name =
+project_type = metric
+sampling_interval = 60s
+run_interval = 60s
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy = 
+if_https_proxy =
