@@ -51,6 +51,9 @@ class JiraAgent:
             'Content-Type': 'application/json'
         })
         
+        # Initialize API version (will be set during test_connection)
+        self.api_version = '2'  # Default to v2
+        
         self.logger.info("Jira Agent initialized")
     
     def _setup_logging(self):
@@ -77,24 +80,30 @@ class JiraAgent:
     
     def test_connection(self) -> bool:
         """Test connection to Jira instance."""
-        try:
-            url = f"{self.jira_url}/rest/api/2/myself"
-            response = self.session.get(url)
-            response.raise_for_status()
-            
-            user_info = response.json()
-            self.logger.info(f"Successfully connected to Jira as: {user_info.get('displayName', 'Unknown')}")
-            return True
-            
-        except requests.exceptions.RequestException as e:
-            self.logger.error(f"Failed to connect to Jira: {e}")
-            return False
+        # Try API v3 first, then fallback to v2
+        for api_version in ['3', '2']:
+            try:
+                url = f"{self.jira_url}/rest/api/{api_version}/myself"
+                response = self.session.get(url)
+                response.raise_for_status()
+                
+                user_info = response.json()
+                self.logger.info(f"Successfully connected to Jira API v{api_version} as: {user_info.get('displayName', 'Unknown')}")
+                self.api_version = api_version
+                return True
+                
+            except requests.exceptions.RequestException as e:
+                self.logger.warning(f"Failed to connect using API v{api_version}: {e}")
+                continue
+        
+        self.logger.error("Failed to connect to Jira using both API v2 and v3")
+        return False
     
     def get_actual_status_names(self, config_statuses: List[str]) -> List[str]:
         """Get actual status names from Jira that match the configured statuses (case insensitive)."""
         try:
             # Get available statuses from Jira
-            url = f"{self.jira_url}/rest/api/2/status"
+            url = f"{self.jira_url}/rest/api/{self.api_version}/status"
             response = self.session.get(url)
             response.raise_for_status()
             
@@ -126,7 +135,7 @@ class JiraAgent:
         """Get actual issue type names from Jira that match the configured types (case insensitive)."""
         try:
             # Get available issue types from Jira
-            url = f"{self.jira_url}/rest/api/2/issuetype"
+            url = f"{self.jira_url}/rest/api/{self.api_version}/issuetype"
             response = self.session.get(url)
             response.raise_for_status()
             
@@ -202,7 +211,12 @@ class JiraAgent:
         
         try:
             while True:
-                url = f"{self.jira_url}/rest/api/2/search"
+                # Use the new /search/jql endpoint for API v3, fallback to /search for v2
+                if self.api_version == '3':
+                    url = f"{self.jira_url}/rest/api/{self.api_version}/search/jql"
+                else:
+                    url = f"{self.jira_url}/rest/api/{self.api_version}/search"
+                    
                 params = {
                     'jql': jql,
                     'startAt': start_at,
@@ -210,7 +224,17 @@ class JiraAgent:
                     'fields': ','.join(fields)
                 }
                 
+                self.logger.debug(f"Making request to: {url}")
+                self.logger.debug(f"JQL: {jql}")
+                self.logger.debug(f"Fields: {','.join(fields)}")
+                
                 response = self.session.get(url, params=params)
+                
+                # Log detailed error information
+                if response.status_code != 200:
+                    self.logger.error(f"HTTP {response.status_code}: {response.reason}")
+                    self.logger.error(f"Response body: {response.text}")
+                    
                 response.raise_for_status()
                 
                 data = response.json()
@@ -358,7 +382,106 @@ class JiraAgent:
                 print(f"   Created: {issue.get('created', 'N/A')}")
                 print("-" * 40)
     
-    def run(self):
+    def send_to_insightfinder(self, data: List[Dict[str, Any]], debug: bool = False) -> bool:
+        """Send extracted data to InsightFinder API."""
+        if not self.config.has_section('insightfinder'):
+            self.logger.info("No InsightFinder configuration found, skipping API submission")
+            return True
+        
+        try:
+            # Get InsightFinder configuration
+            user_name = self.config.get('insightfinder', 'user_name')
+            license_key = self.config.get('insightfinder', 'license_key')
+            system = self.config.get('insightfinder', 'system')
+            if_url = self.config.get('insightfinder', 'if_url').rstrip('/')
+            start_time_field = self.config.get('insightfinder', 'start_time_field')
+            end_time_field = self.config.get('insightfinder', 'end_time_field')
+            zone_field = self.config.get('insightfinder', 'zone_field')
+            
+            # Validate required fields
+            missing_fields = []
+            if not user_name:
+                missing_fields.append('user_name')
+            if not license_key:
+                missing_fields.append('license_key')
+            if not system:
+                missing_fields.append('system')
+            if not if_url:
+                missing_fields.append('if_url')
+            
+            if missing_fields:
+                self.logger.error(f"Missing required InsightFinder configuration fields: {', '.join(missing_fields)}")
+                return False
+            
+            success_count = 0
+            error_count = 0
+            
+            for item in data:
+                try:
+                    # Extract values from the data item
+                    zone_name = item.get(zone_field.lower(), '')
+                    start_time = item.get(start_time_field.lower(), '')
+                    end_time = item.get(end_time_field.lower(), '')
+                    
+                    # Skip items with missing required data
+                    missing_data = []
+                    if not zone_name:
+                        missing_data.append('zone')
+                    if not start_time:
+                        missing_data.append('start_time')
+                    if not end_time:
+                        missing_data.append('end_time')
+                    
+                    if missing_data:
+                        self.logger.warning(f"Skipping item {item.get('key', 'unknown')} - missing: {', '.join(missing_data)}")
+                        continue
+                    
+                    # Build API URL
+                    api_url = f"{if_url}/api/v1/zone-special-day"
+                    
+                    # Make API request
+                    headers = {
+                        'X-User-Name': user_name,
+                        'X-License-Key': license_key
+                    }
+                    
+                    # Prepare POST parameters
+                    post_params = {
+                        'systemName': system,
+                        'customerName': user_name,
+                        'zoneName': zone_name,
+                        'startTime': start_time,
+                        'endTime': end_time
+                    }
+                    
+                    if debug:
+                        self.logger.info(f"API Request Details:")
+                        self.logger.info(f"  URL: {api_url}")
+                        self.logger.info(f"  Method: POST")
+                        self.logger.info(f"  Headers: {headers}")
+                        self.logger.info(f"  Parameters: {json.dumps(post_params, indent=2)}")
+                    
+                    response = requests.post(api_url, data=post_params, headers=headers)
+                    
+                    if response.status_code == 200:
+                        success_count += 1
+                        self.logger.info(f"Successfully sent {item.get('key', 'unknown')} to InsightFinder")
+                    else:
+                        error_count += 1
+                        self.logger.error(f"Failed to send {item.get('key', 'unknown')} to InsightFinder: {response.status_code} - {response.text}")
+                
+                except Exception as e:
+                    error_count += 1
+                    self.logger.error(f"Error sending {item.get('key', 'unknown')} to InsightFinder: {e}")
+            
+            self.logger.info(f"InsightFinder submission complete: {success_count} successful, {error_count} failed")
+            return error_count == 0
+            
+        except Exception as e:
+            self.logger.error(f"Failed to send data to InsightFinder: {e}")
+            return False
+    
+    def run(self, skip_insightfinder: bool = False, debug: bool = False):
         """Main execution method."""
         self.logger.info("Starting Jira Agent execution")
         
@@ -447,6 +570,12 @@ class JiraAgent:
         # Save output
         self.save_output(extracted_data, output_format, output_file)
 
+        # Send to InsightFinder if configured
+        if not skip_insightfinder:
+            self.send_to_insightfinder(extracted_data, debug)
+        else:
+            self.logger.info("Skipping InsightFinder submission (--test flag used)")
+
         self.logger.info("Jira Agent execution completed successfully")
         return True
 
@@ -458,6 +587,10 @@ def main():
                        help='Path to configuration file (default: conf.d/config.ini)')
     parser.add_argument('--test-connection', action='store_true',
                        help='Test connection to Jira and exit')
+    parser.add_argument('--test', action='store_true',
+                       help='Skip sending data to InsightFinder API')
+    parser.add_argument('--debug', action='store_true',
+                       help='Enable debug mode to show detailed API request information')
     
     args = parser.parse_args()
     
@@ -478,7 +611,7 @@ def main():
                 sys.exit(1)
         
         # Run the main process
-        success = agent.run()
+        success = agent.run(args.test, args.debug)
         sys.exit(0 if success else 1)
         
     except KeyboardInterrupt:

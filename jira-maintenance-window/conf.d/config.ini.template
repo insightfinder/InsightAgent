@@ -61,3 +61,12 @@ level = INFO
 # Log file path (optional)
 log_file = jira_agent.log
 
+[insightfinder]
+# InsightFinder API configuration
+user_name = your_username
+license_key = your_license_key
+system = your_system_name
+if_url = https://app.insightfinder.com
+start_time_field = planned_start_date
+end_time_field = planned_end_date
+zone_field = zone
