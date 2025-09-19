@@ -1,12 +1,20 @@
 #=========================== Filebeat inputs =============================
 filebeat.inputs:
-- type: log
+- type: filestream # or log
+  id: <unique id> 
   enabled: true
   paths:
     - <Path to log file>
+  tail_files: true
   exclude_lines: ['^#']
   fields:
-    log_type: <Tag for logstash processing (eg: appserver)> 
+    log_type: <Tag for logstash processing (eg: appserver, nginx etc.)> 
+    instance_name: <instance name for logs>
+    component_name: <component name for instances>
+    system_name: <IF System Name>
+    project_name: <IF Project Name>
+    user_name: <IF User Name>
+    license_key: <IF License Key>
     
 
 #================================ Outputs ======================================
