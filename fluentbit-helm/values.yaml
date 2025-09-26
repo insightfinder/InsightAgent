@@ -1,7 +1,9 @@
 insightfinder:
-  projectName: "test"
-  userName: "user"
-  licenseKey: "4ff0feb86a2fac9d43b7d8e81bfd1dfa2ecdcc82"
+  projectName: ""
+  userName: ""
+  licenseKey: ""
+
+replicaCount: 1
 
 config:
   service: |
@@ -18,7 +20,7 @@ config:
         Name              tail
         Tag               kube.*
         Path              /var/log/containers/*.log
-        Parser            docker
+        Parser            docker, cri
         DB                /var/log/flb_kube.db
         Exclude_Path      /var/log/containers/fluent-bit-*.log
         Mem_Buf_Limit     5MB
@@ -33,10 +35,15 @@ config:
         Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
         Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
         Kube_Tag_Prefix     kube.var.log.containers.
-        Merge_Log           On
-        Merge_Log_Key       message
-        K8S-Logging.Parser  On
+        Merge_Log           Off
+        K8S-Logging.Parser  Off
         K8S-Logging.Exclude Off
+
+    [FILTER]
+        Name    lua
+        Match   kube.*
+        script  /fluent-bit/scripts/clean_log.lua
+        call    clean_log
 
     [FILTER]
         Name nest
@@ -50,7 +57,7 @@ config:
         Match kube.*
         Add log_type fluentbit
         Add project_name {{ .Values.insightfinder.projectName }}
-        Copy kubernetes_pod_name instance_name
+        Copy kubernetes_container_name instance_name
         Add user_name {{ .Values.insightfinder.userName }}
         Add license_key {{ .Values.insightfinder.licenseKey }}
 
@@ -58,8 +65,33 @@ config:
     [OUTPUT]
         Name            http
         Match           *
-        Host            <logstash-host>
-        Port            <logstash-http-port>
+        Host            <Logstash Host>
+        Port            <Logstash HTTP Port>
         Format          json_lines
         json_date_key   timestamp
         Retry_Limit     False
+
+    [OUTPUT]
+        Name  stdout
+        Match *
+        Format          json_lines
+        json_date_key   timestamp
+        Retry_Limit     False
+
+luaScripts:
+  clean_log.lua: |
+    function clean_log(tag, timestamp, record)
+        local log = record["log"]
+        if log ~= nil then
+            -- Match and remove everything up to and including ' stdout X ' or ' stderr X ', where X is any uppercase letter
+            local _, finish = string.find(log, " std%a%a?%s+[A-Z] ")
+            if finish == nil then
+                -- fallback: match ' stdout X ' or ' stderr X ' (legacy, single space)
+                _, finish = string.find(log, " std%a+ [A-Z] ")
+            end
+            if finish ~= nil then
+                record["log"] = string.sub(log, finish + 1)
+            end
+        end
+        return 1, timestamp, record
+    end
