@@ -140,7 +140,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             reset_track(track)
 
             if data_type == 'Log' or data_type == 'Metric':
-                items_res = zapi.do_request('item.get', {'output': ['key_', 'itemid', 'name'], "hostids": hostids,
+                items_res = zapi.do_request('item.get', {'output': ['key_', 'itemid', 'name'], "hostids": hostids,"webitems": True,
                                                          'selectHosts': ['hostId'], 'filter': {'value_type': value_type_list}})
                 items_ids_map = {}
                 items_keys_map = {}
@@ -186,7 +186,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                         time_now = arrow.utcnow()
                         metric_output = ['key_', 'itemid', 'lastclock', 'clock', 'lastvalue', 'value', 'name']
 
-                        params = {'output': metric_output, "hostids": hostids, "selectHosts": ['hostId'],
+                        params = {'output': metric_output, "hostids": hostids, "webitems": True, "selectHosts": ['hostId'],
                                 'filter': {'value_type': value_type_list, 'key_': items_keys}}
                         logger.info('Begin item.get query from {} hosts (attempt {}/{})'.format(len(hostids), attempt + 1, max_retries))
 
@@ -313,11 +313,19 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
     hosts_ip_map = {}
     host_template_map = {}
     hosts_ids = []
-    hosts_res = zapi.do_request('host.get', {'output': ['name', 'hostid'], 'groupids': host_groups_ids,
+
+    zabbix_params = {'output': ['name', 'hostid'], 'groupids': host_groups_ids,
                                              'selectHostGroups': ['groupid', 'name'],
                                              'selectParentTemplates': ['templateid', 'name'],
                                              'selectInterfaces': ['ip', 'type', 'main'],
-                                             'filter': {"host": agent_config_vars['hosts']}, })
+                                             'filter': {"host": agent_config_vars['hosts']}, }
+
+
+    # Remove hosts filter if not needed
+    if agent_config_vars['hosts'] == '':
+        zabbix_params['filter'] = {}
+
+    hosts_res = zapi.do_request('host.get', zabbix_params)
     for item in hosts_res['result']:
         host_id = item['hostid']
         host_name = item['name']
