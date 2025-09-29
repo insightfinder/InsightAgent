@@ -1,0 +1,52 @@
+agent:
+  data_format: "JSON"
+  timezone: "UTC"
+  log_level: "INFO"
+  filters_include: ""
+  filters_exclude: ""
+
+tarana:
+  base_url: 
+  username: 
+  password: 
+  region_ids: []
+  kpis:
+    "/connections/connection/state/rf-range": "RF-Range"
+    "/connections/connection/state/path-loss": "Path-Loss"
+    "/connections/connection/radios/radio[id=0]/state/rx-signal-level/min": "RX-Signal-Radio-0"
+    "/connections/connection/radios/radio[id=1]/state/rx-signal-level/min": "RX-Signal-Radio-1"
+    "/connections/connection/radios/radio[id=2]/state/rx-signal-level/min": "RX-Signal-Radio-2"
+    "/connections/connection/radios/radio[id=3]/state/rx-signal-level/min": "RX-Signal-Radio-3"
+    "/connections/connection/state/dl-snr": "DL-SNR"
+    "/connections/connection/state/ul-snr": "UL-SNR"
+    "/connections/global/state/active-connections": "Active-Connections"
+    "/radios/radio[id=0]/state/rx-signal-level/min": "RX-Signal-Radio-0"
+    "/radios/radio[id=1]/state/rx-signal-level/min": "RX-Signal-Radio-1"
+    "/radios/radio[id=2]/state/rx-signal-level/min": "RX-Signal-Radio-2"
+    "/radios/radio[id=3]/state/rx-signal-level/min": "RX-Signal-Radio-3"
+  verify_ssl: false
+  max_concurrent_requests: 10
+  token_refresh_threshold: 300  # seconds before expiry to refresh token (5 minutes)
+
+insightfinder:
+  # InsightFinder Platform Configuration
+  server_url: https://stg.insightfinder.com
+  username: 
+  license_key: 
+  
+  # Metrics Project Configuration
+  metrics_project_name: tarana-Metrics
+  metrics_system_name: Tarana
+  metrics_project_type: Metric
+
+  # Logs Project Configuration
+  logs_project_name: tarana-Logs
+  logs_system_name: Tarana
+  logs_project_type: Log
+  
+  # Common Configuration
+  cloud_type: OnPremise
+  instance_type: OnPremise
+  is_container: false
+  sampling_interval: 60
+
