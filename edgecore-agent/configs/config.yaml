@@ -1,0 +1,42 @@
+agent:
+  data_format: "JSON"
+  timezone: "UTC"
+  log_level: "INFO"
+  filters_include: ""
+  filters_exclude: ""
+
+edgecore:
+  base_url: 
+  auth0_domain: 
+  client_id: 
+  redirect_uri: 
+  username: 
+  password: 
+  service_provider_id: 
+  verify_ssl: false
+  max_concurrent_requests: 40
+  token_refresh_threshold: 300  # seconds before expiry to refresh token (5 minutes)
+  max_retries: 3  # maximum retry attempts for authentication and API calls
+
+insightfinder:
+  # InsightFinder Platform Configuration
+  server_url: https://stg.insightfinder.com
+  username: 
+  license_key: 
+  
+  # Metrics Project Configuration
+  metrics_project_name: edgecore-Metrics
+  metrics_system_name: EdgeCore
+  metrics_project_type: Metric
+
+  # Logs Project Configuration
+  logs_project_name: edgecore-Logs
+  logs_system_name: EdgeCore
+  logs_project_type: Log
+  
+  # Common Configuration
+  cloud_type: OnPremise
+  instance_type: OnPremise
+  is_container: false
+  sampling_interval: 60
+
