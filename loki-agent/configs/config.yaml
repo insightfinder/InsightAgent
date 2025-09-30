@@ -1,0 +1,65 @@
+agent:
+  data_format: "json"
+  timezone: "UTC"
+  log_level: "INFO"
+  filters_include: ""
+  filters_exclude: ""
+
+loki:
+  base_url: "http://localhost:46339"
+  username: "admin"
+  password: "admin"
+  verify_ssl: false
+  max_concurrent_requests: 10
+  max_retries: 3
+  query_timeout: 60
+  max_entries_per_query: 1000
+  
+  # List of queries to execute
+  queries:
+    - name: "insightfinder_audit_logs"
+      query: '{namespace="insightfinder",pod=~".*appserver.*"} |= `com.insightfinder.models.AuditLog`'
+      enabled: true
+      labels:
+        source: "insightfinder"
+        type: "audit"
+    
+    - name: "application_errors"
+      query: '{namespace="insightfinder"} |~ "ERROR|Exception|FATAL"'
+      enabled: true
+      labels:
+        source: "insightfinder"
+        type: "error"
+    
+    - name: "kubernetes_events"
+      query: '{namespace=~"kube-.*|default"} |= "Event"'
+      enabled: false
+      labels:
+        source: "kubernetes"
+        type: "event"
+
+insightfinder:
+  server_url: "https://app.insightfinder.com"
+  username: ""  # Fill this in
+  license_key: ""  # Fill this in
+  
+  # Logs project configuration (loki-agent only handles logs)
+  logs_project_name: "loki-logs"
+  logs_system_name: "loki-system"
+  logs_project_type: "LOG"
+  
+  # Common settings
+  sampling_interval: 60  # Main collection interval - determines both frequency and time window
+  cloud_type: "OnPremise"
+  instance_type: "OnPremise"
+  is_container: true
+  
+  # HTTP proxy settings (optional)
+  http_proxy: ""
+  https_proxy: ""
+  
+  # Advanced settings
+  chunk_size: 2097152  # 2MB
+  max_packet_size: 10485760  # 10MB
+  retry_times: 3
+  retry_interval: 5
