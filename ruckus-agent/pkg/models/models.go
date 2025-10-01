@@ -23,11 +23,6 @@ type ClientInfo struct {
 	ClientMac string `json:"clientMac"`
 	RSSI      int    `json:"rssi"`
 	SNR       int    `json:"snr"`
-	// Add other fields as needed for future use
-	// APName    string `json:"apName"`
-	// SSID      string `json:"ssid"`
-	// Status    string `json:"status"`
-	// IPAddress string `json:"ipAddress"`
 }
 
 type APInfo struct {
@@ -56,57 +51,29 @@ type APDetailResponse struct {
 
 type APDetail struct {
 	// Context Fields (Always Include)
-	DeviceName      string `json:"deviceName"`
-	APMAC           string `json:"apMac"`
-	IP              string `json:"ip"`
-	ZoneName        string `json:"zoneName"`
-	// Model           string `json:"model"`
-	// FirmwareVersion string `json:"firmwareVersion"`
-	// LastSeen        int64  `json:"lastSeen"`
-
-	// Critical Fields (Must Monitor)
-	Status                       string  `json:"status"`
-	ConnectionStatus             string  `json:"connectionStatus"`
-	Uptime                       int64   `json:"uptime"`
-	Alerts                       int     `json:"alerts"`
-	NumClients                   int     `json:"numClients"`
-	NumClients24G                int     `json:"numClients24G"`
-	NumClients5G                 int     `json:"numClients5G"`
-	NumClients6G                 int     `json:"numClients6G"`
-	Airtime24G                   float64 `json:"airtime24G"`
-	Airtime5G                    float64 `json:"airtime5G"`
-	Airtime6G                    float64 `json:"airtime6G"`
-	ConnectionFailure            float64 `json:"connectionFailure"`
-	IsOverallHealthStatusFlagged bool    `json:"isOverallHealthStatusFlagged"`
-	IsAirtime24GFlagged          bool    `json:"isAirtimeUtilization24GFlagged"`
-	IsAirtime5GFlagged           bool    `json:"isAirtimeUtilization50GFlagged"`
-	IsAirtime6GFlagged           bool    `json:"isAirtimeUtilization6GFlagged"`
-	Channel24GValue              int     `json:"channel24gValue"`
-	Channel5GValue               int     `json:"channel50gValue"`
-	Channel6GValue               int     `json:"channel6gValue"`
-
-	// Performance Fields (High Priority)
-	TxRx       int64 `json:"txRx"`
-	Tx         int64 `json:"tx"`
-	Rx         int64 `json:"rx"`
-	Noise24G   int   `json:"noise24G"`
-	Noise5G    int   `json:"noise5G"`
-	Noise6G    int   `json:"noise6G"`
-	Retry24G   int64 `json:"retry24G"`
-	Retry5G    int64 `json:"retry5G"`
-	Retry6G    int64 `json:"retry6G"`
-	Latency24G int64 `json:"latency24G"`
-	Latency50G int64 `json:"latency50G"`
-	Latency6G  int64 `json:"latency6G"`
-
-	// Additional useful fields
-	Capacity    int    `json:"capacity"`
-	Serial      string `json:"serial"`
-	APGroupName string `json:"apGroupName"`
+	DeviceName    string  `json:"deviceName"`
+	APMAC         string  `json:"apMac"`
+	IP            string  `json:"ip"`
+	ZoneName      string  `json:"zoneName"`
+	NumClients    int     `json:"numClients"`
+	NumClients24G int     `json:"numClients24G"`
+	NumClients5G  int     `json:"numClients5G"`
+	NumClients6G  int     `json:"numClients6G"`
+	Airtime24G    float64 `json:"airtime24G"`
+	Airtime5G     float64 `json:"airtime5G"`
+	Airtime6G     float64 `json:"airtime6G"`
 
 	// Client-derived metrics (enriched from client data)
 	RSSI *int `json:"rssi,omitempty"` // Average RSSI from first client (positive value)
 	SNR  *int `json:"snr,omitempty"`  // Average SNR from first client
+
+	// Client percentage metrics for RSSI and SNR
+	RSSIPercentBelow74 *float64 `json:"rssiPercentBelow74,omitempty"` // Percentage of clients < -74 dBm
+	RSSIPercentBelow78 *float64 `json:"rssiPercentBelow78,omitempty"` // Percentage of clients < -78 dBm
+	RSSIPercentBelow80 *float64 `json:"rssiPercentBelow80,omitempty"` // Percentage of clients < -80 dBm
+	SNRPercentBelow15  *float64 `json:"snrPercentBelow15,omitempty"`  // Percentage of clients < -15 dBm
+	SNRPercentBelow18  *float64 `json:"snrPercentBelow18,omitempty"`  // Percentage of clients < -18 dBm
+	SNRPercentBelow20  *float64 `json:"snrPercentBelow20,omitempty"`  // Percentage of clients < -20 dBm
 }
 
 // InsightFinder data structure
@@ -116,6 +83,7 @@ type MetricData struct {
 	Data          map[string]interface{} `json:"data"`
 	Zone          string                 `json:"zone,omitempty"`
 	ComponentName string                 `json:"componentName,omitempty"`
+	IP            string                 `json:"ip,omitempty"`
 }
 
 // Convert AP detail to metric data
@@ -130,55 +98,47 @@ func (ap *APDetail) ToMetricData(componentNameAsAP bool) *MetricData {
 		Timestamp:    time.Now().Unix(),
 		InstanceName: cleanDeviceName,
 		Data: map[string]interface{}{
-			// === CRITICAL FIELDS (Must Monitor) ===
-			"Status":                  ap.Status,
-			"Connection Status":       ap.ConnectionStatus,
-			"Uptime Seconds":          ap.Uptime,
-			"Num Clients Total":       ap.NumClients,
-			"Num Clients 24G":         ap.NumClients24G,
-			"Num Clients 5G":          ap.NumClients5G,
-			"Num Clients 6G":          ap.NumClients6G,
-			"Airtime 24G Percent":     ap.Airtime24G,
-			"Airtime 5G Percent":      ap.Airtime5G,
-			"Airtime 6G Percent":      ap.Airtime6G,
-			"Connection Failure Rate": ap.ConnectionFailure,
-			"Is Health Flagged":       ap.IsOverallHealthStatusFlagged,
-			"Is Airtime 24G Flagged":  ap.IsAirtime24GFlagged,
-			"Is Airtime 5G Flagged":   ap.IsAirtime5GFlagged,
-			"Is Airtime 6G Flagged":   ap.IsAirtime6GFlagged,
-			"Alerts Total":            ap.Alerts,
-			"Channel 24G":             ap.Channel24GValue,
-			"Channel 5G":              ap.Channel5GValue,
-			"Channel 6G":              ap.Channel6GValue,
-
-			// === PERFORMANCE FIELDS (High Priority) ===
-			"Total Throughput Bytes": ap.TxRx,
-			"Tx Bytes Total":         ap.Tx,
-			"Rx Bytes Total":         ap.Rx,
-			"Noise 24G Dbm":          ap.Noise24G,
-			"Noise 5G Dbm":           ap.Noise5G,
-			"Noise 6G Dbm":           ap.Noise6G,
-			"Retry 24G Total":        ap.Retry24G,
-			"Retry 5G Total":         ap.Retry5G,
-			"Retry 6G Total":         ap.Retry6G,
-			"Latency 24G Microsec":   ap.Latency24G,
-			"Latency 5G Microsec":    ap.Latency50G,
-			"Latency 6G Microsec":    ap.Latency6G,
-
-			// === CONTEXT FIELDS (Always Include) ===
-			// "Capacity":            ap.Capacity,
-			// "Last Seen Timestamp": ap.LastSeen,
+			"Num Clients Total":   ap.NumClients,
+			"Num Clients 24G":     ap.NumClients24G,
+			"Num Clients 5G":      ap.NumClients5G,
+			"Num Clients 6G":      ap.NumClients6G,
+			"Airtime 24G Percent": ap.Airtime24G,
+			"Airtime 5G Percent":  ap.Airtime5G,
+			"Airtime 6G Percent":  ap.Airtime6G,
 		},
 		Zone:          ap.ZoneName,
 		ComponentName: componentName,
+		IP:            ap.IP,
 	}
 
 	// Add client-derived metrics if available
 	if ap.RSSI != nil {
-		metric.Data["RSSI"] = *ap.RSSI
+		metric.Data["RSSI Avg"] = *ap.RSSI
 	}
 	if ap.SNR != nil {
-		metric.Data["SNR"] = *ap.SNR
+		metric.Data["SNR Avg"] = *ap.SNR
+	}
+
+	// Add RSSI percentage metrics
+	if ap.RSSIPercentBelow74 != nil {
+		metric.Data["% Clients RSSI < -74 dBm"] = *ap.RSSIPercentBelow74
+	}
+	if ap.RSSIPercentBelow78 != nil {
+		metric.Data["% Clients RSSI < -78 dBm"] = *ap.RSSIPercentBelow78
+	}
+	if ap.RSSIPercentBelow80 != nil {
+		metric.Data["% Clients RSSI < -80 dBm"] = *ap.RSSIPercentBelow80
+	}
+
+	// Add SNR percentage metrics
+	if ap.SNRPercentBelow15 != nil {
+		metric.Data["% Clients SNR < 15 dBm"] = *ap.SNRPercentBelow15
+	}
+	if ap.SNRPercentBelow18 != nil {
+		metric.Data["% Clients SNR < 18 dBm"] = *ap.SNRPercentBelow18
+	}
+	if ap.SNRPercentBelow20 != nil {
+		metric.Data["% Clients SNR < 20 dBm"] = *ap.SNRPercentBelow20
 	}
 
 	return metric

@@ -47,8 +47,8 @@ func (s *Service) TestBulkQuery() error {
 	logrus.Infof("- Has more: %t", queryResponse.HasMore)
 
 	if len(queryResponse.List) > 0 {
-		logrus.Infof("- First AP: %s (MAC: %s, Status: %s)",
-			queryResponse.List[0].DeviceName, queryResponse.List[0].APMAC, queryResponse.List[0].Status)
+		logrus.Infof("- First AP: %s (MAC: %s)",
+			queryResponse.List[0].DeviceName, queryResponse.List[0].APMAC)
 	}
 
 	return nil
