@@ -121,7 +121,7 @@ func (w *Worker) collectAndSendStreaming() {
 	if clientErr != nil {
 		logrus.Errorf("Failed to fetch client data: %v", clientErr)
 		logrus.Info("Continuing without client enrichment data...")
-		clientMap = make(map[string]models.ClientInfo)
+		clientMap = make(map[string][]models.ClientInfo)
 	} else {
 		logrus.Infof("Successfully fetched client data for %d APs", len(clientMap))
 	}
