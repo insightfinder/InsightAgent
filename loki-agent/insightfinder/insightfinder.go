@@ -27,22 +27,23 @@ const (
 	HTTP_RETRY_INTERVAL = 5 // seconds
 )
 
-func NewService(config config.InsightFinderConfig) *Service {
+func NewService(ifConfig config.InsightFinderConfig, lokiConfig config.LokiConfig) *Service {
 	// Create HTTP client with timeout and TLS settings
 	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	client := &http.Client{Transport: tr, Timeout: 180 * time.Second}
 
 	service := &Service{
-		config:           config,
-		httpClient:       client,
-		ProjectName:      config.LogsProjectName,
-		LogProjectName:   config.LogsProjectName,
-		SystemName:       config.LogsSystemName,
-		ProjectType:      "LOG",
-		Container:        config.IsContainer,
-		CloudType:        config.CloudType,
-		InstanceType:     config.InstanceType,
-		SamplingInterval: uint(config.SamplingInterval),
+		config:              ifConfig,
+		httpClient:          client,
+		ProjectName:         ifConfig.LogsProjectName,
+		LogProjectName:      ifConfig.LogsProjectName,
+		SystemName:          ifConfig.LogsSystemName,
+		ProjectType:         "LOG",
+		Container:           ifConfig.IsContainer,
+		CloudType:           ifConfig.CloudType,
+		InstanceType:        ifConfig.InstanceType,
+		SamplingInterval:    uint(ifConfig.SamplingInterval),
+		defaultInstanceName: lokiConfig.DefaultInstanceName,
 	}
 
 	// Validate and set defaults
@@ -129,7 +130,7 @@ type SendLogDataResult struct {
 
 // SendLogDataWithLabels sends log entries to InsightFinder with labels metadata
 // This is the method expected by the worker
-func (s *Service) SendLogData(entries []models.LogEntry, labels map[string]string) (*SendLogDataResult, error) {
+func (s *Service) SendLogData(entries []models.LogEntry, queryConfig config.QueryConfig) (*SendLogDataResult, error) {
 	startTime := time.Now()
 
 	if len(entries) == 0 {
@@ -148,22 +149,43 @@ func (s *Service) SendLogData(entries []models.LogEntry, labels map[string]strin
 		// Convert timestamp to Unix timestamp in milliseconds
 		timestamp := entry.Timestamp.UnixMilli()
 
+		// Get tag value based on configured default instance name field or query override
+		instanceFieldName := s.defaultInstanceName
+		if queryConfig.InstanceName != "" {
+			instanceFieldName = queryConfig.InstanceName
+		}
+
+		// Skip tag creation if no instance field is configured
+		var tag string
+		if instanceFieldName != "" {
+			tag = s.getFieldValueFromEntry(entry, instanceFieldName)
+
+			// If container name field is specified in query config, append its value to tag
+			if queryConfig.ContainerName != "" {
+				containerValue := s.getFieldValueFromEntry(entry, queryConfig.ContainerName)
+				if containerValue != "" {
+					if tag != "" {
+						tag = CleanDeviceName(tag) + "_" + CleanDeviceName(containerValue)
+					}
+				}
+			}
+		}
+
+		// Get component name from query config field (don't set if empty)
+		componentName := ""
+		if queryConfig.ComponentName != "" {
+			componentName = s.getFieldValueFromEntry(entry, queryConfig.ComponentName)
+			if componentName != "" {
+				componentName = CleanDeviceName(componentName)
+			}
+		}
+
 		// Create log data entry
 		logData := LogData{
 			TimeStamp:     timestamp,
-			Tag:           entry.Stream.Container, // Use container as tag
+			Tag:           tag,
 			Data:          entry.Message,
-			ComponentName: entry.Stream.Namespace,
-		}
-
-		// Use namespace as tag if pod is not available
-		if logData.Tag == "" {
-			logData.Tag = entry.Stream.Namespace
-		}
-
-		// Fallback to "default" if no tag available
-		if logData.Tag == "" {
-			logData.Tag = "default"
+			ComponentName: componentName,
 		}
 
 		logDataList = append(logDataList, logData)
@@ -300,6 +322,25 @@ func (s *Service) CreateProject() bool {
 
 	logrus.Infof("Project '%s' created successfully in InsightFinder", s.ProjectName)
 	return true
+}
+
+// getFieldValueFromEntry extracts the field value from LogEntry based on the specified field name
+func (s *Service) getFieldValueFromEntry(entry models.LogEntry, fieldName string) string {
+	switch fieldName {
+	case "container":
+		return entry.Stream.Container
+	case "instance":
+		return entry.Stream.Instance
+	case "node_name":
+		return entry.Stream.Node
+	case "pod":
+		return entry.Stream.Pod
+	case "app":
+		return entry.Stream.App
+	default:
+		// Return empty string for invalid field names
+		return ""
+	}
 }
 
 // SendLogDataInternal sends LogData using the send_logs.go implementation

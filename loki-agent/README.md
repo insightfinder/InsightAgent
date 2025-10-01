@@ -58,6 +58,9 @@ loki:
   query_timeout: 60                     # Query timeout in seconds (default: 60)
   max_entries_per_query: 1000           # Maximum entries per query (default: 1000)
   
+  # Instance name configuration
+  default_instance_name: "container"    # Default field for instance names (Options: "", "container", "instance", "node_name", "pod", "app")
+  
   queries:                              # List of LogQL queries to execute
     - name: "query_name"                # Unique query identifier (required)
       query: "{namespace=\"example\"}"   # LogQL query string (required)
@@ -66,6 +69,10 @@ loki:
       labels:                           # Additional labels for the query (optional)
         source: "application"
         type: "logs"
+      # Field mapping options (all optional)
+      instance_name: "pod"              # Override default instance field
+      component_name: "app"             # Field for component name
+      container_name: "container"       # Field for container name (appended to instance)
 ```
 
 ### Loki Configuration Options
@@ -80,6 +87,7 @@ loki:
 | `max_retries` | Integer | `3` | No | Maximum number of retry attempts for failed requests |
 | `query_timeout` | Integer | `60` | No | Query timeout in seconds |
 | `max_entries_per_query` | Integer | `1000` | No | Default maximum entries per query |
+| `default_instance_name` | String | `""` | No | Default field for instance names. Options: `""` (skip), `"container"`, `"instance"`, `"node_name"`, `"pod"`, `"app"` |
 
 ### Query Configuration
 
@@ -92,35 +100,252 @@ Each query in the `queries` array supports the following options:
 | `enabled` | Boolean | `true` | No | Whether the query is active |
 | `max_entries` | Integer | Global default | No | Override maximum entries for this query |
 | `labels` | Map | `{}` | No | Additional labels to attach to log entries |
+| `instance_name` | String | `""` | No | Override default instance field. Options: `""`, `"container"`, `"instance"`, `"node_name"`, `"pod"`, `"app"` |
+| `component_name` | String | `""` | No | Field to extract component name from. Options: `"container"`, `"instance"`, `"node_name"`, `"pod"`, `"app"` |
+| `container_name` | String | `""` | No | Field to extract container name from (appended to instance). Options: `"container"`, `"instance"`, `"node_name"`, `"pod"`, `"app"` |
 
 ### Example Queries
 
 ```yaml
-queries:
-  # Application audit logs
-  - name: "insightfinder_audit_logs"
-    query: '{namespace="insightfinder",pod=~".*appserver.*"} |= `com.insightfinder.models.AuditLog`'
-    enabled: true
-    labels:
-      source: "insightfinder"
-      type: "audit"
+loki:
+  # Use pod names as default instance names
+  default_instance_name: "pod"
   
-  # Error logs
-  - name: "application_errors"
-    query: '{namespace="insightfinder"} |~ "ERROR|Exception|FATAL"'
-    enabled: true
-    labels:
-      source: "insightfinder"
-      type: "error"
-  
-  # Kubernetes events (disabled by default)
-  - name: "kubernetes_events"
-    query: '{namespace=~"kube-.*|default"} |= "Event"'
-    enabled: false
-    labels:
-      source: "kubernetes"
-      type: "event"
+  queries:
+    # Application audit logs with component tracking
+    - name: "insightfinder_audit_logs"
+      query: '{namespace="insightfinder",pod=~".*appserver.*"} |= `com.insightfinder.models.AuditLog`'
+      enabled: true
+      labels:
+        source: "insightfinder"
+        type: "audit"
+      component_name: "app"           # Use app field for component classification
+      container_name: "container"     # Append container name to instance
+      # Result: instance="appserver-pod-123_java-container", component="insightfinder-app"
+    
+    # Error logs with node-level tracking
+    - name: "application_errors"
+      query: '{namespace="insightfinder"} |~ "ERROR|Exception|FATAL"'
+      enabled: true
+      labels:
+        source: "insightfinder"
+        type: "error"
+      instance_name: "node_name"      # Override: use node names for error tracking
+      component_name: "pod"           # Use pod for error categorization
+      # Result: instance="worker-node-1", component="error-handler-pod-abc"
+    
+    # Kubernetes events without instance tracking
+    - name: "kubernetes_events"
+      query: '{namespace=~"kube-.*|default"} |= "Event"'
+      enabled: false
+      labels:
+        source: "kubernetes"
+        type: "event"
+      instance_name: ""               # Skip instance names for cluster events
+      component_name: "namespace"     # Would use namespace if it were a valid field
+      # Result: no instance tag, logs grouped by query only
 ```
+
+## Instance Name Configuration
+
+The Loki Agent provides flexible configuration for extracting instance names, component names, and container names from log entries. This system allows you to control how logs are tagged and organized in InsightFinder.
+
+### Overview
+
+The agent extracts metadata from log entries using field mappings. You can specify which fields from the log stream should be used for:
+- **Instance Name (Tag)**: Primary identifier for the log source
+- **Component Name**: Secondary categorization (optional)
+- **Container Name**: Additional identifier that gets appended to instance name
+
+### Available Fields
+
+The following fields are available for extraction from log entries:
+
+| Field Name | Description | Example Value |
+|------------|-------------|---------------|
+| `container` | Container name from the log stream | `"nginx-container"` |
+| `instance` | Instance identifier from the log stream | `"web-instance-1"` |
+| `node_name` | Kubernetes node name | `"worker-node-1"` |
+| `pod` | Kubernetes pod name | `"web-pod-abc123"` |
+| `app` | Application label from the log stream | `"web-app"` |
+
+### Configuration Structure
+
+```yaml
+loki:
+  # Global default field for instance names
+  default_instance_name: "container"    # Options: "", "container", "instance", "node_name", "pod", "app"
+  
+  queries:
+    - name: "example_query"
+      query: '{namespace="production"}'
+      
+      # Query-specific field mappings (all optional)
+      instance_name: "pod"              # Override default instance field
+      component_name: "app"             # Field to use for component name
+      container_name: "container"       # Field to use for container name
+```
+
+### Default Instance Name
+
+The `default_instance_name` field in the Loki configuration sets the global default for all queries:
+
+```yaml
+loki:
+  default_instance_name: "pod"    # Use pod names as default instance names
+```
+
+**Special Behavior:**
+- **Empty value (`""`)**: Skip instance name creation entirely - logs will have no instance tags
+- **Valid field name**: Use that field as the default for all queries
+- **Query override**: Individual queries can override the default using `instance_name`
+
+### Query-Specific Configuration
+
+Each query can customize field extraction independently:
+
+#### Instance Name Override
+```yaml
+queries:
+  - name: "kubernetes_pods"
+    query: '{namespace="kube-system"}'
+    instance_name: "pod"              # Use pod field instead of default
+```
+
+#### Component Name Extraction
+```yaml
+queries:
+  - name: "application_logs"
+    query: '{app="web-service"}'
+    component_name: "app"             # Extract component from app field
+```
+
+#### Container Name Appending
+```yaml
+queries:
+  - name: "multi_container_pods"
+    query: '{namespace="production"}'
+    instance_name: "pod"              # Use pod for instance
+    container_name: "container"       # Append container name
+    # Result: "web-pod-123_nginx-container"
+```
+
+### Tag Generation Logic
+
+The final instance tag (used in InsightFinder) is generated using this logic:
+
+1. **Determine instance field**:
+   - Use query's `instance_name` if specified
+   - Otherwise use global `default_instance_name`
+   - If both are empty, skip tag creation
+
+2. **Extract instance value**:
+   - Get value from the determined field in the log entry
+   - If field is empty or doesn't exist, use empty string
+
+3. **Append container name** (if specified):
+   - Extract value from `container_name` field
+   - Append to instance name with underscore: `{instance}_{container}`
+
+4. **Clean and finalize**:
+   - Apply naming rules and sanitization
+   - If final result is empty, no tag is created
+
+### Configuration Examples
+
+#### Example 1: Skip Instance Names
+```yaml
+loki:
+  default_instance_name: ""           # Skip instance names globally
+  queries:
+    - name: "logs_without_instances"
+      query: '{namespace="logging"}'
+      # No instance names will be created
+```
+
+#### Example 2: Use Pod Names by Default
+```yaml
+loki:
+  default_instance_name: "pod"        # Use pod names as default
+  queries:
+    - name: "kubernetes_logs"
+      query: '{namespace="production"}'
+      # Will use pod names from log entries
+```
+
+#### Example 3: Mixed Configuration
+```yaml
+loki:
+  default_instance_name: "container"  # Default to container names
+  queries:
+    - name: "pod_based_logs"
+      query: '{component="frontend"}'
+      instance_name: "pod"            # Override: use pod names
+      component_name: "app"           # Add component from app field
+      
+    - name: "node_logs"
+      query: '{job="node-exporter"}'
+      instance_name: "node_name"      # Override: use node names
+      
+    - name: "detailed_logs"
+      query: '{namespace="services"}'
+      instance_name: "pod"            # Use pod names
+      container_name: "container"     # Append container names
+      component_name: "app"           # Add component classification
+      # Result: instance="web-pod-123_nginx", component="web-service"
+```
+
+#### Example 4: Application-Specific Tagging
+```yaml
+loki:
+  default_instance_name: "app"        # Use application names
+  queries:
+    - name: "microservice_logs"
+      query: '{namespace="microservices"}'
+      component_name: "pod"           # Use pod for component grouping
+      container_name: "container"     # Track specific containers
+      # Result: instance="user-service_api-container", component="user-service-pod-abc"
+      
+    - name: "database_logs"
+      query: '{app="database"}'
+      instance_name: "instance"       # Use instance field for databases
+      # Result: instance="db-primary-1"
+```
+
+### Field Mapping Reference
+
+| Log Stream Field | Typical Content | Use Case |
+|------------------|----------------|----------|
+| `namespace` | `"production"`, `"kube-system"` | Not configurable for tagging |
+| `container` | `"nginx"`, `"app-server"` | Good for container-focused environments |
+| `instance` | `"web-01"`, `"db-primary"` | Good for traditional instance-based deployments |
+| `node_name` | `"worker-node-1"` | Good for node-level monitoring |
+| `pod` | `"web-deployment-abc123"` | Good for Kubernetes pod tracking |
+| `app` | `"web-service"`, `"user-api"` | Good for application-level grouping |
+
+### Best Practices
+
+1. **Choose Consistent Fields**: Use the same field mapping strategy across related queries
+2. **Consider Cardinality**: Avoid fields that create too many unique instance names
+3. **Test Empty Values**: Ensure your configuration handles missing fields gracefully
+4. **Use Component Names**: Leverage component names for additional categorization
+5. **Document Your Strategy**: Keep track of which fields you're using for what purpose
+
+### Troubleshooting
+
+**No instance names appearing:**
+- Check that `default_instance_name` is not empty
+- Verify the specified field exists in your log entries
+- Ensure queries don't override with empty `instance_name`
+
+**Unexpected instance names:**
+- Check field values in actual log entries
+- Verify field name spelling (e.g., `node_name` not `node`)
+- Test with debug logging enabled
+
+**Too many unique instances:**
+- Consider using higher-level fields (e.g., `app` instead of `pod`)
+- Use component names for detailed categorization instead of instance names
 
 ## InsightFinder Configuration
 

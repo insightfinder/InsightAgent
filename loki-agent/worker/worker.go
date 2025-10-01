@@ -148,7 +148,7 @@ func (w *Worker) processQuery(queryConfig config.QueryConfig) error {
 
 	// Send to InsightFinder if not in test mode
 	if !w.testMode {
-		result, err := w.insightFinderService.SendLogData(entries, queryConfig.Labels)
+		result, err := w.insightFinderService.SendLogData(entries, queryConfig)
 		if err != nil {
 			return fmt.Errorf("failed to send data to InsightFinder: %v", err)
 		}
