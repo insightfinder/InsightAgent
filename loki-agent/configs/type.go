@@ -25,7 +25,7 @@ type LokiConfig struct {
 
 	// Default instance name field - determines what field to use as default instance name/tag
 	// Options: container, instance, node_name, pod, app
-	DefaultInstanceName string `yaml:"default_instance_name"`
+	DefaultInstanceNameField string `yaml:"default_instance_name_field"`
 
 	// Query Configuration
 	Queries            []QueryConfig `yaml:"queries"`
@@ -42,9 +42,9 @@ type QueryConfig struct {
 
 	// Query field parameters - specify which field to use from log entry
 	// Options: container, instance, node_name, pod, app
-	InstanceName  string `yaml:"instance_name"`  // Field name to use for instance name
-	ComponentName string `yaml:"component_name"` // Field name to use for component name
-	ContainerName string `yaml:"container_name"` // Field name to use for container name
+	InstanceNameField  string `yaml:"instance_name_field"`  // Field name to use for instance name
+	ComponentNameField string `yaml:"component_name_field"` // Field name to use for component name
+	ContainerNameField string `yaml:"container_name_field"` // Field name to use for container name
 }
 
 type InsightFinderConfig struct {

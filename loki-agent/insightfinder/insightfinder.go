@@ -43,7 +43,7 @@ func NewService(ifConfig config.InsightFinderConfig, lokiConfig config.LokiConfi
 		CloudType:           ifConfig.CloudType,
 		InstanceType:        ifConfig.InstanceType,
 		SamplingInterval:    uint(ifConfig.SamplingInterval),
-		defaultInstanceName: lokiConfig.DefaultInstanceName,
+		defaultInstanceName: lokiConfig.DefaultInstanceNameField,
 	}
 
 	// Validate and set defaults
@@ -151,8 +151,8 @@ func (s *Service) SendLogData(entries []models.LogEntry, queryConfig config.Quer
 
 		// Get tag value based on configured default instance name field or query override
 		instanceFieldName := s.defaultInstanceName
-		if queryConfig.InstanceName != "" {
-			instanceFieldName = queryConfig.InstanceName
+		if queryConfig.InstanceNameField != "" {
+			instanceFieldName = queryConfig.InstanceNameField
 		}
 
 		// Skip tag creation if no instance field is configured
@@ -161,8 +161,8 @@ func (s *Service) SendLogData(entries []models.LogEntry, queryConfig config.Quer
 			tag = s.getFieldValueFromEntry(entry, instanceFieldName)
 
 			// If container name field is specified in query config, append its value to tag
-			if queryConfig.ContainerName != "" {
-				containerValue := s.getFieldValueFromEntry(entry, queryConfig.ContainerName)
+			if queryConfig.ContainerNameField != "" {
+				containerValue := s.getFieldValueFromEntry(entry, queryConfig.ContainerNameField)
 				if containerValue != "" {
 					if tag != "" {
 						tag = CleanDeviceName(containerValue) + "_" + CleanDeviceName(tag)
@@ -173,8 +173,8 @@ func (s *Service) SendLogData(entries []models.LogEntry, queryConfig config.Quer
 
 		// Get component name from query config field (don't set if empty)
 		componentName := ""
-		if queryConfig.ComponentName != "" {
-			componentName = s.getFieldValueFromEntry(entry, queryConfig.ComponentName)
+		if queryConfig.ComponentNameField != "" {
+			componentName = s.getFieldValueFromEntry(entry, queryConfig.ComponentNameField)
 			if componentName != "" {
 				componentName = CleanDeviceName(componentName)
 			}

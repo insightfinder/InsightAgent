@@ -160,20 +160,20 @@ func validateConfig(config *Config) error {
 		"pod":       true,
 		"app":       true,
 	}
-	if !validFieldNames[config.Loki.DefaultInstanceName] {
-		return fmt.Errorf("invalid default_instance_name: %s. Valid options are: (empty), container, instance, node_name, pod, app", config.Loki.DefaultInstanceName)
+	if !validFieldNames[config.Loki.DefaultInstanceNameField] {
+		return fmt.Errorf("invalid default_instance_name_field: %s. Valid options are: (empty), container, instance, node_name, pod, app", config.Loki.DefaultInstanceNameField)
 	}
 
 	// Validate query field parameters (allow empty)
 	for i, query := range config.Loki.Queries {
-		if query.InstanceName != "" && !validFieldNames[query.InstanceName] {
-			return fmt.Errorf("query %d (%s): invalid instance_name field: %s. Valid options are: (empty), container, instance, node_name, pod, app", i, query.Name, query.InstanceName)
+		if query.InstanceNameField != "" && !validFieldNames[query.InstanceNameField] {
+			return fmt.Errorf("query %d (%s): invalid instance_name_field: %s. Valid options are: (empty), container, instance, node_name, pod, app", i, query.Name, query.InstanceNameField)
 		}
-		if query.ComponentName != "" && !validFieldNames[query.ComponentName] {
-			return fmt.Errorf("query %d (%s): invalid component_name field: %s. Valid options are: (empty), container, instance, node_name, pod, app", i, query.Name, query.ComponentName)
+		if query.ComponentNameField != "" && !validFieldNames[query.ComponentNameField] {
+			return fmt.Errorf("query %d (%s): invalid component_name_field: %s. Valid options are: (empty), container, instance, node_name, pod, app", i, query.Name, query.ComponentNameField)
 		}
-		if query.ContainerName != "" && !validFieldNames[query.ContainerName] {
-			return fmt.Errorf("query %d (%s): invalid container_name field: %s. Valid options are: (empty), container, instance, node_name, pod, app", i, query.Name, query.ContainerName)
+		if query.ContainerNameField != "" && !validFieldNames[query.ContainerNameField] {
+			return fmt.Errorf("query %d (%s): invalid container_name_field: %s. Valid options are: (empty), container, instance, node_name, pod, app", i, query.Name, query.ContainerNameField)
 		}
 	}
 
