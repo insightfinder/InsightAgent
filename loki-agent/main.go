@@ -33,7 +33,7 @@ func main() {
 
 	// Initialize services
 	lokiService := loki.NewService(cfg.Loki)
-	ifService := insightfinder.NewService(cfg.InsightFinder)
+	ifService := insightfinder.NewService(cfg.InsightFinder, cfg.Loki)
 
 	// Validate InsightFinder configuration
 	if !ifService.Validate() {

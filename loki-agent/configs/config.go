@@ -151,5 +151,31 @@ func validateConfig(config *Config) error {
 		}
 	}
 
+	// Validate default instance name (allow empty)
+	validFieldNames := map[string]bool{
+		"":          true, // Allow empty value
+		"container": true,
+		"instance":  true,
+		"node_name": true,
+		"pod":       true,
+		"app":       true,
+	}
+	if !validFieldNames[config.Loki.DefaultInstanceName] {
+		return fmt.Errorf("invalid default_instance_name: %s. Valid options are: (empty), container, instance, node_name, pod, app", config.Loki.DefaultInstanceName)
+	}
+
+	// Validate query field parameters (allow empty)
+	for i, query := range config.Loki.Queries {
+		if query.InstanceName != "" && !validFieldNames[query.InstanceName] {
+			return fmt.Errorf("query %d (%s): invalid instance_name field: %s. Valid options are: (empty), container, instance, node_name, pod, app", i, query.Name, query.InstanceName)
+		}
+		if query.ComponentName != "" && !validFieldNames[query.ComponentName] {
+			return fmt.Errorf("query %d (%s): invalid component_name field: %s. Valid options are: (empty), container, instance, node_name, pod, app", i, query.Name, query.ComponentName)
+		}
+		if query.ContainerName != "" && !validFieldNames[query.ContainerName] {
+			return fmt.Errorf("query %d (%s): invalid container_name field: %s. Valid options are: (empty), container, instance, node_name, pod, app", i, query.Name, query.ContainerName)
+		}
+	}
+
 	return nil
 }

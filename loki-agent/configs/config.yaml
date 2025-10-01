@@ -15,6 +15,10 @@ loki:
   query_timeout: 60
   max_entries_per_query: 1000
   
+  # Default instance name field - determines what field to use as default instance name/tag
+  # Options: container, instance, node_name, pod, app
+  default_instance_name: "container"
+  
   # List of queries to execute
   queries:
     - name: "insightfinder_audit_logs"
@@ -23,6 +27,12 @@ loki:
       labels:
         source: "insightfinder"
         type: "audit"
+      # Optional: Override instance name field for this query (Options: container, instance, node_name, pod, app)
+      # instance_name: "pod"
+      # Optional: Set component name field for this query (Options: container, instance, node_name, pod, app)
+      component_name: "app"
+      # Optional: Set container name field (Options: container, instance, node_name, pod, app)
+      container_name: "container"
     
     - name: "application_errors"
       query: '{namespace="insightfinder"} |~ "ERROR|Exception|FATAL"'
@@ -30,6 +40,9 @@ loki:
       labels:
         source: "insightfinder"
         type: "error"
+      # Example of using query field parameters
+      component_name: "container"
+      container_name: "pod"
     
     - name: "kubernetes_events"
       query: '{namespace=~"kube-.*|default"} |= "Event"'
@@ -37,6 +50,9 @@ loki:
       labels:
         source: "kubernetes"
         type: "event"
+      instance_name: "node_name"
+      component_name: "container"
+      container_name: "pod"
 
 insightfinder:
   server_url: "https://app.insightfinder.com"

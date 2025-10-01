@@ -7,18 +7,19 @@ import (
 )
 
 type Service struct {
-	config           config.InsightFinderConfig
-	httpClient       *http.Client
-	ProjectName      string
-	LogProjectName   string
-	SystemName       string
-	CloudType        string
-	InstanceType     string
-	ProjectType      string // "Metric", "Log", "Trace", "Deployment", "Alert", "Incident"
-	DataType         string
-	Container        bool
-	InsightAgentType string
-	SamplingInterval uint // In seconds
+	config              config.InsightFinderConfig
+	httpClient          *http.Client
+	ProjectName         string
+	LogProjectName      string
+	SystemName          string
+	CloudType           string
+	InstanceType        string
+	ProjectType         string // "Metric", "Log", "Trace", "Deployment", "Alert", "Incident"
+	DataType            string
+	Container           bool
+	InsightAgentType    string
+	SamplingInterval    uint   // In seconds
+	defaultInstanceName string // Default field name to use for instance name
 }
 
 // InsightFinder data structures (matching v2 API format)
