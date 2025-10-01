@@ -121,24 +121,24 @@ func (ap *APDetail) ToMetricData(componentNameAsAP bool) *MetricData {
 
 	// Add RSSI percentage metrics
 	if ap.RSSIPercentBelow74 != nil {
-		metric.Data["RSSI Percent Below -74dBm"] = *ap.RSSIPercentBelow74
+		metric.Data["% Clients RSSI < -74 dBm"] = *ap.RSSIPercentBelow74
 	}
 	if ap.RSSIPercentBelow78 != nil {
-		metric.Data["RSSI Percent Below -78dBm"] = *ap.RSSIPercentBelow78
+		metric.Data["% Clients RSSI < -78 dBm"] = *ap.RSSIPercentBelow78
 	}
 	if ap.RSSIPercentBelow80 != nil {
-		metric.Data["RSSI Percent Below -80dBm"] = *ap.RSSIPercentBelow80
+		metric.Data["% Clients RSSI < -80 dBm"] = *ap.RSSIPercentBelow80
 	}
 
 	// Add SNR percentage metrics
 	if ap.SNRPercentBelow15 != nil {
-		metric.Data["SNR Percent Below 15dBm"] = *ap.SNRPercentBelow15
+		metric.Data["% Clients SNR < 15 dBm"] = *ap.SNRPercentBelow15
 	}
 	if ap.SNRPercentBelow18 != nil {
-		metric.Data["SNR Percent Below 18dBm"] = *ap.SNRPercentBelow18
+		metric.Data["% Clients SNR < 18 dBm"] = *ap.SNRPercentBelow18
 	}
 	if ap.SNRPercentBelow20 != nil {
-		metric.Data["SNR Percent Below 20dBm"] = *ap.SNRPercentBelow20
+		metric.Data["% Clients SNR < 20 dBm"] = *ap.SNRPercentBelow20
 	}
 
 	return metric
