@@ -17,7 +17,7 @@ loki:
   
   # Default instance name field - determines what field to use as default instance name/tag
   # Options: container, instance, node_name, pod, app
-  default_instance_name: "container"
+  default_instance_name: "app"
   
   # List of queries to execute
   queries:
@@ -30,9 +30,9 @@ loki:
       # Optional: Override instance name field for this query (Options: container, instance, node_name, pod, app)
       # instance_name: "pod"
       # Optional: Set component name field for this query (Options: container, instance, node_name, pod, app)
-      component_name: "app"
+      component_name: "container"
       # Optional: Set container name field (Options: container, instance, node_name, pod, app)
-      container_name: "container"
+      container_name: "node_name"
     
     - name: "application_errors"
       query: '{namespace="insightfinder"} |~ "ERROR|Exception|FATAL"'
@@ -46,12 +46,12 @@ loki:
     
     - name: "kubernetes_events"
       query: '{namespace=~"kube-.*|default"} |= "Event"'
-      enabled: false
+      enabled: true
       labels:
         source: "kubernetes"
         type: "event"
-      instance_name: "node_name"
-      component_name: "container"
+      instance_name: "container"
+      component_name: "instance"
       container_name: "pod"
 
 insightfinder:

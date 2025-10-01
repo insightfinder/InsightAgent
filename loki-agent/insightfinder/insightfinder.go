@@ -165,7 +165,7 @@ func (s *Service) SendLogData(entries []models.LogEntry, queryConfig config.Quer
 				containerValue := s.getFieldValueFromEntry(entry, queryConfig.ContainerName)
 				if containerValue != "" {
 					if tag != "" {
-						tag = CleanDeviceName(tag) + "_" + CleanDeviceName(containerValue)
+						tag = CleanDeviceName(containerValue) + "_" + CleanDeviceName(tag)
 					}
 				}
 			}

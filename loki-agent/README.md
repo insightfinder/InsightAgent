@@ -121,7 +121,7 @@ loki:
         type: "audit"
       component_name: "app"           # Use app field for component classification
       container_name: "container"     # Append container name to instance
-      # Result: instance="appserver-pod-123_java-container", component="insightfinder-app"
+      # Result: instance="java-container_appserver-pod-123", component="insightfinder-app"
     
     # Error logs with node-level tracking
     - name: "application_errors"
@@ -227,7 +227,7 @@ queries:
     query: '{namespace="production"}'
     instance_name: "pod"              # Use pod for instance
     container_name: "container"       # Append container name
-    # Result: "web-pod-123_nginx-container"
+    # Result: "nginx-container_web-pod-123"
 ```
 
 ### Tag Generation Logic
@@ -245,7 +245,7 @@ The final instance tag (used in InsightFinder) is generated using this logic:
 
 3. **Append container name** (if specified):
    - Extract value from `container_name` field
-   - Append to instance name with underscore: `{instance}_{container}`
+   - Prepend to instance name with underscore: `{container}_{instance}`
 
 4. **Clean and finalize**:
    - Apply naming rules and sanitization
@@ -292,7 +292,7 @@ loki:
       instance_name: "pod"            # Use pod names
       container_name: "container"     # Append container names
       component_name: "app"           # Add component classification
-      # Result: instance="web-pod-123_nginx", component="web-service"
+      # Result: instance="nginx_web-pod-123", component="web-service"
 ```
 
 #### Example 4: Application-Specific Tagging
@@ -304,7 +304,7 @@ loki:
       query: '{namespace="microservices"}'
       component_name: "pod"           # Use pod for component grouping
       container_name: "container"     # Track specific containers
-      # Result: instance="user-service_api-container", component="user-service-pod-abc"
+      # Result: instance="api-container_user-service", component="user-service-pod-abc"
       
     - name: "database_logs"
       query: '{app="database"}'
