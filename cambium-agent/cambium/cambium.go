@@ -687,19 +687,17 @@ func worker(jobs <-chan Job, results chan<- Result) {
 		metricData := &models.MetricData{
 			Timestamp:    time.Now().Unix(),
 			InstanceName: cleanName,
-			Data: map[string]interface{}{
-				// "Status": func() int {
-				// 	if device.Sys.Online {
-				// 		return 1
-				// 	} else {
-				// 		return 0
-				// 	}
-				// }(),
-				"Available Memory": device.Sys.Mem,
-				"CPU Utilization":  device.Sys.CPU,
-			},
-			Zone: device.Config.Profile,
-			IP:   ipAddress,
+			Data:         map[string]interface{}{},
+			Zone:         device.Config.Profile,
+			IP:           ipAddress,
+		}
+
+		// Add system metrics based on configuration
+		if Cfg.MetricFilter.AvailableMemory {
+			metricData.Data["Available Memory"] = device.Sys.Mem
+		}
+		if Cfg.MetricFilter.CPUUtilization {
+			metricData.Data["CPU Utilization"] = device.Sys.CPU
 		}
 
 		// Add radio data if available
@@ -736,31 +734,47 @@ func worker(jobs <-chan Job, results chan<- Result) {
 		// 	metricData.Data["Channel Utilization 24G"] = 0.0
 		// }
 
-		// Add 5GHz metrics
+		// Add 5GHz metrics based on configuration
 		if radio5G != nil {
-			metricData.Data["Num Clients 5G"] = radio5G.Mus
-			metricData.Data["Channel Utilization 5G"] = radio5G.TotalCu
+			if Cfg.MetricFilter.NumClients5G {
+				metricData.Data["Num Clients 5G"] = radio5G.Mus
+			}
+			if Cfg.MetricFilter.ChannelUtilization5G {
+				metricData.Data["Channel Utilization 5G"] = radio5G.TotalCu
+			}
 			// metricData.Data["UL Throughput 5G"] = radio5G.UlTPut
 			// metricData.Data["DL Throughput 5G"] = radio5G.DlTPut
 			// metricData.Data["Noise Floor 5G"] = radio5G.Nf
 		} else {
-			metricData.Data["Num Clients 5G"] = 0
-			metricData.Data["Channel Utilization 5G"] = 0.0
+			if Cfg.MetricFilter.NumClients5G {
+				metricData.Data["Num Clients 5G"] = 0
+			}
+			if Cfg.MetricFilter.ChannelUtilization5G {
+				metricData.Data["Channel Utilization 5G"] = 0.0
+			}
 			// metricData.Data["UL Throughput 5G"] = 0.0
 			// metricData.Data["DL Throughput 5G"] = 0.0
 			// metricData.Data["Noise Floor 5G"] = 0.0
 		}
 
-		// Add 6GHz metrics
+		// Add 6GHz metrics based on configuration
 		if radio6G != nil {
-			metricData.Data["Num Clients 6G"] = radio6G.Mus
-			metricData.Data["Channel Utilization 6G"] = radio6G.TotalCu
+			if Cfg.MetricFilter.NumClients6G {
+				metricData.Data["Num Clients 6G"] = radio6G.Mus
+			}
+			if Cfg.MetricFilter.ChannelUtilization6G {
+				metricData.Data["Channel Utilization 6G"] = radio6G.TotalCu
+			}
 			// metricData.Data["UL Throughput 6G"] = radio6G.UlTPut
 			// metricData.Data["DL Throughput 6G"] = radio6G.DlTPut
 			// metricData.Data["Noise Floor 6G"] = radio6G.Nf
 		} else {
-			metricData.Data["Num Clients 6G"] = 0
-			metricData.Data["Channel Utilization 6G"] = 0.0
+			if Cfg.MetricFilter.NumClients6G {
+				metricData.Data["Num Clients 6G"] = 0
+			}
+			if Cfg.MetricFilter.ChannelUtilization6G {
+				metricData.Data["Channel Utilization 6G"] = 0.0
+			}
 			// metricData.Data["UL Throughput 6G"] = 0.0
 			// metricData.Data["DL Throughput 6G"] = 0.0
 			// metricData.Data["Noise Floor 6G"] = 0.0
@@ -781,33 +795,33 @@ func worker(jobs <-chan Job, results chan<- Result) {
 				deviceCopy := device
 				enrichDeviceWithClientMetrics(&deviceCopy, clients)
 
-				// Add client-derived metrics if available
-				if deviceCopy.RSSI != nil {
+				// Add client-derived metrics based on configuration
+				if deviceCopy.RSSI != nil && Cfg.MetricFilter.RSSIAvg {
 					metricData.Data["RSSI Avg"] = *deviceCopy.RSSI
 				}
-				if deviceCopy.SNR != nil {
+				if deviceCopy.SNR != nil && Cfg.MetricFilter.SNRAvg {
 					metricData.Data["SNR Avg"] = *deviceCopy.SNR
 				}
 
-				// Add RSSI percentage metrics
-				if deviceCopy.RSSIPercentBelow74 != nil {
+				// Add RSSI percentage metrics based on configuration
+				if deviceCopy.RSSIPercentBelow74 != nil && Cfg.MetricFilter.ClientsRSSIBelow74 {
 					metricData.Data["% Clients RSSI < -74 dBm"] = *deviceCopy.RSSIPercentBelow74
 				}
-				if deviceCopy.RSSIPercentBelow78 != nil {
+				if deviceCopy.RSSIPercentBelow78 != nil && Cfg.MetricFilter.ClientsRSSIBelow78 {
 					metricData.Data["% Clients RSSI < -78 dBm"] = *deviceCopy.RSSIPercentBelow78
 				}
-				if deviceCopy.RSSIPercentBelow80 != nil {
+				if deviceCopy.RSSIPercentBelow80 != nil && Cfg.MetricFilter.ClientsRSSIBelow80 {
 					metricData.Data["% Clients RSSI < -80 dBm"] = *deviceCopy.RSSIPercentBelow80
 				}
 
-				// Add SNR percentage metrics
-				if deviceCopy.SNRPercentBelow15 != nil {
+				// Add SNR percentage metrics based on configuration
+				if deviceCopy.SNRPercentBelow15 != nil && Cfg.MetricFilter.ClientsSNRBelow15 {
 					metricData.Data["% Clients SNR < 15 dBm"] = *deviceCopy.SNRPercentBelow15
 				}
-				if deviceCopy.SNRPercentBelow18 != nil {
+				if deviceCopy.SNRPercentBelow18 != nil && Cfg.MetricFilter.ClientsSNRBelow18 {
 					metricData.Data["% Clients SNR < 18 dBm"] = *deviceCopy.SNRPercentBelow18
 				}
-				if deviceCopy.SNRPercentBelow20 != nil {
+				if deviceCopy.SNRPercentBelow20 != nil && Cfg.MetricFilter.ClientsSNRBelow20 {
 					metricData.Data["% Clients SNR < 20 dBm"] = *deviceCopy.SNRPercentBelow20
 				}
 
@@ -817,7 +831,7 @@ func worker(jobs <-chan Job, results chan<- Result) {
 			}
 		}
 
-		logrus.Debugf("Successfully processed device %s", device.MAC)
+		logrus.Debugf("Successfully processed device %s with %d metrics enabled", device.MAC, len(metricData.Data))
 		results <- Result{MetricData: metricData}
 	}
 }
@@ -996,8 +1010,86 @@ func InitConfig(configPath string) error {
 		return fmt.Errorf("failed to create or verify InsightFinder project")
 	}
 
+	// Log active metric filters
+	logMetricConfiguration()
+
 	logrus.Info("Configuration initialized successfully")
 	return nil
+}
+
+// logMetricConfiguration logs which metrics are enabled for streaming
+func logMetricConfiguration() {
+	logrus.Info("Metric filtering configuration:")
+
+	enabledMetrics := []string{}
+	totalMetrics := 0
+
+	// System metrics
+	totalMetrics++
+	if Cfg.MetricFilter.AvailableMemory {
+		enabledMetrics = append(enabledMetrics, "Available Memory")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.CPUUtilization {
+		enabledMetrics = append(enabledMetrics, "CPU Utilization")
+	}
+
+	// Radio metrics
+	totalMetrics++
+	if Cfg.MetricFilter.NumClients5G {
+		enabledMetrics = append(enabledMetrics, "Num Clients 5G")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ChannelUtilization5G {
+		enabledMetrics = append(enabledMetrics, "Channel Utilization 5G")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.NumClients6G {
+		enabledMetrics = append(enabledMetrics, "Num Clients 6G")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ChannelUtilization6G {
+		enabledMetrics = append(enabledMetrics, "Channel Utilization 6G")
+	}
+
+	// Client-derived metrics
+	totalMetrics++
+	if Cfg.MetricFilter.RSSIAvg {
+		enabledMetrics = append(enabledMetrics, "RSSI Avg")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.SNRAvg {
+		enabledMetrics = append(enabledMetrics, "SNR Avg")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ClientsRSSIBelow74 {
+		enabledMetrics = append(enabledMetrics, "% Clients RSSI < -74 dBm")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ClientsRSSIBelow78 {
+		enabledMetrics = append(enabledMetrics, "% Clients RSSI < -78 dBm")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ClientsRSSIBelow80 {
+		enabledMetrics = append(enabledMetrics, "% Clients RSSI < -80 dBm")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ClientsSNRBelow15 {
+		enabledMetrics = append(enabledMetrics, "% Clients SNR < 15 dBm")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ClientsSNRBelow18 {
+		enabledMetrics = append(enabledMetrics, "% Clients SNR < 18 dBm")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ClientsSNRBelow20 {
+		enabledMetrics = append(enabledMetrics, "% Clients SNR < 20 dBm")
+	}
+
+	logrus.Infof("Enabled metrics (%d/%d): %v", len(enabledMetrics), totalMetrics, enabledMetrics)
+	if len(enabledMetrics) == 0 {
+		logrus.Warn("No metrics are enabled for streaming! All metrics are set to false in configuration.")
+	}
 }
 
 // ===========================================
