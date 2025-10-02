@@ -2,6 +2,25 @@ package models
 
 import "time"
 
+// MetricFilter interface to support filtering
+type MetricFilter interface {
+	IsNumClientsTotal() bool
+	IsNumClients24G() bool
+	IsNumClients5G() bool
+	IsNumClients6G() bool
+	IsAirtime24G() bool
+	IsAirtime5G() bool
+	IsAirtime6G() bool
+	IsRSSIAvg() bool
+	IsSNRAvg() bool
+	IsClientsRSSIBelow74() bool
+	IsClientsRSSIBelow78() bool
+	IsClientsRSSIBelow80() bool
+	IsClientsSNRBelow15() bool
+	IsClientsSNRBelow18() bool
+	IsClientsSNRBelow20() bool
+}
+
 // API Response structures
 type APListResponse struct {
 	TotalCount int      `json:"totalCount"`
@@ -86,8 +105,8 @@ type MetricData struct {
 	IP            string                 `json:"ip,omitempty"`
 }
 
-// Convert AP detail to metric data
-func (ap *APDetail) ToMetricData(componentNameAsAP bool) *MetricData {
+// Convert AP detail to metric data with filtering
+func (ap *APDetail) ToMetricData(componentNameAsAP bool, filter MetricFilter) *MetricData {
 	cleanDeviceName := cleanDeviceName(ap.DeviceName)
 	componentName := ""
 	if componentNameAsAP {
@@ -95,49 +114,66 @@ func (ap *APDetail) ToMetricData(componentNameAsAP bool) *MetricData {
 	}
 
 	metric := &MetricData{
-		Timestamp:    time.Now().Unix(),
-		InstanceName: cleanDeviceName,
-		Data: map[string]interface{}{
-			"Num Clients Total":   ap.NumClients,
-			"Num Clients 24G":     ap.NumClients24G,
-			"Num Clients 5G":      ap.NumClients5G,
-			"Num Clients 6G":      ap.NumClients6G,
-			"Airtime 24G Percent": ap.Airtime24G,
-			"Airtime 5G Percent":  ap.Airtime5G,
-			"Airtime 6G Percent":  ap.Airtime6G,
-		},
+		Timestamp:     time.Now().Unix(),
+		InstanceName:  cleanDeviceName,
+		Data:          map[string]interface{}{},
 		Zone:          ap.ZoneName,
 		ComponentName: componentName,
 		IP:            ap.IP,
 	}
 
-	// Add client-derived metrics if available
-	if ap.RSSI != nil {
+	// Add client count metrics based on filter configuration
+	if filter.IsNumClientsTotal() {
+		metric.Data["Num Clients Total"] = ap.NumClients
+	}
+	if filter.IsNumClients24G() {
+		metric.Data["Num Clients 24G"] = ap.NumClients24G
+	}
+	if filter.IsNumClients5G() {
+		metric.Data["Num Clients 5G"] = ap.NumClients5G
+	}
+	if filter.IsNumClients6G() {
+		metric.Data["Num Clients 6G"] = ap.NumClients6G
+	}
+
+	// Add airtime metrics based on filter configuration
+	if filter.IsAirtime24G() {
+		metric.Data["Airtime 24G Percent"] = ap.Airtime24G
+	}
+	if filter.IsAirtime5G() {
+		metric.Data["Airtime 5G Percent"] = ap.Airtime5G
+	}
+	if filter.IsAirtime6G() {
+		metric.Data["Airtime 6G Percent"] = ap.Airtime6G
+	}
+
+	// Add client-derived metrics based on filter configuration
+	if ap.RSSI != nil && filter.IsRSSIAvg() {
 		metric.Data["RSSI Avg"] = *ap.RSSI
 	}
-	if ap.SNR != nil {
+	if ap.SNR != nil && filter.IsSNRAvg() {
 		metric.Data["SNR Avg"] = *ap.SNR
 	}
 
-	// Add RSSI percentage metrics
-	if ap.RSSIPercentBelow74 != nil {
+	// Add RSSI percentage metrics based on filter configuration
+	if ap.RSSIPercentBelow74 != nil && filter.IsClientsRSSIBelow74() {
 		metric.Data["% Clients RSSI < -74 dBm"] = *ap.RSSIPercentBelow74
 	}
-	if ap.RSSIPercentBelow78 != nil {
+	if ap.RSSIPercentBelow78 != nil && filter.IsClientsRSSIBelow78() {
 		metric.Data["% Clients RSSI < -78 dBm"] = *ap.RSSIPercentBelow78
 	}
-	if ap.RSSIPercentBelow80 != nil {
+	if ap.RSSIPercentBelow80 != nil && filter.IsClientsRSSIBelow80() {
 		metric.Data["% Clients RSSI < -80 dBm"] = *ap.RSSIPercentBelow80
 	}
 
-	// Add SNR percentage metrics
-	if ap.SNRPercentBelow15 != nil {
+	// Add SNR percentage metrics based on filter configuration
+	if ap.SNRPercentBelow15 != nil && filter.IsClientsSNRBelow15() {
 		metric.Data["% Clients SNR < 15 dBm"] = *ap.SNRPercentBelow15
 	}
-	if ap.SNRPercentBelow18 != nil {
+	if ap.SNRPercentBelow18 != nil && filter.IsClientsSNRBelow18() {
 		metric.Data["% Clients SNR < 18 dBm"] = *ap.SNRPercentBelow18
 	}
-	if ap.SNRPercentBelow20 != nil {
+	if ap.SNRPercentBelow20 != nil && filter.IsClientsSNRBelow20() {
 		metric.Data["% Clients SNR < 20 dBm"] = *ap.SNRPercentBelow20
 	}
 

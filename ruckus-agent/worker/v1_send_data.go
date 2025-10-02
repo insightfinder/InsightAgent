@@ -40,7 +40,7 @@ func (w *Worker) collectAllBulk() error {
 	// Convert to metrics
 	var metrics []models.MetricData
 	for _, ap := range details {
-		metric := ap.ToMetricData(w.ruckusService.Config.SendComponentNameAsAP)
+		metric := ap.ToMetricData(w.ruckusService.Config.SendComponentNameAsAP, &w.config.MetricFilter)
 		metrics = append(metrics, *metric)
 	}
 

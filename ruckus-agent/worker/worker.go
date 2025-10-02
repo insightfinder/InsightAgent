@@ -160,7 +160,7 @@ func (w *Worker) collectAndSendStreaming() {
 		// Convert to metrics
 		var chunkMetrics []models.MetricData
 		for _, ap := range enrichedChunk {
-			metric := ap.ToMetricData(w.ruckusService.Config.SendComponentNameAsAP)
+			metric := ap.ToMetricData(w.ruckusService.Config.SendComponentNameAsAP, &w.config.MetricFilter)
 			chunkMetrics = append(chunkMetrics, *metric)
 		}
 
