@@ -35,6 +35,9 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("configuration validation failed: %v", err)
 	}
 
+	// Log active metric filters
+	logMetricConfiguration(&config)
+
 	logrus.Info("Configuration loaded successfully")
 	return &config, nil
 }
@@ -73,6 +76,23 @@ func setDefaults(config *Config) {
 		config.InsightFinder.SystemName = config.InsightFinder.ProjectName
 	}
 
+	// MetricFilter defaults - all set to false by default
+	config.MetricFilter.NumClientsTotal = false
+	config.MetricFilter.NumClients24G = false
+	config.MetricFilter.NumClients5G = false
+	config.MetricFilter.NumClients6G = false
+	config.MetricFilter.Airtime24G = false
+	config.MetricFilter.Airtime5G = false
+	config.MetricFilter.Airtime6G = false
+	config.MetricFilter.RSSIAvg = false
+	config.MetricFilter.SNRAvg = false
+	config.MetricFilter.ClientsRSSIBelow74 = false
+	config.MetricFilter.ClientsRSSIBelow78 = false
+	config.MetricFilter.ClientsRSSIBelow80 = false
+	config.MetricFilter.ClientsSNRBelow15 = false
+	config.MetricFilter.ClientsSNRBelow18 = false
+	config.MetricFilter.ClientsSNRBelow20 = false
+
 	logrus.Debug("Default values applied to configuration")
 }
 
@@ -98,4 +118,83 @@ func validateConfig(config *Config) error {
 	}
 
 	return nil
+}
+
+// logMetricConfiguration logs which metrics are enabled for streaming
+func logMetricConfiguration(config *Config) {
+	logrus.Info("Metric filtering configuration:")
+
+	enabledMetrics := []string{}
+	totalMetrics := 0
+
+	// Client count metrics
+	totalMetrics++
+	if config.MetricFilter.NumClientsTotal {
+		enabledMetrics = append(enabledMetrics, "Num Clients Total")
+	}
+	totalMetrics++
+	if config.MetricFilter.NumClients24G {
+		enabledMetrics = append(enabledMetrics, "Num Clients 24G")
+	}
+	totalMetrics++
+	if config.MetricFilter.NumClients5G {
+		enabledMetrics = append(enabledMetrics, "Num Clients 5G")
+	}
+	totalMetrics++
+	if config.MetricFilter.NumClients6G {
+		enabledMetrics = append(enabledMetrics, "Num Clients 6G")
+	}
+
+	// Airtime metrics
+	totalMetrics++
+	if config.MetricFilter.Airtime24G {
+		enabledMetrics = append(enabledMetrics, "Airtime 24G Percent")
+	}
+	totalMetrics++
+	if config.MetricFilter.Airtime5G {
+		enabledMetrics = append(enabledMetrics, "Airtime 5G Percent")
+	}
+	totalMetrics++
+	if config.MetricFilter.Airtime6G {
+		enabledMetrics = append(enabledMetrics, "Airtime 6G Percent")
+	}
+
+	// Client-derived metrics
+	totalMetrics++
+	if config.MetricFilter.RSSIAvg {
+		enabledMetrics = append(enabledMetrics, "RSSI Avg")
+	}
+	totalMetrics++
+	if config.MetricFilter.SNRAvg {
+		enabledMetrics = append(enabledMetrics, "SNR Avg")
+	}
+	totalMetrics++
+	if config.MetricFilter.ClientsRSSIBelow74 {
+		enabledMetrics = append(enabledMetrics, "% Clients RSSI < -74 dBm")
+	}
+	totalMetrics++
+	if config.MetricFilter.ClientsRSSIBelow78 {
+		enabledMetrics = append(enabledMetrics, "% Clients RSSI < -78 dBm")
+	}
+	totalMetrics++
+	if config.MetricFilter.ClientsRSSIBelow80 {
+		enabledMetrics = append(enabledMetrics, "% Clients RSSI < -80 dBm")
+	}
+	totalMetrics++
+	if config.MetricFilter.ClientsSNRBelow15 {
+		enabledMetrics = append(enabledMetrics, "% Clients SNR < 15 dBm")
+	}
+	totalMetrics++
+	if config.MetricFilter.ClientsSNRBelow18 {
+		enabledMetrics = append(enabledMetrics, "% Clients SNR < 18 dBm")
+	}
+	totalMetrics++
+	if config.MetricFilter.ClientsSNRBelow20 {
+		enabledMetrics = append(enabledMetrics, "% Clients SNR < 20 dBm")
+	}
+
+	logrus.Infof("Enabled metrics (%d/%d): %v", len(enabledMetrics), totalMetrics, enabledMetrics)
+	if len(enabledMetrics) == 0 {
+		logrus.Warn("No metrics are enabled for streaming! All metrics are set to false in configuration.")
+	}
 }

@@ -39,7 +39,7 @@ func (w *Worker) collectSpecificMACs(macAddresses []string) error {
 	// Convert to metrics and send
 	var metrics []models.MetricData
 	for _, ap := range details {
-		metric := ap.ToMetricData(w.ruckusService.Config.SendComponentNameAsAP)
+		metric := ap.ToMetricData(w.ruckusService.Config.SendComponentNameAsAP, &w.config.MetricFilter)
 		metrics = append(metrics, *metric)
 	}
 
