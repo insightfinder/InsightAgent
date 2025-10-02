@@ -28,3 +28,28 @@ insightfinder:
   instance_type: OnPremise
   is_container: false
   sampling_interval: 60
+
+metric_filter:
+  # Metric filtering configuration
+  # Set to true to enable streaming of specific metrics to InsightFinder
+  # Set to false to disable streaming (default: false for all metrics)
+  
+  # System metrics
+  available_memory: false
+  cpu_utilization: false
+  
+  # Radio metrics
+  num_clients_5g: false
+  channel_utilization_5g: false
+  num_clients_6g: false
+  channel_utilization_6g: false
+  
+  # Client-derived metrics (requires Wi-Fi devices with client data)
+  rssi_avg: false
+  snr_avg: false
+  clients_rssi_below_74: false
+  clients_rssi_below_78: false
+  clients_rssi_below_80: false
+  clients_snr_below_15: false
+  clients_snr_below_18: false
+  clients_snr_below_20: false
