@@ -304,6 +304,8 @@ func (s *Service) SendMetricsBulk(metrics []models.MetricData) error {
 				InstanceName:       instanceName,
 				ComponentName:      metric.ComponentName,
 				DataInTimestampMap: make(map[int64]DataInTimestamp),
+				IP:                 metric.IP,
+				Zone:               metric.Zone,
 			}
 		}
 
