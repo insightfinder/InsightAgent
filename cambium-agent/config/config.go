@@ -142,23 +142,8 @@ func setDefaults(config *Config) {
 		config.InsightFinder.SystemName = config.InsightFinder.ProjectName
 	}
 
-	// MetricFilter defaults - all set to false by default
-	// Note: In Go, bool fields are automatically initialized to false,
-	// but being explicit here for clarity
-	config.MetricFilter.AvailableMemory = false
-	config.MetricFilter.CPUUtilization = false
-	config.MetricFilter.NumClients5G = false
-	config.MetricFilter.ChannelUtilization5G = false
-	config.MetricFilter.NumClients6G = false
-	config.MetricFilter.ChannelUtilization6G = false
-	config.MetricFilter.RSSIAvg = false
-	config.MetricFilter.SNRAvg = false
-	config.MetricFilter.ClientsRSSIBelow74 = false
-	config.MetricFilter.ClientsRSSIBelow78 = false
-	config.MetricFilter.ClientsRSSIBelow80 = false
-	config.MetricFilter.ClientsSNRBelow15 = false
-	config.MetricFilter.ClientsSNRBelow18 = false
-	config.MetricFilter.ClientsSNRBelow20 = false
+	// MetricFilter defaults are handled by YAML parsing and Go's zero values
+	// No need to override them here since false is the desired default
 
 	logrus.Debug("Default values applied to configuration")
 }
