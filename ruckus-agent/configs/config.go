@@ -76,22 +76,10 @@ func setDefaults(config *Config) {
 		config.InsightFinder.SystemName = config.InsightFinder.ProjectName
 	}
 
-	// MetricFilter defaults - all set to false by default
-	config.MetricFilter.NumClientsTotal = false
-	config.MetricFilter.NumClients24G = false
-	config.MetricFilter.NumClients5G = false
-	config.MetricFilter.NumClients6G = false
-	config.MetricFilter.Airtime24G = false
-	config.MetricFilter.Airtime5G = false
-	config.MetricFilter.Airtime6G = false
-	config.MetricFilter.RSSIAvg = false
-	config.MetricFilter.SNRAvg = false
-	config.MetricFilter.ClientsRSSIBelow74 = false
-	config.MetricFilter.ClientsRSSIBelow78 = false
-	config.MetricFilter.ClientsRSSIBelow80 = false
-	config.MetricFilter.ClientsSNRBelow15 = false
-	config.MetricFilter.ClientsSNRBelow18 = false
-	config.MetricFilter.ClientsSNRBelow20 = false
+	// MetricFilter defaults - Note: boolean fields in Go structs default to false
+	// The YAML parsing will set the values from the config file, so we don't need
+	// to override them here. All boolean fields will be false by default unless
+	// explicitly set to true in the YAML configuration.
 
 	logrus.Debug("Default values applied to configuration")
 }
