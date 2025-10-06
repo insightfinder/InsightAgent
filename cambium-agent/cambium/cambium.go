@@ -549,8 +549,14 @@ func fetchClientsDataWithRetry(client *http.Client, nid string) (*models.Clients
 // ===========================================
 
 // calculateRSSIPercentages calculates the percentage of clients below RSSI thresholds
-func calculateRSSIPercentages(clients []models.Client) (below74, below78, below80 float64) {
+// If client count is below threshold, returns 0 for all percentages
+func calculateRSSIPercentages(clients []models.Client, minClientThreshold int) (below74, below78, below80 float64) {
 	if len(clients) == 0 {
+		return 0, 0, 0
+	}
+
+	// If client count is below threshold, return 0 for percentages
+	if len(clients) < minClientThreshold {
 		return 0, 0, 0
 	}
 
@@ -577,8 +583,14 @@ func calculateRSSIPercentages(clients []models.Client) (below74, below78, below8
 }
 
 // calculateSNRPercentages calculates the percentage of clients below SNR thresholds
-func calculateSNRPercentages(clients []models.Client) (below15, below18, below20 float64) {
+// If client count is below threshold, returns 0 for all percentages
+func calculateSNRPercentages(clients []models.Client, minClientThreshold int) (below15, below18, below20 float64) {
 	if len(clients) == 0 {
+		return 0, 0, 0
+	}
+
+	// If client count is below threshold, return 0 for percentages
+	if len(clients) < minClientThreshold {
 		return 0, 0, 0
 	}
 
@@ -605,12 +617,12 @@ func calculateSNRPercentages(clients []models.Client) (below15, below18, below20
 }
 
 // enrichDeviceWithClientMetrics enriches device data with RSSI and SNR from client data
-func enrichDeviceWithClientMetrics(device *models.Device, clients []models.Client) {
+func enrichDeviceWithClientMetrics(device *models.Device, clients []models.Client, rssiThreshold, snrThreshold int) {
 	if len(clients) == 0 {
 		return
 	}
 
-	// Calculate average RSSI and SNR from all clients
+	// Always calculate average RSSI and SNR from all clients
 	var totalRSSI, totalSNR int
 	for _, client := range clients {
 		totalRSSI += client.RSSI
@@ -628,9 +640,9 @@ func enrichDeviceWithClientMetrics(device *models.Device, clients []models.Clien
 	device.RSSI = &positiveRSSI
 	device.SNR = &avgSNR
 
-	// Calculate percentage metrics
-	rssiBelow74, rssiBelow78, rssiBelow80 := calculateRSSIPercentages(clients)
-	snrBelow15, snrBelow18, snrBelow20 := calculateSNRPercentages(clients)
+	// Calculate percentage metrics with threshold consideration
+	rssiBelow74, rssiBelow78, rssiBelow80 := calculateRSSIPercentages(clients, rssiThreshold)
+	snrBelow15, snrBelow18, snrBelow20 := calculateSNRPercentages(clients, snrThreshold)
 
 	// Add percentage metrics to device
 	device.RSSIPercentBelow74 = &rssiBelow74
@@ -791,9 +803,11 @@ func worker(jobs <-chan Job, results chan<- Result) {
 				clients := clientsResp.Data.Devices.Clients
 				logrus.Debugf("Device %s has %d clients", device.MAC, len(clients))
 
-				// Create a copy of the device and enrich it with client metrics
+				// Create a copy of the device and enrich it with client metrics (using threshold configuration)
 				deviceCopy := device
-				enrichDeviceWithClientMetrics(&deviceCopy, clients)
+				enrichDeviceWithClientMetrics(&deviceCopy, clients,
+					Cfg.Threshold.MinClientsRSSIThreshold,
+					Cfg.Threshold.MinClientsSNRThreshold)
 
 				// Add client-derived metrics based on configuration
 				if deviceCopy.RSSI != nil && Cfg.MetricFilter.RSSIAvg {

@@ -81,6 +81,14 @@ func setDefaults(config *Config) {
 	// to override them here. All boolean fields will be false by default unless
 	// explicitly set to true in the YAML configuration.
 
+	// Threshold defaults
+	if config.Threshold.MinClientsRSSIThreshold == 0 {
+		config.Threshold.MinClientsRSSIThreshold = 10 // Default to 10 clients
+	}
+	if config.Threshold.MinClientsSNRThreshold == 0 {
+		config.Threshold.MinClientsSNRThreshold = 10 // Default to 10 clients
+	}
+
 	logrus.Debug("Default values applied to configuration")
 }
 
@@ -185,4 +193,9 @@ func logMetricConfiguration(config *Config) {
 	if len(enabledMetrics) == 0 {
 		logrus.Warn("No metrics are enabled for streaming! All metrics are set to false in configuration.")
 	}
+
+	// Log threshold configuration
+	logrus.Infof("Threshold configuration:")
+	logrus.Infof("  Min clients for RSSI percentage calculations: %d", config.Threshold.MinClientsRSSIThreshold)
+	logrus.Infof("  Min clients for SNR percentage calculations: %d", config.Threshold.MinClientsSNRThreshold)
 }
