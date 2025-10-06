@@ -151,8 +151,10 @@ func (w *Worker) collectAndSendStreaming() {
 
 	// Processor function for each chunk
 	processor := func(apChunk []models.APDetail) error {
-		// Enrich AP data with client metrics (RSSI/SNR)
-		enrichedChunk := ruckus.EnrichAPDataWithClientMetrics(apChunk, clientMap)
+		// Enrich AP data with client metrics (RSSI/SNR) with threshold configuration
+		enrichedChunk := ruckus.EnrichAPDataWithClientMetrics(apChunk, clientMap,
+			w.config.Threshold.MinClientsRSSIThreshold,
+			w.config.Threshold.MinClientsSNRThreshold)
 
 		// Update stats
 		w.updateStats(enrichedChunk)
