@@ -6,10 +6,11 @@ import time
 from datetime import datetime, timezone
 import requests
 from configparser import ConfigParser
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from ifobfuscate import decode
 
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36"
+
 
 def log_in(host, user_name, password):
     url = host + '/api/v1/login-check'
@@ -31,6 +32,7 @@ def log_in(host, user_name, password):
         sys.exit(str(e))
 
     return resp.cookies, headers, response_time
+
 
 def run_endpoint_request(url, headers, cookies):
     print("[Endpoint Request] Start request: ", url, "")
@@ -82,6 +84,8 @@ def get_agent_config_vars():
 
             # agent settings
             url = parser.get('agent', 'url')
+            genai_url = parser.get('agent', 'genai_url')
+
 
             login_user = parser.get('agent', 'login_user')
             login_pass = decode(parser.get('agent', 'login_pass'))
@@ -121,6 +125,7 @@ def get_agent_config_vars():
         'user_name': user_name,
         'server_url': server_url,
         'url': url,
+        'genai_url': genai_url,
         'login_user': login_user,
         'login_pass': login_pass,
         'monitor_urls': monitor_urls
@@ -151,10 +156,12 @@ def send_data(metric_data):
         print("Failed to send data.")
 
 
-def run_endpoints(config_vars):
-    response_time = {}
+def run_if_endpoints(start_time, config_vars):
+    results = {}
     url = config_vars['url']
-    (cookies, headers, response_time['Login']) = log_in(url, config_vars['login_user'], config_vars['login_pass'])
+    host = ''.join(url.split('//')[1:])
+
+    (cookies, headers, results['Login']) = log_in(url, config_vars['login_user'], config_vars['login_pass'])
 
     with ThreadPoolExecutor(max_workers=5) as executor:
         # Submit all tasks and store futures
@@ -165,9 +172,102 @@ def run_endpoints(config_vars):
 
         # Wait for all tasks to complete and get results
         for key, future in futures.items():
-            response_time[key] = future.result()
+            results[key] = future.result()
 
-    return response_time
+    metric_data = format_data(host, results, start_time)
+    send_data(metric_data)
+
+
+def run_llm_endpoints(start_time, config_vars):
+    result = {}
+    if_host = ''.join(config_vars['url'].split('//')[1:])
+    genai_url = config_vars['genai_url']
+    incident_summary_recommandation_url = genai_url + "/incident-investigation/SummaryAndRecommendations"
+    incident_summary_recommandation_body = {
+        "system_name": "dev",
+        "occurrence_time": "2024-06-25T10:00:00Z",
+        "incident_description": "System outage due to network failure",
+        "root_cause_list": [
+            {
+                "root_cause": "Network misconfiguration",
+                "time": "2024-06-25T10:00:00Z"
+            },
+            {
+                "root_cause": "Hardware failure",
+                "time": "2024-06-25T11:00:00Z"
+            }
+        ],
+        "recommended_actions": [
+            {
+                "action": "Reconfigure network settings"
+            },
+            {
+                "action": "Replace faulty hardware"
+            }
+        ],
+        "cloud_events": "Incidents",
+        "data_gap_status": [
+            {
+                "is_missing_anomaly": False,
+                "missing_component_name": "Database",
+                "project_name": "ProjectA"
+            },
+            {
+                "is_missing_anomaly": True,
+                "missing_component_name": "Database",
+                "project_name": "ProjectB"
+            }
+        ],
+        "flags": "",
+        "version": "1.0.0",
+        "feature_flag": "",
+        "model_name": "",
+        "use_rag": True,
+        "rag_config": {
+            "feature": [],
+            "dataset_id": [
+                "Microsoft_Documents"
+            ],
+            "company": [
+                "_public"
+            ],
+            "zone_info": []
+        },
+        "username": "test_user",
+        "service_now_ticket_number": "INC12345",
+        "past_incident_contexts": [
+            {
+                "timestamp": 1678886400000,
+                "description": "System performance degraded due to high CPU",
+                "service_now_ticket_number": "INC98765",
+                "service_now_url": "https://instance.service-now.com/nav_to.do?uri=incident.do?sys_id=..."
+            }
+        ]
+    }
+    print("[LLM Request] Start request")
+    try:
+        start = time.time()
+        resp = requests.post(incident_summary_recommandation_url, json=incident_summary_recommandation_body, timeout=60)
+        end = time.time()
+
+        if resp.status_code == 200:
+            response_time = (end - start) * 1000  # convert to MS
+        else:
+            print("[LLM Request] Response failed with status code: ", resp.status_code)
+            print(resp.text)
+            response_time = None
+    except requests.exceptions.RequestException as e:
+        print("[LLM Request] Request failed with exception: ", str(e))
+        response_time = None
+
+    print("[LLM Request] Request finished for: ", incident_summary_recommandation_url, "Response time: ", response_time)
+    if response_time is not None:
+        result['Incident Summary and Recommendation LLM'] = response_time
+
+    metric_data = format_data(if_host, result, start_time)
+    print(metric_data)
+    send_data(metric_data)
+
 
 if __name__ == "__main__":
     print("---------Starting program at time: ", get_time(), ":", time.strftime("%H:%M:%S "), "----------------")
@@ -176,13 +276,17 @@ if __name__ == "__main__":
     start_time = get_time()
     start_time_ns = time.time_ns()
 
-    response_time = run_endpoints(config_vars)
 
-    url = config_vars['url']
-    host = ''.join(url.split('//')[1:])
-    metric_data = format_data(host, response_time, start_time)
-    print(metric_data)
-    send_data(metric_data)
+    # Use multiple threads to run multiple endpoints concurrently
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(run_llm_endpoints, start_time, config_vars),
+            executor.submit(run_if_endpoints, start_time, config_vars)
+        ]
+
+        # Wait for all tasks to complete
+        wait(futures)
+
 
     end_time_ns = time.time_ns()
     print("Total time taken from start to finish is:", (end_time_ns - start_time_ns) / 1000000, "ms")
