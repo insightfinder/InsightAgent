@@ -6,6 +6,7 @@ type Config struct {
 	InsightFinder InsightFinderConfig `yaml:"insightfinder"`
 	State         StateConfig         `yaml:"state"`
 	MetricFilter  MetricFilterConfig  `yaml:"metric_filter"`
+	Threshold     ThresholdConfig     `yaml:"threshold"`
 }
 
 type AgentConfig struct {
@@ -42,6 +43,11 @@ type InsightFinderConfig struct {
 
 type StateConfig struct {
 	LastCollectionTimestamp int64 `yaml:"last_collection_timestamp"`
+}
+
+type ThresholdConfig struct {
+	MinClientsRSSIThreshold int `yaml:"min_clients_rssi_threshold"`
+	MinClientsSNRThreshold  int `yaml:"min_clients_snr_threshold"`
 }
 
 type MetricFilterConfig struct {
