@@ -53,3 +53,9 @@ metric_filter:
   clients_snr_below_15: false
   clients_snr_below_18: false
   clients_snr_below_20: false
+
+threshold:
+  # Minimum client thresholds for percentage calculations
+  # Calculate percentages only if client count is >= threshold, otherwise set to 0
+  min_clients_rssi_threshold: 10  # Minimum clients required for RSSI percentage calculations
+  min_clients_snr_threshold: 10   # Minimum clients required for SNR percentage calculations

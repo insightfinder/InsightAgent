@@ -232,8 +232,14 @@ func (s *Service) fetchClientPage(ctx context.Context, page, limit int) ([]model
 }
 
 // calculateRSSIPercentages calculates the percentage of clients below RSSI thresholds
-func calculateRSSIPercentages(clients []models.ClientInfo) (below74, below78, below80 float64) {
+// If client count is below threshold, returns 0 for all percentages
+func calculateRSSIPercentages(clients []models.ClientInfo, minClientThreshold int) (below74, below78, below80 float64) {
 	if len(clients) == 0 {
+		return 0, 0, 0
+	}
+
+	// If client count is below threshold, return 0 for percentages
+	if len(clients) < minClientThreshold {
 		return 0, 0, 0
 	}
 
@@ -261,8 +267,14 @@ func calculateRSSIPercentages(clients []models.ClientInfo) (below74, below78, be
 }
 
 // calculateSNRPercentages calculates the percentage of clients below SNR thresholds
-func calculateSNRPercentages(clients []models.ClientInfo) (below15, below18, below20 float64) {
+// If client count is below threshold, returns 0 for all percentages
+func calculateSNRPercentages(clients []models.ClientInfo, minClientThreshold int) (below15, below18, below20 float64) {
 	if len(clients) == 0 {
+		return 0, 0, 0
+	}
+
+	// If client count is below threshold, return 0 for percentages
+	if len(clients) < minClientThreshold {
 		return 0, 0, 0
 	}
 
@@ -289,7 +301,7 @@ func calculateSNRPercentages(clients []models.ClientInfo) (below15, below18, bel
 }
 
 // EnrichAPDataWithClientMetrics enriches AP data with RSSI and SNR from client data
-func EnrichAPDataWithClientMetrics(apDetails []models.APDetail, clientMap map[string][]models.ClientInfo) []models.APDetail {
+func EnrichAPDataWithClientMetrics(apDetails []models.APDetail, clientMap map[string][]models.ClientInfo, rssiThreshold, snrThreshold int) []models.APDetail {
 	enriched := make([]models.APDetail, len(apDetails))
 
 	for i, ap := range apDetails {
@@ -297,7 +309,7 @@ func EnrichAPDataWithClientMetrics(apDetails []models.APDetail, clientMap map[st
 
 		// Look for client data for this AP
 		if clients, exists := clientMap[ap.APMAC]; exists && len(clients) > 0 {
-			// Calculate average RSSI and SNR from all clients
+			// Always calculate average RSSI and SNR from all clients
 			var totalRSSI, totalSNR int
 			for _, client := range clients {
 				totalRSSI += client.RSSI
@@ -315,9 +327,9 @@ func EnrichAPDataWithClientMetrics(apDetails []models.APDetail, clientMap map[st
 			enriched[i].RSSI = &positiveRSSI
 			enriched[i].SNR = &avgSNR
 
-			// Calculate percentage metrics
-			rssiBelow74, rssiBelow78, rssiBelow80 := calculateRSSIPercentages(clients)
-			snrBelow15, snrBelow18, snrBelow20 := calculateSNRPercentages(clients)
+			// Calculate percentage metrics with threshold consideration
+			rssiBelow74, rssiBelow78, rssiBelow80 := calculateRSSIPercentages(clients, rssiThreshold)
+			snrBelow15, snrBelow18, snrBelow20 := calculateSNRPercentages(clients, snrThreshold)
 
 			// Add percentage metrics to AP
 			enriched[i].RSSIPercentBelow74 = &rssiBelow74

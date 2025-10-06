@@ -13,6 +13,7 @@ type Config struct {
 	Cambium       CambiumConfig       `yaml:"cambium"`
 	InsightFinder InsightFinderConfig `yaml:"insightfinder"`
 	MetricFilter  MetricFilterConfig  `yaml:"metric_filter"`
+	Threshold     ThresholdConfig     `yaml:"threshold"`
 }
 
 type AgentConfig struct {
@@ -66,6 +67,11 @@ type MetricFilterConfig struct {
 	ClientsSNRBelow15  bool `yaml:"clients_snr_below_15"`
 	ClientsSNRBelow18  bool `yaml:"clients_snr_below_18"`
 	ClientsSNRBelow20  bool `yaml:"clients_snr_below_20"`
+}
+
+type ThresholdConfig struct {
+	MinClientsRSSIThreshold int `yaml:"min_clients_rssi_threshold"`
+	MinClientsSNRThreshold  int `yaml:"min_clients_snr_threshold"`
 }
 
 func LoadConfig(configPath string) (*Config, error) {
@@ -144,6 +150,14 @@ func setDefaults(config *Config) {
 
 	// MetricFilter defaults are handled by YAML parsing and Go's zero values
 	// No need to override them here since false is the desired default
+
+	// Threshold defaults
+	if config.Threshold.MinClientsRSSIThreshold == 0 {
+		config.Threshold.MinClientsRSSIThreshold = 10 // Default to 10 clients
+	}
+	if config.Threshold.MinClientsSNRThreshold == 0 {
+		config.Threshold.MinClientsSNRThreshold = 10 // Default to 10 clients
+	}
 
 	logrus.Debug("Default values applied to configuration")
 }
