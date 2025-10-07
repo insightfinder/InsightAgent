@@ -22,7 +22,7 @@ customfield_10076 = device_id
 
 [InsightFinder]
 insightfinder_url = https://app.insightfinder.com
-username = AccessParksProjectOwner
-password = Access2025Park!
-license_key = 54854267ac101ea07fafdf34634cf05bf74139e
-projects = Ruckus-AP-Metrics # comma seperated list of project names
+username = 
+password = 
+license_key =
+projects =  # comma separated list of project names
