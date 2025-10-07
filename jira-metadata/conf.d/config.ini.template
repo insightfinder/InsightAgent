@@ -1,0 +1,28 @@
+[Jira]
+url = https://<>.atlassian.net
+username = 
+api_token = 
+workspace_id = 
+batch_size = 50
+
+[Hierarchy]
+# For level1 -> level2 ->level3 Hierarchy
+# level1_name = level2_name
+# level2_name = level3_name
+venue = subvenue
+subvenue = location
+location = device
+
+[Jira_Field_Mapping]
+# customfield_name = yaml_key (Not customizable right now)
+customfield_10060 = venue_id
+customfield_10078 = subvenue_id
+customfield_10062 = location_id
+customfield_10076 = device_id
+
+[InsightFinder]
+insightfinder_url = https://app.insightfinder.com
+username = AccessParksProjectOwner
+password = Access2025Park!
+license_key = 54854267ac101ea07fafdf34634cf05bf74139e
+projects = Ruckus-AP-Metrics # comma seperated list of project names
