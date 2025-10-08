@@ -9,19 +9,6 @@ type LogEntry struct {
 	Timestamp time.Time         `json:"timestamp"`
 	Message   string            `json:"message"`
 	Labels    map[string]string `json:"labels"`
-	Stream    StreamInfo        `json:"stream"`
-}
-
-// StreamInfo contains metadata about the log stream
-type StreamInfo struct {
-	Namespace string `json:"namespace,omitempty"`
-	Pod       string `json:"pod,omitempty"`
-	Container string `json:"container,omitempty"`
-	Node      string `json:"node,omitempty"`
-	App       string `json:"app,omitempty"`
-	Job       string `json:"job,omitempty"`
-	Instance  string `json:"instance,omitempty"`
-	Filename  string `json:"filename,omitempty"`
 }
 
 // QueryResult represents the result of a Loki query

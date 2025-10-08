@@ -223,17 +223,6 @@ func (s *Service) ConvertResponseToLogEntries(response *models.LokiResponse, add
 	var entries []models.LogEntry
 
 	for _, result := range response.Data.Result {
-		stream := models.StreamInfo{
-			Namespace: result.Stream["namespace"],
-			Pod:       result.Stream["pod"],
-			Container: result.Stream["container"],
-			Node:      result.Stream["node_name"],
-			App:       result.Stream["app"],
-			Job:       result.Stream["job"],
-			Instance:  result.Stream["instance"],
-			Filename:  result.Stream["filename"],
-		}
-
 		for _, value := range result.Values {
 			if len(value) != 2 {
 				continue // Skip invalid entries
@@ -251,14 +240,13 @@ func (s *Service) ConvertResponseToLogEntries(response *models.LokiResponse, add
 				continue // Skip empty messages
 			}
 
-			// Merge labels
+			// Merge labels - all dynamic fields from Loki are now stored in Labels
 			labels := models.MergeLabels(result.Stream, additionalLabels)
 
 			entry := models.LogEntry{
 				Timestamp: timestamp,
 				Message:   message,
 				Labels:    labels,
-				Stream:    stream,
 			}
 
 			if models.ValidateLogEntry(entry) {
@@ -352,9 +340,9 @@ func (s *Service) isJavaStackTraceLine(message string) bool {
 
 // isSamePodAndTimeRange checks if two log entries are from the same pod and within 1 second time range
 func (s *Service) isSamePodAndTimeRange(cache, current models.LogEntry) bool {
-	// Check if same pod
-	samePod := cache.Stream.Pod == current.Stream.Pod &&
-		cache.Stream.Namespace == current.Stream.Namespace
+	// Check if same pod using Labels map
+	samePod := cache.Labels["pod"] == current.Labels["pod"] &&
+		cache.Labels["namespace"] == current.Labels["namespace"]
 
 	// Check if within 1 second time range
 	withinTimeRange := current.Timestamp.Sub(cache.Timestamp) <= time.Second*1
