@@ -326,6 +326,12 @@ func (s *Service) CreateProject() bool {
 
 // getFieldValueFromEntry extracts the field value from LogEntry based on the specified field name
 func (s *Service) getFieldValueFromEntry(entry models.LogEntry, fieldName string) string {
+	// First check the Labels map for the field
+	if value, exists := entry.Labels[fieldName]; exists {
+		return value
+	}
+
+	// Then check predefined Stream fields for backwards compatibility
 	switch fieldName {
 	case "container":
 		return entry.Stream.Container
@@ -337,8 +343,15 @@ func (s *Service) getFieldValueFromEntry(entry models.LogEntry, fieldName string
 		return entry.Stream.Pod
 	case "app":
 		return entry.Stream.App
+	case "namespace":
+		return entry.Stream.Namespace
+	case "job":
+		return entry.Stream.Job
+	case "filename":
+		return entry.Stream.Filename
 	default:
-		// Return empty string for invalid field names
+		// For any other field name, try to find it in Labels
+		// If not found, return empty string
 		return ""
 	}
 }
