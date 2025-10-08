@@ -326,34 +326,13 @@ func (s *Service) CreateProject() bool {
 
 // getFieldValueFromEntry extracts the field value from LogEntry based on the specified field name
 func (s *Service) getFieldValueFromEntry(entry models.LogEntry, fieldName string) string {
-	// First check the Labels map for the field
+	// Check the Labels map for the field - all fields are now stored here dynamically
 	if value, exists := entry.Labels[fieldName]; exists {
 		return value
 	}
 
-	// Then check predefined Stream fields for backwards compatibility
-	switch fieldName {
-	case "container":
-		return entry.Stream.Container
-	case "instance":
-		return entry.Stream.Instance
-	case "node_name":
-		return entry.Stream.Node
-	case "pod":
-		return entry.Stream.Pod
-	case "app":
-		return entry.Stream.App
-	case "namespace":
-		return entry.Stream.Namespace
-	case "job":
-		return entry.Stream.Job
-	case "filename":
-		return entry.Stream.Filename
-	default:
-		// For any other field name, try to find it in Labels
-		// If not found, return empty string
-		return ""
-	}
+	// Return empty string if field not found
+	return ""
 }
 
 // SendLogDataInternal sends LogData using the send_logs.go implementation
