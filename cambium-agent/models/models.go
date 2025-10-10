@@ -20,6 +20,16 @@ type Device struct {
 	Cfg    CfgInfo     `json:"cfg"`
 	Mode   string      `json:"mode"`
 	Nid    string      `json:"nid"`
+
+	// Client-derived metrics
+	RSSI               *int     `json:"rssi,omitempty"`
+	SNR                *int     `json:"snr,omitempty"`
+	RSSIPercentBelow74 *float64 `json:"rssiPercentBelow74,omitempty"`
+	RSSIPercentBelow78 *float64 `json:"rssiPercentBelow78,omitempty"`
+	RSSIPercentBelow80 *float64 `json:"rssiPercentBelow80,omitempty"`
+	SNRPercentBelow15  *float64 `json:"snrPercentBelow15,omitempty"`
+	SNRPercentBelow18  *float64 `json:"snrPercentBelow18,omitempty"`
+	SNRPercentBelow20  *float64 `json:"snrPercentBelow20,omitempty"`
 }
 
 type SystemInfo struct {
@@ -126,6 +136,43 @@ type RadiosResponse struct {
 			Total  int `json:"total"`
 		} `json:"_metadata"`
 		Radios []Radio `json:"radios"`
+	} `json:"data"`
+	STime int64 `json:"sTime"`
+}
+
+// Client represents a client device connected to an AP
+type Client struct {
+	RSSI int `json:"rssi"`
+	SNR  int `json:"snr"`
+	// ID        int    `json:"id"`
+	// IP        string `json:"ip"`
+	// SSID      string `json:"ssid"`
+	// Name      string `json:"name"`
+	// MAC       string `json:"mac"`
+	// Type      int    `json:"type"`
+	// Mode      string `json:"mode"`
+	// User      string `json:"user"`
+	// GType     string `json:"gType"`
+	// GAType    string `json:"gaType"`
+	// GAAuth    int    `json:"gaAuth"`
+	// Guest     int    `json:"guest"`
+	// IsNSE     bool   `json:"isNSE"`
+	// NSEMac    string `json:"nseMac"`
+	// LastEType string `json:"lastEType"`
+	// Active    bool   `json:"active,omitempty"`
+}
+
+// ClientsResponse represents the API response for client data
+type ClientsResponse struct {
+	Data struct {
+		Metadata struct {
+			Limit      int `json:"limit"`
+			Offset     int `json:"offset"`
+			TotalCount int `json:"totalCount"`
+		} `json:"_metadata"`
+		Devices struct {
+			Clients []Client `json:"clients"`
+		} `json:"devices"`
 	} `json:"data"`
 	STime int64 `json:"sTime"`
 }

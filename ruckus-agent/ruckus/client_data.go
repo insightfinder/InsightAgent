@@ -11,9 +11,9 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// GetAllClientsWithRSSISNR fetches all clients and returns a map of APMac -> ClientInfo
-// This function takes only the first client for each AP to avoid duplicates
-func (s *Service) GetAllClientsWithRSSISNR(ctx context.Context) (map[string]models.ClientInfo, error) {
+// GetAllClientsWithRSSISNR fetches all clients and returns a map of APMac -> []ClientInfo
+// This function collects all clients for each AP to calculate percentage metrics
+func (s *Service) GetAllClientsWithRSSISNR(ctx context.Context) (map[string][]models.ClientInfo, error) {
 	logrus.Info("Starting client data collection for RSSI/SNR metrics")
 
 	// Get total count and first client data in one call
@@ -24,24 +24,22 @@ func (s *Service) GetAllClientsWithRSSISNR(ctx context.Context) (map[string]mode
 
 	if totalCount == 0 {
 		logrus.Info("No clients found")
-		return make(map[string]models.ClientInfo), nil
+		return make(map[string][]models.ClientInfo), nil
 	}
 
 	limit := 1000
 	totalPages := (totalCount + limit - 1) / limit
 	logrus.Infof("Total clients: %d, Pages needed: %d", totalCount, totalPages)
 
-	// Map to store first client per AP (APMac -> ClientInfo)
-	clientMap := make(map[string]models.ClientInfo)
+	// Map to store all clients per AP (APMac -> []ClientInfo)
+	clientMap := make(map[string][]models.ClientInfo)
 	var mapMutex sync.Mutex
 
 	// Process first page data we already have
 	mapMutex.Lock()
 	for _, client := range firstPageClients {
-		// Only add if we haven't seen this AP before (first client wins)
-		if _, exists := clientMap[client.APMac]; !exists {
-			clientMap[client.APMac] = client
-		}
+		// Add all clients for each AP
+		clientMap[client.APMac] = append(clientMap[client.APMac], client)
 	}
 	mapMutex.Unlock()
 
@@ -49,7 +47,11 @@ func (s *Service) GetAllClientsWithRSSISNR(ctx context.Context) (map[string]mode
 
 	// If we only have one page, we're done
 	if totalPages <= 1 {
-		logrus.Infof("Client data collection complete: %d unique APs with RSSI/SNR data", len(clientMap))
+		totalClients := 0
+		for _, clients := range clientMap {
+			totalClients += len(clients)
+		}
+		logrus.Infof("Client data collection complete: %d unique APs with %d total clients for RSSI/SNR data", len(clientMap), totalClients)
 		return clientMap, nil
 	}
 
@@ -89,10 +91,8 @@ func (s *Service) GetAllClientsWithRSSISNR(ctx context.Context) (map[string]mode
 			if pageData, exists := pageResults[page]; exists {
 				mapMutex.Lock()
 				for _, client := range pageData {
-					// Only add if we haven't seen this AP before (first client wins)
-					if _, exists := clientMap[client.APMac]; !exists {
-						clientMap[client.APMac] = client
-					}
+					// Add all clients for each AP
+					clientMap[client.APMac] = append(clientMap[client.APMac], client)
 				}
 				mapMutex.Unlock()
 
@@ -101,7 +101,11 @@ func (s *Service) GetAllClientsWithRSSISNR(ctx context.Context) (map[string]mode
 		}
 	}
 
-	logrus.Infof("Client data collection complete: %d unique APs with RSSI/SNR data", len(clientMap))
+	totalClients := 0
+	for _, clients := range clientMap {
+		totalClients += len(clients)
+	}
+	logrus.Infof("Client data collection complete: %d unique APs with %d total clients for RSSI/SNR data", len(clientMap), totalClients)
 	return clientMap, nil
 }
 
@@ -227,22 +231,113 @@ func (s *Service) fetchClientPage(ctx context.Context, page, limit int) ([]model
 	return queryResponse.List, nil
 }
 
+// calculateRSSIPercentages calculates the percentage of clients below RSSI thresholds
+// If client count is below threshold, returns 0 for all percentages
+func calculateRSSIPercentages(clients []models.ClientInfo, minClientThreshold int) (below74, below78, below80 float64) {
+	if len(clients) == 0 {
+		return 0, 0, 0
+	}
+
+	// If client count is below threshold, return 0 for percentages
+	if len(clients) < minClientThreshold {
+		return 0, 0, 0
+	}
+
+	var count74, count78, count80 int
+	total := len(clients)
+
+	for _, client := range clients {
+		if client.RSSI < -74 {
+			count74++
+		}
+		if client.RSSI < -78 {
+			count78++
+		}
+		if client.RSSI < -80 {
+			count80++
+		}
+
+	}
+
+	below74 = float64(count74) / float64(total) * 100
+	below78 = float64(count78) / float64(total) * 100
+	below80 = float64(count80) / float64(total) * 100
+
+	return below74, below78, below80
+}
+
+// calculateSNRPercentages calculates the percentage of clients below SNR thresholds
+// If client count is below threshold, returns 0 for all percentages
+func calculateSNRPercentages(clients []models.ClientInfo, minClientThreshold int) (below15, below18, below20 float64) {
+	if len(clients) == 0 {
+		return 0, 0, 0
+	}
+
+	// If client count is below threshold, return 0 for percentages
+	if len(clients) < minClientThreshold {
+		return 0, 0, 0
+	}
+
+	var count15, count18, count20 int
+	total := len(clients)
+
+	for _, client := range clients {
+		if client.SNR < 15 {
+			count15++
+		}
+		if client.SNR < 18 {
+			count18++
+		}
+		if client.SNR < 20 {
+			count20++
+		}
+	}
+
+	below15 = float64(count15) / float64(total) * 100
+	below18 = float64(count18) / float64(total) * 100
+	below20 = float64(count20) / float64(total) * 100
+
+	return below15, below18, below20
+}
+
 // EnrichAPDataWithClientMetrics enriches AP data with RSSI and SNR from client data
-func EnrichAPDataWithClientMetrics(apDetails []models.APDetail, clientMap map[string]models.ClientInfo) []models.APDetail {
+func EnrichAPDataWithClientMetrics(apDetails []models.APDetail, clientMap map[string][]models.ClientInfo, rssiThreshold, snrThreshold int) []models.APDetail {
 	enriched := make([]models.APDetail, len(apDetails))
 
 	for i, ap := range apDetails {
 		enriched[i] = ap // Copy the AP detail
 
 		// Look for client data for this AP
-		if clientInfo, exists := clientMap[ap.APMAC]; exists {
-			// Convert RSSI to positive value and add to AP data
-			positiveRSSI := clientInfo.RSSI
+		if clients, exists := clientMap[ap.APMAC]; exists && len(clients) > 0 {
+			// Always calculate average RSSI and SNR from all clients
+			var totalRSSI, totalSNR int
+			for _, client := range clients {
+				totalRSSI += client.RSSI
+				totalSNR += client.SNR
+			}
+
+			avgRSSI := totalRSSI / len(clients)
+			avgSNR := totalSNR / len(clients)
+
+			// Convert RSSI to positive value for backwards compatibility
+			positiveRSSI := avgRSSI
 			if positiveRSSI < 0 {
 				positiveRSSI = -positiveRSSI // Make positive
 			}
 			enriched[i].RSSI = &positiveRSSI
-			enriched[i].SNR = &clientInfo.SNR
+			enriched[i].SNR = &avgSNR
+
+			// Calculate percentage metrics with threshold consideration
+			rssiBelow74, rssiBelow78, rssiBelow80 := calculateRSSIPercentages(clients, rssiThreshold)
+			snrBelow15, snrBelow18, snrBelow20 := calculateSNRPercentages(clients, snrThreshold)
+
+			// Add percentage metrics to AP
+			enriched[i].RSSIPercentBelow74 = &rssiBelow74
+			enriched[i].RSSIPercentBelow78 = &rssiBelow78
+			enriched[i].RSSIPercentBelow80 = &rssiBelow80
+			enriched[i].SNRPercentBelow15 = &snrBelow15
+			enriched[i].SNRPercentBelow18 = &snrBelow18
+			enriched[i].SNRPercentBelow20 = &snrBelow20
 		}
 	}
 

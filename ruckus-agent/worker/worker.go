@@ -121,7 +121,7 @@ func (w *Worker) collectAndSendStreaming() {
 	if clientErr != nil {
 		logrus.Errorf("Failed to fetch client data: %v", clientErr)
 		logrus.Info("Continuing without client enrichment data...")
-		clientMap = make(map[string]models.ClientInfo)
+		clientMap = make(map[string][]models.ClientInfo)
 	} else {
 		logrus.Infof("Successfully fetched client data for %d APs", len(clientMap))
 	}
@@ -151,8 +151,10 @@ func (w *Worker) collectAndSendStreaming() {
 
 	// Processor function for each chunk
 	processor := func(apChunk []models.APDetail) error {
-		// Enrich AP data with client metrics (RSSI/SNR)
-		enrichedChunk := ruckus.EnrichAPDataWithClientMetrics(apChunk, clientMap)
+		// Enrich AP data with client metrics (RSSI/SNR) with threshold configuration
+		enrichedChunk := ruckus.EnrichAPDataWithClientMetrics(apChunk, clientMap,
+			w.config.Threshold.MinClientsRSSIThreshold,
+			w.config.Threshold.MinClientsSNRThreshold)
 
 		// Update stats
 		w.updateStats(enrichedChunk)
@@ -160,7 +162,7 @@ func (w *Worker) collectAndSendStreaming() {
 		// Convert to metrics
 		var chunkMetrics []models.MetricData
 		for _, ap := range enrichedChunk {
-			metric := ap.ToMetricData(w.ruckusService.Config.SendComponentNameAsAP)
+			metric := ap.ToMetricData(w.ruckusService.Config.SendComponentNameAsAP, &w.config.MetricFilter)
 			chunkMetrics = append(chunkMetrics, *metric)
 		}
 
