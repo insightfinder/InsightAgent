@@ -5,6 +5,8 @@ type Config struct {
 	Ruckus        RuckusConfig        `yaml:"ruckus"`
 	InsightFinder InsightFinderConfig `yaml:"insightfinder"`
 	State         StateConfig         `yaml:"state"`
+	MetricFilter  MetricFilterConfig  `yaml:"metric_filter"`
+	Threshold     ThresholdConfig     `yaml:"threshold"`
 }
 
 type AgentConfig struct {
@@ -42,3 +44,48 @@ type InsightFinderConfig struct {
 type StateConfig struct {
 	LastCollectionTimestamp int64 `yaml:"last_collection_timestamp"`
 }
+
+type ThresholdConfig struct {
+	MinClientsRSSIThreshold int `yaml:"min_clients_rssi_threshold"`
+	MinClientsSNRThreshold  int `yaml:"min_clients_snr_threshold"`
+}
+
+type MetricFilterConfig struct {
+	// Client count metrics
+	NumClientsTotal bool `yaml:"num_clients_total"`
+	NumClients24G   bool `yaml:"num_clients_24g"`
+	NumClients5G    bool `yaml:"num_clients_5g"`
+	NumClients6G    bool `yaml:"num_clients_6g"`
+
+	// Airtime metrics
+	Airtime24G bool `yaml:"airtime_24g"`
+	Airtime5G  bool `yaml:"airtime_5g"`
+	Airtime6G  bool `yaml:"airtime_6g"`
+
+	// Client-derived metrics
+	RSSIAvg            bool `yaml:"rssi_avg"`
+	SNRAvg             bool `yaml:"snr_avg"`
+	ClientsRSSIBelow74 bool `yaml:"clients_rssi_below_74"`
+	ClientsRSSIBelow78 bool `yaml:"clients_rssi_below_78"`
+	ClientsRSSIBelow80 bool `yaml:"clients_rssi_below_80"`
+	ClientsSNRBelow15  bool `yaml:"clients_snr_below_15"`
+	ClientsSNRBelow18  bool `yaml:"clients_snr_below_18"`
+	ClientsSNRBelow20  bool `yaml:"clients_snr_below_20"`
+}
+
+// Implement the MetricFilter interface
+func (m *MetricFilterConfig) IsNumClientsTotal() bool    { return m.NumClientsTotal }
+func (m *MetricFilterConfig) IsNumClients24G() bool      { return m.NumClients24G }
+func (m *MetricFilterConfig) IsNumClients5G() bool       { return m.NumClients5G }
+func (m *MetricFilterConfig) IsNumClients6G() bool       { return m.NumClients6G }
+func (m *MetricFilterConfig) IsAirtime24G() bool         { return m.Airtime24G }
+func (m *MetricFilterConfig) IsAirtime5G() bool          { return m.Airtime5G }
+func (m *MetricFilterConfig) IsAirtime6G() bool          { return m.Airtime6G }
+func (m *MetricFilterConfig) IsRSSIAvg() bool            { return m.RSSIAvg }
+func (m *MetricFilterConfig) IsSNRAvg() bool             { return m.SNRAvg }
+func (m *MetricFilterConfig) IsClientsRSSIBelow74() bool { return m.ClientsRSSIBelow74 }
+func (m *MetricFilterConfig) IsClientsRSSIBelow78() bool { return m.ClientsRSSIBelow78 }
+func (m *MetricFilterConfig) IsClientsRSSIBelow80() bool { return m.ClientsRSSIBelow80 }
+func (m *MetricFilterConfig) IsClientsSNRBelow15() bool  { return m.ClientsSNRBelow15 }
+func (m *MetricFilterConfig) IsClientsSNRBelow18() bool  { return m.ClientsSNRBelow18 }
+func (m *MetricFilterConfig) IsClientsSNRBelow20() bool  { return m.ClientsSNRBelow20 }

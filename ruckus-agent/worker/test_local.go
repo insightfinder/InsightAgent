@@ -39,7 +39,7 @@ func (w *Worker) collectSpecificMACs(macAddresses []string) error {
 	// Convert to metrics and send
 	var metrics []models.MetricData
 	for _, ap := range details {
-		metric := ap.ToMetricData(w.ruckusService.Config.SendComponentNameAsAP)
+		metric := ap.ToMetricData(w.ruckusService.Config.SendComponentNameAsAP, &w.config.MetricFilter)
 		metrics = append(metrics, *metric)
 	}
 
@@ -75,12 +75,6 @@ func (w *Worker) updateStats(apChunk []models.APDetail) {
 	w.currentStats.LastUpdateTime = time.Now()
 
 	for _, ap := range apChunk {
-		if ap.ConnectionStatus == "Connect" {
-			w.currentStats.OnlineAPs++
-		}
-		if ap.Status == "Flagged" {
-			w.currentStats.FlaggedAPs++
-		}
 		w.currentStats.TotalClients += ap.NumClients
 		if ap.Airtime24G > 80 {
 			w.currentStats.HighAirtime24G++

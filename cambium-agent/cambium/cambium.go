@@ -41,7 +41,7 @@ var (
 	BaseURL    string
 	DevicesAPI string
 	RadiosAPI  string
-	E2EAPI     string
+	ClientsAPI string
 	LoginURL   string
 )
 
@@ -497,17 +497,17 @@ func FetchDevices(client *http.Client) (*models.DevicesResponse, error) {
 	return nil, fmt.Errorf("failed to fetch devices after %d attempts", MaxRetries)
 }
 
-// Test E2E API with retry and token update
-func fetchE2EDataWithRetry(client *http.Client, nid string) (*models.E2EData, error) {
-	url := fmt.Sprintf(E2EAPI, nid)
+// Fetch clients data with retry and token update
+func fetchClientsDataWithRetry(client *http.Client, nid string) (*models.ClientsResponse, error) {
+	url := fmt.Sprintf(ClientsAPI, nid)
 
 	for attempt := 1; attempt <= MaxRetries; attempt++ {
 		resp, err := makeAuthenticatedRequest(client, url)
 		if err != nil {
 			if attempt == MaxRetries {
-				return nil, fmt.Errorf("failed after %d attempts: %v", MaxRetries, err)
+				return nil, fmt.Errorf("clients request failed after %d attempts: %v", MaxRetries, err)
 			}
-			logrus.Warnf("E2E request failed (attempt %d/%d): %v, retrying...", attempt, MaxRetries, err)
+			logrus.Warnf("Clients request failed (attempt %d/%d): %v, retrying...", attempt, MaxRetries, err)
 			time.Sleep(time.Duration(attempt) * time.Second)
 			continue
 		}
@@ -517,33 +517,140 @@ func fetchE2EDataWithRetry(client *http.Client, nid string) (*models.E2EData, er
 			// Read and decompress response body
 			bodyBytes, err := readResponseBody(resp)
 			if err != nil {
-				return nil, fmt.Errorf("failed to read E2E response body: %v", err)
+				return nil, fmt.Errorf("failed to read clients response body: %v", err)
 			}
 
-			var e2eResp models.E2EData
-			if err := json.Unmarshal(bodyBytes, &e2eResp); err != nil {
-				return nil, fmt.Errorf("failed to decode E2E response: %v", err)
+			var clientsResp models.ClientsResponse
+			if err := json.Unmarshal(bodyBytes, &clientsResp); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal clients response: %v", err)
 			}
-			return &e2eResp, nil
+			return &clientsResp, nil
 		}
 
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
-			logrus.Warnf("E2E authentication failed (status %d), attempting to update tokens...", resp.StatusCode)
-			if updateTokensFromHeaders(resp.Header) && attempt < MaxRetries {
-				logrus.Infof("Tokens updated, retrying E2E (attempt %d/%d)...", attempt+1, MaxRetries)
-				time.Sleep(time.Duration(attempt) * time.Second)
-				continue
+			logrus.Warnf("Authentication failed (status %d), attempting to update tokens...", resp.StatusCode)
+			if !updateTokensFromHeaders(resp.Header) {
+				logrus.Warn("Failed to update tokens from response headers")
 			}
 		}
 
 		if attempt == MaxRetries {
-			return nil, fmt.Errorf("E2E failed after %d attempts, last status: %d", MaxRetries, resp.StatusCode)
+			return nil, fmt.Errorf("clients request failed with status %d after %d attempts", resp.StatusCode, MaxRetries)
 		}
-		logrus.Warnf("E2E request failed with status %d (attempt %d/%d), retrying...", resp.StatusCode, attempt, MaxRetries)
+		logrus.Warnf("Clients request failed with status %d (attempt %d/%d), retrying...", resp.StatusCode, attempt, MaxRetries)
 		time.Sleep(time.Duration(attempt) * time.Second)
 	}
 
-	return nil, fmt.Errorf("unexpected error in E2E retry logic")
+	return nil, fmt.Errorf("unexpected error in clients retry logic")
+}
+
+// ===========================================
+// CLIENT METRICS CALCULATION FUNCTIONS
+// ===========================================
+
+// calculateRSSIPercentages calculates the percentage of clients below RSSI thresholds
+// If client count is below threshold, returns 0 for all percentages
+func calculateRSSIPercentages(clients []models.Client, minClientThreshold int) (below74, below78, below80 float64) {
+	if len(clients) == 0 {
+		return 0, 0, 0
+	}
+
+	// If client count is below threshold, return 0 for percentages
+	if len(clients) < minClientThreshold {
+		return 0, 0, 0
+	}
+
+	var count74, count78, count80 int
+	total := len(clients)
+
+	for _, client := range clients {
+		if client.RSSI < -74 {
+			count74++
+		}
+		if client.RSSI < -78 {
+			count78++
+		}
+		if client.RSSI < -80 {
+			count80++
+		}
+	}
+
+	below74 = float64(count74) / float64(total) * 100
+	below78 = float64(count78) / float64(total) * 100
+	below80 = float64(count80) / float64(total) * 100
+
+	return below74, below78, below80
+}
+
+// calculateSNRPercentages calculates the percentage of clients below SNR thresholds
+// If client count is below threshold, returns 0 for all percentages
+func calculateSNRPercentages(clients []models.Client, minClientThreshold int) (below15, below18, below20 float64) {
+	if len(clients) == 0 {
+		return 0, 0, 0
+	}
+
+	// If client count is below threshold, return 0 for percentages
+	if len(clients) < minClientThreshold {
+		return 0, 0, 0
+	}
+
+	var count15, count18, count20 int
+	total := len(clients)
+
+	for _, client := range clients {
+		if client.SNR < 15 {
+			count15++
+		}
+		if client.SNR < 18 {
+			count18++
+		}
+		if client.SNR < 20 {
+			count20++
+		}
+	}
+
+	below15 = float64(count15) / float64(total) * 100
+	below18 = float64(count18) / float64(total) * 100
+	below20 = float64(count20) / float64(total) * 100
+
+	return below15, below18, below20
+}
+
+// enrichDeviceWithClientMetrics enriches device data with RSSI and SNR from client data
+func enrichDeviceWithClientMetrics(device *models.Device, clients []models.Client, rssiThreshold, snrThreshold int) {
+	if len(clients) == 0 {
+		return
+	}
+
+	// Always calculate average RSSI and SNR from all clients
+	var totalRSSI, totalSNR int
+	for _, client := range clients {
+		totalRSSI += client.RSSI
+		totalSNR += client.SNR
+	}
+
+	avgRSSI := totalRSSI / len(clients)
+	avgSNR := totalSNR / len(clients)
+
+	// Convert RSSI to positive value for backwards compatibility
+	positiveRSSI := avgRSSI
+	if positiveRSSI < 0 {
+		positiveRSSI = -positiveRSSI // Make positive
+	}
+	device.RSSI = &positiveRSSI
+	device.SNR = &avgSNR
+
+	// Calculate percentage metrics with threshold consideration
+	rssiBelow74, rssiBelow78, rssiBelow80 := calculateRSSIPercentages(clients, rssiThreshold)
+	snrBelow15, snrBelow18, snrBelow20 := calculateSNRPercentages(clients, snrThreshold)
+
+	// Add percentage metrics to device
+	device.RSSIPercentBelow74 = &rssiBelow74
+	device.RSSIPercentBelow78 = &rssiBelow78
+	device.RSSIPercentBelow80 = &rssiBelow80
+	device.SNRPercentBelow15 = &snrBelow15
+	device.SNRPercentBelow18 = &snrBelow18
+	device.SNRPercentBelow20 = &snrBelow20
 }
 
 // ===========================================
@@ -592,19 +699,17 @@ func worker(jobs <-chan Job, results chan<- Result) {
 		metricData := &models.MetricData{
 			Timestamp:    time.Now().Unix(),
 			InstanceName: cleanName,
-			Data: map[string]interface{}{
-				// "Status": func() int {
-				// 	if device.Sys.Online {
-				// 		return 1
-				// 	} else {
-				// 		return 0
-				// 	}
-				// }(),
-				"Available Memory": device.Sys.Mem,
-				"CPU Utilization":  device.Sys.CPU,
-			},
-			Zone: device.Config.Profile,
-			IP:   ipAddress,
+			Data:         map[string]interface{}{},
+			Zone:         device.Config.Profile,
+			IP:           ipAddress,
+		}
+
+		// Add system metrics based on configuration
+		if Cfg.MetricFilter.AvailableMemory {
+			metricData.Data["Available Memory"] = device.Sys.Mem
+		}
+		if Cfg.MetricFilter.CPUUtilization {
+			metricData.Data["CPU Utilization"] = device.Sys.CPU
 		}
 
 		// Add radio data if available
@@ -641,86 +746,106 @@ func worker(jobs <-chan Job, results chan<- Result) {
 		// 	metricData.Data["Channel Utilization 24G"] = 0.0
 		// }
 
-		// Add 5GHz metrics
+		// Add 5GHz metrics based on configuration
 		if radio5G != nil {
-			metricData.Data["Num Clients 5G"] = radio5G.Mus
-			metricData.Data["Channel Utilization 5G"] = radio5G.TotalCu
+			if Cfg.MetricFilter.NumClients5G {
+				metricData.Data["Num Clients 5G"] = radio5G.Mus
+			}
+			if Cfg.MetricFilter.ChannelUtilization5G {
+				metricData.Data["Channel Utilization 5G"] = radio5G.TotalCu
+			}
 			// metricData.Data["UL Throughput 5G"] = radio5G.UlTPut
 			// metricData.Data["DL Throughput 5G"] = radio5G.DlTPut
 			// metricData.Data["Noise Floor 5G"] = radio5G.Nf
 		} else {
-			metricData.Data["Num Clients 5G"] = 0
-			metricData.Data["Channel Utilization 5G"] = 0.0
+			if Cfg.MetricFilter.NumClients5G {
+				metricData.Data["Num Clients 5G"] = 0
+			}
+			if Cfg.MetricFilter.ChannelUtilization5G {
+				metricData.Data["Channel Utilization 5G"] = 0.0
+			}
 			// metricData.Data["UL Throughput 5G"] = 0.0
 			// metricData.Data["DL Throughput 5G"] = 0.0
 			// metricData.Data["Noise Floor 5G"] = 0.0
 		}
 
-		// Add 6GHz metrics
+		// Add 6GHz metrics based on configuration
 		if radio6G != nil {
-			metricData.Data["Num Clients 6G"] = radio6G.Mus
-			metricData.Data["Channel Utilization 6G"] = radio6G.TotalCu
+			if Cfg.MetricFilter.NumClients6G {
+				metricData.Data["Num Clients 6G"] = radio6G.Mus
+			}
+			if Cfg.MetricFilter.ChannelUtilization6G {
+				metricData.Data["Channel Utilization 6G"] = radio6G.TotalCu
+			}
 			// metricData.Data["UL Throughput 6G"] = radio6G.UlTPut
 			// metricData.Data["DL Throughput 6G"] = radio6G.DlTPut
 			// metricData.Data["Noise Floor 6G"] = radio6G.Nf
 		} else {
-			metricData.Data["Num Clients 6G"] = 0
-			metricData.Data["Channel Utilization 6G"] = 0.0
+			if Cfg.MetricFilter.NumClients6G {
+				metricData.Data["Num Clients 6G"] = 0
+			}
+			if Cfg.MetricFilter.ChannelUtilization6G {
+				metricData.Data["Channel Utilization 6G"] = 0.0
+			}
 			// metricData.Data["UL Throughput 6G"] = 0.0
 			// metricData.Data["DL Throughput 6G"] = 0.0
 			// metricData.Data["Noise Floor 6G"] = 0.0
 		}
 
-		// Check if device is not Wi-Fi and has NID for E2E data
-		if (strings.ToLower(device.Mode) != "wi-fi" && strings.ToLower(device.Mode) != "wifi") && device.Nid != "" {
-			logrus.Debugf("Device %s is not Wi-Fi with NID %s, fetching E2E data...", device.MAC, device.Nid)
+		// Check if device is Wi-Fi and has NID for client data
+		if (strings.ToLower(device.Mode) == "wi-fi" || strings.ToLower(device.Mode) == "wifi") && device.Nid != "" {
+			logrus.Debugf("Device %s is Wi-Fi with NID %s, fetching client data...", device.MAC, device.Nid)
 
-			e2eResp, err := fetchE2EDataWithRetry(client, device.Nid)
+			clientsResp, err := fetchClientsDataWithRetry(client, device.MAC)
 			if err != nil {
-				logrus.Warnf("Failed to get E2E data for device %s (NID: %s): %v", device.MAC, device.Nid, err)
-			} else if e2eResp != nil && len(e2eResp.Data.Links) > 0 {
-				logrus.Debugf("Device %s has %d E2E links", device.MAC, len(e2eResp.Data.Links))
+				logrus.Warnf("Failed to get client data for device %s (MAC: %s): %v", device.MAC, device.MAC, err)
+			} else if clientsResp != nil && len(clientsResp.Data.Devices.Clients) > 0 {
+				clients := clientsResp.Data.Devices.Clients
+				logrus.Debugf("Device %s has %d clients", device.MAC, len(clients))
 
-				// Process E2E link data - use first valid link encountered
-				var firstValidLink *models.Link
-				linkCount := len(e2eResp.Data.Links)
+				// Create a copy of the device and enrich it with client metrics (using threshold configuration)
+				deviceCopy := device
+				enrichDeviceWithClientMetrics(&deviceCopy, clients,
+					Cfg.Threshold.MinClientsRSSIThreshold,
+					Cfg.Threshold.MinClientsSNRThreshold)
 
-				// Skip E2E metrics if no links available
-				if linkCount >= 1 {
-					// Find the first link with valid data
-					for _, link := range e2eResp.Data.Links {
-						// Check if link has valid data (non-zero values)
-						if link.RSSI != 0 || link.SNR != 0 {
-							firstValidLink = &link
-							break
-						}
-					}
-
-					// Add E2E metrics if we have valid link data
-					if firstValidLink != nil {
-						// Take absolute value of RSSI (ignore negative sign)
-						rssiValue := firstValidLink.RSSI
-						if rssiValue < 0 {
-							rssiValue = -rssiValue
-						}
-
-						metricData.Data["RSSI"] = rssiValue
-						metricData.Data["SNR"] = firstValidLink.SNR
-
-						metricData.Data["RxMCS"] = firstValidLink.RxMCS
-						// metricData.Data["TxMCS"] = firstValidLink.TxMCS
-						// metricData.Data["Link Count"] = linkCount
-
-						// logrus.Debugf("Added E2E metrics for device %s: RSSI=%d, RxMCS=%d, TxMCS=%d, SNR=%d, Links=%d",
-						// 	device.MAC, rssiValue, firstValidLink.RxMCS, firstValidLink.TxMCS, firstValidLink.SNR, linkCount)
-					}
-				} else {
-					logrus.Debugf("Device %s has no E2E links, skipping E2E metrics", device.MAC)
+				// Add client-derived metrics based on configuration
+				if deviceCopy.RSSI != nil && Cfg.MetricFilter.RSSIAvg {
+					metricData.Data["RSSI Avg"] = *deviceCopy.RSSI
 				}
+				if deviceCopy.SNR != nil && Cfg.MetricFilter.SNRAvg {
+					metricData.Data["SNR Avg"] = *deviceCopy.SNR
+				}
+
+				// Add RSSI percentage metrics based on configuration
+				if deviceCopy.RSSIPercentBelow74 != nil && Cfg.MetricFilter.ClientsRSSIBelow74 {
+					metricData.Data["% Clients RSSI < -74 dBm"] = *deviceCopy.RSSIPercentBelow74
+				}
+				if deviceCopy.RSSIPercentBelow78 != nil && Cfg.MetricFilter.ClientsRSSIBelow78 {
+					metricData.Data["% Clients RSSI < -78 dBm"] = *deviceCopy.RSSIPercentBelow78
+				}
+				if deviceCopy.RSSIPercentBelow80 != nil && Cfg.MetricFilter.ClientsRSSIBelow80 {
+					metricData.Data["% Clients RSSI < -80 dBm"] = *deviceCopy.RSSIPercentBelow80
+				}
+
+				// Add SNR percentage metrics based on configuration
+				if deviceCopy.SNRPercentBelow15 != nil && Cfg.MetricFilter.ClientsSNRBelow15 {
+					metricData.Data["% Clients SNR < 15 dBm"] = *deviceCopy.SNRPercentBelow15
+				}
+				if deviceCopy.SNRPercentBelow18 != nil && Cfg.MetricFilter.ClientsSNRBelow18 {
+					metricData.Data["% Clients SNR < 18 dBm"] = *deviceCopy.SNRPercentBelow18
+				}
+				if deviceCopy.SNRPercentBelow20 != nil && Cfg.MetricFilter.ClientsSNRBelow20 {
+					metricData.Data["% Clients SNR < 20 dBm"] = *deviceCopy.SNRPercentBelow20
+				}
+
+				logrus.Debugf("Added client metrics for device %s: %d clients processed", device.MAC, len(clients))
+			} else {
+				logrus.Debugf("Device %s has no clients, skipping client metrics", device.MAC)
 			}
 		}
 
-		logrus.Debugf("Successfully processed device %s", device.MAC)
+		logrus.Debugf("Successfully processed device %s with %d metrics enabled", device.MAC, len(metricData.Data))
 		results <- Result{MetricData: metricData}
 	}
 }
@@ -871,7 +996,7 @@ func InitConfig(configPath string) error {
 	BaseURL = Cfg.Cambium.BaseURL
 	DevicesAPI = BaseURL + "/tree/devices"
 	RadiosAPI = BaseURL + "/stats/devices/%s/radios"
-	E2EAPI = BaseURL + "/stats/e2e/%s/links?fields=$e2e.links,amac,zmac,linkAvailable,rssi,rxMcs,snr,eirp,txMcs"
+	ClientsAPI = BaseURL + "/stats/devices/%s/clients?fields=$clients,_id,id,eType,ip,ssid,name,rssi,snr,active,mac,type:0,eType:Jaguar,mode:wi-fi,$inventory,cfg&limit=1000&offset=0&sortedBy=name,mac&unconnected=false"
 	LoginURL = Cfg.Cambium.LoginURL
 	MaxRetries = Cfg.Cambium.MaxRetries
 	WorkerCount = Cfg.Cambium.WorkerCount
@@ -899,8 +1024,86 @@ func InitConfig(configPath string) error {
 		return fmt.Errorf("failed to create or verify InsightFinder project")
 	}
 
+	// Log active metric filters
+	logMetricConfiguration()
+
 	logrus.Info("Configuration initialized successfully")
 	return nil
+}
+
+// logMetricConfiguration logs which metrics are enabled for streaming
+func logMetricConfiguration() {
+	logrus.Info("Metric filtering configuration:")
+
+	enabledMetrics := []string{}
+	totalMetrics := 0
+
+	// System metrics
+	totalMetrics++
+	if Cfg.MetricFilter.AvailableMemory {
+		enabledMetrics = append(enabledMetrics, "Available Memory")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.CPUUtilization {
+		enabledMetrics = append(enabledMetrics, "CPU Utilization")
+	}
+
+	// Radio metrics
+	totalMetrics++
+	if Cfg.MetricFilter.NumClients5G {
+		enabledMetrics = append(enabledMetrics, "Num Clients 5G")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ChannelUtilization5G {
+		enabledMetrics = append(enabledMetrics, "Channel Utilization 5G")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.NumClients6G {
+		enabledMetrics = append(enabledMetrics, "Num Clients 6G")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ChannelUtilization6G {
+		enabledMetrics = append(enabledMetrics, "Channel Utilization 6G")
+	}
+
+	// Client-derived metrics
+	totalMetrics++
+	if Cfg.MetricFilter.RSSIAvg {
+		enabledMetrics = append(enabledMetrics, "RSSI Avg")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.SNRAvg {
+		enabledMetrics = append(enabledMetrics, "SNR Avg")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ClientsRSSIBelow74 {
+		enabledMetrics = append(enabledMetrics, "% Clients RSSI < -74 dBm")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ClientsRSSIBelow78 {
+		enabledMetrics = append(enabledMetrics, "% Clients RSSI < -78 dBm")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ClientsRSSIBelow80 {
+		enabledMetrics = append(enabledMetrics, "% Clients RSSI < -80 dBm")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ClientsSNRBelow15 {
+		enabledMetrics = append(enabledMetrics, "% Clients SNR < 15 dBm")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ClientsSNRBelow18 {
+		enabledMetrics = append(enabledMetrics, "% Clients SNR < 18 dBm")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ClientsSNRBelow20 {
+		enabledMetrics = append(enabledMetrics, "% Clients SNR < 20 dBm")
+	}
+
+	logrus.Infof("Enabled metrics (%d/%d): %v", len(enabledMetrics), totalMetrics, enabledMetrics)
+	if len(enabledMetrics) == 0 {
+		logrus.Warn("No metrics are enabled for streaming! All metrics are set to false in configuration.")
+	}
 }
 
 // ===========================================

@@ -12,6 +12,8 @@ type Config struct {
 	Agent         AgentConfig         `yaml:"agent"`
 	Cambium       CambiumConfig       `yaml:"cambium"`
 	InsightFinder InsightFinderConfig `yaml:"insightfinder"`
+	MetricFilter  MetricFilterConfig  `yaml:"metric_filter"`
+	Threshold     ThresholdConfig     `yaml:"threshold"`
 }
 
 type AgentConfig struct {
@@ -43,6 +45,33 @@ type InsightFinderConfig struct {
 	InstanceType     string `yaml:"instance_type"`     // OnPremise, EC2, etc.
 	ProjectType      string `yaml:"project_type"`      // Metric, Log, etc.
 	IsContainer      bool   `yaml:"is_container"`      // Container deployment flag
+}
+
+type MetricFilterConfig struct {
+	// System metrics
+	AvailableMemory bool `yaml:"available_memory"`
+	CPUUtilization  bool `yaml:"cpu_utilization"`
+
+	// Radio metrics
+	NumClients5G         bool `yaml:"num_clients_5g"`
+	ChannelUtilization5G bool `yaml:"channel_utilization_5g"`
+	NumClients6G         bool `yaml:"num_clients_6g"`
+	ChannelUtilization6G bool `yaml:"channel_utilization_6g"`
+
+	// Client-derived metrics
+	RSSIAvg            bool `yaml:"rssi_avg"`
+	SNRAvg             bool `yaml:"snr_avg"`
+	ClientsRSSIBelow74 bool `yaml:"clients_rssi_below_74"`
+	ClientsRSSIBelow78 bool `yaml:"clients_rssi_below_78"`
+	ClientsRSSIBelow80 bool `yaml:"clients_rssi_below_80"`
+	ClientsSNRBelow15  bool `yaml:"clients_snr_below_15"`
+	ClientsSNRBelow18  bool `yaml:"clients_snr_below_18"`
+	ClientsSNRBelow20  bool `yaml:"clients_snr_below_20"`
+}
+
+type ThresholdConfig struct {
+	MinClientsRSSIThreshold int `yaml:"min_clients_rssi_threshold"`
+	MinClientsSNRThreshold  int `yaml:"min_clients_snr_threshold"`
 }
 
 func LoadConfig(configPath string) (*Config, error) {
@@ -117,6 +146,17 @@ func setDefaults(config *Config) {
 	}
 	if config.InsightFinder.SystemName == "" {
 		config.InsightFinder.SystemName = config.InsightFinder.ProjectName
+	}
+
+	// MetricFilter defaults are handled by YAML parsing and Go's zero values
+	// No need to override them here since false is the desired default
+
+	// Threshold defaults
+	if config.Threshold.MinClientsRSSIThreshold == 0 {
+		config.Threshold.MinClientsRSSIThreshold = 10 // Default to 10 clients
+	}
+	if config.Threshold.MinClientsSNRThreshold == 0 {
+		config.Threshold.MinClientsSNRThreshold = 10 // Default to 10 clients
 	}
 
 	logrus.Debug("Default values applied to configuration")
