@@ -22,9 +22,9 @@ def main():
     projects = [p.strip() for p in projects_str.split(',') if p.strip()]
 
     print("--- Getting Asset Hierarchy ---")
-    #run_script("get_asset_hierarchy.py")
+    run_script("get_asset_hierarchy.py")
     print(" --- Creating Device DB ---")
-    #run_script("create_device_db.py")
+    run_script("create_device_db.py")
 
     # Login once to InsightFinder for all projects
     print("--- Logging into InsightFinder (shared session for all projects) ---")
