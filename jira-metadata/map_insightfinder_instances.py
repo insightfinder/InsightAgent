@@ -87,44 +87,70 @@ def query_device_data(sanitized_device_name: str):
     conn.close()
     return dict(row) if row else None
 
+# --- Main Processing Function ---
+def process_project(project_name_to_query: str, session: requests.Session = None, csrf_token: str = None):
+    """
+    Process a single project - fetch instances from InsightFinder and map to device data.
+    
+    Args:
+        project_name_to_query: Name of the project to process
+        session: Optional requests.Session object (if not provided, will create new one)
+        csrf_token: Optional CSRF token (if not provided, will login to get one)
+    
+    Returns:
+        Dictionary of instance metadata
+    """
+    print(f"Starting process for project: {project_name_to_query}")
+    
+    # Create session and login if not provided
+    should_close_session = False
+    if session is None or csrf_token is None:
+        print("Logging into InsightFinder...")
+        session = requests.Session()
+        csrf_token = login(session)
+        should_close_session = True
+    
+    try:
+        # 1. Fetch instances from InsightFinder
+        print("Fetching instances...")
+        instance_list = list_instances_in_project(session, csrf_token, project_name_to_query)
+        if not instance_list:
+            print("No instances found or error fetching instances.")
+            return {}
+        print(f"Found {len(instance_list)} instances.")
+
+        # 2. Query database and build metadata mapping
+        all_instance_metadata = {}
+        print("Querying database for each instance...")
+        for original_instance_name in instance_list:
+            sanitized_instance = sanitize_name(original_instance_name)
+            if not sanitized_instance:
+                print(f"Skipping instance '{original_instance_name}' (empty after sanitization).")
+                continue
+
+            device_info = query_device_data(sanitized_instance)
+            if device_info:
+                all_instance_metadata[original_instance_name] = device_info
+            else:
+                all_instance_metadata[original_instance_name] = {"error": "Device not found in database"}
+
+        # 3. Store the results in a YAML file
+        print(f"Writing collected metadata to '{OUTPUT_YAML_FILE}'...")
+        with open(OUTPUT_YAML_FILE, 'w') as f:
+            yaml.dump(all_instance_metadata, f, indent=2, sort_keys=False)
+
+        print("Process completed successfully.")
+        return all_instance_metadata
+    finally:
+        # Only close session if we created it in this function
+        if should_close_session and session:
+            session.close()
+
 # --- Main Execution ---
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print(f"Usage: python {sys.argv[0]} <project_name>")
         sys.exit(1)
 
-    project_name_to_query = sys.argv[1]
-    print(f"Starting process for project: {project_name_to_query}")
-
-    # 1. Fetch instances from InsightFinder
-    print("Logging into InsightFinder...")
-    session = requests.Session()
-    csrf_token = login(session)
-    print("Fetching instances...")
-    instance_list = list_instances_in_project(session, csrf_token, project_name_to_query)
-    if not instance_list:
-        print("No instances found or error fetching instances. Exiting.")
-        sys.exit(0)
-    print(f"Found {len(instance_list)} instances.")
-
-    # 2. Query database and build metadata mapping
-    all_instance_metadata = {}
-    print("Querying database for each instance...")
-    for original_instance_name in instance_list:
-        sanitized_instance = sanitize_name(original_instance_name)
-        if not sanitized_instance:
-            print(f"Skipping instance '{original_instance_name}' (empty after sanitization).")
-            continue
-
-        device_info = query_device_data(sanitized_instance)
-        if device_info:
-            all_instance_metadata[original_instance_name] = device_info
-        else:
-            all_instance_metadata[original_instance_name] = {"error": "Device not found in database"}
-
-    # 3. Store the results in a YAML file
-    print(f"Writing collected metadata to '{OUTPUT_YAML_FILE}'...")
-    with open(OUTPUT_YAML_FILE, 'w') as f:
-        yaml.dump(all_instance_metadata, f, indent=2, sort_keys=False)
-
-    print("Process completed successfully.")
+    project_name = sys.argv[1]
+    process_project(project_name)
