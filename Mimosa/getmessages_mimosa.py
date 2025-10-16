@@ -745,6 +745,7 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
         metric_name = metric_data.get('metric_name')
         value = metric_data.get('value')
         timestamp = metric_data.get('timestamp', sampling_time)
+        ipAddress = metric_data.get('ip_address', '')
         
         if value is None or metric_name is None:
             return
@@ -765,7 +766,8 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
             'componentName': default_component_name,
             'metricName': safe_metric_key,
             'data': value,
-            'timestamp': timestamp
+            'timestamp': timestamp,
+            'ipAddress': ipAddress,
         }
         
         # Add to metric buffer
@@ -1125,12 +1127,13 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
         timestamp = str(chunk['timestamp'])
         # device_type = chunk.get('device_type', 'mimosa_device')
         host_id = chunk.get('host_id')
+        ipAddress = chunk.get('ipAddress', '')
         
         if instance_name not in instance_data_map:
             instance_data_map[instance_name] = {
                 'in': instance_name,
                 'cn': component_name,
-                # 'ct': 0,
+                'i': ipAddress,
                 'dit': {}
             }
         
