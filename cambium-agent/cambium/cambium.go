@@ -754,6 +754,13 @@ func worker(jobs <-chan Job, results chan<- Result) {
 			if Cfg.MetricFilter.ChannelUtilization5G {
 				metricData.Data["Channel Utilization 5G"] = radio5G.TotalCu
 			}
+			if Cfg.MetricFilter.ChannelUtilization5GClientsOver35 {
+				if radio5G.Mus > 35 {
+					metricData.Data["Channel Utilization 5G Clients > 35"] = radio5G.TotalCu
+				} else {
+					metricData.Data["Channel Utilization 5G Clients > 35"] = 0.0
+				}
+			}
 			// metricData.Data["UL Throughput 5G"] = radio5G.UlTPut
 			// metricData.Data["DL Throughput 5G"] = radio5G.DlTPut
 			// metricData.Data["Noise Floor 5G"] = radio5G.Nf
@@ -763,6 +770,9 @@ func worker(jobs <-chan Job, results chan<- Result) {
 			}
 			if Cfg.MetricFilter.ChannelUtilization5G {
 				metricData.Data["Channel Utilization 5G"] = 0.0
+			}
+			if Cfg.MetricFilter.ChannelUtilization5GClientsOver35 {
+				metricData.Data["Channel Utilization 5G Clients > 35"] = 0.0
 			}
 			// metricData.Data["UL Throughput 5G"] = 0.0
 			// metricData.Data["DL Throughput 5G"] = 0.0
@@ -777,6 +787,13 @@ func worker(jobs <-chan Job, results chan<- Result) {
 			if Cfg.MetricFilter.ChannelUtilization6G {
 				metricData.Data["Channel Utilization 6G"] = radio6G.TotalCu
 			}
+			if Cfg.MetricFilter.ChannelUtilization6GClientsOver35 {
+				if radio6G.Mus > 35 {
+					metricData.Data["Channel Utilization 6G Clients > 35"] = radio6G.TotalCu
+				} else {
+					metricData.Data["Channel Utilization 6G Clients > 35"] = 0.0
+				}
+			}
 			// metricData.Data["UL Throughput 6G"] = radio6G.UlTPut
 			// metricData.Data["DL Throughput 6G"] = radio6G.DlTPut
 			// metricData.Data["Noise Floor 6G"] = radio6G.Nf
@@ -786,6 +803,9 @@ func worker(jobs <-chan Job, results chan<- Result) {
 			}
 			if Cfg.MetricFilter.ChannelUtilization6G {
 				metricData.Data["Channel Utilization 6G"] = 0.0
+			}
+			if Cfg.MetricFilter.ChannelUtilization6GClientsOver35 {
+				metricData.Data["Channel Utilization 6G Clients > 35"] = 0.0
 			}
 			// metricData.Data["UL Throughput 6G"] = 0.0
 			// metricData.Data["DL Throughput 6G"] = 0.0
@@ -1064,6 +1084,14 @@ func logMetricConfiguration() {
 	totalMetrics++
 	if Cfg.MetricFilter.ChannelUtilization6G {
 		enabledMetrics = append(enabledMetrics, "Channel Utilization 6G")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ChannelUtilization5GClientsOver35 {
+		enabledMetrics = append(enabledMetrics, "Channel Utilization 5G Clients > 35")
+	}
+	totalMetrics++
+	if Cfg.MetricFilter.ChannelUtilization6GClientsOver35 {
+		enabledMetrics = append(enabledMetrics, "Channel Utilization 6G Clients > 35")
 	}
 
 	// Client-derived metrics
