@@ -53,10 +53,12 @@ type MetricFilterConfig struct {
 	CPUUtilization  bool `yaml:"cpu_utilization"`
 
 	// Radio metrics
-	NumClients5G         bool `yaml:"num_clients_5g"`
-	ChannelUtilization5G bool `yaml:"channel_utilization_5g"`
-	NumClients6G         bool `yaml:"num_clients_6g"`
-	ChannelUtilization6G bool `yaml:"channel_utilization_6g"`
+	NumClients5G                      bool `yaml:"num_clients_5g"`
+	ChannelUtilization5G              bool `yaml:"channel_utilization_5g"`
+	NumClients6G                      bool `yaml:"num_clients_6g"`
+	ChannelUtilization6G              bool `yaml:"channel_utilization_6g"`
+	ChannelUtilization5GClientsOver35 bool `yaml:"channel_utilization_5g_clients_over_35"`
+	ChannelUtilization6GClientsOver35 bool `yaml:"channel_utilization_6g_clients_over_35"`
 
 	// Client-derived metrics
 	RSSIAvg            bool `yaml:"rssi_avg"`

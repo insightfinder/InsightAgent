@@ -43,6 +43,8 @@ metric_filter:
   channel_utilization_5g: false
   num_clients_6g: false
   channel_utilization_6g: false
+  channel_utilization_5g_clients_over_35: true
+  channel_utilization_6g_clients_over_35: true
   
   # Client-derived metrics (requires Wi-Fi devices with client data)
   rssi_avg: false
