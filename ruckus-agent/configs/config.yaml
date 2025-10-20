@@ -49,6 +49,9 @@ metric_filter:
   airtime_24g: false
   airtime_5g: false
   airtime_6g: false
+  airtime_24g_clients_over_35: true
+  airtime_5g_clients_over_35: true
+  airtime_6g_clients_over_35: true
   
   # Client-derived metrics (requires client data enrichment)
   rssi_avg: false

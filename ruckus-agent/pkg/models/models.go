@@ -11,6 +11,9 @@ type MetricFilter interface {
 	IsAirtime24G() bool
 	IsAirtime5G() bool
 	IsAirtime6G() bool
+	IsAirtime24GClientsOver35() bool
+	IsAirtime5GClientsOver35() bool
+	IsAirtime6GClientsOver35() bool
 	IsRSSIAvg() bool
 	IsSNRAvg() bool
 	IsClientsRSSIBelow74() bool
@@ -145,6 +148,29 @@ func (ap *APDetail) ToMetricData(componentNameAsAP bool, filter MetricFilter) *M
 	}
 	if filter.IsAirtime6G() {
 		metric.Data["Airtime 6G Percent"] = ap.Airtime6G
+	}
+
+	// Add airtime metrics with client threshold (only include airtime if clients > 35)
+	if filter.IsAirtime24GClientsOver35() {
+		if ap.NumClients24G > 35 {
+			metric.Data["Airtime 24G Clients > 35"] = ap.Airtime24G
+		} else {
+			metric.Data["Airtime 24G Clients > 35"] = 0.0
+		}
+	}
+	if filter.IsAirtime5GClientsOver35() {
+		if ap.NumClients5G > 35 {
+			metric.Data["Airtime 5G Clients > 35"] = ap.Airtime5G
+		} else {
+			metric.Data["Airtime 5G Clients > 35"] = 0.0
+		}
+	}
+	if filter.IsAirtime6GClientsOver35() {
+		if ap.NumClients6G > 35 {
+			metric.Data["Airtime 6G Clients > 35"] = ap.Airtime6G
+		} else {
+			metric.Data["Airtime 6G Clients > 35"] = 0.0
+		}
 	}
 
 	// Add client-derived metrics based on filter configuration
