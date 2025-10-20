@@ -155,6 +155,20 @@ func logMetricConfiguration(config *Config) {
 		enabledMetrics = append(enabledMetrics, "Airtime 6G Percent")
 	}
 
+	// Airtime metrics with client threshold
+	totalMetrics++
+	if config.MetricFilter.Airtime24GClientsOver35 {
+		enabledMetrics = append(enabledMetrics, "Airtime 24G Clients > 35")
+	}
+	totalMetrics++
+	if config.MetricFilter.Airtime5GClientsOver35 {
+		enabledMetrics = append(enabledMetrics, "Airtime 5G Clients > 35")
+	}
+	totalMetrics++
+	if config.MetricFilter.Airtime6GClientsOver35 {
+		enabledMetrics = append(enabledMetrics, "Airtime 6G Clients > 35")
+	}
+
 	// Client-derived metrics
 	totalMetrics++
 	if config.MetricFilter.RSSIAvg {
