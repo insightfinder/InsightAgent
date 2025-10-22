@@ -9,7 +9,13 @@ from configparser import ConfigParser
 from concurrent.futures import ThreadPoolExecutor, wait
 from ifobfuscate import decode
 
-USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36"
+def generate_user_agent():
+    timestamp = datetime.now().strftime("%Y.%m.%d.%H.%M")
+    user_agent = f"ResponseTimeAgent/{timestamp} (Linux; x86_64)"
+    print("Generated the UserAgent:",user_agent)
+    return user_agent
+
+USER_AGENT = generate_user_agent()
 
 
 def log_in(host, user_name, password):
@@ -85,6 +91,8 @@ def get_agent_config_vars():
             # agent settings
             url = parser.get('agent', 'url')
             genai_url = parser.get('agent', 'genai_url')
+            genaichat_url = parser.get('agent', 'genaichat_url')
+            llmjudge_url = parser.get('agent', 'llmjudge_url')
 
 
             login_user = parser.get('agent', 'login_user')
@@ -126,6 +134,8 @@ def get_agent_config_vars():
         'server_url': server_url,
         'url': url,
         'genai_url': genai_url,
+        'genaichat_url': genaichat_url,
+        'llmjudge_url': llmjudge_url,
         'login_user': login_user,
         'login_pass': login_pass,
         'monitor_urls': monitor_urls
@@ -178,11 +188,10 @@ def run_if_endpoints(start_time, config_vars):
     send_data(metric_data)
 
 
-def run_llm_endpoints(start_time, config_vars):
+def run_llm_endpoints(start_time, if_endpoint, llm_endpoint,metric_name ):
     result = {}
-    if_host = ''.join(config_vars['url'].split('//')[1:])
-    genai_url = config_vars['genai_url']
-    incident_summary_recommandation_url = genai_url + "/incident-investigation/SummaryAndRecommendations"
+
+    incident_summary_recommandation_url = llm_endpoint + "/incident-investigation/SummaryAndRecommendations"
     incident_summary_recommandation_body = {
         "system_name": "dev",
         "occurrence_time": "2024-06-25T10:00:00Z",
@@ -244,7 +253,7 @@ def run_llm_endpoints(start_time, config_vars):
             }
         ]
     }
-    print("[LLM Request] Start request")
+    print("[LLM Request] Start request:", llm_endpoint, "")
     try:
         start = time.time()
         resp = requests.post(incident_summary_recommandation_url, json=incident_summary_recommandation_body, timeout=60)
@@ -262,9 +271,9 @@ def run_llm_endpoints(start_time, config_vars):
 
     print("[LLM Request] Request finished for: ", incident_summary_recommandation_url, "Response time: ", response_time)
     if response_time is not None:
-        result['Incident Summary and Recommendation LLM'] = response_time
+        result[metric_name] = response_time
 
-    metric_data = format_data(if_host, result, start_time)
+    metric_data = format_data(if_endpoint, result, start_time)
     print(metric_data)
     send_data(metric_data)
 
@@ -276,11 +285,21 @@ if __name__ == "__main__":
     start_time = get_time()
     start_time_ns = time.time_ns()
 
+    if_host = ''.join(config_vars['url'].split('//')[1:])
+    genai_url = config_vars['genai_url']
+    genaichat_url = config_vars['genaichat_url']
+    llmjudge_url = config_vars['llmjudge_url']
 
     # Use multiple threads to run multiple endpoints concurrently
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         futures = [
-            executor.submit(run_llm_endpoints, start_time, config_vars),
+            executor.submit(run_llm_endpoints, start_time, if_host, genai_url,
+                            "Incident Summary and Recommendation LLM"),
+            executor.submit(run_llm_endpoints, start_time, if_host, genaichat_url,
+                            "Realtime Chatbot LLM"),
+            executor.submit(run_llm_endpoints, start_time, if_host, llmjudge_url,
+                            "LLM Evaluation Service"),
+
             executor.submit(run_if_endpoints, start_time, config_vars)
         ]
 
