@@ -25,7 +25,7 @@ def log_in(host, user_name, password):
 
     try:
         start = time.time()
-        resp = requests.post(url, data=data, headers=headers, timeout=10)
+        resp = requests.post(url, data=data, headers=headers, timeout=60)
         end = time.time()
 
         if resp.status_code == 200:
@@ -44,7 +44,7 @@ def run_endpoint_request(url, headers, cookies):
     print("[Endpoint Request] Start request: ", url, "")
     try:
         start = time.time()
-        resp = requests.get(url, headers=headers, cookies=cookies, timeout=10)
+        resp = requests.get(url, headers=headers, cookies=cookies, timeout=60)
         end = time.time()
 
         if resp.status_code == 200:
