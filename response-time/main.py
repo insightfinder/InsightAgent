@@ -66,18 +66,6 @@ def get_time():
     return epoch
 
 
-def format_data(host, response_time, timestamp):
-    header = ["timestamp"]
-    entry = [str(timestamp)]
-
-    for result in response_time:
-        if response_time[result]:
-            header.append(result + "[" + host + "]")
-            entry.append(str(round(response_time[result], 4)))
-
-    return [dict(list(zip(header, entry)))]
-
-
 def get_agent_config_vars():
     try:
         if os.path.exists(os.path.join(os.getcwd(), "config.ini")):
@@ -143,25 +131,47 @@ def get_agent_config_vars():
     return config_vars
 
 
-def send_data(metric_data):
+def send_data(if_endpoint, metric_data, start_time):
     """ Sends parsed metric data to InsightFinder """
-    send_data_time = time.time()
-    # prepare data for metric streaming agent
-    to_send_data_dict = dict()
-    # for backend so this is the camel case in to_send_data_dict
-    to_send_data_dict["metricData"] = json.dumps(metric_data)
-    to_send_data_dict["licenseKey"] = config_vars['license_key']
-    to_send_data_dict["projectName"] = config_vars['project_name']
-    to_send_data_dict["userName"] = config_vars['user_name']
-    to_send_data_dict["agentType"] = "MetricFileReplay"
 
-    to_send_data_json = json.dumps(to_send_data_dict)
+    # Build the metric data points array
+    metric_data_points = []
+    for key, value in metric_data.items():
+        metric_data_points.append({
+            "m": key,
+            "v": value
+        })
+
+    # Create the instance data map with if_endpoint as the instance name
+    idm = {
+        if_endpoint: {  # Use instance name as key
+            "in": if_endpoint,
+            "dit": {
+                str(start_time): {
+                    "t": start_time,
+                    "metricDataPointSet": metric_data_points  # All metrics here
+                }
+            }
+        }
+    }
+
+    to_send_data_dict = {
+        "userName": config_vars['user_name'],
+        "licenseKey": config_vars['license_key'],
+        "data": {
+            "projectName": config_vars['project_name'],
+            "userName": config_vars['user_name'],
+            "iat": "Custom",
+            "ct": "PrivateCloud",
+            "idm": idm
+        }
+    }
 
     # send the data
-    post_url = config_vars['server_url'] + "/customprojectrawdata"
-    response = requests.post(post_url, data=json.loads(to_send_data_json))
+    post_url = config_vars['server_url'] + "/api/v2/metric-data-receive"
+    response = requests.post(post_url, json=to_send_data_dict)
     if response.status_code == 200:
-        print(str(sys.getsizeof(to_send_data_json)) + " bytes of data are reported.")
+        print(str(sys.getsizeof(to_send_data_dict)) + " bytes of data are reported.")
     else:
         print("Failed to send data.")
 
@@ -184,8 +194,8 @@ def run_if_endpoints(start_time, config_vars):
         for key, future in futures.items():
             results[key] = future.result()
 
-    metric_data = format_data(host, results, start_time)
-    send_data(metric_data)
+    print(results)
+    send_data(host, results, start_time)
 
 
 def run_llm_endpoints(start_time, if_endpoint, llm_endpoint,metric_name ):
@@ -273,9 +283,8 @@ def run_llm_endpoints(start_time, if_endpoint, llm_endpoint,metric_name ):
     if response_time is not None:
         result[metric_name] = response_time
 
-    metric_data = format_data(if_endpoint, result, start_time)
-    print(metric_data)
-    send_data(metric_data)
+    print(result)
+    send_data(if_endpoint, result, start_time)
 
 
 if __name__ == "__main__":
