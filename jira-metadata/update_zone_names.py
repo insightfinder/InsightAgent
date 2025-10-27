@@ -22,13 +22,30 @@ def load_zone_mapping():
         print(f"Error loading {ZONE_MAPPING_FILE}: {e}")
         return {}
 
-def extract_prefix(instance_name):
-    """Extract the substring before the first hyphen or period from instance name."""
+def get_zone_from_instance_name(instance_name, zone_mapping):
+    """
+    Extract the prefix from instance name and find matching zone.
+    First tries splitting by '-', then by '.' if no match found.
+    Returns zone_name if found, None otherwise.
+    """
+    # Try splitting by hyphen first
     if '-' in instance_name:
-        return instance_name.split('-')[0]
-    elif '.' in instance_name:
-        return instance_name.split('.')[0]
-    return instance_name
+        prefix = instance_name.split('-')[0].lower()
+        zone_name = zone_mapping.get(prefix)
+        if zone_name:
+            print(f"Using fallback zone mapping for '{instance_name}': prefix '{prefix}' -> zone '{zone_name}'")
+            return zone_name
+    
+    # If no match with hyphen, try splitting by period
+    if '.' in instance_name:
+        prefix = instance_name.split('.')[0].lower()
+        zone_name = zone_mapping.get(prefix)
+        if zone_name:
+            print(f"Using fallback zone mapping for '{instance_name}': prefix '{prefix}' -> zone '{zone_name}'")
+            return zone_name
+    
+    print(f"Warning: No venue_name or zone mapping found for instance '{instance_name}'")
+    return None
 
 def update_zone_names():
     """
@@ -70,13 +87,10 @@ def update_zone_names():
             zone_name = venue_name
         else:
             # Fallback: Extract prefix and look up in zone mapping
-            prefix = extract_prefix(instance_name)
-            zone_name = zone_mapping.get(prefix.lower())
+            zone_name = get_zone_from_instance_name(instance_name, zone_mapping)
             if zone_name:
                 fallback_count += 1
-                print(f"Using fallback zone mapping for '{instance_name}': prefix '{prefix}' -> zone '{zone_name}'")
             else:
-                print(f"Warning: No venue_name or zone mapping found for instance '{instance_name}' (prefix: '{prefix}')")
                 skipped_count += 1
         
         if zone_name:
