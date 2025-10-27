@@ -25,6 +25,8 @@ def main():
     run_script("get_asset_hierarchy.py")
     print(" --- Creating Device DB ---")
     run_script("create_device_db.py")
+    print("--- Generating Abbreviation - Venue Mapping ---")
+    run_script("generate_abbreviation_venue_mapping.py")
 
     # Login once to InsightFinder for all projects
     print("--- Logging into InsightFinder (shared session for all projects) ---")
@@ -37,7 +39,8 @@ def main():
             print(f"\n--- Running scripts for project: {project_name} ---")
             # Call process_project directly with shared session and token
             process_project(project_name, session=session, csrf_token=csrf_token)
-            run_script("send_data_to_if.py", project_name)
+            run_script("send_metadata_to_if.py", project_name)
+            run_script("update_zone_names.py", project_name)
     finally:
         # Clean up session
         session.close()
