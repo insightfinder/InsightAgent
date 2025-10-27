@@ -23,9 +23,11 @@ def load_zone_mapping():
         return {}
 
 def extract_prefix(instance_name):
-    """Extract the substring before the first hyphen from instance name."""
+    """Extract the substring before the first hyphen or period from instance name."""
     if '-' in instance_name:
         return instance_name.split('-')[0]
+    elif '.' in instance_name:
+        return instance_name.split('.')[0]
     return instance_name
 
 def update_zone_names():
@@ -69,7 +71,7 @@ def update_zone_names():
         else:
             # Fallback: Extract prefix and look up in zone mapping
             prefix = extract_prefix(instance_name)
-            zone_name = zone_mapping.get(prefix)
+            zone_name = zone_mapping.get(prefix.lower())
             if zone_name:
                 fallback_count += 1
                 print(f"Using fallback zone mapping for '{instance_name}': prefix '{prefix}' -> zone '{zone_name}'")
