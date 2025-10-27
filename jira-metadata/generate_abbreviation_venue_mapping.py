@@ -63,7 +63,7 @@ def main():
     for venue in venues:
         abbr_key = get_abbreviation_key(venue)
         if abbr_key and abbr_key in abbr_lookup:
-            abbr_name = abbr_lookup[abbr_key]
+            abbr_name = abbr_lookup[abbr_key].lower()  # Convert to lowercase
             if abbr_name not in zone_mapping:
                 zone_mapping[abbr_name] = venue["label"]
                 print(f"Mapped: {abbr_name} -> {venue['label']}")
