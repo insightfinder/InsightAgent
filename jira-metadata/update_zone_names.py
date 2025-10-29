@@ -43,14 +43,24 @@ def get_zone_from_instance_name(instance_name, zone_mapping, zone_mapping_manual
     First tries splitting by '-', then by '.' if no match found.
     Checks zone_mapping first, then zone_mapping_manual as fallback.
     Returns zone_name if found, None otherwise.
+    
+    zone_mapping can be either:
+    - dict with nested structure: {abbr: {"venue_name": str, "venue_id": str}}
+    - dict with simple structure: {abbr: str} (for manual mapping)
     """
     # Try splitting by hyphen first
     if '-' in instance_name:
         prefix = instance_name.split('-')[0].lower()
-        zone_name = zone_mapping.get(prefix)
-        if zone_name:
-            print(f"Using zone mapping for '{instance_name}': prefix '{prefix}' -> zone '{zone_name}'")
-            return zone_name
+        zone_entry = zone_mapping.get(prefix)
+        if zone_entry:
+            # Handle nested structure (venue_name/venue_id)
+            if isinstance(zone_entry, dict):
+                zone_name = zone_entry.get("venue_name")
+            else:
+                zone_name = zone_entry
+            if zone_name:
+                print(f"Using zone mapping for '{instance_name}': prefix '{prefix}' -> zone '{zone_name}'")
+                return zone_name
         # Check manual mapping
         zone_name = zone_mapping_manual.get(prefix)
         if zone_name:
@@ -60,10 +70,16 @@ def get_zone_from_instance_name(instance_name, zone_mapping, zone_mapping_manual
     # If no match with hyphen, try splitting by period
     if '.' in instance_name:
         prefix = instance_name.split('.')[0].lower()
-        zone_name = zone_mapping.get(prefix)
-        if zone_name:
-            print(f"Using zone mapping for '{instance_name}': prefix '{prefix}' -> zone '{zone_name}'")
-            return zone_name
+        zone_entry = zone_mapping.get(prefix)
+        if zone_entry:
+            # Handle nested structure (venue_name/venue_id)
+            if isinstance(zone_entry, dict):
+                zone_name = zone_entry.get("venue_name")
+            else:
+                zone_name = zone_entry
+            if zone_name:
+                print(f"Using zone mapping for '{instance_name}': prefix '{prefix}' -> zone '{zone_name}'")
+                return zone_name
         # Check manual mapping
         zone_name = zone_mapping_manual.get(prefix)
         if zone_name:

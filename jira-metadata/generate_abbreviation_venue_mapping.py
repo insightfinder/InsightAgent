@@ -42,6 +42,17 @@ def get_abbreviation_key(venue):
     return None
 
 def main():
+    """
+    Fetches abbreviations and venues from Jira Assets and creates a mapping file.
+    
+    Output file (zone_mapping.yaml) structure:
+    {
+        "abbreviation": {
+            "venue_name": "Venue Name",
+            "venue_id": "12345"
+        }
+    }
+    """
     config = configparser.ConfigParser()
     config.read("conf.d/config.ini")
     
@@ -55,7 +66,7 @@ def main():
     
     print(f"Found {len(abbreviations)} abbreviations and {len(venues)} venues.")
     
-    # Build lookup and mapping
+    # Build lookup and mappings
     abbr_lookup = {abbr["objectKey"]: abbr["label"] for abbr in abbreviations}
     zone_mapping = {}
     unmapped_venues = []
@@ -65,8 +76,13 @@ def main():
         if abbr_key and abbr_key in abbr_lookup:
             abbr_name = abbr_lookup[abbr_key].lower()  # Convert to lowercase
             if abbr_name not in zone_mapping:
-                zone_mapping[abbr_name] = venue["label"]
-                print(f"Mapped: {abbr_name} -> {venue['label']}")
+                zone_mapping[abbr_name] = {
+                    "venue_name": venue["label"],
+                    "venue_id": venue["id"]
+                }
+                print(f"Mapped: {abbr_name} -> {venue['label']} (ID: {venue['id']})")
+            else:
+                print(f"Warning: Duplicate abbreviation '{abbr_name}' found for venue {venue['label']}")
         else:
             unmapped_venues.append(venue["label"])
     
