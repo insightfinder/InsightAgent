@@ -7,6 +7,7 @@ import sys
 CONFIG_FILE = "conf.d/config.ini"
 METADATA_FILE = "instance_metadata.yaml"
 ZONE_MAPPING_FILE = "zone_mapping.yaml"
+ZONE_MAPPING_MANUAL_FILE = "zone_mapping_manual.yaml"
 
 def load_zone_mapping():
     """Load zone mapping from YAML file."""
@@ -22,10 +23,25 @@ def load_zone_mapping():
         print(f"Error loading {ZONE_MAPPING_FILE}: {e}")
         return {}
 
-def get_zone_from_instance_name(instance_name, zone_mapping):
+def load_manual_zone_mapping():
+    """Load manual zone mapping from YAML file."""
+    try:
+        with open(ZONE_MAPPING_MANUAL_FILE, 'r') as f:
+            zone_mapping = yaml.safe_load(f)
+        print(f"Loaded manual zone mapping with {len(zone_mapping)} entries from {ZONE_MAPPING_MANUAL_FILE}")
+        return zone_mapping if zone_mapping else {}
+    except FileNotFoundError:
+        print(f"Warning: {ZONE_MAPPING_MANUAL_FILE} not found. Manual fallback mapping will not be available.")
+        return {}
+    except Exception as e:
+        print(f"Error loading {ZONE_MAPPING_MANUAL_FILE}: {e}")
+        return {}
+
+def get_zone_from_instance_name(instance_name, zone_mapping, zone_mapping_manual):
     """
     Extract the prefix from instance name and find matching zone.
     First tries splitting by '-', then by '.' if no match found.
+    Checks zone_mapping first, then zone_mapping_manual as fallback.
     Returns zone_name if found, None otherwise.
     """
     # Try splitting by hyphen first
@@ -33,7 +49,12 @@ def get_zone_from_instance_name(instance_name, zone_mapping):
         prefix = instance_name.split('-')[0].lower()
         zone_name = zone_mapping.get(prefix)
         if zone_name:
-            print(f"Using fallback zone mapping for '{instance_name}': prefix '{prefix}' -> zone '{zone_name}'")
+            print(f"Using zone mapping for '{instance_name}': prefix '{prefix}' -> zone '{zone_name}'")
+            return zone_name
+        # Check manual mapping
+        zone_name = zone_mapping_manual.get(prefix)
+        if zone_name:
+            print(f"Using manual zone mapping for '{instance_name}': prefix '{prefix}' -> zone '{zone_name}'")
             return zone_name
     
     # If no match with hyphen, try splitting by period
@@ -41,7 +62,12 @@ def get_zone_from_instance_name(instance_name, zone_mapping):
         prefix = instance_name.split('.')[0].lower()
         zone_name = zone_mapping.get(prefix)
         if zone_name:
-            print(f"Using fallback zone mapping for '{instance_name}': prefix '{prefix}' -> zone '{zone_name}'")
+            print(f"Using zone mapping for '{instance_name}': prefix '{prefix}' -> zone '{zone_name}'")
+            return zone_name
+        # Check manual mapping
+        zone_name = zone_mapping_manual.get(prefix)
+        if zone_name:
+            print(f"Using manual zone mapping for '{instance_name}': prefix '{prefix}' -> zone '{zone_name}'")
             return zone_name
     
     print(f"Warning: No venue_name or zone mapping found for instance '{instance_name}'")
@@ -61,6 +87,7 @@ def update_zone_names():
 
     # Load zone mapping for fallback
     zone_mapping = load_zone_mapping()
+    zone_mapping_manual = load_manual_zone_mapping()
 
     # InsightFinder config
     if_config = config['InsightFinder']
@@ -87,7 +114,7 @@ def update_zone_names():
             zone_name = venue_name
         else:
             # Fallback: Extract prefix and look up in zone mapping
-            zone_name = get_zone_from_instance_name(instance_name, zone_mapping)
+            zone_name = get_zone_from_instance_name(instance_name, zone_mapping, zone_mapping_manual)
             if zone_name:
                 fallback_count += 1
             else:
