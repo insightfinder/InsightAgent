@@ -1,5 +1,5 @@
 #!/bin/bash
 while true; do
        python3 main.py &
-       sleep 60
+       sleep 600
 done
