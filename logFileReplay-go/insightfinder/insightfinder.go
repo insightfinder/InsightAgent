@@ -322,7 +322,7 @@ func SendLogData(ifConfig *IFConfig, LogDataList *[]LogData) {
 	}
 
 	client := createClient(ifConfig)
-	endPointUrl := BuildCompleteURL(ifConfig.IFUrl, "/customprojectrawdata")
+	endPointUrl := BuildCompleteURL(ifConfig.IFUrl, "/api/v1/customprojectrawdata")
 
 	client.RetryCount = 2
 	client.RetryWaitTime = 5
