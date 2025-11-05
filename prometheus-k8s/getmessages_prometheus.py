@@ -1057,11 +1057,11 @@ def get_api_from_project_type(if_config_vars):
     """ use project type to determine which API to post to """
     # incident uses a different API endpoint
     if 'INCIDENT' in if_config_vars['project_type']:
-        return 'incidentdatareceive'
+        return '/api/v1/incidentdatareceive'
     elif 'DEPLOYMENT' in if_config_vars['project_type']:
-        return 'deploymentEventReceive'
+        return '/api/v1/deploymentEventReceive'
     else:  # MERTIC, LOG, ALERT
-        return 'customprojectrawdata'
+        return '/api/v1/customprojectrawdata'
 
 
 def initialize_api_post_data(logger, if_config_vars):
