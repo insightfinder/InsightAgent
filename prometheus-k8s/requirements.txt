@@ -4,3 +4,4 @@ regex
 requests
 apscheduler
 kubernetes
+urllib3>=2.5.0
