@@ -1,8 +1,13 @@
-FROM bitnami/python:3.13
+FROM python:3.13
 ENV TZ=UTC
-COPY . .
+
+WORKDIR /app
+
+COPY . /app
+
 
 RUN apt-get update -y && apt-get upgrade -y && \
+    python3 -m pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     chown -R 1001:1001 ./
 
