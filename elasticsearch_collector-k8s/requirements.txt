@@ -1,9 +1,9 @@
 APScheduler
 arrow
-elasticsearch==7.17.4
+elasticsearch
 pytz
 regex
 requests
-urllib3
+urllib3>=2.5.0
 backports.zoneinfo;python_version<"3.9"
 kubernetes
