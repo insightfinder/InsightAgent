@@ -227,8 +227,7 @@ def run_llm_chatbot_endpoint(llm_endpoint, headers, cookies):
     chatbot_url = llm_endpoint + "/api/v1/llama2-root-cause?tzOffset=-18000000"
     chatbot_payload = {
         "mode": "0",
-        "context": "00000000-0000-0000-0000-000000000000",
-        "message": "Explain me about the error code 0x14f",
+        "message": "what is windows error code 0x14f",
     }
     
     # Required keywords to validate in response
@@ -287,7 +286,7 @@ def run_incident_summary_recommendation_llm(llm_endpoint, headers, cookies, conf
     }
     
     # Required keywords to validate in response
-    required_keywords = ["Root Cause Analysis", "Potential Actions"]
+    required_keywords = ["Recommendation", "root cause chain"]
     
     print("[Incident Summary LLM Request] Start request:", llm_endpoint, "")
     try:
