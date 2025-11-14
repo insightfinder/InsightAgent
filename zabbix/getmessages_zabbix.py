@@ -77,7 +77,10 @@ def is_matching_disallow_regex(text, disallow_regex_map):
 
     for disallow_regex in disallow_regex_map:
         if disallow_regex:
-            if disallow_regex.startswith('/') and disallow_regex.endswith('/'):
+            if disallow_regex.startswith('/') and disallow_regex.endswith('/i'):
+                if regex.match(disallow_regex[1:-2], text, regex.IGNORECASE):
+                    return True
+            elif disallow_regex.startswith('/') and disallow_regex.endswith('/'):
                 if regex.match(disallow_regex[1:-1], text):
                     return True
             else:
