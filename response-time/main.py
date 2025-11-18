@@ -282,7 +282,8 @@ def run_incident_summary_recommendation_llm(llm_endpoint, headers, cookies, conf
         "customerName": config_vars['customer_name'],
         "rootCauseEntry": config_vars['root_cause_entry'], 
         "rootCauseChainSize": config_vars['root_cause_chain_size'],
-        "mode": "3"
+        "mode": "3",
+        "isLiveChat": "false"
     }
     
     # Required keywords to validate in response
