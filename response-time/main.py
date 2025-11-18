@@ -87,6 +87,12 @@ def get_agent_config_vars():
             login_pass = decode(parser.get('agent', 'login_pass'))
 
             monitor_urls = json.loads(parser.get('agent', 'monitor_urls', raw=True))
+            
+            # Incident Summary and Recommendation LLM parameters
+            system_name = parser.get('agent', 'system_name')
+            customer_name = parser.get('agent', 'customer_name')
+            root_cause_chain_size = parser.get('agent', 'root_cause_chain_size')
+            root_cause_entry = parser.get('agent', 'root_cause_entry', raw=True)
 
             if len(license_key) == 0:
                 print("Agent not correctly configured(license key). Check config file.")
@@ -126,7 +132,11 @@ def get_agent_config_vars():
         'llmjudge_url': llmjudge_url,
         'login_user': login_user,
         'login_pass': login_pass,
-        'monitor_urls': monitor_urls
+        'monitor_urls': monitor_urls,
+        'system_name': system_name,
+        'customer_name': customer_name,
+        'root_cause_chain_size': root_cause_chain_size,
+        'root_cause_entry': root_cause_entry
     }
     return config_vars
 
@@ -183,87 +193,198 @@ def run_if_endpoints(start_time, config_vars):
 
     (cookies, headers, results['Login']) = log_in(url, config_vars['login_user'], config_vars['login_pass'])
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=7) as executor:
         # Submit all tasks and store futures
         futures = {}
+        
+        # Add regular endpoint monitoring tasks
         for monitor_url in config_vars['monitor_urls']:
             key = next(iter(monitor_url.keys()))
             futures[key] = executor.submit(run_endpoint_request, url + monitor_url[key], headers, cookies)
+        
+        # Add LLM Chatbot endpoint task
+        futures['Realtime Chatbot LLM'] = executor.submit(
+            run_llm_chatbot_endpoint, url, headers, cookies
+        )
+        
+        # Add Incident Summary and Recommendation LLM endpoint task
+        futures['Incident Summary and Recommendation LLM'] = executor.submit(
+            run_incident_summary_recommendation_llm, url, headers, cookies, config_vars
+        )
 
         # Wait for all tasks to complete and get results
         for key, future in futures.items():
-            results[key] = future.result()
+            result = future.result()
+            if result is not None:
+                results[key] = result
 
     print(results)
     send_data(host, results, start_time)
 
 
-def run_llm_endpoints(start_time, if_endpoint, llm_endpoint,metric_name ):
+def run_llm_chatbot_endpoint(llm_endpoint, headers, cookies):
+    """Helper function to run chatbot endpoint and return response time"""
+    chatbot_url = llm_endpoint + "/api/v1/llama2-root-cause?tzOffset=-18000000"
+    chatbot_payload = {
+        "mode": "0",
+        "message": "what is windows error code 0x14f",
+    }
+    
+    # Required keywords to validate in response
+    required_keywords = ["PDC_WATCHDOG_TIMEOUT", "Windows"]
+    
+    print("[LLM Chatbot Request] Start request:", llm_endpoint, "")
+    try:
+        start = time.time()
+        resp = requests.post(chatbot_url, data=chatbot_payload, headers=headers, cookies=cookies, timeout=60)
+        end = time.time()
+
+        if resp.status_code == 200:
+            response_time = (end - start) * 1000  # convert to MS
+            
+            # Validate response content
+            try:
+                response_json = json.loads(resp.text)
+                response_text = str(response_json)
+                
+                # Check if required keywords are present in response
+                keywords_found = all(keyword.lower() in response_text.lower() for keyword in required_keywords)
+                
+                if keywords_found:
+                    return response_time
+                else:
+                    print("[LLM Chatbot Request] ✗ Response validation failed - Missing required keywords")
+                    print(f"[LLM Chatbot Request] Required keywords: {required_keywords}")
+                    print(f"[LLM Chatbot Request] Keywords found: {[kw for kw in required_keywords if kw.lower() in response_text.lower()]}")
+                    print(f"[LLM Chatbot Request] Full response: {resp.text}")
+                    return None
+                    
+            except (json.JSONDecodeError, KeyError) as e:
+                print(f"[LLM Chatbot Request] ✗ Response validation failed - Invalid JSON: {str(e)}")
+                print(f"[LLM Chatbot Request] Full response: {resp.text}")
+                return None
+        else:
+            print("[LLM Chatbot Request] Response failed with status code: ", resp.status_code)
+            print(f"[LLM Chatbot Request] Response: {resp.text}")
+            return None
+    except requests.exceptions.RequestException as e:
+        print("[LLM Chatbot Request] Request failed with exception: ", str(e))
+        return None
+
+def run_incident_summary_recommendation_llm(llm_endpoint, headers, cookies, config_vars):
+    """Function to run Incident Summary and Recommendation LLM endpoint and return response time"""
+    
+    incident_summary_url = llm_endpoint + "/api/v1/llama2-root-cause?tzOffset=-18000000"
+    
+    # Build payload from config parameters - convert rootCauseEntry to JSON string for form data
+    incident_summary_payload = {
+        "systemName": config_vars['system_name'],
+        "customerName": config_vars['customer_name'],
+        "rootCauseEntry": config_vars['root_cause_entry'], 
+        "rootCauseChainSize": config_vars['root_cause_chain_size'],
+        "mode": "3",
+        "isLiveChat": "false"
+    }
+    
+    # Required keywords to validate in response
+    required_keywords = ["Recommendation", "root cause chain"]
+    
+    print("[Incident Summary LLM Request] Start request:", llm_endpoint, "")
+    try:
+        start = time.time()
+        # Use data= instead of json= to send as form data
+        resp = requests.post(incident_summary_url, data=incident_summary_payload, headers=headers, cookies=cookies, timeout=60)
+        end = time.time()
+
+        if resp.status_code == 200:
+            response_time = (end - start) * 1000  # convert to MS
+            
+            # Validate response content
+            try:
+                response_json = json.loads(resp.text)
+                response_text = str(response_json)
+                
+                # Check if required keywords are present in response
+                keywords_found = all(keyword.lower() in response_text.lower() for keyword in required_keywords)
+                
+                if keywords_found:
+                    print("[Incident Summary LLM Request] ✓ Response validation successful")
+                    return response_time
+                else:
+                    print("[Incident Summary LLM Request] ✗ Response validation failed - Missing required keywords")
+                    print(f"[Incident Summary LLM Request] Required keywords: {required_keywords}")
+                    print(f"[Incident Summary LLM Request] Keywords found: {[kw for kw in required_keywords if kw.lower() in response_text.lower()]}")
+                    print(f"[Incident Summary LLM Request] Full response: {resp.text}")
+                    return None
+                    
+            except (json.JSONDecodeError, KeyError) as e:
+                print(f"[Incident Summary LLM Request] ✗ Response validation failed - Invalid JSON: {str(e)}")
+                print(f"[Incident Summary LLM Request] Full response: {resp.text}")
+                return None
+        else:
+            print("[Incident Summary LLM Request] Response failed with status code: ", resp.status_code)
+            print(f"[Incident Summary LLM Request] Response: {resp.text}")
+            return None
+    except requests.exceptions.RequestException as e:
+        print("[Incident Summary LLM Request] Request failed with exception: ", str(e))
+        return None
+
+def run_llm_judge_endpoint(start_time, if_endpoint, llm_endpoint, metric_name):
     result = {}
 
-    incident_summary_recommandation_url = llm_endpoint + "/incident-investigation/SummaryAndRecommendations"
+    incident_summary_recommandation_url = llm_endpoint + "/llm-as-judge/LLMJudgeHallucination"
     incident_summary_recommandation_body = {
         "system_name": "dev",
-        "occurrence_time": "2024-06-25T10:00:00Z",
-        "incident_description": "System outage due to network failure",
-        "root_cause_list": [
-            {
-                "root_cause": "Network misconfiguration",
-                "time": "2024-06-25T10:00:00Z"
-            },
-            {
-                "root_cause": "Hardware failure",
-                "time": "2024-06-25T11:00:00Z"
-            }
+        "trace_id": "1744654956758",
+        "llm_judge_input": {
+            "prompt": "what is error code 0x14f?",
+            "response": "Error code 0x14f is a Device Manager error code that indicates a problem with the hardware or driver of a device connected to your computer. The code 0x14f specifically means \"This device is causing a problem due to a bad or incompatible driver.\"\nThis error can occur for various reasons, such as:\nOutdated, corrupt, or incompatible device drivers\nHardware issues or conflicts with the device\nIncorrect installation of the device or its drivers."
+        },
+        "flags": [
+            "hallucination",
+            "answer_irrelevance",
+            "logical_inconsistency",
+            "factual_inaccuracy"
         ],
-        "recommended_actions": [
-            {
-                "action": "Reconfigure network settings"
-            },
-            {
-                "action": "Replace faulty hardware"
-            }
-        ],
-        "cloud_events": "Incidents",
-        "data_gap_status": [
-            {
-                "is_missing_anomaly": False,
-                "missing_component_name": "Database",
-                "project_name": "ProjectA"
-            },
-            {
-                "is_missing_anomaly": True,
-                "missing_component_name": "Database",
-                "project_name": "ProjectB"
-            }
-        ],
-        "flags": "",
         "version": "1.0.0",
         "feature_flag": "",
-        "model_name": "",
         "use_rag": True,
         "rag_config": {
             "feature": [],
             "dataset_id": [
-                "Microsoft_Documents"
+            "Microsoft_Documents"
             ],
             "company": [
-                "_public"
+            "_public"
             ],
             "zone_info": []
         },
         "username": "test_user",
-        "service_now_ticket_number": "INC12345",
-        "past_incident_contexts": [
-            {
-                "timestamp": 1678886400000,
-                "description": "System performance degraded due to high CPU",
-                "service_now_ticket_number": "INC98765",
-                "service_now_url": "https://instance.service-now.com/nav_to.do?uri=incident.do?sys_id=..."
+        "custom_judge_prompts": {
+            "additionalProp1": {
+            "customPrompt": "string",
+            "description": "string",
+            "scale": "string",
+            "instruction": "string"
+            },
+            "additionalProp2": {
+            "customPrompt": "string",
+            "description": "string",
+            "scale": "string",
+            "instruction": "string"
+            },
+            "additionalProp3": {
+            "customPrompt": "string",
+            "description": "string",
+            "scale": "string",
+            "instruction": "string"
             }
-        ]
+        },
+        "confidence_thresholds": {
+            "all": 3
+        }
     }
-    print("[LLM Request] Start request:", llm_endpoint, "")
+    print("[LLM Judge Request] Start request:", llm_endpoint, "")
     try:
         start = time.time()
         resp = requests.post(incident_summary_recommandation_url, json=incident_summary_recommandation_body, timeout=60)
@@ -271,15 +392,43 @@ def run_llm_endpoints(start_time, if_endpoint, llm_endpoint,metric_name ):
 
         if resp.status_code == 200:
             response_time = (end - start) * 1000  # convert to MS
+            
+            # Validate response content
+            try:
+                response_json = json.loads(resp.text)
+                
+                # Required keywords to check
+                required_keywords = ["PDC_WATCHDOG_TIMEOUT", "0x14f", "Device Manager"]
+                
+                # Fields to check for keywords
+                hallucination_exp = response_json.get("hallucination_explanation", "")
+                answer_relevance_exp = response_json.get("answer_relevance_explanation", "")
+                factual_inaccuracy_exp = response_json.get("factual_inaccuracy_explanation", "")
+                
+                # Check if all required keywords are present in at least one of the explanation fields
+                combined_text = f"{hallucination_exp} {answer_relevance_exp} {factual_inaccuracy_exp}"
+                keywords_found = all(keyword in combined_text for keyword in required_keywords)
+
+                if not keywords_found:
+                    print("[LLM Judge Request] ✗ Response validation failed - Missing required keywords")
+                    print(f"[LLM Judge Request] Required keywords: {required_keywords}")
+                    print(f"[LLM Judge Request] Keywords found: {[kw for kw in required_keywords if kw in combined_text]}")
+                    print(f"[LLM Judge Request] Full response: {resp.text}")
+                    response_time = None
+                    
+            except (json.JSONDecodeError, KeyError) as e:
+                print(f"[LLM Judge Request] ✗ Response validation failed - Invalid JSON or missing fields: {str(e)}")
+                print(f"[LLM Judge Request] Full response: {resp.text}")
+                response_time = None
         else:
-            print("[LLM Request] Response failed with status code: ", resp.status_code)
+            print("[LLM Judge Request] Response failed with status code: ", resp.status_code)
             print(resp.text)
             response_time = None
     except requests.exceptions.RequestException as e:
-        print("[LLM Request] Request failed with exception: ", str(e))
+        print("[LLM Judge Request] Request failed with exception: ", str(e))
         response_time = None
 
-    print("[LLM Request] Request finished for: ", incident_summary_recommandation_url, "Response time: ", response_time)
+    print("[LLM Judge Request] Request finished for: ", incident_summary_recommandation_url, "Response time: ", response_time)
     if response_time is not None:
         result[metric_name] = response_time
 
@@ -302,11 +451,7 @@ if __name__ == "__main__":
     # Use multiple threads to run multiple endpoints concurrently
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = [
-            executor.submit(run_llm_endpoints, start_time, if_host, genai_url,
-                            "Incident Summary and Recommendation LLM"),
-            executor.submit(run_llm_endpoints, start_time, if_host, genaichat_url,
-                            "Realtime Chatbot LLM"),
-            executor.submit(run_llm_endpoints, start_time, if_host, llmjudge_url,
+            executor.submit(run_llm_judge_endpoint, start_time, if_host, llmjudge_url,
                             "LLM Evaluation Service"),
 
             executor.submit(run_if_endpoints, start_time, config_vars)
