@@ -230,40 +230,60 @@ def get_es_connection(logger, agent_config_vars):
     # Extract connection-level parameters (not allowed in hosts dict in ES 8.x)
     connection_params = {}
     
-    # Handle authentication - try basic_auth first (ES 8.x), fallback to http_auth (ES 7.x)
+    # Detect ES client version
+    es_major_version = 7  # default to 7 for backward compatibility
+    try:
+        from elasticsearch import __version__ as es_version
+        # __version__ is typically a string like "8.12.0" or tuple like (8, 12, 0)
+        if isinstance(es_version, tuple):
+            es_major_version = es_version[0]
+        else:
+            es_major_version = int(str(es_version).split('.')[0])
+        logger.debug(f"Detected Elasticsearch client version: {es_version} (major: {es_major_version})")
+    except Exception as e:
+        logger.warning(f"Could not determine ES client version, defaulting to v7 behavior: {e}")
+    
+    # Handle authentication based on version
     if 'http_auth' in agent_config_vars['elasticsearch_kwargs']:
         auth_value = agent_config_vars['elasticsearch_kwargs']['http_auth']
-        try:
-            # Try ES 8.x style first
-            from elasticsearch import __version__ as es_version
-            major_version = int(es_version[0].split('.')[0]) if isinstance(es_version, tuple) else int(es_version.split('.')[0])
-            
-            if major_version >= 8:
-                # ES 8.x uses basic_auth as tuple
-                connection_params['basic_auth'] = tuple(auth_value.split(':'))
-            else:
-                # ES 7.x uses http_auth as string
-                connection_params['http_auth'] = auth_value
-        except Exception:
-            # Fallback: try both and let it fail naturally
-            logger.warning("Could not determine ES version, trying http_auth")
+        if es_major_version >= 8:
+            # ES 8.x uses basic_auth as tuple
+            connection_params['basic_auth'] = tuple(auth_value.split(':', 1))  # split only on first ':'
+        else:
+            # ES 7.x uses http_auth as string
             connection_params['http_auth'] = auth_value
     
+    # Handle SSL/TLS parameters
     if 'use_ssl' in agent_config_vars['elasticsearch_kwargs']:
         connection_params['use_ssl'] = agent_config_vars['elasticsearch_kwargs']['use_ssl']
+    
     if 'verify_certs' in agent_config_vars['elasticsearch_kwargs']:
         connection_params['verify_certs'] = agent_config_vars['elasticsearch_kwargs']['verify_certs']
+    
     if 'ca_certs' in agent_config_vars['elasticsearch_kwargs']:
         connection_params['ca_certs'] = agent_config_vars['elasticsearch_kwargs']['ca_certs']
+    
     if 'client_cert' in agent_config_vars['elasticsearch_kwargs']:
         connection_params['client_cert'] = agent_config_vars['elasticsearch_kwargs']['client_cert']
+    
     if 'client_key' in agent_config_vars['elasticsearch_kwargs']:
         connection_params['client_key'] = agent_config_vars['elasticsearch_kwargs']['client_key']
+    
+    # SSL version (if specified)
+    if 'ssl_version' in agent_config_vars['elasticsearch_kwargs']:
+        import ssl
+        ssl_version_str = agent_config_vars['elasticsearch_kwargs']['ssl_version']
+        if hasattr(ssl, ssl_version_str):
+            connection_params['ssl_version'] = getattr(ssl, ssl_version_str)
+    
+    logger.debug(f"Elasticsearch connection params: {connection_params}")
     
     try:
         return Elasticsearch(hosts, **connection_params)
     except Exception as e:
         logger.error('Could not contact ElasticSearch with provided configuration.')
+        logger.error(f'Hosts: {hosts}')
+        logger.error(f'Connection params: {connection_params}')
         logger.error(e)
         return False
 
@@ -275,20 +295,28 @@ def build_es_connection_hosts(logger, agent_config_vars):
         host = {}
 
         # parse uri for overrides
-        uri = urllib.parse.urlparse(uri)
-        host['host'] = uri.hostname or uri.path
+        parsed_uri = urllib.parse.urlparse(uri)
+        host['host'] = parsed_uri.hostname or parsed_uri.path
         
-        # Only include parameters allowed in hosts dict (same for ES 7.x and 8.x)
-        if uri.port:
-            host['port'] = uri.port
+        # Handle port - only include parameters allowed in hosts dict
+        if parsed_uri.port:
+            host['port'] = parsed_uri.port
         elif 'port' in agent_config_vars['elasticsearch_kwargs']:
-            host['port'] = agent_config_vars['elasticsearch_kwargs']['port']
+            # Ensure port is an integer
+            port_value = agent_config_vars['elasticsearch_kwargs']['port']
+            host['port'] = int(port_value) if isinstance(port_value, str) else port_value
         
-        if uri.scheme == 'https':
+        # Handle scheme
+        if parsed_uri.scheme:
+            host['scheme'] = parsed_uri.scheme
+        elif agent_config_vars['elasticsearch_kwargs'].get('use_ssl'):
             host['scheme'] = 'https'
+        else:
+            host['scheme'] = 'http'
         
         hosts.append(host)
-    logger.debug(hosts)
+    
+    logger.debug(f"Built ES hosts: {hosts}")
     return hosts
 
 
