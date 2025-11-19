@@ -1945,29 +1945,6 @@ def main():
     kill_logger = logging.getLogger('KILL')
     kill_logger.info('KILL')
 
-
-def set_nested_field(dct, field_path, value):
-    """Set a value in a nested dict using dot notation (e.g., _source.service)"""
-    keys = field_path.split('.')
-    for k in keys[:-1]:
-        if k not in dct or not isinstance(dct[k], dict):
-            dct[k] = {}
-        dct = dct[k]
-    dct[keys[-1]] = value
-
-
-if __name__ == "__main__":
-    main()
-   
-    logger.setLevel(logging.INFO)
-    logger.info("Agent completed in {} seconds".format(arrow.utcnow().float_timestamp - timer))
-
-    # send kill signal
-    time.sleep(1)
-    kill_logger = logging.getLogger('KILL')
-    kill_logger.info('KILL')
-
-
 def set_nested_field(dct, field_path, value):
     """Set a value in a nested dict using dot notation (e.g., _source.service)"""
     keys = field_path.split('.')
