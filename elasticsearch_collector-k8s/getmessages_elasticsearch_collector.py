@@ -209,7 +209,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
         if isinstance(agent_config_vars['query_json'], dict):
             merge(agent_config_vars['query_json'], query_body)
 
-        logger.info('Getting data from ElasticSearch with query:' + str(query_body))
+        logger.debug('Getting data from ElasticSearch with query:' + str(query_body))
 
         # build query with chunk
         query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn, query_body,
@@ -235,9 +235,8 @@ def get_es_connection(logger, agent_config_vars):
         auth_value = agent_config_vars['elasticsearch_kwargs']['http_auth']
         connection_params['basic_auth'] = tuple(auth_value.split(':', 1))
     
-    # Handle SSL/TLS parameters
-    if 'use_ssl' in agent_config_vars['elasticsearch_kwargs']:
-        connection_params['use_ssl'] = agent_config_vars['elasticsearch_kwargs']['use_ssl']
+    # Handle SSL/TLS parameters for Elasticsearch 8.x
+    # Note: use_ssl is no longer supported in ES 8.x, use scheme in URL instead
     
     if 'verify_certs' in agent_config_vars['elasticsearch_kwargs']:
         connection_params['verify_certs'] = agent_config_vars['elasticsearch_kwargs']['verify_certs']
@@ -442,7 +441,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                     not last_log_time or current_time - last_log_time > log_compression_interval):
                 needs_log_data = True
                 logCompressState['_parse_messages'] = current_time
-                logger.info('Raw data:\n' + pformat(message))
+                logger.debug('Raw data:\n' + pformat(message))
 
             if not isinstance(message, list):
                 data_messages_list = [message]
@@ -582,7 +581,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                         data_entry['project'] = project
                         data_entry['data_size'] = getsizeof(str(data))
                         if needs_log_data:
-                            logger.info('Parsed data:\n' + pformat(data_entry))
+                            logger.debug('Parsed data:\n' + pformat(data_entry))
 
                         if is_metric:
                             metric_data_entries.append(data_entry)
