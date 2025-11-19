@@ -227,31 +227,13 @@ def get_es_connection(logger, agent_config_vars):
     """ Try to connect to es """
     hosts = build_es_connection_hosts(logger, agent_config_vars)
     
-    # Extract connection-level parameters (not allowed in hosts dict in ES 8.x)
+    # Extract connection-level parameters
     connection_params = {}
     
-    # Detect ES client version
-    es_major_version = 7  # default to 7 for backward compatibility
-    try:
-        from elasticsearch import __version__ as es_version
-        # __version__ is typically a string like "8.12.0" or tuple like (8, 12, 0)
-        if isinstance(es_version, tuple):
-            es_major_version = es_version[0]
-        else:
-            es_major_version = int(str(es_version).split('.')[0])
-        logger.debug(f"Detected Elasticsearch client version: {es_version} (major: {es_major_version})")
-    except Exception as e:
-        logger.warning(f"Could not determine ES client version, defaulting to v7 behavior: {e}")
-    
-    # Handle authentication based on version
+    # Handle authentication (ES client 8.x format)
     if 'http_auth' in agent_config_vars['elasticsearch_kwargs']:
         auth_value = agent_config_vars['elasticsearch_kwargs']['http_auth']
-        if es_major_version >= 8:
-            # ES 8.x uses basic_auth as tuple
-            connection_params['basic_auth'] = tuple(auth_value.split(':', 1))  # split only on first ':'
-        else:
-            # ES 7.x uses http_auth as string
-            connection_params['http_auth'] = auth_value
+        connection_params['basic_auth'] = tuple(auth_value.split(':', 1))
     
     # Handle SSL/TLS parameters
     if 'use_ssl' in agent_config_vars['elasticsearch_kwargs']:
@@ -279,12 +261,15 @@ def get_es_connection(logger, agent_config_vars):
     logger.debug(f"Elasticsearch connection params: {connection_params}")
     
     try:
-        return Elasticsearch(hosts, **connection_params)
+        es_client = Elasticsearch(hosts, **connection_params)
+        logger.info("Successfully created Elasticsearch client connection")
+        return es_client
     except Exception as e:
         logger.error('Could not contact ElasticSearch with provided configuration.')
         logger.error(f'Hosts: {hosts}')
         logger.error(f'Connection params: {connection_params}')
         logger.error(e)
+        logger.error(traceback.format_exc())
         return False
 
 
@@ -1951,6 +1936,29 @@ def main():
         p.join(timeout=worker_timeout)
 
     # Set logging to INFO to print end of agent
+   
+    logger.setLevel(logging.INFO)
+    logger.info("Agent completed in {} seconds".format(arrow.utcnow().float_timestamp - timer))
+
+    # send kill signal
+    time.sleep(1)
+    kill_logger = logging.getLogger('KILL')
+    kill_logger.info('KILL')
+
+
+def set_nested_field(dct, field_path, value):
+    """Set a value in a nested dict using dot notation (e.g., _source.service)"""
+    keys = field_path.split('.')
+    for k in keys[:-1]:
+        if k not in dct or not isinstance(dct[k], dict):
+            dct[k] = {}
+        dct = dct[k]
+    dct[keys[-1]] = value
+
+
+if __name__ == "__main__":
+    main()
+   
     logger.setLevel(logging.INFO)
     logger.info("Agent completed in {} seconds".format(arrow.utcnow().float_timestamp - timer))
 
