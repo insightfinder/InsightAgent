@@ -209,7 +209,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
         if isinstance(agent_config_vars['query_json'], dict):
             merge(agent_config_vars['query_json'], query_body)
 
-        logger.debug('Getting data from ElasticSearch with query:' + str(query_body))
+        logger.info('Getting data from ElasticSearch with query:' + str(query_body))
 
         # build query with chunk
         query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn, query_body,
@@ -226,49 +226,11 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
 def get_es_connection(logger, agent_config_vars):
     """ Try to connect to es """
     hosts = build_es_connection_hosts(logger, agent_config_vars)
-    
-    # Extract connection-level parameters
-    connection_params = {}
-    
-    # Handle authentication (ES client 8.x format)
-    if 'http_auth' in agent_config_vars['elasticsearch_kwargs']:
-        auth_value = agent_config_vars['elasticsearch_kwargs']['http_auth']
-        connection_params['basic_auth'] = tuple(auth_value.split(':', 1))
-    
-    # Handle SSL/TLS parameters for Elasticsearch 8.x
-    # Note: use_ssl is no longer supported in ES 8.x, use scheme in URL instead
-    
-    if 'verify_certs' in agent_config_vars['elasticsearch_kwargs']:
-        connection_params['verify_certs'] = agent_config_vars['elasticsearch_kwargs']['verify_certs']
-    
-    if 'ca_certs' in agent_config_vars['elasticsearch_kwargs']:
-        connection_params['ca_certs'] = agent_config_vars['elasticsearch_kwargs']['ca_certs']
-    
-    if 'client_cert' in agent_config_vars['elasticsearch_kwargs']:
-        connection_params['client_cert'] = agent_config_vars['elasticsearch_kwargs']['client_cert']
-    
-    if 'client_key' in agent_config_vars['elasticsearch_kwargs']:
-        connection_params['client_key'] = agent_config_vars['elasticsearch_kwargs']['client_key']
-    
-    # SSL version (if specified)
-    if 'ssl_version' in agent_config_vars['elasticsearch_kwargs']:
-        import ssl
-        ssl_version_str = agent_config_vars['elasticsearch_kwargs']['ssl_version']
-        if hasattr(ssl, ssl_version_str):
-            connection_params['ssl_version'] = getattr(ssl, ssl_version_str)
-    
-    logger.debug(f"Elasticsearch connection params: {connection_params}")
-    
     try:
-        es_client = Elasticsearch(hosts, **connection_params)
-        logger.info("Successfully created Elasticsearch client connection")
-        return es_client
+        return Elasticsearch(hosts)
     except Exception as e:
         logger.error('Could not contact ElasticSearch with provided configuration.')
-        logger.error(f'Hosts: {hosts}')
-        logger.error(f'Connection params: {connection_params}')
         logger.error(e)
-        logger.error(traceback.format_exc())
         return False
 
 
@@ -276,31 +238,22 @@ def build_es_connection_hosts(logger, agent_config_vars):
     """ Build array of host dicts """
     hosts = []
     for uri in agent_config_vars['es_uris']:
-        host = {}
+        host = agent_config_vars['elasticsearch_kwargs'].copy()
 
         # parse uri for overrides
-        parsed_uri = urllib.parse.urlparse(uri)
-        host['host'] = parsed_uri.hostname or parsed_uri.path
-        
-        # Handle port - only include parameters allowed in hosts dict
-        if parsed_uri.port:
-            host['port'] = parsed_uri.port
-        elif 'port' in agent_config_vars['elasticsearch_kwargs']:
-            # Ensure port is an integer
-            port_value = agent_config_vars['elasticsearch_kwargs']['port']
-            host['port'] = int(port_value) if isinstance(port_value, str) else port_value
-        
-        # Handle scheme
-        if parsed_uri.scheme:
-            host['scheme'] = parsed_uri.scheme
-        elif agent_config_vars['elasticsearch_kwargs'].get('use_ssl'):
-            host['scheme'] = 'https'
-        else:
-            host['scheme'] = 'http'
-        
+        uri = urllib.parse.urlparse(uri)
+        host['host'] = uri.hostname or uri.path
+        host['port'] = uri.port or host['port']
+        host['http_auth'] = '{}:{}'.format(uri.username, uri.password) if uri.username and uri.password else host.get(
+            'http_auth')
+        if uri.scheme == 'https':
+            host['use_ssl'] = True
+
+        # add ssl info
+        if len(agent_config_vars['elasticsearch_kwargs']) != 0:
+            host.update(agent_config_vars['elasticsearch_kwargs'])
         hosts.append(host)
-    
-    logger.debug(f"Built ES hosts: {hosts}")
+    logger.debug(hosts)
     return hosts
 
 
@@ -441,7 +394,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                     not last_log_time or current_time - last_log_time > log_compression_interval):
                 needs_log_data = True
                 logCompressState['_parse_messages'] = current_time
-                logger.debug('Raw data:\n' + pformat(message))
+                logger.info('Raw data:\n' + pformat(message))
 
             if not isinstance(message, list):
                 data_messages_list = [message]
@@ -581,7 +534,7 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                         data_entry['project'] = project
                         data_entry['data_size'] = getsizeof(str(data))
                         if needs_log_data:
-                            logger.debug('Parsed data:\n' + pformat(data_entry))
+                            logger.info('Parsed data:\n' + pformat(data_entry))
 
                         if is_metric:
                             metric_data_entries.append(data_entry)
@@ -1935,7 +1888,6 @@ def main():
         p.join(timeout=worker_timeout)
 
     # Set logging to INFO to print end of agent
-   
     logger.setLevel(logging.INFO)
     logger.info("Agent completed in {} seconds".format(arrow.utcnow().float_timestamp - timer))
 
@@ -1943,6 +1895,7 @@ def main():
     time.sleep(1)
     kill_logger = logging.getLogger('KILL')
     kill_logger.info('KILL')
+
 
 def set_nested_field(dct, field_path, value):
     """Set a value in a nested dict using dot notation (e.g., _source.service)"""
