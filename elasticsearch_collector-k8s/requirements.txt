@@ -1,6 +1,6 @@
 APScheduler
 arrow
-elasticsearch
+elasticsearch>=8.0.0
 pytz
 regex
 requests
