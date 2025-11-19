@@ -226,42 +226,8 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
 def get_es_connection(logger, agent_config_vars):
     """ Try to connect to es """
     hosts = build_es_connection_hosts(logger, agent_config_vars)
-    
-    # Extract connection-level parameters (not allowed in hosts dict in ES 8.x)
-    connection_params = {}
-    
-    # Handle authentication - try basic_auth first (ES 8.x), fallback to http_auth (ES 7.x)
-    if 'http_auth' in agent_config_vars['elasticsearch_kwargs']:
-        auth_value = agent_config_vars['elasticsearch_kwargs']['http_auth']
-        try:
-            # Try ES 8.x style first
-            from elasticsearch import __version__ as es_version
-            major_version = int(es_version[0].split('.')[0]) if isinstance(es_version, tuple) else int(es_version.split('.')[0])
-            
-            if major_version >= 8:
-                # ES 8.x uses basic_auth as tuple
-                connection_params['basic_auth'] = tuple(auth_value.split(':'))
-            else:
-                # ES 7.x uses http_auth as string
-                connection_params['http_auth'] = auth_value
-        except Exception:
-            # Fallback: try both and let it fail naturally
-            logger.warning("Could not determine ES version, trying http_auth")
-            connection_params['http_auth'] = auth_value
-    
-    if 'use_ssl' in agent_config_vars['elasticsearch_kwargs']:
-        connection_params['use_ssl'] = agent_config_vars['elasticsearch_kwargs']['use_ssl']
-    if 'verify_certs' in agent_config_vars['elasticsearch_kwargs']:
-        connection_params['verify_certs'] = agent_config_vars['elasticsearch_kwargs']['verify_certs']
-    if 'ca_certs' in agent_config_vars['elasticsearch_kwargs']:
-        connection_params['ca_certs'] = agent_config_vars['elasticsearch_kwargs']['ca_certs']
-    if 'client_cert' in agent_config_vars['elasticsearch_kwargs']:
-        connection_params['client_cert'] = agent_config_vars['elasticsearch_kwargs']['client_cert']
-    if 'client_key' in agent_config_vars['elasticsearch_kwargs']:
-        connection_params['client_key'] = agent_config_vars['elasticsearch_kwargs']['client_key']
-    
     try:
-        return Elasticsearch(hosts, **connection_params)
+        return Elasticsearch(hosts)
     except Exception as e:
         logger.error('Could not contact ElasticSearch with provided configuration.')
         logger.error(e)
@@ -272,21 +238,20 @@ def build_es_connection_hosts(logger, agent_config_vars):
     """ Build array of host dicts """
     hosts = []
     for uri in agent_config_vars['es_uris']:
-        host = {}
+        host = agent_config_vars['elasticsearch_kwargs'].copy()
 
         # parse uri for overrides
         uri = urllib.parse.urlparse(uri)
         host['host'] = uri.hostname or uri.path
-        
-        # Only include parameters allowed in hosts dict (same for ES 7.x and 8.x)
-        if uri.port:
-            host['port'] = uri.port
-        elif 'port' in agent_config_vars['elasticsearch_kwargs']:
-            host['port'] = agent_config_vars['elasticsearch_kwargs']['port']
-        
+        host['port'] = uri.port or host['port']
+        host['http_auth'] = '{}:{}'.format(uri.username, uri.password) if uri.username and uri.password else host.get(
+            'http_auth')
         if uri.scheme == 'https':
-            host['scheme'] = 'https'
-        
+            host['use_ssl'] = True
+
+        # add ssl info
+        if len(agent_config_vars['elasticsearch_kwargs']) != 0:
+            host.update(agent_config_vars['elasticsearch_kwargs'])
         hosts.append(host)
     logger.debug(hosts)
     return hosts
