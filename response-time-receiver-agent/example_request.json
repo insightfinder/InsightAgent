@@ -1,0 +1,19 @@
+{
+  "environment": "staging",
+  "timestamp": 1700000000000,
+  "agentType": 0,
+  "metriclist": [
+    {
+      "name": "service_now_creation_time",
+      "value": 150.5
+    },
+    {
+      "name": "service_now_feedback_time",
+      "value": 200.3
+    },
+    {
+      "name": "service_now_response_time",
+      "value": 350.8
+    }
+  ]
+}
