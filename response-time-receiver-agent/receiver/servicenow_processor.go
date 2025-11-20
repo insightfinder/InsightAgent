@@ -104,6 +104,7 @@ func determineTargetEnvironments(requestedEnv string, config *configs.Config) ma
 }
 
 // mapMetricsToInsightFinder maps incoming metrics to InsightFinder metric names
+// and converts values from seconds to milliseconds
 func mapMetricsToInsightFinder(incomingMetrics []MetricItem, metricListMap map[string]string) map[string]float64 {
 	mappedMetrics := make(map[string]float64)
 
@@ -113,8 +114,10 @@ func mapMetricsToInsightFinder(incomingMetrics []MetricItem, metricListMap map[s
 
 		// Check if this metric name exists in the metriclistMap
 		if mappedName, exists := metricListMap[metricName]; exists {
-			mappedMetrics[mappedName] = float64(metric.Value)
-			logrus.Debugf("Mapped metric: %s -> %s = %.2f", metricName, mappedName, float64(metric.Value))
+			// Convert seconds to milliseconds (multiply by 1000)
+			valueInMs := float64(metric.Value) * 1000
+			mappedMetrics[mappedName] = valueInMs
+			logrus.Debugf("Mapped metric: %s -> %s = %.2f seconds (%.2f ms)", metricName, mappedName, float64(metric.Value), valueInMs)
 		} else {
 			logrus.Debugf("Metric '%s' not found in metriclistMap, skipping", metricName)
 		}
