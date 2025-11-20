@@ -113,7 +113,11 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
     # pit used
     pit = None
     try:
-        pit_response = es_conn.open_point_in_time(index=agent_config_vars['indeces'], keep_alive="1m")
+        # Use low-level API for Elasticsearch 7.x compatibility
+        pit_response = es_conn.transport.perform_request(
+            'POST',
+            f'/{agent_config_vars["indeces"]}/_pit?keep_alive=1m'
+        )
         pit = pit_response['id']
     except Exception as ex:
         logger.error("ElasticSearch open PIT failed. \n{}".format(str(ex)))
