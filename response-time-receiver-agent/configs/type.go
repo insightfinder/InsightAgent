@@ -1,5 +1,7 @@
 package configs
 
+import "fmt"
+
 // Config represents the entire application configuration
 type Config struct {
 	Agent       AgentConfig       `yaml:"agent"`
@@ -14,10 +16,8 @@ type AgentConfig struct {
 
 // EnvironmentConfig contains all environment configurations
 type EnvironmentConfig struct {
-	SendToAllEnvironments bool                 `yaml:"send_to_all_environments"`
-	Staging               *EnvironmentSettings `yaml:"staging,omitempty"`
-	Production            *EnvironmentSettings `yaml:"production,omitempty"`
-	NBC                   *EnvironmentSettings `yaml:"nbc,omitempty"`
+	SendToAllEnvironments bool                             `yaml:"send_to_all_environments"`
+	Environments          map[string][]EnvironmentSettings `yaml:"environments"`
 }
 
 // EnvironmentSettings contains settings for a specific environment
@@ -52,30 +52,43 @@ type InsightFinderConfig struct {
 }
 
 // GetEnvironment returns the settings for a specific environment
+// If multiple configurations exist for the same environment name, returns the first one
 func (ec *EnvironmentConfig) GetEnvironment(envName string) *EnvironmentSettings {
-	switch envName {
-	case "staging":
-		return ec.Staging
-	case "production":
-		return ec.Production
-	case "nbc":
-		return ec.NBC
-	default:
-		return nil
+	if envs, exists := ec.Environments[envName]; exists && len(envs) > 0 {
+		return &envs[0]
 	}
+	return nil
 }
 
-// GetAllEnvironments returns all configured environments
+// GetEnvironmentInstances returns all instances for a specific environment name
+func (ec *EnvironmentConfig) GetEnvironmentInstances(envName string) []EnvironmentSettings {
+	if envs, exists := ec.Environments[envName]; exists {
+		return envs
+	}
+	return nil
+}
+
+// GetAllEnvironments returns all configured environments as a flat map
+// If multiple instances exist for the same environment, they are suffixed with index
 func (ec *EnvironmentConfig) GetAllEnvironments() map[string]*EnvironmentSettings {
 	envs := make(map[string]*EnvironmentSettings)
-	if ec.Staging != nil {
-		envs["staging"] = ec.Staging
-	}
-	if ec.Production != nil {
-		envs["production"] = ec.Production
-	}
-	if ec.NBC != nil {
-		envs["nbc"] = ec.NBC
+	for envName, envList := range ec.Environments {
+		for i := range envList {
+			key := envName
+			if len(envList) > 1 {
+				key = fmt.Sprintf("%s-%d", envName, i+1)
+			}
+			envs[key] = &envList[i]
+		}
 	}
 	return envs
+}
+
+// GetAllEnvironmentsList returns all configured environments as a list
+func (ec *EnvironmentConfig) GetAllEnvironmentsList() []EnvironmentSettings {
+	var allEnvs []EnvironmentSettings
+	for _, envList := range ec.Environments {
+		allEnvs = append(allEnvs, envList...)
+	}
+	return allEnvs
 }
