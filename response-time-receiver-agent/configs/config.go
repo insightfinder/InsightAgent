@@ -44,17 +44,20 @@ func validateConfig(config *Config) error {
 	}
 
 	// Validate at least one environment is configured
-	if config.Environment.Staging == nil &&
-		config.Environment.Production == nil &&
-		config.Environment.NBC == nil {
+	if len(config.Environment.Environments) == 0 {
 		return fmt.Errorf("at least one environment must be configured")
 	}
 
 	// Validate each configured environment
-	envs := config.Environment.GetAllEnvironments()
-	for envName, envSettings := range envs {
-		if err := validateEnvironmentSettings(envName, envSettings); err != nil {
-			return err
+	for envName, envList := range config.Environment.Environments {
+		for i, envSettings := range envList {
+			envLabel := envName
+			if len(envList) > 1 {
+				envLabel = fmt.Sprintf("%s[%d]", envName, i)
+			}
+			if err := validateEnvironmentSettings(envLabel, &envSettings); err != nil {
+				return err
+			}
 		}
 	}
 
