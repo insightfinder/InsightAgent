@@ -89,12 +89,19 @@ func determineTargetEnvironments(requestedEnv string, config *configs.Config) ma
 		return config.Environment.GetAllEnvironments()
 	}
 
-	// If a specific environment is requested
+	// If a specific environment is requested, send to all instances of that environment
 	if requestedEnv != "" {
-		envSettings := config.Environment.GetEnvironment(requestedEnv)
-		if envSettings != nil {
-			targetEnvs[requestedEnv] = envSettings
-			logrus.Infof("Sending to requested environment: %s", requestedEnv)
+		envInstances := config.Environment.GetEnvironmentInstances(requestedEnv)
+		if len(envInstances) > 0 {
+			// Send to all instances of the requested environment
+			for i := range envInstances {
+				key := requestedEnv
+				if len(envInstances) > 1 {
+					key = fmt.Sprintf("%s-%d", requestedEnv, i+1)
+				}
+				targetEnvs[key] = &envInstances[i]
+			}
+			logrus.Infof("Sending to %d instance(s) of environment: %s", len(envInstances), requestedEnv)
 		} else {
 			logrus.Warnf("Requested environment '%s' not found in configuration", requestedEnv)
 		}
