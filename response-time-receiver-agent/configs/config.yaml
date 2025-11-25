@@ -5,50 +5,71 @@ agent:
 environment:
   send_to_all_environments: false
   
-  staging:
-    instancename: stg.insightfinder.com
-    insightfinder:
-      # InsightFinder Platform Configuration
-      server_url: https://stg.insightfinder.com
-      username: 
-      license_key: 
-      
-      # Metrics Project Configuration
-      metrics_project_name: 
-      metrics_system_name: 
-      metrics_project_type: Metric
-      
-      # Common Configuration
-      cloud_type: OnPremise
-      instance_type: OnPremise
-      is_container: false
-      sampling_interval: 60
-    
-    metriclistMap:
-      service_now_creation_time: "Service Now Creation Time"
-      service_now_feedback_time: "Service Now Feedback Time"
-      service_now_response_time: "Service Now Response Time"
-      
-  production:
-    instancename: app.insightfinder.com
-    insightfinder:
-      # InsightFinder Platform Configuration
-      server_url: https://app.insightfinder.com
-      username: 
-      license_key: 
+  environments:
+    staging:
+      - instancename: stg.insightfinder.com
+        insightfinder:
+          # InsightFinder Platform Configuration
+          server_url: 
+          username: 
+          license_key: 
+          
+          # Metrics Project Configuration
+          metrics_project_name: 
+          metrics_system_name:
+          metrics_project_type: Metric
+          
+          # Common Configuration
+          cloud_type: OnPremise
+          instance_type: OnPremise
+          is_container: false
+          sampling_interval: 60
+        
+        metriclistMap:
+          ServiceNowTicketCreateDelay: "ServiceNow Ticket Creation"
+          ServiceNowNoteRetrieve: "ServiceNow Feedback"
 
-      # Metrics Project Configuration
-      metrics_project_name: 
-      metrics_system_name: 
-      metrics_project_type: Metric
-      
-      # Common Configuration
-      cloud_type: OnPremise
-      instance_type: OnPremise
-      is_container: false
-      sampling_interval: 60
-    
-    metriclistMap:
-      service_now_creation_time: "Service Now Creation Time"
-      service_now_feedback_time: "Service Now Feedback Time"
-      service_now_response_time: "Service Now Response Time"
+    production:
+      - instancename: app.insightfinder.com
+        insightfinder:
+          # InsightFinder Platform Configuration
+          server_url: 
+          username: 
+          license_key: 
+
+          # Metrics Project Configuration
+          metrics_project_name: 
+          metrics_system_name: 
+          metrics_project_type: Metric
+          
+          # Common Configuration
+          cloud_type: OnPremise
+          instance_type: OnPremise
+          is_container: false
+          sampling_interval: 60
+        
+        metriclistMap:
+          ServiceNowTicketCreateDelay: "ServiceNow Ticket Creation"
+          ServiceNowNoteRetrieve: "ServiceNow Feedback"
+
+      - instancename: app2.insightfinder.com
+        insightfinder:
+          # InsightFinder Platform Configuration
+          server_url: 
+          username: 
+          license_key: 
+
+          # Metrics Project Configuration
+          metrics_project_name: 
+          metrics_system_name: 
+          metrics_project_type: Metric
+          
+          # Common Configuration
+          cloud_type: OnPremise
+          instance_type: OnPremise
+          is_container: false
+          sampling_interval: 60
+        
+        metriclistMap:
+          ServiceNowTicketCreateDelay: "ServiceNow Ticket Creation"
+          ServiceNowNoteRetrieve: "ServiceNow Feedback"
