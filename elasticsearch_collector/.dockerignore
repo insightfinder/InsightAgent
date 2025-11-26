@@ -8,3 +8,7 @@ venv/
 .python-version
 nohup.out
 Dockerfile
+# Exclude large tar.gz archives
+*.tar.gz
+# Exclude offline packages
+offline/

@@ -1,8 +1,10 @@
 APScheduler
 arrow
-elasticsearch==7.17.4
+# elasticsearch>=8.0.0,<9.0.0
+elasticsearch<8.0.0
 pytz
 regex
 requests
-urllib3
+urllib3>=2.5.0
 backports.zoneinfo;python_version<"3.9"
+kubernetes
