@@ -1,174 +1,461 @@
 # Elasticsearch Collector
-This agent collects data from elasticsearch and sends it to Insightfinder.
-## Installing the Agent
+Collects data from Elasticsearch and sends it to InsightFinder.
 
-### Required Dependencies:
-1. Python 3.6.8
-1. Pip3
+## Quick Start with Docker
 
-###### Installation Steps:
-1. Download the elasticsearch_collector.tar.gz package
-1. Copy the agent package to the machine that will be running the agent
-1. Extract the package
-1. Navigate to the extracted location 
-1. Configure venv and python dependencies
-1. Configure agent settings under `conf.d/`
-1. Test the agent
-1. Run agent with cron.py
+1. **Configure the agent:**
+   ```bash
+   cp conf.d/config.ini.template conf.d/config.ini
+   # Edit conf.d/config.ini with your Elasticsearch and InsightFinder settings
+   ```
 
-The final steps are described in more detail below. 
+2. **Obfuscate password (if using authentication):**
+   ```bash
+   # Run interactively to obfuscate your Elasticsearch password
+   docker run -it --rm elasticsearch-collector python3 ifobfuscate.py
+   # Copy the obfuscated value to your config.ini http_auth field
+   ```
 
-###### Configure venv and python dependencies:
-The configure_python.sh script sets up a virtual python environment and installs all required libraries for running the agent. 
+3. **Build the Docker image:**
+   ```bash
+   docker build -t elasticsearch-collector .
+   ```
 
+4. **Run the container:**
+   ```bash
+   docker run -d \
+     --name elasticsearch-collector \
+     -v $(pwd)/conf.d:/app/conf.d:ro \
+     -v $(pwd)/logs:/app/logs \
+     elasticsearch-collector
+   ```
+
+5. **Monitor the agent:**
+   ```bash
+   # View container logs
+   docker logs -f elasticsearch-collector
+   
+   # Check agent log files
+   tail -f logs/*.log
+   ```
+
+6. **Stop/restart:**
+   ```bash
+   docker stop elasticsearch-collector
+   docker start elasticsearch-collector
+   docker restart elasticsearch-collector
+   ```
+
+### Docker Volume Mounts
+
+- **`/app/conf.d`** - Configuration directory (required)
+  - Contains `config.ini` and optional `query_json.json`
+  - Mount as read-only (`:ro`) for security
+  
+- **`/app/logs`** - Log output directory (optional but recommended)
+  - Persists agent logs on the host system
+  - Useful for troubleshooting and monitoring
+
+### Docker Advanced Usage
+
+**Custom cron parameters:**
 ```bash
-./setup/configure_python.sh
+docker run -d \
+  --name elasticsearch-collector \
+  -v $(pwd)/conf.d:/app/conf.d:ro \
+  -v $(pwd)/logs:/app/logs \
+  elasticsearch-collector \
+  /bin/bash -c "python3 cron.py -v -p 8 -o 15"
 ```
 
-###### Agent configuration:
-The config.ini file contains all of the configuration settings needed to connect to the Elasticsearch instance and to stream the data to InsightFinder.
-
-The password for the Elasticsearch user will need to be obfuscated using the ifobfuscate.py script.  It will prompt you for the password and provide the value to add to the configuration file. 
-
+**Docker Compose:**
+Create `docker-compose.yml`:
+```yaml
+version: '3.8'
+services:
+  elasticsearch-collector:
+    build: .
+    container_name: elasticsearch-collector
+    volumes:
+      - ./conf.d:/app/conf.d:ro
+      - ./logs:/app/logs
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
 ```
-python ./ifobfuscate.py 
-```
 
-The configure_python.sh script will generate a config.ini file for you; however, if you need to create a new one, you can simply copy the config.ini.template file over the config.ini file to start over. 
+Run with: `docker-compose up -d`
 
-Populate all of the necessary fields in the config.ini file with the relevant data.  More details about each field can be found in the comments of the config.ini file and the Config Variables below. 
+## Local Installation
 
-###### Test the agent:
-Once you have finished configuring the config.ini file, you can test the agent to validate the settings. 
+### Prerequisites
+- Python 3.6+ (Python 3.13 recommended)
+- pip3
 
-This will connect to the Elasticsearch instance, but it will not send any data to InsightFinder. This allows you to verify that you are getting data from Prometheus and that there are no failing exceptions in the agent configuration.
+### Installation Steps
 
-User `-p` to define max processes, use `--timeout` to define max timeout.
+1. **Setup Python environment:**
+   ```bash
+   ./setup/configure_python.sh
+   ```
+   This script creates a virtual environment and installs all required dependencies.
 
+2. **Configure the agent:**
+   ```bash
+   cp conf.d/config.ini.template conf.d/config.ini
+   # Edit conf.d/config.ini with your Elasticsearch and InsightFinder settings
+   ```
+
+3. **Obfuscate password (if using authentication):**
+   ```bash
+   python3 ifobfuscate.py
+   # Enter your password when prompted
+   # Copy the obfuscated value to your config.ini http_auth field
+   ```
+
+4. **Test the configuration (recommended):**
+   ```bash
+   ./setup/test_agent.sh
+   ```
+   This connects to Elasticsearch but doesn't send data to InsightFinder - useful for validation.
+
+5. **Run the agent:**
+   ```bash
+   nohup venv/bin/python3 cron.py &
+   ```
+
+6. **Monitor the agent:**
+   ```bash
+   # Check if running
+   jobs -l
+   
+   # View logs
+   tail -f logs/*.log
+   ```
+
+7. **Stop the agent:**
+   ```bash
+   # Get PID of background jobs
+   jobs -l
+   
+   # Kill the cron process
+   kill -9 <PID>
+   ```
+
+### Local Advanced Usage
+
+**Run with custom parameters:**
 ```bash
-./setup/test_agent.sh
+# Verbose output, 8 processes, 15 second offset
+nohup venv/bin/python3 cron.py -v -p 8 -o 15 &
 ```
 
-###### Run agent with cron:
-For the agent to run continuously, it will need to run as a cron job with `cron.py`. Every config file will start a cron job.
+**Command line options:**
+- `-q, --quiet` - Only show warnings and errors
+- `-v, --verbose` - Verbose output
+- `-g, --grace` - Grace time in minutes (default: 1)
+- `-o, --offset` - Offset time in seconds (default: 10)
+- `-p, --process` - Max number of processes (default: 4)
 
-```bash
-nohup venv/bin/python3 cron.py &
+## Configuration
+
+The `conf.d/config.ini` file contains all settings needed to connect to Elasticsearch and stream data to InsightFinder.
+
+### Quick Configuration Example
+
+```ini
+[elasticsearch]
+es_uris = http://localhost:9200
+indeces = filebeat*
+http_auth = username:obfuscated_password
+timestamp_field = @timestamp
+
+[insightfinder]
+user_name = your_email@example.com
+license_key = your_license_key
+project_name = my-elasticsearch-logs
+project_type = log
+sampling_interval = 1
+run_interval = 1
 ```
-
-###### Stopping the agent:
-Once the cron is running, you can stop the agent by kill the `cron.py` process.
-
-```bash
-# get pid of backgroud jobs
-jobs -l
-# kill the cron process
-kill -9 PID
-``` 
 
 ### Config Variables
-**ElasticSearch Settings**
-* **`es_uris`**: A comma delimited list of RFC-1738 formatted urls. (Required)
-  * Example: `<scheme>://[<username>:<password>@]hostname:port`
-  * Username and Password are optional above, and can be provided below as well
-* **`query_json`**: Query in json format for elasticsearch. (Optional*)
-  * Not needed if providing a json file for query
-* **`query_json_file`**: Json file to add to query body. (Optional*)
-  * Not needed if providing query_json above
-* **`query_chunk_size`**: The maximum number of messages for each query.
-  * Default is 5000, max is 10000.
-* **`indeces`**: Indeces to search over. (Required)
-  * can list multiple indeces seperated by commma
-  * Regex/wildcards supported
-* **`query_time_offset_seconds`**: The time offset when querying live data w.r.t current time
-  * Default is `0`
-* **`port`**: Port to connect to where ElasticSearch is running. (Optional)
-  * Overriden if port provided in URL
-* **`http_auth`**: `username:password` used to connect to ElasticSearch. (Optional)
-  * Overridden if provided in the URL
-* **`use_ssl`**: True or False if SSL should be used. (Optional)
-  * Overridden if URI scheme is `https`
-* **`ssl_version`**: Version of SSL to use. (Optional)
-  * Accepted values: `SSLv23 (default), SSLv2, SSLv3, TLSv1`
-* **`ssl_assert_hostname`**: True or False if hostname verification should be enabled. (Optional)
-* **`ssl_assert_fingerprint`**: True or False if fingerprint verification should be enabled. (Optional)
-* **`verify_certs`**: True or False if certificates should be verified. (Optional)
-* **`ca_certs`**: Path to CA bundle. (Optional)
-* **`client_cert`**: Path to client certificate. (Optional)
-* **`client_key`**: Path to client key. (Optional)
-* **`his_time_range`**: Historical data time range. (Optional)
-  * If this option is set, the agent will query metric values by time range.
-  * Example: `2020-04-14 00:00:00,2020-04-15 00:00:00`
-* **`project_field`**: Field name in response for the project name. (Optional)
-  * If this field is empty, agent will use project_name in insightfinder section. 
-* **`project_whitelist`**: Regex string used to define which projects form project_field will be filtered. (Optional)
-* **`timestamp_format`**: Format of the timestamp, in python [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). If the timestamp is in Unix epoch, this can be set to `epoch`.
-  * If the timestamp is split over multiple fields, curlies can be used to indicate formatting, ie: `YYYY-MM-DD HH:mm:ss ZZ`
-  * If the timestamp can be in one of multiple fields, a priority list of field names can be given: `timestamp1,timestamp2`.
-* **`timezone`**: Timezone of the timestamp data stored in/returned by the DB. (Optional)
-  * Note: if timezone information is not included in the data returned by the DB, then this field has to be specified. 
-* **`timestamp_field`**: Field name for the timestamp. (Required)
-  * Default is `@timestamp`.
-  * If document_root_field is "", need to set the full path. For example _source.@timestamp
-* **`target_timestamp_timezone`**: Timezone of the timestamp data to be sent and stored in InsightFinder.
-  * Default value is UTC
-  * Only if you wish to store data with a time zone other than UTC, this field should be specified to be the desired time zone.
-* **`document_root_field`**: Defines the root for fields below. (Optional)
-  * Default is `_source`
-  * To use the whole document as the root, use ""
-* **`component_field`**: Field name for the component name. (Optional)
-* **`default_component_name`**: Default component name if component_field is not set or field value is empty. (Optional)
-* **`instance_field`**: Field name for the instance name. (Optional)
-  * If no value given, the elasticsearch's server name will be used.
-* **`instance_field_regex`**: Field name and regex for the instance name. (Optional)
-  * If no match or empty, will use `instance_field` setting
-* **`instance_whitelist`**: This field is a regex string used to define which instances will be filtered. (Optional)
-* **`default_instance_name`**: Default instance name if not set/found from above. (Optional)
-* **`device_field`**: Field name for the device/container for containerized projects.
-  * Can be set as a priority list: `device1,device2`.
-  * If document_root_field is "", need to set the full path. For example _source.device
-* **`device_field_regex`**: Regex to retrieve the device name using a capture group named 'device'. (Optional)
-  * Example: `'(?P<device>.*)'`
-* **`data_fields`**: Comma-delimited list of field names to use as data fields. (Optional)
-  * Each data field can either be a field name (`name`) or regex.
-  * If it is empty, the whole document at the document root will be sent.
-  * Example: `Example: data_fields = /^system\.filesystem.*/,system.process.cgroup.memory.memsw.events.max`
-* **`aggregation_data_fields`**: Fields to aggregrate in query/response, string or regex separated by commas. (Optional)
-  * Example: `/0-metric\.values\.99.0/,value,doc_count`
-* **`agent_http_proxy`**: HTTP proxy used to connect to the agent. (Optional)
-* **`agent_https_proxy`**: HTTPS proxy used to connect to the agent. (Optional)
 
-**InsightFinder Settings**
-* **`user_name`**: User name in InsightFinder. (Required)
-* **`license_key`**: License Key from your Account Profile in the InsightFinder UI. (Required)
-* **`project_name`**: Name of the project created in the InsightFinder UI. (Required)
-  * If this project does not exist, agent will create it automatically.
-* **`system_name`**: Name of System owning the project. (Required)
-  * If project_name does not exist in InsightFinder, agent will create a new system automatically from this field or project_name. 
-* **`project_type`**: Type of the project (Required)
-  * Accepted Values: `metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay`.
-* **`containerize`**: Set to `YES` if project is a container project. (Required)
+#### Elasticsearch Settings
+
+* **`es_uris`** (Required)
+  * Comma-delimited list of RFC-1738 formatted URLs
+  * Format: `<scheme>://[<username>:<password>@]hostname:port`
+  * Example: `http://localhost:9200` or `https://user:pass@es.example.com:9200`
+
+* **`indeces`** (Required)
+  * Indices to search over (supports regex/wildcards)
+  * Example: `filebeat*`, `metricbeat-*`, or `logs-2024-*`
+
+* **`query_json`** (Optional)
+  * Query in JSON format for Elasticsearch
+  * Use for filtering data (e.g., exclude DEBUG logs)
+  * Not needed if providing `query_json_file`
+
+* **`query_json_file`** (Optional)
+  * Path to JSON file containing query body
+  * File should be in `conf.d/` directory
+  * Not needed if providing `query_json`
+
+* **`query_chunk_size`** (Optional)
+  * Maximum messages per query
+  * Default: `5000`, Max: `10000`
+
+* **`query_time_offset_seconds`** (Optional)
+  * Time offset when querying live data relative to current time
+  * Default: `0`
+
+* **`http_auth`** (Optional)
+  * Authentication in format `username:password`
+  * **Use obfuscated password** (see `ifobfuscate.py`)
+  * Overridden if credentials are in the URL
+
+* **`port`** (Optional)
+  * Port to connect to Elasticsearch
+  * Overridden if port is in URL
+
+* **`use_ssl`** (Optional)
+  * Enable SSL: `True` or `False`
+  * Automatically set to `True` if URI scheme is `https`
+
+* **`ssl_version`** (Optional)
+  * SSL version: `SSLv23` (default), `SSLv2`, `SSLv3`, `TLSv1`
+
+* **`verify_certs`** (Optional)
+  * Verify SSL certificates: `True` or `False`
+
+* **`ssl_assert_hostname`** (Optional)
+  * Enable hostname verification: `True` or `False`
+
+* **`ssl_assert_fingerprint`** (Optional)
+  * Enable fingerprint verification: `True` or `False`
+
+* **`ca_certs`** (Optional)
+  * Path to CA bundle
+
+* **`client_cert`** (Optional)
+  * Path to client certificate
+
+* **`client_key`** (Optional)
+  * Path to client key
+
+* **`his_time_range`** (Optional)
+  * Historical data time range for backfilling
+  * Format: `YYYY-MM-DD HH:MM:SS,YYYY-MM-DD HH:MM:SS`
+  * Example: `2024-04-14 00:00:00,2024-04-15 00:00:00`
+
+* **`timestamp_field`** (Required)
+  * Field name for the timestamp
+  * Default: `@timestamp`
+  * Use full path if `document_root_field` is empty (e.g., `_source.@timestamp`)
+
+* **`timestamp_format`** (Optional)
+  * Format in Python [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens) syntax
+  * Use `epoch` for Unix timestamps
+  * For split timestamps: `{YYYY-MM-DD} {HH:mm:ss} {ZZ}`
+  * For multiple possible fields: `timestamp1,timestamp2`
+
+* **`timezone`** (Optional)
+  * Timezone of timestamp data (pytz format)
+  * Required if timezone not included in Elasticsearch data
+  * Example: `UTC`, `America/New_York`, `Europe/London`
+
+* **`target_timestamp_timezone`** (Optional)
+  * Timezone for data stored in InsightFinder
+  * Default: `UTC`
+
+* **`document_root_field`** (Optional)
+  * Root field for document parsing
+  * Default: `_source`
+  * Use `""` for whole document as root
+
+* **`instance_field`** (Optional)
+  * Field name for instance identification
+  * Example: `agent.hostname`, `host.name`
+  * Falls back to Elasticsearch server name if not set
+
+* **`instance_field_regex`** (Optional)
+  * Field name and regex to extract instance name
+  * Syntax: `<field1>::<regex1>,<field2>::<regex2>`
+  * Example: `message::host=\"(.*?)\"`
+
+* **`instance_whitelist`** (Optional)
+  * Regex to filter instances
+
+* **`default_instance_name`** (Optional)
+  * Default instance name if not found
+
+* **`component_field`** (Optional)
+  * Field name for component identification
+
+* **`default_component_name`** (Optional)
+  * Default component name if not set
+
+* **`device_field`** (Optional)
+  * Field name for device/container (for containerized projects)
+  * Can be priority list: `device1,device2`
+
+* **`device_field_regex`** (Optional)
+  * Regex with named group 'device': `(?P<device>.*)`
+
+* **`data_fields`** (Optional)
+  * Comma-delimited list of fields to send as data
+  * Supports field names and regex patterns
+  * If empty, entire document at root is sent
+  * Example: `/^system\.filesystem.*/,system.cpu.total.pct`
+
+* **`aggregation_data_fields`** (Optional)
+  * Fields to aggregate (string or regex, comma-separated)
+  * Example: `/0-metric\.values\.99.0/,value,doc_count`
+
+* **`project_field`** (Optional)
+  * Field name for project identification
+  * If empty, uses `project_name` from InsightFinder section
+
+* **`project_whitelist`** (Optional)
+  * Regex to filter projects from `project_field`
+
+* **`safe_instance_fields`** (Optional)
+  * Comma-separated field names to sanitize for instance naming
+  * Values sanitized but not used as instance name
+
+* **`agent_http_proxy`** (Optional)
+  * HTTP proxy URL
+  * Example: `http://proxy.example.com:8080`
+
+* **`agent_https_proxy`** (Optional)
+  * HTTPS proxy URL
+
+#### InsightFinder Settings
+
+* **`user_name`** (Required)
+  * Your InsightFinder username/email
+
+* **`license_key`** (Required)
+  * License key from your InsightFinder account profile
+
+* **`token`** (Optional)
+  * Authentication token (alternative to license_key)
+
+* **`project_name`** (Required)
+  * Name of the project in InsightFinder
+  * Will be auto-created if it doesn't exist
+
+* **`system_name`** (Optional)
+  * Name of system owning the project
+  * Used when auto-creating projects
+
+* **`project_type`** (Required)
+  * Type of project
+  * Values: `metric`, `metricreplay`, `log`, `logreplay`, `incident`, `incidentreplay`, `alert`, `alertreplay`, `deployment`, `deploymentreplay`
+  * Most common: `log` or `metric`
+
+* **`containerize`** (Optional)
+  * Set to `YES` for container projects
   * Default: `no`
-* **`enable_holistic_model`**: Enable holistic model when auto creating project. (Optional)
-  * Default is `false`.
-* **`sampling_interval`**: How frequently (in Minutes) data is collected. Should match the interval used in project settings. (Required)
-  * Default is `10`
-* **`frequency_sampling_interval`**: How frequently (in Minutes) the hot/cold events are detected.
-  * Default value is `10`
-* **`log_compression_interval`**: How frequently (in Minutes) the log messages are compressed. (Optional)
-  * Default value: `1`
-* **`enable_log_rotation`**: Enable/Disable daily log rotation. (Optional)
-  * `True` or `False`
-* **`log_backup_count`**: The number of the log files to keep when `enable_log_rotation` is `true`. (Optional)
-* **`run_interval`**: How frequently (in Minutes) the agent is run. (Required)
-  * Should match the interval used in cron.
-  * Default value: `10`
-* **`worker_timeout`**: Timeout (in Minutes) for the worker process. (Optional)
-  * Default is same as `run_interval`.
-* **`chunk_size_kb`**: Size of chunks (in KB) to send to InsightFinder. (Optional)
-  * Default is `2048`.
-* **`if_url`**: URL for InsightFinder. (Required)
-  * Default is `https://app.insightfinder.com`.
-* **`if_http_proxy`**: HTTP proxy used to connect to InsightFinder. (Optional)
-* **`if_https_proxy`**: HTTPS proxy used to connect to InsightFinder. (Optional)
+
+* **`enable_holistic_model`** (Optional)
+  * Enable holistic model when auto-creating project
+  * Default: `false`
+
+* **`sampling_interval`** (Required)
+  * Data collection frequency in minutes
+  * Should match project settings
+  * Default: `10`
+
+* **`run_interval`** (Required)
+  * How frequently the agent runs in minutes
+  * Should match cron schedule
+  * Default: `10`
+
+* **`worker_timeout`** (Optional)
+  * Worker process timeout in minutes
+  * Default: same as `run_interval`
+
+* **`frequency_sampling_interval`** (Optional)
+  * Hot/cold event detection frequency in minutes
+  * Default: `10`
+
+* **`log_compression_interval`** (Optional)
+  * Log compression frequency in minutes
+  * Default: `1`
+
+* **`enable_log_rotation`** (Optional)
+  * Enable daily log rotation: `True` or `False`
+  * Default: `False`
+
+* **`log_backup_count`** (Optional)
+  * Number of log files to retain when rotation is enabled
+  * Default: `14`
+
+* **`chunk_size_kb`** (Optional)
+  * Size of data chunks sent to InsightFinder in KB
+  * Default: `2048`
+
+* **`if_url`** (Optional)
+  * InsightFinder URL
+  * Default: `https://app.insightfinder.com`
+
+* **`if_http_proxy`** (Optional)
+  * HTTP proxy for InsightFinder connection
+
+* **`if_https_proxy`** (Optional)
+  * HTTPS proxy for InsightFinder connection
+
+## Troubleshooting
+
+### Docker
+```bash
+# Check container status
+docker ps -a | grep elasticsearch-collector
+
+# View recent logs
+docker logs --tail 100 elasticsearch-collector
+
+# Access container shell
+docker exec -it elasticsearch-collector /bin/bash
+
+# Test configuration inside container
+docker exec -it elasticsearch-collector python3 getmessages_elasticsearch_collector.py -t
+```
+
+### Local Installation
+```bash
+# Check if agent is running
+ps aux | grep cron.py
+
+# View recent logs
+tail -100 logs/*.log
+
+# Test configuration
+./setup/test_agent.sh
+
+# Run in foreground for debugging
+venv/bin/python3 cron.py -v
+```
+
+### Common Issues
+
+**Connection to Elasticsearch fails:**
+- Verify `es_uris` is correct and accessible
+- Check `http_auth` credentials are valid (and obfuscated)
+- Ensure SSL settings match your Elasticsearch configuration
+
+**No data in InsightFinder:**
+- Verify `license_key` and `project_name` are correct
+- Check `indeces` pattern matches your Elasticsearch indices
+- Review agent logs for errors
+- Ensure `timestamp_field` exists in your data
+
+**Permission errors (Docker):**
+- Ensure mounted directories have correct permissions
+- Container runs as user `1001` - adjust ownership if needed:
+  ```bash
+  sudo chown -R 1001:1001 conf.d logs
+  ```
 

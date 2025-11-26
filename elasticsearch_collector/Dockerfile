@@ -1,12 +1,18 @@
-FROM bitnami/python:3.13
+FROM python:3.13
 ENV TZ=UTC
 SHELL ["/bin/bash", "-c"]
-COPY . .
 
-# Install system dependencies
+WORKDIR /app
+
+COPY . /app
+
+
 RUN apt-get update -y && apt-get upgrade -y && \
-    pip install -r requirements.txt && \
+    python3 -m pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
     chown -R 1001:1001 ./
+
+RUN chmod +x getmessages_elasticsearch_collector.py
 
 USER 1001
 
