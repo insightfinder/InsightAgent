@@ -1,0 +1,15 @@
+# gNMIc Telemetry Streaming Configuration
+# This YAML configuration file is provided by Tarana Wireless for setting up telemetry streaming.
+# Please refer to the 'Telemetry Streaming App Note' on instructions on how to configure this feature.
+# For additional details on gNMIc client please visit https://gnmic.kmrd.dev/
+
+# Output to InfluxDB time series database
+outputs:
+  influxdb_output:
+    type: influxdb
+    url: http://localhost:9092
+    org: tarana
+    bucket: gnmic-data
+    token: my-super-secret-auth-token
+    batch-size: 1000
+    flush-timer: 10s
