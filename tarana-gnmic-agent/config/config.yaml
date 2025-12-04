@@ -1,0 +1,62 @@
+# Tarana gNMIc Agent Configuration
+# This file contains all configuration for the integrated agent system
+
+# Agent Settings
+agent:
+  name: "tarana-gnmic-agent"
+  log_level: "info"  # debug, info, warn, error
+  log_file: "logs/agent.log"
+
+# InfluxDB Configuration
+influxdb:
+  url: "http://localhost:9092"
+  token: "my-super-secret-auth-token"
+  org: "tarana"
+  bucket: "gnmic-data"
+  
+  # Docker setup (for local InfluxDB)
+  docker:
+    enabled: true
+    image: "influxdb:2.7"
+    container_name: "influxdb"
+    port_mapping: "9092:8086"
+    init_mode: "setup"
+    init_username: "admin"
+    init_password: "adminpassword"
+    init_retention: "1h"
+
+# gNMIc Telemetry Configuration
+gnmic:
+  listen_address: ":80"
+  org: "tarana"
+  config_file: "gnmic/telemetry_cfg.yaml"
+  binary_path: "gnmic/gnmicc"
+  auto_start: true
+  
+# Metrics Collector Configuration
+collector:
+  # Time range for querying metrics from InfluxDB
+  time_range: "-5m"
+  
+# InsightFinder Configuration
+insightfinder:
+  enabled: true
+  server_url: "https://stg.insightfinder.com"
+  username: ""
+  license_key: ""
+  
+  # Metrics Project Configuration
+  metrics_project_name: "tarana-gnmic-metrics"
+  metrics_system_name: "tarana-network"
+  
+  # Agent Settings
+  sampling_interval: 60  # seconds - how often to collect and send data
+  is_container: false
+  cloud_type: "PrivateCloud"
+  instance_type: "Tarana"
+  
+  # Data sending settings
+  chunk_size_kb: 2048  # 2MB
+  max_packet_size_kb: 10000  # 10MB
+  http_retry_times: 3
+  http_retry_interval_sec: 5
