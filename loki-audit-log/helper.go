@@ -22,7 +22,7 @@ import (
 )
 
 const METRIC_DATA_API = "/api/v2/metric-data-receive"
-const LOG_DATA_API = "/api/v1/customerprojectrawdata"
+const LOG_DATA_API = "/api/v1/customprojectrawdata"
 const LOG_DATA_AGENT_TYPE = "Stream"
 const CHUNK_SIZE = 2 * 1024 * 1024
 const MAX_PACKET_SIZE = 10000000
