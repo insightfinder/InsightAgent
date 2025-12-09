@@ -6,12 +6,21 @@ import "fmt"
 type Config struct {
 	Agent       AgentConfig       `yaml:"agent"`
 	Environment EnvironmentConfig `yaml:"environment"`
+	Sampler     SamplerConfig     `yaml:"sampler"`
 }
 
 // AgentConfig contains general agent settings
 type AgentConfig struct {
 	ServerPort int    `yaml:"server_port"`
 	LogLevel   string `yaml:"log_level"`
+}
+
+// SamplerConfig contains periodic sampler settings
+type SamplerConfig struct {
+	Enabled          bool               `yaml:"enabled"`
+	SamplingInterval int                `yaml:"sampling_interval"` // Interval in seconds
+	ServerURL        string             `yaml:"server_url"`        // Receiver server URL to send data to
+	Metrics          map[string]float64 `yaml:"metrics"`           // Metric keys with their values (typically 0)
 }
 
 // EnvironmentConfig contains all environment configurations
