@@ -2,6 +2,16 @@ agent:
   server_port: 8080
   log_level: "INFO"
 
+# Periodic Sampler Configuration
+# Sends metric values (typically 0) for configured metrics to staging and production
+sampler:
+  enabled: false                                       # Set to true to enable periodic sampling
+  sampling_interval: 300                               # Interval in seconds (300s = 5 minutes, 60s = 1 minute)
+  server_url: "http://localhost:8080/api/v1/data"     # Receiver server URL to send data to
+  metrics:                                             # Configurable metrics to send
+    ServiceNowTicketCreateDelay: 0                     # ServiceNow Ticket Creation metric
+    ServiceNowNoteRetrieve: 0                          # ServiceNow Feedback metric
+
 environment:
   send_to_all_environments: false
   

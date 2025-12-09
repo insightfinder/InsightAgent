@@ -14,6 +14,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/insightfinder/receiver-agent/configs"
 	"github.com/insightfinder/receiver-agent/receiver"
+	"github.com/insightfinder/receiver-agent/sampler"
 	"github.com/sirupsen/logrus"
 )
 
@@ -69,6 +70,10 @@ func main() {
 	// Setup routes
 	receiver.SetupRoutes(app, config)
 
+	// Initialize and start sampler if enabled
+	samplerService := sampler.NewSamplerService(&config.Sampler, config)
+	samplerService.Start()
+
 	// Start server in a goroutine
 	serverAddr := fmt.Sprintf(":%d", config.Agent.ServerPort)
 	go func() {
@@ -87,6 +92,9 @@ func main() {
 	<-quit
 
 	logrus.Info("Shutting down receiver agent...")
+
+	// Stop sampler service
+	samplerService.Stop()
 
 	// Graceful shutdown
 	if err := app.Shutdown(); err != nil {
