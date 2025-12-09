@@ -10,7 +10,7 @@ sampler:
   server_url: "http://localhost:8080/api/v1/data"     # Receiver server URL to send data to
   metrics:                                             # Configurable metrics to send
     ServiceNowTicketCreateDelay: 0                     # ServiceNow Ticket Creation metric
-    ServiceNowNoteRetrieve: 0                          # ServiceNow Feedback metric
+    # ServiceNowNoteRetrieve: 0                          # ServiceNow Feedback metric
 
 environment:
   send_to_all_environments: false
