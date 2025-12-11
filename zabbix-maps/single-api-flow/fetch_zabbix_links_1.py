@@ -12,11 +12,15 @@ COMMA = re.compile(r"\,")
 
 # Zabbix server and credentials
 ZABBIX_URL = 'http://localhost:9999/zabbix/api_jsonrpc.php'
-USERNAME = 'insight.finder'
-PASSWORD = '2ri2T*%HKxbs'
+USERNAME = ''
+PASSWORD = ''
 
-# Testing configuration - limit to first 5 maps with data
-MAX_MAPS_TO_PROCESS = 5
+# InsightFinder API credentials
+INSIGHTFINDER_URL = 'https://stg.insightfinder.com/api/v2/updaterelationsdependency'  # Update with your actual URL
+IF_USERNAME = 'your_username'  # Update with your InsightFinder username
+IF_LICENSE_KEY = 'your_license_key'  # Update with your license key
+IF_PROJECT_NAME = 'your_project_name'  # Update with your project name
+IF_SYSTEM_NAME = 'systemName'  # Update with your system display name
 
 # Authenticate and get API token
 def get_auth_token():
@@ -88,6 +92,28 @@ def make_safe_instance_string(instance, device=''):
         instance = '{}_{}'.format(make_safe_instance_string(device), instance)
     return instance
 
+# Send dependency data to InsightFinder
+def send_to_insightfinder(component_relations):
+    payload = {
+        "systemDisplayName": IF_SYSTEM_NAME,
+        "licenseKey": IF_LICENSE_KEY,
+        "userName": IF_USERNAME,
+        "projectName": IF_PROJECT_NAME,
+        "componentRelationList": component_relations
+    }
+    
+    print(f"\nSending {len(component_relations)} relations to InsightFinder...")
+    response = requests.post(INSIGHTFINDER_URL, json=payload)
+    
+    if response.status_code == 200:
+        print("Successfully sent data to InsightFinder!")
+        print("Response:", response.json())
+    else:
+        print(f"Error sending data: {response.status_code}")
+        print("Response:", response.text)
+    
+    return response
+
 if __name__ == "__main__":
     token = get_auth_token()
     
@@ -99,25 +125,18 @@ if __name__ == "__main__":
         print("No maps found in Zabbix.")
         exit(1)
     
-    print(f"Found {len(maps)} total maps in Zabbix")
-    print(f"TEST MODE: Will process only first {MAX_MAPS_TO_PROCESS} maps with data\n")
+    print(f"Found {len(maps)} maps in Zabbix")
     
     # Collect all device links from all maps
     all_component_relations = []
     all_links_set = set()  # To avoid duplicates across maps
-    maps_processed = 0
     
     for map_idx, map_data in enumerate(maps, 1):
-        # Stop after processing MAX_MAPS_TO_PROCESS maps with data
-        if maps_processed >= MAX_MAPS_TO_PROCESS:
-            print(f"\nReached limit of {MAX_MAPS_TO_PROCESS} maps with data. Stopping.")
-            break
-        
         map_name = map_data.get('name', f'Map {map_idx}')
         map_id = map_data.get('sysmapid', 'unknown')
         
         print(f"\n{'='*60}")
-        print(f"Checking Map {map_idx}/{len(maps)}: {map_name} (ID: {map_id})")
+        print(f"Processing Map {map_idx}/{len(maps)}: {map_name} (ID: {map_id})")
         print(f"{'='*60}")
         
         if 'links' not in map_data or 'selements' not in map_data:
@@ -127,10 +146,6 @@ if __name__ == "__main__":
         if not map_data['links']:
             print(f"  Skipping - no links in this map")
             continue
-        
-        # This map has data, count it
-        maps_processed += 1
-        print(f"  Processing map {maps_processed}/{MAX_MAPS_TO_PROCESS} with data...")
         
         # Build mapping from selementid to device name for this map
         selement_name_map = {}
@@ -178,13 +193,12 @@ if __name__ == "__main__":
         json.dump(all_component_relations, f, indent=2)
     
     print(f"\n{'='*60}")
-    print(f"TEST MODE Summary:")
-    print(f"  Total maps in Zabbix: {len(maps)}")
-    print(f"  Maps with data processed: {maps_processed}/{MAX_MAPS_TO_PROCESS}")
+    print(f"Summary:")
+    print(f"  Total maps processed: {len(maps)}")
     print(f"  Total unique device links: {len(all_component_relations)}")
     print(f"  Saved to: {output_file}")
     print(f"{'='*60}")
     
     if not all_component_relations:
-        print("\nWarning: No device links found in processed maps!")
+        print("\nWarning: No device links found across all maps!")
         exit(1)
