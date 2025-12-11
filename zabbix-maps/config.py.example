@@ -1,0 +1,45 @@
+# Configurations for Zabbix
+zabbix_url = "http://localhost:9999/zabbix"
+zabbix_user = "your_zabbix_username"
+zabbix_password = "your_zabbix_password"
+
+# Configurations for InsightFinder
+insightfinder_url = "https://stg.insightfinder.com"  # or https://app.insightfinder.com
+insightfinder_username = "your_insightfinder_username"
+insightfinder_password = "your_insightfinder_password"
+license_key = "your_insightfinder_license_key"
+insightfinder_project = "your_project_name"
+insightfinder_system = "your_system_name"  # System display name (can be different from project)
+user_agent = "Mozilla/5.0 (compatible; InsightFinderClient/1.0;)"
+
+# Test mode configuration for run_per_map_test.py
+max_maps_to_process = 5  # Limit number of maps to process in test script
+
+# Component regex mapping - maps hostname patterns to component types
+# Format: (regex_pattern, component_type)
+# Patterns are checked in order - first match wins
+# Customize these patterns to match your naming conventions
+component_regex_mapping = [
+    (r'.*he.*(mi[ck]rotik).*', 'HE-Router'),           # HE Mikrotik routers
+    (r'.*(?!.*he).*(mi[ck]rotik).*', 'Router'),        # Other Mikrotik routers
+    (r'.*(he-swt|he-sw).*', 'HE-SW'),                  # HE switches
+    (r'.*(?<!he-)(swt|sw|switch).*', 'Switch'),        # Other switches
+    (r'.*-tn$', 'TN'),                                 # Tower nodes
+    (r'(?i).*-bn\d*$', 'BN'),                          # Base nodes (case insensitive)
+    (r'.*rtr.*', 'Router'),                            # Routers with "rtr"
+    (r'.*ap.*', 'AP'),                                 # Access points
+    (r'.*cpe.*', 'CPE'),                               # Customer premise equipment
+    (r'.*enb.*', 'eNB'),                               # eNodeB (LTE base station)
+    (r'.*esxi.*', 'ESXI'),                             # ESXi hosts
+    (r'.*isp.*', 'ISP'),                               # ISP connections
+    (r'.*olt.*', 'OLT'),                               # Optical line terminals
+    (r'.*pdu.*', 'PDU'),                               # Power distribution units
+    (r'.*ptp.*', 'PTP'),                               # Point-to-point links
+    (r'.*router.*', 'Router'),                         # Generic routers
+    (r'.*smartbox.*', 'Smartbox'),                     # Smartbox devices
+    (r'.*ups.*', 'UPS'),                               # UPS systems
+    (r'.*-gam.?$', 'GAM'),                             # GAM devices
+    (r'.*wan.*', 'WAN'),                               # WAN connections
+    (r'.*-dn$', 'DN'),                                 # Distribution nodes
+    (r'.*-cn$', 'CN'),                                 # Core nodes
+]

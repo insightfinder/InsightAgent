@@ -12,33 +12,8 @@ import requests
 from pyzabbix import ZabbixAPI
 import config as config
 
-# Component regex mapping for hostname
-COMPONENT_REGEX_MAPPING = [
-    # (r'^(?=.*he)(?=.*mikrotik|microtik).*', 'HE-Router'),
-    # (r'.*he.*(mi[ck]rotik).*|.*(mi[ck]rotik).*he.*', 'HE-Router'),
-    (r'.*he.*(mi[ck]rotik).*', 'HE-Router'),
-    (r'.*(?!.*he).*(mi[ck]rotik).*', 'Router'),
-    (r'.*(he-swt|he-sw).*', 'HE-SW'),
-    (r'.*(?<!he-)(swt|sw|switch).*', 'Switch'),
-    (r'.*-tn$', 'TN'),
-    (r'(?i).*-bn\d*$', 'BN'),
-    (r'.*rtr.*', 'Router'),
-    (r'.*ap.*', 'AP'),
-    (r'.*cpe.*', 'CPE'),
-    (r'.*enb.*', 'eNB'),
-    (r'.*esxi.*', 'ESXI'),
-    (r'.*isp.*', 'ISP'),
-    (r'.*olt.*', 'OLT'),
-    (r'.*pdu.*', 'PDU'),
-    (r'.*ptp.*', 'PTP'),
-    (r'.*router.*', 'Router'),
-    (r'.*smartbox.*', 'Smartbox'),
-    (r'.*ups.*', 'UPS'),
-    (r'.*-gam.?$', 'GAM'),
-    (r'.*wan.*', 'WAN'),
-    (r'.*-dn$', 'DN'),
-    (r'.*-cn$', 'CN'),
-]
+# Component regex mapping loaded from config
+COMPONENT_REGEX_MAPPING = config.component_regex_mapping
 
 # declare a few vars
 TRUE = regex.compile(r"T(RUE)?", regex.IGNORECASE)
