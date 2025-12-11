@@ -12,7 +12,7 @@ ENV/
 .venv
 
 # Configuration (contains sensitive credentials)
-# config.py
+config.py
 
 # Generated JSON files
 *.json

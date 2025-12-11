@@ -12,9 +12,6 @@ insightfinder_project = "your_project_name"
 insightfinder_system = "your_system_name"  # System display name (can be different from project)
 user_agent = "Mozilla/5.0 (compatible; InsightFinderClient/1.0;)"
 
-# Test mode configuration for run_per_map_test.py
-max_maps_to_process = 5  # Limit number of maps to process in test script
-
 # Component regex mapping - maps hostname patterns to component types
 # Format: (regex_pattern, component_type)
 # Patterns are checked in order - first match wins
@@ -43,3 +40,6 @@ component_regex_mapping = [
     (r'.*-dn$', 'DN'),                                 # Distribution nodes
     (r'.*-cn$', 'CN'),                                 # Core nodes
 ]
+
+# Test mode configuration for update_IF_zabbix_map_dependency_test.py
+max_maps_to_process = 5  # Limit number of maps to process in test script
