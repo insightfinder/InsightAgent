@@ -18,7 +18,7 @@ func (s *Service) GetAllAPDetailsStreamingBulk(ctx context.Context,
 
 	logrus.Info("Starting streaming bulk AP details collection with concurrent fetching")
 
-	limit := 1000
+	limit := 500
 
 	// Get total count from API instead of fetching first page
 	totalCount, err := s.GetTotalAPCount()
