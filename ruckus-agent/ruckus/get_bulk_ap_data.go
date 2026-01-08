@@ -14,7 +14,7 @@ import (
 func (s *Service) GetAllAPDetailsBulk() ([]models.APDetail, error) {
 	logrus.Info("Starting bulk AP details collection using concurrent pagination")
 
-	limit := 1000
+	limit := 500
 
 	// Get total count from API instead of fetching first page
 	totalCount, err := s.GetTotalAPCount()
