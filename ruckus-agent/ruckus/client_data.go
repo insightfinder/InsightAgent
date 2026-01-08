@@ -27,7 +27,7 @@ func (s *Service) GetAllClientsWithRSSISNR(ctx context.Context) (map[string][]mo
 		return make(map[string][]models.ClientInfo), nil
 	}
 
-	limit := 1000
+	limit := 500
 	totalPages := (totalCount + limit - 1) / limit
 	logrus.Infof("Total clients: %d, Pages needed: %d", totalCount, totalPages)
 
@@ -111,7 +111,7 @@ func (s *Service) GetAllClientsWithRSSISNR(ctx context.Context) (map[string][]mo
 
 // Get total client count and first page of clients in one call
 func (s *Service) getTotalClientCountAndFirstPage(ctx context.Context) (int, []models.ClientInfo, error) {
-	limit := 1000 // Use reasonable page size
+	limit := 500 // Use reasonable page size
 	request := ClientBulkQueryRequest{
 		Filters: []Filter{},
 		Page:    1, // Ruckus uses 1-based pagination

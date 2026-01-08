@@ -16,7 +16,7 @@ func (s *Service) TestBulkQuery() error {
 	request := APBulkQueryRequest{
 		Filters: []Filter{}, // Empty filters
 		Page:    1,
-		Limit:   1000,
+		Limit:   500,
 	}
 
 	url := fmt.Sprintf("%s/query/ap", s.BaseURL)
