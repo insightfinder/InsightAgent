@@ -1,0 +1,25 @@
+# ServiceNow Configuration
+servicenow:
+  instance_url: "https://dev.service-now.com"
+  username: "admin"
+  password: "12345"
+
+# Ticket Payload Configuration
+# You can modify these values to create different types of tickets
+# Use {random:min-max:decimals} for random values, e.g., {random:0.5-0.9:5} generates 0.5-0.9 with 5 decimals
+ticket:
+  short_description: "Availability (avg: {random:0.5-0.9:5}) is {random:20-35:2}% lower than normal"
+  description: "ip-172-31-52-141.ec2.internal"
+  urgency: "3"  # 1=High, 2=Medium, 3=Low
+  impact: "3"   # 1=High, 2=Medium, 3=Low
+  category: "inquiry"  # inquiry, software, hardware, network, database
+  assignment_group: ""  # Leave empty or specify group name
+  assigned_to: ""       # Leave empty or specify user name
+  
+  # Additional fields for hostname/server information
+  # cmdb_ci: ""  # Configuration Item - only use if CI exists in CMDB
+  work_notes: ""  # Additional notes
+  location: ""  # Physical/logical location
+  comments: ""  # Customer-visible comments
+  
+
