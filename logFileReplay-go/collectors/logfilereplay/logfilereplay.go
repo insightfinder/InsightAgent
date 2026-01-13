@@ -4,12 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"github.com/araddon/dateparse"
-	"github.com/bigkevmcd/go-configparser"
-	"github.com/golang-module/carbon/v2"
-	"github.com/rs/zerolog/log"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 	. "insightagent-go/insightfinder"
 	"io"
 	"math"
@@ -19,6 +13,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/araddon/dateparse"
+	"github.com/bigkevmcd/go-configparser"
+	"github.com/golang-module/carbon/v2"
+	"github.com/rs/zerolog/log"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 var STRIP_PORT, _ = regexp.Compile("(.+):\\d+")
@@ -244,9 +245,12 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 					dataFields := strings.Split(config.logDataField, ",")
 					for _, field := range dataFields {
 						value := gjson.Get(data, field)
-						filteredData, err = sjson.SetRaw(filteredData, field, value.Raw)
-						if err != nil {
-							log.Error().Msgf("Error filtering data field: %s", field)
+						// Only add the field if it exists in the source data
+						if value.Exists() {
+							filteredData, err = sjson.SetRaw(filteredData, field, value.Raw)
+							if err != nil {
+								log.Error().Msgf("Error filtering data field: %s", field)
+							}
 						}
 					}
 					LogDataList = append(LogDataList, LogData{
