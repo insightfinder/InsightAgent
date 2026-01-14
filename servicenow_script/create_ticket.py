@@ -155,7 +155,8 @@ def prepare_ticket_payload(ticket_config: Dict[str, Any]) -> Dict[str, Any]:
         'location',
         'business_service',
         'priority',
-        'state'
+        'state',
+        'opened_at'
     ]
     
     for field in optional_fields:
