@@ -1,0 +1,57 @@
+agent:
+  # Agent behavior settings
+  log_level: INFO
+  data_format: JSON
+  timezone: UTC
+  filters_include: ""
+  filters_exclude: ""
+
+netexperience:
+  # NetExperience API Configuration
+  base_url: https://cmap-portal-svc.prod1.netexperience.com
+  user_id: YOUR_EMAIL@example.com  # Replace with your NetExperience user ID
+  password: YOUR_PASSWORD           # Replace with your NetExperience password
+  service_provider_id: 58           # Your service provider ID
+  
+  # Token management
+  token_refresh_interval: 82800  # seconds (23 hours, token expires in 24 hours)
+  token_retry_attempts: 3
+  token_retry_delay: 5  # seconds
+  
+  # API Rate limiting (180 requests per 10 seconds)
+  rate_limit_requests: 180
+  rate_limit_period: 10  # seconds
+  
+  # Data collection settings
+  max_concurrent_requests: 5
+  equipment_batch_size: 5  # Number of equipment IDs to query at once
+  
+  # Cache settings
+  customer_cache_refresh_hours: 24  # Refresh customer list once per day
+  equipment_cache_refresh_hours: 24  # Refresh equipment list once per day
+  equipment_ip_cache_refresh_hours: 24  # Refresh equipment IP addresses once per day
+  
+  # Metric thresholds
+  min_clients_rssi_threshold: 10  # Minimum clients required for RSSI percentage calculations
+
+insightfinder:
+  # InsightFinder Platform Configuration
+  server_url: https://stg.insightfinder.com  # or https://app.insightfinder.com for production
+  username: YOUR_USERNAME          # Replace with your InsightFinder username
+  license_key: YOUR_LICENSE_KEY    # Replace with your InsightFinder license key
+  
+  # Metrics Project Configuration
+  metrics_project_name: NetExperience-Metrics
+  metrics_system_name: NetExperience
+  metrics_project_type: Metric
+
+  # Logs Project Configuration
+  logs_project_name: NetExperience-Logs
+  logs_system_name: NetExperience
+  logs_project_type: Log
+  
+  # Common Configuration
+  cloud_type: OnPremise
+  instance_type: OnPremise
+  is_container: false
+  sampling_interval: 60  # seconds - how often to collect metrics
