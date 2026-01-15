@@ -125,7 +125,7 @@ insightfinder:
 4. **Data Delivery**:
    - Formats metrics for InsightFinder API
    - Sends to InsightFinder platform
-   - Instance naming: `{CustomerName}_{EquipmentName}`
+   - Instance naming: `{EquipmentName}`
 
 ### Metrics Collected
 
