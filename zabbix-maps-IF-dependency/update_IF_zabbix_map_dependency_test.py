@@ -206,11 +206,11 @@ def process_map_device_links(logger, zabbix_token, map_data):
     
     if 'links' not in map_data or 'selements' not in map_data:
         logger.info(f"  Map '{map_name}' has no links or elements")
-        return []
+        return [], None
     
     if not map_data['links']:
         logger.info(f"  Map '{map_name}' has no links")
-        return []
+        return [], None
     
     # Build mapping from selementid to device name
     selement_name_map = {}
@@ -224,11 +224,17 @@ def process_map_device_links(logger, zabbix_token, map_data):
         else:
             selement_name_map[selement['selementid']] = selement.get('label', f"ID:{selement['selementid']}")
     
-    # Extract device links
+    # Extract device links - keep both original and sanitized names
     device_links = []
+    original_device_name = None  # Track first original device name for zone lookup
+    
     for link in map_data['links']:
         name1 = selement_name_map.get(link['selementid1'], link['selementid1'])
         name2 = selement_name_map.get(link['selementid2'], link['selementid2'])
+        
+        # Store the first original device name for zone lookup
+        if original_device_name is None:
+            original_device_name = name1
         
         safe_name1 = make_safe_instance_string(name1)
         safe_name2 = make_safe_instance_string(name2)
@@ -239,7 +245,7 @@ def process_map_device_links(logger, zabbix_token, map_data):
         })
     
     logger.info(f"  Extracted {len(device_links)} device links from map '{map_name}'")
-    return device_links
+    return device_links, original_device_name
 
 def create_component_links(device_links, instance_component_dict):
     """Transform device links to component links with deduplication"""
@@ -268,8 +274,8 @@ def create_component_links(device_links, instance_component_dict):
     
     return component_links, skipped_count
 
-def send_component_links_to_insightfinder(logger, component_links, map_name):
-    """Send component links to InsightFinder API"""
+def send_component_links_to_insightfinder(logger, component_links, map_name, zone_name=None):
+    """Send component links to InsightFinder API with optional zoneName"""
     if not component_links:
         logger.warning(f"  No component links to send for map '{map_name}'")
         return False
@@ -292,13 +298,13 @@ def send_component_links_to_insightfinder(logger, component_links, map_name):
     # Convert to JSON string
     component_relation_list_str = json.dumps(component_relation_list)
     
-    # Create payload
+    # Create payload - zoneName is always provided
     payload = {
         "systemDisplayName": config.insightfinder_system,
         "licenseKey": config.license_key,
         "userName": config.insightfinder_username,
-        "dailyTimestamp": int(time.time() * 1000),
-        "projectLevelAddRelationSetStr": component_relation_list_str
+        "projectLevelAddRelationSetStr": component_relation_list_str,
+        "zoneName": zone_name
     }
     
     try:
@@ -310,7 +316,7 @@ def send_component_links_to_insightfinder(logger, component_links, map_name):
         )
         
         if response.status_code == 200:
-            logger.info(f"  ✓ Successfully sent {len(component_links)} component links for map '{map_name}'")
+            logger.info(f"  ✓ Successfully sent {len(component_links)} component links for map '{map_name}' with zoneName '{zone_name}'")
             return True
         else:
             logger.error(f"  ✗ Failed to send links for map '{map_name}': {response.status_code}")
@@ -324,8 +330,14 @@ def main():
     """Main orchestration function"""
     logger = setup_logging()
     
+    # Determine if we should process all maps or limit
+    process_all_maps = (MAX_MAPS_TO_PROCESS == 0)
+    
     logger.info("="*80)
-    logger.info(f"TEST MODE: Processing first {MAX_MAPS_TO_PROCESS} maps with data")
+    if process_all_maps:
+        logger.info("MODE: Processing ALL maps")
+    else:
+        logger.info(f"TEST MODE: Processing first {MAX_MAPS_TO_PROCESS} maps with data")
     logger.info("="*80)
     
     # Step 1: Connect to Zabbix
@@ -357,8 +369,22 @@ def main():
     logger.info(f"  Found {len(maps)} total maps in Zabbix")
     logger.info(f"  Will process first {MAX_MAPS_TO_PROCESS} maps with data")
     
-    # Step 6: Process each map individually (up to limit)
-    logger.info(f"\n[6/6] Processing and sending maps (limit: {MAX_MAPS_TO_PROCESS})...")
+    # Step 6: Load device->hostgroup mapping
+    logger.info("\n[6/7] Loading device->hostgroup mapping...")
+    try:
+        with open('device_hostgroups_mapping.json', 'r') as f:
+            device_hostgroup_mapping = json.load(f)
+        logger.info(f"  Loaded mapping for {len(device_hostgroup_mapping)} devices")
+    except Exception as e:
+        logger.error(f"  Failed to load device_hostgroups_mapping.json: {e}")
+        logger.warning("  Continuing without zone names...")
+        device_hostgroup_mapping = {}
+    
+    # Step 7: Process each map individually (up to limit)
+    if process_all_maps:
+        logger.info(f"\n[7/7] Processing and sending all maps...")
+    else:
+        logger.info(f"\n[7/7] Processing and sending maps (limit: {MAX_MAPS_TO_PROCESS})...")
     logger.info("="*80)
     
     total_maps = len(maps)
@@ -369,8 +395,8 @@ def main():
     total_component_links = 0
     
     for map_idx, map_data in enumerate(maps, 1):
-        # Stop if we've processed enough maps with data
-        if maps_with_data_processed >= MAX_MAPS_TO_PROCESS:
+        # Stop if we've processed enough maps with data (only if not processing all)
+        if not process_all_maps and maps_with_data_processed >= MAX_MAPS_TO_PROCESS:
             logger.info(f"\nReached limit of {MAX_MAPS_TO_PROCESS} maps with data. Stopping.")
             logger.info(f"Remaining unchecked maps: {total_maps - maps_checked}")
             break
@@ -382,8 +408,8 @@ def main():
         logger.info(f"\nChecking Map {map_idx}/{total_maps}: '{map_name}' (ID: {map_id})")
         logger.info("-"*80)
         
-        # Extract device links from this map
-        device_links = process_map_device_links(logger, zabbix_token, map_data)
+        # Extract device links from this map - also get original device name for zone lookup
+        device_links, original_device_name = process_map_device_links(logger, zabbix_token, map_data)
         
         if not device_links:
             logger.info("  Skipping - no device links in this map")
@@ -403,17 +429,40 @@ def main():
         
         total_component_links += len(component_links)
         
-        # Send to InsightFinder
-        if send_component_links_to_insightfinder(logger, component_links, map_name):
+        # Fetch a single device name from this map to determine zone
+        # Use the ORIGINAL (unsanitized) device name for hostgroup lookup
+        zone_name = "NO_ZONE"  # Default value
+        if original_device_name:
+            logger.info(f"  Using original device name '{original_device_name}' to determine zone/hostgroup")
+            
+            # Look up host groups for this device using ORIGINAL name
+            host_groups = device_hostgroup_mapping.get(original_device_name, [])
+            if host_groups:
+                # Use the first host group as zone name
+                zone_name = host_groups[0]
+                logger.info(f"  Zone name: '{zone_name}'")
+            else:
+                logger.warning(f"  No host group found for device '{original_device_name}', using default: '{zone_name}'")
+        else:
+            logger.warning(f"  No device name available, using default zone name: '{zone_name}'")
+        
+        # Send to InsightFinder with zone name (always provided)
+        if send_component_links_to_insightfinder(logger, component_links, map_name, zone_name):
             maps_sent_successfully += 1
     
     # Final summary
     logger.info("\n" + "="*80)
-    logger.info("TEST MODE SUMMARY")
+    if process_all_maps:
+        logger.info("PROCESSING SUMMARY")
+    else:
+        logger.info("TEST MODE SUMMARY")
     logger.info("="*80)
     logger.info(f"Total maps in Zabbix: {total_maps}")
     logger.info(f"Maps checked: {maps_checked}")
-    logger.info(f"Maps with data processed: {maps_with_data_processed}/{MAX_MAPS_TO_PROCESS}")
+    if process_all_maps:
+        logger.info(f"Maps with data processed: {maps_with_data_processed}")
+    else:
+        logger.info(f"Maps with data processed: {maps_with_data_processed}/{MAX_MAPS_TO_PROCESS}")
     logger.info(f"Maps sent successfully: {maps_sent_successfully}")
     logger.info(f"Total device links extracted: {total_device_links}")
     logger.info(f"Total component links sent: {total_component_links}")
@@ -423,7 +472,10 @@ def main():
         logger.error("No maps were sent successfully!")
         sys.exit(1)
     
-    logger.info(f"\n✓ Test workflow completed! Processed {maps_with_data_processed} maps.")
+    if process_all_maps:
+        logger.info(f"\n✓ Workflow completed! Processed all {maps_with_data_processed} maps with data.")
+    else:
+        logger.info(f"\n✓ Test workflow completed! Processed {maps_with_data_processed} maps.")
 
 if __name__ == "__main__":
     main()
