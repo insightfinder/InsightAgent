@@ -45,3 +45,5 @@ instance_component.json
 zabbix_metadata.json
 zabbix_matched_components.json
 zabbix_unmatched_components.json
+venues.yaml
+zabbix_devices_tags.yaml
