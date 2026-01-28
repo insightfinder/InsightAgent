@@ -1,0 +1,18 @@
+# Configurations for Jira
+jira_url = ""
+jira_username = ""
+jira_api_token = ""
+jira_workspace_id = ""
+jira_batch_size = 50
+
+# Configurations for Zabbix
+zabbix_url = ""
+zabbix_user = ""
+zabbix_password = ""
+
+# Configurations for InsightFinder
+insightfinder_url = ""
+insightfinder_username = ""
+license_key = ""
+insightfinder_system = ""
+user_agent = "Mozilla/5.0 (compatible; InsightFinderClient/1.0;)"
