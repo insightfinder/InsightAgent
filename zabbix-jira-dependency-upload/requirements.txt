@@ -1,0 +1,19 @@
+# Zabbix API Integration
+pyzabbix>=1.0.0
+
+# HTTP Requests
+requests>=2.31.0
+
+# Regular Expression Support (extended regex)
+regex>=2023.0.0
+
+# YAML Support
+pyyaml
+
+# Standard library modules (no installation needed):
+# - json
+# - logging
+# - sys
+# - re
+# - subprocess
+# - os
