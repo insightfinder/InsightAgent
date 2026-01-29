@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# Configuration (contains sensitive credentials)
+config.py
+
+# Generated JSON files
+*.json
+!requirements.json
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+last_api_payload.json
+
+# Project specific outputs
+device_links.json
+component_links.json
+instance_component.json
+zabbix_metadata.json
+zabbix_matched_components.json
+zabbix_unmatched_components.json
+venues.yaml
+zabbix_devices_tags.yaml
