@@ -1,0 +1,23 @@
+{
+    "keywords": {
+        "whitelist": [],
+        "trainingWhitelist": [],
+        "featurelist": [
+            {
+                "isImportant": true,
+                "priority": 1,
+                "type": "fieldName",
+                "keyword": "priority"
+            }
+        ],
+        "incidentlist": [
+            {
+                "order": 0,
+                "type": "fieldName",
+                "keyword": "severity=critical"
+            }
+        ],
+        "patternNameLabels": [],
+        "instanceNameLabels": []
+    }
+}
