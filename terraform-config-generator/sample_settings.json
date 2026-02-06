@@ -1,0 +1,5 @@
+{
+    "settingList": {
+        "example-project": "{\"CLASSNAME\":\"com.insightfinder.models.projectSetting.possibleSetting.LogPossibleSetting\",\"DATA\":{\"projectName\":\"example-project\",\"projectDisplayName\":\"Example Project\",\"projectTimeZone\":\"UTC\",\"retentionTime\":365,\"samplingInterval\":600,\"anomalyDetectionMode\":0,\"enableNewAlertEmail\":false,\"dailyModelSpan\":1,\"maxLogModelSize\":10000,\"keywordFeatureNumber\":200,\"similaritySensitivity\":\"medium\",\"enableHotEvent\":true,\"hotEventThreshold\":10,\"trainingFilter\":true}}"
+    }
+}
