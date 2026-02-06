@@ -1,0 +1,17 @@
+{
+    "host": "https://your-instance.service-now.com",
+    "serviceNowUser": "your-username",
+    "serviceNowPassword": "your-password",
+    "clientId": "your-client-id",
+    "clientSecret": "your-client-secret",
+    "instanceField": "test_ci",
+    "timestampFormat": "MM/dd/yyyy HH:mm:ss",
+    "proxy": "",
+    "additionalFields": [
+        "priority",
+        "severity",
+        "state",
+        "short_description",
+        "description"
+    ]
+}
