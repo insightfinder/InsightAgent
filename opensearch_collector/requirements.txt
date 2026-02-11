@@ -1,0 +1,9 @@
+APScheduler
+arrow
+opensearch-py>=2.0.0
+pytz
+regex
+requests
+urllib3>=2.5.0
+backports.zoneinfo;python_version<"3.9"
+kubernetes
