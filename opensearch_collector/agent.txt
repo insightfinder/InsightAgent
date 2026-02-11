@@ -1,0 +1,2 @@
+name = opensearch_collector
+script_name = getmessages_opensearch_collector.py
