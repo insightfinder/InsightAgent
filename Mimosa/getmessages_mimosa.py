@@ -1213,6 +1213,76 @@ def send_data_to_if(logger, cli_config_vars, if_config_vars, track, chunk_metric
                     verify=False)
 
     logger.info('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
+    
+    # Send instance metadata after successful data upload
+    if not cli_config_vars['testing'] and data_to_post:
+        send_instance_metadata(logger, if_config_vars, data_to_post, agent_config_vars)
+
+
+def send_instance_metadata(logger, if_config_vars, data_to_post, agent_config_vars=None):
+    """Send instance metadata to InsightFinder after data upload"""
+    try:
+        # Extract instance metadata from the sent data
+        instance_metadata_list = []
+        
+        if 'data' in data_to_post and 'idm' in data_to_post['data']:
+            instance_data_map = data_to_post['data']['idm']
+            
+            for instance_key, instance_info in instance_data_map.items():
+                instance_name = instance_info.get('in', '')  # instanceName
+                ip_address = instance_info.get('i', '')  # ipAddress (used as componentName)
+                
+                if instance_name:
+                    metadata_entry = {
+                        'instanceName': instance_name,
+                        'ipAddress': ip_address if ip_address else ''
+                    }
+                    instance_metadata_list.append(metadata_entry)
+        
+        if not instance_metadata_list:
+            logger.debug('No instance metadata to send')
+            return
+        
+        # Save metadata to file for debugging
+        metadata_filename = 'mimosa_instance_metadata.json'
+        try:
+            with open(metadata_filename, 'w') as f:
+                json.dump(instance_metadata_list, f, indent=2)
+            logger.info(f"Instance metadata saved to {metadata_filename}")
+        except Exception as e:
+            logger.error(f"Failed to save metadata file: {e}")
+        
+        # Build the metadata API URL
+        metadata_url = (
+            f"{if_config_vars['if_url']}/api/v1/agent-upload-instancemetadata"
+            f"?userName={if_config_vars['user_name']}"
+            f"&licenseKey={if_config_vars['license_key']}"
+            f"&projectName={if_config_vars['project_name']}"
+            f"&override=true"
+        )
+        
+        logger.info(f'Sending instance metadata for {len(instance_metadata_list)} instances')
+        
+        # Send the metadata request
+        response = send_request(
+            logger, 
+            metadata_url,
+            mode='POST',
+            data=json.dumps(instance_metadata_list),
+            headers={'Content-Type': 'application/json'},
+            proxies=get_proxy_dict(if_config_vars),
+            verify=False,
+            success_message='Instance metadata uploaded successfully',
+            failure_message='Failed to upload instance metadata'
+        )
+        
+        if response != -1:
+            logger.info('Instance metadata sent successfully')
+        else:
+            logger.warning('Failed to send instance metadata')
+            
+    except Exception as e:
+        logger.error(f'Error sending instance metadata: {str(e)}')
 
 
 def send_request(logger, url, mode='GET', failure_message='Failure!', success_message='Success!',
