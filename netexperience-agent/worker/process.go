@@ -203,7 +203,7 @@ func (w *Worker) sendMetricBatch(timestamp int64, metrics []*models.EquipmentMet
 			"% Clients RSSI < -74 dBm":   em.PercentRSSIBelow74,
 			"% Clients RSSI < -78 dBm":   em.PercentRSSIBelow78,
 			"% Clients RSSI < -80 dBm":   em.PercentRSSIBelow80,
-			"WAN Port Speed":             float64(em.WANPortSpeed),
+			"WAN Port Speed Mbps":        float64(em.WANPortSpeed),
 		}
 
 		metricData := models.MetricData{
