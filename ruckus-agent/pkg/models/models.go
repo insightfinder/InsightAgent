@@ -22,6 +22,7 @@ type MetricFilter interface {
 	IsClientsSNRBelow15() bool
 	IsClientsSNRBelow18() bool
 	IsClientsSNRBelow20() bool
+	IsEthernetStatusMbps() bool
 }
 
 // API Response structures
@@ -84,6 +85,7 @@ type APDetail struct {
 	Airtime24G    float64 `json:"airtime24G"`
 	Airtime5G     float64 `json:"airtime5G"`
 	Airtime6G     float64 `json:"airtime6G"`
+	POEPortStatus string  `json:"poePortStatus,omitempty"` // POE port status (e.g., "100Mbps")
 
 	// Client-derived metrics (enriched from client data)
 	RSSI *int `json:"rssi,omitempty"` // Average RSSI from first client (positive value)
@@ -201,6 +203,13 @@ func (ap *APDetail) ToMetricData(componentNameAsAP bool, filter MetricFilter) *M
 	}
 	if ap.SNRPercentBelow20 != nil && filter.IsClientsSNRBelow20() {
 		metric.Data["% Clients SNR < 20 dBm"] = *ap.SNRPercentBelow20
+	}
+
+	// Add Ethernet Status Mbps metric based on filter configuration
+	if ap.POEPortStatus != "" && filter.IsEthernetStatusMbps() {
+		if mbpsValue := ExtractMbpsFromPOEPortStatus(ap.POEPortStatus); mbpsValue != nil {
+			metric.Data["Ethernet Status Mbps"] = *mbpsValue
+		}
 	}
 
 	return metric

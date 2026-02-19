@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -80,6 +81,32 @@ func cleanDeviceName(deviceName string) string {
 
 // return result
 // }
+
+// ExtractMbpsFromPOEPortStatus extracts the numeric value from POE port status string
+// For example: "100Mbps" -> 100, "1000Mbps" -> 1000, "10Mbps" -> 10
+// Returns the numeric value or nil if parsing fails
+func ExtractMbpsFromPOEPortStatus(portStatus string) *float64 {
+	if portStatus == "" {
+		return nil
+	}
+
+	// Use regex to extract numeric value from string like "100Mbps"
+	re := regexp.MustCompile(`^(\d+(?:\.\d+)?)`)
+	matches := re.FindStringSubmatch(portStatus)
+
+	if len(matches) > 1 {
+		// Parse the numeric value using strconv
+		value, err := strconv.ParseFloat(matches[1], 64)
+		if err == nil {
+			return &value
+		}
+		logrus.Debugf("Failed to parse numeric value from POE port status: %s, error: %v", portStatus, err)
+		return nil
+	}
+
+	logrus.Debugf("Failed to extract numeric value from POE port status: %s", portStatus)
+	return nil
+}
 
 func ProcessZoneMappings(metricData []MetricData) []MetricData {
 	zoneMappingFile := "pkg/models/mapping.json"
