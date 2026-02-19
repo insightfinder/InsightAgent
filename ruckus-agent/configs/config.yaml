@@ -62,6 +62,9 @@ metric_filter:
   clients_snr_below_15: false
   clients_snr_below_18: false
   clients_snr_below_20: false
+  
+  # Ethernet metrics
+  ethernet_status_mbps: true  # Extract Mbps from poePortStatus and send as metric
 
 threshold:
   # Minimum client thresholds for percentage calculations

@@ -123,6 +123,9 @@ type EquipmentMetrics struct {
 	PercentRSSIBelow74 float64
 	PercentRSSIBelow78 float64
 	PercentRSSIBelow80 float64
+
+	// WAN Port Speed
+	WANPortSpeed int
 }
 
 // CachedData represents cached customer and equipment data

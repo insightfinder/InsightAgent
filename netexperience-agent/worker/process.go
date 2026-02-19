@@ -103,6 +103,14 @@ func (w *Worker) processEquipmentMetrics(equipment *models.Equipment, customer *
 		Timestamp:     time.UnixMilli(latestTimestamp),
 	}
 
+	// Fetch WAN Port Speed
+	wanSpeed, err := w.netexpService.GetWANPortSpeed(customer.ID, equipment.ID)
+	if err != nil {
+		logrus.Warnf("Failed to get WAN port speed for equipment %s (ID: %d): %v", equipment.Name, equipment.ID, err)
+	} else {
+		result.WANPortSpeed = wanSpeed
+	}
+
 	// Client counts from ApNode metrics
 	if apNodeMetrics.ClientMacAddressesPerRadio != nil {
 		if clients5G, ok := apNodeMetrics.ClientMacAddressesPerRadio["is5GHz"]; ok {
@@ -195,6 +203,7 @@ func (w *Worker) sendMetricBatch(timestamp int64, metrics []*models.EquipmentMet
 			"% Clients RSSI < -74 dBm":   em.PercentRSSIBelow74,
 			"% Clients RSSI < -78 dBm":   em.PercentRSSIBelow78,
 			"% Clients RSSI < -80 dBm":   em.PercentRSSIBelow80,
+			"WAN Port Speed Mbps":        float64(em.WANPortSpeed),
 		}
 
 		metricData := models.MetricData{
