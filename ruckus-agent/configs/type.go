@@ -76,6 +76,9 @@ type MetricFilterConfig struct {
 	ClientsSNRBelow15  bool `yaml:"clients_snr_below_15"`
 	ClientsSNRBelow18  bool `yaml:"clients_snr_below_18"`
 	ClientsSNRBelow20  bool `yaml:"clients_snr_below_20"`
+
+	// Ethernet metrics
+	EthernetStatusMbps bool `yaml:"ethernet_status_mbps"`
 }
 
 // Implement the MetricFilter interface
@@ -97,3 +100,4 @@ func (m *MetricFilterConfig) IsClientsRSSIBelow80() bool      { return m.Clients
 func (m *MetricFilterConfig) IsClientsSNRBelow15() bool       { return m.ClientsSNRBelow15 }
 func (m *MetricFilterConfig) IsClientsSNRBelow18() bool       { return m.ClientsSNRBelow18 }
 func (m *MetricFilterConfig) IsClientsSNRBelow20() bool       { return m.ClientsSNRBelow20 }
+func (m *MetricFilterConfig) IsEthernetStatusMbps() bool      { return m.EthernetStatusMbps }
