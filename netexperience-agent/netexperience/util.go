@@ -353,3 +353,59 @@ func (s *Service) GetEquipmentIPAddress(customerID, equipmentID int) (string, er
 
 	return "", nil // No IP address found
 }
+
+// GetWANPortSpeed fetches the WAN port speed for a specific equipment
+func (s *Service) GetWANPortSpeed(customerID, equipmentID int) (int, error) {
+	urlStr := fmt.Sprintf("%s/portal/status/forEquipment?customerId=%d&equipmentId=%d",
+		s.config.BaseURL, customerID, equipmentID)
+
+	resp, err := s.makeAuthenticatedRequest("GET", urlStr, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get equipment status: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("get equipment status failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	// Parse the response array
+	var statuses []struct {
+		StatusDataType string          `json:"statusDataType"`
+		Details        json.RawMessage `json:"details"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&statuses); err != nil {
+		return 0, fmt.Errorf("failed to decode equipment status response: %w", err)
+	}
+
+	// Find the WIRED_ETHERNET_PORT status which contains the WAN port speed
+	for _, status := range statuses {
+		if status.StatusDataType == "WIRED_ETHERNET_PORT" {
+			// Parse the details for WiredEthernetPortStatusData
+			var portData struct {
+				InterfacePortStatusMap struct {
+					Upstream []struct {
+						Name  string `json:"name"`
+						Speed int    `json:"speed"`
+					} `json:"upstream"`
+				} `json:"interfacePortStatusMap"`
+			}
+
+			if err := json.Unmarshal(status.Details, &portData); err != nil {
+				logrus.Warnf("Failed to parse WIRED_ETHERNET_PORT details: %v", err)
+				continue
+			}
+
+			// Find the upstream WAN port and return its speed
+			for _, port := range portData.InterfacePortStatusMap.Upstream {
+				if port.Name == "WAN" && port.Speed > -1 {
+					return port.Speed, nil
+				}
+			}
+		}
+	}
+
+	return 0, nil // No WAN port speed found
+}
