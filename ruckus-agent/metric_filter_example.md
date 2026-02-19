@@ -23,6 +23,9 @@ metric_filter:
   clients_snr_below_15: false
   clients_snr_below_18: false
   clients_snr_below_20: true   # Enable streaming % Clients SNR < 20 dBm
+  
+  # Ethernet metrics
+  ethernet_status_mbps: true   # Enable streaming Ethernet Status Mbps
 
 # With this configuration, only the following metrics will be streamed to InsightFinder:
 # - Num Clients Total
@@ -33,6 +36,7 @@ metric_filter:
 # - SNR Avg (if client data is available)
 # - % Clients RSSI < -78 dBm (if client data is available)
 # - % Clients SNR < 20 dBm (if client data is available)
+# - Ethernet Status Mbps (extracted from poePortStatus, e.g., "100Mbps" -> 100)
 #
 # All other metrics will be skipped and not sent to InsightFinder.
 
