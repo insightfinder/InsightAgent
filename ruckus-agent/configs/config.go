@@ -203,6 +203,12 @@ func logMetricConfiguration(config *Config) {
 		enabledMetrics = append(enabledMetrics, "% Clients SNR < 20 dBm")
 	}
 
+	// Ethernet metrics
+	totalMetrics++
+	if config.MetricFilter.EthernetStatusMbps {
+		enabledMetrics = append(enabledMetrics, "Ethernet Status Mbps")
+	}
+
 	logrus.Infof("Enabled metrics (%d/%d): %v", len(enabledMetrics), totalMetrics, enabledMetrics)
 	if len(enabledMetrics) == 0 {
 		logrus.Warn("No metrics are enabled for streaming! All metrics are set to false in configuration.")
