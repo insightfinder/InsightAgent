@@ -22,4 +22,8 @@ ticket:
   location: ""  # Physical/logical location
   comments: ""  # Customer-visible comments
   
-
+  # Example opened_at values (choose one format):
+  # - Epoch seconds (integer): 1674720000
+  # - ISO 8601 (UTC): "2026-01-26T15:00:00Z"
+  # If provided and in the future, the script will wait until this time before creating the ticket.
+  # opened_at: "2026-01-26T06:10:00Z"  # example (ISO 8601, UTC)
