@@ -1,17 +1,17 @@
 # ServiceNow Configuration
 servicenow:
-  instance_url: "https://dev.service-now.com"
-  username: "admin"
-  password: "12345"
+  instance_url: ""
+  username: ""
+  password: ""
 
 # Ticket Payload Configuration
 # You can modify these values to create different types of tickets
 # Use {random:min-max:decimals} for random values, e.g., {random:0.5-0.9:5} generates 0.5-0.9 with 5 decimals
 ticket:
-  short_description: "Availability (avg: {random:0.5-0.9:5}) is {random:20-35:2}% lower than normal"
-  description: "ip-172-31-52-141.ec2.internal"
-  urgency: "3"  # 1=High, 2=Medium, 3=Low
-  impact: "3"   # 1=High, 2=Medium, 3=Low
+  short_description: "Availability (avg: 0.73107) is 26.89% lower than normal"
+  description: "test-instance"
+  urgency: "1"  # 1=High, 2=Medium, 3=Low
+  impact: "1"   # 1=High, 2=Medium, 3=Low
   category: "inquiry"  # inquiry, software, hardware, network, database
   assignment_group: ""  # Leave empty or specify group name
   assigned_to: ""       # Leave empty or specify user name
@@ -22,4 +22,8 @@ ticket:
   location: ""  # Physical/logical location
   comments: ""  # Customer-visible comments
   
-
+  # Example opened_at values (choose one format):
+  # - Epoch seconds (integer): 1674720000
+  # - ISO 8601 (UTC): "2026-01-26T15:00:00Z"
+  # If provided and in the future, the script will wait until this time before creating the ticket.
+  # opened_at: "2026-01-26T06:10:00Z"  # example (ISO 8601, UTC)
