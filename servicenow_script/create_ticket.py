@@ -11,7 +11,8 @@ import yaml
 import json
 import sys
 import random
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 from typing import Dict, Any
 
 
@@ -66,12 +67,25 @@ class ServiceNowClient:
             }
             
         except requests.exceptions.HTTPError as e:
-            return {
+            # response may be attached to the exception; guard against missing attributes
+            status_code = None
+            resp_text = None
+            try:
+                resp = e.response
+                status_code = getattr(resp, 'status_code', None)
+                resp_text = getattr(resp, 'text', None)
+            except Exception:
+                resp = None
+
+            payload = {
                 'success': False,
                 'error': f"HTTP Error: {e}",
-                'status_code': response.status_code,
-                'response': response.text
             }
+            if status_code is not None:
+                payload['status_code'] = status_code
+            if resp_text is not None:
+                payload['response'] = resp_text
+            return payload
         except requests.exceptions.RequestException as e:
             return {
                 'success': False,
@@ -162,7 +176,69 @@ def prepare_ticket_payload(ticket_config: Dict[str, Any]) -> Dict[str, Any]:
         if field in ticket_config and ticket_config[field]:
             payload[field] = ticket_config[field]
     
+    # Include opened_at if provided in ticket config (we accept epoch or ISO / common formats)
+    if 'opened_at' in ticket_config and ticket_config.get('opened_at'):
+        opened_val = ticket_config.get('opened_at')
+        # If already a datetime object, format it; otherwise keep raw and let caller format
+        if isinstance(opened_val, datetime):
+            payload['opened_at'] = opened_val.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            # leave string/int as-is; main() will parse/validate and possibly overwrite with formatted string
+            payload['opened_at'] = opened_val
+
     return payload
+
+
+def parse_opened_at(value) -> datetime:
+    """
+    Parse opened_at value from config into a timezone-aware datetime (UTC if no tz given).
+
+    Accepts:
+      - integer / float: treated as epoch seconds
+      - ISO 8601 / common datetime strings
+
+    Returns a datetime in UTC.
+    Raises ValueError on invalid formats.
+    """
+    # Epoch seconds
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(float(value), tz=timezone.utc)
+
+    if isinstance(value, str):
+        s = value.strip()
+        # Handle trailing Z (Zulu) as UTC
+        if s.endswith('Z'):
+            s = s[:-1] + '+00:00'
+
+        # Try fromisoformat (handles offsets like +00:00)
+        try:
+            dt = datetime.fromisoformat(s)
+            if dt.tzinfo is None:
+                # assume UTC
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return dt
+        except Exception:
+            pass
+
+        # Try common formats
+        fmts = [
+            '%Y-%m-%d %H:%M:%S',
+            '%Y-%m-%dT%H:%M:%S',
+            '%Y/%m/%d %H:%M:%S',
+            '%Y-%m-%d %H:%M',
+            '%Y-%m-%d'
+        ]
+        for fmt in fmts:
+            try:
+                dt = datetime.strptime(s, fmt)
+                dt = dt.replace(tzinfo=timezone.utc)
+                return dt
+            except Exception:
+                continue
+
+    raise ValueError(f"Unable to parse opened_at value: {value}")
 
 
 def print_ticket_details(ticket_data: Dict[str, Any]):
@@ -218,6 +294,31 @@ def main():
     payload = prepare_ticket_payload(ticket_config)
     print(f"\nTicket Payload:")
     print(json.dumps(payload, indent=2))
+    
+    # If opened_at provided, parse, wait if in the future, and set formatted value
+    if ticket_config.get('opened_at'):
+        try:
+            dt = parse_opened_at(ticket_config.get('opened_at'))
+        except ValueError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+
+        now = datetime.now(timezone.utc)
+        # If the target time is in the future, wait until then
+        if dt > now:
+            wait_seconds = (dt - now).total_seconds()
+            print(f"Opened_at is in the future ({dt.isoformat()}); waiting {int(wait_seconds)} seconds to create the ticket...")
+            try:
+                # Sleep until time arrives
+                time.sleep(wait_seconds)
+            except KeyboardInterrupt:
+                print("Interrupted while waiting for opened_at time. Exiting.")
+                sys.exit(1)
+
+        # Format for ServiceNow: 'YYYY-MM-DD HH:MM:SS' (UTC)
+        formatted = dt.strftime('%Y-%m-%d %H:%M:%S')
+        payload['opened_at'] = formatted
+        print(f"Using opened_at: {formatted}")
     
     # Create ticket
     print("\nCreating incident ticket...")
