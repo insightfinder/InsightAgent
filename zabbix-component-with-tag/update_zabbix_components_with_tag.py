@@ -258,6 +258,10 @@ def get_component_names_from_metadata(metadata, project_instances_list):
             if component_type and jira_make_value:
                 component_type = f"{component_type}-{jira_make_value}"
             
+            # Special handling for Mimosa devices
+            if jira_make_value and 'mimosa' in jira_make_value.lower():
+                component_type = f"PTP-Mimosa"
+            
             instance_component_name_dict[hostname] = component_type
 
     return instance_component_name_dict
