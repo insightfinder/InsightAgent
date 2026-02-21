@@ -306,10 +306,10 @@ def batch_update_instance_component_name(project_name: str, instance_component_n
         'Content-Type': 'application/json'
     }
 
-    logger.debug(json_body)
+    #logger.debug(json_body)
 
     response = requests.request("POST", url, headers=headers, data=json.dumps(json_body))
-    logger.info(f'Successfully updated the component names for project {project_name} with status code: {response.status_code}')
+    print(f'Successfully updated the component names for project {project_name} with status code: {response.status_code}')
 
     return True
 
