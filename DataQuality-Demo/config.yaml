@@ -1,0 +1,214 @@
+mappings:
+  
+  # Name of the mapping. Can be anything
+  source_to_target:
+    source: 'source'
+    target: 'target'
+
+    # List of identifying columns to match source and target data
+    id_columns:
+      - newOrderId # OrderIntId
+      - buySellIndicator
+      - executionType # eventType
+      - datetime_epoch
+      # - transactionId
+      - i_quantity # initialQty
+    
+    # Timestamp column in source and target and the delta with which they can differ
+    timestamp:
+      source_col: "datetime_epoch"
+      target_col: "datetime_epoch"
+      delta: 1
+
+    # Columns to fill in augmented target excluding id_columns. id_columns are filled by default
+    extra_columns_to_fill: 
+      - orderType
+      - location # venueId
+      - multiplier # priceMultiplier
+      - pCurrency # priceCcy
+      - qCurrency # quantityCcy
+      - fCode # fisn
+      - transactionId # instrumentId
+      - price
+
+    # Columns to perform consistency check on source data. If any inconsistency is seen the consistent value is filled in augmented target
+    consistency_check_columns:
+      - orderType
+      - location
+      - multiplier
+      - pCurrency
+      - qCurrency
+      - fCode
+      - transactionId
+
+    # Rules for id_columns, data generation and consistency checks. Each entry is a function definition that applies a transformation
+    rules:
+      newOrderId: |-
+        def newOrderIdRule(row):
+          # Simple concatenation based on instrument type
+          orderId = str(row.get('orderId', ''))
+          instType = row.get('instType', '')
+          
+          if instType == 'SWAP':
+            # Add leg ID suffix for swaps
+            legId = row.get('l_id', '0')
+            return f"{orderId}_{legId}"
+          elif instType == 'BLOCK':
+            # Add allocation and quote IDs for blocks
+            allocId = row.get('allocationId', '')
+            quoteId = row.get('q_id', '')
+            return f"{orderId}_{allocId}_{quoteId}"
+          else:
+            # Return orderId as-is for other types
+            return orderId
+
+      datetime_epoch: |-
+        def datetime_epochRule(row):
+          try:
+            val = str(int(float(row['datetime_epoch'])))
+            return val
+          except Exception as e:
+            logger.debug(f"Caught an exception: {e}")
+            return ""
+
+      executionType: |-
+        def executionTypeRule(row):
+          # Map transaction types to execution types
+          transactionType = str(row.get('transactionType', ''))
+          typeMap = {
+            "NEW": "NEWO",
+            "CONFIRMED": "CONF",
+            "CANCELLED": "CAMO",
+            "REJECTED": "REMO",
+            "TRADE": "FILL",
+            "TRADE_ACK": "PARF"
+          }
+          return typeMap.get(transactionType, "")
+
+      transactionId: |-
+        def transactionIdRule(row):
+          # Build transaction ID from currency pair
+          tradeCurrencies = str(row.get('tradeCurrencies', ''))
+          
+          # Check if precious metals (PM) based on 2nd/3rd chars
+          isPM = tradeCurrencies[1:3] in ["AU", "AG", "PT", "PD"] if len(tradeCurrencies) >= 3 else False
+          prefix = "PM" if isPM else "FX"
+          
+          # Add 'X' prefix for precious metals
+          if isPM:
+            tradeCurrencies = 'X' + tradeCurrencies[1:]
+          
+          return f"{prefix}SPOT{tradeCurrencies}"
+
+      buySellIndicator: |-
+        def buySellIndicatorRule(row):
+          # Convert direction based on instrument and currency order
+          direction = str(row.get('direction', ''))
+          
+          # Map BUY to BUYI for consistency
+          if direction == "BUY":
+            return "BUYI"
+          elif direction == "SELL":
+            return "SELL"
+          else:
+            return ""
+      
+      i_quantity: |-
+        def i_quantityRule(row):
+          # Return quantity, potentially with negative sign
+          allocationQty = str(row.get('allocationQty', '')).strip()
+          
+          if not allocationQty or allocationQty == "NA":
+            return allocationQty
+          
+          # Add negative sign if direction doesn't match request
+          directionMatch = str(row.get('directionMatchesRequest', '')).lower()
+          if directionMatch == "false":
+            return f"-{allocationQty}"
+          return allocationQty
+
+      location: |-
+        def locationRule(row):
+          # Clean up market code
+          mCode = str(row.get('mCode', ''))
+          mCode = mCode.replace("''", "").replace("{", "").replace("}", "").replace("MicCode=", "").replace("()", "").strip()
+          return "XXXX" if not mCode else mCode
+
+      multiplier: |-
+        def multiplierRule(row):
+          return "1"
+      
+      qCurrency: |-
+        def qCurrencyRule(row):
+          # Extract quote currency from trading pair
+          tradeCurrencies = str(row.get('tradeCurrencies', ''))
+          qUnit = str(row.get('q_unit', ''))
+          
+          # Clean up currency codes
+          tradeCurrencies = tradeCurrencies.replace("CNH", "CNY").replace("SGX", "SGD")
+          
+          # Return first 3 chars for BASE, last 3 for COUNTER
+          if qUnit == "BASE" and len(tradeCurrencies) >= 3:
+            return tradeCurrencies[:3]
+          elif len(tradeCurrencies) >= 6:
+            return tradeCurrencies[-3:]
+          return ""
+
+      pCurrency: |-
+        def pCurrencyRule(row):
+          # Extract price currency (always last 3 characters)
+          tradeCurrencies = str(row.get('tradeCurrencies', ''))
+          
+          # Clean up currency codes
+          tradeCurrencies = tradeCurrencies.replace("CNH", "CNY").replace("SGX", "SGD")
+          
+          return tradeCurrencies[-3:] if len(tradeCurrencies) >= 3 else ""
+      
+      fCode: |-
+        def fCodeRule(row):
+          # Generate financial code based on instrument type
+          instType = row.get('instType', '')
+          tenor = row.get('tenor', '')
+          tradeCurrencies = str(row.get('tradeCurrencies', ''))
+          
+          # Return empty for SPOT instruments
+          if instType == 'SPOT' or (tenor == 'SPOT' and instType in ['BLOCK', 'OUTRIGHT']):
+            return ""
+          
+          # Build code for forward instruments
+          return f"FWD_{tradeCurrencies}" if tradeCurrencies else ""
+
+      orderType: |-
+        def orderTypeRule(row):
+          # Map order types
+          orderType = str(row.get('orderType', ''))
+          typeMap = {
+            "QUOTED": "QOT",
+            "MARKET": "MKT",
+            "LIMIT": "LMT"
+          }
+          return typeMap.get(orderType, "")
+
+      price: |-
+        def priceRule(row):
+          # Simply return the source price as-is
+          # All price scenarios (missing, NA, negative, etc.) are controlled by the generation code
+          source_price = row.get('price', '').strip()
+          return source_price
+
+    # If the consistency check is a little different from the rules mapping then provide new consistency check rules
+    # These rules will take priority over the rules defined above. This is ONLY for consistency checks
+    consistency_check_rules:
+      orderType: |-
+        def orderTypeRule(row):
+          # Map order types (same as main rule since we removed randomness)
+          orderType = str(row.get('orderType', ''))
+          typeMap = {
+            "QUOTED": "QOT",
+            "MARKET": "MKT",
+            "LIMIT": "LMT"
+          }
+          return typeMap.get(orderType, "")
+          
+        
+
