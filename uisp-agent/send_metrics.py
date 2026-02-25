@@ -3,15 +3,21 @@
 Send UISP metrics to InsightFinder.
 
 This script:
-1. Fetches metrics from UISP devices using get_metrics.py
-2. Transforms data to InsightFinder format using transform_metrics.py
-3. Sends data to InsightFinder using insightfinder.py
+1. Fetches device overview metrics from UISP devices
+2. Transforms data to InsightFinder format
+3. Sends data to InsightFinder
+
+Supported Metrics:
+  - airFiber/airMax: signal, downlink/uplink utilization, active stations count, per-station capacity
+  - OLT: ONU count
+  - ONU: signal, receive power
 
 Usage:
-    python send_metrics.py                      # Send metrics for all active 60GHz devices (auto-creates project)
-    python send_metrics.py --period 10m         # Fetch last 10 minutes of data
-    python send_metrics.py --num-points 10      # Limit to 10 data points per device (default: all points)
+    python send_metrics.py                      # Send metrics for all active devices
+    python send_metrics.py -n 5                 # Limit to 5 devices
     python send_metrics.py --no-create-project  # Disable auto-creation of InsightFinder project
+    python send_metrics.py --dry-run            # Test without sending
+    python send_metrics.py -v                   # Verbose output
 """
 
 import argparse
@@ -19,18 +25,17 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime
-from typing import Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import requests
+import urllib3
 from dotenv import load_dotenv
 
+# Suppress SSL warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 # Import local modules
-from get_metrics import (
-    get_device_statistics,
-    extract_statistics,
-    extract_device_info,
-    is_active_60ghz_device,
-)
+from get_metrics import extract_device_metrics, get_devices
 from transform_metrics import transform_all_devices
 from insightfinder import InsightFinder, Config
 
@@ -42,41 +47,6 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-
-def format_metrics_for_display(metrics: list[dict[str, str]]) -> list[dict[str, str]]:
-    """Format metrics with human-readable timestamps for display.
-
-    NOTE: This function is ONLY used for local debugging/logging.
-    The returned metrics are never sent to InsightFinder - only the
-    original metrics (without timestamp_readable) are sent.
-
-    Args:
-        metrics: List of metric dictionaries with epoch timestamp strings
-
-    Returns:
-        List of metrics with added human-readable timestamp field
-    """
-    formatted = []
-    for metric in metrics:
-        # Create a copy to avoid modifying original
-        display_metric = metric.copy()
-
-        # Add human-readable timestamp
-        if "timestamp" in metric:
-            try:
-                epoch_ms = int(metric["timestamp"])
-                human_time = datetime.fromtimestamp(epoch_ms / 1000).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
-                # Insert readable timestamp right after the epoch timestamp
-                display_metric["timestamp_readable"] = human_time
-            except (ValueError, OSError):
-                display_metric["timestamp_readable"] = "Invalid timestamp"
-
-        formatted.append(display_metric)
-
-    return formatted
 
 
 def load_config(create_project: bool = False) -> Config:
@@ -133,91 +103,91 @@ def load_config(create_project: bool = False) -> Config:
     )
 
 
-def get_device_metrics(
+def get_device_overview_metrics(
     api_token: str,
     devices: list,
-    period: str = "1h",
-    num_points: int | None = None,
-    sample_interval: str | None = None,
     limit: int | None = None,
 ) -> list[dict]:
-    """Fetch metrics for all active 60GHz devices.
+    """Fetch overview metrics for all active devices using concurrent requests.
 
     Args:
         api_token: UISP API token
         devices: List of devices from UISP API
-        period: Time period to fetch (e.g., '10m', '1h', '2h')
-        num_points: Number of data points to fetch per device
-        sample_interval: Sample interval for filtering (e.g., '1m', '5m')
         limit: Maximum number of devices to process (None for all)
 
     Returns:
         List of device data with metrics
     """
-    # Use sampling interval from env if not specified (in minutes, convert to seconds)
-    if sample_interval is None:
-        sampling_interval_minutes = int(
-            os.getenv("INSIGHTFINDER_SAMPLING_INTERVAL", "5")
-        )
-        sampling_interval_seconds = sampling_interval_minutes * 60
-        if sampling_interval_seconds >= 3600:
-            sample_interval = f"{sampling_interval_seconds // 3600}h"
-        else:
-            sample_interval = f"{sampling_interval_seconds // 60}m"
-
-    devices_with_metrics = []
-
+    uisp_url = os.getenv("UISP_URL", "").rstrip("/")
+    base_api = f"{uisp_url}/nms/api/v2.1"
+    max_workers = int(os.getenv("UISP_MAX_WORKERS", "3"))
+    timeout = int(os.getenv("UISP_TIMEOUT", "30"))
+    
+    # Filter active devices
+    active_devices = []
     for device in devices:
-        # Only process active devices with signal and 60GHz radio
-        if not is_active_60ghz_device(device):
+        overview = device.get("overview", {})
+        if overview.get("status", "").lower() != "active":
             continue
-
         device_id = device.get("identification", {}).get("id")
         if not device_id:
             continue
-
-        # Fetch statistics
-        logger.debug(
-            f"Fetching metrics for device: {device.get('identification', {}).get('name', 'Unknown')}"
-        )
-        stats_data = get_device_statistics(api_token, device_id, period)
-
-        if not stats_data:
-            logger.warning(f"No statistics data for device {device_id}")
-            continue
-
-        device_name = device.get("identification", {}).get("name", "Unknown")
-        stats = extract_statistics(stats_data, num_points, sample_interval, device_name)
-
-        # Include device if it has any signal metrics
-        if stats and any(
-            stats.get(key)
-            for key in ["signal", "remoteSignal", "signal60g", "remoteSignal60g"]
-        ):
-            info = extract_device_info(device)
-
-            # Count total data points for this device
-            total_points = sum(len(v) for v in stats.values() if v is not None)
-            logger.debug(
-                f"{device_name}: {total_points} data points ready for transformation"
-            )
-
-            # Merge device info with metrics
-            device_entry = {**info, **stats}
-            devices_with_metrics.append(device_entry)
-
-            # Stop if we've reached the limit
-            if limit and len(devices_with_metrics) >= limit:
-                logger.info(f"Reached device limit of {limit}")
-                break
-
-    logger.info(f"Found {len(devices_with_metrics)} devices with metrics")
+        active_devices.append(device)
+        if limit and len(active_devices) >= limit:
+            break
+    
+    logger.info(f"Fetching details for {len(active_devices)} active devices (max {max_workers} concurrent)")
+    
+    devices_with_metrics = []
+    
+    def fetch_device_detail(device):
+        """Fetch and extract metrics for a single device."""
+        device_id = device.get("identification", {}).get("id")
+        device_name = device.get("identification", {}).get("name", "unknown")
+        
+        try:
+            url = f"{base_api}/devices/{device_id}/detail?withStations=true"
+            headers = {"x-auth-token": api_token}
+            response = requests.get(url, headers=headers, verify=False, timeout=timeout)
+            
+            if response.status_code != 200:
+                logger.debug(f"Could not fetch detail for {device_name}: {response.status_code}")
+                return None
+            
+            device_detail = response.json()
+            metrics = extract_device_metrics(device_detail)
+            return metrics
+        except Exception as e:
+            logger.debug(f"Error fetching detail for {device_name}: {e}")
+            return None
+    
+    # Use ThreadPoolExecutor for concurrent requests
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all tasks
+        futures = {
+            executor.submit(fetch_device_detail, device): device 
+            for device in active_devices
+        }
+        
+        # Collect results as they complete
+        completed = 0
+        for future in as_completed(futures):
+            completed += 1
+            result = future.result()
+            if result:
+                devices_with_metrics.append(result)
+            
+            # Log progress every 50 devices
+            if completed % 50 == 0:
+                logger.info(f"  Progress: {completed}/{len(active_devices)} devices fetched ({len(devices_with_metrics)} with metrics)")
+    
+    logger.info(f"Found {len(devices_with_metrics)} active devices with metrics")
     return devices_with_metrics
 
 
 def send_to_insightfinder(
     insightfinder: InsightFinder,
-    devices_metrics: dict[str, Any],
+    devices_metrics: dict[str, dict],
     verbose: bool = False,
 ) -> None:
     """Send metrics to InsightFinder using v2 API (batched).
@@ -248,14 +218,14 @@ def send_to_insightfinder(
             logger.debug(f"Instance Type (ct): {config.instance_type}")
             logger.debug(f"Number of Instances: {num_devices}")
 
-            # Count total data points across all devices
-            total_points = 0
+            # Count total metrics across all devices
+            total_metrics = 0
             for instance_name, instance_data in devices_metrics.items():
                 dit = instance_data.get("dit", {})
-                total_points += len(dit)
-                logger.debug(f"  - {instance_name}: {len(dit)} timestamp(s)")
+                for ts_data in dit.values():
+                    total_metrics += len(ts_data.get("metricDataPointSet", []))
 
-            logger.debug(f"\nTotal timestamps across all devices: {total_points}")
+            logger.debug(f"\nTotal metrics across all devices: {total_metrics}")
             logger.debug("\nPayload structure (idm):")
             logger.debug(json.dumps(devices_metrics, indent=2))
             logger.debug(f"{'─' * 60}\n")
@@ -272,18 +242,15 @@ def send_to_insightfinder(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Send UISP metrics to InsightFinder",
+        description="Send UISP device metrics to InsightFinder",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     python send_metrics.py                    # Send all metrics with default settings
     python send_metrics.py -n 5               # Limit to first 5 devices
-    python send_metrics.py --period 10m       # Fetch last 10 minutes
-    python send_metrics.py --period 1h        # Fetch last hour
-    python send_metrics.py --num-points 10     # Limit to 10 data points per device
-    python send_metrics.py --sample-interval 5m  # Sample every 5 minutes
     python send_metrics.py --no-create-project # Disable auto-creation of project
     python send_metrics.py --dry-run          # Test without sending to InsightFinder
+    python send_metrics.py -v                 # Verbose output
         """,
     )
     parser.add_argument(
@@ -292,24 +259,6 @@ Examples:
         type=int,
         default=None,
         help="Limit number of devices to process (default: all devices)",
-    )
-    parser.add_argument(
-        "--period",
-        type=str,
-        default="1h",
-        help="Time period for metrics (format: <number><unit>, e.g., 10m, 1h, 2h, 7d)",
-    )
-    parser.add_argument(
-        "--num-points",
-        type=int,
-        default=None,
-        help="Number of data points to fetch per device (default: all points in the period)",
-    )
-    parser.add_argument(
-        "--sample-interval",
-        type=str,
-        default=None,
-        help="Sample interval for filtering data points (default: from INSIGHTFINDER_SAMPLING_INTERVAL in .env)",
     )
     parser.add_argument(
         "--create-project",
@@ -332,7 +281,7 @@ Examples:
         "-v",
         "--verbose",
         action="store_true",
-        help="Enable debug logging and show payloads when sending metrics",
+        help="Enable debug logging and show payloads",
     )
 
     args = parser.parse_args()
@@ -359,9 +308,7 @@ Examples:
     logger.info("STEP 1: Fetching devices from UISP")
     logger.info("=" * 60)
 
-    from get_metrics import get_devices as fetch_devices
-
-    devices = fetch_devices(api_token)
+    devices = get_devices(api_token)
 
     if not devices:
         logger.error("No devices found")
@@ -369,17 +316,14 @@ Examples:
 
     # Step 2: Fetch metrics for devices
     logger.info("\n" + "=" * 60)
-    logger.info("STEP 2: Fetching metrics for active 60GHz devices")
+    logger.info("STEP 2: Extracting metrics for active devices")
     if args.limit:
         logger.info(f"Limiting to first {args.limit} devices")
     logger.info("=" * 60)
 
-    devices_with_metrics = get_device_metrics(
+    devices_with_metrics = get_device_overview_metrics(
         api_token,
         devices,
-        period=args.period,
-        num_points=args.num_points,
-        sample_interval=args.sample_interval,
         limit=args.limit,
     )
 
@@ -396,24 +340,14 @@ Examples:
 
     logger.info(f"Transformed metrics for {len(transformed_metrics)} devices")
 
-    # Log detailed data point counts per device
-    for device_name, instance_data in transformed_metrics.items():
-        dit = instance_data.get("dit", {})
-        logger.debug(f"{device_name}: {len(dit)} timestamp(s) ready to send")
+    # Log device breakdown by type
+    type_counts = {}
+    for device in devices_with_metrics:
+        dtype = device.get("type", "unknown")
+        type_counts[dtype] = type_counts.get(dtype, 0) + 1
 
-    # Log sample data for first device (if verbose)
-    if args.verbose and transformed_metrics:
-        first_device = next(iter(transformed_metrics.keys()))
-        instance_data = transformed_metrics[first_device]
-        dit = instance_data.get("dit", {})
-        logger.debug(f"\nSample data for {first_device}:")
-        logger.debug(f"  Instance name: {instance_data.get('in')}")
-        logger.debug(f"  Total timestamps: {len(dit)}")
-        if dit:
-            first_timestamp = next(iter(dit.keys()))
-            first_entry = dit[first_timestamp]
-            logger.debug(f"  First timestamp: {first_timestamp}")
-            logger.debug(f"  Metrics: {json.dumps(first_entry, indent=4)}")
+    for dtype, count in sorted(type_counts.items()):
+        logger.info(f"  - {dtype}: {count} device(s)")
 
     # Step 4: Send metrics to InsightFinder
     if args.dry_run:
@@ -421,24 +355,29 @@ Examples:
         logger.info("DRY RUN: Skipping send to InsightFinder")
         logger.info("=" * 60)
         logger.info(
-            f"Would send metrics for {len(transformed_metrics)} devices in batched request:"
+            f"Would send metrics for {len(transformed_metrics)} devices in batched request"
         )
 
         # Display summary for each device
         for device_name, instance_data in transformed_metrics.items():
             dit = instance_data.get("dit", {})
-            logger.info(f"\n{'─' * 60}")
-            logger.info(f"Device: {device_name}")
-            logger.info(f"Instance name: {instance_data.get('in')}")
-            logger.info(f"Timestamps: {len(dit)}")
-            logger.info(f"{'─' * 60}")
+            for ts_str, ts_data in dit.items():
+                metrics = ts_data.get("metricDataPointSet", [])
+                logger.info(f"\n{'─' * 60}")
+                logger.info(f"Device: {device_name}")
+                logger.info(f"Timestamp: {ts_str}")
+                logger.info(f"Metrics: {len(metrics)}")
+                for metric in metrics:
+                    logger.info(f"  - {metric['m']}: {metric['v']}")
+                logger.info(f"{'─' * 60}")
 
-        # Display full idm payload structure
-        logger.info(f"\n{'─' * 60}")
-        logger.info("Full payload (idm structure):")
-        logger.info(f"{'─' * 60}")
-        payload = json.dumps(transformed_metrics, indent=2)
-        logger.info(f"{payload}")
+        # Display full idm payload structure if verbose
+        if args.verbose:
+            logger.debug(f"\n{'─' * 60}")
+            logger.debug("Full payload (idm structure):")
+            logger.debug(f"{'─' * 60}")
+            payload = json.dumps(transformed_metrics, indent=2)
+            logger.debug(f"{payload}")
 
     else:
         logger.info("\n" + "=" * 60)

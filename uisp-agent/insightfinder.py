@@ -350,6 +350,20 @@ class InsightFinder:
             url, json=payload, headers=headers, verify=False, timeout=30
         )
         response.raise_for_status()
+        
+        # Log response body for debugging
+        try:
+            response_body = response.json()
+            logger.debug(f"Response body: {response_body}")
+            
+            # Check for errors in the response
+            if isinstance(response_body, dict):
+                if not response_body.get("success", True):
+                    logger.error(f"API returned failure: {response_body.get('message', 'Unknown error')}")
+                    logger.error(f"Response: {response_body}")
+        except (ValueError, KeyError):
+            logger.debug(f"Response text: {response.text[:500]}")
+        
         return response
 
     @retry(requests.exceptions.RequestException, tries=3, logger=logger)
