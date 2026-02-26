@@ -1,0 +1,15 @@
+# UISP to InsightFinder Integration
+# Python dependencies
+
+# HTTP requests
+requests>=2.31.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# SSL/TLS support (already included with requests, but explicit for urllib3 warnings)
+urllib3>=2.0.0
+
+# Job scheduling (for cron.py)
+apscheduler>=3.10.0
+pytz
