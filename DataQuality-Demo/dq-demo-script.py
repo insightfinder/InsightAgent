@@ -41,10 +41,10 @@ import random
 import urllib.parse
 import requests
 import socket
+import logging
+import yaml
+import os
 from typing import Dict, List, Any, Optional
-
-from data_quality_agent.config import get_config
-from data_quality_agent.logger import setLoggingLevel, get_logger
 
 # ============================================================================
 # CONFIGURATION - MODIFY THESE VALUES TO CONFIGURE SCENARIOS
@@ -55,6 +55,42 @@ CONFIG_PATH = "./config.yaml"
 
 # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 LOG_LEVEL = "INFO"
+
+# ============================================================================
+# LOGGING AND CONFIG HELPER FUNCTIONS
+# ============================================================================
+
+LOG_FORMAT = "%(asctime)s [%(levelname)s] (%(name)s): %(message)s"
+
+def setup_logging(level: str):
+    """Set up logging configuration."""
+    logging.basicConfig(level=level, format=LOG_FORMAT)
+
+def get_logger(name: str):
+    """Get a logger with the specified name."""
+    return logging.getLogger(name)
+
+def load_config(config_path: str) -> dict:
+    """Load YAML configuration from file."""
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+    
+    with open(config_path, "r") as file:
+        try:
+            config = yaml.safe_load(file)
+            return config
+        except yaml.YAMLError as e:
+            raise ValueError(f"Error parsing configuration file: {e}")
+
+def get_config(config_path: str) -> dict:
+    """Load and return configuration."""
+    logger = get_logger(__name__)
+    logger.info(f"Loading configuration from: {config_path}")
+    return load_config(config_path)
+
+# ============================================================================
+# SCENARIO CONFIGURATION
+# ============================================================================
 
 # Scenario 1: source price valid, target price missing
 NUM_SOURCE_VALID_TARGET_MISSING = 2
@@ -1027,7 +1063,7 @@ def main():
     """Main function to run the simulation."""
     try:
         # Set up logging
-        setLoggingLevel(LOG_LEVEL.upper())
+        setup_logging(LOG_LEVEL.upper())
         logger = get_logger(__name__)
         
         logger.info("Starting Price Scenario Simulation")
