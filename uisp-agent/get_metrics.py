@@ -120,6 +120,7 @@ def extract_device_metrics(device):
         metrics["signal"] = overview.get("signal")
         metrics["downlinkUtilization"] = overview.get("downlinkUtilization")
         metrics["uplinkUtilization"] = overview.get("uplinkUtilization")
+        metrics["capacity"] = overview.get("totalCapacity")
         metrics["linkActiveStationsCount"] = overview.get("linkActiveStationsCount")
         
         # Per-station capacity metrics
