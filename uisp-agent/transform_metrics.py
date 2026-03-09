@@ -132,7 +132,7 @@ def transform_uisp_to_insightfinder(
         # Active Stations Count
         if device_data.get("linkActiveStationsCount") is not None:
             metric_data_point_set.append({
-                "m": "activeStationsCount",
+                "m": "Total Clients",
                 "v": float(device_data["linkActiveStationsCount"])
             })
         
