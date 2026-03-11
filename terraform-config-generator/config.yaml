@@ -6,8 +6,15 @@ STG:
   username: YOUR_USERNAME
   licensekey: YOUR_LICENSE_KEY
   project_types: [Log]
+  terraform_version: 1.7.0
+  only_process:
+    projects: ["Project A", "Project B"]
 PROD:
   base_url: https://app.insightfinder.com/
   username: YOUR_USERNAME
   licensekey: YOUR_LICENSE_KEY
   project_types: [Log]
+  terraform_version: 1.7.0
+  only_process:
+    systems: ["System A"] # process all projects in the system
+    projects: ["Project C"] # process this project even if it's not in the above system (this will still create original system name folder structure)
