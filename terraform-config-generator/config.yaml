@@ -1,0 +1,13 @@
+# InsightFinder Terraform automation config
+# Delay: seconds to wait between project API calls (0 = no delay)
+Delay: 2
+STG:
+  base_url: https://stg.insightfinder.com/
+  username: YOUR_USERNAME
+  licensekey: YOUR_LICENSE_KEY
+  project_types: [Log]
+PROD:
+  base_url: https://app.insightfinder.com/
+  username: YOUR_USERNAME
+  licensekey: YOUR_LICENSE_KEY
+  project_types: [Log]
