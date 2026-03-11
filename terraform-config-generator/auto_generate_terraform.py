@@ -18,6 +18,10 @@ config.yaml format:
       username: nbcAdmin
       licensekey: xyzzzz
       project_types: [metric, log]
+      terraform_version: 1.7.0        # optional; defaults to ">= 1.6.1"
+      only_process:                   # optional; omit to process everything
+        systems: ["System A"]         # process all projects in these systems
+        projects: ["Project X"]       # also process these projects (original system folder structure)
     PROD:
       base_url: https://app.insightfinder.com/
       username: mustafa
@@ -255,14 +259,14 @@ def fetch_system_level_settings(session: requests.Session, host: str, username: 
 # Terraform file generators
 # ---------------------------------------------------------------------------
 
-def _versions_tf(env_name: str, system_name: str) -> str:
+def _versions_tf(env_name: str, system_name: str, terraform_version: str = ">= 1.6.1") -> str:
     key = f"{env_name}/{system_name}/terraform.tfstate"
     return f'''\
 terraform {{
   required_providers {{
     insightfinder = {{
       source  = "insightfinder/insightfinder"
-      version = ">= 1.6.1"
+      version = "{terraform_version}"
     }}
   }}
 
@@ -702,13 +706,19 @@ def write_file(path: str, content: str, dry_run: bool = False) -> None:
 
 def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
                    system: Dict, output_dir: str, delay: float,
-                   dry_run: bool) -> Dict[str, int]:
-    """Generate all Terraform files for one system. Returns stats."""
+                   dry_run: bool,
+                   allowed_projects: Optional[set] = None) -> Dict[str, int]:
+    """Generate all Terraform files for one system. Returns stats.
+
+    allowed_projects: if set, only process projects whose names are in this set.
+                      None means process all projects (subject to type filter).
+    """
     system_name = get_system_display_name(system)
     system_id = get_system_id(system)
     base_url = env_cfg["base_url"].rstrip('/')
     username = env_cfg["username"]
     api_key = env_cfg["licensekey"]
+    terraform_version = str(env_cfg.get("terraform_version", ">= 1.6.1"))
     project_types: List[str] = env_cfg.get("project_types", env_cfg.get("project_type", []))
     if isinstance(project_types, str):
         project_types = [project_types]
@@ -723,7 +733,13 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
         all_projects = all_projects_raw or []
     projects = filter_projects_by_type(all_projects, project_types)
 
-    print(f"\n  System: {system_name!r}  ({len(projects)}/{len(all_projects)} projects after type filter)")
+    # Apply only_process.projects filter if provided
+    if allowed_projects is not None:
+        projects = [p for p in projects
+                    if (p.get("projectName") or p.get("name") or "") in allowed_projects]
+
+    filter_desc = "type+project filter" if allowed_projects is not None else "type filter"
+    print(f"\n  System: {system_name!r}  ({len(projects)}/{len(all_projects)} projects after {filter_desc})")
 
     if not projects:
         print("    No matching projects — skipping system.")
@@ -750,7 +766,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
 
     # --- Write system-level files ---
     write_file(os.path.join(system_dir, "versions.tf"),
-               _versions_tf(env_name, system_name), dry_run)
+               _versions_tf(env_name, system_name, terraform_version), dry_run)
     write_file(os.path.join(system_dir, "provider.tf"),
                _provider_tf(), dry_run)
     write_file(os.path.join(system_dir, "variables.tf"),
@@ -861,14 +877,56 @@ def run(config_path: str, output_dir: str, env_filter: Optional[str],
             print(f"  Skipping {env_name}: missing username/licensekey/base_url", file=sys.stderr)
             continue
 
+        # Parse only_process filter
+        only_process = env_cfg.get("only_process") or {}
+        allowed_systems: set = set(only_process.get("systems") or [])
+        extra_projects: set = set(only_process.get("projects") or [])
+        has_filter = bool(allowed_systems or extra_projects)
+
+        if has_filter:
+            parts = []
+            if allowed_systems:
+                parts.append(f"systems={sorted(allowed_systems)}")
+            if extra_projects:
+                parts.append(f"projects={sorted(extra_projects)}")
+            print(f"  only_process filter: {', '.join(parts)}")
+
         print(f"  Fetching owned systems for {username}...")
         systems = get_own_systems(session, base_url, username, api_key, username)
         print(f"  Found {len(systems)} owned system(s).")
 
         for system in systems:
+            system_display = get_system_display_name(system)
+
+            if has_filter:
+                system_in_allowed = system_display in allowed_systems
+
+                if system_in_allowed:
+                    # Process all projects in this system (type filter still applies)
+                    project_filter = None
+                else:
+                    # Check if any explicitly listed projects belong to this system
+                    if not extra_projects:
+                        print(f"\n  System: {system_display!r} — skipped (not in only_process.systems)")
+                        continue
+                    system_project_names = {
+                        (p.get("projectName") or p.get("name") or "")
+                        for p in (system.get("projectDetailsList")
+                                  or system.get("projectDetailList") or [])
+                        if isinstance(p, dict)
+                    }
+                    matching = extra_projects & system_project_names
+                    if not matching:
+                        print(f"\n  System: {system_display!r} — skipped (no matching projects)")
+                        continue
+                    project_filter = matching
+            else:
+                project_filter = None
+
             total_systems += 1
             stats = process_system(session, env_name, env_cfg, system,
-                                   output_dir, global_delay, dry_run)
+                                   output_dir, global_delay, dry_run,
+                                   allowed_projects=project_filter)
             total_projects += stats["projects"]
             total_skipped += stats["skipped"]
 

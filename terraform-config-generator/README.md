@@ -22,7 +22,7 @@ pip install requests pyyaml
 
 - Python 3.10+
 - Terraform >= 1.0
-- InsightFinder Terraform Provider >= 1.6.1
+- InsightFinder Terraform Provider >= 1.6.1 (version constraint set via `terraform_version` in config)
 
 ---
 
@@ -38,13 +38,55 @@ STAGING:
   username: yourUsername
   licensekey: YOUR_LICENSE_KEY
   project_types: [log]        # log, metric, alert, trace
+  terraform_version: 1.7.0   # optional; written into versions.tf (default: ">= 1.6.1")
 
 PROD:
   base_url: https://app.insightfinder.com/
   username: yourUsername
   licensekey: YOUR_LICENSE_KEY
   project_types: [log, metric]
+  terraform_version: 1.7.0
+  only_process:               # optional; omit to process all owned systems/projects
+    systems: ["System A"]     # process ALL projects in these systems
+    projects: ["Project C"]   # also process these specific projects (uses their original system folder)
 ```
+
+#### `terraform_version`
+
+Sets the provider version constraint written into each `versions.tf`:
+
+```hcl
+insightfinder = {
+  source  = "insightfinder/insightfinder"
+  version = "1.7.0"           # taken from terraform_version in config
+}
+```
+
+If omitted, the default constraint `>= 1.6.1` is used.
+
+#### `only_process`
+
+Limits which systems and projects are generated. Both fields are optional and can be used together or independently.
+
+| Field | Behaviour |
+|-------|-----------|
+| `systems` | Process **all** projects (matching `project_types`) inside the listed systems |
+| `projects` | Process these specific projects regardless of which system they belong to; the original system's folder structure is preserved |
+
+**Examples:**
+
+```yaml
+# Only two specific projects, no system restriction
+only_process:
+  projects: ["Project A", "Project B"]
+
+# All projects in System A, plus one extra project from any other system
+only_process:
+  systems: ["System A"]
+  projects: ["Project C"]
+```
+
+If `only_process` is omitted entirely, all owned systems and projects are processed (existing behaviour).
 
 ### 2. Run
 
