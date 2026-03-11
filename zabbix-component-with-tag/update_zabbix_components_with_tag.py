@@ -246,13 +246,15 @@ def get_component_names_from_metadata(metadata, project_instances_list):
         if hostname not in instance_component_name_dict and hostname in project_instances_list:
             component_type = match_component_type(hostname)
             
-            # Extract jira_make tag value
+            # Extract jira_make and jira_model tag values
             jira_make_value = None
+            jira_model_value = None
             tags = host.get('tags', [])
             for tag in tags:
                 if tag.get('tag') == 'jira_make':
                     jira_make_value = tag.get('value', '')
-                    break
+                elif tag.get('tag') == 'jira_model':
+                    jira_model_value = tag.get('value', '')
             
             # Append jira_make to component name if both exist
             if component_type and jira_make_value:
@@ -261,6 +263,11 @@ def get_component_names_from_metadata(metadata, project_instances_list):
             # Special handling for Mimosa devices
             if jira_make_value and 'mimosa' in jira_make_value.lower():
                 component_type = f"PTP-Mimosa"
+            
+            # Fallback: If no component name was generated, check for Aviat with WTM model
+            if not component_type and jira_make_value and jira_model_value:
+                if jira_make_value.lower() == 'aviat' and jira_model_value.upper().startswith('WTM'):
+                    component_type = f"PTP-{jira_make_value}"
             
             instance_component_name_dict[hostname] = component_type
 
