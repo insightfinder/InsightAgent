@@ -22,12 +22,27 @@ user_agent = "Mozilla/5.0 (compatible; InsightFinderClient/1.0;)"
 DB_FILE = "devices.db"
 TABLE_NAME = "devices"
 OUTPUT_YAML_FILE = "instance_metadata.yaml"
+MANUAL_INSTANCE_MAPPING_FILE = "instance-device-manual.yaml"
 
 def sanitize_name(name):
     """Removes all special characters from a string, leaving only alphanumeric characters."""
     if not name:
         return ""
     return re.sub(r'[^a-zA-Z0-9]', '', name)
+
+def load_manual_mapping():
+    """Load manual instance-to-device mapping from YAML file."""
+    try:
+        with open(MANUAL_INSTANCE_MAPPING_FILE, 'r') as f:
+            manual_mapping = yaml.safe_load(f)
+        print(f"Loaded manual mapping with {len(manual_mapping)} entries from {MANUAL_INSTANCE_MAPPING_FILE}")
+        return manual_mapping if manual_mapping else {}
+    except FileNotFoundError:
+        print(f"Info: {MANUAL_INSTANCE_MAPPING_FILE} not found. Manual fallback mapping will not be used.")
+        return {}
+    except Exception as e:
+        print(f"Error loading {MANUAL_INSTANCE_MAPPING_FILE}: {e}")
+        return {}
 
 # --- InsightFinder Functions ---
 def login(session: requests.Session):
@@ -119,6 +134,9 @@ def process_project(project_name_to_query: str, session: requests.Session = None
             return {}
         print(f"Found {len(instance_list)} instances.")
 
+        # Load manual mapping for fallback
+        manual_mapping = load_manual_mapping()
+
         # 2. Query database and build metadata mapping
         all_instance_metadata = {}
         print("Querying database for each instance...")
@@ -128,7 +146,19 @@ def process_project(project_name_to_query: str, session: requests.Session = None
                 print(f"Skipping instance '{original_instance_name}' (empty after sanitization).")
                 continue
 
+            # Try to query device data using sanitized instance name
             device_info = query_device_data(sanitized_instance)
+            
+            # Fallback: Check manual mapping if database lookup fails
+            if not device_info and original_instance_name in manual_mapping:
+                manual_device_name = manual_mapping[original_instance_name]
+                sanitized_device_name = sanitize_name(manual_device_name)
+                if sanitized_device_name:
+                    print(f"Fallback: Found manual mapping for '{original_instance_name}' -> '{manual_device_name}'")
+                    device_info = query_device_data(sanitized_device_name)
+                    if device_info:
+                        print(f"Fallback: Successfully retrieved device data for '{manual_device_name}' from database")
+            
             if device_info:
                 all_instance_metadata[original_instance_name] = device_info
             else:
