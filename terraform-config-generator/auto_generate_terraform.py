@@ -59,6 +59,9 @@ from generate_terraform_cli import (
     convert_keywords_to_log_labels,
     convert_json_keys_to_terraform,
     generate_system_settings_config,
+    generate_servicenow_env_config,
+    _parse_servicenow_entry,
+    _sn_safe_name,
     parse_project_settings,
 )
 
@@ -253,6 +256,175 @@ def fetch_system_level_settings(session: requests.Session, host: str, username: 
         notifications = all_notif[system_id]
 
     return kb_global, kb_incident, notifications
+
+
+def fetch_servicenow_env_configs(session: requests.Session, host: str,
+                                 username: str, api_key: str) -> List[Dict]:
+    """Fetch all environment-level ServiceNow configurations from the API.
+
+    Returns a list of parsed config dicts (one per extServiceAllInfo entry).
+    """
+    url = f"{host.rstrip('/')}/api/external/v1/system/externalServlies/list"
+    headers = api_headers(username, api_key)
+    params = {"serviceProvider": "ServiceNow", "tzOffset": "-14400000"}
+
+    data = fetch_json(session, url, headers, params)
+    if not data or not data.get("success"):
+        return []
+
+    entries_raw = data.get("extServiceAllInfo", [])
+    configs = []
+    for entry in entries_raw:
+        parsed = _parse_servicenow_entry(entry)
+        if parsed:
+            configs.append(parsed)
+    return configs
+
+
+def _build_system_id_to_name(systems: List[Dict]) -> Dict[str, str]:
+    """Build a mapping from system ID (hash) to display name from the systems list."""
+    id_to_name: Dict[str, str] = {}
+    for system in systems:
+        system_id = get_system_id(system)
+        display_name = get_system_display_name(system)
+        if system_id and display_name:
+            id_to_name[system_id] = display_name
+    return id_to_name
+
+
+def _servicenow_env_variables_tf(sn_configs: List[Dict]) -> str:
+    """Generate variables.tf for the env-level servicenow root module."""
+    lines = [
+        'variable "if_username" {',
+        '  description = "InsightFinder account username"',
+        '  type        = string',
+        '}',
+        '',
+        'variable "if_licensekey" {',
+        '  description = "InsightFinder license key"',
+        '  type        = string',
+        '  sensitive   = true',
+        '}',
+        '',
+        'variable "base_url" {',
+        '  description = "Base URL of the InsightFinder instance"',
+        '  type        = string',
+        '}',
+    ]
+
+    for config in sn_configs:
+        safe_name = _sn_safe_name(config["account"], config["service_host"])
+        var_prefix = f"sn_{safe_name}"
+        account = config["account"]
+        service_host = config["service_host"]
+
+        lines += [
+            '',
+            f'variable "{var_prefix}_password" {{',
+            f'  description = "Password for ServiceNow account {account} at {service_host}"',
+            '  type        = string',
+            '  sensitive   = true',
+            '}',
+        ]
+
+        if config.get("auth_type") == "oauth":
+            lines += [
+                '',
+                f'variable "{var_prefix}_app_key" {{',
+                f'  description = "App key for ServiceNow account {account} at {service_host}"',
+                '  type        = string',
+                '  sensitive   = true',
+                '}',
+            ]
+
+    return '\n'.join(lines) + '\n'
+
+
+def _servicenow_env_tfvars(base_url: str, sn_configs: List[Dict]) -> str:
+    """Generate terraform.tfvars for the env-level servicenow root module."""
+    lines = [
+        '# Environment-level ServiceNow integration settings.',
+        '# ⚠️  Sensitive values (credentials) are loaded from GitHub Secrets.',
+        '#     See workflows for secret naming convention: <ENV>_SN_<ACCOUNT>_<VARNAME>',
+        '',
+        f'base_url = "{base_url}"',
+        '',
+        '# InsightFinder credentials — loaded from secrets',
+        '# if_username   = "..."  # Set via GitHub Secrets',
+        '# if_licensekey = "..."  # Set via GitHub Secrets',
+    ]
+
+    for config in sn_configs:
+        safe_name = _sn_safe_name(config["account"], config["service_host"])
+        var_prefix = f"sn_{safe_name}"
+        lines += [
+            '',
+            f'# ServiceNow: {config["account"]} @ {config["service_host"]}',
+            f'# {var_prefix}_password = "..."  # Set via GitHub Secrets',
+        ]
+        if config.get("auth_type") == "oauth":
+            lines.append(f'# {var_prefix}_app_key = "..."  # Set via GitHub Secrets')
+
+    return '\n'.join(lines) + '\n'
+
+
+def process_env_servicenow(session: requests.Session, env_name: str, env_cfg: Dict,
+                           systems: List[Dict], output_dir: str,
+                           dry_run: bool) -> int:
+    """Generate env-level ServiceNow Terraform files under ENV/servicenow/.
+
+    Returns the number of ServiceNow configs generated (0 if none found).
+    """
+    base_url = env_cfg["base_url"].rstrip('/')
+    username = env_cfg["username"]
+    api_key = env_cfg["licensekey"]
+    terraform_version = str(env_cfg.get("terraform_version", ">= 1.6.1"))
+
+    print(f"\n  Fetching environment-level ServiceNow configurations...")
+    sn_configs = fetch_servicenow_env_configs(session, base_url, username, api_key)
+
+    if not sn_configs:
+        print(f"  No ServiceNow configurations found — skipping servicenow module.")
+        return 0
+
+    print(f"  Found {len(sn_configs)} ServiceNow configuration(s).")
+
+    # Resolve system IDs → display names using the already-fetched systems list
+    system_id_to_name = _build_system_id_to_name(systems)
+    for config in sn_configs:
+        config["system_names"] = [
+            system_id_to_name.get(sid, sid) for sid in config.get("system_ids", [])
+        ]
+
+    env_sn_dir = os.path.join(output_dir, env_name, "servicenow")
+
+    # versions.tf — dedicated S3 backend key for the servicenow root module
+    write_file(os.path.join(env_sn_dir, "versions.tf"),
+               _versions_tf(env_name, "servicenow", terraform_version), dry_run)
+
+    write_file(os.path.join(env_sn_dir, "provider.tf"),
+               _provider_tf(), dry_run)
+
+    write_file(os.path.join(env_sn_dir, "variables.tf"),
+               _servicenow_env_variables_tf(sn_configs), dry_run)
+
+    write_file(os.path.join(env_sn_dir, "terraform.tfvars"),
+               _servicenow_env_tfvars(base_url, sn_configs), dry_run)
+
+    sn_hcl = generate_servicenow_env_config(
+        sn_entries=sn_configs,
+        include_provider=False,  # provider.tf handles this
+        use_vars=True,           # reference var.sn_*_password etc.
+        system_id_to_name=system_id_to_name,
+    )
+    write_file(os.path.join(env_sn_dir, "servicenow.tf"),
+               sn_hcl, dry_run)
+
+    for config in sn_configs:
+        print(f"    ServiceNow: {config['account']} @ {config['service_host']}"
+              + (f" → {len(config['system_names'])} system(s)" if config.get('system_names') else ""))
+
+    return len(sn_configs)
 
 
 # ---------------------------------------------------------------------------
@@ -754,15 +926,45 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
         session, base_url, username, api_key, username, system_id
     )
 
+    # --- Pre-fetch all project data so ServiceNow detection is based on actual API
+    #     response, not just cloudType (which may be missing/incorrect in some envs) ---
+    print(f"    Pre-fetching project data ({len(projects)} projects)...")
+    prefetched: Dict[str, Any] = {}   # project_name -> project_data
+    for proj in projects:
+        project_name = proj.get("projectName") or proj.get("name") or ""
+        if not project_name:
+            continue
+        try:
+            prefetched[project_name] = fetch_project_data(
+                session, base_url, username, api_key, username, project_name
+            )
+        except Exception as e:
+            print(f"      Error pre-fetching {project_name!r}: {e}", file=sys.stderr)
+        if delay > 0:
+            time.sleep(delay)
+
     # --- Determine if any project uses ServiceNow ---
+    # A project is treated as ServiceNow if cloudType says so OR if the API
+    # returned real ServiceNow settings (handles envs where cloudType is missing).
+    def _is_servicenow(proj: Dict) -> bool:
+        name = proj.get("projectName") or proj.get("name") or ""
+        if (proj.get("cloudType") or "").lower() == "servicenow":
+            return True
+        return bool((prefetched.get(name) or {}).get("servicenow"))
+
     servicenow_projects = {
-        p["projectName"] for p in projects
-        if (p.get("cloudType") or "").lower() == "servicenow"
+        (p.get("projectName") or p.get("name") or "")
+        for p in projects if _is_servicenow(p)
     }
     has_servicenow = len(servicenow_projects) > 0
 
-    # Collect a representative SN host from project data (filled in later)
+    # Collect a representative SN host for tfvars
     sn_host_for_tfvars = ""
+    for sn_name in servicenow_projects:
+        sn_data = (prefetched.get(sn_name) or {}).get("servicenow")
+        if sn_data and sn_data.get("host"):
+            sn_host_for_tfvars = sn_data["host"]
+            break
 
     # --- Write system-level files ---
     write_file(os.path.join(system_dir, "versions.tf"),
@@ -793,7 +995,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
         write_file(os.path.join(system_dir, "system_settings.tf"),
                    sys_settings_content + "\n", dry_run)
 
-    # --- Generate per-project files ---
+    # --- Generate per-project files from pre-fetched data ---
     generated = 0
     skipped = 0
 
@@ -803,24 +1005,14 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
             skipped += 1
             continue
 
+        project_data = prefetched.get(project_name)
+        if project_data is None:
+            skipped += 1
+            continue
+
         is_sn = project_name in servicenow_projects
         print(f"    [{generated + skipped + 1}/{len(projects)}] {project_name}"
               + (" (ServiceNow)" if is_sn else ""))
-
-        try:
-            project_data = fetch_project_data(
-                session, base_url, username, api_key, username, project_name
-            )
-        except Exception as e:
-            print(f"      Error fetching data: {e}", file=sys.stderr)
-            skipped += 1
-            if delay > 0:
-                time.sleep(delay)
-            continue
-
-        # Capture SN host from first SN project
-        if is_sn and not sn_host_for_tfvars and project_data.get("servicenow"):
-            sn_host_for_tfvars = project_data["servicenow"].get("host", "")
 
         try:
             tf_content = generate_project_tf(project_name, project_data,
@@ -828,16 +1020,11 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
         except Exception as e:
             print(f"      Error generating TF: {e}", file=sys.stderr)
             skipped += 1
-            if delay > 0:
-                time.sleep(delay)
             continue
 
         tf_filename = tf_resource_name(project_name) + ".tf"
         write_file(os.path.join(projects_dir, tf_filename), tf_content + "\n", dry_run)
         generated += 1
-
-        if delay > 0:
-            time.sleep(delay)
 
     # --- Write terraform.tfvars (after we have SN host if any) ---
     write_file(os.path.join(system_dir, "terraform.tfvars"),
@@ -894,6 +1081,9 @@ def run(config_path: str, output_dir: str, env_filter: Optional[str],
         print(f"  Fetching owned systems for {username}...")
         systems = get_own_systems(session, base_url, username, api_key, username)
         print(f"  Found {len(systems)} owned system(s).")
+
+        # Generate environment-level ServiceNow root module (ENV/servicenow/)
+        process_env_servicenow(session, env_name, env_cfg, systems, output_dir, dry_run)
 
         for system in systems:
             system_display = get_system_display_name(system)
