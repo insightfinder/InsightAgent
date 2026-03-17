@@ -126,6 +126,205 @@ def convert_json_keys_to_terraform(json_keys_data, summary_settings=None, metafi
     return json_key_settings
 
 
+def _sn_safe_name(account, service_host):
+    """Generate a safe Terraform resource/variable name suffix from account and service host."""
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(service_host)
+        host_part = parsed.netloc or parsed.path
+    except Exception:
+        host_part = service_host
+    combined = f"{account}_{host_part}"
+    return re.sub(r'[^a-z0-9_]', '_', combined.lower())
+
+
+def _parse_servicenow_entry(entry):
+    """Parse a single ServiceNow entry from extServiceAllInfo API response.
+
+    Returns a dict with normalized fields, or None if the entry is invalid.
+    """
+    account = entry.get("account", "")
+    service_host = entry.get("service_host", "")
+    if not account or not service_host:
+        return None
+
+    config = {
+        "account": account,
+        "service_host": service_host,
+        "password": entry.get("password", ""),
+        "proxy": entry.get("proxy", ""),
+        "dampening_period": int(entry.get("dampeningPeriod", 0)),
+        "app_id": entry.get("appId", ""),
+        "app_key": entry.get("appKey", ""),
+        "system_ids": [],
+        "system_names": [],
+        "options": [],
+        "content_option": [],
+        "service_now_field": entry.get("serviceNowField", ""),
+        "content_source": entry.get("contentSource", ""),
+        "trigger_window_in_mills": 0,
+        "table_mapping": {},
+    }
+
+    # Parse options JSON array string
+    options_str = entry.get("options", "")
+    if options_str:
+        try:
+            config["options"] = json.loads(options_str)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Parse configs JSON string for systemIds, contentOption, triggerWindowInMills
+    configs_str = entry.get("configs", "")
+    if configs_str:
+        try:
+            configs = json.loads(configs_str)
+            config["system_ids"] = [str(sid) for sid in configs.get("systemIds", [])]
+            config["content_option"] = [str(co) for co in configs.get("contentOption", [])]
+            if not config["service_now_field"]:
+                config["service_now_field"] = configs.get("serviceNowField", "")
+            if not config["content_source"]:
+                config["content_source"] = configs.get("contentSource", "")
+            trigger = configs.get("triggerWindowInMills", 0)
+            if trigger:
+                config["trigger_window_in_mills"] = int(float(trigger))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+    # Parse tableMapping array of [projectName, tableName] pairs
+    table_mapping_raw = entry.get("tableMapping", [])
+    if isinstance(table_mapping_raw, list):
+        for row in table_mapping_raw:
+            if isinstance(row, list) and len(row) == 2:
+                config["table_mapping"][str(row[0])] = str(row[1])
+
+    # Determine auth type from appId/appKey presence
+    config["auth_type"] = "oauth" if (config["app_id"] and config["app_key"]) else "basic"
+
+    return config
+
+
+def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="",
+                                   use_vars=False, system_id_to_name=None):
+    """Generate Terraform configuration for insightfinder_servicenow resources.
+
+    One resource block is generated per entry. This is an environment-level resource,
+    not tied to any specific system.
+
+    Args:
+        sn_entries: List of parsed ServiceNow config dicts (from _parse_servicenow_entry).
+        include_provider: Whether to include terraform/provider blocks.
+        base_url: InsightFinder base URL (used in provider block when include_provider=True).
+        use_vars: If True, sensitive fields (password, app_key) reference Terraform variables
+                  named var.sn_<safe_name>_password / var.sn_<safe_name>_app_key.
+                  If False, outputs empty strings with TODO comments.
+        system_id_to_name: Optional dict mapping system IDs to display names. When provided,
+                           system_ids are resolved to names for the system_names attribute.
+
+    Returns:
+        HCL string for all insightfinder_servicenow resources.
+    """
+    if not sn_entries:
+        return ""
+
+    if system_id_to_name is None:
+        system_id_to_name = {}
+
+    lines = []
+
+    if include_provider:
+        lines += [
+            'terraform {',
+            '  required_providers {',
+            '    insightfinder = {',
+            '      source  = "insightfinder/insightfinder"',
+            '      version = ">= 1.6.1"',
+            '    }',
+            '  }',
+            '}',
+            '',
+            'provider "insightfinder" {',
+            f'  base_url = "{base_url}"',
+            '}',
+            '',
+        ]
+
+    for config in sn_entries:
+        account = config["account"]
+        service_host = config["service_host"]
+        safe_name = _sn_safe_name(account, service_host)
+        var_prefix = f"sn_{safe_name}"
+
+        # Resolve system names: prefer pre-resolved names, then look up by ID, then fall back to ID
+        system_names = list(config.get("system_names", []))
+        if not system_names:
+            system_names = [system_id_to_name.get(sid, sid) for sid in config.get("system_ids", [])]
+
+        lines.append(f'resource "insightfinder_servicenow" "{safe_name}" {{')
+        lines.append(f'  account      = "{account}"')
+        lines.append(f'  service_host = "{service_host}"')
+
+        if use_vars:
+            lines.append(f'  password     = var.{var_prefix}_password')
+        else:
+            lines.append(f'  password     = ""  # TODO: set password for {account} @ {service_host}')
+
+        lines.append(f'  auth_type    = "{config["auth_type"]}"')
+
+        if config.get("app_id"):
+            lines.append(f'  app_id       = "{config["app_id"]}"')
+        if config.get("app_key"):
+            if use_vars:
+                lines.append(f'  app_key      = var.{var_prefix}_app_key')
+            else:
+                lines.append(f'  app_key      = ""  # TODO: set app_key for {account} @ {service_host}')
+
+        proxy = config.get("proxy", "")
+        escaped_proxy = proxy.replace('"', '\\"')
+        lines.append(f'  proxy        = "{escaped_proxy}"')
+
+        lines.append(f'  dampening_period = {config["dampening_period"]}')
+        lines.append('')
+
+        if system_names:
+            names_json = json.dumps(system_names)
+            lines.append(f'  system_names = {names_json}')
+        elif config.get("system_ids"):
+            ids_comment = ", ".join(f'"{sid}"' for sid in config["system_ids"])
+            lines.append(f'  # TODO: replace system IDs with display names: {ids_comment}')
+            lines.append(f'  system_names = []')
+
+        if config.get("options"):
+            lines.append(f'  options        = {json.dumps(config["options"])}')
+
+        if config.get("content_option"):
+            lines.append(f'  content_option = {json.dumps(config["content_option"])}')
+
+        if config.get("service_now_field"):
+            escaped = config["service_now_field"].replace('"', '\\"')
+            lines.append(f'  service_now_field = "{escaped}"')
+
+        if config.get("content_source"):
+            escaped = config["content_source"].replace('"', '\\"')
+            lines.append(f'  content_source = "{escaped}"')
+
+        if config.get("trigger_window_in_mills"):
+            lines.append(f'  trigger_window_in_mills = {config["trigger_window_in_mills"]}')
+
+        if config.get("table_mapping"):
+            lines.append('  table_mapping = {')
+            for project, table in config["table_mapping"].items():
+                proj_e = project.replace('"', '\\"')
+                table_e = table.replace('"', '\\"')
+                lines.append(f'    "{proj_e}" = "{table_e}"')
+            lines.append('  }')
+
+        lines.append('}')
+        lines.append('')
+
+    return '\n'.join(lines)
+
+
 def generate_terraform_config(project_name, settings_data, keywords_data, servicenow_data=None,
                               json_keys_data=None, summary_settings=None, metafield_settings=None,
                               dampening_field_settings=None,
@@ -393,10 +592,21 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
     return '\n'.join(config)
 
 
+def _format_string_list(lst: list) -> str:
+    """Format a Python list of strings as an HCL list literal: ["a", "b"]."""
+    if not lst:
+        return "[]"
+    items = ", ".join(f'"{s}"' for s in lst)
+    return f"[{items}]"
+
+
 def generate_system_settings_config(system_name: str, kb_global_data: dict | None,
                                     kb_incident_data: dict | None,
                                     notifications_data: dict | None,
-                                    system_name_expr: str | None = None) -> str:
+                                    system_name_expr: str | None = None,
+                                    system_down_data: dict | None = None,
+                                    insights_report_data: dict | None = None,
+                                    instance_down_items: list | None = None) -> str:
     """Generate an insightfinder_system_settings Terraform resource block.
 
     Args:
@@ -501,6 +711,47 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
             if val is not None:
                 lines.append(f'    {tf_key} = {format_terraform_value(val)}')
 
+        # system_down_notification — only include if enabled
+        if system_down_data and system_down_data.get("enableSystemDownEmailAlert"):
+            lines.append('')
+            lines.append('    system_down_notification = {')
+            lines.append(f'      enable_system_down_email_alert = true')
+            lines.append(f'      email_dampening_period         = {system_down_data.get("emailDampeningPeriod", 3600000)}')
+            lines.append(f'      email_set                      = {_format_string_list(system_down_data.get("emailSet") or [])}')
+            lines.append('    }')
+
+        # daily_report_notification — only include if enabled
+        if insights_report_data and insights_report_data.get("enableDailyInsightsReport"):
+            lines.append('')
+            lines.append('    daily_report_notification = {')
+            lines.append(f'      enable_insights_report = true')
+            lines.append(f'      email_set              = {_format_string_list(insights_report_data.get("emailSet") or [])}')
+            lines.append('    }')
+
+        # weekly_report_notification — only include if enabled
+        if insights_report_data and insights_report_data.get("enableWeeklyInsightsReport"):
+            lines.append('')
+            lines.append('    weekly_report_notification = {')
+            lines.append(f'      enable_insights_report = true')
+            lines.append(f'      email_set              = {_format_string_list(insights_report_data.get("weeklyEmailSet") or [])}')
+            lines.append('    }')
+
+        # instance_down_notification — one block per project where instanceDownEnable=true
+        if instance_down_items:
+            lines.append('')
+            lines.append('    instance_down_notification = [')
+            for i, item in enumerate(instance_down_items):
+                is_last = i == len(instance_down_items) - 1
+                lines.append('      {')
+                lines.append(f'        project_name              = "{item["projectName"]}"')
+                lines.append(f'        instance_down_enable      = true')
+                lines.append(f'        instance_down_dampening   = {item.get("instanceDownDampening", 3600000)}')
+                lines.append(f'        instance_down_threshold   = {item.get("instanceDownThreshold", 3600000)}')
+                lines.append(f'        instance_down_report_number = {item.get("instanceDownReportNumber", 50)}')
+                lines.append(f'        instance_down_emails      = {_format_string_list(item.get("instanceDownEmails") or [])}')
+                lines.append('      }' + ('' if is_last else ','))
+            lines.append('    ]')
+
         lines.append('  }')
 
     lines.append('}')
@@ -546,8 +797,12 @@ Examples:
         """
     )
     
-    parser.add_argument('--settings', required=True, help='Path to settings JSON file (sample_settings.json)')
-    parser.add_argument('--keywords', required=True, help='Path to keywords JSON file (sample_keywords.json)')
+    parser.add_argument('--settings', help='Path to settings JSON file (sample_settings.json)')
+    parser.add_argument('--keywords', help='Path to keywords JSON file (sample_keywords.json)')
+    parser.add_argument('--servicenow-external-settings', dest='servicenow_external_settings',
+                        help='Path to external ServiceNow settings JSON '
+                             '(extServiceAllInfo API response). Generates insightfinder_servicenow '
+                             'resources at environment level (not tied to any system).')
     parser.add_argument('--servicenow', help='Path to ServiceNow settings JSON file (optional)')
     parser.add_argument('--json-keys', help='Path to JSON keys definition file (optional, sample_jsonkey.json)')
     parser.add_argument('--summary-metafield',
@@ -569,7 +824,63 @@ Examples:
                         help='Path to notifications/health-view settings JSON (sample_notifications.json)')
     
     args = parser.parse_args()
-    
+
+    # Validate argument combinations
+    if not args.settings and not args.servicenow_external_settings:
+        parser.error("at least one of --settings or --servicenow-external-settings is required")
+    if args.settings and not args.keywords:
+        parser.error("--keywords is required when --settings is provided")
+
+    # -----------------------------------------------------------------------
+    # ServiceNow-only mode: generate insightfinder_servicenow resources from
+    # the external settings API response (environment-level, no system/project).
+    # -----------------------------------------------------------------------
+    if args.servicenow_external_settings and not args.settings:
+        try:
+            with open(args.servicenow_external_settings, 'r') as f:
+                ext_raw = json.load(f)
+        except FileNotFoundError:
+            print(f"Error: File not found: {args.servicenow_external_settings}", file=sys.stderr)
+            sys.exit(1)
+        except json.JSONDecodeError as e:
+            print(f"Error: Invalid JSON in external settings file: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        entries_raw = ext_raw.get("extServiceAllInfo", [])
+        sn_entries = [_parse_servicenow_entry(e) for e in entries_raw]
+        sn_entries = [e for e in sn_entries if e is not None]
+
+        if not sn_entries:
+            print("Warning: No valid ServiceNow configurations found in the input file.", file=sys.stderr)
+            sys.exit(0)
+
+        output_file = args.output or "servicenow.tf"
+        sn_hcl = generate_servicenow_env_config(
+            sn_entries=sn_entries,
+            include_provider=not args.no_provider,
+            base_url=args.base_url,
+            use_vars=False,  # CLI mode: output placeholders, not var refs
+        )
+
+        with open(output_file, 'w') as f:
+            f.write(sn_hcl)
+
+        print(f"\nServiceNow Terraform configuration generated: {output_file}")
+        print(f"   Configurations: {len(sn_entries)}")
+        for e in sn_entries:
+            print(f"   - {e['account']} @ {e['service_host']}")
+        print("\nNote: Replace TODO placeholders (password, app_key, system_names) before applying.")
+        print("Next steps:")
+        print("1. Review and update placeholder values in the generated file")
+        print("2. Run: terraform init")
+        print("3. Run: terraform plan")
+        print("4. Run: terraform apply")
+        return
+
+    # -----------------------------------------------------------------------
+    # Project mode (existing behaviour): load settings and generate project TF
+    # -----------------------------------------------------------------------
+
     # Load settings
     try:
         with open(args.settings, 'r') as f:
@@ -737,6 +1048,29 @@ Examples:
         if notifications_data:
             blocks.append("notifications_settings")
         print(f"   System settings blocks: {', '.join(blocks)}")
+
+    # Also generate environment-level ServiceNow config if provided alongside project
+    if args.servicenow_external_settings:
+        try:
+            with open(args.servicenow_external_settings, 'r') as f:
+                ext_raw = json.load(f)
+            entries_raw = ext_raw.get("extServiceAllInfo", [])
+            sn_entries = [_parse_servicenow_entry(e) for e in entries_raw]
+            sn_entries = [e for e in sn_entries if e is not None]
+            if sn_entries:
+                sn_output = "servicenow.tf"
+                sn_hcl = generate_servicenow_env_config(
+                    sn_entries=sn_entries,
+                    include_provider=False,  # already emitted by the project file
+                    base_url=args.base_url,
+                    use_vars=False,
+                )
+                with open(sn_output, 'w') as f:
+                    f.write(sn_hcl)
+                print(f"   ServiceNow env config: {sn_output} ({len(sn_entries)} resource(s))")
+        except (FileNotFoundError, json.JSONDecodeError, Exception) as e:
+            print(f"Warning: Could not generate ServiceNow env config: {e}", file=sys.stderr)
+
     print("\nNext steps:")
     print("1. Review the generated file")
     print("2. Run: terraform init")
