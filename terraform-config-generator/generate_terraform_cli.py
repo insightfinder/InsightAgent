@@ -592,10 +592,21 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
     return '\n'.join(config)
 
 
+def _format_string_list(lst: list) -> str:
+    """Format a Python list of strings as an HCL list literal: ["a", "b"]."""
+    if not lst:
+        return "[]"
+    items = ", ".join(f'"{s}"' for s in lst)
+    return f"[{items}]"
+
+
 def generate_system_settings_config(system_name: str, kb_global_data: dict | None,
                                     kb_incident_data: dict | None,
                                     notifications_data: dict | None,
-                                    system_name_expr: str | None = None) -> str:
+                                    system_name_expr: str | None = None,
+                                    system_down_data: dict | None = None,
+                                    insights_report_data: dict | None = None,
+                                    instance_down_items: list | None = None) -> str:
     """Generate an insightfinder_system_settings Terraform resource block.
 
     Args:
@@ -699,6 +710,47 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
             val = notifications_data.get(api_key)
             if val is not None:
                 lines.append(f'    {tf_key} = {format_terraform_value(val)}')
+
+        # system_down_notification — only include if enabled
+        if system_down_data and system_down_data.get("enableSystemDownEmailAlert"):
+            lines.append('')
+            lines.append('    system_down_notification = {')
+            lines.append(f'      enable_system_down_email_alert = true')
+            lines.append(f'      email_dampening_period         = {system_down_data.get("emailDampeningPeriod", 3600000)}')
+            lines.append(f'      email_set                      = {_format_string_list(system_down_data.get("emailSet") or [])}')
+            lines.append('    }')
+
+        # daily_report_notification — only include if enabled
+        if insights_report_data and insights_report_data.get("enableDailyInsightsReport"):
+            lines.append('')
+            lines.append('    daily_report_notification = {')
+            lines.append(f'      enable_insights_report = true')
+            lines.append(f'      email_set              = {_format_string_list(insights_report_data.get("emailSet") or [])}')
+            lines.append('    }')
+
+        # weekly_report_notification — only include if enabled
+        if insights_report_data and insights_report_data.get("enableWeeklyInsightsReport"):
+            lines.append('')
+            lines.append('    weekly_report_notification = {')
+            lines.append(f'      enable_insights_report = true')
+            lines.append(f'      email_set              = {_format_string_list(insights_report_data.get("weeklyEmailSet") or [])}')
+            lines.append('    }')
+
+        # instance_down_notification — one block per project where instanceDownEnable=true
+        if instance_down_items:
+            lines.append('')
+            lines.append('    instance_down_notification = [')
+            for i, item in enumerate(instance_down_items):
+                is_last = i == len(instance_down_items) - 1
+                lines.append('      {')
+                lines.append(f'        project_name              = "{item["projectName"]}"')
+                lines.append(f'        instance_down_enable      = true')
+                lines.append(f'        instance_down_dampening   = {item.get("instanceDownDampening", 3600000)}')
+                lines.append(f'        instance_down_threshold   = {item.get("instanceDownThreshold", 3600000)}')
+                lines.append(f'        instance_down_report_number = {item.get("instanceDownReportNumber", 50)}')
+                lines.append(f'        instance_down_emails      = {_format_string_list(item.get("instanceDownEmails") or [])}')
+                lines.append('      }' + ('' if is_last else ','))
+            lines.append('    ]')
 
         lines.append('  }')
 

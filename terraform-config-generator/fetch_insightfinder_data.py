@@ -14,6 +14,12 @@ Usage examples:
       --customer-name nbcAdmin --project-name "Conviva-Alerts-Stage" \
       --system-name "My System"
 
+  # Metric project — also fetch component alert/escalate/ignored configurations
+  python3 fetch_insightfinder_data.py \
+      --username mustafa --api-key SECRET \
+      --customer-name mustafa --project-name "uisp-metrics-5" \
+      --data-type metric
+
 This script calls the APIs referenced in the `apis` file and saves the
 responses as JSON files in the output directory.
 
@@ -22,6 +28,11 @@ Project-level endpoints:
   - /api/external/v1/watch-tower-setting
   - /api/external/v1/logsummarysettings
   - /api/external/v1/logjsontype
+
+Metric-project endpoints (requires --data-type metric):
+  - /api/external/v1/metriccomponent          (escalateIncident components)
+  - /api/external/v1/metriccomponent          (ignored components)
+  - /api/external/v1/componentmetricupdate    (per-metric alert settings)
 
 System-level endpoints (requires --system-name):
   - /api/external/v1/systemframework          (resolve system name -> system ID)
@@ -161,6 +172,103 @@ def resolve_system_id(session: requests.Session, host: str, headers: Dict[str, s
     return None
 
 
+def fetch_metric_project_data(session: requests.Session, host: str, headers: Dict[str, str],
+                              username: str, customer_name: str,
+                              project_name: str, out_dir: str) -> None:
+    """Fetch metric-project-specific configuration data and save to JSON files."""
+    base = host.rstrip('/')
+
+    # 1. Escalate-incident component settings
+    escalate_out = os.path.join(out_dir, "sample_metric_escalate_components.json")
+    try:
+        escalate_data = fetch_and_save(
+            session,
+            f"{base}/api/external/v1/metriccomponent",
+            headers,
+            {"projectName": project_name, "customerName": customer_name,
+             "operation": "escalateIncident", "tzOffset": "-14400000"},
+            escalate_out,
+            "metric escalate-incident components",
+        )
+    except Exception as e:
+        print(f"  Failed to fetch escalate-incident components: {e}", file=sys.stderr)
+        escalate_data = None
+
+    # 2. Ignored component settings
+    ignored_out = os.path.join(out_dir, "sample_metric_ignored_components.json")
+    try:
+        ignored_data = fetch_and_save(
+            session,
+            f"{base}/api/external/v1/metriccomponent",
+            headers,
+            {"projectName": project_name, "customerName": customer_name,
+             "operation": "ignored", "tzOffset": "-14400000"},
+            ignored_out,
+            "metric ignored components",
+        )
+    except Exception as e:
+        print(f"  Failed to fetch ignored components: {e}", file=sys.stderr)
+        ignored_data = None
+
+    # Collect all unique metric names from both responses
+    all_metric_names: set = set()
+    for resp_data, key in [
+        (escalate_data, "componentEscalateIncident"),
+        (ignored_data, "componentIgnored"),
+    ]:
+        if not resp_data:
+            continue
+        encoded = resp_data.get(key, "")
+        if not encoded:
+            continue
+        try:
+            for entry in json.loads(encoded):
+                metric = entry["metricLevelPrimaryKey"]["metricName"]
+                all_metric_names.add(metric)
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass
+
+    if not all_metric_names:
+        print("  No metrics found in component responses — skipping per-metric alert settings.")
+        return
+
+    print(f"  Found {len(all_metric_names)} metric(s): {sorted(all_metric_names)}")
+
+    # 3. Per-metric alert settings
+    all_metric_settings = {}
+    for metric_name in sorted(all_metric_names):
+        params = {
+            "onlyIsKpi": "false",
+            "onlyComputeDifference": "false",
+            "projectName": f"{project_name}@{username}",
+            "start": "0",
+            "limit": "500",
+            "metricFilter": metric_name,
+            "customerName": customer_name,
+            "tzOffset": "-14400000",
+        }
+        try:
+            resp = get_with_retries(
+                session,
+                f"{base}/api/external/v1/componentmetricupdate",
+                headers,
+                params=params,
+            )
+            if resp.status_code != 200:
+                print(f"  Warning: HTTP {resp.status_code} for metric '{metric_name}'",
+                      file=sys.stderr)
+                continue
+            all_metric_settings[metric_name] = resp.json()
+            print(f"  Metric '{metric_name}' settings fetched.")
+        except Exception as e:
+            print(f"  Failed to fetch settings for metric '{metric_name}': {e}", file=sys.stderr)
+
+    if all_metric_settings:
+        metric_settings_out = os.path.join(out_dir, "sample_metric_alert_settings.json")
+        save_json(all_metric_settings, metric_settings_out)
+        print(f"  All metric alert settings saved to {metric_settings_out}")
+
+
 def fetch_system_settings(session: requests.Session, host: str, headers: Dict[str, str],
                           customer_name: str, system_id: str, out_dir: str) -> None:
     """Fetch all system-level settings for the given system ID."""
@@ -219,6 +327,9 @@ def main(argv=None):
     parser.add_argument("--system-name", dest="system_name",
                         help="System display name to fetch system-level settings (knowledgebase + notifications). "
                              "If omitted, only project-level data is fetched.")
+    parser.add_argument("--data-type", dest="data_type", default=None,
+                        help="Project data type (e.g. 'metric'). When 'metric', also fetches "
+                             "metric configurations (component alert settings, escalate/ignored).")
     parser.add_argument("--host", default=None,
                         help=f"Host for all APIs (default: {DEFAULT_HOST} or CONFIG_DEFAULTS)")
     parser.add_argument("--out-dir", default=None, dest="out_dir",
@@ -238,6 +349,7 @@ def main(argv=None):
     customer_name = resolve('customer_name', args.customer_name)
     project_name = resolve('project_name', args.project_name)
     system_name = resolve('system_name', args.system_name)
+    data_type = (args.data_type or "").lower()
     host = resolve('host', args.host) or DEFAULT_HOST
     out_dir = resolve('out_dir', args.out_dir) or '.'
     no_ssl_verify = args.no_ssl_verify or CONFIG_DEFAULTS.get('no_ssl_verify', False)
@@ -325,6 +437,18 @@ def main(argv=None):
                        "ServiceNow third-party settings")
     except Exception as e:
         print(f"  Failed (skipping – project may not be a ServiceNow project): {e}", file=sys.stderr)
+
+    # Metric-project-specific data (optional, when --data-type metric)
+    if data_type == "metric":
+        print()
+        print("=" * 60)
+        print(f"Fetching METRIC CONFIGURATION data for '{project_name}'")
+        print("=" * 60)
+        fetch_metric_project_data(
+            session, host, headers, username, customer_name, project_name, out_dir,
+        )
+    elif data_type:
+        print(f"Tip: Pass --data-type metric to also fetch metric configurations.")
 
     # System-level settings (optional)
     if system_name:
