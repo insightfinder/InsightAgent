@@ -1100,12 +1100,24 @@ variable "system_name" {
 '''
 
 
-def _trace_projects_tf() -> str:
+def _trace_projects_tf(has_servicenow: bool = False) -> str:
     lines = [
         'module "trace_projects" {',
         '  source = "./trace-projects"',
         '',
         '  system_name = var.system_name',
+    ]
+    if has_servicenow:
+        lines += [
+            '',
+            '  # ServiceNow credentials',
+            '  servicenow_host         = var.servicenow_host',
+            '  servicenow_username     = var.servicenow_username',
+            '  servicenow_password     = var.servicenow_password',
+            '  servicenow_clientid     = var.servicenow_clientid',
+            '  servicenow_clientsecret = var.servicenow_clientsecret',
+        ]
+    lines += [
         '',
         '  providers = {',
         '    insightfinder = insightfinder',
@@ -1116,21 +1128,65 @@ def _trace_projects_tf() -> str:
     return '\n'.join(lines)
 
 
-def _trace_projects_variables_tf() -> str:
-    return '''\
-variable "system_name" {
-  description = "System name passed from parent module"
-  type        = string
-}
-'''
+def _trace_projects_variables_tf(has_servicenow: bool = False) -> str:
+    lines = [
+        'variable "system_name" {',
+        '  description = "System name passed from parent module"',
+        '  type        = string',
+        '}',
+    ]
+    if has_servicenow:
+        lines += [
+            '',
+            'variable "servicenow_host" {',
+            '  description = "ServiceNow host url"',
+            '  type        = string',
+            '}',
+            '',
+            'variable "servicenow_username" {',
+            '  description = "ServiceNow service account username"',
+            '  type        = string',
+            '}',
+            '',
+            'variable "servicenow_password" {',
+            '  description = "ServiceNow service account password"',
+            '  type        = string',
+            '  sensitive   = true',
+            '}',
+            '',
+            'variable "servicenow_clientid" {',
+            '  description = "ServiceNow service account clientId"',
+            '  type        = string',
+            '  sensitive   = true',
+            '}',
+            '',
+            'variable "servicenow_clientsecret" {',
+            '  description = "ServiceNow service account clientSecret"',
+            '  type        = string',
+            '  sensitive   = true',
+            '}',
+        ]
+    return '\n'.join(lines) + '\n'
 
 
-def _change_events_projects_tf() -> str:
+def _change_events_projects_tf(has_servicenow: bool = False) -> str:
     lines = [
         'module "change_events_projects" {',
         '  source = "./change-events-projects"',
         '',
         '  system_name = var.system_name',
+    ]
+    if has_servicenow:
+        lines += [
+            '',
+            '  # ServiceNow credentials',
+            '  servicenow_host         = var.servicenow_host',
+            '  servicenow_username     = var.servicenow_username',
+            '  servicenow_password     = var.servicenow_password',
+            '  servicenow_clientid     = var.servicenow_clientid',
+            '  servicenow_clientsecret = var.servicenow_clientsecret',
+        ]
+    lines += [
         '',
         '  providers = {',
         '    insightfinder = insightfinder',
@@ -1141,13 +1197,45 @@ def _change_events_projects_tf() -> str:
     return '\n'.join(lines)
 
 
-def _change_events_projects_variables_tf() -> str:
-    return '''\
-variable "system_name" {
-  description = "System name passed from parent module"
-  type        = string
-}
-'''
+def _change_events_projects_variables_tf(has_servicenow: bool = False) -> str:
+    lines = [
+        'variable "system_name" {',
+        '  description = "System name passed from parent module"',
+        '  type        = string',
+        '}',
+    ]
+    if has_servicenow:
+        lines += [
+            '',
+            'variable "servicenow_host" {',
+            '  description = "ServiceNow host url"',
+            '  type        = string',
+            '}',
+            '',
+            'variable "servicenow_username" {',
+            '  description = "ServiceNow service account username"',
+            '  type        = string',
+            '}',
+            '',
+            'variable "servicenow_password" {',
+            '  description = "ServiceNow service account password"',
+            '  type        = string',
+            '  sensitive   = true',
+            '}',
+            '',
+            'variable "servicenow_clientid" {',
+            '  description = "ServiceNow service account clientId"',
+            '  type        = string',
+            '  sensitive   = true',
+            '}',
+            '',
+            'variable "servicenow_clientsecret" {',
+            '  description = "ServiceNow service account clientSecret"',
+            '  type        = string',
+            '  sensitive   = true',
+            '}',
+        ]
+    return '\n'.join(lines) + '\n'
 
 
 def _incident_projects_tf() -> str:
@@ -1551,9 +1639,9 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
         if delay > 0:
             time.sleep(delay)
 
-    # --- Determine if any log project uses ServiceNow ---
-    # ServiceNow projects are always Log type. A project is treated as ServiceNow
-    # if cloudType says so OR if the API returned real ServiceNow settings.
+    # --- Determine which projects use ServiceNow (any data type) ---
+    # A project is treated as ServiceNow if cloudType says so OR if the API
+    # returned real ServiceNow settings.
     def _is_servicenow(proj: Dict) -> bool:
         name = proj.get("projectName") or proj.get("name") or ""
         if (proj.get("cloudType") or "").lower() == "servicenow":
@@ -1564,11 +1652,21 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
         (p.get("projectName") or p.get("name") or "")
         for p in log_projects_list if _is_servicenow(p)
     }
+    servicenow_trace_projects = {
+        (p.get("projectName") or p.get("name") or "")
+        for p in trace_projects_list if _is_servicenow(p)
+    }
+    servicenow_change_events_projects = {
+        (p.get("projectName") or p.get("name") or "")
+        for p in change_events_projects_list if _is_servicenow(p)
+    }
     has_servicenow = len(servicenow_projects) > 0
+    has_servicenow_trace = len(servicenow_trace_projects) > 0
+    has_servicenow_change_events = len(servicenow_change_events_projects) > 0
 
-    # Collect a representative SN host for tfvars
+    # Collect a representative SN host for tfvars (from any project type)
     sn_host_for_tfvars = ""
-    for sn_name in servicenow_projects:
+    for sn_name in (*servicenow_projects, *servicenow_trace_projects, *servicenow_change_events_projects):
         sn_data = (prefetched.get(sn_name) or {}).get("servicenow")
         if sn_data and sn_data.get("host"):
             sn_host_for_tfvars = sn_data["host"]
@@ -1600,19 +1698,19 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
 
     if trace_projects_list:
         write_file(os.path.join(system_dir, "trace_projects.tf"),
-                   _trace_projects_tf(), dry_run)
+                   _trace_projects_tf(has_servicenow_trace), dry_run)
         write_file(os.path.join(trace_projects_dir, "versions.tf"),
                    _projects_versions_tf(), dry_run)
         write_file(os.path.join(trace_projects_dir, "variables.tf"),
-                   _trace_projects_variables_tf(), dry_run)
+                   _trace_projects_variables_tf(has_servicenow_trace), dry_run)
 
     if change_events_projects_list:
         write_file(os.path.join(system_dir, "change_events_projects.tf"),
-                   _change_events_projects_tf(), dry_run)
+                   _change_events_projects_tf(has_servicenow_change_events), dry_run)
         write_file(os.path.join(change_events_projects_dir, "versions.tf"),
                    _projects_versions_tf(), dry_run)
         write_file(os.path.join(change_events_projects_dir, "variables.tf"),
-                   _change_events_projects_variables_tf(), dry_run)
+                   _change_events_projects_variables_tf(has_servicenow_change_events), dry_run)
 
     if incident_projects_list:
         write_file(os.path.join(system_dir, "incident_projects.tf"),
@@ -1726,11 +1824,13 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
             trace_skipped += 1
             continue
 
-        print(f"    [trace {trace_generated + trace_skipped + 1}/{len(trace_projects_list)}] {project_name}")
+        is_sn_trace = project_name in servicenow_trace_projects
+        print(f"    [trace {trace_generated + trace_skipped + 1}/{len(trace_projects_list)}] {project_name}"
+              + (" (ServiceNow)" if is_sn_trace else ""))
 
         try:
             tf_content = generate_project_tf(project_name, project_data,
-                                             system_name, is_servicenow_project=False,
+                                             system_name, is_servicenow_project=is_sn_trace,
                                              data_type="Trace", proj_info=proj)
         except Exception as e:
             print(f"      Error generating trace TF: {e}", file=sys.stderr)
@@ -1752,11 +1852,13 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
             change_events_skipped += 1
             continue
 
-        print(f"    [deployment {change_events_generated + change_events_skipped + 1}/{len(change_events_projects_list)}] {project_name}")
+        is_sn_deployment = project_name in servicenow_change_events_projects
+        print(f"    [deployment {change_events_generated + change_events_skipped + 1}/{len(change_events_projects_list)}] {project_name}"
+              + (" (ServiceNow)" if is_sn_deployment else ""))
 
         try:
             tf_content = generate_project_tf(project_name, project_data,
-                                             system_name, is_servicenow_project=False,
+                                             system_name, is_servicenow_project=is_sn_deployment,
                                              data_type="Deployment", proj_info=proj)
         except Exception as e:
             print(f"      Error generating change-events TF: {e}", file=sys.stderr)
