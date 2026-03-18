@@ -1,0 +1,69 @@
+# InsightFinder Project Settings Sync Configuration
+# Used with: python sync_project_settings.py --config config.yaml --sync-config sync_config.yaml
+#
+# Supported project types: log, metric, trace, deployment (change events), incident
+# All types receive: watch_tower, keywords, summary, json_keys, holidays
+# Metric projects additionally receive: metric component/alert configurations (if metric: true)
+
+sync_rules:
+  # # -------------------------------------------------------------------------
+  # # Rule 1: Sync all NBC Stage projects -> NBC UAT projects
+  # # All project types are included: log, metric, trace, deployment, incident.
+  # # Destination project "akamai-uat" maps to source project "akamai", etc.
+  # # -------------------------------------------------------------------------
+  # - env: NBC                          # which env block from config.yaml
+  #   from_system: "NBC Stage"          # source system display name
+  #   to_system: "NBC UAT"              # destination system display name
+  #   suffix: "-uat"                    # strip this from destination project names to find source
+  #                                     # e.g. "akamai-uat" -> looks for "akamai" in NBC Stage
+
+  #   sync:
+  #     # Applied to ALL project types (log, metric, trace, deployment, incident):
+  #     watch_tower: true               # main project settings (anomaly thresholds, alerts, etc.)
+  #     keywords: true                  # log label / keyword settings
+  #     summary: true                   # summary and metafield settings
+  #     json_keys: true                 # JSON key type/role settings
+  #     holidays: true                  # holiday schedules
+  #     # Applied only to Metric-type projects:
+  #     metric: true                    # metric component escalation/ignored + per-metric alert settings
+
+  #   exclude_projects:                 # destination project names to skip entirely
+  #     []
+  #     # - "some-project-uat"
+
+  # -------------------------------------------------------------------------
+  # Rule 2: Explicit project-to-project mapping (bypasses system lookup)
+  # Use this when names don't follow a consistent suffix pattern,
+  # or when syncing individual projects across different systems.
+  # Project type (log/metric/trace/deployment/incident) is auto-detected.
+  # -------------------------------------------------------------------------
+  - env: NBC
+    project_mappings:
+      - from_project: "Conviva-Alerts-Stage"
+        to_project: "Conviva-Alerts-Prod"
+      - from_project: "Harmonic-Alerts-Stage"
+        to_project: "Harmonic-Alerts-NBC-Prod"
+      - from_project: "Harmonic-Alerts-Stage"     
+        to_project: "Harmonic-Alerts-Prod"
+      - from_project: "NewRelic-Alerts-NBC-Stage"      
+        to_project: "NewRelic-Alerts-NBC-Prod"
+      - from_project: "Thanos-Alerts-NBC-Stage"      
+        to_project: "Thanos-Alerts-NBC-Prod"
+      - from_project: "Touchstream-Alerts-NBC-Stage"     
+        to_project: "Touchstream-Alerts-NBC-Prod"
+      # - from_project: "nbc-stage-servicenow-incidents-live"     
+      #   to_project: ""
+    sync:
+      watch_tower: true
+      keywords: true
+      summary: true
+      json_keys: true
+      holidays: true
+      metric: true
+
+
+# dpe_message_queuing-uat
+# gc-uat
+# gst_apps_android-uat
+# gst_apps_ios-uat
+# stellar-uat

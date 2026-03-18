@@ -163,6 +163,7 @@ def _parse_servicenow_entry(entry):
         "service_now_field": entry.get("serviceNowField", ""),
         "content_source": entry.get("contentSource", ""),
         "trigger_window_in_mills": 0,
+        "enable_feedback_collect": bool(entry.get("enableServiceNowFeedbackCollect", False)),
         "table_mapping": {},
     }
 
@@ -188,6 +189,8 @@ def _parse_servicenow_entry(entry):
             trigger = configs.get("triggerWindowInMills", 0)
             if trigger:
                 config["trigger_window_in_mills"] = int(float(trigger))
+            if "enableFeedbackCollect" in configs:
+                config["enable_feedback_collect"] = bool(configs["enableFeedbackCollect"])
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
@@ -310,6 +313,9 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
 
         if config.get("trigger_window_in_mills"):
             lines.append(f'  trigger_window_in_mills = {config["trigger_window_in_mills"]}')
+
+        if config.get("enable_feedback_collect"):
+            lines.append(f'  enable_feedback_collect = true')
 
         if config.get("table_mapping"):
             lines.append('  table_mapping = {')
