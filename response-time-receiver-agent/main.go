@@ -67,12 +67,17 @@ func main() {
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 	}))
 
-	// Setup routes
-	receiver.SetupRoutes(app, config)
-
 	// Initialize and start sampler if enabled
 	samplerService := sampler.NewSamplerService(&config.Sampler, config)
 	samplerService.Start()
+
+	// Initialize and start fault tolerance monitoring
+	ftServerURL := fmt.Sprintf("http://localhost:%d/api/v1/data", config.Agent.ServerPort)
+	ftService := sampler.NewFaultToleranceService(config, ftServerURL)
+	ftService.Start()
+
+	// Setup routes
+	receiver.SetupRoutes(app, config, ftService)
 
 	// Start server in a goroutine
 	serverAddr := fmt.Sprintf(":%d", config.Agent.ServerPort)
@@ -93,8 +98,9 @@ func main() {
 
 	logrus.Info("Shutting down receiver agent...")
 
-	// Stop sampler service
+	// Stop sampler and fault tolerance services
 	samplerService.Stop()
+	ftService.Stop()
 
 	// Graceful shutdown
 	if err := app.Shutdown(); err != nil {
