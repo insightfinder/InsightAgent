@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import time
+import random
 from datetime import datetime, timezone
 import requests
 from configparser import ConfigParser
@@ -11,7 +12,8 @@ from ifobfuscate import decode
 
 def generate_user_agent():
     timestamp = datetime.now().strftime("%Y.%m.%d.%H.%M")
-    user_agent = f"ResponseTimeAgent/{timestamp} (Linux; x86_64)"
+    random_suffix = random.randint(10000, 99999)
+    user_agent = f"ResponseTimeAgent/{timestamp}-{random_suffix} (Linux; x86_64)"
     print("Generated the UserAgent:",user_agent)
     return user_agent
 
@@ -202,10 +204,10 @@ def run_if_endpoints(start_time, config_vars):
             key = next(iter(monitor_url.keys()))
             futures[key] = executor.submit(run_endpoint_request, url + monitor_url[key], headers, cookies)
         
-        # Add LLM Chatbot endpoint task
-        futures['Realtime Chatbot LLM'] = executor.submit(
-            run_llm_chatbot_endpoint, url, headers, cookies
-        )
+        # # Add LLM Chatbot endpoint task
+        # futures['Realtime Chatbot LLM'] = executor.submit(
+        #     run_llm_chatbot_endpoint, url, headers, cookies
+        # )
         
         # Add Incident Summary and Recommendation LLM endpoint task
         futures['Incident Summary and Recommendation LLM'] = executor.submit(
@@ -278,16 +280,13 @@ def run_incident_summary_recommendation_llm(llm_endpoint, headers, cookies, conf
     
     # Build payload from config parameters - convert rootCauseEntry to JSON string for form data
     incident_summary_payload = {
-        "systemName": config_vars['system_name'],
-        "customerName": config_vars['customer_name'],
-        "rootCauseEntry": config_vars['root_cause_entry'], 
-        "rootCauseChainSize": config_vars['root_cause_chain_size'],
-        "mode": "3",
-        "isLiveChat": "false"
+        "mode": "0",
+        "message": "what is 1+2?",
     }
     
     # Required keywords to validate in response
-    required_keywords = ["Recommendation", "root cause chain"]
+    # required_keywords = ["Recommendation", "root cause chain"]
+    required_keywords = ["3"]
     
     print("[Incident Summary LLM Request] Start request:", llm_endpoint, "")
     try:

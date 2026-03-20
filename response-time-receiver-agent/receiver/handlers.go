@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/insightfinder/receiver-agent/configs"
 	"github.com/insightfinder/receiver-agent/insightfinder"
+	"github.com/insightfinder/receiver-agent/sampler"
 	"github.com/sirupsen/logrus"
 )
 
@@ -17,13 +18,13 @@ var (
 )
 
 // SetupRoutes sets up all HTTP routes for the Fiber app
-func SetupRoutes(app *fiber.App, config *configs.Config) {
+func SetupRoutes(app *fiber.App, config *configs.Config, ftService *sampler.FaultToleranceService) {
 	// Health check endpoint
 	app.Get("/health", HealthCheckHandler)
 
 	// Data ingestion endpoint
 	app.Post("/api/v1/data", func(c *fiber.Ctx) error {
-		return DataIngestionHandler(c, config)
+		return DataIngestionHandler(c, config, ftService)
 	})
 
 	logrus.Info("HTTP routes configured successfully")
@@ -43,7 +44,7 @@ func HealthCheckHandler(c *fiber.Ctx) error {
 }
 
 // DataIngestionHandler handles incoming data from external agents
-func DataIngestionHandler(c *fiber.Ctx, config *configs.Config) error {
+func DataIngestionHandler(c *fiber.Ctx, config *configs.Config, ftService *sampler.FaultToleranceService) error {
 	logrus.Info("Received data ingestion request")
 
 	// Log raw request body for debugging
@@ -101,6 +102,15 @@ func DataIngestionHandler(c *fiber.Ctx, config *configs.Config) error {
 		} else {
 			successCount++
 			logrus.Infof("Successfully sent metrics to InsightFinder for environment: %s", pm.Environment)
+		}
+	}
+
+	// Notify fault tolerance service about received metrics so windows are reset correctly.
+	// We use the raw environment name from the request (the config key, e.g. "staging") and
+	// record all original metric names that were in the payload, regardless of mapping.
+	if ftService != nil && successCount > 0 {
+		for _, metric := range incomingData.GetMetrics() {
+			ftService.RecordReceived(incomingData.Environment, metric.GetName())
 		}
 	}
 
