@@ -8,7 +8,7 @@ sampler:
   enabled: false                                       # Set to true to enable periodic sampling
   sampling_interval: 300                               # Interval in seconds (300s = 5 minutes, 60s = 1 minute)
   server_url: "http://localhost:8080/api/v1/data"     # Receiver server URL to send data to
-  metrics:                                             # Configurable metrics to send
+  metrics:                                             # Configurable metrics to send periodically
     ServiceNowTicketCreateDelay: 0                     # ServiceNow Ticket Creation metric
     # ServiceNowNoteRetrieve: 0                          # ServiceNow Feedback metric
 
@@ -20,66 +20,102 @@ environment:
       - instancename: stg.insightfinder.com
         insightfinder:
           # InsightFinder Platform Configuration
-          server_url: 
-          username: 
-          license_key: 
-          
+          server_url:
+          username:
+          license_key:
+
           # Metrics Project Configuration
-          metrics_project_name: 
+          metrics_project_name:
           metrics_system_name:
           metrics_project_type: Metric
-          
+
           # Common Configuration
           cloud_type: OnPremise
           instance_type: OnPremise
           is_container: false
           sampling_interval: 60
-        
+
         metriclistMap:
           ServiceNowTicketCreateDelay: "ServiceNow Ticket Creation"
           ServiceNowNoteRetrieve: "ServiceNow Feedback"
+
+        # Fault Tolerance: if a metric is not received within window_size minutes,
+        # send default_value automatically. Window resets on each successful receive or default send.
+        fault_tolerance:
+          ServiceNowTicketCreateDelay:
+            enabled: false
+            window_size: 15      # minutes
+            default_value: 0
+          ServiceNowNoteRetrieve:
+            enabled: false
+            window_size: 15      # minutes
+            default_value: 0
 
     production:
       - instancename: app.insightfinder.com
         insightfinder:
           # InsightFinder Platform Configuration
-          server_url: 
-          username: 
-          license_key: 
+          server_url:
+          username:
+          license_key:
 
           # Metrics Project Configuration
-          metrics_project_name: 
-          metrics_system_name: 
+          metrics_project_name:
+          metrics_system_name:
           metrics_project_type: Metric
-          
+
           # Common Configuration
           cloud_type: OnPremise
           instance_type: OnPremise
           is_container: false
           sampling_interval: 60
-        
+
         metriclistMap:
           ServiceNowTicketCreateDelay: "ServiceNow Ticket Creation"
           ServiceNowNoteRetrieve: "ServiceNow Feedback"
+
+        # Fault Tolerance: if a metric is not received within window_size minutes,
+        # send default_value automatically. Window resets on each successful receive or default send.
+        fault_tolerance:
+          ServiceNowTicketCreateDelay:
+            enabled: false
+            window_size: 15      # minutes
+            default_value: 0
+          ServiceNowNoteRetrieve:
+            enabled: false
+            window_size: 15      # minutes
+            default_value: 0
 
       - instancename: app2.insightfinder.com
         insightfinder:
           # InsightFinder Platform Configuration
-          server_url: 
-          username: 
-          license_key: 
+          server_url:
+          username:
+          license_key:
 
           # Metrics Project Configuration
-          metrics_project_name: 
-          metrics_system_name: 
+          metrics_project_name:
+          metrics_system_name:
           metrics_project_type: Metric
-          
+
           # Common Configuration
           cloud_type: OnPremise
           instance_type: OnPremise
           is_container: false
           sampling_interval: 60
-        
+
         metriclistMap:
           ServiceNowTicketCreateDelay: "ServiceNow Ticket Creation"
           ServiceNowNoteRetrieve: "ServiceNow Feedback"
+
+        # Fault Tolerance: if a metric is not received within window_size minutes,
+        # send default_value automatically. Window resets on each successful receive or default send.
+        fault_tolerance:
+          ServiceNowTicketCreateDelay:
+            enabled: false
+            window_size: 15      # minutes
+            default_value: 0
+          ServiceNowNoteRetrieve:
+            enabled: false
+            window_size: 15      # minutes
+            default_value: 0
