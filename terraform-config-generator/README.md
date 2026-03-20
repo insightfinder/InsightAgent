@@ -1,191 +1,201 @@
 # Terraform Configuration Generator
 
-This tool generates Terraform configuration files from InsightFinder API data, enabling Infrastructure as Code (IaC) management of InsightFinder projects.
+Generates Terraform HCL files for InsightFinder projects, enabling IaC management of all project settings including log labels, JSON keys, ServiceNow integration, and system-level KB/notification settings.
 
-## Overview
+---
 
-The `generate_terraform_cli.py` script converts InsightFinder project settings and keywords into Terraform HCL format, supporting all project configuration options including log label settings, ServiceNow integration, and advanced detection settings.
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `auto_generate_terraform.py` | **Fully automated** — reads `config.yaml`, discovers all owned systems and projects via API, generates the complete `TerraformFiles/` directory structure |
+| `fetch_insightfinder_data.py` | Fetches raw API data for a single project and saves to JSON files |
+| `generate_terraform_cli.py` | Generates a `.tf` file from previously fetched JSON files |
+
+---
 
 ## Requirements
 
-- Python 3.6 or higher
+```bash
+pip install requests pyyaml
+```
+
+- Python 3.10+
 - Terraform >= 1.0
-- InsightFinder Terraform Provider >= 1.0.0
+- InsightFinder Terraform Provider >= 1.6.1 (version constraint set via `terraform_version` in config)
 
-## Getting Data from InsightFinder UI
+---
 
-To export your existing project configuration from InsightFinder:
+## Automated Generation (Recommended)
 
-### 1. Navigate to Project Settings
-- Log in to your InsightFinder instance
-- Go to your project's settings page
+### 1. Configure `config.yaml`
 
-### 2. Open Browser Developer Tools
-- Press **F12** to open browser developer tools
-- Go to the **Network** tab
+```yaml
+Delay: 2  # seconds between project API calls (0 = no delay)
 
-### 3. Copy API Responses
+STAGING:
+  base_url: https://stg.insightfinder.com/
+  username: yourUsername
+  licensekey: YOUR_LICENSE_KEY
+  project_types: [log]        # log, metric, alert, trace
+  terraform_version: 1.7.0   # optional; written into versions.tf (default: ">= 1.6.1")
 
-**For Project Settings (`sample_settings.json`):**
-- Find the API call: `/api/v2/project-setting` (GET)
-- Copy the response JSON
-
-**For Keywords (`sample_keywords.json`):**
-- Find the API call: `/api/v1/projectkeywords` (GET)
-- Copy the response JSON
-
-**For ServiceNow Settings (`sample_servicenow.json`):**
-- Find the API call: `/api/v2/thirdpartysetting` (GET)
-- Copy the response JSON
-
-### 4. Save to Files
-Save each copied response to the corresponding JSON file.
-
-## Quick Start
-
-### 1. Prepare Input Files
-
-Create three JSON files with your project configuration:
-- `sample_settings.json` - Project settings
-- `sample_keywords.json` - Log label keywords
-- `sample_servicenow.json` - ServiceNow settings (optional)
-
-### 2. Generate Terraform Configuration
-
-Basic usage:
-```bash
-python3 generate_terraform_cli.py \
-  --settings sample_settings.json \
-  --keywords sample_keywords.json
+PROD:
+  base_url: https://app.insightfinder.com/
+  username: yourUsername
+  licensekey: YOUR_LICENSE_KEY
+  project_types: [log, metric]
+  terraform_version: 1.7.0
+  only_process:               # optional; omit to process all owned systems/projects
+    systems: ["System A"]     # process ALL projects in these systems
+    projects: ["Project C"]   # also process these specific projects (uses their original system folder)
 ```
 
-With ServiceNow integration:
-```bash
-python3 generate_terraform_cli.py \
-  --settings sample_settings.json \
-  --keywords sample_keywords.json \
-  --servicenow sample_servicenow.json
-```
+#### `terraform_version`
 
-### 3. Apply Configuration
+Sets the provider version constraint written into each `versions.tf`:
 
-```bash
-terraform init
-terraform plan
-terraform apply
-```
-
-## Usage Options
-
-### Specify Output File
-
-```bash
-python3 generate_terraform_cli.py \
-  --settings sample_settings.json \
-  --keywords sample_keywords.json \
-  --output myproject.tf
-```
-
-### Override Project Details
-
-```bash
-python3 generate_terraform_cli.py \
-  --settings sample_settings.json \
-  --keywords sample_keywords.json \
-  --project-name "My Project" \
-  --system-name "Production"
-```
-
-### Append to Existing File
-
-```bash
-python3 generate_terraform_cli.py \
-  --settings sample_settings.json \
-  --keywords sample_keywords.json \
-  --output existing.tf \
-  --no-provider
-```
-
-### Custom Base URL
-
-```bash
-python3 generate_terraform_cli.py \
-  --settings sample_settings.json \
-  --keywords sample_keywords.json \
-  --base-url "https://app.insightfinder.com"
-```
-
-## Input File Formats
-
-### Settings JSON
-```json
-{
-  "settingList": {
-    "ProjectName": "{\"CLASSNAME\":\"...\",\"DATA\":{...}}"
-  }
+```hcl
+insightfinder = {
+  source  = "insightfinder/insightfinder"
+  version = "1.7.0"           # taken from terraform_version in config
 }
 ```
 
-### Keywords JSON
-```json
-{
-  "keywords": {
-    "whitelist": [],
-    "featurelist": [...],
-    "incidentlist": [...]
-  }
-}
+If omitted, the default constraint `>= 1.6.1` is used.
+
+#### `only_process`
+
+Limits which systems and projects are generated. Both fields are optional and can be used together or independently.
+
+| Field | Behaviour |
+|-------|-----------|
+| `systems` | Process **all** projects (matching `project_types`) inside the listed systems |
+| `projects` | Process these specific projects regardless of which system they belong to; the original system's folder structure is preserved |
+
+**Examples:**
+
+```yaml
+# Only two specific projects, no system restriction
+only_process:
+  projects: ["Project A", "Project B"]
+
+# All projects in System A, plus one extra project from any other system
+only_process:
+  systems: ["System A"]
+  projects: ["Project C"]
 ```
 
-### ServiceNow JSON
-```json
-{
-  "host": "https://your-instance.service-now.com",
-  "serviceNowUser": "username",
-  "serviceNowPassword": "password",
-  "instanceField": "test_ci"
-}
+If `only_process` is omitted entirely, all owned systems and projects are processed (existing behaviour).
+
+### 2. Run
+
+```bash
+# All environments
+python3 auto_generate_terraform.py --config config.yaml
+
+# Single environment
+python3 auto_generate_terraform.py --config config.yaml --env STAGING
+
+# Preview without writing files
+python3 auto_generate_terraform.py --config config.yaml --dry-run
+
+# Custom output directory
+python3 auto_generate_terraform.py --config config.yaml --output-dir /path/to/output
 ```
 
-See sample files for complete examples.
+The script will:
+- Discover all **owned** systems (`ownSystemArr`) for each environment
+- Filter projects by the configured `project_types` (matched against API `dataType`)
+- Fetch all settings per project (keywords, watch-tower settings, summary/metafields, JSON keys, ServiceNow)
+- Fetch system-level settings (knowledgebase, incident prediction, notifications)
+- Write the full directory structure and run `terraform fmt -recursive` at the end
 
-## Command-Line Options
+### Generated Structure
 
-| Option | Required | Description |
-|--------|----------|-------------|
-| `--settings` | Yes | Path to settings JSON file |
-| `--keywords` | Yes | Path to keywords JSON file |
-| `--servicenow` | No | Path to ServiceNow settings JSON file |
-| `--output`, `-o` | No | Output Terraform file (default: auto-generated) |
-| `--project-name` | No | Override project name from settings |
-| `--system-name` | No | System name (default: "Default System") |
-| `--base-url` | No | InsightFinder base URL (default: https://stg.insightfinder.com) |
-| `--no-provider` | No | Skip provider block for appending to existing files |
-| `--help`, `-h` | No | Show help message |
+```
+TerraformFiles/
+└── STAGING/
+    └── My System/
+        ├── versions.tf          # provider version lock + S3 backend
+        ├── provider.tf          # insightfinder provider block
+        ├── variables.tf         # all input variables
+        ├── terraform.tfvars     # base_url, system_name, servicenow_host
+        ├── projects.tf          # module call to ./projects
+        ├── system_settings.tf   # KB + notification settings (var.system_name)
+        └── projects/
+            ├── versions.tf      # provider source reference (no version)
+            ├── variables.tf     # system_name + servicenow vars
+            ├── project_one.tf
+            ├── project_two.tf
+            └── ...
+```
 
-## Output
+---
 
-The script generates a Terraform configuration file containing:
+## Manual Single-Project Generation
 
-1. **Provider Configuration** (unless `--no-provider` is used)
-2. **Project Resource** with all settings
-3. **Log Label Settings** (if keywords provided)
-4. **ServiceNow Settings** (if ServiceNow JSON provided)
+Use this when you need to regenerate one specific project.
+
+### 1. Fetch project data
+
+```bash
+python3 fetch_insightfinder_data.py \
+  --username yourUsername \
+  --api-key YOUR_KEY \
+  --customer-name yourUsername \
+  --project-name "my-project" \
+  --system-name "My System" \
+  --host https://app.insightfinder.com
+```
+
+This saves: `sample_settings.json`, `sample_keywords.json`, `sample_jsonkey.json`, `sample_summary_and_metafields.json`, `sample_servicenow.json`, `sample_kb_global.json`, `sample_kb_incident_prediction.json`, `sample_notifications.json`
+
+### 2. Generate `.tf` file
+
+```bash
+python3 generate_terraform_cli.py \
+  --settings sample_settings.json \
+  --keywords sample_keywords.json \
+  --json-keys sample_jsonkey.json \
+  --summary-metafield sample_summary_and_metafields.json \
+  --system-name "My System" \
+  --base-url https://app.insightfinder.com \
+  --output my_project.tf
+```
+
+With ServiceNow:
+```bash
+python3 generate_terraform_cli.py \
+  --settings sample_settings.json \
+  --keywords sample_keywords.json \
+  --servicenow sample_servicenow.json \
+  --system-name "My System" \
+  --output my_project.tf
+```
+
+With system-level settings:
+```bash
+python3 generate_terraform_cli.py \
+  --settings sample_settings.json \
+  --keywords sample_keywords.json \
+  --system-name "My System" \
+  --kb-global sample_kb_global.json \
+  --kb-incident-prediction sample_kb_incident_prediction.json \
+  --notifications sample_notifications.json \
+  --output my_project.tf
+```
+---
 
 ## Troubleshooting
 
-### Validate JSON Files
 ```bash
-python3 -m json.tool sample_settings.json
-python3 -m json.tool sample_keywords.json
-```
-
-### Check Generated File
-```bash
-cat output.tf
+# Validate generated files
 terraform validate
+
+# Check JSON files are valid
+python3 -m json.tool sample_settings.json
+
+# SSL issues (self-signed certs)
+python3 auto_generate_terraform.py --config config.yaml --no-ssl-verify
 ```
-
-## License
-
-This tool is provided as-is for use with InsightFinder.
