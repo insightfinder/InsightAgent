@@ -210,7 +210,14 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                         if attempt > 0:
                             time.sleep(retry_delay * attempt)
 
-                        items_res = zapi.do_request('item.get', params)
+                        payload = {
+                            "jsonrpc": "2.0",
+                            "method": "item.get",
+                            "params": params,
+                            "id": 1,
+                            "auth": zapi.auth
+                        }
+                        items_res = requests.post(zapi.url, json=payload, verify=False).json()
                         logger.info('Query {} items from {} hosts with {} metrics in {} seconds'.format(len(items_res['result']),
                                                                                                     len(hostids),
                                                                                                     len(items_keys), (
