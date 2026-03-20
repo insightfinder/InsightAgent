@@ -21,6 +21,13 @@ type SamplerConfig struct {
 	SamplingInterval int                `yaml:"sampling_interval"` // Interval in seconds
 	ServerURL        string             `yaml:"server_url"`        // Receiver server URL to send data to
 	Metrics          map[string]float64 `yaml:"metrics"`           // Metric keys with their values (typically 0)
+	ScheduledMetrics []ScheduledSample  `yaml:"scheduled_metrics"` // Metrics to send at specific UTC times
+}
+
+// ScheduledSample defines a set of metric values to send at a specific UTC time each day
+type ScheduledSample struct {
+	Time    string             `yaml:"time"`    // UTC time in HH:MM format (e.g. "00:00")
+	Metrics map[string]float64 `yaml:"metrics"` // Metric name -> value to send at this time
 }
 
 // EnvironmentConfig contains all environment configurations
@@ -29,11 +36,19 @@ type EnvironmentConfig struct {
 	Environments          map[string][]EnvironmentSettings `yaml:"environments"`
 }
 
+// MetricFaultTolerance defines fault tolerance settings for a single metric
+type MetricFaultTolerance struct {
+	Enabled      bool    `yaml:"enabled"`
+	WindowSize   int     `yaml:"window_size"`   // Window size in minutes; if no metric is received within this window, default_value is sent
+	DefaultValue float64 `yaml:"default_value"` // Value to send when no metric has been received within the window
+}
+
 // EnvironmentSettings contains settings for a specific environment
 type EnvironmentSettings struct {
-	InstanceName  string              `yaml:"instancename"`
-	InsightFinder InsightFinderConfig `yaml:"insightfinder"`
-	MetricListMap map[string]string   `yaml:"metriclistMap"`
+	InstanceName   string                          `yaml:"instancename"`
+	InsightFinder  InsightFinderConfig             `yaml:"insightfinder"`
+	MetricListMap  map[string]string               `yaml:"metriclistMap"`
+	FaultTolerance map[string]MetricFaultTolerance `yaml:"fault_tolerance"` // Per-metric fault tolerance config
 }
 
 // InsightFinderConfig contains InsightFinder platform configuration
