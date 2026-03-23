@@ -553,6 +553,7 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
         # Additional fields
         fields_json = json.dumps(servicenow_data.get('additionalFields', {}))
         config.append(f'    additional_fields    = {fields_json}')
+        config.append(f'    component_name_rule  = "{servicenow_data.get("componentNameRule", "")}"')
         
         config.append('  }')
     
