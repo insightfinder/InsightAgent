@@ -48,6 +48,9 @@ REQUESTS = dict()
 This script gathers data to send to Insightfinder
 """
 
+def log_to_file(filename, data):
+    with open(filename, 'w') as f:
+        f.write(json.dumps(data, indent=2))
 
 def align_timestamp(timestamp, sampling_interval):
     if sampling_interval == 0 or not timestamp:
@@ -146,6 +149,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                 items_res = zapi.do_request('item.get',
                                             {'output': ['key_', 'itemid', 'name'], "hostids": hostids, "webitems": False,
                                              'selectHosts': ['hostId'], 'filter': {'value_type': value_type_list}})
+                #log_to_file("/tmp/all_items.json", items_res)
                 items_ids_map = {}
                 items_keys_map = {}
                 for item in items_res['result']:
@@ -205,6 +209,8 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
 
                         print("DEBUG 1 START: Get metric data with filter")
                         items_res = zapi.do_request('item.get', params)
+                        #input("DEBUG: Press Enter to continue...")
+                        #log_to_file("/tmp/debug1_raw_data.json", items_res)
                         print("DEBUG 1 END: Get metric data with filter")
                         logger.info('Query {} items from {} hosts with {} metrics in {} seconds'.format(
                             len(items_res['result']),
@@ -458,6 +464,10 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
     alert_data_fields = agent_config_vars['alert_data_fields']
 
     for message in result:
+        #log_to_file("/tmp/message.json", message)
+        #log_to_file("/tmp/items_map.json", items_map)
+        #log_to_file("/tmp/all_field_map.json", all_field_map)
+        #input("DEBUG: Press Enter to continue...")
         try:
             logger.debug('Message received:' + str(message))
 
@@ -465,6 +475,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             item_key = message.get('key_')
             item_id = message.get('itemid')
             item_name = message.get('name')
+            # input("DEBUG: Press Enter to continue...")
             print("DEBUG 2 END: Extract key data")
 
 
@@ -485,6 +496,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                     instance_id = hosts[0].get(instance_field)
                 else:
                     continue
+            # input("DEBUG: Press Enter to continue...")
             print("DEBUG 3 END: Set instance and device")
 
             instance = all_field_map.get(instance_field).get(instance_id)
@@ -532,6 +544,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                     continue
 
                 data_field = make_safe_data_key(data_field)
+            # input("DEBUG: Press Enter to continue...")
             print("DEBUG 5 END: Extract item")
 
             data_value = None
