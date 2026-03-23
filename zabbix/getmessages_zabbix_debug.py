@@ -190,6 +190,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
 
                         clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
                 else:
+                    # from pudb import set_trace;set_trace()
                     if metric_allowlist_map and len(items_keys) == 0:
                         continue
                     else:
@@ -468,6 +469,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
         #log_to_file("/tmp/items_map.json", items_map)
         #log_to_file("/tmp/all_field_map.json", all_field_map)
         #input("DEBUG: Press Enter to continue...")
+        #from pudb import set_trace;set_trace()
         try:
             logger.debug('Message received:' + str(message))
 
