@@ -315,6 +315,40 @@ def _if_headers(api_key: str, user_name: str) -> dict:
     return {'X-Api-Key': api_key, 'X-User-Name': user_name}
 
 
+def if_get_all_datasets(if_url: str, api_key: str, user_name: str) -> dict:
+    """
+    Fetch all datasets from InsightFinder.
+    Returns a dict of {dataset_name: dataset_id}.
+    Handles pagination automatically.
+    """
+    url = f"{if_url}/api/external/v1/llm-lab/datasets/search"
+    datasets = {}
+    page = 0
+    page_size = 100
+    while True:
+        params = {'pageNumber': page, 'pageSize': page_size}
+        try:
+            response = requests.get(url, headers=_if_headers(api_key, user_name), params=params, timeout=15)
+            response.raise_for_status()
+            content = response.json().get('content', [])
+            for item in content:
+                datasets[item['datasetName']] = item['id']
+            if len(content) < page_size:
+                break
+            page += 1
+        except Exception as exc:
+            logger.warning(f"Could not fetch datasets from InsightFinder: {exc}")
+            break
+    logger.info(f"Fetched {len(datasets)} dataset(s) from InsightFinder.")
+    return datasets
+
+
+def convert_prompt_with_dataset(prompt: str, dataset_id: str, dataset_name: str) -> str:
+    """Replace {{dataset_name}} placeholder with the InsightFinder dataset tag."""
+    dataset_tag = f'<dataset id="{dataset_id}"> {dataset_name} </dataset>'
+    return prompt.replace(f"{{{{{dataset_name}}}}}", dataset_tag)
+
+
 def if_dataset_exists(if_url: str, api_key: str, user_name: str, dataset_name: str) -> bool:
     """Return True if a dataset with exactly this name already exists in InsightFinder."""
     url = f"{if_url}/api/external/v1/llm-lab/datasets/search"
@@ -500,6 +534,9 @@ def process_prompts(
         logger.info("No prompt documents found in the queried time range.")
         return
 
+    # Fetch all datasets once so we can resolve {{dataset-name}} placeholders in prompts
+    dataset_map = if_get_all_datasets(if_url, api_key, user_name)
+
     for doc in docs:
         template_name    = get_field(doc, template_name_field) or default_name
         raw_prompts_list = get_field(doc, prompts_field)
@@ -527,6 +564,15 @@ def process_prompts(
                 f"Document '{doc.get('_id')}' produced an empty prompts list — skipping."
             )
             continue
+
+        # Replace any {{dataset-name}} placeholders with their InsightFinder dataset tags.
+        # Each prompt is passed through every known dataset so multiple placeholders are resolved.
+        converted: list[str] = []
+        for p in prompts:
+            for name, did in dataset_map.items():
+                p = convert_prompt_with_dataset(p, did, name)
+            converted.append(p)
+        prompts = converted
 
         if if_prompt_template_exists(if_url, api_key, user_name, template_name):
             logger.info(f"Prompt template '{template_name}' already exists in InsightFinder, skipping.")
