@@ -1,0 +1,13 @@
+# Install ONE of the two elasticsearch client versions depending on your cluster:
+#
+#   Elasticsearch 7.x cluster:
+#     pip install "elasticsearch>=7,<8"
+#
+#   Elasticsearch 8.x cluster:
+#     pip install "elasticsearch>=8"
+#
+# The agent auto-detects the installed client version at startup.
+
+elasticsearch>=7,<8
+requests
+urllib3>=1.26
