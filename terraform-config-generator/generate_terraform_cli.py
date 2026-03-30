@@ -163,6 +163,8 @@ def _parse_servicenow_entry(entry):
         "service_now_field": entry.get("serviceNowField", ""),
         "content_source": entry.get("contentSource", ""),
         "trigger_window_in_mills": 0,
+        "enable_feedback_collect": bool(entry.get("enableServiceNowFeedbackCollect", False)),
+        "enable_ticket_creation": bool(entry.get("enableTicketCreation", False)),
         "table_mapping": {},
     }
 
@@ -188,6 +190,12 @@ def _parse_servicenow_entry(entry):
             trigger = configs.get("triggerWindowInMills", 0)
             if trigger:
                 config["trigger_window_in_mills"] = int(float(trigger))
+            # enableFeedbackCollect in configs only fills in if root-level was absent/false
+            if not config["enable_feedback_collect"]:
+                config["enable_feedback_collect"] = bool(configs.get("enableFeedbackCollect", False))
+            # enableTicketCreation in configs only fills in if not already set at root
+            if not config["enable_ticket_creation"]:
+                config["enable_ticket_creation"] = bool(configs.get("enableTicketCreation", False))
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
@@ -310,6 +318,9 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
 
         if config.get("trigger_window_in_mills"):
             lines.append(f'  trigger_window_in_mills = {config["trigger_window_in_mills"]}')
+
+        lines.append(f'  enable_feedback_collect = {str(config.get("enable_feedback_collect", False)).lower()}')
+        lines.append(f'  enable_ticket_creation  = {str(config.get("enable_ticket_creation", False)).lower()}')
 
         if config.get("table_mapping"):
             lines.append('  table_mapping = {')
@@ -549,10 +560,15 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
         config.append(f'    timestamp_format     = "{servicenow_data.get("timestampFormat", "")}"')
         config.append(f'    sysparm_query        = "{servicenow_data.get("sysparmQuery", "")}"')
         config.append(f'    proxy                = "{servicenow_data.get("proxy", "")}"')
-        
+
+        if servicenow_data.get("componentNameRule"):
+            escaped = servicenow_data["componentNameRule"].replace('"', '\\"')
+            config.append(f'    component_name_rule  = "{escaped}"')
+
         # Additional fields
         fields_json = json.dumps(servicenow_data.get('additionalFields', {}))
         config.append(f'    additional_fields    = {fields_json}')
+        config.append(f'    component_name_rule  = "{servicenow_data.get("componentNameRule", "")}"')
         
         config.append('  }')
     

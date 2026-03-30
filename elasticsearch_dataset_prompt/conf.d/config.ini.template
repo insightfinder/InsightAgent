@@ -1,0 +1,95 @@
+# ============================================================
+# Elasticsearch LLM Agent — Configuration Template
+# Copy this file to config.ini and fill in the values.
+# ============================================================
+
+[elasticsearch]
+# Required. Comma-separated RFC-1738 URLs.
+# Examples:
+#   http://localhost:9200
+#   https://user:pass@my-es-host:9200
+#   https://node1:9200,https://node2:9200
+es_uris = http://localhost:9200
+
+# HTTP Basic Auth credentials (username:password).
+# Can also be embedded in es_uris above.
+http_auth = elastic:elastic123
+
+# SSL/TLS settings
+use_ssl = False
+verify_certs = False
+# Path to CA bundle (leave blank to skip CA verification)
+ca_certs =
+# Paths to client certificate and key (mutual TLS — leave blank if not required)
+client_cert =
+client_key =
+
+# Timestamp field name in documents (dot-notation for nested fields).
+# Example for Kibana/Beats data: @timestamp
+timestamp_field = @timestamp
+
+# Maximum number of documents to fetch per query page (ES max is 10000).
+query_chunk_size = 1000
+
+# Historical mode: set a time range to replay past data.
+# Format: YYYY-MM-DD HH:MM:SS,YYYY-MM-DD HH:MM:SS  (UTC)
+# Leave empty for live/streaming mode.
+his_time_range =
+
+# Streaming mode only: shift the query end-time back by this many seconds.
+# Useful when data indexing lags behind real time.
+# Default is 0 (query up to now).
+query_time_offset_seconds = 0
+
+# Streaming mode only: how many seconds of past data to query on each run.
+# The query window will be [now - query_time_offset_seconds - streaming_lookback_seconds,
+#                           now - query_time_offset_seconds).
+# Example: 300 means always query the last 5 minutes of data.
+streaming_lookback_seconds = 60
+
+
+# ============================================================
+# Dataset index settings
+# ============================================================
+[dataset_index]
+# Elasticsearch index that holds dataset documents.
+index = test-dataset
+
+# Field in each document that contains the dataset content (text body).
+content_field = content
+
+# Field in each document that contains the dataset name.
+dataset_name_field = dataset_name
+
+# Fallback name used when dataset_name_field is absent or empty.
+default_dataset_name = default-dataset
+
+
+# ============================================================
+# Prompt index settings
+# ============================================================
+[prompt_index]
+# Elasticsearch index that holds prompt documents.
+index = test-prompt
+
+# Field in each document that holds the list of prompt objects.
+# Expected to be an array, e.g. [{"prompt": "..."}, {"prompt": "..."}]
+prompts_field = prompts
+
+# Field *within each prompt object* that contains the prompt text.
+prompt_content_field = prompt
+
+# Field in each document that contains the template name.
+template_name_field = template_name
+
+# Fallback name used when template_name_field is absent or empty.
+default_template_name = default-template
+
+
+# ============================================================
+# InsightFinder settings
+# ============================================================
+[insightfinder]
+if_url = https://ai-stg.insightfinder.com
+user_name =
+api_key =

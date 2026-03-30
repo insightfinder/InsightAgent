@@ -26,6 +26,12 @@ metric_allowlist = /.*Space utilization*/,/.*Used space.*/,/.*Total space.*/,/.*
 # comma-separated list of regex or string of the metric names to exclude from the result. For regex, should surround with /, e.g. /cpu/
 metric_disallowlist =
 
+# Entries are evaluated top-to-bottom; the first matching entry is applied.
+# Specific (exact string) entries should come before general (regex) entries.
+# If not set, no transforms are applied.
+# Example: metric_transform_script = /etc/insightfinder/my_transforms.py
+metric_transform_script =
+
 # max number of workers to query and process data, default is cpu cores but max is 10 (connection pool size)
 max_workers =
 # request timeout in seconds, default is 60

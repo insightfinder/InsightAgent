@@ -1,6 +1,7 @@
 import configparser
 import glob
 import http.client
+import importlib.util
 import json
 import logging
 import multiprocessing
@@ -102,6 +103,48 @@ def is_matching_block_regex(item_id, name, block_regex_map):
     return False
 
 
+def load_metric_transforms(script_path, logger):
+    """Load TRANSFORMS list from a user-provided Python script."""
+    if not os.path.exists(script_path):
+        logger.error('metric_transform_script not found: {}'.format(script_path))
+        return []
+    try:
+        spec = importlib.util.spec_from_file_location('metric_transforms', script_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        if not hasattr(mod, 'TRANSFORMS'):
+            logger.error('metric_transform_script {} does not define a TRANSFORMS list'.format(script_path))
+            return []
+        logger.info('Loaded {} metric transform(s) from {}'.format(len(mod.TRANSFORMS), script_path))
+        return mod.TRANSFORMS
+    except Exception as e:
+        logger.error('Failed to load metric_transform_script {}: {}'.format(script_path, e))
+        return []
+
+
+def apply_metric_transform(metric_name, value, transforms):
+    """Apply the first matching transform from the TRANSFORMS list.
+    Each entry is a (pattern, fn) tuple where pattern is either:
+      - a str  → exact match against metric_name
+      - a compiled regex → pattern.match() against metric_name
+    fn can return:
+      - float        → value transformed, name unchanged
+      - (str, float) → new metric name and new value
+    Always returns (metric_name, value) — transformed or original.
+    """
+    for pattern, fn in transforms:
+        if isinstance(pattern, str):
+            matched = pattern == metric_name
+        else:
+            matched = bool(pattern.match(metric_name))
+        if matched:
+            result = fn(metric_name, value)
+            if isinstance(result, tuple):
+                return result[0], result[1]  # (new_name, new_value)
+            return metric_name, result        # name unchanged, value transformed
+    return metric_name, value                 # no match — passthrough
+
+
 def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_field_map, items_map, items_keys,
                            cli_config_vars, agent_config_vars, if_config_vars, sampling_now):
     logger.info('Starting data processing worker {}/{}...'.format(idx + 1, total))
@@ -120,7 +163,8 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
 
             # value_type: 0 - FLOAT 1 - CHAR 2 - LOG 3 - UNSIGNED(default)
             value_type_list = ['0', '3'] if data_type == 'Metric' else ['2']
-            history_type = 0 if data_type == 'Metric' else 2
+            history_type_list = [0, 3] if data_type == 'Metric' else [2]
+            history_type = history_type_list[0]
 
             if his_time_range:
                 timestamp_end = his_time_range[1]
@@ -169,16 +213,18 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                     logger.debug('Using time range for replay data: {}'.format(his_time_range))
                     for timestamp in range(timestamp_start, timestamp_end, his_interval):
                         time_now = arrow.utcnow()
-                        query = {'output': 'extend', "history": history_type, "hostids": hostids, "itemids": items_ids,
-                                 'time_from': timestamp, 'time_till': timestamp + his_interval}
-                        logger.debug('Begin history.get query {} from {} hosts'.format(query, len(hostids)))
-
-                        history_res = zapi.do_request('history.get', query)
+                        combined_results = []
+                        for h_type in history_type_list:
+                            query = {'output': 'extend', "history": h_type, "hostids": hostids, "itemids": items_ids,
+                                     'time_from': timestamp, 'time_till': timestamp + his_interval}
+                            logger.debug('Begin history.get query {} from {} hosts'.format(query, len(hostids)))
+                            history_res = zapi.do_request('history.get', query)
+                            combined_results.extend(history_res['result'])
                         logger.info(
-                            'Query {} items from {} hosts with {} metrics in {} seconds'.format(len(history_res['result']),
+                            'Query {} items from {} hosts with {} metrics in {} seconds'.format(len(combined_results),
                                                                                             len(hostids), len(items_keys), (
                                                                                                     arrow.utcnow() - time_now).total_seconds()))
-                        parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map, 'history',
+                        parse_messages_zabbix(logger, data_type, combined_results, all_field_map, items_ids_map, 'history',
                                               agent_config_vars, track, data_buffer, sampling_interval, sampling_now)
 
                         clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
@@ -616,6 +662,14 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                     data_value = str(abs(numeric_value))
                     logger.debug(f'Converted negative value {numeric_value} to positive {data_value} for metric {data_field}')
 
+            # Apply per-metric transform from user-provided script
+            if is_metric and data_value and agent_config_vars.get('metric_transforms'):
+                try:
+                    data_field, transformed = apply_metric_transform(data_field, float(data_value), agent_config_vars['metric_transforms'])
+                    data_value = str(transformed)
+                except Exception as e:
+                    logger.warn('Error applying metric transform for {}: {}'.format(data_field, e))
+
             timestamp = str(timestamp)
 
             key = '{}-{}'.format(timestamp, full_instance)
@@ -707,6 +761,7 @@ def get_agent_config_vars(logger, config_ini):
             collect_dedicated_items = config_parser.get('zabbix', 'collect_dedicated_items', fallback=False)
             metric_allowlist = config_parser.get('zabbix', 'metric_allowlist')
             metric_disallowlist = config_parser.get('zabbix', 'metric_disallowlist', fallback=None)
+            metric_transform_script = config_parser.get('zabbix', 'metric_transform_script', fallback=None)
             applications = config_parser.get('zabbix', 'applications')
 
             max_workers = config_parser.get('zabbix', 'max_workers')
@@ -857,6 +912,11 @@ def get_agent_config_vars(logger, config_ini):
         else:
             collect_dedicated_items = False
 
+        # metric transform script
+        metric_transforms = []
+        if metric_transform_script and len(metric_transform_script.strip()) != 0:
+            metric_transforms = load_metric_transforms(metric_transform_script.strip(), logger)
+
         # add parsed variables to a global
         config_vars = {'zabbix_kwargs': zabbix_kwargs, 'host_groups': host_groups, 'hosts': hosts,
                        'host_blocklist': host_blocklist, 'host_blocklist_map': host_blocklist_map,
@@ -876,6 +936,7 @@ def get_agent_config_vars(logger, config_ini):
                        'target_timestamp_timezone': target_timestamp_timezone, 'timezone': timezone,
                        'timestamp_format': timestamp_format, 'component_from_instance_name_re_sub': component_from_instance_name_re_sub,
                        'component_name_script': component_name_script}
+                       'metric_transforms': metric_transforms}
 
         return config_vars
 

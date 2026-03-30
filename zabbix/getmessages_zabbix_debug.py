@@ -48,6 +48,9 @@ REQUESTS = dict()
 This script gathers data to send to Insightfinder
 """
 
+def log_to_file(filename, data):
+    with open(filename, 'w') as f:
+        f.write(json.dumps(data, indent=2))
 
 def align_timestamp(timestamp, sampling_interval):
     if sampling_interval == 0 or not timestamp:
@@ -143,21 +146,10 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             reset_track(track)
 
             if data_type == 'Log' or data_type == 'Metric':
-                payload = {
-                    "jsonrpc": "2.0",
-                    "method": "item.get",
-                    "params": {
-                        'output': ['key_', 'itemid', 'name'],
-                        "hostids": hostids,
-                        "webitems": True,
-                        'selectHosts': ['hostId'],
-                        'filter': {'value_type': value_type_list}
-                    },
-                    "id": 1,
-                    "auth": zapi.auth
-                }
-                items_res = requests.post(zapi.url, json=payload, verify=False).json()
-                print("[DEBUG] item.get response: {}".format(items_res))
+                items_res = zapi.do_request('item.get',
+                                            {'output': ['key_', 'itemid', 'name'], "hostids": hostids, "webitems": False,
+                                             'selectHosts': ['hostId'], 'filter': {'value_type': value_type_list}})
+                #log_to_file("/tmp/all_items.json", items_res)
                 items_ids_map = {}
                 items_keys_map = {}
                 for item in items_res['result']:
@@ -188,42 +180,46 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
 
                         history_res = zapi.do_request('history.get', query)
                         logger.info(
-                            'Query {} items from {} hosts with {} metrics in {} seconds'.format(len(history_res['result']),
-                                                                                            len(hostids), len(items_keys), (
-                                                                                                    arrow.utcnow() - time_now).total_seconds()))
-                        parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map, 'history',
+                            'Query {} items from {} hosts with {} metrics in {} seconds'.format(
+                                len(history_res['result']),
+                                len(hostids), len(items_keys), (
+                                        arrow.utcnow() - time_now).total_seconds()))
+                        parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map,
+                                              'history',
                                               agent_config_vars, track, data_buffer, sampling_interval, sampling_now)
 
                         clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
                 else:
+                    # from pudb import set_trace;set_trace()
                     if metric_allowlist_map and len(items_keys) == 0:
                         continue
                     else:
                         time_now = arrow.utcnow()
                         metric_output = ['key_', 'itemid', 'lastclock', 'clock', 'lastvalue', 'value', 'name']
 
-                        params = {'output': metric_output, "hostids": hostids, "webitems": True, "selectHosts": ['hostId'],
-                                'filter': {'value_type': value_type_list, 'key_': items_keys}}
-                        logger.info('Begin item.get query from {} hosts (attempt {}/{})'.format(len(hostids), attempt + 1, max_retries))
+                        params = {'output': metric_output, "hostids": hostids,
+                                  "selectHosts": ['hostId'],
+                                  'filter': {'key_': items_keys}}
+                        logger.info(
+                            'Begin item.get query from {} hosts (attempt {}/{})'.format(len(hostids), attempt + 1,
+                                                                                        max_retries))
 
                         # Add delay between requests to reduce connection pressure
                         if attempt > 0:
                             time.sleep(retry_delay * attempt)
 
-                        payload = {
-                            "jsonrpc": "2.0",
-                            "method": "item.get",
-                            "params": params,
-                            "id": 1,
-                            "auth": zapi.auth
-                        }
-                        items_res = requests.post(zapi.url, json=payload, verify=False).json()
-                        logger.info('Query {} items from {} hosts with {} metrics in {} seconds'.format(len(items_res['result']),
-                                                                                                    len(hostids),
-                                                                                                    len(items_keys), (
-                                                                                                            arrow.utcnow() - time_now).total_seconds()))
+                        print("DEBUG 1 START: Get metric data with filter")
+                        items_res = zapi.do_request('item.get', params)
+                        #input("DEBUG: Press Enter to continue...")
+                        #log_to_file("/tmp/debug1_raw_data.json", items_res)
+                        print("DEBUG 1 END: Get metric data with filter")
+                        logger.info('Query {} items from {} hosts with {} metrics in {} seconds'.format(
+                            len(items_res['result']),
+                            len(hostids),
+                            len(items_keys), (
+                                    arrow.utcnow() - time_now).total_seconds()))
                         parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
-                                            agent_config_vars, track, data_buffer, sampling_interval, sampling_now)
+                                              agent_config_vars, track, data_buffer, sampling_interval, sampling_now)
                         clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
             elif data_type == 'Alert':
                 for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
@@ -245,8 +241,9 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
 
                     history_res = zapi.do_request('problem.get', query)
 
-                    logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids), (
-                            arrow.utcnow() - time_now).total_seconds()))
+                    logger.info(
+                        'Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids), (
+                                arrow.utcnow() - time_now).total_seconds()))
                     parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
                                           agent_config_vars, track, data_buffer, log_request_interval, sampling_now)
                     # clear data buffer when piece of time range end
@@ -263,15 +260,18 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
 
                     history_res = zapi.do_request('history.get', query)
 
-                    logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids), (
-                            arrow.utcnow() - time_now).total_seconds()))
-                    parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map, 'history',
+                    logger.info(
+                        'Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids), (
+                                arrow.utcnow() - time_now).total_seconds()))
+                    parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_ids_map,
+                                          'history',
                                           agent_config_vars, track, data_buffer, log_request_interval, sampling_now)
                     clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
             return idx + 1
         except Exception as e:
             if "Too many connections" in str(e) and attempt < max_retries - 1:
-                logger.warning(f'Connection limit reached on attempt {attempt + 1}, retrying in {retry_delay * (attempt + 1)} seconds...')
+                logger.warning(
+                    f'Connection limit reached on attempt {attempt + 1}, retrying in {retry_delay * (attempt + 1)} seconds...')
                 time.sleep(retry_delay * (attempt + 1))
                 continue
             else:
@@ -282,7 +282,6 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
 
 
 def start_data_processing(logger, config_name, cli_config_vars, agent_config_vars, if_config_vars, sampling_now):
-
     # Setup data_type
     if 'METRIC' in if_config_vars['project_type']:
         data_type = "Metric"
@@ -301,7 +300,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
     max_workers = agent_config_vars['max_workers']
     request_timeout = agent_config_vars['request_timeout']
     zapi = ZabbixAPI(server=zabbix_url, timeout=request_timeout)
-    zapi.session.verify=False
+    zapi.session.verify = False
     zapi.login(user=zabbix_user, password=zabbix_password)
     logger.info("Connected to Zabbix API Version %s" % zapi.api_version())
 
@@ -338,11 +337,10 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
     hosts_ids = []
 
     zabbix_params = {'output': ['name', 'hostid'], 'groupids': host_groups_ids,
-                                             'selectHostGroups': ['groupid', 'name'],
-                                             'selectParentTemplates': ['templateid', 'name'],
-                                             'selectInterfaces': ['ip', 'type', 'main'],
-                                             'filter': {"host": agent_config_vars['hosts']}, }
-
+                     'selectHostGroups': ['groupid', 'name'],
+                     'selectParentTemplates': ['templateid', 'name'],
+                     'selectInterfaces': ['ip', 'type', 'main'],
+                     'filter': {"host": agent_config_vars['hosts']}, }
 
     # Remove hosts filter if not needed
     if agent_config_vars['hosts'] == '':
@@ -467,14 +465,24 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
     alert_data_fields = agent_config_vars['alert_data_fields']
 
     for message in result:
+        #log_to_file("/tmp/message.json", message)
+        #log_to_file("/tmp/items_map.json", items_map)
+        #log_to_file("/tmp/all_field_map.json", all_field_map)
+        #input("DEBUG: Press Enter to continue...")
+        #from pudb import set_trace;set_trace()
         try:
             logger.debug('Message received:' + str(message))
 
+            print("DEBUG 2 START: Extract key data")
             item_key = message.get('key_')
             item_id = message.get('itemid')
             item_name = message.get('name')
+            # input("DEBUG: Press Enter to continue...")
+            print("DEBUG 2 END: Extract key data")
+
 
             # set instance and device
+            print("DEBUG 3 START: Set instance and device")
             if not message.get('hosts'):
                 item = items_map.get(item_id)
                 if not item:
@@ -490,65 +498,25 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                     instance_id = hosts[0].get(instance_field)
                 else:
                     continue
+            # input("DEBUG: Press Enter to continue...")
+            print("DEBUG 3 END: Set instance and device")
 
             instance = all_field_map.get(instance_field).get(instance_id)
-            
+
             # set IP address
             ip_address = None
-            if all_field_map.get('hostip'):
-                ip_address = all_field_map.get('hostip').get(instance_id)
-            # set zone
             zone = None
-            if zone_from_host_group:
-                zone_field = 'hostgroup'
-                if all_field_map.get(zone_field):
-                    zone = all_field_map.get(zone_field).get(instance_id)
-
             # set subzone
             subzone = None
-            if subzone_from_instance_name_regex and instance:
-                try:
-                    match = re.search(subzone_from_instance_name_regex, instance)
-                    if match:
-                        # If the regex has groups, use the first group, otherwise use the full match
-                        subzone = match.group(1) if match.groups() else match.group(0)
-                except re.error as e:
-                    logger.warn(f'Invalid subzone regex pattern: {subzone_from_instance_name_regex}, error: {e}')
 
             # set component
-            component = None
-            if component_from_host_group:
-                component_field = 'hostgroup'
-                if all_field_map.get(component_field):
-                    component = all_field_map.get(component_field).get(instance_id)
-            elif component_from_instance_name_re_sub:
-                re_sub_rules = component_from_instance_name_re_sub.split(",")
-                if len(re_sub_rules) % 2 != 0:
-                    logger.error("Unable to parse component_from_instance_name_re_sub")
-
-                re_rule_part1 = ""
-                re_rule_part2 = ""
-                component = instance
-
-                for rule_index in range(len(re_sub_rules)):
-                    if rule_index %2 == 0:
-                        re_rule_part1 = re_sub_rules[rule_index]
-                    else:
-                        re_rule_part2 = re_sub_rules[rule_index]
-                        component = re.sub(re_rule_part1, re_rule_part2, component)
-            if component is not None and component != '':
-                component = re.sub(r'^[-_\W]+', '', component)  # remove leading non-alphanumeric characters
+            component = instance
 
             # add device info if it has
             device = None
-            if (item_key or item_id) and device_field and len(device_field) > 0:
-                device_field = device_field[0]
-                if items_map.get(item_key) or items_map.get(item_id):
-                    item = items_map.get(item_key) or items_map.get(item_id)
-                    device_id = item.get(device_field)
-                    device = all_field_map.get(device_field).get(device_id)
-            full_instance = make_safe_instance_string(instance, device)
+            full_instance = make_safe_instance_string(instance, "")
 
+            print("DEBUG 4 START: Extract timestamp")
             # set timestamp
             if is_metric and replay_type == 'live':
                 timestamp = sampling_now
@@ -561,8 +529,10 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
 
             if timestamp == 0:
                 continue
+            print("DEBUG 4 END: Extract timestamp")
 
             # set data field and value
+            print("DEBUG 5 START: Extract item")
             data_field = None
             if is_metric:
                 if item_name:
@@ -576,10 +546,11 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                     continue
 
                 data_field = make_safe_data_key(data_field)
+            # input("DEBUG: Press Enter to continue...")
+            print("DEBUG 5 END: Extract item")
 
             data_value = None
             if is_alert:
-
                 # Skip Alerts / Problems `resolved` or `ok` event
                 if 'value' in message and message['value'] == '0':
                     continue
@@ -604,7 +575,8 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                 numeric_value = float(data_value)
                 if numeric_value < 0:
                     data_value = str(abs(numeric_value))
-                    logger.debug(f'Converted negative value {numeric_value} to positive {data_value} for metric {data_field}')
+                    logger.debug(
+                        f'Converted negative value {numeric_value} to positive {data_value} for metric {data_field}')
 
             timestamp = str(timestamp)
 
@@ -719,8 +691,10 @@ def get_agent_config_vars(logger, config_ini):
             instance_field = config_parser.get('zabbix', 'instance_field', raw=True)
             component_from_host_group = config_parser.get('zabbix', 'component_from_host_group') or False
             zone_from_host_group = config_parser.get('zabbix', 'zone_from_host_group') or False
-            component_from_instance_name_re_sub = config_parser.get('zabbix', 'component_from_instance_name_re_sub', fallback=None)
-            subzone_from_instance_name_regex = config_parser.get('zabbix', 'subzone_from_instance_name_regex', fallback=None)
+            component_from_instance_name_re_sub = config_parser.get('zabbix', 'component_from_instance_name_re_sub',
+                                                                    fallback=None)
+            subzone_from_instance_name_regex = config_parser.get('zabbix', 'subzone_from_instance_name_regex',
+                                                                 fallback=None)
             device_field = config_parser.get('zabbix', 'device_field', raw=True)
             timestamp_field = config_parser.get('zabbix', 'timestamp_field', raw=True) or 'timestamp'
             target_timestamp_timezone = config_parser.get('zabbix', 'target_timestamp_timezone', raw=True) or 'UTC'
@@ -849,7 +823,8 @@ def get_agent_config_vars(logger, config_ini):
         # add parsed variables to a global
         config_vars = {'zabbix_kwargs': zabbix_kwargs, 'host_groups': host_groups, 'hosts': hosts,
                        'host_blocklist': host_blocklist, 'host_blocklist_map': host_blocklist_map,
-                       'template_ids': template_ids,'collect_dedicated_items': collect_dedicated_items, 'metric_allowlist': metric_allowlist,
+                       'template_ids': template_ids, 'collect_dedicated_items': collect_dedicated_items,
+                       'metric_allowlist': metric_allowlist,
                        'metric_allowlist_map': metric_allowlist_map,
                        'metric_disallowlist_map': metric_disallowlist_map,
                        'max_workers': max_workers,
@@ -863,7 +838,8 @@ def get_agent_config_vars(logger, config_ini):
                        'device_field': device_fields, 'data_fields': data_fields,
                        'alert_data_fields': alert_data_fields, 'timestamp_field': timestamp_fields,
                        'target_timestamp_timezone': target_timestamp_timezone, 'timezone': timezone,
-                       'timestamp_format': timestamp_format, 'component_from_instance_name_re_sub': component_from_instance_name_re_sub}
+                       'timestamp_format': timestamp_format,
+                       'component_from_instance_name_re_sub': component_from_instance_name_re_sub}
 
         return config_vars
 
@@ -1010,12 +986,12 @@ def make_safe_instance_string(instance, device=''):
     # strip underscores
     instance = UNDERSCORE.sub('.', instance)
     instance = COLONS.sub('-', instance)
-    
+
     # remove leading special characters (hyphens, underscores, etc.)
     instance = re.sub(r'^[-_\W]+', '', instance)
-    
+
     # if there's a device, concatenate it to the instance with an underscore
-    if device:
+    if device and device != '':
         instance = '{}_{}'.format(make_safe_instance_string(device), instance)
     return instance
 
@@ -1167,7 +1143,8 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
         if data and timestamp and instance_name:
             ts = int(timestamp)
             if instance_name not in instance_data_map:
-                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'i': ip_address, 'z': zone, 'sz': subzone, 'dit': {}, }
+                instance_data_map[instance_name] = {'in': instance_name, 'cn': component_name, 'i': ip_address,
+                                                    'z': zone, 'sz': subzone, 'dit': {}, }
 
             if timestamp not in instance_data_map[instance_name]['dit']:
                 instance_data_map[instance_name]['dit'][timestamp] = {'t': ts, 'm': []}
@@ -1456,10 +1433,10 @@ def listener_process(q, c_config):
             try:
                 while not q.empty():
                     record = q.get(timeout=1)  # Add timeout to prevent blocking
-                    
+
                     if not record or record.name == 'KILL':
                         return
-                    
+
                     logger = logging.getLogger(record.name)
                     logger.handle(record)
             except Exception as e:
@@ -1588,18 +1565,16 @@ def main():
         time.sleep(0.5)  # Give listener time to process kill signal
     except:
         pass
-    
+
     # Terminate listener if it's still alive
     if listener.is_alive():
         listener.terminate()
     listener.join(timeout=5)  # Wait max 5 seconds for clean shutdown
-    
+
     # Force cleanup if needed
     if listener.is_alive():
         listener.kill()
 
 
-
 if __name__ == "__main__":
     main()
-
