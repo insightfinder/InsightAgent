@@ -68,6 +68,12 @@ component_from_host_group = false
 # each pair of re.sub params will be seperated by comma,
 component_from_instance_name_re_sub = ^([^-]+).*?([^-]+)$,\1-\2,      (.*)(-swt|-switch),-Switch
 
+# Path to a Python script that defines a generate_component_name function used to generate component names.
+# When set, this takes precedence over component_from_host_group and component_from_instance_name_re_sub.
+# The script must define:
+#   def generate_component_name(instance_name=None, hostgroup_name=None, tags=None) -> str:
+component_name_script =
+
 # Set up zone field
 zone_from_host_group = false
 

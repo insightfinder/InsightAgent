@@ -489,8 +489,27 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
     component_from_host_group = agent_config_vars['component_from_host_group']
     zone_from_host_group = agent_config_vars['zone_from_host_group']
     component_from_instance_name_re_sub = agent_config_vars['component_from_instance_name_re_sub']
+    component_name_script = agent_config_vars.get('component_name_script')
     subzone_from_instance_name_regex = agent_config_vars['subzone_from_instance_name_regex']
     alert_data_fields = agent_config_vars['alert_data_fields']
+
+    # Load custom component name script if configured
+    _generate_component_name_fn = None
+    if component_name_script:
+        import importlib.util
+        script_path = os.path.abspath(component_name_script)
+        if os.path.exists(script_path):
+            try:
+                _spec = importlib.util.spec_from_file_location('component_name_script', script_path)
+                _mod = importlib.util.module_from_spec(_spec)
+                _spec.loader.exec_module(_mod)
+                _generate_component_name_fn = getattr(_mod, 'generate_component_name', None)
+                if _generate_component_name_fn is None:
+                    logger.error(f'component_name_script {script_path} does not define generate_component_name()')
+            except Exception as e:
+                logger.error(f'Failed to load component_name_script {script_path}: {e}')
+        else:
+            logger.error(f'component_name_script not found: {script_path}')
 
     for message in result:
         try:
@@ -543,7 +562,18 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
 
             # set component
             component = None
-            if component_from_host_group:
+            if _generate_component_name_fn is not None:
+                try:
+                    hostgroup_name = all_field_map.get('hostgroup', {}).get(instance_id)
+                    tags = message.get('tags')
+                    component = _generate_component_name_fn(
+                        instance_name=instance,
+                        hostgroup_name=hostgroup_name,
+                        tags=tags,
+                    )
+                except Exception as e:
+                    logger.error(f'generate_component_name raised an error: {e}')
+            elif component_from_host_group:
                 component_field = 'hostgroup'
                 if all_field_map.get(component_field):
                     component = all_field_map.get(component_field).get(instance_id)
@@ -755,6 +785,7 @@ def get_agent_config_vars(logger, config_ini):
             component_from_host_group = config_parser.get('zabbix', 'component_from_host_group') or False
             zone_from_host_group = config_parser.get('zabbix', 'zone_from_host_group') or False
             component_from_instance_name_re_sub = config_parser.get('zabbix', 'component_from_instance_name_re_sub', fallback=None)
+            component_name_script = config_parser.get('zabbix', 'component_name_script', fallback=None)
             subzone_from_instance_name_regex = config_parser.get('zabbix', 'subzone_from_instance_name_regex', fallback=None)
             device_field = config_parser.get('zabbix', 'device_field', raw=True)
             timestamp_field = config_parser.get('zabbix', 'timestamp_field', raw=True) or 'timestamp'
@@ -904,6 +935,7 @@ def get_agent_config_vars(logger, config_ini):
                        'alert_data_fields': alert_data_fields, 'timestamp_field': timestamp_fields,
                        'target_timestamp_timezone': target_timestamp_timezone, 'timezone': timezone,
                        'timestamp_format': timestamp_format, 'component_from_instance_name_re_sub': component_from_instance_name_re_sub,
+                       'component_name_script': component_name_script}
                        'metric_transforms': metric_transforms}
 
         return config_vars
