@@ -1028,6 +1028,7 @@ def generate_project_tf(project_name: str, project_data: Dict,
         cfg.append(f'    proxy                = "{sn.get("proxy", "")}"')
         fields_json = json.dumps(sn.get('additionalFields', {}))
         cfg.append(f'    additional_fields    = {fields_json}')
+        cfg.append(f'    component_name_rule  = "{sn.get("componentNameRule", "")}"')
         cfg.append('  }')
 
     # log_label_settings
@@ -1878,10 +1879,16 @@ def run(config_path: str, output_dir: str, env_filter: Optional[str],
                     if not extra_projects:
                         print(f"\n  System: {system_display!r} — skipped (not in only_process.systems)")
                         continue
+                    _raw_projects = (system.get("projectDetailsList")
+                                     or system.get("projectDetailList") or [])
+                    if isinstance(_raw_projects, str):
+                        try:
+                            _raw_projects = json.loads(_raw_projects)
+                        except (json.JSONDecodeError, ValueError):
+                            _raw_projects = []
                     system_project_names = {
                         (p.get("projectName") or p.get("name") or "")
-                        for p in (system.get("projectDetailsList")
-                                  or system.get("projectDetailList") or [])
+                        for p in _raw_projects
                         if isinstance(p, dict)
                     }
                     matching = extra_projects & system_project_names
