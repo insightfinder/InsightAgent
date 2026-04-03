@@ -165,6 +165,7 @@ def _parse_servicenow_entry(entry):
         "trigger_window_in_mills": 0,
         "enable_feedback_collect": bool(entry.get("enableServiceNowFeedbackCollect", False)),
         "enable_ticket_creation": bool(entry.get("enableTicketCreation", False)),
+        "enable_ticket_update": bool(entry.get("enableTicketUpdate", False)),
         "table_mapping": {},
     }
 
@@ -196,6 +197,8 @@ def _parse_servicenow_entry(entry):
             # enableTicketCreation in configs only fills in if not already set at root
             if not config["enable_ticket_creation"]:
                 config["enable_ticket_creation"] = bool(configs.get("enableTicketCreation", False))
+            if not config["enable_ticket_update"]:
+                config["enable_ticket_update"] = bool(configs.get("enableTicketUpdate", False))
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
@@ -321,6 +324,7 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
 
         lines.append(f'  enable_feedback_collect = {str(config.get("enable_feedback_collect", False)).lower()}')
         lines.append(f'  enable_ticket_creation  = {str(config.get("enable_ticket_creation", False)).lower()}')
+        lines.append(f'  enable_ticket_update    = {str(config.get("enable_ticket_update", False)).lower()}')
 
         if config.get("table_mapping"):
             lines.append('  table_mapping = {')
