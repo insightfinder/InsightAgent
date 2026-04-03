@@ -12,7 +12,8 @@ Usage:
     python auto_generate_terraform.py --config config.yaml --dry-run
 
 config.yaml format:
-    Delay: 2  # seconds between project API calls (0 = no delay)
+    Delay: 2     # seconds between project API calls AND between HTTP retries (0 = no delay)
+    Retries: 3   # max HTTP-level retries on non-200 responses (default 3)
     NBC:
       base_url: https://nbc.insightfinder.com/
       username: nbcAdmin
@@ -67,6 +68,14 @@ from generate_terraform_cli import (
 
 
 # ---------------------------------------------------------------------------
+# Runtime config (overridden by run() from config.yaml)
+# ---------------------------------------------------------------------------
+
+_RETRY_DELAY: float = 1.0   # seconds to sleep between HTTP retries
+_MAX_RETRIES: int = 3        # max attempts per HTTP request
+
+
+# ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
@@ -100,19 +109,51 @@ def make_session(no_ssl_verify: bool = False) -> requests.Session:
     return s
 
 
+def _build_curl(url: str, headers: Dict[str, str], params: Optional[Dict]) -> str:
+    """Return a curl command string equivalent to the GET request (for debugging)."""
+    import urllib.parse
+    header_flags = " ".join(f"-H '{k}: {v}'" for k, v in headers.items())
+    if params:
+        qs = urllib.parse.urlencode(params)
+        full_url = f"{url}?{qs}"
+    else:
+        full_url = url
+    return f"curl -X GET '{full_url}' {header_flags}"
+
+
 def _get(session: requests.Session, url: str, headers: Dict[str, str],
-         params: Optional[Dict] = None, max_retries: int = 3) -> Optional[requests.Response]:
-    for attempt in range(1, max_retries + 1):
+         params: Optional[Dict] = None,
+         max_retries: Optional[int] = None,
+         retry_delay: Optional[float] = None) -> Optional[requests.Response]:
+    """GET with retries on both network errors and non-200 HTTP responses."""
+    attempts = max_retries if max_retries is not None else _MAX_RETRIES
+    delay = retry_delay if retry_delay is not None else _RETRY_DELAY
+
+    last_resp: Optional[requests.Response] = None
+    for attempt in range(1, attempts + 1):
         try:
             resp = session.get(url, headers=headers, params=params, timeout=30)
-            return resp
+            if resp.status_code == 200:
+                return resp
+            # Non-200: print details and maybe retry
+            last_resp = resp
+            print(f"  [attempt {attempt}/{attempts}] HTTP {resp.status_code} for {url}", file=sys.stderr)
+            print(f"  curl: {_build_curl(url, headers, params)}", file=sys.stderr)
+            print(f"  params: {json.dumps(params, indent=4) if params else '(none)'}", file=sys.stderr)
+            body = resp.text.strip()
+            print(f"  body:  {body[:500] if body else '(empty)'}", file=sys.stderr)
+            if attempt < attempts:
+                print(f"  Retrying in {delay}s...", file=sys.stderr)
+                time.sleep(delay)
         except requests.RequestException as e:
-            if attempt < max_retries:
-                time.sleep(attempt)
+            if attempt < attempts:
+                print(f"  [attempt {attempt}/{attempts}] Network error: {e} — retrying in {delay}s...",
+                      file=sys.stderr)
+                time.sleep(delay)
             else:
-                print(f"  Request failed after {max_retries} attempts: {e}", file=sys.stderr)
+                print(f"  Request failed after {attempts} attempts: {e}", file=sys.stderr)
                 return None
-    return None
+    return last_resp  # return last non-200 response so caller can inspect status_code
 
 
 def fetch_json(session: requests.Session, url: str, headers: Dict[str, str],
@@ -121,7 +162,8 @@ def fetch_json(session: requests.Session, url: str, headers: Dict[str, str],
     if resp is None:
         return None
     if resp.status_code != 200:
-        print(f"  Warning: HTTP {resp.status_code} for {url}", file=sys.stderr)
+        # Details already printed by _get; just surface the final status here.
+        print(f"  Warning: HTTP {resp.status_code} for {url} (all retries exhausted)", file=sys.stderr)
         return None
     try:
         return resp.json()
@@ -328,6 +370,7 @@ def fetch_metric_configurations(session: requests.Session, host: str, username: 
         start = 0
         limit = 500
         found = False
+        got_response = False
 
         while not found:
             alert_params = {
@@ -346,6 +389,7 @@ def fetch_metric_configurations(session: requests.Session, host: str, username: 
             if not alert_resp:
                 break
 
+            got_response = True
             pattern_id_rule = alert_resp.get("patternIdGenerationRule", pattern_id_rule)
 
             for entry in alert_resp.get("metricSetting", []):
@@ -360,6 +404,10 @@ def fetch_metric_configurations(session: requests.Session, host: str, username: 
             if found or alert_resp.get("reachEnd", True):
                 break
             start += limit
+
+        if not got_response:
+            print(f"  Skipping metric '{metric_name}' — no settings returned after all retries.")
+            continue
 
         metric_configs[metric_name] = {
             "escalate_incident_components": escalate_map.get(metric_name, []),
@@ -1101,6 +1149,31 @@ variable "system_name" {
 '''
 
 
+def _l2m_projects_tf() -> str:
+    lines = [
+        'module "l2m_projects" {',
+        '  source = "./l2m-projects"',
+        '',
+        '  system_name = var.system_name',
+        '',
+        '  providers = {',
+        '    insightfinder = insightfinder',
+        '  }',
+        '}',
+        '',
+    ]
+    return '\n'.join(lines)
+
+
+def _l2m_projects_variables_tf() -> str:
+    return '''\
+variable "system_name" {
+  description = "System name passed from parent module"
+  type        = string
+}
+'''
+
+
 def _trace_projects_tf() -> str:
     lines = [
         'module "trace_projects" {',
@@ -1254,7 +1327,8 @@ def _generate_metric_configurations_hcl(metric_configs: Dict[str, Any]) -> List[
     lines.append("")
     lines.append("  metric_configurations = [")
 
-    metrics = sorted(metric_configs.keys())
+    metrics = [m for m in sorted(metric_configs.keys())
+               if metric_configs[m].get("alert_settings")]
     for metric_idx, metric_name in enumerate(metrics):
         cfg = metric_configs[metric_name]
         is_last_metric = metric_idx == len(metrics) - 1
@@ -1274,23 +1348,20 @@ def _generate_metric_configurations_hcl(metric_configs: Dict[str, Any]) -> List[
 
         # metric_alert_settings
         alert_settings = cfg.get("alert_settings") or []
-        if alert_settings:
-            lines.append("")
-            lines.append("      metric_alert_settings = [")
-            for s_idx, setting in enumerate(alert_settings):
-                is_last_setting = s_idx == len(alert_settings) - 1
-                lines.append("        {")
-                for api_key, tf_attr, field_type in _ALERT_SETTING_FIELD_MAP:
-                    if api_key in setting:
-                        val_hcl = _format_alert_setting_value(setting[api_key], field_type)
-                        lines.append(f"          {tf_attr} = {val_hcl}")
-                # rougeValue — special handling
-                rouge_hcl = _format_rouge_value(setting.get("rougeValue"))
-                lines.append(f"          rouge_value = {rouge_hcl}")
-                lines.append("        }" + ("" if is_last_setting else ","))
-            lines.append("      ]")
-        else:
-            lines.append("      metric_alert_settings = []")
+        lines.append("")
+        lines.append("      metric_alert_settings = [")
+        for s_idx, setting in enumerate(alert_settings):
+            is_last_setting = s_idx == len(alert_settings) - 1
+            lines.append("        {")
+            for api_key, tf_attr, field_type in _ALERT_SETTING_FIELD_MAP:
+                if api_key in setting:
+                    val_hcl = _format_alert_setting_value(setting[api_key], field_type)
+                    lines.append(f"          {tf_attr} = {val_hcl}")
+            # rougeValue — special handling
+            rouge_hcl = _format_rouge_value(setting.get("rougeValue"))
+            lines.append(f"          rouge_value = {rouge_hcl}")
+            lines.append("        }" + ("" if is_last_setting else ","))
+        lines.append("      ]")
 
         lines.append("    }" + ("" if is_last_metric else ","))
 
@@ -1490,14 +1561,22 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
 
     if not projects:
         print("    No matching projects — skipping system.")
-        return {"projects": 0, "skipped": 0, "metric_projects": 0, "metric_skipped": 0}
+        return {"projects": 0, "skipped": 0, "metric_projects": 0, "metric_skipped": 0,
+                "l2m_projects": 0, "l2m_skipped": 0}
 
     # Split projects by data type into dedicated subfolders:
-    #   metric-projects/        — Metric
+    #   metric-projects/        — Metric (excluding L2M)
+    #   l2m-projects/           — Metric projects whose name ends in -L2M (case-insensitive)
     #   log-projects/           — Log, Alert, and any other non-separated types
     #   trace-projects/         — Trace
     #   change-events-projects/ — Deployment
-    metric_projects_list = [p for p in projects if (p.get("dataType") or "").lower() == "metric"]
+    all_metric_projects = [p for p in projects if (p.get("dataType") or "").lower() == "metric"]
+    l2m_projects_list = [
+        p for p in all_metric_projects
+        if (p.get("projectName") or p.get("name") or "").lower().endswith("-l2m")
+    ]
+    l2m_project_names = {p.get("projectName") or p.get("name") or "" for p in l2m_projects_list}
+    metric_projects_list = [p for p in all_metric_projects if (p.get("projectName") or p.get("name") or "") not in l2m_project_names]
     trace_projects_list = [p for p in projects if (p.get("dataType") or "").lower() == "trace"]
     change_events_projects_list = [p for p in projects if (p.get("dataType") or "").lower() == "deployment"]
     incident_projects_list = [p for p in projects if (p.get("dataType") or "").lower() == "incident"]
@@ -1509,6 +1588,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
     system_dir = os.path.join(output_dir, env_name, system_name)
     log_projects_dir = os.path.join(system_dir, "log-projects")
     metric_projects_dir = os.path.join(system_dir, "metric-projects")
+    l2m_projects_dir = os.path.join(system_dir, "l2m-projects")
     trace_projects_dir = os.path.join(system_dir, "trace-projects")
     change_events_projects_dir = os.path.join(system_dir, "change-events-projects")
     incident_projects_dir = os.path.join(system_dir, "incident-projects")
@@ -1530,7 +1610,8 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
     print(f"    Pre-fetching project data ({len(projects)} projects)...")
     prefetched: Dict[str, Any] = {}   # project_name -> project_data
     metric_project_names = {
-        p.get("projectName") or p.get("name") or "" for p in metric_projects_list
+        p.get("projectName") or p.get("name") or ""
+        for p in metric_projects_list + l2m_projects_list
     }
     for proj in projects:
         project_name = proj.get("projectName") or proj.get("name") or ""
@@ -1599,6 +1680,14 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
         write_file(os.path.join(metric_projects_dir, "variables.tf"),
                    _metric_projects_variables_tf(), dry_run)
 
+    if l2m_projects_list:
+        write_file(os.path.join(system_dir, "l2m_projects.tf"),
+                   _l2m_projects_tf(), dry_run)
+        write_file(os.path.join(l2m_projects_dir, "versions.tf"),
+                   _projects_versions_tf(), dry_run)
+        write_file(os.path.join(l2m_projects_dir, "variables.tf"),
+                   _l2m_projects_variables_tf(), dry_run)
+
     if trace_projects_list:
         write_file(os.path.join(system_dir, "trace_projects.tf"),
                    _trace_projects_tf(), dry_run)
@@ -1656,6 +1745,8 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
     log_skipped = 0
     metric_generated = 0
     metric_skipped = 0
+    l2m_generated = 0
+    l2m_skipped = 0
     trace_generated = 0
     trace_skipped = 0
     change_events_generated = 0
@@ -1715,6 +1806,31 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
         tf_filename = tf_resource_name(project_name) + ".tf"
         write_file(os.path.join(metric_projects_dir, tf_filename), tf_content + "\n", dry_run)
         metric_generated += 1
+
+    for proj in l2m_projects_list:
+        project_name = proj.get("projectName") or proj.get("name") or ""
+        if not project_name:
+            l2m_skipped += 1
+            continue
+
+        project_data = prefetched.get(project_name)
+        if project_data is None:
+            l2m_skipped += 1
+            continue
+
+        print(f"    [l2m {l2m_generated + l2m_skipped + 1}/{len(l2m_projects_list)}] {project_name}")
+
+        try:
+            tf_content = generate_metric_project_tf(project_name, project_data,
+                                                    system_name, proj)
+        except Exception as e:
+            print(f"      Error generating l2m TF: {e}", file=sys.stderr)
+            l2m_skipped += 1
+            continue
+
+        tf_filename = tf_resource_name(project_name) + ".tf"
+        write_file(os.path.join(l2m_projects_dir, tf_filename), tf_content + "\n", dry_run)
+        l2m_generated += 1
 
     for proj in trace_projects_list:
         project_name = proj.get("projectName") or proj.get("name") or ""
@@ -1800,12 +1916,14 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
 
     print(f"    Log: {log_generated}/{len(log_projects_list)}  "
           f"Metric: {metric_generated}/{len(metric_projects_list)}  "
+          f"L2M: {l2m_generated}/{len(l2m_projects_list)}  "
           f"Trace: {trace_generated}/{len(trace_projects_list)}  "
           f"Deployment: {change_events_generated}/{len(change_events_projects_list)}  "
           f"Incident: {incident_generated}/{len(incident_projects_list)}")
     return {
         "projects": log_generated, "skipped": log_skipped,
         "metric_projects": metric_generated, "metric_skipped": metric_skipped,
+        "l2m_projects": l2m_generated, "l2m_skipped": l2m_skipped,
         "trace_projects": trace_generated, "trace_skipped": trace_skipped,
         "change_events_projects": change_events_generated, "change_events_skipped": change_events_skipped,
         "incident_projects": incident_generated, "incident_skipped": incident_skipped,
@@ -1816,12 +1934,17 @@ def run(config_path: str, output_dir: str, env_filter: Optional[str],
         dry_run: bool, no_ssl_verify: bool) -> None:
     cfg = load_config(config_path)
 
+    global _RETRY_DELAY, _MAX_RETRIES
     global_delay = float(cfg.get("Delay", cfg.get("delay", 0)))
+    _RETRY_DELAY = global_delay  # reuse Delay for sleep between HTTP retries
+    _MAX_RETRIES = int(cfg.get("Retries", cfg.get("retries", 3)))
+    print(f"Config: Delay={global_delay}s, Retries={_MAX_RETRIES}")
     session = make_session(no_ssl_verify)
 
     total_projects = 0
     total_skipped = 0
     total_metric_projects = 0
+    total_l2m_projects = 0
     total_trace_projects = 0
     total_systems = 0
 
@@ -1906,6 +2029,7 @@ def run(config_path: str, output_dir: str, env_filter: Optional[str],
             total_projects += stats["projects"]
             total_skipped += stats["skipped"]
             total_metric_projects += stats.get("metric_projects", 0)
+            total_l2m_projects += stats.get("l2m_projects", 0)
             total_trace_projects += stats.get("trace_projects", 0)
 
     print(f"\n{'='*60}")
@@ -1913,6 +2037,7 @@ def run(config_path: str, output_dir: str, env_filter: Optional[str],
           f"Systems: {total_systems}  "
           f"Projects generated: {total_projects}  "
           f"Metric projects generated: {total_metric_projects}  "
+          f"L2M projects generated: {total_l2m_projects}  "
           f"Deployment projects generated: {total_trace_projects}  "
           f"Skipped: {total_skipped}")
     print(f"Output directory: {output_dir}")
