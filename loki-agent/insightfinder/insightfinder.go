@@ -128,50 +128,30 @@ type SendLogDataResult struct {
 	TimeTaken   time.Duration
 }
 
-// SendLogDataWithLabels sends log entries to InsightFinder with labels metadata
-// This is the method expected by the worker
-func (s *Service) SendLogData(entries []models.LogEntry, queryConfig config.QueryConfig) (*SendLogDataResult, error) {
-	startTime := time.Now()
-
-	if len(entries) == 0 {
-		return &SendLogDataResult{
-			EntriesSent: 0,
-			BytesSent:   0,
-			TimeTaken:   time.Since(startTime),
-		}, nil
-	}
-
-	// Convert models.LogEntry to insightfinder.LogData
+// ConvertToLogData converts LogEntry slice to InsightFinder LogData slice using the query config.
+// The result is in the exact format expected by SendLogDataInternal / the IF API.
+func (s *Service) ConvertToLogData(entries []models.LogEntry, queryConfig config.QueryConfig) []LogData {
 	logDataList := make([]LogData, 0, len(entries))
-	totalBytes := 0
 
 	for _, entry := range entries {
-		// Convert timestamp to Unix timestamp in milliseconds
 		timestamp := entry.Timestamp.UnixMilli()
 
-		// Get tag value based on configured default instance name field or query override
 		instanceFieldName := s.defaultInstanceName
 		if queryConfig.InstanceNameField != "" {
 			instanceFieldName = queryConfig.InstanceNameField
 		}
 
-		// Skip tag creation if no instance field is configured
 		var tag string
 		if instanceFieldName != "" {
 			tag = s.getFieldValueFromEntry(entry, instanceFieldName)
-
-			// If container name field is specified in query config, append its value to tag
 			if queryConfig.ContainerNameField != "" {
 				containerValue := s.getFieldValueFromEntry(entry, queryConfig.ContainerNameField)
-				if containerValue != "" {
-					if tag != "" {
-						tag = CleanDeviceName(containerValue) + "_" + CleanDeviceName(tag)
-					}
+				if containerValue != "" && tag != "" {
+					tag = CleanDeviceName(containerValue) + "_" + CleanDeviceName(tag)
 				}
 			}
 		}
 
-		// Get component name from query config field (don't set if empty)
 		componentName := ""
 		if queryConfig.ComponentNameField != "" {
 			componentName = s.getFieldValueFromEntry(entry, queryConfig.ComponentNameField)
@@ -180,21 +160,33 @@ func (s *Service) SendLogData(entries []models.LogEntry, queryConfig config.Quer
 			}
 		}
 
-		// Create log data entry
-		logData := LogData{
+		logDataList = append(logDataList, LogData{
 			TimeStamp:     timestamp,
 			Tag:           tag,
 			Data:          entry.Message,
 			ComponentName: componentName,
-		}
+		})
+	}
 
-		logDataList = append(logDataList, logData)
+	return logDataList
+}
+
+// SendLogData converts log entries and sends them to InsightFinder.
+func (s *Service) SendLogData(entries []models.LogEntry, queryConfig config.QueryConfig) (*SendLogDataResult, error) {
+	startTime := time.Now()
+
+	if len(entries) == 0 {
+		return &SendLogDataResult{TimeTaken: time.Since(startTime)}, nil
+	}
+
+	logDataList := s.ConvertToLogData(entries, queryConfig)
+
+	totalBytes := 0
+	for _, entry := range entries {
 		totalBytes += len(entry.Message)
 	}
 
-	// Send the data using the existing SendLogDataInternal method
-	err := s.SendLogDataInternal(logDataList)
-	if err != nil {
+	if err := s.SendLogDataInternal(logDataList); err != nil {
 		return nil, err
 	}
 
