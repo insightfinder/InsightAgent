@@ -22,7 +22,7 @@ insightfinder:
 
 ## Agent Configuration
 
-Controls general agent behavior and logging settings.
+Controls general agent behavior, logging settings, and operation mode.
 
 ```yaml
 agent:
@@ -31,6 +31,23 @@ agent:
   log_level: "INFO"                # Logging level: DEBUG, INFO, WARN, ERROR (default: "INFO")
   filters_include: ""              # Include filters (optional)
   filters_exclude: ""              # Exclude filters (optional)
+
+  # Operation mode (default: "continuous")
+  mode: "continuous"
+
+  # Required for historical and stream_historical modes
+  # Accepted formats: RFC3339 "2024-01-01T00:00:00Z" or date-only "2024-01-01"
+  start_time: ""
+  end_time: ""                     # Leave blank to default to current time
+
+  # historical mode: directory where downloaded NDJSON files are written
+  download_path: "./loki_downloads"
+
+  # replay mode: path to a single .ndjson file or a directory of .ndjson files
+  replay_path: ""
+
+  # stream_historical / replay: seconds to wait between batches (0 = maximum speed)
+  stream_chunk_interval: 0
 ```
 
 ### Agent Configuration Options
@@ -42,6 +59,83 @@ agent:
 | `log_level` | String | `"INFO"` | Logging verbosity level |
 | `filters_include` | String | `""` | Filters to include specific log entries |
 | `filters_exclude` | String | `""` | Filters to exclude specific log entries |
+| `mode` | String | `"continuous"` | Operation mode. See [Operation Modes](#operation-modes) |
+| `start_time` | String | `""` | Start of the historical time range. Required for `historical` and `stream_historical` modes. Accepts RFC3339 (`"2024-01-01T00:00:00Z"`) or date-only (`"2024-01-01"`) |
+| `end_time` | String | `""` | End of the historical time range. Defaults to current time if blank |
+| `download_path` | String | `"./loki_downloads"` | Directory where NDJSON files are written in `historical` mode. Required for that mode |
+| `replay_path` | String | `""` | File or directory of `.ndjson` files to send to InsightFinder in `replay` mode. Required for that mode |
+| `stream_chunk_interval` | Integer | `0` | Seconds to wait between batches in `stream_historical` and `replay` modes. `0` = no wait |
+
+## Operation Modes
+
+The agent supports four operation modes controlled by `agent.mode`.
+
+### `continuous` (default)
+
+Polls Loki every `sampling_interval` seconds and forwards new log entries to InsightFinder indefinitely.
+
+```yaml
+agent:
+  mode: "continuous"
+
+insightfinder:
+  sampling_interval: 60
+```
+
+### `historical`
+
+Downloads all logs from `start_time` to `end_time` and writes them to local NDJSON files. Exits when done. **InsightFinder connectivity is not required** for this mode.
+
+The time range is walked in `sampling_interval`-sized chunks. One file is created per enabled query:
+
+```
+loki_downloads/
+  my_query_1704067200_1704153600.ndjson
+```
+
+Each line in the file is a JSON-encoded InsightFinder log entry (with all transformations — tag extraction, component name, sensitive data masking — already applied).
+
+```yaml
+agent:
+  mode: "historical"
+  start_time: "2024-01-01T00:00:00Z"
+  end_time: "2024-01-02T00:00:00Z"   # blank = now
+  download_path: "./loki_downloads"
+```
+
+### `replay`
+
+Reads the NDJSON files produced by `historical` mode and streams each entry to InsightFinder. Acts as a replay client — useful for re-sending previously downloaded logs without querying Loki again.
+
+`replay_path` may be a single `.ndjson` file or a directory (all `*.ndjson` files are replayed in sorted order).
+
+```yaml
+agent:
+  mode: "replay"
+  replay_path: "./loki_downloads"
+  stream_chunk_interval: 1    # optional: wait 1s between batches of 1000 entries
+```
+
+### `stream_historical`
+
+Walks `start_time` to `end_time` in `sampling_interval`-sized chunks and streams each chunk directly to InsightFinder — no files are written. Use `stream_chunk_interval` to pace the replay.
+
+```yaml
+agent:
+  mode: "stream_historical"
+  start_time: "2024-01-01T00:00:00Z"
+  end_time: "2024-01-02T00:00:00Z"
+  stream_chunk_interval: 0    # 0 = maximum speed
+```
+
+### Mode Comparison
+
+| Mode | Reads from | Writes to | IF required | Exits when done |
+|------|-----------|-----------|-------------|-----------------|
+| `continuous` | Loki (live) | InsightFinder | Yes | No (runs forever) |
+| `historical` | Loki | Local NDJSON files | No | Yes |
+| `replay` | Local NDJSON files | InsightFinder | Yes | Yes |
+| `stream_historical` | Loki | InsightFinder | Yes | Yes |
 
 ## Loki Configuration
 
@@ -103,6 +197,37 @@ Each query in the `queries` array supports the following options:
 | `instance_name_field` | String | `""` | No | Override default instance field. Options: `""`, `"container"`, `"instance"`, `"node_name"`, `"pod"`, `"app"` |
 | `component_name_field` | String | `""` | No | Field to extract component name from. Options: `"container"`, `"instance"`, `"node_name"`, `"pod"`, `"app"` |
 | `container_name_field` | String | `""` | No | Field to extract container name from (appended to instance). Options: `"container"`, `"instance"`, `"node_name"`, `"pod"`, `"app"` |
+| `sensitive_data_filters` | List | `[]` | No | List of regex patterns to mask sensitive data. See [Sensitive Data Filtering](#sensitive-data-filtering) |
+
+### Sensitive Data Filtering
+
+Each query can define a list of regex-replacement pairs under `sensitive_data_filters`. The agent applies every filter to each log message **before** sending to InsightFinder (and before writing to NDJSON in `historical` mode).
+
+```yaml
+queries:
+  - name: "application_logs"
+    query: '{namespace="production"}'
+    enabled: true
+    sensitive_data_filters:
+      - regex: "password=\\S+"
+        replacement: "password=***"
+      - regex: "\\b\\d{4}[- ]?\\d{4}[- ]?\\d{4}[- ]?\\d{4}\\b"
+        replacement: "[CARD_REDACTED]"
+      - regex: "Bearer\\s+[A-Za-z0-9\\-._~+/]+=*"
+        replacement: "Bearer [TOKEN_REDACTED]"
+```
+
+Each entry in the list has two fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `regex` | String | Yes | A valid Go regular expression to match against the log message |
+| `replacement` | String | Yes | The string to substitute for every match. Use `""` to delete matches |
+
+**Notes:**
+- Filters are applied in the order they are listed.
+- Compiled regexes are cached per query; there is no repeated compilation overhead.
+- Invalid regex patterns are rejected at startup with a configuration validation error.
 
 ### Example Queries
 
@@ -281,6 +406,11 @@ The agent validates the configuration on startup and will fail if required field
 - Each query must have a non-empty `query` string
 - `timezone` must be a valid timezone identifier
 - `sampling_interval` must be greater than 0
+- `mode` must be one of: `continuous`, `historical`, `stream_historical`, `replay`
+- `start_time` is required when `mode` is `historical` or `stream_historical`
+- `download_path` is required when `mode` is `historical`
+- `replay_path` is required when `mode` is `replay`
+- All `sensitive_data_filters[].regex` values must be valid Go regular expressions
 
 ## Usage Examples
 
