@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
 	config "github.com/insightfinder/loki-agent/configs"
@@ -35,9 +34,11 @@ func main() {
 	lokiService := loki.NewService(cfg.Loki)
 	ifService := insightfinder.NewService(cfg.InsightFinder, cfg.Loki)
 
-	// Validate InsightFinder configuration
-	if !ifService.Validate() {
-		log.Fatalf("InsightFinder configuration validation failed")
+	// Validate InsightFinder configuration (not required for historical download mode)
+	if cfg.Agent.Mode != "historical" {
+		if !ifService.Validate() {
+			log.Fatalf("InsightFinder configuration validation failed")
+		}
 	}
 
 	// // Test Loki connection
@@ -61,24 +62,21 @@ func main() {
 	// Comment out this line when ready for production
 	// w.EnableTestMode()
 
-	// Graceful shutdown setup
-	var wg sync.WaitGroup
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	wg.Add(1)
+	done := make(chan struct{})
 	go func() {
-		defer wg.Done()
 		w.Start(quit)
+		close(done)
 	}()
 
 	logrus.Info("Loki Agent started successfully")
 	logrus.Info("Press Ctrl+C to stop...")
 
-	// Wait for shutdown signal
-	<-quit
-	logrus.Info("Shutting down Loki Agent...")
-	wg.Wait()
+	// Block until the worker finishes (one-shot modes exit naturally;
+	// continuous mode exits when a signal is received).
+	<-done
 	logrus.Info("Loki Agent stopped")
 }
 
