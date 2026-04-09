@@ -1074,9 +1074,11 @@ def generate_project_tf(project_name: str, project_data: Dict,
         cfg.append(f'    timestamp_format     = "{sn.get("timestampFormat", "")}"')
         cfg.append(f'    sysparm_query        = "{sn.get("sysparmQuery", "")}"')
         cfg.append(f'    proxy                = "{sn.get("proxy", "")}"')
-        fields_json = json.dumps(sn.get('additionalFields', {}))
-        cfg.append(f'    additional_fields    = {fields_json}')
-        cfg.append(f'    component_name_rule  = "{sn.get("componentNameRule", "")}"')
+        fields_json = json.dumps(sn.get('additionalFields', []))
+        cfg.append(f'    additional_fields       = {fields_json}')
+        cfg.append(f'    component_name_rule     = "{sn.get("componentNameRule", "")}"')
+        sn_import_flag = str(sn.get("serviceNowImportFlag", False)).lower()
+        cfg.append(f'    service_now_import_flag = {sn_import_flag}')
         cfg.append('  }')
 
     # log_label_settings
