@@ -565,15 +565,13 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
         config.append(f'    sysparm_query        = "{servicenow_data.get("sysparmQuery", "")}"')
         config.append(f'    proxy                = "{servicenow_data.get("proxy", "")}"')
 
-        if servicenow_data.get("componentNameRule"):
-            escaped = servicenow_data["componentNameRule"].replace('"', '\\"')
-            config.append(f'    component_name_rule  = "{escaped}"')
-
         # Additional fields
-        fields_json = json.dumps(servicenow_data.get('additionalFields', {}))
-        config.append(f'    additional_fields    = {fields_json}')
-        config.append(f'    component_name_rule  = "{servicenow_data.get("componentNameRule", "")}"')
-        
+        fields_json = json.dumps(servicenow_data.get('additionalFields', []))
+        config.append(f'    additional_fields       = {fields_json}')
+        config.append(f'    component_name_rule     = "{servicenow_data.get("componentNameRule", "")}"')
+        sn_import_flag = str(servicenow_data.get("serviceNowImportFlag", False)).lower()
+        config.append(f'    service_now_import_flag = {sn_import_flag}')
+
         config.append('  }')
     
     # Add log_label_settings if present
