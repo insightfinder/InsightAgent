@@ -521,3 +521,29 @@ This will provide detailed logging about configuration loading, validation, and 
 - Use `max_entries_per_query` to limit resource usage
 - Configure `max_concurrent_requests` based on system capabilities
 - Set appropriate `query_timeout` values for large queries
+
+### When to use `labels`
+
+The `labels` field is only useful when Loki does not already provide a label that you need for field mapping. Use it to inject a constant value and then point `component_name_field` (or another field config) at it:
+
+```yaml
+loki:
+  default_instance_name_field: "pod"
+  queries:
+    - name: "batch_jobs"
+      query: '{job="batch-processor"}'
+      labels:
+        team: "data-platform"         # Loki has no "team" label — we inject it
+      component_name_field: "team"    # point component extraction at our static label
+```
+
+Loki stream labels: `{ job="batch-processor", pod="batch-xyz-456" }`
+
+Merged label map: `{ job="batch-processor", pod="batch-xyz-456", team="data-platform" }`
+
+InsightFinder receives:
+```
+timestamp | message | instance tag: "batch-xyz-456" | component: "data-platform"
+```
+
+Every log entry from this query gets `component="data-platform"` regardless of what Loki returns — because `team` is a static label we injected.

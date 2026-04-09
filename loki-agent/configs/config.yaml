@@ -49,9 +49,6 @@ loki:
     - name: "insightfinder_audit_logs"
       query: '{namespace="insightfinder",pod=~".*appserver.*"} |= `com.insightfinder.models.AuditLog`'
       enabled: true
-      labels:
-        source: "insightfinder"
-        type: "audit"
       # Optional: Override instance name field for this query (Options: container, instance, node_name, pod, app)
       # instance_name_field: "pod"
       # Optional: Set component name field for this query (Options: container, instance, node_name, pod, app)
@@ -69,19 +66,12 @@ loki:
     - name: "application_errors"
       query: '{namespace="insightfinder"} |~ "ERROR|Exception|FATAL"'
       enabled: true
-      labels:
-        source: "insightfinder"
-        type: "error"
-      # Example of using query field parameters
       component_name_field: "container"
       container_name_field: "pod"
     
     - name: "kubernetes_events"
       query: '{namespace=~"kube-.*|default"} |= "Event"'
       enabled: true
-      labels:
-        source: "kubernetes"
-        type: "event"
       instance_name_field: "container"
       component_name_field: "instance"
       container_name_field: "pod"
