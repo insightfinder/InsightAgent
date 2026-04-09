@@ -122,15 +122,17 @@ func validateConfig(config *Config) error {
 		return fmt.Errorf("loki.base_url is required")
 	}
 
-	// Validate required InsightFinder fields
-	if config.InsightFinder.UserName == "" {
-		return fmt.Errorf("insightfinder.username is required")
-	}
-	if config.InsightFinder.LicenseKey == "" {
-		return fmt.Errorf("insightfinder.license_key is required")
-	}
-	if config.InsightFinder.LogsProjectName == "" {
-		return fmt.Errorf("insightfinder.logs_project_name is required")
+	// Validate required InsightFinder fields (not needed for download-only historical mode)
+	if config.Agent.Mode != "historical" {
+		if config.InsightFinder.UserName == "" {
+			return fmt.Errorf("insightfinder.username is required")
+		}
+		if config.InsightFinder.LicenseKey == "" {
+			return fmt.Errorf("insightfinder.license_key is required")
+		}
+		if config.InsightFinder.LogsProjectName == "" {
+			return fmt.Errorf("insightfinder.logs_project_name is required")
+		}
 	}
 
 	// Validate at least one query is configured
