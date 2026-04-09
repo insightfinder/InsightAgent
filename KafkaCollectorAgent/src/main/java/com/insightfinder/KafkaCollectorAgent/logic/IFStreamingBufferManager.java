@@ -30,8 +30,13 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Future;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -97,7 +102,8 @@ public class IFStreamingBufferManager {
   private Map<String, Integer> namedGroups;
   private Pattern metricPattern;
   private Set<String> instanceList;
-  private ExecutorService executorService;
+  private ScheduledExecutorService timerExecutor;
+  private ExecutorService workerExecutor;
 
   @SuppressWarnings("unchecked")
   private static Map<String, Integer> getNamedGroups(Pattern regex)
@@ -144,55 +150,76 @@ public class IFStreamingBufferManager {
         metricProjectList = metricProjectConfigParser.getMetricProjectMapping();
       }
     }
-    //timer thread
-    executorService = Executors.newFixedThreadPool(5);
-    executorService.execute(() -> {
-      int printMetricsTimer = ifConfig.getKafkaMetricLogInterval();
-      int sentTimer = ifConfig.getBufferingTime();
-      int logMetadataSentTimer = ifConfig.getLogMetadataBufferingTime();
-      while (true) {
-        if (sentTimer <= 0) {
-          sentTimer = ifConfig.getBufferingTime();
-          //sending data thread
-          executorService.execute(() -> {
-            if (ifConfig.isLogProject()) {
-              logger.info("sending log data");
-              mergeLogDataAndSendToIF(collectingLogDataMap);
-            } else {
-              logger.info("sending metric data");
-              mergeDataAndSendToIF(collectingDataMap);
-            }
-          });
-        }
+    workerExecutor = new ThreadPoolExecutor(
+        5, 5, 0L, TimeUnit.MILLISECONDS,
+        new ArrayBlockingQueue<>(10),
+        (task, executor) -> {
+          logger.log(Level.WARNING, "Worker pool saturated — dropping task. Check for frozen/slow worker threads.");
+          // Mark the FutureTask cancelled so submitWithTimeout skips the watchdog schedule.
+          if (task instanceof Future) {
+            ((Future<?>) task).cancel(false);
+          }
+        });
+    timerExecutor = Executors.newScheduledThreadPool(1);
 
-        if (logMetadataSentTimer <= 0) {
-          logMetadataSentTimer = ifConfig.getLogMetadataBufferingTime();
-          executorService.execute(() -> {
-            if (ifConfig.isLogProject()) {
-              logger.info("sending metadata");
-              mergeLogMetaDataAndSendToIF(collectingLogMetadataMap);
-            }
-          });
-        }
+    timerExecutor.scheduleAtFixedRate(
+        () -> submitWithTimeout(this::sendData, ifConfig.getBufferingTime(), "send data"),
+        ifConfig.getBufferingTime(), ifConfig.getBufferingTime(), TimeUnit.SECONDS);
 
-        if (printMetricsTimer <= 0) {
-          printMetricsTimer = ifConfig.getKafkaMetricLogInterval();
-          registry.getMeters().forEach(meter -> {
-            if (metricFilterSet.contains(meter.getId().getName())) {
-              meter.measure().forEach(measurement -> logger.log(Level.INFO,
-                  String.format("%s %s : %f", meter.getId().getTag("client.id"),
-                      meter.getId().getName(), measurement.getValue())));
-            }
-          });
-        }
+    timerExecutor.scheduleAtFixedRate(
+        () -> submitWithTimeout(this::sendLogMetadata, ifConfig.getLogMetadataBufferingTime(), "send metadata"),
+        ifConfig.getLogMetadataBufferingTime(), ifConfig.getLogMetadataBufferingTime(), TimeUnit.SECONDS);
+
+    timerExecutor.scheduleAtFixedRate(
+        () -> submitWithTimeout(this::printKafkaMetrics, ifConfig.getKafkaMetricLogInterval(), "print metrics"),
+        ifConfig.getKafkaMetricLogInterval(), ifConfig.getKafkaMetricLogInterval(), TimeUnit.SECONDS);
+  }
+
+  private void submitWithTimeout(Runnable work, int timeoutSeconds, String taskName) {
+    try {
+      Future<?> task = workerExecutor.submit(() -> {
         try {
-          Thread.sleep(1000);
-          printMetricsTimer--;
-          sentTimer--;
-          logMetadataSentTimer--;
-        } catch (InterruptedException e) {
-          throw new RuntimeException(e);
+          work.run();
+        } catch (Exception e) {
+          logger.log(Level.WARNING, "Error in " + taskName, e);
         }
+      });
+      if (!task.isCancelled()) {
+        timerExecutor.schedule(() -> {
+          if (!task.isDone()) {
+            logger.log(Level.WARNING, taskName + " timed out after " + timeoutSeconds + "s — interrupting worker");
+            task.cancel(true);
+          }
+        }, timeoutSeconds, TimeUnit.SECONDS);
+      }
+    } catch (Exception e) {
+      logger.log(Level.WARNING, "Error submitting " + taskName, e);
+    }
+  }
+
+  private void sendData() {
+    if (ifConfig.isLogProject()) {
+      logger.info("sending log data");
+      mergeLogDataAndSendToIF(collectingLogDataMap);
+    } else {
+      logger.info("sending metric data");
+      mergeDataAndSendToIF(collectingDataMap);
+    }
+  }
+
+  private void sendLogMetadata() {
+    if (ifConfig.isLogProject()) {
+      logger.info("sending metadata");
+      mergeLogMetaDataAndSendToIF(collectingLogMetadataMap);
+    }
+  }
+
+  private void printKafkaMetrics() {
+    registry.getMeters().forEach(meter -> {
+      if (metricFilterSet.contains(meter.getId().getName())) {
+        meter.measure().forEach(measurement -> logger.log(Level.INFO,
+            String.format("%s %s : %f", meter.getId().getTag("client.id"),
+                meter.getId().getName(), measurement.getValue())));
       }
     });
   }

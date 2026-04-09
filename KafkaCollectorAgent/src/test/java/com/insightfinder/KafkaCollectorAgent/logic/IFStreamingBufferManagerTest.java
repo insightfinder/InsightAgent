@@ -1,7 +1,6 @@
 package com.insightfinder.KafkaCollectorAgent.logic;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.times;
@@ -20,6 +19,7 @@ import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessage;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessageId;
 import com.insightfinder.KafkaCollectorAgent.model.logmetadatamessage.LogMetadataMessage;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collections;
 import java.util.HashMap;
@@ -27,18 +27,21 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mockito.*;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.reactive.function.client.WebClient;
 
+@ExtendWith(MockitoExtension.class)
 class IFStreamingBufferManagerTest {
 
   IFStreamingBufferManager ifStreamingBufferManager;
-  @Mock
-  MeterRegistry registry;
+  MeterRegistry registry = new SimpleMeterRegistry();
   @Mock
   IFConfig ifConfig;
   @Mock
@@ -53,17 +56,29 @@ class IFStreamingBufferManagerTest {
   LogMessageHandler logMessageHandler;
   @Mock
   WebClientEndpoints webClientEndpoints;
-  @Mock
-  ExecutorService executorService;
 
   @BeforeEach
   void setup() {
-    MockitoAnnotations.openMocks(this);
+    // Provide valid intervals so scheduleAtFixedRate does not throw (period must be > 0).
+    // Large values ensure timers never fire during tests.
+    when(ifConfig.getBufferingTime()).thenReturn(Integer.MAX_VALUE);
+    when(ifConfig.getLogMetadataBufferingTime()).thenReturn(Integer.MAX_VALUE);
+    when(ifConfig.getKafkaMetricLogInterval()).thenReturn(Integer.MAX_VALUE);
     ifStreamingBufferManager = new IFStreamingBufferManager(registry, new Gson(), ifConfig,
         projectManager, webClient, metricProjectConfigParser, logProjectConfigParser,
         logMessageHandler, webClientEndpoints);
-    ifStreamingBufferManager.setExecutorService(executorService);
-    doNothing().when(executorService).execute(any());
+  }
+
+  @AfterEach
+  void tearDown() {
+    // Shut down real executor threads so they don't prevent JVM exit after tests.
+    // Null checks guard against tests where init() was never called.
+    if (ifStreamingBufferManager.getTimerExecutor() != null) {
+      ifStreamingBufferManager.getTimerExecutor().shutdownNow();
+    }
+    if (ifStreamingBufferManager.getWorkerExecutor() != null) {
+      ifStreamingBufferManager.getWorkerExecutor().shutdownNow();
+    }
   }
 
   @Nested
@@ -73,11 +88,7 @@ class IFStreamingBufferManagerTest {
     void setup() throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
       when(ifConfig.isLogProject()).thenReturn(true);
       when(ifConfig.getDataFormat()).thenReturn("JSON");
-      when(ifConfig.getDataFormatRegex()).thenReturn(null);
       when(ifConfig.getInstanceList()).thenReturn(new HashSet<>());
-      Set<String> metadataTopics = new HashSet<>();
-      metadataTopics.add("metadataTopic");
-      when(ifConfig.getLogMetadataTopics()).thenReturn(metadataTopics);
       Map<ProjectListKey, ProjectInfo> logProjectList = new HashMap<>();
       logProjectList.put(
           ProjectListKey.builder().datasetId("326CE741-4E1F-404F-BDA2-0D0D48AE4039").hasDatasetName(true).build(),
@@ -109,6 +120,9 @@ class IFStreamingBufferManagerTest {
 
     @Test
     void testParseLogMetadata() {
+      Set<String> metadataTopics = new HashSet<>();
+      metadataTopics.add("metadataTopic");
+      when(ifConfig.getLogMetadataTopics()).thenReturn(metadataTopics);
       LogMetadataMessage metadataMessage = LogMetadataMessage.builder()
           .outputMessage(new JsonObject())
           .build();
@@ -191,8 +205,12 @@ class IFStreamingBufferManagerTest {
 
     @Test
     void testParseLogData() {
+      // Use name("dataset_name") so matchedMessageId hits the hasDatasetName branch,
+      // which only matches the one key with hasDatasetName=true → "DeviceProcessEvent".
+      // Using name("dataset_id") would match all keys whose datasetId equals the id,
+      // making the result non-deterministic over HashMap iteration order.
       LogMessage logMessage = LogMessage.builder()
-          .id(LogMessageId.builder().name("dataset_id")
+          .id(LogMessageId.builder().name("dataset_name")
               .id("326CE741-4E1F-404F-BDA2-0D0D48AE4039").build())
           .outputMessage(new JsonObject())
           .build();
@@ -222,7 +240,7 @@ class IFStreamingBufferManagerTest {
       ArgumentCaptor<String> messageCapture = ArgumentCaptor.forClass(String.class);
       ArgumentCaptor<String> projectName = ArgumentCaptor.forClass(String.class);
       ArgumentCaptor<String> systemName = ArgumentCaptor.forClass(String.class);
-      doNothing().when(webClientEndpoints).sendMetadataToIF(anyString(), anyString(), anyString());
+      doNothing().when(webClientEndpoints).sendDataToIF(anyString(), anyString(), anyString());
       ConcurrentHashMap<ProjectInfo, Set<JsonObject>> collectingLogDataMap = new ConcurrentHashMap<>();
       Set<JsonObject> jsonArray = ConcurrentHashMap.newKeySet();
       jsonArray.add(new JsonObject());

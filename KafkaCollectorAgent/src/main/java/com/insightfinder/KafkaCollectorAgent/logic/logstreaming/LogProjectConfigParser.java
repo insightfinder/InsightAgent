@@ -31,12 +31,14 @@ public class LogProjectConfigParser {
     Map<String, ProjectInfo> mapping;
     mapping = gson.fromJson(ifConfig.getProjectList(), PROJECT_LIST_TYPE);
     Map<ProjectListKey, ProjectInfo> resultMapping = new HashMap<>();
-    for (String projectKey : mapping.keySet()) {
-      String[] keys = projectKey.split(ifConfig.getProjectDelimiter());
-      for (String key : keys) {
-        ProjectListKey projectListKey = ProjectListKey.parseFromString(key);
-        if (projectListKey != null) {
-          resultMapping.put(ProjectListKey.parseFromString(key), mapping.get(projectKey));
+    if (mapping != null) {
+      for (String projectKey : mapping.keySet()) {
+        String[] keys = projectKey.split(ifConfig.getProjectDelimiter());
+        for (String key : keys) {
+          ProjectListKey projectListKey = ProjectListKey.parseFromString(key);
+          if (projectListKey != null) {
+            resultMapping.put(ProjectListKey.parseFromString(key), mapping.get(projectKey));
+          }
         }
       }
     }
