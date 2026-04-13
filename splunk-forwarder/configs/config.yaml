@@ -1,0 +1,91 @@
+agent:
+  log_level: "INFO"   # DEBUG | INFO | WARN | ERROR
+  mode: "continuous"  # only supported mode
+
+splunk:
+  # Splunk Enterprise: use username + password, leave token empty
+  # Splunk Cloud:      set token, leave username + password empty
+  server_url: "https://localhost:8089"
+  username:   ""
+  password:   ""
+  token:      ""   # Splunk Cloud Only: Settings → Tokens → New Token
+
+  verify_ssl:    false  # set true for Splunk Cloud (valid cert)
+  max_retries:   3
+  query_timeout: 60     # seconds to wait for a search job to complete
+  max_results:   5000   # default max events per query run
+
+  # Concurrent query execution.
+  # When concurrent_queries is false (default) queries run one after another.
+  # When true, all enabled queries are dispatched to Splunk in parallel.
+  # max_concurrent caps how many run at once (0 = no cap, all at once).
+  concurrent_queries: false
+  max_concurrent:     0
+
+  queries:
+    - name:    "app_logs"
+      query:   "search index=main sourcetype=app-logs"
+      enabled: true
+      # max_results: 1000  # optional: override global max_results for this query
+
+      # Per-query field mapping overrides (leave empty to inherit global defaults).
+      # instance_field and component_field name a Splunk field whose value is used.
+      # instance_value and component_value set a fixed string (overrides field lookup).
+      instance_field:  "index"
+      # instance_value:  ""
+      component_field: "source"
+      # component_value: ""
+
+    - name:    "system_errors"
+      query:   "search index=main (ERROR OR FATAL OR Exception)"
+      enabled: true
+
+    - name:    "security_events"
+      query:   "search index=security"
+      enabled: true
+
+insightfinder:
+  server_url:  "https://app.insightfinder.com"
+  username:    ""    # your IF username
+  license_key: ""    # your IF license key
+
+  logs_project_name: "splunk-logs"
+  logs_system_name:  "splunk-system"
+  logs_project_type: "LOG"
+
+  # Polling interval in seconds — agent fetches events from the last
+  # sampling_interval seconds on each tick.
+  sampling_interval: 60
+
+  cloud_type:    "OnPremise"   # OnPremise | AWS | Azure | GCP
+  instance_type: "OnPremise"
+  is_container:  false
+
+  http_proxy:  ""
+  https_proxy: ""
+
+  chunk_size:      2097152   # 2 MB — split payload above this threshold
+  max_packet_size: 10485760  # 10 MB — hard max per HTTP call
+  retry_times:     3
+  retry_interval:  5         # seconds between retries
+
+  # ── Field mapping ──────────────────────────────────────────────────────────
+  # Controls how Splunk fields map to InsightFinder instance name and
+  # componentName.  These are global defaults; each query can override them.
+  #
+  # Resolution order (first non-empty value wins):
+  #   1. query.instance_value  — fixed string, per query
+  #   2. query.instance_field  — Splunk field name, per query
+  #   3. instance_value        — fixed string, global
+  #   4. instance_field        — Splunk field name, global  ← default: "host"
+  #
+  # The same logic applies for component_value / component_field / "sourcetype".
+  #
+  # Any field Splunk returns (host, source, sourcetype, index, _raw, or custom
+  # fields) can be used — the lookup is dynamic, not hardcoded.
+
+  instance_field:  "host"        # Splunk field → IF instance name
+  instance_value:  ""            # static override (leave empty to use instance_field)
+
+  component_field: "sourcetype"  # Splunk field → IF componentName
+  component_value: ""            # static override (leave empty to use component_field)
