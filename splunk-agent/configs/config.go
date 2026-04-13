@@ -3,6 +3,7 @@ package configs
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
@@ -37,6 +38,9 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Agent.Mode == "" {
 		cfg.Agent.Mode = "continuous"
+	}
+	if cfg.Agent.ChunkInterval == 0 {
+		cfg.Agent.ChunkInterval = 60 // 60 minutes default for historical chunks
 	}
 
 	if cfg.Splunk.MaxRetries == 0 {
@@ -112,14 +116,53 @@ func validate(cfg *Config) error {
 			return fmt.Errorf("splunk.queries[%d] (%s): query is required", i, q.Name)
 		}
 	}
-	if cfg.InsightFinder.UserName == "" {
-		return fmt.Errorf("insightfinder.username is required")
+
+	// InsightFinder credentials are not needed for download-only historical mode.
+	if cfg.Agent.Mode != "historical" {
+		if cfg.InsightFinder.UserName == "" {
+			return fmt.Errorf("insightfinder.username is required")
+		}
+		if cfg.InsightFinder.LicenseKey == "" {
+			return fmt.Errorf("insightfinder.license_key is required")
+		}
+		if cfg.InsightFinder.LogsProjectName == "" {
+			return fmt.Errorf("insightfinder.logs_project_name is required")
+		}
 	}
-	if cfg.InsightFinder.LicenseKey == "" {
-		return fmt.Errorf("insightfinder.license_key is required")
+
+	// Validate mode-specific fields.
+	switch cfg.Agent.Mode {
+	case "continuous", "":
+		// no additional validation needed
+	case "historical":
+		if cfg.Agent.StartTime == "" {
+			return fmt.Errorf("agent.start_time is required for mode 'historical'")
+		}
+		if _, err := ParseAgentTime(cfg.Agent.StartTime); err != nil {
+			return fmt.Errorf("invalid agent.start_time '%s': %v", cfg.Agent.StartTime, err)
+		}
+		if cfg.Agent.EndTime != "" {
+			if _, err := ParseAgentTime(cfg.Agent.EndTime); err != nil {
+				return fmt.Errorf("invalid agent.end_time '%s': %v", cfg.Agent.EndTime, err)
+			}
+		}
+		if cfg.Agent.DownloadPath == "" {
+			return fmt.Errorf("agent.download_path is required for mode 'historical'")
+		}
+	default:
+		return fmt.Errorf("invalid agent.mode '%s': must be 'continuous' or 'historical'", cfg.Agent.Mode)
 	}
-	if cfg.InsightFinder.LogsProjectName == "" {
-		return fmt.Errorf("insightfinder.logs_project_name is required")
-	}
+
 	return nil
+}
+
+// ParseAgentTime parses a time string in RFC3339 or date-only ("2006-01-02") format.
+func ParseAgentTime(s string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, nil
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t, nil
+	}
+	return time.Time{}, fmt.Errorf("unsupported time format; use RFC3339 (e.g. '2024-01-01T00:00:00Z') or date-only ('2024-01-01')")
 }
