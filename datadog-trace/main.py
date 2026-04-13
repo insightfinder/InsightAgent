@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import requests
 import yaml
 
 from insightfinder import send_log_data_to_if
@@ -224,14 +225,14 @@ def send_to_insightfinder(
                 total,
                 resp,
             )
-        except urllib.error.HTTPError as exc:
+        except requests.HTTPError as exc:
             log.error(
                 "[%s] InsightFinder HTTP %d: %s",
                 source,
-                exc.code,
-                exc.read().decode(),
+                exc.response.status_code,
+                exc.response.text,
             )
-        except urllib.error.URLError as exc:
+        except requests.ConnectionError as exc:
             log.error("[%s] InsightFinder network error: %s", source, exc)
 
 
