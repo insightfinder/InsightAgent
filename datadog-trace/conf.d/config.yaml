@@ -1,0 +1,53 @@
+datadog:
+  # Base URL of your Datadog site.
+  # US1 (default): https://api.datadoghq.com
+  # EU:            https://api.datadoghq.eu
+  # US3:           https://us3.datadoghq.com
+  # US5:           https://us5.datadoghq.com
+  endpoint: "https://api.datadoghq.eu"
+
+  # Datadog API key (found under Organization Settings → API Keys)
+  api_key: ""
+
+  # Datadog Application key (found under Organization Settings → Application Keys)
+  application_key: ""
+
+  trace:
+      # One entry per group of spans you want to collect.
+      # Each entry runs as a separate query against the Datadog Spans Search API.
+    - query:
+        # List of filter expressions to narrow the spans returned.
+        # Expressions are ANDed together. Supports any Datadog search syntax, e.g.:
+        #   service:<name>        – filter by service
+        #   env:<name>            – filter by environment
+        #   status:error          – only error spans
+        #   @http.status_code:500 – filter on a span tag
+        # Leave empty (or omit) to return all spans.
+        - "service:hybris_/se"
+        - "status:error"
+        - "@http.status_code:500"
+      instance_name_field: "service"
+
+
+insightfinder:
+  # Full URL of your InsightFinder instance, e.g. https://app.insightfinder.com
+  url: https://stg.insightfinder.com
+
+  # InsightFinder account username
+  username: maoyuwang
+
+  # InsightFinder license key (found in Account Settings)
+  license_key:
+
+  # Target project name in InsightFinder where spans will be stored
+  project: maoyu-test-dd-trace
+
+
+agent:
+  # How many minutes back from "now" to query for spans each run.
+  # Should match (or be slightly larger than) your cron interval so there
+  # are no gaps between runs. Default: 1 min
+  lookback: 1
+
+  # Maximum number of spans to fetch per query. Default: 2000
+  limit: 2000
