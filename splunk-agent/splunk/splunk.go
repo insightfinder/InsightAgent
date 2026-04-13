@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/insightfinder/splunk-forwarder/configs"
+	"github.com/insightfinder/splunk-agent/configs"
 	"github.com/sirupsen/logrus"
 )
 

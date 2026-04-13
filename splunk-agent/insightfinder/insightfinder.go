@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/insightfinder/splunk-forwarder/configs"
+	"github.com/insightfinder/splunk-agent/configs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -125,7 +125,7 @@ func (s *Service) sendLogDataInternal(logEntries []LogData) error {
 
 	hostname, _ := os.Hostname()
 	if hostname == "" {
-		hostname = "splunk-forwarder"
+		hostname = "splunk-agent"
 	}
 
 	form := url.Values{}

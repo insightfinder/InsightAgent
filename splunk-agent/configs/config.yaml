@@ -8,7 +8,7 @@ splunk:
   server_url: "https://localhost:8089"
   username:   ""
   password:   ""
-  token:      ""   # Splunk Cloud Only: Settings → Tokens → New Token
+  token:      ""   # Splunk Cloud: Settings → Tokens → New Token
 
   verify_ssl:    false  # set true for Splunk Cloud (valid cert)
   max_retries:   3

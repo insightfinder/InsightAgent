@@ -1,4 +1,4 @@
-# Splunk Forwarder Agent
+# Splunk Agent
 
 Streams log events from **Splunk Enterprise or Splunk Cloud** to **InsightFinder** in continuous mode.
 
@@ -23,7 +23,7 @@ Streams log events from **Splunk Enterprise or Splunk Cloud** to **InsightFinder
 ## Project structure
 
 ```
-splunk-forwarder/
+splunk-agent/
 ├── configs/
 │   ├── config.yaml      ← all configuration (edit this)
 │   ├── config.go        ← YAML loader + validation
@@ -50,7 +50,7 @@ splunk-forwarder/
 
 ```bash
 git clone <repo-url>
-cd splunk-forwarder
+cd splunk-agent
 ```
 
 ### 2. Install Go dependencies
@@ -259,10 +259,10 @@ curl -k -u admin:password https://localhost:8089/services/server/info?output_mod
 
 ```bash
 # Build binary
-go build -o splunk-forwarder .
+go build -o splunk-agent .
 
 # Run
-./splunk-forwarder
+./splunk-agent
 ```
 
 Or run directly without building:

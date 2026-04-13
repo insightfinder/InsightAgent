@@ -6,10 +6,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/insightfinder/splunk-forwarder/configs"
-	"github.com/insightfinder/splunk-forwarder/insightfinder"
-	"github.com/insightfinder/splunk-forwarder/splunk"
-	"github.com/insightfinder/splunk-forwarder/worker"
+	"github.com/insightfinder/splunk-agent/configs"
+	"github.com/insightfinder/splunk-agent/insightfinder"
+	"github.com/insightfinder/splunk-agent/splunk"
+	"github.com/insightfinder/splunk-agent/worker"
 	"github.com/sirupsen/logrus"
 )
 
@@ -21,7 +21,7 @@ func main() {
 
 	setupLogging(cfg.Agent.LogLevel)
 
-	logrus.Info("Starting Splunk Forwarder Agent")
+	logrus.Info("Starting Splunk Agent")
 	logrus.Infof("Splunk server:      %s", cfg.Splunk.ServerURL)
 	logrus.Infof("IF project:         %s", cfg.InsightFinder.LogsProjectName)
 	logrus.Infof("Sampling interval:  %ds", cfg.InsightFinder.SamplingInterval)
