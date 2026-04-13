@@ -31,9 +31,9 @@ splunk:
       # Per-query field mapping overrides (leave empty to inherit global defaults).
       # instance_field and component_field name a Splunk field whose value is used.
       # instance_value and component_value set a fixed string (overrides field lookup).
-      instance_field:  "index"
+      # instance_field:  ""
       # instance_value:  ""
-      component_field: "source"
+      # component_field: ""
       # component_value: ""
 
     - name:    "system_errors"
