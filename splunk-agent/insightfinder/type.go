@@ -3,7 +3,7 @@ package insightfinder
 import (
 	"net/http"
 
-	"github.com/insightfinder/splunk-forwarder/configs"
+	"github.com/insightfinder/splunk-agent/configs"
 )
 
 // Service holds the InsightFinder HTTP client and project settings.

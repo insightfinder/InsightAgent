@@ -1,4 +1,4 @@
-module github.com/insightfinder/splunk-forwarder
+module github.com/insightfinder/splunk-agent
 
 go 1.21
 

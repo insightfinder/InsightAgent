@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/insightfinder/splunk-forwarder/configs"
-	"github.com/insightfinder/splunk-forwarder/insightfinder"
-	"github.com/insightfinder/splunk-forwarder/splunk"
+	"github.com/insightfinder/splunk-agent/configs"
+	"github.com/insightfinder/splunk-agent/insightfinder"
+	"github.com/insightfinder/splunk-agent/splunk"
 	"github.com/sirupsen/logrus"
 )
 
