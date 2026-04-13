@@ -5,10 +5,9 @@ InsightFinder integration utilities.
 Provides helpers for sending data to the InsightFinder API.
 """
 
-import json
-import urllib.request
-import urllib.error
 from typing import Any
+
+import requests
 
 IF_ENDPOINT = "https://stg.insightfinder.com"
 
@@ -41,32 +40,26 @@ def send_log_data_to_if(
         Parsed JSON response from InsightFinder.
 
     Raises:
-        urllib.error.HTTPError: On non-2xx HTTP responses.
-        urllib.error.URLError:  On network-level errors.
+        requests.HTTPError: On non-2xx HTTP responses.
+        requests.ConnectionError: On network-level errors.
     """
     url = f"{if_url.rstrip('/')}/api/v1/customprojectrawdata"
 
-    payload = json.dumps(
-        {
+    resp = requests.post(
+        url,
+        json={
             "userName": user_name,
             "projectName": project_name,
             "licenseKey": license_key,
             "agentType": agent_type,
             "metricData": metric_data,
             "systemName": system_name,
-        }
-    ).encode("utf-8")
-
-    req = urllib.request.Request(
-        url,
-        data=payload,
+        },
         headers={
             "agent-type": "Stream",
-            "Content-Type": "application/json",
             "Accept": "application/json",
         },
-        method="POST",
+        timeout=15,
     )
-
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.loads(resp.read().decode())
+    resp.raise_for_status()
+    return resp.json()
