@@ -1,7 +1,8 @@
 # Splunk Agent
 
-Streams log events from **Splunk Enterprise or Splunk Cloud** to **InsightFinder** in continuous mode.
+Streams log events from **Splunk Enterprise or Splunk Cloud** to **InsightFinder**.
 
+- Two operation modes: **continuous** (live polling) and **historical** (download to JSONL files)
 - Polls Splunk via its REST API on a configurable interval
 - Supports multiple independent SPL queries
 - Forwards the **full Splunk event as structured JSON** (all fields — `_raw`, `_time`, `host`, `source`, `sourcetype`, `index`, and any extras)
@@ -68,8 +69,36 @@ Edit **`configs/config.yaml`**. The three sections are:
 ```yaml
 agent:
   log_level: "INFO"    # DEBUG | INFO | WARN | ERROR
-  mode: "continuous"   # only supported mode
+  mode: "continuous"   # "continuous" | "historical"
 ```
+
+Two modes are supported:
+
+| Mode | Description |
+|------|-------------|
+| `continuous` | Poll Splunk every `sampling_interval` seconds and forward events to InsightFinder indefinitely |
+| `historical` | Query a fixed time range, write results to JSONL files on disk, then exit |
+
+**Historical mode** does not require InsightFinder credentials — it only connects to Splunk.
+
+```yaml
+agent:
+  mode: "historical"
+  start_time:     "2024-01-01T00:00:00Z"   # RFC3339 or date-only "2024-01-01"
+  end_time:       "2024-01-31T00:00:00Z"   # optional — defaults to now if omitted
+  download_path:  "./splunk_downloads"     # directory where JSONL files are saved
+  chunk_interval: 60                       # minutes per Splunk job (default 60 = 1 hour)
+```
+
+One JSONL file is written per enabled query:
+
+```
+splunk_downloads/
+  app_logs_1704067200_1706745600.jsonl
+  system_errors_1704067200_1706745600.jsonl
+```
+
+Each line in a JSONL file is a JSON-encoded log entry with the same structure sent to InsightFinder (`timestamp`, `tag`, `componentName`, `data`). The time range is walked in `sampling_interval`-sized chunks so Splunk is never asked for more than one interval at a time.
 
 #### `splunk` — connection and queries
 
@@ -311,7 +340,11 @@ on startup and every sampling_interval seconds:
 | Key | Default | Description |
 |-----|---------|-------------|
 | `log_level` | `INFO` | Log verbosity: `DEBUG`, `INFO`, `WARN`, `ERROR` |
-| `mode` | `continuous` | Operation mode (only `continuous` is supported) |
+| `mode` | `continuous` | `continuous` or `historical` |
+| `start_time` | — | Start of historical range — RFC3339 or `YYYY-MM-DD`; required for `historical` |
+| `end_time` | now | End of historical range — RFC3339 or `YYYY-MM-DD`; defaults to current time |
+| `download_path` | — | Directory to write JSONL files; required for `historical` |
+| `chunk_interval` | `60` | Minutes per Splunk query chunk in historical mode (larger = fewer jobs, coarser) |
 
 ### `splunk`
 

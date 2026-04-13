@@ -10,7 +10,19 @@ type Config struct {
 // AgentConfig controls agent-level behaviour.
 type AgentConfig struct {
 	LogLevel string `yaml:"log_level"` // DEBUG | INFO | WARN | ERROR
-	Mode     string `yaml:"mode"`      // "continuous" (only mode for now)
+
+	// Operation mode:
+	//   "continuous"  - (default) poll every sampling_interval indefinitely
+	//   "historical"  - download Splunk logs to local NDJSON files, then exit
+	Mode      string `yaml:"mode"`
+	StartTime string `yaml:"start_time"` // RFC3339 (e.g. "2024-01-01T00:00:00Z") or "2006-01-02"; required for historical
+	EndTime   string `yaml:"end_time"`   // Optional; defaults to now if blank
+
+	// historical mode: directory where downloaded JSONL files are written
+	DownloadPath string `yaml:"download_path"`
+	// historical mode: minutes per Splunk query chunk (default 60).
+	// Larger values = fewer Splunk jobs over the range; smaller = finer granularity.
+	ChunkInterval int `yaml:"chunk_interval"`
 }
 
 // SplunkConfig holds connection and query settings for Splunk.

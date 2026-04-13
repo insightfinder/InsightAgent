@@ -1,6 +1,16 @@
 agent:
   log_level: "INFO"   # DEBUG | INFO | WARN | ERROR
-  mode: "continuous"  # only supported mode
+  mode: "continuous"  # "continuous" | "historical"
+
+  # ── Historical download mode ──────────────────────────────────────────────
+  # Set mode: "historical" to query Splunk for a fixed time range and write
+  # the results to JSONL files on disk (one file per enabled query), then exit.
+  # InsightFinder credentials are not required in this mode.
+  #
+  # start_time:    "2026-04-01T00:00:00Z"  # RFC3339 or date-only "2024-01-01"
+  # end_time:      ""                       # optional; defaults to now
+  # download_path: "./splunk_downloads"     # directory where JSONL files are saved
+  # chunk_interval: 1440                      # minutes per Splunk query chunk (default 60 = 1 hour)
 
 splunk:
   # Splunk Enterprise: use username + password, leave token empty
