@@ -433,8 +433,14 @@ func parseTimestampStr(line *string, config *Config) int64 {
 			var timestampNum int64
 			// Try to parse the timestamp as a number first
 			if strings.Contains(timestampStr, ".") {
-				timestampNumFloat, _ := strconv.ParseFloat(timestampStr, 64)
-				timestampNum = int64(timestampNumFloat)
+				var floatErr error
+				var timestampNumFloat float64
+				timestampNumFloat, floatErr = strconv.ParseFloat(timestampStr, 64)
+				if floatErr != nil {
+					err = floatErr
+				} else {
+					timestampNum = int64(timestampNumFloat)
+				}
 			} else {
 				timestampNum, err = strconv.ParseInt(timestampStr, 10, 64)
 			}
