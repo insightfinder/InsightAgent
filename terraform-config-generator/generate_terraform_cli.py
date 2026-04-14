@@ -138,6 +138,22 @@ def _sn_safe_name(account, service_host):
     return re.sub(r'[^a-z0-9_]', '_', combined.lower())
 
 
+def _parse_project_configs(raw: dict) -> dict:
+    """Convert a raw projectConfigs dict from the API into a normalised Python dict."""
+    result = {}
+    for project_name, pc in raw.items():
+        if not isinstance(pc, dict):
+            continue
+        result[project_name] = {
+            "enable_ticket_creation": bool(pc.get("enableTicketCreation", False)),
+            "enable_ticket_update": bool(pc.get("enableTicketUpdate", False)),
+            "enable_incident_consolidation_info_update": bool(
+                pc.get("enableIncidentConsolidationInfoUpdate", False)
+            ),
+        }
+    return result
+
+
 def _parse_servicenow_entry(entry):
     """Parse a single ServiceNow entry from extServiceAllInfo API response.
 
@@ -164,10 +180,17 @@ def _parse_servicenow_entry(entry):
         "content_source": entry.get("contentSource", ""),
         "trigger_window_in_mills": 0,
         "enable_feedback_collect": bool(entry.get("enableServiceNowFeedbackCollect", False)),
-        "enable_ticket_creation": bool(entry.get("enableTicketCreation", False)),
-        "enable_ticket_update": bool(entry.get("enableTicketUpdate", False)),
+        "ticket_created_by_source_key": entry.get("ticketCreatedBySourceKey", ""),
+        "ticket_created_by_source_value": entry.get("ticketCreatedBySourceValue", ""),
+        "configuration_item": entry.get("configurationItem", ""),
+        "project_configs": {},
         "table_mapping": {},
     }
+
+    # Parse projectConfigs from root level
+    root_project_configs = entry.get("projectConfigs")
+    if isinstance(root_project_configs, dict):
+        config["project_configs"] = _parse_project_configs(root_project_configs)
 
     # Parse options JSON array string
     options_str = entry.get("options", "")
@@ -194,11 +217,17 @@ def _parse_servicenow_entry(entry):
             # enableFeedbackCollect in configs only fills in if root-level was absent/false
             if not config["enable_feedback_collect"]:
                 config["enable_feedback_collect"] = bool(configs.get("enableFeedbackCollect", False))
-            # enableTicketCreation in configs only fills in if not already set at root
-            if not config["enable_ticket_creation"]:
-                config["enable_ticket_creation"] = bool(configs.get("enableTicketCreation", False))
-            if not config["enable_ticket_update"]:
-                config["enable_ticket_update"] = bool(configs.get("enableTicketUpdate", False))
+            if not config["ticket_created_by_source_key"]:
+                config["ticket_created_by_source_key"] = configs.get("ticketCreatedBySourceKey", "")
+            if not config["ticket_created_by_source_value"]:
+                config["ticket_created_by_source_value"] = configs.get("ticketCreatedBySourceValue", "")
+            if not config["configuration_item"]:
+                config["configuration_item"] = configs.get("configurationItem", "")
+            # Fall back to projectConfigs from configs JSON if not found at root level
+            if not config["project_configs"]:
+                pc_raw = configs.get("projectConfigs")
+                if isinstance(pc_raw, dict):
+                    config["project_configs"] = _parse_project_configs(pc_raw)
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
@@ -323,8 +352,27 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
             lines.append(f'  trigger_window_in_mills = {config["trigger_window_in_mills"]}')
 
         lines.append(f'  enable_feedback_collect = {str(config.get("enable_feedback_collect", False)).lower()}')
-        lines.append(f'  enable_ticket_creation  = {str(config.get("enable_ticket_creation", False)).lower()}')
-        lines.append(f'  enable_ticket_update    = {str(config.get("enable_ticket_update", False)).lower()}')
+
+        if config.get("ticket_created_by_source_key"):
+            escaped = config["ticket_created_by_source_key"].replace('"', '\\"')
+            lines.append(f'  ticket_created_by_source_key   = "{escaped}"')
+        if config.get("ticket_created_by_source_value"):
+            escaped = config["ticket_created_by_source_value"].replace('"', '\\"')
+            lines.append(f'  ticket_created_by_source_value = "{escaped}"')
+        if config.get("configuration_item"):
+            escaped = config["configuration_item"].replace('"', '\\"')
+            lines.append(f'  configuration_item = "{escaped}"')
+
+        if config.get("project_configs"):
+            lines.append('  project_configs = {')
+            for proj_name, pc in config["project_configs"].items():
+                proj_e = proj_name.replace('"', '\\"')
+                lines.append(f'    "{proj_e}" = {{')
+                lines.append(f'      enable_ticket_creation                    = {str(pc["enable_ticket_creation"]).lower()}')
+                lines.append(f'      enable_ticket_update                      = {str(pc["enable_ticket_update"]).lower()}')
+                lines.append(f'      enable_incident_consolidation_info_update = {str(pc["enable_incident_consolidation_info_update"]).lower()}')
+                lines.append('    }')
+            lines.append('  }')
 
         if config.get("table_mapping"):
             lines.append('  table_mapping = {')
