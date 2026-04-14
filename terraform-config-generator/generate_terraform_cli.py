@@ -818,6 +818,22 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
                 lines.append('      }' + ('' if is_last else ','))
             lines.append('    ]')
 
+        # project_level_dampening_windows — one block per entry in projectLevelDampeningWindows
+        pldw = notifications_data.get('projectLevelDampeningWindows') or []
+        if pldw:
+            lines.append('')
+            lines.append('    project_level_dampening_windows = [')
+            for i, entry in enumerate(pldw):
+                is_last = i == len(pldw) - 1
+                lines.append('      {')
+                lines.append(f'        source_project  = "{entry.get("ps", "")}"')
+                lines.append(f'        target_project  = "{entry.get("pt", "")}"')
+                lines.append(f'        source_customer = "{entry.get("cs", "")}"')
+                lines.append(f'        target_customer = "{entry.get("ct", "")}"')
+                lines.append(f'        duration        = {entry.get("d", 0)}')
+                lines.append('      }' + ('' if is_last else ','))
+            lines.append('    ]')
+
         lines.append('  }')
 
     lines.append('}')
