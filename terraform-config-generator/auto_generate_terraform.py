@@ -233,6 +233,29 @@ def filter_projects_by_type(project_list: List[Dict], project_types: List[str]) 
     return [p for p in project_list if (p.get("dataType") or "").lower() in allowed]
 
 
+def fetch_project_mode(session: requests.Session, base: str, username: str,
+                       api_key: str, project_name: str) -> Optional[int]:
+    """Fetch the process mode for a project from /api/v1/logdedicatedmode.
+
+    This endpoint uses cookie-based auth (Cookie: userName=<username>) in addition
+    to query params, mirroring DoRequestWithCookieAuth in the Go client.
+    """
+    url = f"{base}/api/v1/logdedicatedmode"
+    params = {"userName": username, "projectName": project_name, "licenseKey": api_key}
+    cookie_headers = {"Cookie": f"userName={username};", "Content-Type": "application/json"}
+    resp = _get(session, url, cookie_headers, params)
+    if resp is None or resp.status_code != 200:
+        return None
+    try:
+        data = resp.json()
+        entries = data.get("data") or []
+        if entries:
+            return entries[0].get("processMode")
+    except (ValueError, KeyError, IndexError, TypeError):
+        pass
+    return None
+
+
 def fetch_project_data(session: requests.Session, host: str, username: str,
                        api_key: str, customer_name: str, project_name: str,
                        is_metric: bool = False) -> Dict:
@@ -303,6 +326,9 @@ def fetch_project_data(session: requests.Session, host: str, username: str,
         }
     else:
         result["instance_down"] = None
+
+    # 9. Process mode (logdedicatedmode API — uses cookie auth)
+    result["mode"] = fetch_project_mode(session, base, username, api_key, project_name)
 
     return result
 
@@ -1057,6 +1083,11 @@ def generate_project_tf(project_name: str, project_data: Dict,
                     value = dict(value)
                     value['awSeverityLevel'] = 'Major'
             cfg.append(f'  {tf_key} = {format_terraform_value(value)}')
+
+    # Process mode (from /api/v1/logdedicatedmode)
+    mode = project_data.get("mode")
+    if mode is not None:
+        cfg.append(f'  mode = {mode}')
 
     # ServiceNow block using var references for credentials
     if is_servicenow_project:

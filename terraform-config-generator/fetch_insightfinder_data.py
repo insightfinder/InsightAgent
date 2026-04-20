@@ -28,6 +28,7 @@ Project-level endpoints:
   - /api/external/v1/watch-tower-setting
   - /api/external/v1/logsummarysettings
   - /api/external/v1/logjsontype
+  - /api/v1/logdedicatedmode        (process mode; uses Cookie auth)
 
 Metric-project endpoints (requires --data-type metric):
   - /api/external/v1/metriccomponent          (escalateIncident components)
@@ -428,7 +429,17 @@ def main(argv=None):
     except Exception as e:
         print(f"  Failed: {e}", file=sys.stderr)
 
-    # 5) ServiceNow third-party settings (uses X-License-Key header)
+    # 5) logdedicatedmode — process mode (cookie-based auth)
+    mode_url = f"{host.rstrip('/')}/api/v1/logdedicatedmode"
+    mode_params = {"userName": username, "projectName": project_name, "licenseKey": api_key}
+    mode_headers = {"Cookie": f"userName={username};", "Content-Type": "application/json"}
+    mode_out = os.path.join(out_dir, "sample_mode.json")
+    try:
+        fetch_and_save(session, mode_url, mode_headers, mode_params, mode_out, "process mode")
+    except Exception as e:
+        print(f"  Failed (skipping – may not be supported): {e}", file=sys.stderr)
+
+    # 6) ServiceNow third-party settings (uses X-License-Key header)
     sn_url = f"{host.rstrip('/')}/api/external/v1/thirdpartysetting"
     sn_params = {"projectName": project_name, "cloudType": "ServiceNow", "tzOffset": "-18000000"}
     sn_out = os.path.join(out_dir, "sample_servicenow.json")
