@@ -150,6 +150,8 @@ def _parse_project_configs(raw: dict) -> dict:
             "enable_incident_consolidation_info_update": bool(
                 pc.get("enableIncidentConsolidationInfoUpdate", False)
             ),
+            "enable_incident_resolve_update": bool(pc.get("enableIncidentResolveUpdate", False)),
+            "configuration_item": pc.get("configurationItem", ""),
         }
     return result
 
@@ -371,6 +373,10 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
                 lines.append(f'      enable_ticket_creation                    = {str(pc["enable_ticket_creation"]).lower()}')
                 lines.append(f'      enable_ticket_update                      = {str(pc["enable_ticket_update"]).lower()}')
                 lines.append(f'      enable_incident_consolidation_info_update = {str(pc["enable_incident_consolidation_info_update"]).lower()}')
+                lines.append(f'      enable_incident_resolve_update            = {str(pc["enable_incident_resolve_update"]).lower()}')
+                if pc.get("configuration_item"):
+                    ci_e = pc["configuration_item"].replace('"', '\\"')
+                    lines.append(f'      configuration_item                        = "{ci_e}"')
                 lines.append('    }')
             lines.append('  }')
 
@@ -672,7 +678,8 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
                                     system_name_expr: str | None = None,
                                     system_down_data: dict | None = None,
                                     insights_report_data: dict | None = None,
-                                    instance_down_items: list | None = None) -> str:
+                                    instance_down_items: list | None = None,
+                                    miscellaneous_data: dict | None = None) -> str:
     """Generate an insightfinder_system_settings Terraform resource block.
 
     Args:
@@ -681,6 +688,8 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
         kb_incident_data: Dict from sample_kb_incident_prediction.json (IncidentPredictionSetting API response).
         notifications_data: Dict from sample_notifications.json (healthviewsetting API response, single system).
         system_name_expr: HCL expression for system_name attribute. Defaults to a quoted literal.
+        miscellaneous_data: Dict with longTerm, shouldAutoShare, rootCauseReverseEntryFilterThreshold,
+                            enableCompositeTimeline (from sample_miscellaneous.json).
 
     Returns:
         Terraform HCL string for the resource block.
@@ -836,6 +845,21 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
 
         lines.append('  }')
 
+    # --- miscellaneous_settings block ---
+    if miscellaneous_data:
+        lines.append('')
+        lines.append('  miscellaneous_settings = {')
+        misc_field_map = [
+            ('longTerm',                             'healthview_longterm'),
+            ('shouldAutoShare',                      'should_auto_share'),
+            ('rootCauseReverseEntryFilterThreshold', 'rootcause_reverse_entry_filter_threshold'),
+            ('enableCompositeTimeline',              'enable_composite_timeline'),
+        ]
+        for api_key, tf_key in misc_field_map:
+            if api_key in miscellaneous_data:
+                lines.append(f'    {tf_key} = {format_terraform_value(miscellaneous_data[api_key])}')
+        lines.append('  }')
+
     lines.append('}')
     return '\n'.join(lines)
 
@@ -863,7 +887,8 @@ Examples:
       --system-name "My System" \\
       --kb-global sample_kb_global.json \\
       --kb-incident-prediction sample_kb_incident_prediction.json \\
-      --notifications sample_notifications.json
+      --notifications sample_notifications.json \\
+      --miscellaneous sample_miscellaneous.json
 
   # Full example: project + system settings + ServiceNow
   python generate_terraform_cli.py --settings sample_settings.json --keywords sample_keywords.json \\
@@ -904,6 +929,8 @@ Examples:
                         help='Path to incident prediction settings JSON (sample_kb_incident_prediction.json)')
     parser.add_argument('--notifications', dest='notifications',
                         help='Path to notifications/health-view settings JSON (sample_notifications.json)')
+    parser.add_argument('--miscellaneous', dest='miscellaneous',
+                        help='Path to miscellaneous system framework settings JSON (sample_miscellaneous.json)')
     
     args = parser.parse_args()
 
@@ -1082,6 +1109,17 @@ Examples:
         except json.JSONDecodeError as e:
             print(f"Warning: Invalid JSON in notifications file: {e}", file=sys.stderr)
 
+    miscellaneous_data = None
+    if args.miscellaneous:
+        try:
+            with open(args.miscellaneous, 'r') as f:
+                miscellaneous_data = json.load(f)
+            print(f"Loaded miscellaneous settings from: {args.miscellaneous}")
+        except FileNotFoundError:
+            print(f"Warning: Miscellaneous file not found: {args.miscellaneous}", file=sys.stderr)
+        except json.JSONDecodeError as e:
+            print(f"Warning: Invalid JSON in miscellaneous file: {e}", file=sys.stderr)
+
     # Generate Terraform configuration
     terraform_config = generate_terraform_config(
         project_name=project_name,
@@ -1098,7 +1136,7 @@ Examples:
     )
 
     # Append system-level settings block if any system data was provided
-    has_system_settings = kb_global_data or kb_incident_data or notifications_data
+    has_system_settings = kb_global_data or kb_incident_data or notifications_data or miscellaneous_data
     system_settings_config = ""
     if has_system_settings:
         system_settings_config = "\n\n" + generate_system_settings_config(
@@ -1106,6 +1144,7 @@ Examples:
             kb_global_data=kb_global_data,
             kb_incident_data=kb_incident_data,
             notifications_data=notifications_data,
+            miscellaneous_data=miscellaneous_data,
         )
 
     # Determine output file
@@ -1129,6 +1168,8 @@ Examples:
             blocks.append("knowledgebase_settings")
         if notifications_data:
             blocks.append("notifications_settings")
+        if miscellaneous_data:
+            blocks.append("miscellaneous_settings")
         print(f"   System settings blocks: {', '.join(blocks)}")
 
     # Also generate environment-level ServiceNow config if provided alongside project
