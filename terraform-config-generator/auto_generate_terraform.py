@@ -505,6 +505,40 @@ def fetch_insights_report_setting(session: requests.Session, host: str, username
     return None
 
 
+def fetch_miscellaneous_settings(session: requests.Session, host: str, username: str,
+                                 api_key: str, customer_name: str,
+                                 system_id: str) -> Optional[Dict]:
+    """Return miscellaneous system framework settings for the given system, or None."""
+    headers = api_headers(username, api_key)
+    base = host.rstrip('/')
+    data = fetch_json(session, f"{base}/api/external/v1/systemframework",
+                      headers, {"customerName": customer_name, "needDetail": "false",
+                                "tzOffset": "-18000000"})
+    if not isinstance(data, dict):
+        return None
+    for entry_str in data.get("ownSystemArr", []):
+        try:
+            entry = json.loads(entry_str) if isinstance(entry_str, str) else entry_str
+        except (json.JSONDecodeError, TypeError):
+            continue
+        entry_system_id = (entry.get("systemKey") or {}).get("systemName", "")
+        if entry_system_id != system_id:
+            continue
+        misc: Dict = {"longTerm": entry.get("longTerm", False)}
+        system_setting_str = entry.get("systemSetting", "")
+        if system_setting_str:
+            try:
+                inner = json.loads(system_setting_str)
+                misc["shouldAutoShare"] = inner.get("shouldAutoShare", False)
+                misc["rootCauseReverseEntryFilterThreshold"] = inner.get(
+                    "rootCauseReverseEntryFilterThreshold", 0)
+                misc["enableCompositeTimeline"] = inner.get("enableCompositeTimeline", False)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return misc
+    return None
+
+
 def fetch_servicenow_env_configs(session: requests.Session, host: str,
                                  username: str, api_key: str) -> List[Dict]:
     """Fetch all environment-level ServiceNow configurations from the API.
@@ -1627,7 +1661,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
     incident_projects_dir = os.path.join(system_dir, "incident-projects")
 
     # --- Fetch system-level settings ---
-    print(f"    Fetching system-level settings (KB, notifications)...")
+    print(f"    Fetching system-level settings (KB, notifications, miscellaneous)...")
     kb_global, kb_incident, notifications = fetch_system_level_settings(
         session, base_url, username, api_key, username, system_id
     )
@@ -1635,6 +1669,9 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
         session, base_url, username, api_key, username, system_id
     )
     insights_report_data = fetch_insights_report_setting(
+        session, base_url, username, api_key, username, system_id
+    )
+    miscellaneous_data = fetch_miscellaneous_settings(
         session, base_url, username, api_key, username, system_id
     )
 
@@ -1758,7 +1795,8 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
 
     # --- Write system_settings.tf in system folder (not projects/) ---
     has_sys_settings = (kb_global or kb_incident or notifications
-                        or system_down_data or insights_report_data or instance_down_items)
+                        or system_down_data or insights_report_data or instance_down_items
+                        or miscellaneous_data)
     if has_sys_settings:
         sys_settings_content = generate_system_settings_config(
             system_name=system_name,
@@ -1769,6 +1807,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
             system_down_data=system_down_data,
             insights_report_data=insights_report_data,
             instance_down_items=instance_down_items if instance_down_items else None,
+            miscellaneous_data=miscellaneous_data,
         )
         write_file(os.path.join(system_dir, "system_settings.tf"),
                    sys_settings_content + "\n", dry_run)

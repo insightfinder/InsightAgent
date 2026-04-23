@@ -40,6 +40,7 @@ System-level endpoints (requires --system-name):
   - /api/external/v1/globalknowledgebasesetting
   - /api/external/v2/IncidentPredictionSetting
   - /api/external/v2/healthviewsetting
+  - /api/external/v1/systemframework          (miscellaneous: longTerm, shouldAutoShare, etc.)
 
 By default the script uses:
   host: https://stg.insightfinder.com
@@ -315,6 +316,45 @@ def fetch_system_settings(session: requests.Session, host: str, headers: Dict[st
             print(f"  Filtered to system '{system_id}' and re-saved to {filtered_out}")
     except Exception as e:
         print(f"  Failed to fetch notifications settings: {e}", file=sys.stderr)
+
+    # 4) Miscellaneous system framework settings (longTerm, shouldAutoShare, etc.)
+    sf_url = f"{host.rstrip('/')}/api/external/v1/systemframework"
+    sf_params = {"customerName": customer_name, "needDetail": "false", "tzOffset": "-18000000"}
+    misc_out = os.path.join(out_dir, "sample_miscellaneous.json")
+    try:
+        resp = get_with_retries(session, sf_url, headers, params=sf_params)
+        if resp.status_code != 200:
+            print(f"  Error fetching system framework: HTTP {resp.status_code}", file=sys.stderr)
+        else:
+            framework = resp.json()
+            misc_data = None
+            for entry_str in framework.get("ownSystemArr", []):
+                try:
+                    entry = json.loads(entry_str) if isinstance(entry_str, str) else entry_str
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                entry_system_id = (entry.get("systemKey") or {}).get("systemName", "")
+                if entry_system_id != system_id:
+                    continue
+                misc_data = {"longTerm": entry.get("longTerm", False)}
+                system_setting_str = entry.get("systemSetting", "")
+                if system_setting_str:
+                    try:
+                        inner = json.loads(system_setting_str)
+                        misc_data["shouldAutoShare"] = inner.get("shouldAutoShare", False)
+                        misc_data["rootCauseReverseEntryFilterThreshold"] = inner.get(
+                            "rootCauseReverseEntryFilterThreshold", 0)
+                        misc_data["enableCompositeTimeline"] = inner.get("enableCompositeTimeline", False)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                break
+            if misc_data is not None:
+                save_json(misc_data, misc_out)
+                print(f"  Saved miscellaneous settings to {misc_out}")
+            else:
+                print(f"  System '{system_id}' not found in system framework response", file=sys.stderr)
+    except Exception as e:
+        print(f"  Failed to fetch miscellaneous settings: {e}", file=sys.stderr)
 
 
 def main(argv=None):
