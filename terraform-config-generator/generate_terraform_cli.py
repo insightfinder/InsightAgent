@@ -774,6 +774,7 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
             ('enableRootCauseEmailAlert',          'enable_root_cause_email_alert'),
             ('rootCauseEmail',                     'root_cause_email'),
             ('incidentDampeningWindow',            'incident_dampening_window'),
+            ('ticketOpenTime',                     'ticket_open_time'),
         ]
         for api_key, tf_key in notif_field_map:
             if api_key in notifications_data:
