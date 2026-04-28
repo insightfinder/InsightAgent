@@ -1339,6 +1339,8 @@ _ALERT_SETTING_FIELD_MAP: List[Tuple[str, str, str]] = [
     ("isFlappingResultOnly",               "is_flapping_result_only",                 "bool"),
     ("incidentDurationThreshold",          "incident_duration_threshold",             "int"),
     ("detectionType",                      "detection_type",                          "string"),
+    ("cValueOverride",                     "c_value_override",                        "nullable_int"),
+    ("highCValueOverride",                 "high_c_value_override",                   "nullable_int"),
     ("patternNameHigher",                  "pattern_name_higher",                     "string"),
     ("patternNameLower",                   "pattern_name_lower",                      "string"),
     ("metricType",                         "metric_type",                             "string"),
@@ -1356,6 +1358,8 @@ def _format_alert_setting_value(value: Any, field_type: str) -> str:
         return "true" if value else "false"
     elif field_type == "int":
         return str(int(value))
+    elif field_type == "nullable_int":
+        return "null" if value is None else str(int(value))
     else:  # string
         escaped = str(value).replace('\\', '\\\\').replace('"', '\\"')
         return f'"{escaped}"'
@@ -1421,9 +1425,14 @@ def _generate_metric_configurations_hcl(metric_configs: Dict[str, Any]) -> List[
             is_last_setting = s_idx == len(alert_settings) - 1
             lines.append("        {")
             for api_key, tf_attr, field_type in _ALERT_SETTING_FIELD_MAP:
-                if api_key in setting:
+                # nullable_int fields are always emitted (null when absent)
+                if field_type == "nullable_int":
+                    val_hcl = _format_alert_setting_value(setting.get(api_key), field_type)
+                elif api_key in setting:
                     val_hcl = _format_alert_setting_value(setting[api_key], field_type)
-                    lines.append(f"          {tf_attr} = {val_hcl}")
+                else:
+                    continue
+                lines.append(f"          {tf_attr} = {val_hcl}")
             # rougeValue — special handling
             rouge_hcl = _format_rouge_value(setting.get("rougeValue"))
             lines.append(f"          rouge_value = {rouge_hcl}")
