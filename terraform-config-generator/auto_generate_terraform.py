@@ -1437,13 +1437,16 @@ def _format_rouge_value(raw: Any) -> str:
     """Format rougeValue from the API GET response for HCL.
 
     The GET API returns rougeValue as a JSON string like '{"l":NaN,"s":NaN}' or "null".
-    In Terraform HCL we emit it as a string attribute or null.
+    In Terraform HCL we emit it as a string attribute.
+    If null, default to '{"l":NaN,"s":NaN}'.
     """
     if raw is None:
-        return "null"
+        # Default to NaN values when null
+        return '"{{\\"l\\":NaN,\\"s\\":NaN}}"'
     s = str(raw).strip()
     if s == "" or s == "null":
-        return "null"
+        # Default to NaN values when null
+        return '"{{\\"l\\":NaN,\\"s\\":NaN}}"'
     # It's a non-null string like {"l":NaN,"s":NaN} — emit as a quoted HCL string
     escaped = s.replace('\\', '\\\\').replace('"', '\\"')
     return f'"{escaped}"'
@@ -1493,9 +1496,12 @@ def _generate_metric_configurations_hcl(metric_configs: Dict[str, Any]) -> List[
             is_last_setting = s_idx == len(alert_settings) - 1
             lines.append("        {")
             for api_key, tf_attr, field_type in _ALERT_SETTING_FIELD_MAP:
-                # nullable_int fields are always emitted (null when absent)
+                # Skip c_value_override and high_c_value_override if they are null
                 if field_type == "nullable_int":
-                    val_hcl = _format_alert_setting_value(setting.get(api_key), field_type)
+                    val = setting.get(api_key)
+                    if val is None:
+                        continue  # Skip null nullable_int fields (except for rouge_value which is handled separately)
+                    val_hcl = _format_alert_setting_value(val, field_type)
                 elif api_key in setting:
                     val_hcl = _format_alert_setting_value(setting[api_key], field_type)
                 else:
