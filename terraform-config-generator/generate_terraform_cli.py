@@ -314,7 +314,10 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
         lines.append(f'  auth_type    = "{config["auth_type"]}"')
 
         if config.get("app_id"):
-            lines.append(f'  app_id       = "{config["app_id"]}"')
+            if use_vars:
+                lines.append(f'  app_id       = var.{var_prefix}_app_id')
+            else:
+                lines.append(f'  app_id       = ""  # TODO: set app_id for {account} @ {service_host}')
         if config.get("app_key"):
             if use_vars:
                 lines.append(f'  app_key      = var.{var_prefix}_app_key')
@@ -361,9 +364,8 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
         if config.get("ticket_created_by_source_value"):
             escaped = config["ticket_created_by_source_value"].replace('"', '\\"')
             lines.append(f'  ticket_created_by_source_value = "{escaped}"')
-        if config.get("configuration_item"):
-            escaped = config["configuration_item"].replace('"', '\\"')
-            lines.append(f'  configuration_item = "{escaped}"')
+        ci = config.get("configuration_item", "")
+        lines.append(f'  configuration_item             = "{ci.replace(chr(34), chr(92)+chr(34))}"')
 
         if config.get("project_configs"):
             lines.append('  project_configs = {')
@@ -374,9 +376,8 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
                 lines.append(f'      enable_ticket_update                      = {str(pc["enable_ticket_update"]).lower()}')
                 lines.append(f'      enable_incident_consolidation_info_update = {str(pc["enable_incident_consolidation_info_update"]).lower()}')
                 lines.append(f'      enable_incident_resolve_update            = {str(pc["enable_incident_resolve_update"]).lower()}')
-                if pc.get("configuration_item"):
-                    ci_e = pc["configuration_item"].replace('"', '\\"')
-                    lines.append(f'      configuration_item                        = "{ci_e}"')
+                ci_e = pc.get("configuration_item", "").replace('"', '\\"')
+                lines.append(f'      configuration_item                        = "{ci_e}"')
                 lines.append('    }')
             lines.append('  }')
 
@@ -502,6 +503,7 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
         'coldEventThreshold': 'cold_event_threshold',
         'coldNumberLimit': 'cold_number_limit',
         'collectAllRareEventsFlag': 'collect_all_rare_events_flag',
+        'componentNameAutoOverwrite': 'component_name_auto_overwrite',
         'dailyModelSpan': 'daily_model_span',
         'disableLogCompressEvent': 'disable_log_compress_event',
         'disableModelKeywordStatsCollection': 'disable_model_keyword_stats_collection',
@@ -596,7 +598,10 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
                     value['awSeverityLevel'] = 'Major'
             formatted_value = format_terraform_value(value)
             config.append(f'  {tf_key} = {formatted_value}')
-    
+
+    if 'componentNameAutoOverwrite' not in settings_data:
+        config.append('  component_name_auto_overwrite = true')
+
     # Add ServiceNow settings if present
     if servicenow_data:
         config.append('')
