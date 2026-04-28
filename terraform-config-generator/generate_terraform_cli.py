@@ -376,9 +376,8 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
                 lines.append(f'      enable_ticket_update                      = {str(pc["enable_ticket_update"]).lower()}')
                 lines.append(f'      enable_incident_consolidation_info_update = {str(pc["enable_incident_consolidation_info_update"]).lower()}')
                 lines.append(f'      enable_incident_resolve_update            = {str(pc["enable_incident_resolve_update"]).lower()}')
-                if pc.get("configuration_item"):
-                    ci_e = pc["configuration_item"].replace('"', '\\"')
-                    lines.append(f'      configuration_item                        = "{ci_e}"')
+                ci_e = pc.get("configuration_item", "").replace('"', '\\"')
+                lines.append(f'      configuration_item                        = "{ci_e}"')
                 lines.append('    }')
             lines.append('  }')
 
