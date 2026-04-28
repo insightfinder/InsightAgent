@@ -387,54 +387,43 @@ def fetch_metric_configurations(session: requests.Session, host: str, username: 
             except (json.JSONDecodeError, KeyError, TypeError):
                 pass
 
-    # 3. Per-metric alert settings (for every metric that appears in either map).
-    #    metricFilter is a fuzzy search, so paginate until reachEnd=true and only
-    #    keep the entry whose globalSetting.smetric exactly matches metric_name.
+    # 3. Alert settings — single bulk fetch for all metrics at once
     all_metrics = sorted(set(escalate_map) | set(ignored_map))
+    alert_resp = fetch_json(
+        session, f"{base}/api/external/v1/componentmetricupdate", headers,
+        {
+            "onlyIsKpi": "false",
+            "onlyComputeDifference": "false",
+            "projectName": f"{project_name}@{username}",
+            "start": "0",
+            "limit": "500000",
+            "metricFilter": "",
+            "customerName": customer_name,
+            "tzOffset": "-14400000",
+        },
+    )
+
+    smetric_to_entry: Dict[str, Any] = {}
+    if alert_resp:
+        pattern_id_rule = alert_resp.get("patternIdGenerationRule", pattern_id_rule)
+        if not alert_resp.get("reachEnd", False):
+            print("  Warning: reachEnd is not true — metric alert settings may be incomplete.",
+                  file=sys.stderr)
+        for entry in alert_resp.get("metricSetting", []):
+            gs = entry.get("globalSetting") or {}
+            smetric = gs.get("smetric", "")
+            if smetric:
+                smetric_to_entry[smetric] = entry
+
     for metric_name in all_metrics:
-        alert_settings: List[Dict] = []
-        start = 0
-        limit = 500
-        found = False
-        got_response = False
-
-        while not found:
-            alert_params = {
-                "onlyIsKpi": "false",
-                "onlyComputeDifference": "false",
-                "projectName": f"{project_name}@{username}",
-                "start": str(start),
-                "limit": str(limit),
-                "metricFilter": metric_name,
-                "customerName": customer_name,
-                "tzOffset": "-14400000",
-            }
-            alert_resp = fetch_json(
-                session, f"{base}/api/external/v1/componentmetricupdate", headers, alert_params,
-            )
-            if not alert_resp:
-                break
-
-            got_response = True
-            pattern_id_rule = alert_resp.get("patternIdGenerationRule", pattern_id_rule)
-
-            for entry in alert_resp.get("metricSetting", []):
-                gs = entry.get("globalSetting") or {}
-                if gs.get("smetric") == metric_name:
-                    alert_settings.append(gs)
-                    for comp_setting in entry.get("componentLevelSettingList", []):
-                        alert_settings.append(comp_setting)
-                    found = True
-                    break
-
-            if found or alert_resp.get("reachEnd", True):
-                break
-            start += limit
-
-        if not got_response:
-            print(f"  Skipping metric '{metric_name}' — no settings returned after all retries.")
+        entry = smetric_to_entry.get(metric_name)
+        if entry is None:
+            print(f"  Skipping metric '{metric_name}' — no settings found in bulk response.")
             continue
-
+        gs = entry.get("globalSetting") or {}
+        alert_settings: List[Dict] = [gs]
+        for comp_setting in entry.get("componentLevelSettingList", []):
+            alert_settings.append(comp_setting)
         metric_configs[metric_name] = {
             "escalate_incident_components": escalate_map.get(metric_name, []),
             "ignored_components": ignored_map.get(metric_name, []),

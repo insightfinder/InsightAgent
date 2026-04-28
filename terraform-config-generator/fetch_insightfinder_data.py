@@ -212,63 +212,48 @@ def fetch_metric_project_data(session: requests.Session, host: str, headers: Dic
         print(f"  Failed to fetch ignored components: {e}", file=sys.stderr)
         ignored_data = None
 
-    # Collect all unique metric names from both responses
-    all_metric_names: set = set()
-    for resp_data, key in [
-        (escalate_data, "componentEscalateIncident"),
-        (ignored_data, "componentIgnored"),
-    ]:
-        if not resp_data:
-            continue
-        encoded = resp_data.get(key, "")
-        if not encoded:
-            continue
-        try:
-            for entry in json.loads(encoded):
-                metric = entry["metricLevelPrimaryKey"]["metricName"]
-                all_metric_names.add(metric)
-        except (json.JSONDecodeError, KeyError, TypeError):
-            pass
-
-    if not all_metric_names:
-        print("  No metrics found in component responses — skipping per-metric alert settings.")
-        return
-
-    print(f"  Found {len(all_metric_names)} metric(s): {sorted(all_metric_names)}")
-
-    # 3. Per-metric alert settings
-    all_metric_settings = {}
-    for metric_name in sorted(all_metric_names):
-        params = {
-            "onlyIsKpi": "false",
-            "onlyComputeDifference": "false",
-            "projectName": f"{project_name}@{username}",
-            "start": "0",
-            "limit": "500",
-            "metricFilter": metric_name,
-            "customerName": customer_name,
-            "tzOffset": "-14400000",
-        }
-        try:
-            resp = get_with_retries(
-                session,
-                f"{base}/api/external/v1/componentmetricupdate",
-                headers,
-                params=params,
-            )
-            if resp.status_code != 200:
-                print(f"  Warning: HTTP {resp.status_code} for metric '{metric_name}'",
+    # 3. Per-metric alert settings — fetch all at once
+    params = {
+        "onlyIsKpi": "false",
+        "onlyComputeDifference": "false",
+        "projectName": f"{project_name}@{username}",
+        "start": "0",
+        "limit": "500000",
+        "metricFilter": "",
+        "customerName": customer_name,
+        "tzOffset": "-14400000",
+    }
+    try:
+        resp = get_with_retries(
+            session,
+            f"{base}/api/external/v1/componentmetricupdate",
+            headers,
+            params=params,
+        )
+        if resp.status_code != 200:
+            print(f"  Warning: HTTP {resp.status_code} fetching all metric settings",
+                  file=sys.stderr)
+        else:
+            resp_json = resp.json()
+            if not resp_json.get("reachEnd", False):
+                print("  Warning: reachEnd is not true — response may be incomplete.",
                       file=sys.stderr)
-                continue
-            all_metric_settings[metric_name] = resp.json()
-            print(f"  Metric '{metric_name}' settings fetched.")
-        except Exception as e:
-            print(f"  Failed to fetch settings for metric '{metric_name}': {e}", file=sys.stderr)
-
-    if all_metric_settings:
-        metric_settings_out = os.path.join(out_dir, "sample_metric_alert_settings.json")
-        save_json(all_metric_settings, metric_settings_out)
-        print(f"  All metric alert settings saved to {metric_settings_out}")
+            metric_settings_list = resp_json.get("metricSetting", [])
+            print(f"  Fetched {len(metric_settings_list)} metric setting(s) "
+                  f"(reachEnd={resp_json.get('reachEnd')}).")
+            # Build per-metric dict keyed by smetric name
+            all_metric_settings = {}
+            for entry in metric_settings_list:
+                gs = entry.get("globalSetting", {})
+                smetric = gs.get("smetric", "")
+                if smetric:
+                    all_metric_settings[smetric] = entry
+            if all_metric_settings:
+                metric_settings_out = os.path.join(out_dir, "sample_metric_alert_settings.json")
+                save_json(all_metric_settings, metric_settings_out)
+                print(f"  All metric alert settings saved to {metric_settings_out}")
+    except Exception as e:
+        print(f"  Failed to fetch all metric settings: {e}", file=sys.stderr)
 
 
 def fetch_system_settings(session: requests.Session, host: str, headers: Dict[str, str],
