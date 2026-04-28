@@ -387,54 +387,43 @@ def fetch_metric_configurations(session: requests.Session, host: str, username: 
             except (json.JSONDecodeError, KeyError, TypeError):
                 pass
 
-    # 3. Per-metric alert settings (for every metric that appears in either map).
-    #    metricFilter is a fuzzy search, so paginate until reachEnd=true and only
-    #    keep the entry whose globalSetting.smetric exactly matches metric_name.
+    # 3. Alert settings — single bulk fetch for all metrics at once
     all_metrics = sorted(set(escalate_map) | set(ignored_map))
+    alert_resp = fetch_json(
+        session, f"{base}/api/external/v1/componentmetricupdate", headers,
+        {
+            "onlyIsKpi": "false",
+            "onlyComputeDifference": "false",
+            "projectName": f"{project_name}@{username}",
+            "start": "0",
+            "limit": "500000",
+            "metricFilter": "",
+            "customerName": customer_name,
+            "tzOffset": "-14400000",
+        },
+    )
+
+    smetric_to_entry: Dict[str, Any] = {}
+    if alert_resp:
+        pattern_id_rule = alert_resp.get("patternIdGenerationRule", pattern_id_rule)
+        if not alert_resp.get("reachEnd", False):
+            print("  Warning: reachEnd is not true — metric alert settings may be incomplete.",
+                  file=sys.stderr)
+        for entry in alert_resp.get("metricSetting", []):
+            gs = entry.get("globalSetting") or {}
+            smetric = gs.get("smetric", "")
+            if smetric:
+                smetric_to_entry[smetric] = entry
+
     for metric_name in all_metrics:
-        alert_settings: List[Dict] = []
-        start = 0
-        limit = 500
-        found = False
-        got_response = False
-
-        while not found:
-            alert_params = {
-                "onlyIsKpi": "false",
-                "onlyComputeDifference": "false",
-                "projectName": f"{project_name}@{username}",
-                "start": str(start),
-                "limit": str(limit),
-                "metricFilter": metric_name,
-                "customerName": customer_name,
-                "tzOffset": "-14400000",
-            }
-            alert_resp = fetch_json(
-                session, f"{base}/api/external/v1/componentmetricupdate", headers, alert_params,
-            )
-            if not alert_resp:
-                break
-
-            got_response = True
-            pattern_id_rule = alert_resp.get("patternIdGenerationRule", pattern_id_rule)
-
-            for entry in alert_resp.get("metricSetting", []):
-                gs = entry.get("globalSetting") or {}
-                if gs.get("smetric") == metric_name:
-                    alert_settings.append(gs)
-                    for comp_setting in entry.get("componentLevelSettingList", []):
-                        alert_settings.append(comp_setting)
-                    found = True
-                    break
-
-            if found or alert_resp.get("reachEnd", True):
-                break
-            start += limit
-
-        if not got_response:
-            print(f"  Skipping metric '{metric_name}' — no settings returned after all retries.")
+        entry = smetric_to_entry.get(metric_name)
+        if entry is None:
+            print(f"  Skipping metric '{metric_name}' — no settings found in bulk response.")
             continue
-
+        gs = entry.get("globalSetting") or {}
+        alert_settings: List[Dict] = [gs]
+        for comp_setting in entry.get("componentLevelSettingList", []):
+            alert_settings.append(comp_setting)
         metric_configs[metric_name] = {
             "escalate_incident_components": escalate_map.get(metric_name, []),
             "ignored_components": ignored_map.get(metric_name, []),
@@ -616,6 +605,12 @@ def _servicenow_env_variables_tf(sn_configs: List[Dict]) -> str:
                 '  type        = string',
                 '  sensitive   = true',
                 '}',
+                '',
+                f'variable "{var_prefix}_app_id" {{',
+                f'  description = "App id for ServiceNow account {account} at {service_host}"',
+                '  type        = string',
+                '  sensitive   = true',
+                '}',
             ]
 
     return '\n'.join(lines) + '\n'
@@ -645,6 +640,7 @@ def _servicenow_env_tfvars(base_url: str, sn_configs: List[Dict]) -> str:
         ]
         if config.get("auth_type") == "oauth":
             lines.append(f'# {var_prefix}_app_key = "..."  # Set via GitHub Secrets')
+            lines.append(f'# {var_prefix}_app_id = "..."  # Set via GitHub Secrets')
 
     return '\n'.join(lines) + '\n'
 
@@ -692,16 +688,22 @@ def process_env_servicenow(session: requests.Session, env_name: str, env_cfg: Di
     write_file(os.path.join(env_sn_dir, "terraform.tfvars"),
                _servicenow_env_tfvars(base_url, sn_configs), dry_run)
 
-    sn_hcl = generate_servicenow_env_config(
-        sn_entries=sn_configs,
-        include_provider=False,  # provider.tf handles this
-        use_vars=True,           # reference var.sn_*_password etc.
-        system_id_to_name=system_id_to_name,
-    )
-    write_file(os.path.join(env_sn_dir, "servicenow.tf"),
-               sn_hcl, dry_run)
-
+    # Write one dedicated .tf file per ServiceNow config, named by host subdomain
     for config in sn_configs:
+        try:
+            from urllib.parse import urlparse as _urlparse
+            _host = _urlparse(config["service_host"]).netloc or config["service_host"]
+            _subdomain = _host.split('.')[0]
+        except Exception:
+            _subdomain = _sn_safe_name(config["account"], config["service_host"])
+        tf_filename = re.sub(r'[^a-z0-9-]', '-', _subdomain.lower()) + ".tf"
+        sn_hcl = generate_servicenow_env_config(
+            sn_entries=[config],
+            include_provider=False,
+            use_vars=True,
+            system_id_to_name=system_id_to_name,
+        )
+        write_file(os.path.join(env_sn_dir, tf_filename), sn_hcl, dry_run)
         print(f"    ServiceNow: {config['account']} @ {config['service_host']}"
               + (f" → {len(config['system_names'])} system(s)" if config.get('system_names') else ""))
 
@@ -869,29 +871,34 @@ def _log_projects_variables_tf(has_servicenow: bool) -> str:
             'variable "servicenow_host" {',
             '  description = "ServiceNow host url"',
             "  type        = string",
+            '  default     = ""',
             "}",
             "",
             'variable "servicenow_username" {',
             '  description = "ServiceNow service account username"',
             "  type        = string",
+            '  default     = ""',
             "}",
             "",
             'variable "servicenow_password" {',
             '  description = "ServiceNow service account password"',
             "  type        = string",
             "  sensitive   = true",
+            '  default     = ""',
             "}",
             "",
             'variable "servicenow_clientid" {',
             '  description = "ServiceNow service account clientId"',
             "  type        = string",
             "  sensitive   = true",
+            '  default     = ""',
             "}",
             "",
             'variable "servicenow_clientsecret" {',
             '  description = "ServiceNow service account clientSecret"',
             "  type        = string",
             "  sensitive   = true",
+            '  default     = ""',
             "}",
         ]
     return "\n".join(lines) + "\n"
@@ -973,6 +980,11 @@ def generate_project_tf(project_name: str, project_data: Dict,
 
     servicenow_data = project_data.get("servicenow") if is_servicenow_project else None
 
+    # Skip projects with no meaningful settings to avoid generating empty stubs
+    if not (settings_data or keywords_data or json_keys_data or servicenow_data
+            or any(project_data.get("holidays") or {})):
+        return None
+
     # --- Build HCL ---
     resource_name = tf_resource_name(project_name)
     cfg: List[str] = []
@@ -992,12 +1004,15 @@ def generate_project_tf(project_name: str, project_data: Dict,
     agent_type = _class_type.title() if _class_type else "Historical"
     cfg.append('  project_creation_config = {')
     if is_servicenow_project:
-        cfg.append('    data_type          = "Log"')
+        cfg.append(f'    data_type          = "{hcl_data_type}"')
         cfg.append('    instance_type      = "ServiceNow"')
         cfg.append('    project_cloud_type = "ServiceNow"')
         cfg.append('    insight_agent_type = "Custom"')
-        # The servicenow_table needs a real value; use data from settings or placeholder
-        sn_table = (servicenow_data or {}).get("servicenow_table", "incident")
+        project_name_lower = project_name.lower()
+        if "problem" in project_name_lower:
+            sn_table = "problem"
+        else:
+            sn_table = (servicenow_data or {}).get("servicenow_table", "incident")
         cfg.append(f'    servicenow_table   = "{sn_table}"')
     else:
         cfg.append(f'    data_type          = "{hcl_data_type}"')
@@ -1026,6 +1041,7 @@ def generate_project_tf(project_name: str, project_data: Dict,
         'coldEventThreshold': 'cold_event_threshold',
         'coldNumberLimit': 'cold_number_limit',
         'collectAllRareEventsFlag': 'collect_all_rare_events_flag',
+        'componentNameAutoOverwrite': 'component_name_auto_overwrite',
         'dailyModelSpan': 'daily_model_span',
         'disableLogCompressEvent': 'disable_log_compress_event',
         'disableModelKeywordStatsCollection': 'disable_model_keyword_stats_collection',
@@ -1118,9 +1134,12 @@ def generate_project_tf(project_name: str, project_data: Dict,
                     value['awSeverityLevel'] = 'Major'
             cfg.append(f'  {tf_key} = {format_terraform_value(value)}')
 
+    if 'componentNameAutoOverwrite' not in settings_data:
+        cfg.append('  component_name_auto_overwrite = true')
+
     # Process mode (from /api/v1/logdedicatedmode)
     mode = project_data.get("mode")
-    if mode is not None:
+    if mode is not None and mode != 0:
         cfg.append(f'  mode = {mode}')
 
     # ServiceNow block using var references for credentials
@@ -1266,29 +1285,78 @@ variable "system_name" {
 '''
 
 
-def _change_events_projects_tf() -> str:
+def _change_events_projects_tf(has_servicenow: bool = False) -> str:
     lines = [
         'module "change_events_projects" {',
         '  source = "./change-events-projects"',
-        '',
-        '  system_name = var.system_name',
-        '',
-        '  providers = {',
-        '    insightfinder = insightfinder',
-        '  }',
-        '}',
-        '',
+        "",
+        "  system_name = var.system_name",
     ]
-    return '\n'.join(lines)
+    if has_servicenow:
+        lines += [
+            "",
+            "  # ServiceNow credentials",
+            "  servicenow_host         = var.servicenow_host",
+            "  servicenow_username     = var.servicenow_username",
+            "  servicenow_password     = var.servicenow_password",
+            "  servicenow_clientid     = var.servicenow_clientid",
+            "  servicenow_clientsecret = var.servicenow_clientsecret",
+        ]
+    lines += [
+        "",
+        "  providers = {",
+        "    insightfinder = insightfinder",
+        "  }",
+        "}",
+        "",
+    ]
+    return "\n".join(lines)
 
 
-def _change_events_projects_variables_tf() -> str:
-    return '''\
-variable "system_name" {
-  description = "System name passed from parent module"
-  type        = string
-}
-'''
+def _change_events_projects_variables_tf(has_servicenow: bool = False) -> str:
+    lines = [
+        'variable "system_name" {',
+        '  description = "System name passed from parent module"',
+        "  type        = string",
+        "}",
+    ]
+    if has_servicenow:
+        lines += [
+            "",
+            'variable "servicenow_host" {',
+            '  description = "ServiceNow host url"',
+            "  type        = string",
+            '  default     = ""',
+            "}",
+            "",
+            'variable "servicenow_username" {',
+            '  description = "ServiceNow service account username"',
+            "  type        = string",
+            '  default     = ""',
+            "}",
+            "",
+            'variable "servicenow_password" {',
+            '  description = "ServiceNow service account password"',
+            "  type        = string",
+            "  sensitive   = true",
+            '  default     = ""',
+            "}",
+            "",
+            'variable "servicenow_clientid" {',
+            '  description = "ServiceNow service account clientId"',
+            "  type        = string",
+            "  sensitive   = true",
+            '  default     = ""',
+            "}",
+            "",
+            'variable "servicenow_clientsecret" {',
+            '  description = "ServiceNow service account clientSecret"',
+            "  type        = string",
+            "  sensitive   = true",
+            '  default     = ""',
+            "}",
+        ]
+    return "\n".join(lines) + "\n"
 
 
 def _incident_projects_tf() -> str:
@@ -1339,6 +1407,8 @@ _ALERT_SETTING_FIELD_MAP: List[Tuple[str, str, str]] = [
     ("isFlappingResultOnly",               "is_flapping_result_only",                 "bool"),
     ("incidentDurationThreshold",          "incident_duration_threshold",             "int"),
     ("detectionType",                      "detection_type",                          "string"),
+    ("cValueOverride",                     "c_value_override",                        "nullable_int"),
+    ("highCValueOverride",                 "high_c_value_override",                   "nullable_int"),
     ("patternNameHigher",                  "pattern_name_higher",                     "string"),
     ("patternNameLower",                   "pattern_name_lower",                      "string"),
     ("metricType",                         "metric_type",                             "string"),
@@ -1356,6 +1426,8 @@ def _format_alert_setting_value(value: Any, field_type: str) -> str:
         return "true" if value else "false"
     elif field_type == "int":
         return str(int(value))
+    elif field_type == "nullable_int":
+        return "null" if value is None else str(int(value))
     else:  # string
         escaped = str(value).replace('\\', '\\\\').replace('"', '\\"')
         return f'"{escaped}"'
@@ -1365,13 +1437,16 @@ def _format_rouge_value(raw: Any) -> str:
     """Format rougeValue from the API GET response for HCL.
 
     The GET API returns rougeValue as a JSON string like '{"l":NaN,"s":NaN}' or "null".
-    In Terraform HCL we emit it as a string attribute or null.
+    In Terraform HCL we emit it as a string attribute.
+    If null, default to '{"l":NaN,"s":NaN}'.
     """
     if raw is None:
-        return "null"
+        # Default to NaN values when null
+        return '"{{\\"l\\":NaN,\\"s\\":NaN}}"'
     s = str(raw).strip()
     if s == "" or s == "null":
-        return "null"
+        # Default to NaN values when null
+        return '"{{\\"l\\":NaN,\\"s\\":NaN}}"'
     # It's a non-null string like {"l":NaN,"s":NaN} — emit as a quoted HCL string
     escaped = s.replace('\\', '\\\\').replace('"', '\\"')
     return f'"{escaped}"'
@@ -1421,9 +1496,17 @@ def _generate_metric_configurations_hcl(metric_configs: Dict[str, Any]) -> List[
             is_last_setting = s_idx == len(alert_settings) - 1
             lines.append("        {")
             for api_key, tf_attr, field_type in _ALERT_SETTING_FIELD_MAP:
-                if api_key in setting:
+                # Skip c_value_override and high_c_value_override if they are null
+                if field_type == "nullable_int":
+                    val = setting.get(api_key)
+                    if val is None:
+                        continue  # Skip null nullable_int fields (except for rouge_value which is handled separately)
+                    val_hcl = _format_alert_setting_value(val, field_type)
+                elif api_key in setting:
                     val_hcl = _format_alert_setting_value(setting[api_key], field_type)
-                    lines.append(f"          {tf_attr} = {val_hcl}")
+                else:
+                    continue
+                lines.append(f"          {tf_attr} = {val_hcl}")
             # rougeValue — special handling
             rouge_hcl = _format_rouge_value(setting.get("rougeValue"))
             lines.append(f"          rouge_value = {rouge_hcl}")
@@ -1718,9 +1801,15 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
     }
     has_servicenow = len(servicenow_projects) > 0
 
-    # Collect a representative SN host for tfvars
+    change_events_servicenow_projects = {
+        (p.get("projectName") or p.get("name") or "")
+        for p in change_events_projects_list if _is_servicenow(p)
+    }
+    has_change_events_servicenow = len(change_events_servicenow_projects) > 0
+
+    # Collect a representative SN host for tfvars (log projects first, then change-events)
     sn_host_for_tfvars = ""
-    for sn_name in servicenow_projects:
+    for sn_name in list(servicenow_projects) + list(change_events_servicenow_projects):
         sn_data = (prefetched.get(sn_name) or {}).get("servicenow")
         if sn_data and sn_data.get("host"):
             sn_host_for_tfvars = sn_data["host"]
@@ -1768,11 +1857,11 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
 
     if change_events_projects_list:
         write_file(os.path.join(system_dir, "change_events_projects.tf"),
-                   _change_events_projects_tf(), dry_run)
+                   _change_events_projects_tf(has_change_events_servicenow), dry_run)
         write_file(os.path.join(change_events_projects_dir, "versions.tf"),
                    _projects_versions_tf(), dry_run)
         write_file(os.path.join(change_events_projects_dir, "variables.tf"),
-                   _change_events_projects_variables_tf(), dry_run)
+                   _change_events_projects_variables_tf(has_change_events_servicenow), dry_run)
 
     if incident_projects_list:
         write_file(os.path.join(system_dir, "incident_projects.tf"),
@@ -1847,6 +1936,11 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
                                              proj_info=proj)
         except Exception as e:
             print(f"      Error generating log TF: {e}", file=sys.stderr)
+            log_skipped += 1
+            continue
+
+        if tf_content is None:
+            print(f"      Skipped — no settings")
             log_skipped += 1
             continue
 
@@ -1926,6 +2020,11 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
             trace_skipped += 1
             continue
 
+        if tf_content is None:
+            print(f"      Skipped — no settings")
+            trace_skipped += 1
+            continue
+
         tf_filename = tf_resource_name(project_name) + ".tf"
         write_file(os.path.join(trace_projects_dir, tf_filename), tf_content + "\n", dry_run)
         trace_generated += 1
@@ -1941,14 +2040,21 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
             change_events_skipped += 1
             continue
 
-        print(f"    [deployment {change_events_generated + change_events_skipped + 1}/{len(change_events_projects_list)}] {project_name}")
+        is_sn_ce = project_name in change_events_servicenow_projects
+        print(f"    [deployment {change_events_generated + change_events_skipped + 1}/{len(change_events_projects_list)}] {project_name}"
+              + (" (ServiceNow)" if is_sn_ce else ""))
 
         try:
             tf_content = generate_project_tf(project_name, project_data,
-                                             system_name, is_servicenow_project=False,
+                                             system_name, is_servicenow_project=is_sn_ce,
                                              data_type="Deployment", proj_info=proj)
         except Exception as e:
             print(f"      Error generating change-events TF: {e}", file=sys.stderr)
+            change_events_skipped += 1
+            continue
+
+        if tf_content is None:
+            print(f"      Skipped — no settings")
             change_events_skipped += 1
             continue
 
@@ -1975,6 +2081,11 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
                                              data_type="Incident", proj_info=proj)
         except Exception as e:
             print(f"      Error generating incident TF: {e}", file=sys.stderr)
+            incident_skipped += 1
+            continue
+
+        if tf_content is None:
+            print(f"      Skipped — no settings")
             incident_skipped += 1
             continue
 
