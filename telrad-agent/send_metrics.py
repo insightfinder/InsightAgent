@@ -30,6 +30,7 @@ Usage:
 import argparse
 import json
 import logging
+import re
 import sys
 import time
 
@@ -45,6 +46,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 COMPONENT_NAME = "eNB-Telrad"
+
+_LEADING_SPECIAL = re.compile(r"^[-_\W]+")
+
+
+def clean_instance_name(name: str) -> str:
+    if not name:
+        return name
+    name = name.replace("_", ".").replace(":", "-")
+    cleaned = _LEADING_SPECIAL.sub("", name).strip()
+    return cleaned if cleaned else name
 
 
 def _load_or_build_asset_map(env: dict) -> dict:
@@ -100,6 +111,7 @@ def build_idm(devices: list[dict], ts_ms: int, asset_map: dict) -> dict:
             logger.warning(
                 f"No asset map entry for eNB {enb_id} — sending under BreezeVIEW name '{instance_name}'"
             )
+        instance_name = clean_instance_name(instance_name)
 
         avg_rssi = round(sum(rssi_vals) / len(rssi_vals))
 
