@@ -89,15 +89,16 @@ def convert_keywords_to_log_labels(keywords_data):
     return log_labels
 
 
-def convert_json_keys_to_terraform(json_keys_data, summary_settings=None, metafield_settings=None, dampening_field_settings=None):
+def convert_json_keys_to_terraform(json_keys_data, summary_settings=None, metafield_settings=None, dampening_field_settings=None, notification_settings=None):
     """Convert JSON keys data to json_key_settings format for Terraform.
-    
+
     Args:
         json_keys_data: List of dicts with jsonKey and type
         summary_settings: List of field names to mark as summary
         metafield_settings: List of field names to mark as metafield
         dampening_field_settings: List of field names to mark as dampening field
-    
+        notification_settings: Dict mapping field name -> {selected, displayName} from API
+
     Returns:
         List of formatted terraform json_key_settings
     """
@@ -105,24 +106,30 @@ def convert_json_keys_to_terraform(json_keys_data, summary_settings=None, metafi
     summary_set = set(summary_settings) if summary_settings else set()
     metafield_set = set(metafield_settings) if metafield_settings else set()
     dampening_field_set = set(dampening_field_settings) if dampening_field_settings else set()
-    
+    notification_map = notification_settings if isinstance(notification_settings, dict) else {}
+
     if not isinstance(json_keys_data, list):
         return json_key_settings
-    
+
     for key_item in json_keys_data:
         json_key = key_item.get('jsonKey') or key_item.get('json_key')
         key_type = key_item.get('type', 'string')
-        
+
         if json_key:
+            notif_entry = notification_map.get(json_key)
+            notif_selected = bool(notif_entry and notif_entry.get('selected'))
+            notif_display_name = notif_entry.get('displayName', '') if notif_entry else ''
             setting = {
                 'json_key': json_key,
                 'type': key_type,
                 'summary_setting': json_key in summary_set,
                 'metafield_setting': json_key in metafield_set,
-                'dampening_field_setting': json_key in dampening_field_set
+                'dampening_field_setting': json_key in dampening_field_set,
+                'notification_setting': notif_selected,
+                'notification_setting_display_name': notif_display_name,
             }
             json_key_settings.append(setting)
-    
+
     return json_key_settings
 
 
@@ -397,11 +404,11 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
 
 def generate_terraform_config(project_name, settings_data, keywords_data, servicenow_data=None,
                               json_keys_data=None, summary_settings=None, metafield_settings=None,
-                              dampening_field_settings=None,
-                              system_name="NBC Stage", 
+                              dampening_field_settings=None, notification_settings=None,
+                              system_name="NBC Stage",
                               base_url="https://nbc.insightfinder.com", include_provider=True):
     """Generate Terraform configuration from project settings and keywords.
-    
+
     Args:
         project_name: Name of the project
         settings_data: Project settings dictionary
@@ -411,6 +418,7 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
         summary_settings: List of fields to include in summary (optional)
         metafield_settings: List of fields to include in metafield (optional)
         dampening_field_settings: List of fields to include in dampening field (optional)
+        notification_settings: Dict mapping field name -> {selected, displayName} (optional)
         system_name: System name
         base_url: InsightFinder base URL
         include_provider: Whether to include provider block
@@ -444,7 +452,8 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
         json_keys_data or [],
         summary_settings=summary_settings,
         metafield_settings=metafield_settings,
-        dampening_field_settings=dampening_field_settings
+        dampening_field_settings=dampening_field_settings,
+        notification_settings=notification_settings,
     )
     
     # Start building the Terraform configuration
@@ -653,11 +662,15 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
         config.append('  json_key_settings = [')
         for i, key_setting in enumerate(json_key_settings):
             config.append('    {')
-            config.append(f'      json_key               = "{key_setting["json_key"]}"')
+            config.append(f'      json_key                = "{key_setting["json_key"]}"')
             config.append(f'      type                   = "{key_setting["type"]}"')
-            config.append(f'      summary_setting        = {format_terraform_value(key_setting["summary_setting"])}')
-            config.append(f'      metafield_setting      = {format_terraform_value(key_setting["metafield_setting"])}')
+            config.append(f'      summary_setting         = {format_terraform_value(key_setting["summary_setting"])}')
+            config.append(f'      metafield_setting       = {format_terraform_value(key_setting["metafield_setting"])}')
             config.append(f'      dampening_field_setting = {format_terraform_value(key_setting["dampening_field_setting"])}')
+            if key_setting.get('notification_setting'):
+                config.append(f'      notification_setting              = {format_terraform_value(key_setting["notification_setting"])}')
+                display_name = key_setting.get('notification_setting_display_name') or ''
+                config.append(f'      notification_setting_display_name = "{display_name}"')
             if i < len(json_key_settings) - 1:
                 config.append('    },')
             else:
@@ -1066,6 +1079,7 @@ Examples:
     summary_settings = []
     metafield_settings = []
     dampening_field_settings = []
+    notification_settings = {}
     if args.summary_metafield:
         try:
             with open(args.summary_metafield, 'r') as f:
@@ -1073,6 +1087,7 @@ Examples:
                 summary_settings = summary_meta_data.get('summarySetting', [])
                 metafield_settings = summary_meta_data.get('metaFieldSetting', [])
                 dampening_field_settings = summary_meta_data.get('dampeningFieldSetting', [])
+                notification_settings = summary_meta_data.get('notificationSetting', {})
             print(f"📄 Summary and metafield settings loaded from: {args.summary_metafield}")
         except FileNotFoundError:
             print(f"Warning: Summary/metafield file not found: {args.summary_metafield}", file=sys.stderr)
@@ -1136,6 +1151,7 @@ Examples:
         summary_settings=summary_settings,
         metafield_settings=metafield_settings,
         dampening_field_settings=dampening_field_settings,
+        notification_settings=notification_settings,
         system_name=args.system_name,
         base_url=args.base_url,
         include_provider=not args.no_provider
