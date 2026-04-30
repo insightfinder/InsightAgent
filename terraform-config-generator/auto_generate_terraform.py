@@ -971,6 +971,7 @@ def generate_project_tf(project_name: str, project_data: Dict,
     summary_settings: List[str] = summary_meta.get("summarySetting", [])
     metafield_settings: List[str] = summary_meta.get("metaFieldSetting", [])
     dampening_field_settings: List[str] = summary_meta.get("dampeningFieldSetting", [])
+    notification_settings: dict = summary_meta.get("notificationSetting", {})
 
     jsonkeys_raw = project_data.get("jsonkeys") or {}
     if isinstance(jsonkeys_raw, list):
@@ -1186,6 +1187,7 @@ def generate_project_tf(project_name: str, project_data: Dict,
         summary_settings=summary_settings,
         metafield_settings=metafield_settings,
         dampening_field_settings=dampening_field_settings,
+        notification_settings=notification_settings,
     )
     if json_key_settings:
         cfg.append('')
@@ -1197,6 +1199,10 @@ def generate_project_tf(project_name: str, project_data: Dict,
             cfg.append(f'      summary_setting         = {format_terraform_value(ks["summary_setting"])}')
             cfg.append(f'      metafield_setting       = {format_terraform_value(ks["metafield_setting"])}')
             cfg.append(f'      dampening_field_setting = {format_terraform_value(ks["dampening_field_setting"])}')
+            if ks.get('notification_setting'):
+                cfg.append(f'      notification_setting              = {format_terraform_value(ks["notification_setting"])}')
+                display_name = ks.get('notification_setting_display_name') or ''
+                cfg.append(f'      notification_setting_display_name = "{display_name}"')
             if i < len(json_key_settings) - 1:
                 cfg.append('    },')
             else:
