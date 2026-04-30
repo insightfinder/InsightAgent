@@ -62,19 +62,28 @@ def load_env(path=".env"):
     return env
 
 
+def _cfg(env: dict, key: str) -> str:
+    return os.environ.get(key) or env.get(key, "")
+
+
+def _localname(el) -> str:
+    return el.tag.split("}")[-1] if "}" in el.tag else el.tag
+
+
 def make_request(url, username, password, timeout):
     creds = base64.b64encode(f"{username}:{password}".encode()).decode()
     req = urllib.request.Request(url, headers={"Authorization": f"Basic {creds}"})
     return urllib.request.urlopen(req, timeout=timeout)
 
 
-def get_device_ids(base_url, username, password, timeout):
+def get_device_ip_map(base_url, username, password, timeout) -> dict:
+    """Return {device_id: ip_address} for all unique-IP eNBs."""
     url = f"{base_url}/api/running/devices/device?select=name;address"
     resp = make_request(url, username, password, timeout)
     root = ET.fromstring(resp.read())
     ns = {"ncs": "http://tail-f.com/ns/ncs"}
-    seen_ips = set()
-    device_ids = []
+    seen_ips: set = set()
+    result: dict = {}
     for device in root.findall(".//ncs:device", ns):
         name_el = device.find("ncs:name", ns)
         addr_el = device.find("ncs:address", ns)
@@ -86,8 +95,38 @@ def get_device_ids(base_url, username, password, timeout):
             continue
         if address:
             seen_ips.add(address)
-        device_ids.append(name)
-    return device_ids
+        result[name] = address or ""
+    return result
+
+
+def get_device_name_map(base_url, username, password, timeout) -> dict:
+    """Return {device_id: display_name} from config/Device/General/Name."""
+    url = f"{base_url}/api/running/devices/device?select=name;config/Device/General/Name"
+    resp = make_request(url, username, password, timeout)
+    root = ET.fromstring(resp.read())
+    result: dict = {}
+
+    for device in root:
+        if _localname(device) != "device":
+            continue
+        name_el = next((c for c in device if _localname(c) == "name"), None)
+        if name_el is None or not name_el.text:
+            continue
+        display = ""
+        cursor = next((c for c in device if _localname(c) == "config"), None)
+        if cursor is not None:
+            for path_tag in ("Device", "General", "Name"):
+                cursor = next((c for c in cursor if _localname(c) == path_tag), None)
+                if cursor is None:
+                    break
+            if cursor is not None and cursor.text:
+                display = cursor.text.strip()
+        result[name_el.text] = display
+    return result
+
+
+def get_device_ids(base_url, username, password, timeout) -> list:
+    return list(get_device_ip_map(base_url, username, password, timeout).keys())
 
 
 def get_device_metrics(base_url, device_id, username, password, timeout):
@@ -166,14 +205,23 @@ def collect_metrics(base_url, username, password, timeout, device_id=None):
     Returns (timestamp_ms, list[device_result])."""
     if device_id is not None:
         device_ids = [device_id]
+        name_map = {}
     else:
         logger.debug("Enumerating devices...")
-        device_ids = get_device_ids(base_url, username, password, timeout)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            fut_ids = pool.submit(get_device_ip_map, base_url, username, password, timeout)
+            fut_names = pool.submit(get_device_name_map, base_url, username, password, timeout)
+            device_ids = list(fut_ids.result().keys())
+            try:
+                name_map = fut_names.result()
+            except Exception:
+                name_map = {}
         logger.debug(f"Found {len(device_ids)} eNB device(s): {', '.join(device_ids)}")
 
     def fetch(did):
         logger.debug(f"Fetching metrics for eNB {did}...")
         result = get_device_metrics(base_url, did, username, password, timeout)
+        result["device_name"] = name_map.get(did, "")
         if result["status"] == "ok":
             logger.debug(f"eNB {did}: ok ({len(result.get('ues', []))} UEs attached)")
         else:
@@ -189,8 +237,10 @@ def collect_metrics(base_url, username, password, timeout, device_id=None):
 
 def print_summary(devices, all_ues=False):
     for d in devices:
+        name = d.get("device_name") or ""
+        label = f"{d['device_id']}  ({name})" if name else d['device_id']
         if d["status"] == "error":
-            print(f"[eNB {d['device_id']}]  UNREACHABLE — {d['error']}")
+            print(f"[eNB {label}]  UNREACHABLE — {d['error']}")
             continue
 
         cm = d.get("cell_metrics", {})
@@ -198,7 +248,7 @@ def print_summary(devices, all_ues=False):
         cell0 = cm.get("cell0_ul_rms_power_dbm")
         cell1 = cm.get("cell1_ul_rms_power_dbm")
         print(
-            f"[eNB {d['device_id']}]  "
+            f"[eNB {label}]  "
             f"Cell0 UL RMS: {cell0} dBm  Cell1 UL RMS: {cell1} dBm  "
             f"UEs attached: {len(ues)}"
         )
@@ -231,9 +281,9 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
 
     env = load_env()
-    base_url = (os.environ.get("ACCESSPARKS_TELRAD_URL") or env.get("ACCESSPARKS_TELRAD_URL", "")).rstrip("/")
-    username = os.environ.get("ACCESSPARKS_TELRAD_USERNAME") or env.get("ACCESSPARKS_TELRAD_USERNAME", "")
-    password = os.environ.get("ACCESSPARKS_TELRAD_PASSWORD") or env.get("ACCESSPARKS_TELRAD_PASSWORD", "")
+    base_url = _cfg(env, "ACCESSPARKS_TELRAD_URL").rstrip("/")
+    username = _cfg(env, "ACCESSPARKS_TELRAD_USERNAME")
+    password = _cfg(env, "ACCESSPARKS_TELRAD_PASSWORD")
 
     if not base_url or not username or not password:
         logger.error("set ACCESSPARKS_TELRAD_URL, ACCESSPARKS_TELRAD_USERNAME, ACCESSPARKS_TELRAD_PASSWORD in .env")
