@@ -119,14 +119,9 @@ def send_relations_to_insightfinder(relations):
         instance_relation_list = []
         for rel in zone_relations:
             instance_relation_list.append({
-                "s": {
-                    "id": rel['source'],
-                    "type": "componentLevel"
-                },
-                "t": {
-                    "id": rel['target'],
-                    "type": "componentLevel"
-                }
+                "sources": [{"id": rel['source'], "type": config.relation_node_type}],
+                "targets": [{"id": rel['target'], "type": config.relation_node_type}],
+                "st": 1
             })
         
         # Convert to JSON string
