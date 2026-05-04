@@ -518,6 +518,7 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
         'disableModelKeywordStatsCollection': 'disable_model_keyword_stats_collection',
         'emailSetting': 'email_setting',
         'enableAnomalyScoreEscalation': 'enable_anomaly_score_escalation',
+        'enableComponentLevelDetection': 'enable_component_level_detection',
         'enableHotEvent': 'enable_hot_event',
         'enableNewAlertEmail': 'enable_new_alert_email',
         'enableStreamDetection': 'enable_stream_detection',
