@@ -33,6 +33,7 @@ netexperience:
   
   # Metric thresholds
   min_clients_rssi_threshold: 10  # Minimum clients required for RSSI percentage calculations
+  min_clients_snr_threshold: 10  # Minimum clients required for SNR/retry rate calculations
 
 insightfinder:
   # InsightFinder Platform Configuration
