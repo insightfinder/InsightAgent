@@ -147,10 +147,35 @@ func (w *Worker) processEquipmentMetrics(equipment *models.Equipment, customer *
 		}
 
 		if len(rssiValues) > 0 {
-			threshold := w.config.NetExperience.MinClientsRSSIThreshold
+			rssiThreshold := w.config.NetExperience.MinClientsRSSIThreshold
 			result.AverageRSSI, result.ClientsRSSIBelow74, result.ClientsRSSIBelow78, result.ClientsRSSIBelow80,
 				result.PercentRSSIBelow74, result.PercentRSSIBelow78, result.PercentRSSIBelow80 =
-				models.CalculateRSSIMetrics(rssiValues, threshold)
+				models.CalculateRSSIMetrics(rssiValues, rssiThreshold)
+		}
+	}
+
+	// 5GHz corroboration KPIs — only computed when clients meet the SNR threshold
+	snrThreshold := w.config.NetExperience.MinClientsSNRThreshold
+	if result.TotalClients >= snrThreshold {
+		if stats5G, ok := apNodeMetrics.RadioStatsPerRadio["is5GHz"]; ok {
+			if noise5G, ok := apNodeMetrics.NoiseFloorPerRadio["is5GHz"]; ok {
+				result.SNR5GHz = float64(stats5G.RxLastRssi) - noise5G
+			}
+			if stats5G.NumTxFramesTransmitted > 0 {
+				result.TxRetryRate5GHz = float64(stats5G.NumTxRetryAttemps) / float64(stats5G.NumTxFramesTransmitted) * 100
+			}
+		}
+	}
+
+	// Critical RF: binary 1/0 — requires both thresholds to be met
+	rssiThreshold := w.config.NetExperience.MinClientsRSSIThreshold
+	if result.TotalClients >= rssiThreshold && result.TotalClients >= snrThreshold {
+		criticalRSSI := result.PercentRSSIBelow78 >= 35
+		criticalKPI := result.ChannelUtilization5GHz > 85 ||
+			(result.SNR5GHz > 0 && result.SNR5GHz < 18) ||
+			result.TxRetryRate5GHz > 18
+		if criticalRSSI && criticalKPI {
+			result.CriticalRF = 1
 		}
 	}
 
@@ -200,10 +225,23 @@ func (w *Worker) sendMetricBatch(timestamp int64, metrics []*models.EquipmentMet
 			"Channel Utilization 5GHz":   em.ChannelUtilization5GHz,
 			"Channel Utilization 2.4GHz": em.ChannelUtilization24GHz,
 			"Average RSSI":               em.AverageRSSI,
-			"% Clients RSSI < -74 dBm":   em.PercentRSSIBelow74,
-			"% Clients RSSI < -78 dBm":   em.PercentRSSIBelow78,
-			"% Clients RSSI < -80 dBm":   em.PercentRSSIBelow80,
 			"WAN Port Speed Mbps":        float64(em.WANPortSpeed),
+		}
+
+		if em.TotalClients >= w.config.NetExperience.MinClientsRSSIThreshold {
+			data["% Clients RSSI < -74 dBm"] = em.PercentRSSIBelow74
+			data["% Clients RSSI < -78 dBm"] = em.PercentRSSIBelow78
+			data["% Clients RSSI < -80 dBm"] = em.PercentRSSIBelow80
+		}
+
+		if em.TotalClients >= w.config.NetExperience.MinClientsSNRThreshold {
+			data["SNR 5GHz"] = em.SNR5GHz
+			data["TX Retry Rate 5GHz"] = em.TxRetryRate5GHz
+		}
+
+		if em.TotalClients >= w.config.NetExperience.MinClientsRSSIThreshold &&
+			em.TotalClients >= w.config.NetExperience.MinClientsSNRThreshold {
+			data["Critical RF"] = em.CriticalRF
 		}
 
 		metricData := models.MetricData{
