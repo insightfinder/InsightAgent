@@ -1,0 +1,147 @@
+[mssql]
+
+# ============================================================
+# Database Connection
+# ============================================================
+
+host = localhost
+user =
+password =
+database =
+port = 1433
+
+# How long to wait for a query to complete (seconds)
+timeout =
+# How long to wait when establishing the connection (seconds)
+login_timeout =
+# Optional label shown in MSSQL activity monitor
+appname =
+
+# ============================================================
+# Table Selection
+# ============================================================
+
+# Comma-separated list of tables to query.
+# Can also be a dynamic SQL query: sql:SELECT name FROM sys.tables
+table_list =
+
+# ============================================================
+# Instance Mapping (optional)
+# ============================================================
+
+# If your data stores instance IDs instead of names, point these
+# at a lookup table to map IDs to human-readable names.
+# All three must be set together, or leave all empty.
+instance_map_table =
+instance_map_id_field =
+instance_map_name_field =
+
+# ============================================================
+# Device Mapping (optional)
+# ============================================================
+
+# Maps raw device field values to display names.
+# The resolved device name is prepended to the instance name.
+# All three must be set together, or leave all empty.
+device_map_table =
+device_map_id_field =
+device_map_name_field =
+
+# ============================================================
+# SQL Query
+# ============================================================
+
+# Supported placeholders:
+#   {{table}}           - replaced with each table from table_list
+#   {{timestamp_field}} - replaced with the timestamp_field value below
+#   {{start_time}}      - replaced with the window start time
+#   {{end_time}}        - replaced with the window end time
+sql = """
+      SELECT *
+      FROM {{table}}
+      WHERE {{timestamp_field}} >= '{{start_time}}' AND {{timestamp_field}} < '{{end_time}}';
+      """
+
+# ============================================================
+# Data Parsing
+# ============================================================
+
+# Format of rows returned from MSSQL. Always json for this agent.
+data_format = json
+
+# Column that holds the event timestamp
+timestamp_field = timestamp
+
+# Format of the timestamp column, using Arrow format strings.
+# Leave empty to default to epoch (Unix timestamp).
+# Example: YYYY-MM-DD HH:mm:ss
+timestamp_format =
+
+# Timezone the timestamps in the database are stored in (pytz name)
+timezone = UTC
+
+# Timezone InsightFinder stores data in. Default is UTC.
+target_timestamp_timezone = UTC
+
+# Column that holds the instance/host name
+instance_field = host
+
+# Column for an optional device identifier (prepended to instance name)
+device_field =
+
+# Columns to send as metric values (metric) or log fields (log).
+# Comma-separated. Leave empty to include all columns.
+data_fields =
+
+# METRIC ONLY: if set, this column holds the metric name (narrow format).
+# If empty, column names from data_fields are used as metric names (wide format).
+metric_name_field =
+
+# ============================================================
+# Streaming Config
+# ============================================================
+
+# How far back to query on each run, in minutes. Default: 10
+query_window = 10
+
+# HISTORY/REPLAY: if set, the agent replays data over this time range
+# instead of streaming live. Both fields must be set together.
+# hist_time_range format: 2020-04-13 00:00:00,2020-04-14 00:00:00
+hist_time_range =
+# hist_batch_interval: how large each replay batch is, in seconds. Example: 3600
+hist_batch_interval =
+
+# ============================================================
+# Proxy (optional)
+# ============================================================
+
+agent_http_proxy =
+agent_https_proxy =
+
+
+[insightfinder]
+
+# ============================================================
+# InsightFinder Connection
+# ============================================================
+
+user_name =
+license_key =
+project_name =
+
+# project_type: metric or log
+project_type = metric
+
+# METRIC ONLY: how frequently data points are collected, in minutes.
+# Append 's' for seconds (e.g. 30s). Tells InsightFinder the data granularity.
+sampling_interval = 1
+
+# Max payload size per HTTP request in KB. Default: 2048 (2MB)
+chunk_size_kb = 2048
+
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
+
+# Set to true if this agent runs inside a container
+containerize =

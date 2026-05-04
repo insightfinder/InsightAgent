@@ -1,0 +1,7 @@
+*.ini
+conf.d/*.ini
+entrypoint.sh
+*.bak
+init-db.py
+init-db.sql
+venv
