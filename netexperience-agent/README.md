@@ -11,8 +11,9 @@ NetExperience Agent is a Go-based data collection agent that fetches network per
 - **Comprehensive Metrics**: Collects AP metrics including:
   - Client counts (5GHz, 2.4GHz, total)
   - Channel utilization per radio
-  - RSSI statistics and thresholds
-  - Client distribution across signal strength levels
+  - RSSI statistics and client distribution across signal strength levels
+  - 5GHz corroboration KPIs: SNR and TX retry rate
+  - **Critical RF indicator**: binary metric combining RSSI, SNR, airtime utilization, and TX retry rate
 
 ## Architecture
 
@@ -63,6 +64,7 @@ netexperience:
   
   # Thresholds
   min_clients_rssi_threshold: 10
+  min_clients_snr_threshold: 10
 
 insightfinder:
   server_url: https://stg.insightfinder.com
@@ -121,6 +123,8 @@ insightfinder:
    - Calculates RSSI statistics and percentages
    - Counts clients per radio band
    - Extracts channel utilization
+   - Computes 5GHz SNR (`rxLastRssi − noiseFloor`) and TX retry rate
+   - Evaluates Critical RF indicator when client thresholds are met
 
 4. **Data Delivery**:
    - Formats metrics for InsightFinder API
@@ -130,20 +134,37 @@ insightfinder:
 ### Metrics Collected
 
 Per equipment (AP):
-- `total_clients`: Total connected clients
-- `clients_5ghz`: Clients on 5GHz band
-- `clients_2_4ghz`: Clients on 2.4GHz band
-- `channel_utilization_5ghz`: 5GHz channel utilization %
-- `channel_utilization_2_4ghz`: 2.4GHz channel utilization %
-- `average_rssi`: Average RSSI across all clients
-- `clients_rssi_below_74`: Count of clients with RSSI < -74 dBm
-- `clients_rssi_below_78`: Count of clients with RSSI < -78 dBm
-- `clients_rssi_below_80`: Count of clients with RSSI < -80 dBm
-- `percent_rssi_below_74`: Percentage of clients with RSSI < -74 dBm
-- `percent_rssi_below_78`: Percentage of clients with RSSI < -78 dBm
-- `percent_rssi_below_80`: Percentage of clients with RSSI < -80 dBm
 
-**Note**: RSSI percentages are only calculated when total clients >= `min_clients_rssi_threshold` (default: 10)
+| Metric | Description | Threshold-gated |
+|---|---|---|
+| `Total Clients` | Total connected clients | — |
+| `Clients 5GHz` | Clients on 5GHz band | — |
+| `Clients 2.4GHz` | Clients on 2.4GHz band | — |
+| `Channel Utilization 5GHz` | 5GHz channel utilization % | — |
+| `Channel Utilization 2.4GHz` | 2.4GHz channel utilization % | — |
+| `Average RSSI` | Average RSSI across all clients (dBm, absolute value) | — |
+| `WAN Port Speed Mbps` | WAN port speed | — |
+| `% Clients RSSI < -74 dBm` | % of clients in orange signal zone | `min_clients_rssi_threshold` |
+| `% Clients RSSI < -78 dBm` | % of clients in red signal zone | `min_clients_rssi_threshold` |
+| `% Clients RSSI < -80 dBm` | % of clients below red signal zone | `min_clients_rssi_threshold` |
+| `SNR 5GHz` | 5GHz SNR: `rxLastRssi − noiseFloor` (dB) | `min_clients_snr_threshold` |
+| `TX Retry Rate 5GHz` | 5GHz TX retry rate: `retries / frames × 100` (%) | `min_clients_snr_threshold` |
+| `Critical RF` | Binary indicator: `1` = critical RF conditions detected, `0` = normal | both thresholds |
+
+Threshold-gated metrics are **omitted entirely** (not sent as zero) when the AP has fewer clients than the configured minimum.
+
+#### Critical RF Logic
+
+`Critical RF` is set to `1` when **all** of the following are true (requires ≥ `min_clients_rssi_threshold` and ≥ `min_clients_snr_threshold` clients):
+
+- **≥ 35% of clients have RSSI < −78 dBm**, AND
+- **at least one 5GHz KPI breaches its critical threshold**:
+
+| KPI | Critical threshold |
+|---|---|
+| Channel Utilization 5GHz | > 85% |
+| SNR 5GHz | < 18 dB |
+| TX Retry Rate 5GHz | > 18% |
 
 ## Rate Limiting
 
@@ -174,6 +195,11 @@ Log level configurable via `agent.log_level`: DEBUG, INFO, WARN, ERROR
 - Ensure customers and equipment are cached (check logs)
 - Verify equipment has recent data in the API
 - Check time range calculation (fromTime/toTime)
+
+### RSSI / SNR / Critical RF metrics missing
+- These are omitted when the AP client count is below the configured threshold
+- Check `min_clients_rssi_threshold` (controls RSSI % and Critical RF) and `min_clients_snr_threshold` (controls SNR, TX Retry Rate, and Critical RF)
+- Default is 10 for both; APs with fewer clients will not emit these metrics
 
 ### Rate Limiting
 - Reduce `equipment_batch_size` if hitting rate limits
