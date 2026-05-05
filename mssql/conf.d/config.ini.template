@@ -129,6 +129,9 @@ user_name =
 license_key =
 project_name =
 
+# system_name: the IF system this project belongs to.
+system_name =
+
 # project_type: metric or log
 project_type = metric
 
