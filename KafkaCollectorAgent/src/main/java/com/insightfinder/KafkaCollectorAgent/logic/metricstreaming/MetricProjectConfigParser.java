@@ -15,23 +15,28 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class MetricProjectConfigParser {
+
   public static Type PROJECT_LIST_TYPE = new TypeToken<Map<String, ProjectInfo>>() {
   }.getType();
 
-  @Autowired private final IFConfig ifConfig;
-  @Autowired private final Gson gson;
+  @Autowired
+  private final IFConfig ifConfig;
+  @Autowired
+  private final Gson gson;
 
 
   public Map<String, ProjectInfo> getMetricProjectMapping() {
     Map<String, ProjectInfo> mapping;
     mapping = gson.fromJson(ifConfig.getProjectList(), PROJECT_LIST_TYPE);
     Map<String, ProjectInfo> resultMapping = new HashMap<>();
-    for (String projectKey : mapping.keySet()) {
-      String[] keys = projectKey.split(ifConfig.getProjectDelimiter());
-      for (String key : keys) {
-        key = key.trim();
-        if (!StringUtils.isEmpty(key)) {
-          resultMapping.put(key.trim(), mapping.get(projectKey));
+    if (mapping != null) {
+      for (String projectKey : mapping.keySet()) {
+        String[] keys = projectKey.split(ifConfig.getProjectDelimiter());
+        for (String key : keys) {
+          key = key.trim();
+          if (!StringUtils.isEmpty(key)) {
+            resultMapping.put(key.trim(), mapping.get(projectKey));
+          }
         }
       }
     }
