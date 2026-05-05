@@ -408,6 +408,7 @@ def get_if_config_vars(logger, config_file):
         if_http_proxy = config_parser.get('insightfinder', 'if_http_proxy')
         if_https_proxy = config_parser.get('insightfinder', 'if_https_proxy')
         containerize = config_parser.get('insightfinder', 'containerize', fallback='').upper() in ('TRUE', '1', 'YES')
+        system_name = config_parser.get('insightfinder', 'system_name', fallback='')
     except configparser.NoOptionError as cp_noe:
         logger.error(cp_noe)
         return config_error(logger)
@@ -447,6 +448,7 @@ def get_if_config_vars(logger, config_file):
         'user_name': user_name,
         'license_key': license_key,
         'project_name': project_name,
+        'system_name': system_name,
         'project_type': project_type,
         'sampling_interval': int(sampling_interval),
         'chunk_size': int(chunk_size_kb) * 1024,
@@ -526,6 +528,7 @@ def convert_to_metric_data(if_config_vars, chunk_metric_data):
     data_dict = {
         'projectName': if_config_vars['project_name'],
         'userName': if_config_vars['user_name'],
+        'systemName': if_config_vars.get('system_name', ''),
     }
 
     common_fields = {'instanceName', 'timestamp'}
@@ -605,10 +608,79 @@ def send_request(logger, url, mode='GET', failure_message='Failure!', success_me
     return -1
 
 
+def get_data_type_from_project_type(if_config_vars):
+    if 'METRIC' in if_config_vars['project_type']:
+        return 'Metric'
+    return 'Log'
+
+
+def get_insight_agent_type_from_project_type(if_config_vars):
+    if if_config_vars.get('containerize'):
+        return 'containerStreaming' if 'METRIC' in if_config_vars['project_type'] else 'ContainerCustom'
+    return 'Custom'
+
+
 def get_agent_type_from_project_type(if_config_vars):
     if if_config_vars.get('containerize'):
         return 'containerStreaming' if 'METRIC' in if_config_vars['project_type'] else 'containerCustom'
     return 'CUSTOM' if 'METRIC' in if_config_vars['project_type'] else 'LogStreaming'
+
+
+def check_project_exist(logger, if_config_vars):
+    url = urllib.parse.urljoin(if_config_vars['if_url'], 'api/v1/check-and-add-custom-project')
+    system_name = if_config_vars.get('system_name', '')
+
+    check_params = {
+        'operation': 'check',
+        'userName': if_config_vars['user_name'],
+        'licenseKey': if_config_vars['license_key'],
+        'projectName': if_config_vars['project_name'],
+    }
+    if system_name:
+        check_params['systemName'] = system_name
+
+    logger.info('Checking if project exists: {}'.format(if_config_vars['project_name']))
+    response = send_request(logger, url, 'POST', 'Project check failed', 'Project check done',
+                            data=check_params, verify=False, proxies=if_config_vars['if_proxies'])
+    if response == -1:
+        return False
+
+    if response.json().get('isProjectExist'):
+        logger.info('Project already exists: {}'.format(if_config_vars['project_name']))
+        return True
+
+    logger.info('Creating project: {}'.format(if_config_vars['project_name']))
+    create_payload = {
+        'operation': 'create',
+        'userName': if_config_vars['user_name'],
+        'licenseKey': if_config_vars['license_key'],
+        'projectName': if_config_vars['project_name'],
+        **({'systemName': system_name} if system_name else {}),
+        'instanceType': 'OnPremise',
+        'projectCloudType': 'OnPremise',
+        'dataType': get_data_type_from_project_type(if_config_vars),
+        'insightAgentType': get_insight_agent_type_from_project_type(if_config_vars),
+        'samplingInterval': int(if_config_vars['sampling_interval']),
+        'samplingIntervalInSeconds': if_config_vars['sampling_interval'],
+    }
+    response = send_request(logger, url, 'POST', 'Project creation failed', 'Project created',
+                            data=create_payload,
+                            verify=False, proxies=if_config_vars['if_proxies'])
+    if response == -1:
+        logger.error('Failed to create project: {}'.format(if_config_vars['project_name']))
+        return False
+
+    result = response.json()
+    logger.info('Create project response: {}'.format(result))
+
+    logger.info('Waiting for project to be ready...')
+    time.sleep(10)
+
+    response = send_request(logger, url, 'POST', 'Project check failed', 'Project ready',
+                            data=check_params, verify=False, proxies=if_config_vars['if_proxies'])
+    if response == -1:
+        return False
+    return response.json().get('isProjectExist', False)
 
 
 def get_api_from_project_type(if_config_vars):
@@ -622,6 +694,7 @@ def initialize_api_post_data(if_config_vars):
         'userName': if_config_vars['user_name'],
         'licenseKey': if_config_vars['license_key'],
         'projectName': if_config_vars['project_name'],
+        'systemName': if_config_vars.get('system_name', ''),
         'instanceName': HOSTNAME,
         'agentType': get_agent_type_from_project_type(if_config_vars),
     }
@@ -709,8 +782,13 @@ def worker_process(args):
     print_summary_info(logger, if_config_vars, agent_config_vars)
 
     if c_config['testing']:
-        logger.info('TEST MODE — skipping data send')
-        return
+        if_config_vars['testing'] = True
+        logger.info('TEST MODE — data will be parsed but not sent to InsightFinder')
+
+    if not c_config['testing']:
+        if not check_project_exist(logger, if_config_vars):
+            logger.error('Project does not exist and could not be created. Aborting.')
+            return
 
     initialize_data_gathering(logger, if_config_vars, agent_config_vars)
     logger.info('Process done with config: {}'.format(config_name))
