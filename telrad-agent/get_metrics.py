@@ -206,12 +206,14 @@ def collect_metrics(base_url, username, password, timeout, device_id=None):
     if device_id is not None:
         device_ids = [device_id]
         name_map = {}
+        ip_map = {}
     else:
         logger.debug("Enumerating devices...")
         with ThreadPoolExecutor(max_workers=2) as pool:
             fut_ids = pool.submit(get_device_ip_map, base_url, username, password, timeout)
             fut_names = pool.submit(get_device_name_map, base_url, username, password, timeout)
-            device_ids = list(fut_ids.result().keys())
+            ip_map = fut_ids.result()
+            device_ids = list(ip_map.keys())
             try:
                 name_map = fut_names.result()
             except Exception:
@@ -222,6 +224,7 @@ def collect_metrics(base_url, username, password, timeout, device_id=None):
         logger.debug(f"Fetching metrics for eNB {did}...")
         result = get_device_metrics(base_url, did, username, password, timeout)
         result["device_name"] = name_map.get(did, "")
+        result["device_ip"] = ip_map.get(did, "")
         if result["status"] == "ok":
             logger.debug(f"eNB {did}: ok ({len(result.get('ues', []))} UEs attached)")
         else:
