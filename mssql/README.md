@@ -1,194 +1,375 @@
-# mssql
-This agent collects data from mssql and sends it to Insightfinder.
-## Installing the Agent
+# MSSQL InsightFinder Agent
 
-### Before install agent
-###### Install freetds for linux/osx
+Collects metrics or logs from a Microsoft SQL Server database and streams them to InsightFinder.
+
+---
+
+## Installation
+
+### Prerequisites (Linux/macOS)
+
 ```bash
-osx: brew install freetds
-linux: yum install freetds
+# macOS
+brew install freetds
+
+# Linux (RHEL/CentOS)
+yum install freetds
 ```
 
-### Short Version
+### Quick Install
+
 ```bash
 bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) mssql && cd mssql
-vi config.ini
-sudo ./setup/install.sh --create  # install on localhost
-                                  ## or on multiple nodes
-sudo ./offline/remote-cp-run.sh list_of_nodes
-```
-
-See the `offline` README for instructions on installing prerequisites.
-
-### Long Version
-###### Download the agent tarball and untar it:
-```bash
-curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/mssql/mssql.tar.gz
-tar xvf mssql.tar.gz && cd mssql
-```
-
-###### Set up `config.ini`
-```bash
-python configure.py
-```
-See below for a further explanation of each variable. 
-
-#### Automated Install (local or remote)
-###### Review propsed changes from install:
-```bash
-sudo ./setup/install.sh
-```
-
-###### Once satisfied, run:
-```bash
+cp conf.d/config.ini.template conf.d/config.ini
+vi conf.d/config.ini
 sudo ./setup/install.sh --create
 ```
 
-###### To deploy on multiple hosts, instead call 
-```bash
-sudo ./offline/remote-cp-run.sh list_of_nodes -f <nodelist_file>
-```
-Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
+### Manual Install
 
-#### Manual Install (local only)
-###### Check Python version & upgrade if using Python 3
 ```bash
-if [[ $(python -V 2>&1 | awk '{ print substr($NF, 1, 1) }') == "3" ]]; then \
-2to3 -w getmessages_mssql.py; \
-else echo "No upgrade needed"; fi
-```
+# 1. Download
+curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/mssql/mssql.tar.gz
+tar xvf mssql.tar.gz && cd mssql
 
-###### Setup pip & required packages:
-```bash
+# 2. Install dependencies
 sudo ./setup/pip-config.sh
-```
 
-###### Test the agent:
-```bash
+# 3. Configure
+cp conf.d/config.ini.template conf.d/config.ini
+vi conf.d/config.ini
+
+# 4. Test
 python getmessages_mssql.py -t
-```
 
-###### If satisfied with the output, configure the agent to run continuously:
-```bash
+# 5. Schedule (cron)
 sudo ./setup/cron-config.sh
 ```
 
-### Manual Setup Agent on windows 
-###### Download the agent tarball and untar it:
-```bash
-[Download] https://github.com/insightfinder/InsightAgent/raw/master/mssql/mssql.tar.gz
-cd mssql
-```
+### Windows Install
 
-###### Install PyInstaller:
-```bash
-pip install pyinstaller
-```
+Download and unzip `getmessages_mssql-win.zip`, then:
 
-###### create exe file with PyInstaller:
-```bash
-PyInstaller -D getmessages_mssql.py -w --add-data=config.ini.template;.\ --add-data=config.ini.template-replay;.\
-```
-
-###### Build package:
-Create zip package `getmessages_mssql-win.zip` from folder `dist/getmessages_mssql`
-
-
-### Install Agent on windows
-Download the agent file and unzip. 
-
-###### 1.Edit config
-
-(Assuming your directory is getmessages_mssql)
-
+```bat
 cd getmessages_mssql
 copy config.ini.template config.ini
-
-Change the [mssql] section to reflect the access and database of your MSSQL.
-
-Work with InsightFinder technical support to specify field in the [Insightfinder] section. 
-
-###### 2.Test agent
-
+# Edit config.ini, then test:
 .\getmessages_mssql.exe -c config.ini -t
+```
 
-###### 3.Add cron job if it is for streating
+Schedule via Task Scheduler or `schtasks`:
 
-a. run as a command
-schtasks /create /tn "InsightAgent Cron Job" /tr "cmd /c {{AGENT_PATH}}\getmessages_mssql.exe -c {{AGENT_PATH}}\config.ini >> {{AGENT_PATH}}\output.log 2>&1" /sc hourly
-* {AGENT_PATH} is the actual agent path
-* change "hourly" to the desired sampling window
+```bat
+schtasks /create /tn "InsightAgent" /tr "cmd /c C:\path\getmessages_mssql.exe -c C:\path\config.ini >> C:\path\output.log 2>&1" /sc minute /mo 10
+```
 
-or 
-b. use Windows Task Scheduler
-In Windows server "Search Windows" function (usually located at the bottom of the left side besides the Windows Icon),type "Task Scheduler"
+---
 
-Under the "General" tab
-Click "Create Task..." under "Actions" on the right side
-Specify Task Name, Description
-Select "Run whether user is logged on or not"
+## Configuration Reference
 
-Under the "Triggers" tab
-Click "New..."
-Select a Setting (One time, Daily, Weekly, or Monthly)
-In "Advanced settings"
-Select "Stop task if it runs longer than:"
+The config file has two sections: `[mssql]` (database and query settings) and `[insightfinder]` (destination settings).
 
-Under the "Actions" tab
-Click "New..."
-Click "Browse..." to select the "getmessages_mssql.exe" file
-in "Add arguments (optional)", add "-c {{AGENT_PATH}}\config.ini" by replacing {{AGENT_PATH}} with the actual path. 
-E.g.:
-"-c C:\Users\Administrator\Desktop\getmessages_mssql-win\config.ini" if the package is located under Desktop  
+---
 
-Click "OK" to close Windows Task Scheduler
+### `[mssql]` — Database Connection
 
-Please see [schtasks](https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/schtasks) for more details.
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `host` | Yes | `localhost` | MSSQL server hostname or IP |
+| `user` | Yes | — | Database login user |
+| `password` | Yes | — | Database login password |
+| `database` | Yes | — | Database name to connect to |
+| `port` | No | `1433` | TCP port |
+| `timeout` | No | 0 (none) | Query timeout in seconds |
+| `login_timeout` | No | 60 | Connection/login timeout in seconds |
+| `appname` | No | — | Label shown in MSSQL activity monitor |
 
-### Config Variables
-* **`host`**: Database host. Default value: localhost.
-* **`user`**: Database user to connect as. Default value: None.
-* **`password`**: User's password. Default value: None.
-* **`database`**: The database to initially connect to.
-* `timeout`: Query timeout in seconds, default 0 (no timeout).
-* `login_timeout`: Timeout for connection and login in seconds, default 60.
-* `appname`: Set the application name to use for the connection.
-* `port`: The TCP port to use to connect to the server.
-* `conn_properties`: SQL queries to send to the server upon connection establishment. Can be a string or another kind of iterable of strings.
-* `autocommit`: Whether to use default autocommiting mode or not.
-* `tds_version`: TDS protocol version to use.
-* **`table_list`**: table_list can be from sql, example: `sql:select name from sys.tables`. table_list also can be a list, example: `table1,table2,table3`.
-* `table_whitelist`: table_whitelist is a regex string used to define which table will be filtered.
-* `instance_map_table`: Table to get instance mapping info, Define this field if instance field need mapping.
-* `instance_map_id_field`: Id field to get instance mapping info, Define this field if instance field need mapping.
-* `instance_map_name_field`: Name field to get instance mapping info, Define this field if instance field need mapping.
-* `device_map_table_info`: Device mapping info for different device field, example: device_field#Table#field_id#field_name,...
-* **`sql`**: The query string for mssql. Use template filed {{start_time}} or {{end_time}} or {{extract_time}} to replace the time in sql. Example: """SELECT * FROM Table{{extract_time}} WHERE Table{{extract_time}}.Time >= {{start_time}} and Table{{extract_time}}.Time < {{end_time}};"""
-* **`sql_time_format`**: The {{start_time}} and {{end_time}} format in sql, as library [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). Example: YYYYMMDD
-* **`sql_extract_time_offset`**: This options will create template field {{extract_time}}, and with offset of {{end_time}}, unit is second. Example: 86400|-86400|0
-* **`sql_extract_time_format`**: The {{extract_time}} format in sql, as library [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). Example: YYYYMMDD 
-* `sql_time_range`: History data time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00. If this option is set, the agent will execute sql by time range and time interval, and `sql_time_interval` is required. 
-* `sql_time_interval`: Time range interval, unit is second. Example: 86400.
-* **`data_format`**: The format of the data to parse: RAW, RAWTAIL, CSV, CSVTAIL, XLS, XLSX, JSON, JSONTAIL, AVRO, or XML. \*TAIL formats keep track of the current file being read & the position in the file.
-* **`timestamp_format`**: Format of the timestamp, in python [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). If the timestamp is in Unix epoch, this can be set to `epoch`. If the timestamp is split over multiple fields, curlies can be used to indicate formatting, ie: `YYYY-MM-DD HH:mm:ss ZZ`; alternatively, if the timestamp can be in one of multiple fields, a priority list of field names can be given: `timestamp1,timestamp2`.
-* `timezone`: Timezone of the timestamp data stored in/returned by the DB. Note that if timezone information is not included in the data returned by the DB, then this field has to be specified. 
-* `timestamp_field`: Field name for the timestamp. Default is `timestamp`.
-* `target_timestamp_timezone`: Timezone of the timestamp data to be sent and stored in InsightFinder. Default value is UTC. Only if you wish to store data with a time zone other than UTC, this field should be specified to be the desired time zone.
-* `instance_field`: Field name for the instance name. If not set or the field is not found, the instance name is the hostname of the machine the agent is installed on. This can also use curly formatting or a priority list. Alternatively, if the field is 'complex' - a reference field which holds a link to another API within the same context, a link can be made to that data using the following formatting: `field1!!ref=json|csv|xml|raw&headers={“Accept”:”application/json”}&auth!!field2` where: `field1` is the reference field in this message body; `!!` is a delimiter; `ref=json|csv|xml|raw` indicates that this is a reference link and it returns data in the format of json or csv etc as applicable; `&headers={“Accept”:”application/json”}&auth` indicates which passthrough keywords to pass to requests (either literal, a la `headers={“Accept”:”application/json”}` or using previously-used keywords, a la `auth=auth` when no literal value is given); `!!` is another delimiter; and `field2` is the field in the reference'd data to grab.
-* `device_field`: Field name for the device/container for containerized projects. This can also use curly or complex formatting, or a priority list.
-* `data_fields`: Comma-delimited list of field names to use as data fields. If not set, all fields will be reported. Each data field can either be a field name (`name`) or a labeled field (`<name>::<value>` or `<name>::==<value>`), where `<name>` and `<value>` can be raw strings (`fieldname::fieldvalue`), curly or complex formatted (`link!!ref=json&auth!!name::=={val} - {ue}`), or a combination. If `::==` is used as the separator, `<value>` is treated as a mathematical expression that can be evaluated with `eval()`.
-* `start_time_multiple`: Used for streaming, multiple of sampling_interval
-* `metric_name_field`: If this is set, only the first value in `data_fields` will be used as the field containing the value for the metric who's name is contained here. For example, if `data_fields = count` and `metric_name_field = status`, and the data is `{"count": 20, "status": "success"}`, then the data reported will be `success: 20`.
-* `agent_http_proxy`: HTTP proxy used to connect to the agent.
-* `agent_https_proxy`: As above, but HTTPS.
-* **`user_name`**: User name in InsightFinder
-* **`license_key`**: License Key from your Account Profile in the InsightFinder UI. 
-* `token`: Token from your Account Profile in the InsightFinder UI. 
-* **`project_name`**: Name of the project created in the InsightFinder UI. 
-* **`project_type`**: Type of the project - one of `metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay`.
-* **`sampling_interval`**: How frequently (in Minutes) data is collected. Should match the interval used in project settings.
-* **`run_interval`**: How frequently (in Minutes) the agent is ran. Should match the interval used in cron.
-* `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
-* `if_url`: URL for InsightFinder. Default is `https://app.insightfinder.com`.
-* `if_http_proxy`: HTTP proxy used to connect to InsightFinder.
-* `if_https_proxy`: As above, but HTTPS.
+---
+
+### `[mssql]` — Table Selection
+
+```ini
+# Static list
+table_list = server_metrics, app_events
+
+# Dynamic: SQL query that returns table names
+table_list = sql:SELECT name FROM sys.tables WHERE name LIKE 'metrics_%'
+```
+
+The agent runs the configured `sql` query once per table in this list, substituting `{{table}}` with each table name.
+
+---
+
+### `[mssql]` — SQL Query
+
+```ini
+sql = """
+      SELECT *
+      FROM {{table}}
+      WHERE {{timestamp_field}} >= '{{start_time}}' AND {{timestamp_field}} < '{{end_time}}';
+      """
+```
+
+**Supported placeholders:**
+
+| Placeholder | Replaced with |
+|---|---|
+| `{{table}}` | Each table from `table_list` |
+| `{{timestamp_field}}` | The value of `timestamp_field` |
+| `{{start_time}}` | Window start time |
+| `{{end_time}}` | Window end time |
+
+---
+
+### `[mssql]` — Data Parsing
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `timestamp_field` | Yes | `timestamp` | Column that holds the event timestamp |
+| `timestamp_format` | No | epoch | Arrow format string, e.g. `YYYY-MM-DD HH:mm:ss` |
+| `timezone` | No | `UTC` | Timezone of timestamps stored in the DB |
+| `target_timestamp_timezone` | No | `UTC` | Timezone InsightFinder stores data in |
+| `instance_field` | No | hostname | Column whose value is used as the instance/host name |
+| `device_field` | No | — | Column for an optional device identifier |
+| `data_fields` | No | all columns | Comma-separated list of columns to send as data |
+| `metric_name_field` | No | — | Column that holds the metric name (narrow/pivot format) |
+
+---
+
+### `[mssql]` — Instance Mapping
+
+**Purpose:** Your data table stores a numeric or opaque ID in the instance column, but you want InsightFinder to show a human-readable name. Point these three fields at a lookup table and the agent will translate IDs to names automatically at startup.
+
+| Field | Description |
+|---|---|
+| `instance_map_table` | Lookup table name |
+| `instance_map_id_field` | Column in the lookup table that holds the raw ID |
+| `instance_map_name_field` | Column in the lookup table that holds the display name |
+
+**All three must be set together, or leave all three empty.**
+
+#### How it works
+
+1. At startup, the agent runs `SELECT * FROM <instance_map_table>`.
+2. It builds an in-memory dictionary: `{ id_field_value → name_field_value }`.
+3. For every data row, it looks up the value in `instance_field` against this dictionary and replaces it with the display name before sending to InsightFinder.
+4. If a value is not found in the map, the original raw value is used unchanged.
+
+#### Example
+
+Suppose your data table `server_metrics` stores a numeric `server_id` instead of a hostname:
+
+```
+server_metrics
+┌────────────────────────────────────────────────────────┐
+│ ts                  │ server_id │ cpu_pct │ mem_pct    │
+│ 2025-01-15 10:00:00 │ 42        │ 78.3    │ 55.1       │
+│ 2025-01-15 10:00:00 │ 99        │ 12.0    │ 30.4       │
+└────────────────────────────────────────────────────────┘
+```
+
+And you have a lookup table `host_registry`:
+
+```
+host_registry
+┌──────────────────────────────────┐
+│ id  │ hostname                   │
+│ 42  │ web-prod-01.example.com    │
+│ 99  │ db-prod-03.example.com     │
+└──────────────────────────────────┘
+```
+
+Configure the mapping:
+
+```ini
+instance_field       = server_id
+instance_map_table   = host_registry
+instance_map_id_field   = id
+instance_map_name_field = hostname
+```
+
+Result: InsightFinder receives `web-prod-01.example.com` and `db-prod-03.example.com` as instance names instead of `42` and `99`.
+
+---
+
+### `[mssql]` — Device Mapping
+
+**Purpose:** Same concept as instance mapping, but for the *device* field. The resolved device name is prepended to the instance name in InsightFinder (forming `device/instance`).
+
+| Field | Description |
+|---|---|
+| `device_map_table` | Lookup table name |
+| `device_map_id_field` | Column in the lookup table that holds the raw ID |
+| `device_map_name_field` | Column in the lookup table that holds the display name |
+
+**All three must be set together, or leave all three empty.**
+
+#### Example
+
+Suppose each server belongs to a datacenter stored as a numeric `dc_id`:
+
+```
+server_metrics
+┌──────────────────────────────────────────────────────────────┐
+│ ts                  │ server_id │ dc_id │ cpu_pct │ mem_pct  │
+│ 2025-01-15 10:00:00 │ 42        │ 7     │ 78.3    │ 55.1     │
+└──────────────────────────────────────────────────────────────┘
+```
+
+Lookup table `datacenter_registry`:
+
+```
+datacenter_registry
+┌──────────────────────┐
+│ id  │ dc_name        │
+│ 7   │ us-east-1      │
+└──────────────────────┘
+```
+
+Configure:
+
+```ini
+instance_field     = server_id
+instance_map_table = host_registry
+instance_map_id_field   = id
+instance_map_name_field = hostname
+
+device_field       = dc_id
+device_map_table   = datacenter_registry
+device_map_id_field   = id
+device_map_name_field = dc_name
+```
+
+Result: InsightFinder receives the instance as `us-east-1/web-prod-01.example.com`.
+
+---
+
+### `[mssql]` — Streaming and Replay
+
+| Field | Description |
+|---|---|
+| `query_window` | Minutes to look back on each run. Default: `10` |
+| `hist_time_range` | Replay a fixed time range instead of streaming live. Format: `2024-01-01 00:00:00,2024-01-02 00:00:00` |
+| `hist_batch_interval` | Chunk size for replay, in seconds. Required when `hist_time_range` is set. Example: `3600` |
+
+**Streaming (live):** leave `hist_time_range` empty. The agent runs on a schedule and queries the most recent `query_window` minutes of data each time.
+
+**Replay (history):** set both `hist_time_range` and `hist_batch_interval`. The agent walks through the entire range in batches.
+
+---
+
+### `[insightfinder]` — InsightFinder Connection
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `user_name` | Yes | — | Your InsightFinder username |
+| `license_key` | Yes | — | API license key from Account Profile |
+| `project_name` | Yes | — | Project name created in InsightFinder UI |
+| `project_type` | Yes | `metric` | `metric` or `log` |
+| `sampling_interval` | Yes | `1` | Data collection frequency in minutes. Append `s` for seconds (e.g. `30s`) |
+| `chunk_size_kb` | No | `2048` | Max HTTP payload size in KB |
+| `if_url` | No | `https://app.insightfinder.com` | InsightFinder URL |
+| `if_http_proxy` | No | — | HTTP proxy for InsightFinder connection |
+| `if_https_proxy` | No | — | HTTPS proxy for InsightFinder connection |
+| `containerize` | No | — | Set to `true` if the agent runs inside a container |
+
+---
+
+## Complete Example: Metric Config
+
+```ini
+[mssql]
+
+host     = sql-server.example.com
+user     = insight_reader
+password = s3cr3t
+database = OpsDB
+port     = 1433
+
+table_list = server_metrics
+
+instance_map_table      = host_registry
+instance_map_id_field   = id
+instance_map_name_field = hostname
+
+device_map_table      = datacenter_registry
+device_map_id_field   = id
+device_map_name_field = dc_name
+
+sql = """
+      SELECT *
+      FROM {{table}}
+      WHERE {{timestamp_field}} >= '{{start_time}}' AND {{timestamp_field}} < '{{end_time}}';
+      """
+
+data_format = json
+timestamp_field  = ts
+timestamp_format = YYYY-MM-DD HH:mm:ss.SSSSSSS
+timezone         = UTC
+target_timestamp_timezone = UTC
+
+instance_field = server_id
+device_field   = dc_id
+data_fields    = cpu_pct,mem_pct,disk_read,disk_write,net_in,net_out
+
+query_window = 10
+
+[insightfinder]
+
+user_name    = your_username
+license_key  = your_license_key
+project_name = my-mssql-metrics
+project_type = metric
+sampling_interval = 1
+if_url = https://app.insightfinder.com
+```
+
+---
+
+## Complete Example: Log Config
+
+```ini
+[mssql]
+
+host     = sql-server.example.com
+user     = insight_reader
+password = s3cr3t
+database = OpsDB
+port     = 1433
+
+table_list = app_logs
+
+instance_map_table      = host_registry
+instance_map_id_field   = id
+instance_map_name_field = hostname
+
+device_map_table =
+device_map_id_field =
+device_map_name_field =
+
+sql = """
+      SELECT *
+      FROM {{table}}
+      WHERE {{timestamp_field}} >= '{{start_time}}' AND {{timestamp_field}} < '{{end_time}}';
+      """
+
+data_format = json
+timestamp_field  = ts
+timestamp_format = YYYY-MM-DD HH:mm:ss.SSSSSSS
+timezone         = UTC
+target_timestamp_timezone = UTC
+
+instance_field = host
+data_fields    =
+
+query_window = 10
+
+[insightfinder]
+
+user_name    = your_username
+license_key  = your_license_key
+project_name = my-mssql-logs
+project_type = log
+sampling_interval = 1
+if_url = https://app.insightfinder.com
+```
