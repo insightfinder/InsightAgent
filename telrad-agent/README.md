@@ -56,19 +56,13 @@ python3 send_metrics.py               # loop at configured interval
 python3 send_metrics.py --once        # single tick then exit
 python3 send_metrics.py --interval 2  # override interval (minutes)
 python3 send_metrics.py --dry-run     # print payload, skip POST
-python3 send_metrics.py --rebuild-map # force-refresh asset_map.json then exit
 ```
 
-On first run (or if `asset_map.json` is missing or older than 7 days), it automatically builds or refreshes the Jira name map. During continuous operation the map is also refreshed in-loop when it goes stale, so instance names stay current without a restart.
+The Jira workspace ID is resolved once at startup. Per-device name mappings are cached in memory: Jira is only queried when a new device_id appears or when a previously unmapped device's 1-hour retry window expires. No `asset_map.json` is written to disk.
 
-### `build_asset_map.py` — Jira asset name map
+### `build_asset_map.py` — Jira asset resolution helper
 
-Queries BreezeVIEW for device IPs and Jira Assets for matching device objects, then writes `asset_map.json`. Run manually after Jira asset renames or to pre-warm the map.
-
-```bash
-python3 build_asset_map.py            # build silently
-python3 build_asset_map.py --print    # build and print result
-```
+Library used by `send_metrics.py`. Provides `resolve_subset()` to map a set of BreezeVIEW device IDs to Jira asset labels via AQL lookup.
 
 **Matching strategy** (in priority order):
 
@@ -89,7 +83,7 @@ python3 get_metrics.py --json-only --output metrics.json
 
 ### `jira_assets.py` — Jira Assets API client
 
-Library used by `build_asset_map.py`. Provides workspace discovery and AQL-based asset lookup by management IP.
+Library used by `build_asset_map.py` and `send_metrics.py`. Provides workspace discovery and AQL-based asset lookup by management IP.
 
 ### `insightfinder.py` — InsightFinder API client
 

@@ -1,60 +1,25 @@
 #!/usr/bin/env python3
 """
-Build asset_map.json — maps BreezeVIEW eNB device IDs to Jira asset names.
+Jira asset map helpers — resolve BreezeVIEW device IDs to Jira asset names.
+
+No file I/O. resolve_subset() is the main entry point: given a subset of
+{device_id: ip} and {device_id: display_name}, return {device_id: label}.
 
 Matching strategy (in priority order):
   1. DeviceName numeric suffix  — Jira DeviceName="eNodeB200" → device_id "200"
-                                    Stable even when management IP changes.
-  2. management_ip              — for assets whose DeviceName carries no embedded ID.
-
-Usage:
-  python3 build_asset_map.py            # build and write asset_map.json
-  python3 build_asset_map.py --print    # also pretty-print the result
+  2. management_ip              — fallback for assets whose DeviceName has no embedded ID
+  3. BreezeVIEW display name    — last resort when no Jira match exists
 """
 
-import argparse
-import json
 import logging
-import os
-import sys
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
 
-from get_metrics import _cfg, get_device_ip_map, get_device_name_map, load_env
-from jira_assets import ENB_NAME_RE, discover_workspace_id, fetch_assets_by_ips
+from jira_assets import ENB_NAME_RE, fetch_assets_by_ips
 
-ASSET_MAP_FILE = "asset_map.json"
-MAP_STALE_DAYS = 7
-
-
-def map_age_days(asset_map: dict) -> int | None:
-    """Return age of asset_map in whole days, or None if timestamp is absent/invalid."""
-    generated_at = asset_map.get("generated_at", "")
-    if not generated_at:
-        return None
-    try:
-        return (
-            datetime.now(timezone.utc)
-            - datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
-        ).days
-    except ValueError:
-        return None
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-7s  %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%SZ",
-)
 logger = logging.getLogger(__name__)
 
 
 def _resolve_map(device_ip_map: dict[str, str], assets: list[dict], device_name_map: dict[str, str]) -> dict[str, str]:
-    """Return {device_id: label} using two-tier Jira matching with BreezeVIEW name fallback.
-
-    Tier 1: asset.device_id_hint == device_id (numeric suffix from Jira DeviceName)
-    Tier 2: asset.ip == device_ip (management IP fallback)
-    Tier 3: config/Device/General/Name from BreezeVIEW (e.g. 'DeathValley-Oasis')
-    """
+    """Return {device_id: label} using two-tier Jira matching with BreezeVIEW name fallback."""
     by_hint: dict[str, list[dict]] = {}
     by_ip: dict[str, list[dict]] = {}
     for a in assets:
@@ -96,68 +61,18 @@ def _resolve_map(device_ip_map: dict[str, str], assets: list[dict], device_name_
     return result
 
 
-def build(env: dict | None = None) -> dict:
-    """Build and write asset_map.json; return the map dict.
+def resolve_subset(
+    jira_user: str,
+    jira_token: str,
+    workspace_id: str,
+    device_ip_map: dict[str, str],
+    device_name_map: dict[str, str],
+) -> dict[str, str]:
+    """Return {device_id: label} for the given subset of devices.
 
-    Importable by send_metrics.py for automatic bootstrap when the file is absent.
+    Queries Jira only for the IPs in device_ip_map. Falls back to BreezeVIEW
+    display name (device_name_map) when no Jira asset matches.
     """
-    if env is None:
-        env = load_env()
-
-    jira_url = _cfg(env, "ACCESSPARKS_JIRA_URL")
-    jira_user = _cfg(env, "ACCESSPARKS_JIRA_USERNAME")
-    jira_token = _cfg(env, "ACCESSPARKS_JIRA_API_TOKEN")
-    bv_url = _cfg(env, "ACCESSPARKS_TELRAD_URL").rstrip("/")
-    bv_user = _cfg(env, "ACCESSPARKS_TELRAD_USERNAME")
-    bv_pw = _cfg(env, "ACCESSPARKS_TELRAD_PASSWORD")
-
-    missing = [k for k, v in [("ACCESSPARKS_JIRA_URL", jira_url), ("ACCESSPARKS_JIRA_USERNAME", jira_user), ("ACCESSPARKS_JIRA_API_TOKEN", jira_token)] if not v]
-    if missing:
-        raise ValueError(f"Missing Jira config: {', '.join(missing)} — add to .env")
-
-    # BreezeVIEW device list, name map, and Jira workspace ID are independent — fetch in parallel
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        fut_bv = pool.submit(get_device_ip_map, bv_url, bv_user, bv_pw, 15)
-        fut_names = pool.submit(get_device_name_map, bv_url, bv_user, bv_pw, 15)
-        fut_ws = pool.submit(discover_workspace_id, jira_url, jira_user, jira_token)
-        device_ip_map = fut_bv.result()
-        device_name_map = fut_names.result()
-        workspace_id = fut_ws.result()
-
     ips = [ip for ip in device_ip_map.values() if ip]
-    logger.info(f"Querying Jira Assets for {len(ips)} eNB IP(s)...")
     assets = fetch_assets_by_ips(workspace_id, jira_user, jira_token, ips)
-
-    by_device_id = _resolve_map(device_ip_map, assets, device_name_map)
-
-    asset_map = {
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "by_device_id": by_device_id,
-    }
-
-    tmp = ASSET_MAP_FILE + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(asset_map, f, indent=2)
-    os.replace(tmp, ASSET_MAP_FILE)
-
-    logger.info(f"Mapped {len(by_device_id)}/{len(device_ip_map)} eNBs — wrote {ASSET_MAP_FILE}")
-    return asset_map
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Build Jira → BreezeVIEW eNB asset name map")
-    parser.add_argument("--print", dest="do_print", action="store_true", help="Print asset_map.json after building")
-    args = parser.parse_args()
-
-    try:
-        asset_map = build()
-    except Exception as e:
-        logger.error(f"Failed to build asset map: {e}")
-        sys.exit(1)
-
-    if args.do_print:
-        print(json.dumps(asset_map, indent=2))
-
-
-if __name__ == "__main__":
-    main()
+    return _resolve_map(device_ip_map, assets, device_name_map)
