@@ -6,9 +6,13 @@ Metric sent per eNB:
   - ulrssi: average abs(UlRSSI) in dBm across all attached UEs
 
 One InsightFinder instance per eNB, named after the corresponding Jira asset
-(e.g. 'Tus-TennisCourt-eNodeB200'). Instance names are resolved via asset_map.json
-(built by build_asset_map.py). If the file is absent at startup it is built
-automatically. Fallback: the BreezeVIEW device name (e.g. 'DeathValley-Oasis') with a WARNING log.
+(e.g. 'Tus-TennisCourt-eNodeB200'). Instance names are resolved via a live Jira
+Assets query. The Jira workspace ID is fetched once at startup. Per-device mappings
+are cached in memory and only re-queried when a new device_id appears or a previously
+unmapped device's cooldown expires (1 hour). No asset_map.json file is written.
+
+Fallback: if Jira is unreachable, the BreezeVIEW device name (e.g. 'DeathValley-Oasis')
+is used with a WARNING log.
 
 Component name is 'eNB-Telrad' for all instances.
 
@@ -17,26 +21,26 @@ Configuration via .env:
   INSIGHTFINDER_BASE_URL, INSIGHTFINDER_USER_NAME, INSIGHTFINDER_LICENSE_KEY
   INSIGHTFINDER_PROJECT_NAME, INSIGHTFINDER_SYSTEM_NAME
   INSIGHTFINDER_SAMPLING_INTERVAL  (minutes, default 5)
-  ACCESSPARKS_JIRA_URL, ACCESSPARKS_JIRA_USERNAME, ACCESSPARKS_JIRA_API_TOKEN  (for auto-building asset_map.json)
+  ACCESSPARKS_JIRA_URL, ACCESSPARKS_JIRA_USERNAME, ACCESSPARKS_JIRA_API_TOKEN
 
 Usage:
   python3 send_metrics.py               # loop at configured interval
   python3 send_metrics.py --once        # single tick then exit
   python3 send_metrics.py --interval 2  # override interval in minutes
   python3 send_metrics.py --dry-run     # print payload, skip POST
-  python3 send_metrics.py --rebuild-map # force rebuild asset_map.json then exit
 """
 
 import argparse
 import json
 import logging
-import re
 import sys
 import time
+from dataclasses import dataclass, field
 
-from build_asset_map import ASSET_MAP_FILE, MAP_STALE_DAYS, build as build_asset_map, map_age_days
+from build_asset_map import resolve_subset
 from get_metrics import _cfg, collect_metrics, load_env
 from insightfinder import Config, InsightFinder
+from jira_assets import discover_workspace_id
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,50 +50,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 COMPONENT_NAME = "eNB-Telrad"
-
-_LEADING_SPECIAL = re.compile(r"^[-_\W]+")
-
-
-def clean_instance_name(name: str) -> str:
-    if not name:
-        return name
-    name = name.replace("_", ".").replace(":", "-")
-    cleaned = _LEADING_SPECIAL.sub("", name).strip()
-    return cleaned if cleaned else name
+UNMAPPED_RETRY_S = 3600
 
 
-def _load_or_build_asset_map(env: dict) -> dict:
-    """Return asset_map dict. Auto-builds from Jira if missing or stale."""
-    try:
-        with open(ASSET_MAP_FILE) as f:
-            asset_map = json.load(f)
-        age = map_age_days(asset_map)
-        if age is not None and age >= MAP_STALE_DAYS:
-            logger.info(f"asset_map.json is {age} day(s) old — rebuilding from Jira...")
-            try:
-                return build_asset_map(env)
-            except Exception as e:
-                logger.warning(f"Could not rebuild asset map: {e} — continuing with stale map")
-        return asset_map
-    except FileNotFoundError:
-        pass
-
-    logger.info("asset_map.json not found — building automatically from Jira Assets (this may take a moment)...")
-    try:
-        return build_asset_map(env)
-    except Exception as e:
-        logger.warning(f"Could not auto-build asset map: {e}  — falling back to device IDs for instance names")
-        return {"by_device_id": {}}
+@dataclass
+class JiraState:
+    url: str
+    user: str
+    token: str
+    workspace_id: str | None = None
+    asset_map: dict[str, str] = field(default_factory=dict)
+    unmapped_retry_at: dict[str, float] = field(default_factory=dict)
 
 
-def build_idm(devices: list[dict], ts_ms: int, asset_map: dict) -> dict:
+def build_idm(devices: list[dict], ts_ms: int, by_device_id: dict[str, str]) -> dict:
     """Transform device results into InsightFinder v2 idm structure.
 
     One instance per eNB. Metric: average abs(UlRSSI) across all attached UEs.
     UEs without UlRSSI data are excluded from the average. eNBs with no UE
     RSSI data are skipped entirely.
     """
-    by_device_id: dict = asset_map.get("by_device_id", {})
     idm: dict = {}
 
     for device in devices:
@@ -111,7 +91,6 @@ def build_idm(devices: list[dict], ts_ms: int, asset_map: dict) -> dict:
             logger.warning(
                 f"No asset map entry for eNB {enb_id} — sending under BreezeVIEW name '{instance_name}'"
             )
-        instance_name = clean_instance_name(instance_name)
 
         avg_rssi = round(sum(rssi_vals) / len(rssi_vals))
 
@@ -129,17 +108,70 @@ def build_idm(devices: list[dict], ts_ms: int, asset_map: dict) -> dict:
     return idm
 
 
+def _try_discover_workspace(jira: JiraState) -> None:
+    try:
+        jira.workspace_id = discover_workspace_id(jira.url, jira.user, jira.token)
+    except Exception as e:
+        logger.warning(f"Jira workspace discovery failed: {e} — will retry each tick")
+
+
+def refresh_new_devices(devices: list[dict], jira: JiraState) -> None:
+    """Query Jira for device_ids not yet in asset_map (or whose retry cooldown expired)."""
+    if jira.workspace_id is None:
+        _try_discover_workspace(jira)
+    if jira.workspace_id is None:
+        return
+
+    active_ids = {d["device_id"] for d in devices}
+    for stale in list(jira.unmapped_retry_at):
+        if stale not in active_ids:
+            jira.unmapped_retry_at.pop(stale)
+
+    now = time.monotonic()
+    candidates = [
+        d for d in devices
+        if d.get("status") == "ok"
+        and (
+            d["device_id"] not in jira.asset_map
+            or now >= jira.unmapped_retry_at.get(d["device_id"], float("inf"))
+        )
+    ]
+    if not candidates:
+        return
+
+    candidate_ip_map = {d["device_id"]: d.get("device_ip", "") for d in candidates}
+    candidate_name_map = {d["device_id"]: d.get("device_name", "") for d in candidates}
+
+    logger.info(f"Querying Jira for {len(candidates)} new/unmapped eNB(s): {list(candidate_ip_map)}")
+    try:
+        resolved = resolve_subset(jira.user, jira.token, jira.workspace_id, candidate_ip_map, candidate_name_map)
+    except Exception as e:
+        logger.warning(f"Jira asset lookup failed for new device(s): {e} — will retry next tick")
+        return
+
+    for device_id, label in resolved.items():
+        bv_name = candidate_name_map.get(device_id) or device_id
+        jira.asset_map[device_id] = label
+        if label == bv_name:
+            jira.unmapped_retry_at[device_id] = now + UNMAPPED_RETRY_S
+        else:
+            jira.unmapped_retry_at.pop(device_id, None)
+
+
 def run_tick(
     base_url: str,
     telrad_username: str,
     telrad_password: str,
     timeout: int,
     client: InsightFinder,
-    asset_map: dict,
+    jira: JiraState,
     dry_run: bool,
 ) -> None:
     ts_ms, devices = collect_metrics(base_url, telrad_username, telrad_password, timeout)
-    idm = build_idm(devices, ts_ms, asset_map)
+
+    refresh_new_devices(devices, jira)
+
+    idm = build_idm(devices, ts_ms, jira.asset_map)
 
     if not idm:
         logger.warning("No eNB data to send this tick")
@@ -160,7 +192,6 @@ def main():
     parser.add_argument("--interval", type=float, metavar="MIN", help="Override sampling interval in minutes")
     parser.add_argument("--timeout", type=int, default=15, metavar="SEC", help="BreezeVIEW HTTP timeout (default: 15)")
     parser.add_argument("--dry-run", action="store_true", help="Print payload without sending to InsightFinder")
-    parser.add_argument("--rebuild-map", action="store_true", help="Force rebuild asset_map.json from Jira then exit")
     args = parser.parse_args()
 
     env = load_env()
@@ -173,10 +204,6 @@ def main():
         print("ERROR: set ACCESSPARKS_TELRAD_URL, ACCESSPARKS_TELRAD_USERNAME, ACCESSPARKS_TELRAD_PASSWORD in .env", file=sys.stderr)
         sys.exit(1)
 
-    if args.rebuild_map:
-        build_asset_map(env)
-        return
-
     if_url = _cfg(env, "INSIGHTFINDER_BASE_URL")
     if_user = _cfg(env, "INSIGHTFINDER_USER_NAME")
     if_key = _cfg(env, "INSIGHTFINDER_LICENSE_KEY")
@@ -187,6 +214,13 @@ def main():
         print("ERROR: set INSIGHTFINDER_BASE_URL, INSIGHTFINDER_USER_NAME, INSIGHTFINDER_LICENSE_KEY, INSIGHTFINDER_PROJECT_NAME in .env", file=sys.stderr)
         sys.exit(1)
 
+    jira_url = _cfg(env, "ACCESSPARKS_JIRA_URL")
+    jira_user = _cfg(env, "ACCESSPARKS_JIRA_USERNAME")
+    jira_token = _cfg(env, "ACCESSPARKS_JIRA_API_TOKEN")
+
+    if not jira_url or not jira_user or not jira_token:
+        print("WARNING: Jira config incomplete — asset names will fall back to BreezeVIEW device names", file=sys.stderr)
+
     if args.interval is not None:
         interval_minutes = int(args.interval)
     else:
@@ -194,10 +228,11 @@ def main():
         interval_minutes = int(raw)
     interval_s = interval_minutes * 60
 
-    asset_map = _load_or_build_asset_map(env)
+    jira = JiraState(url=jira_url, user=jira_user, token=jira_token)
+    _try_discover_workspace(jira)
 
     logger.info(f"Sampling interval: {interval_minutes} min | InsightFinder project: {if_project}")
-    logger.info(f"Component: {COMPONENT_NAME} | Mapped eNBs: {len(asset_map.get('by_device_id', {}))}")
+    logger.info(f"Component: {COMPONENT_NAME} | Jira workspace: {jira.workspace_id or 'pending'}")
 
     config = Config(
         url=if_url,
@@ -213,25 +248,25 @@ def main():
         create_project=True,
     )
 
+    tick_kwargs = dict(
+        base_url=base_url,
+        telrad_username=telrad_username,
+        telrad_password=telrad_password,
+        timeout=args.timeout,
+        jira=jira,
+    )
+
     with InsightFinder(config) as client:
         if args.once or args.dry_run:
-            run_tick(base_url, telrad_username, telrad_password, args.timeout, client, asset_map, args.dry_run)
+            run_tick(client=client, dry_run=args.dry_run, **tick_kwargs)
             return
 
         logger.info("Starting metric loop (Ctrl-C to stop)")
         next_tick = time.monotonic()
         while True:
             next_tick += interval_s
-            age = map_age_days(asset_map)
-            if age is not None and age >= MAP_STALE_DAYS:
-                logger.info(f"asset_map.json is {age} day(s) old — refreshing from Jira...")
-                try:
-                    asset_map = build_asset_map(env)
-                    logger.info(f"Asset map refreshed — {len(asset_map.get('by_device_id', {}))} eNB(s) mapped")
-                except Exception as e:
-                    logger.warning(f"Asset map refresh failed: {e} — continuing with stale map")
             try:
-                run_tick(base_url, telrad_username, telrad_password, args.timeout, client, asset_map, dry_run=False)
+                run_tick(client=client, dry_run=False, **tick_kwargs)
             except Exception as e:
                 logger.error(f"Tick failed: {e}")
             sleep_for = max(0.0, next_tick - time.monotonic())
