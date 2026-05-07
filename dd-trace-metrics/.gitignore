@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Config with real credentials — use conf.d/config.yaml.template instead
+conf.d/*.yaml
+
+# Discovery output (generated files, not source)
+discovered_frameworks.yaml
+service_frameworks.yaml
+discovery_results.json
+
+# Scratch / backup files
+*.bak
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+*.swp
