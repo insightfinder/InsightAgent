@@ -52,5 +52,8 @@ insightfinder:
 
 
 agent:
-  lookback: 5          # minutes — match your cron interval
-  sampling_interval: 300  # seconds — used for project creation (defaults to lookback * 60)
+  lookback: 5              # minutes — match your cron interval
+  sampling_interval: 300   # seconds — used for project creation (defaults to lookback * 60)
+  # query_offset_minutes: 0      # shift end time back by N minutes (e.g. 30 to avoid Datadog ingestion lag)
+  # historic_time_range: "2020-04-14 00:00:00,2020-04-15 00:00:00"  # if set, disables streaming and replays this range
+  # historic_chunk_minutes: 60   # query window size for historic backfill (default: 60)
