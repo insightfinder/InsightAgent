@@ -28,6 +28,7 @@ log = logging.getLogger("dd-http-availability")
 
 DEFAULT_DD_ENDPOINT = "https://api.datadoghq.eu"
 DEFAULT_LOOKBACK_MINUTES = 5
+DEFAULT_SAMPLING_INTERVAL = 60
 IF_BATCH_SIZE = 500
 
 
@@ -47,13 +48,16 @@ def build_queries(
     - tags      : filter tags slotted into the query scope
     - split_by  : if set, appends `by {tag}` so Datadog returns one series
                   per value of that tag (used for auto instance discovery)
+
+    All queries use a fixed 60-second rollup so every data point is always a
+    per-minute count, regardless of query window width.
     """
     tag_parts = [f"{k}:{v}" for k, v in tags.items() if v]
     tag_filter = ",".join(tag_parts) if tag_parts else "*"
     by_clause = f" by {{{split_by}}}" if split_by else ""
-    total_query   = f"sum:trace.{framework}.request.hits{{{tag_filter}}}{by_clause}.as_count()"
-    error_500_query = f"sum:trace.{framework}.request.errors{{{tag_filter},http.status_code:500}}{by_clause}.as_count()"
-    error_5xx_query = f"sum:trace.{framework}.request.errors{{{tag_filter}}}{by_clause}.as_count()"
+    total_query     = f"sum:trace.{framework}.request.hits{{{tag_filter}}}{by_clause}.as_count().rollup(sum, 60)"
+    error_500_query = f"sum:trace.{framework}.request.errors{{{tag_filter},http.status_code:500}}{by_clause}.as_count().rollup(sum, 60)"
+    error_5xx_query = f"sum:trace.{framework}.request.errors{{{tag_filter}}}{by_clause}.as_count().rollup(sum, 60)"
     return total_query, error_500_query, error_5xx_query
 
 
@@ -180,8 +184,6 @@ def query_timeseries(
     """
     # Accumulate across frameworks: instance → { ts: total/error }
     total_by_instance: dict[str, dict[int, float]] = {}
-    error_by_instance: dict[str, dict[int, float]] = {}
-
     error_500_by_instance: dict[str, dict[int, float]] = {}
     error_5xx_by_instance: dict[str, dict[int, float]] = {}
 
@@ -197,6 +199,7 @@ def query_timeseries(
         )).items():
             key = _extract_tag_value(scope, split_by) if split_by else "_combined"
             bucket = total_by_instance.setdefault(key, {})
+            log.info("  [debug] framework=%s  instance=%s  points=%d  sum=%.0f", framework, key, len(pts), sum(pts.values()))
             for ts, val in pts.items():
                 bucket[ts] = bucket.get(ts, 0.0) + val
 
@@ -296,9 +299,32 @@ def process_config(cfg: dict) -> None:
 
     # ── Time window ──────────────────────────────────────────────────────────
     lookback: int = int(agent_cfg.get("lookback") or DEFAULT_LOOKBACK_MINUTES)
-    sampling_interval: int = int(agent_cfg.get("sampling_interval") or lookback * 60)
-    query_end = datetime.now(timezone.utc)
-    query_start = query_end - timedelta(minutes=lookback)
+    sampling_interval: int = int(agent_cfg.get("sampling_interval") or DEFAULT_SAMPLING_INTERVAL)
+
+    historic_range: str = agent_cfg.get("historic_time_range") or ""
+    historic_chunk_minutes: int = int(agent_cfg.get("historic_chunk_minutes") or 60)
+    query_offset_minutes: int = int(agent_cfg.get("query_offset_minutes") or 0)
+
+    if historic_range:
+        try:
+            start_str, end_str = [s.strip() for s in historic_range.split(",", 1)]
+            range_start = datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            range_end   = datetime.strptime(end_str,   "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        except ValueError:
+            log.error("[%s] Invalid historic_time_range format (expected 'YYYY-MM-DD HH:MM:SS,YYYY-MM-DD HH:MM:SS'): %r", source, historic_range)
+            return
+        windows: list[tuple[datetime, datetime]] = []
+        chunk_start = range_start
+        while chunk_start < range_end:
+            chunk_end = min(chunk_start + timedelta(minutes=historic_chunk_minutes), range_end)
+            windows.append((chunk_start, chunk_end))
+            chunk_start = chunk_end
+        log.info("[%s] Historic mode: %s → %s  (%d chunk(s) of %d min)", source, range_start, range_end, len(windows), historic_chunk_minutes)
+    else:
+        now = datetime.now(timezone.utc)
+        query_end   = now.replace(second=0, microsecond=0) - timedelta(minutes=query_offset_minutes)
+        query_start = query_end - timedelta(minutes=lookback)
+        windows = [(query_start, query_end)]
 
     # ── Ensure project exists ────────────────────────────────────────────────
     if not check_and_create_project(
@@ -318,85 +344,84 @@ def process_config(cfg: dict) -> None:
         log.warning("[%s] No services defined — skipping", source)
         return
 
-    all_rows: list[dict] = []
+    for window_start, window_end in windows:
+        all_rows: list[dict] = []
 
-    for inst in instances:
-        tags: dict[str, str] = inst.get("tags") or {}
-        component_name: str = inst.get("component_name") or ""
-        component_name_from_tag: str | None = inst.get("component_name_from_tag") or None
+        for inst in instances:
+            tags: dict[str, str] = inst.get("tags") or {}
+            component_name: str = inst.get("component_name") or ""
+            component_name_from_tag: str | None = inst.get("component_name_from_tag") or None
 
-        raw_inst_fw = inst.get("frameworks") or inst.get("framework")
-        inst_frameworks = (
-            [raw_inst_fw] if isinstance(raw_inst_fw, str)
-            else list(raw_inst_fw) if raw_inst_fw
-            else default_frameworks
-        )
+            raw_inst_fw = inst.get("frameworks") or inst.get("framework")
+            inst_frameworks = (
+                [raw_inst_fw] if isinstance(raw_inst_fw, str)
+                else list(raw_inst_fw) if raw_inst_fw
+                else default_frameworks
+            )
 
-        instance_name: str | None = inst.get("instance_name") or None
-        instance_name_from_tag: str | None = inst.get("instance_name_from_tag") or None
+            instance_name: str | None = inst.get("instance_name") or None
+            instance_name_from_tag: str | None = inst.get("instance_name_from_tag") or None
 
-        if not instance_name and not instance_name_from_tag:
-            log.warning("[%s] service entry must have 'instance_name' or 'instance_name_from_tag' — skipping", source)
+            if not instance_name and not instance_name_from_tag:
+                log.warning("[%s] service entry must have 'instance_name' or 'instance_name_from_tag' — skipping", source)
+                continue
+
+            # instance_name_from_tag: split by that tag, each unique value becomes an instance
+            # instance_name:          fixed string, all matching series merged into one instance
+            if instance_name_from_tag:
+                split_by, fixed_name = instance_name_from_tag, None
+            else:
+                split_by, fixed_name = None, instance_name
+
+            log.info(
+                "[%s] querying  frameworks=%s  tags=%s  split_by=%s  window=%s→%s",
+                source, inst_frameworks, tags, split_by or "(combined)", window_start, window_end,
+            )
+
+            results = query_timeseries(
+                api_key=api_key, app_key=app_key,
+                frameworks=inst_frameworks, tags=tags,
+                split_by=split_by,
+                start=window_start, end=window_end, base_url=base_url,
+            )
+
+            for discovered_name, (total_points, error_500_points, error_5xx_points) in results.items():
+                instance_name = fixed_name or discovered_name
+                resolved_component = (
+                    _extract_tag_value(discovered_name, component_name_from_tag)
+                    if component_name_from_tag else component_name
+                )
+                log.info(
+                    "[%s] instance=%r  component=%r  total=%d  500s=%d  5xx=%d",
+                    source, instance_name, resolved_component or "(none)",
+                    len(total_points), len(error_500_points), len(error_5xx_points),
+                )
+                all_rows.extend(build_metric_rows(
+                    total_points=total_points,
+                    error_500_points=error_500_points,
+                    error_5xx_points=error_5xx_points,
+                    instance_name=instance_name,
+                    component_name=resolved_component,
+                ))
+
+        if not all_rows:
+            log.info("[%s] No metric data to send for window %s→%s", source, window_start, window_end)
             continue
 
-        # empty tags = no filter, matches all traffic
-
-        # instance_name_from_tag: split by that tag, each unique value becomes an instance
-        # instance_name:          fixed string, all matching series merged into one instance
-        if instance_name_from_tag:
-            split_by, fixed_name = instance_name_from_tag, None
-        else:
-            split_by, fixed_name = None, instance_name
-
-        log.info(
-            "[%s] querying  frameworks=%s  tags=%s  split_by=%s",
-            source, inst_frameworks, tags, split_by or "(combined)",
-        )
-
-        results = query_timeseries(
-            api_key=api_key, app_key=app_key,
-            frameworks=inst_frameworks, tags=tags,
-            split_by=split_by,
-            start=query_start, end=query_end, base_url=base_url,
-        )
-
-        for discovered_name, (total_points, error_500_points, error_5xx_points) in results.items():
-            instance_name = fixed_name or discovered_name
-            resolved_component = (
-                _extract_tag_value(discovered_name, component_name_from_tag)
-                if component_name_from_tag else component_name
-            )
-            log.info(
-                "[%s] instance=%r  component=%r  total=%d  500s=%d  5xx=%d",
-                source, instance_name, resolved_component or "(none)",
-                len(total_points), len(error_500_points), len(error_5xx_points),
-            )
-            all_rows.extend(build_metric_rows(
-                total_points=total_points,
-                error_500_points=error_500_points,
-                error_5xx_points=error_5xx_points,
-                instance_name=instance_name,
-                component_name=resolved_component,
-            ))
-
-    if not all_rows:
-        log.info("[%s] No metric data to send", source)
-        return
-
-    # ── Send to InsightFinder ────────────────────────────────────────────────
-    for offset in range(0, len(all_rows), IF_BATCH_SIZE):
-        batch = all_rows[offset: offset + IF_BATCH_SIZE]
-        try:
-            resp = send_metric_data_to_if(
-                user_name=if_user, license_key=if_key,
-                project_name=if_project, system_name=if_system,
-                metric_rows=batch, if_url=if_url,
-            )
-            log.info("[%s] Sent %d row(s) to InsightFinder | %s", source, len(batch), resp)
-        except requests.HTTPError as exc:
-            log.error("[%s] InsightFinder HTTP %d: %s", source, exc.response.status_code, exc.response.text)
-        except requests.ConnectionError as exc:
-            log.error("[%s] InsightFinder network error: %s", source, exc)
+        # ── Send to InsightFinder ────────────────────────────────────────────────
+        for offset in range(0, len(all_rows), IF_BATCH_SIZE):
+            batch = all_rows[offset: offset + IF_BATCH_SIZE]
+            try:
+                resp = send_metric_data_to_if(
+                    user_name=if_user, license_key=if_key,
+                    project_name=if_project, system_name=if_system,
+                    metric_rows=batch, if_url=if_url,
+                )
+                log.info("[%s] Sent %d row(s) to InsightFinder | %s", source, len(batch), resp)
+            except requests.HTTPError as exc:
+                log.error("[%s] InsightFinder HTTP %d: %s", source, exc.response.status_code, exc.response.text)
+            except requests.ConnectionError as exc:
+                log.error("[%s] InsightFinder network error: %s", source, exc)
 
 
 # ---------------------------------------------------------------------------
