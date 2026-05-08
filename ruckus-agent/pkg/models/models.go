@@ -42,10 +42,14 @@ type ClientResponse struct {
 }
 
 type ClientInfo struct {
-	APMac     string `json:"apMac"`
-	ClientMac string `json:"clientMac"`
-	RSSI      int    `json:"rssi"`
-	SNR       int    `json:"snr"`
+	APMac            string `json:"apMac"`
+	ClientMac        string `json:"clientMac"`
+	RSSI             int    `json:"rssi"`
+	SNR              int    `json:"snr"`
+	RadioType        string `json:"radioType"`
+	TxFrames         int    `json:"txFrames"`
+	TxDropDataFrames int    `json:"txDropDataFrames"`
+	MedianTxMCSRate  int    `json:"medianTxMCSRate"` // kbps; MCS 3 = 26000, MCS 7 = 65000
 }
 
 type APInfo struct {
@@ -98,6 +102,16 @@ type APDetail struct {
 	SNRPercentBelow15  *float64 `json:"snrPercentBelow15,omitempty"`  // Percentage of clients < -15 dBm
 	SNRPercentBelow18  *float64 `json:"snrPercentBelow18,omitempty"`  // Percentage of clients < -18 dBm
 	SNRPercentBelow20  *float64 `json:"snrPercentBelow20,omitempty"`  // Percentage of clients < -20 dBm
+
+	// 5GHz-only corroboration KPIs (p50 across 5GHz clients, requires ≥MinClientsThreshold 5GHz clients)
+	MedianSNR5GHz   *float64 `json:"medianSNR5GHz,omitempty"`
+	TxRetryRate5GHz *float64 `json:"txRetryRate5GHz,omitempty"` // percent
+
+	// Critical alert indicators (binary 0/1), 5GHz clients only
+	AlertCrit_RSSI_SNR     *float64 `json:"alertCrit_RSSI_SNR,omitempty"`
+	AlertCrit_RSSI_TxRetry *float64 `json:"alertCrit_RSSI_TxRetry,omitempty"`
+	AlertCrit_RSSI_Airtime *float64 `json:"alertCrit_RSSI_Airtime,omitempty"`
+	AlertCrit_RSSI_MCS     *float64 `json:"alertCrit_RSSI_MCS,omitempty"`
 }
 
 // InsightFinder data structure
@@ -210,6 +224,28 @@ func (ap *APDetail) ToMetricData(componentNameAsAP bool, filter MetricFilter) *M
 		if mbpsValue := ExtractMbpsFromPOEPortStatus(ap.POEPortStatus); mbpsValue != nil {
 			metric.Data["Ethernet Status Mbps"] = *mbpsValue
 		}
+	}
+
+	// 5GHz-only corroboration KPIs
+	if ap.MedianSNR5GHz != nil {
+		metric.Data["Median SNR 5GHz"] = *ap.MedianSNR5GHz
+	}
+	if ap.TxRetryRate5GHz != nil {
+		metric.Data["TX Retry Rate 5GHz"] = *ap.TxRetryRate5GHz
+	}
+
+	// Critical alert indicators
+	if ap.AlertCrit_RSSI_SNR != nil {
+		metric.Data["≥ 35% of clients RSSI < -78 dBm AND SNR/SINR < 18 dB"] = *ap.AlertCrit_RSSI_SNR
+	}
+	if ap.AlertCrit_RSSI_TxRetry != nil {
+		metric.Data["≥ 35% of clients RSSI < -78 dBm AND TX Retry Rate > 18%"] = *ap.AlertCrit_RSSI_TxRetry
+	}
+	if ap.AlertCrit_RSSI_Airtime != nil {
+		metric.Data["≥ 35% of clients RSSI < -78 dBm AND Airtime Utilization > 85%"] = *ap.AlertCrit_RSSI_Airtime
+	}
+	if ap.AlertCrit_RSSI_MCS != nil {
+		metric.Data["≥ 35% of clients RSSI < -78 dBm AND Median MCS < 3"] = *ap.AlertCrit_RSSI_MCS
 	}
 
 	return metric

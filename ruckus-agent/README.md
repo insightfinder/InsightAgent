@@ -1,94 +1,60 @@
-# Ruckus Agent Configuration Guide
+# Ruckus Agent
 
-## Overview
+Ruckus Agent is a Go-based data collection agent that fetches network performance metrics from a Ruckus SmartZone controller and sends them to InsightFinder for analysis and monitoring.
 
-The Ruckus Agent uses a YAML configuration file to connect to your Ruckus Wireless Controller and send metrics to InsightFinder. This guide explains how to configure the agent properly.
+## Features
 
-## Configuration File Location
+- **Concurrent Bulk Collection**: Fetches all AP and client data via paginated bulk queries with configurable concurrency
+- **Client Enrichment**: Enriches per-AP metrics with RSSI, SNR, and TX statistics derived from individual client data
+- **5GHz-only Critical Metrics**: Computes corroboration KPIs and critical alert indicators exclusively for 5GHz clients
+- **Metric Filtering**: Per-metric enable/disable flags to control exactly what is sent to InsightFinder
+- **Zone Mapping**: Optional JSON-based zone name remapping
+- **Streaming Processing**: Processes APs in configurable chunks to bound memory usage
 
-The configuration file should be placed at: `configs/config.yaml` (relative to the executable)
+## Architecture
 
-## Configuration Sections
+```
+ruckus-agent/
+├── configs/          # Configuration types and YAML loading
+├── insightfinder/    # InsightFinder API client
+├── pkg/models/       # Data models, metric conversion, utilities
+│   ├── models.go     # APDetail, ClientInfo, MetricData, ToMetricData
+│   └── utils.go      # Device name cleaning, zone mapping, POE parsing
+├── ruckus/           # Ruckus SmartZone API client
+│   ├── ruckus.go     # Authentication and HTTP client
+│   ├── streaming.go  # Bulk AP pagination and streaming
+│   ├── client_data.go # Client enrichment, 5GHz KPIs, alert indicators
+│   ├── get_bulk_ap_data.go
+│   └── type.go       # Request/response types
+├── worker/           # Collection orchestration
+│   ├── worker.go     # Lifecycle, scheduling, streaming loop
+│   └── v1_send_data.go
+└── main.go           # Entry point
+```
 
-### ruckus - Ruckus Controller Settings
+## Configuration
 
-Configure connection to your Ruckus Wireless Controller:
-
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `controller_host` | Yes | - | IP address or hostname of Ruckus controller |
-| `controller_port` | No | 8443 | HTTPS port for Ruckus controller API |
-| `username` | Yes | - | Username for Ruckus controller authentication |
-| `password` | Yes | - | Password for Ruckus controller authentication |
-| `api_version` | No | v10_0 | Ruckus API version (v10_0, v11_0, v11_1, etc.) |
-| `verify_ssl` | No | false | Enable/disable SSL certificate verification |
-| `max_concurrent_requests` | No | 10 | Maximum concurrent API requests |
-
-### insightfinder - InsightFinder Settings
-
-Configure connection to InsightFinder platform:
-
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `server_url` | Yes | - | InsightFinder server URL (e.g., https://app.insightfinder.com) |
-| `username` | Yes | - | InsightFinder username |
-| `license_key` | Yes | - | InsightFinder license key |
-| `project_name` | Yes | - | InsightFinder project name |
-| `system_name` | No | project_name | System name for grouping |
-| `project_type` | No | Metric | Project type (Metric, Log, Trace, etc.) |
-| `cloud_type` | No | OnPremise | Cloud type (OnPremise, AWS, Azure, GCP) |
-| `instance_type` | No | OnPremise | Instance type |
-| `is_container` | No | false | Set to true if running in container |
-| `sampling_interval` | No | 300 | Data collection interval in seconds |
-
-### agent - Agent Settings
-
-Configure agent behavior:
-
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `log_level` | No | info | Logging level (debug, info, warn, error) |
-| `data_format` | No | JSON | Data format (for future use) |
-| `timezone` | No | UTC | Timezone for timestamps |
-| `filters_include` | No | - | Comma-separated list of AP filters to include |
-| `filters_exclude` | No | - | Comma-separated list of AP filters to exclude |
-
-### state - State Management
-
-Internal state tracking (automatically managed):
-
-| Parameter | Description |
-|-----------|-------------|
-| `last_collection_timestamp` | Last successful data collection timestamp |
-
-## Sample Configuration File
-
-Create a file named `config.yaml` in the `configs/` directory:
+Edit `configs/config.yaml`:
 
 ```yaml
-# Ruckus Agent Configuration File
-# Place this file at: configs/config.yaml
-
 agent:
-  # Agent behavior settings
-  log_level: info
+  log_level: info        # debug | info | warn | error
   data_format: JSON
   timezone: UTC
-  filters_include: ""
-  filters_exclude: ""
+  filters_include: ""    # Comma-separated AP name substrings to include
+  filters_exclude: ""    # Comma-separated AP name substrings to exclude
 
 ruckus:
-  # Ruckus Wireless Controller Configuration
   controller_host: 192.168.1.100
   controller_port: 8443
   username: your_ruckus_username
   password: your_ruckus_password
-  api_version: v11_1
+  api_version: v11_1     # v10_0 for SZ 5.x, v11_0/v11_1 for SZ 6.x
   verify_ssl: false
-  max_concurrent_requests: 10
+  max_concurrent_requests: 20
+  send_component_name_as_AP: true
 
 insightfinder:
-  # InsightFinder Platform Configuration
   server_url: https://app.insightfinder.com
   username: your_if_username
   license_key: your_license_key_here
@@ -98,71 +64,137 @@ insightfinder:
   cloud_type: OnPremise
   instance_type: OnPremise
   is_container: false
-  sampling_interval: 300
+  sampling_interval: 300   # seconds; 300 = 5-minute window
 
-state:
-  # Internal state (automatically managed)
-  last_collection_timestamp: 0
+threshold:
+  # Minimum number of 5GHz clients required before computing 5GHz KPIs
+  # and critical alert indicators for an AP. APs below this count are skipped.
+  min_clients_rssi_threshold: 10
+  min_clients_snr_threshold: 10
+
+metric_filter:
+  # Set true to stream a metric to InsightFinder, false to suppress it.
+  num_clients_total: false
+  num_clients_24g: false
+  num_clients_5g: false
+  num_clients_6g: false
+
+  airtime_24g: false
+  airtime_5g: false
+  airtime_6g: false
+  airtime_24g_clients_over_35: true
+  airtime_5g_clients_over_35: true
+  airtime_6g_clients_over_35: true
+
+  rssi_avg: false
+  snr_avg: false
+  clients_rssi_below_74: false
+  clients_rssi_below_78: false
+  clients_rssi_below_80: false
+  clients_snr_below_15: false
+  clients_snr_below_18: false
+  clients_snr_below_20: false
+
+  ethernet_status_mbps: true
 ```
 
-## Configuration Steps
-
-### Step 1: Create Configuration Directory
+## Installation
 
 ```bash
-mkdir -p configs
+go mod download
+go build -o ruckus-agent
 ```
 
-### Step 2: Create Configuration File
-
-Copy the sample configuration above to `configs/config.yaml` and modify the values:
+## Running
 
 ```bash
-cp configs/config.yaml.example configs/config.yaml
-nano configs/config.yaml
+./ruckus-agent
 ```
 
-### Step 3: Configure Ruckus Controller
+## Metrics Collected
 
-1. **Controller Host**: Enter your Ruckus controller's IP address or hostname
-2. **Credentials**: Use an admin or read-only user account
-3. **API Version**: Check your controller's firmware version:
-   - SmartZone 5.x: use `v10_0`
-   - SmartZone 6.x: use `v11_0` or `v11_1`
-4. **SSL**: Set `verify_ssl: false` for self-signed certificates
+### Standard AP Metrics (filter-gated)
 
-### Step 4: Configure InsightFinder
+These are enabled/disabled individually via `metric_filter` in `config.yaml`:
 
-1. **Server URL**: Your InsightFinder server URL
-2. **Credentials**: Get from your InsightFinder account settings
-3. **Project Name**: Choose a descriptive name (will be created automatically)
-4. **Sampling Interval**: Recommended 300 seconds (5 minutes) for WiFi metrics
+| Metric | Description |
+|--------|-------------|
+| `Num Clients Total` | Total associated clients |
+| `Num Clients 24G` | Clients on 2.4GHz |
+| `Num Clients 5G` | Clients on 5GHz |
+| `Num Clients 6G` | Clients on 6GHz |
+| `Airtime 24G Percent` | 2.4GHz channel utilization % |
+| `Airtime 5G Percent` | 5GHz channel utilization % |
+| `Airtime 6G Percent` | 6GHz channel utilization % |
+| `Airtime 24G Clients > 35` | 2.4GHz airtime % (only if >35 clients, else 0) |
+| `Airtime 5G Clients > 35` | 5GHz airtime % (only if >35 clients, else 0) |
+| `Airtime 6G Clients > 35` | 6GHz airtime % (only if >35 clients, else 0) |
+| `RSSI Avg` | Average RSSI across all clients (positive dBm) |
+| `SNR Avg` | Average SNR across all clients (dB) |
+| `% Clients RSSI < -74 dBm` | % clients in orange signal zone |
+| `% Clients RSSI < -78 dBm` | % clients in red signal zone |
+| `% Clients RSSI < -80 dBm` | % clients below red signal zone |
+| `% Clients SNR < 15 dBm` | % clients below SNR 15 dB |
+| `% Clients SNR < 18 dBm` | % clients below SNR 18 dB |
+| `% Clients SNR < 20 dBm` | % clients below SNR 20 dB |
+| `Ethernet Status Mbps` | WAN/uplink port speed parsed from POE port status |
 
-## Configuration Validation
+### 5GHz Corroboration KPIs
 
-The agent validates your configuration on startup and will report errors for:
+Always sent when the AP has ≥ `min_clients_rssi_threshold` 5GHz clients. Computed as **p50 (median) across all 5GHz clients** for the current collection window.
 
-- Missing required fields
-- Invalid URLs or hostnames  
-- Unreachable controllers or InsightFinder servers
-- Invalid credentials
-- Network connectivity issues
+5GHz clients are identified by `radioType` starting with `"a/"` (e.g. `a/n/ac`, `a/n/ac/ax`, `a/n`).
 
-### Debug Mode
+| Metric | Description |
+|--------|-------------|
+| `Median SNR 5GHz` | p50 SNR across 5GHz clients (dB) |
+| `TX Retry Rate 5GHz` | p50 TX retry rate across 5GHz clients: `txDropDataFrames / txFrames × 100` (%) |
 
-Enable debug logging for detailed troubleshooting:
+### Critical Alert Indicators (5GHz only)
 
-```yaml
-agent:
-  log_level: debug
-```
+Binary `1`/`0` metrics. Each fires independently when its specific pair of conditions is simultaneously true. Requires ≥ `min_clients_rssi_threshold` 5GHz clients per AP.
 
-This will provide detailed API requests, responses, and internal processing information.
+The RSSI condition shared by all critical indicators: **≥ 35% of 5GHz clients have RSSI < −78 dBm**.
 
-## YAML Configuration Notes
+| Metric sent to InsightFinder | Paired KPI condition |
+|------------------------------|----------------------|
+| `≥ 35% of clients RSSI < -78 dBm AND SNR/SINR < 18 dB` | Median SNR 5GHz < 18 dB |
+| `≥ 35% of clients RSSI < -78 dBm AND TX Retry Rate > 18%` | Median TX Retry Rate 5GHz > 18% |
+| `≥ 35% of clients RSSI < -78 dBm AND Airtime Utilization > 85%` | Airtime 5GHz > 85% |
+| `≥ 35% of clients RSSI < -78 dBm AND Median MCS < 3` | Median TX MCS Rate 5GHz < 26,000 kbps (≈ MCS 3) |
 
-- Use spaces (not tabs) for indentation
-- Boolean values should be lowercase: `true`, `false`
-- Strings with special characters should be quoted
-- Empty values can be represented as empty strings `""` or omitted entirely
-- Comments start with `#` and can be placed on their own line or at the end of a line
+**MCS threshold note**: The Ruckus API reports `medianTxMCSRate` in kbps. Based on 802.11n 20 MHz 1SS rates, MCS 3 = 26,000 kbps and MCS 7 = 65,000 kbps. The indicator uses `< 26,000 kbps` as the critical threshold.
+
+## Troubleshooting
+
+### No 5GHz KPI or Critical Indicator metrics appearing
+- Check that the AP has ≥ `min_clients_rssi_threshold` 5GHz clients (`radioType` starting with `a/`)
+- Enable `debug` log level to see per-AP client counts
+- Verify client data is being fetched (look for "Client data collection complete" in logs)
+
+### Standard metrics not appearing
+- Confirm the relevant flag is `true` in `metric_filter` section of `config.yaml`
+
+### Authentication failures
+- Verify `controller_host`, `username`, and `password`
+- Set `verify_ssl: false` for controllers with self-signed certificates
+- Check `api_version` matches your SmartZone firmware:
+  - SmartZone 5.x → `v10_0`
+  - SmartZone 6.x → `v11_0` or `v11_1`
+
+### High memory usage
+- Reduce `max_concurrent_requests` to lower peak concurrency
+- The worker streams APs in chunks; chunk size is set internally to 1000 APs
+
+## Development
+
+### Adding New Metrics
+
+1. Add field to `APDetail` in `pkg/models/models.go`
+2. Populate it in `ruckus/client_data.go:EnrichAPDataWithClientMetrics()` or `enrich5GHzMetrics()`
+3. Send it in `pkg/models/models.go:ToMetricData()`
+4. If filter-gated, add a flag to `MetricFilterConfig` in `configs/type.go` and implement the interface method
+
+## License
+
+Copyright InsightFinder Inc.
