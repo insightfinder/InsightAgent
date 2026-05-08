@@ -141,8 +141,10 @@ type EquipmentMetrics struct {
 	SNR5GHz         float64 // rxLastRssi - noiseFloor (dB)
 	TxRetryRate5GHz float64 // numTxRetryAttemps / numTxFramesTransmitted (0–100%)
 
-	// Critical RF: 1 if ≥35% clients < -78 dBm AND any critical KPI breached, else 0
-	CriticalRF float64
+	// Critical RF indicators: each is 1 if ≥35% clients RSSI < -78 dBm AND the paired KPI is breached, else 0
+	CriticalRF_RSSI_SNR     float64 // RSSI condition AND SNR/SINR < 18 dB
+	CriticalRF_RSSI_Airtime float64 // RSSI condition AND Airtime Utilization > 85%
+	CriticalRF_RSSI_TxRetry float64 // RSSI condition AND TX Retry Rate > 18%
 }
 
 // CachedData represents cached customer and equipment data

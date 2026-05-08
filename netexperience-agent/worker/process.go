@@ -167,16 +167,20 @@ func (w *Worker) processEquipmentMetrics(equipment *models.Equipment, customer *
 		}
 	}
 
-	// Critical RF: binary 1/0 — requires both thresholds to be met
+	// Critical RF indicators — each requires RSSI threshold to be met and paired KPI to be breached
 	rssiThreshold := w.config.NetExperience.MinClientsRSSIThreshold
-	if result.TotalClients >= rssiThreshold && result.TotalClients >= snrThreshold {
-		criticalRSSI := result.PercentRSSIBelow78 >= 35
-		criticalKPI := result.ChannelUtilization5GHz > 85 ||
-			(result.SNR5GHz > 0 && result.SNR5GHz < 18) ||
-			result.TxRetryRate5GHz > 18
-		if criticalRSSI && criticalKPI {
-			result.CriticalRF = 1
+	criticalRSSI := result.TotalClients >= rssiThreshold && result.PercentRSSIBelow78 >= 35
+
+	if criticalRSSI && result.TotalClients >= snrThreshold {
+		if result.SNR5GHz > 0 && result.SNR5GHz < 18 {
+			result.CriticalRF_RSSI_SNR = 1
 		}
+		if result.TxRetryRate5GHz > 18 {
+			result.CriticalRF_RSSI_TxRetry = 1
+		}
+	}
+	if criticalRSSI && result.ChannelUtilization5GHz > 85 {
+		result.CriticalRF_RSSI_Airtime = 1
 	}
 
 	return result
@@ -239,9 +243,13 @@ func (w *Worker) sendMetricBatch(timestamp int64, metrics []*models.EquipmentMet
 			data["TX Retry Rate 5GHz"] = em.TxRetryRate5GHz
 		}
 
+		if em.TotalClients >= w.config.NetExperience.MinClientsRSSIThreshold {
+			data["≥ 35% of clients RSSI < -78 dBm AND Airtime Utilization > 85%"] = em.CriticalRF_RSSI_Airtime
+		}
 		if em.TotalClients >= w.config.NetExperience.MinClientsRSSIThreshold &&
 			em.TotalClients >= w.config.NetExperience.MinClientsSNRThreshold {
-			data["Critical RF"] = em.CriticalRF
+			data["≥ 35% of clients RSSI < -78 dBm AND SNR/SINR < 18 dB"] = em.CriticalRF_RSSI_SNR
+			data["≥ 35% of clients RSSI < -78 dBm AND TX Retry Rate > 18%"] = em.CriticalRF_RSSI_TxRetry
 		}
 
 		metricData := models.MetricData{
