@@ -47,6 +47,7 @@ func NewService(cfg config.LokiConfig) *Service {
 		MaxConcurrentRequests: cfg.MaxConcurrentRequests,
 		MaxRetries:            cfg.MaxRetries,
 		QueryTimeout:          time.Duration(cfg.QueryTimeout) * time.Second,
+		DefaultHeaders:        cfg.Headers,
 		httpClient:            client,
 		isHealthy:             false,
 		lastHealthCheck:       time.Time{},
@@ -55,14 +56,37 @@ func NewService(cfg config.LokiConfig) *Service {
 	return service
 }
 
+// newRequest creates a request builder pre-configured with the HTTP client,
+// auth, and headers. Auth priority (highest wins):
+//  1. Per-query headers (extraHeaders) — e.g. Authorization: Bearer <token>
+//  2. Default headers (s.DefaultHeaders) — e.g. Authorization: Bearer <token>
+//  3. Basic Auth (s.Username / s.Password) — only applied when username is non-empty
+//
+// If both Basic Auth credentials and an Authorization header are configured,
+// the Authorization header wins because it is applied after BasicAuth.
+func (s *Service) newRequest(endpoint string, extraHeaders map[string]string) *requests.Builder {
+	rb := requests.URL(endpoint).
+		Client(s.httpClient.(*http.Client))
+
+	if s.Username != "" {
+		rb = rb.BasicAuth(s.Username, s.Password)
+	}
+
+	for k, v := range s.DefaultHeaders {
+		rb = rb.Header(k, v)
+	}
+	for k, v := range extraHeaders {
+		rb = rb.Header(k, v)
+	}
+	return rb
+}
+
 // HealthCheck performs a health check against the Loki instance
 func (s *Service) HealthCheck() error {
 	endpoint := s.BaseURL + HEALTH_ENDPOINT
 
 	var response string
-	err := requests.URL(endpoint).
-		Client(s.httpClient.(*http.Client)).
-		BasicAuth(s.Username, s.Password).
+	err := s.newRequest(endpoint, nil).
 		ToString(&response).
 		Fetch(context.Background())
 
@@ -107,9 +131,7 @@ func (s *Service) QueryRange(req QueryRequest) (*models.LokiResponse, error) {
 	}
 
 	var response models.LokiResponse
-	err := requests.URL(endpoint).
-		Client(s.httpClient.(*http.Client)).
-		BasicAuth(s.Username, s.Password).
+	err := s.newRequest(endpoint, req.Headers).
 		Params(params).
 		ToJSON(&response).
 		Fetch(context.Background())
@@ -138,9 +160,7 @@ func (s *Service) Query(query string, timestamp time.Time, limit int) (*models.L
 	}
 
 	var response models.LokiResponse
-	err := requests.URL(endpoint).
-		Client(s.httpClient.(*http.Client)).
-		BasicAuth(s.Username, s.Password).
+	err := s.newRequest(endpoint, nil).
 		Params(params).
 		ToJSON(&response).
 		Fetch(context.Background())
@@ -169,9 +189,7 @@ func (s *Service) GetLabels(start, end time.Time) ([]string, error) {
 	}
 
 	var response LabelResponse
-	err := requests.URL(endpoint).
-		Client(s.httpClient.(*http.Client)).
-		BasicAuth(s.Username, s.Password).
+	err := s.newRequest(endpoint, nil).
 		Params(params).
 		ToJSON(&response).
 		Fetch(context.Background())
@@ -200,9 +218,7 @@ func (s *Service) GetLabelValues(labelName string, start, end time.Time) ([]stri
 	}
 
 	var response LabelValuesResponse
-	err := requests.URL(endpoint).
-		Client(s.httpClient.(*http.Client)).
-		BasicAuth(s.Username, s.Password).
+	err := s.newRequest(endpoint, nil).
 		Params(params).
 		ToJSON(&response).
 		Fetch(context.Background())

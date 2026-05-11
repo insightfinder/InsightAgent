@@ -14,6 +14,9 @@ type Service struct {
 	MaxRetries            int
 	QueryTimeout          time.Duration
 
+	// Default HTTP headers applied to every request.
+	DefaultHeaders map[string]string
+
 	// Internal client state
 	httpClient      interface{} // Will be *http.Client
 	isHealthy       bool
@@ -29,6 +32,9 @@ type QueryRequest struct {
 	Direction string            `json:"direction"` // "forward" or "backward"
 	Step      string            `json:"step,omitempty"`
 	Labels    map[string]string `json:"labels,omitempty"`
+	// Headers are merged with Service.DefaultHeaders for this request only.
+	// Per-query values take precedence over default values for the same key.
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 // HealthCheckResponse represents Loki health check response

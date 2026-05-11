@@ -45,6 +45,10 @@ type LokiConfig struct {
 	// Options: container, instance, node_name, pod, app
 	DefaultInstanceNameField string `yaml:"default_instance_name_field"`
 
+	// Default HTTP headers sent with every Loki request.
+	// Per-query headers (QueryConfig.Headers) override these for matching keys.
+	Headers map[string]string `yaml:"headers"`
+
 	// Query Configuration
 	Queries            []QueryConfig `yaml:"queries"`
 	MaxEntriesPerQuery int           `yaml:"max_entries_per_query"`
@@ -69,6 +73,10 @@ type QueryConfig struct {
 	InstanceNameField  string `yaml:"instance_name_field"`  // Field name to use for instance name
 	ComponentNameField string `yaml:"component_name_field"` // Field name to use for component name
 	ContainerNameField string `yaml:"container_name_field"` // Field name to use for container name
+
+	// Per-query HTTP headers. These are merged with loki.headers, with per-query
+	// values taking precedence over default values for the same key.
+	Headers map[string]string `yaml:"headers"`
 
 	// Sensitive data masking: applied to every log message for this query.
 	// Each entry matches the regex and replaces with the given string.
