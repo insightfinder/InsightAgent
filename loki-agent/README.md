@@ -155,6 +155,12 @@ loki:
   # Instance name configuration
   default_instance_name_field: "container"    # Default field for instance names (Options: "", "container", "instance", "node_name", "pod", "app")
   
+  # Default HTTP headers sent with every request to Loki (optional)
+  # Per-query headers override these for matching keys.
+  headers:
+    X-Scope-OrgID: "my-tenant"         # Example: multi-tenant Loki
+    Authorization: "Bearer <token>"    # Example: token-based auth
+  
   queries:                              # List of LogQL queries to execute
     - name: "query_name"                # Unique query identifier (required)
       query: "{namespace=\"example\"}"   # LogQL query string (required)
@@ -163,6 +169,9 @@ loki:
       labels:                           # Additional labels for the query (optional)
         source: "application"
         type: "logs"
+      # Per-query HTTP headers (optional) — merged with loki.headers; these win on key conflicts
+      headers:
+        X-Scope-OrgID: "query-specific-tenant"
       # Field mapping options (all optional)
       instance_name_field: "pod"              # Override default instance field
       component_name_field: "app"             # Field for component name
@@ -182,6 +191,7 @@ loki:
 | `query_timeout` | Integer | `60` | No | Query timeout in seconds |
 | `max_entries_per_query` | Integer | `1000` | No | Default maximum entries per query |
 | `default_instance_name_field` | String | `""` | No | Default field for instance names. Options: `""` (skip), `"container"`, `"instance"`, `"node_name"`, `"pod"`, `"app"` |
+| `headers` | Map | `{}` | No | Default HTTP headers sent with every Loki request. Per-query headers override these for matching keys. See [HTTP Headers](#http-headers) |
 
 ### Query Configuration
 
@@ -197,7 +207,78 @@ Each query in the `queries` array supports the following options:
 | `instance_name_field` | String | `""` | No | Override default instance field. Options: `""`, `"container"`, `"instance"`, `"node_name"`, `"pod"`, `"app"` |
 | `component_name_field` | String | `""` | No | Field to extract component name from. Options: `"container"`, `"instance"`, `"node_name"`, `"pod"`, `"app"` |
 | `container_name_field` | String | `""` | No | Field to extract container name from (appended to instance). Options: `"container"`, `"instance"`, `"node_name"`, `"pod"`, `"app"` |
+| `headers` | Map | `{}` | No | Per-query HTTP headers. Merged with `loki.headers`; per-query values take precedence for matching keys. See [HTTP Headers](#http-headers) |
 | `sensitive_data_filters` | List | `[]` | No | List of regex patterns to mask sensitive data. See [Sensitive Data Filtering](#sensitive-data-filtering) |
+
+### HTTP Headers
+
+The agent supports two levels of custom HTTP headers for Loki requests:
+
+| Level | Config key | Scope | Priority |
+|-------|-----------|-------|----------|
+| Default | `loki.headers` | Every request (all endpoints) | Lower |
+| Per-query | `queries[].headers` | That query's `query_range` call only | Higher — overrides defaults for matching keys |
+
+Per-query headers are merged on top of default headers at request time. A key present in both uses the per-query value. All other default headers are preserved unchanged.
+
+#### Common use cases
+
+**Multi-tenant Loki (`X-Scope-OrgID`)**
+
+Grafana Loki uses the `X-Scope-OrgID` header to route requests to the correct tenant. Set it globally, then override per query to fan out across tenants:
+
+```yaml
+loki:
+  base_url: "https://loki.company.com"
+  headers:
+    X-Scope-OrgID: "platform"      # default tenant for all queries
+
+  queries:
+    - name: "platform_errors"
+      query: '{namespace="platform"} |~ "ERROR"'
+      enabled: true
+      # inherits X-Scope-OrgID: "platform" from loki.headers
+
+    - name: "billing_errors"
+      query: '{namespace="billing"} |~ "ERROR"'
+      enabled: true
+      headers:
+        X-Scope-OrgID: "billing"   # overrides default for this query only
+```
+
+**Bearer token authentication**
+
+When Loki is protected by a token gateway instead of (or in addition to) basic auth:
+
+```yaml
+loki:
+  base_url: "https://loki.company.com"
+  headers:
+    Authorization: "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Combining default and per-query headers**
+
+```yaml
+loki:
+  headers:
+    X-Scope-OrgID: "shared-tenant"    # applied to every request
+    X-Environment: "production"       # applied to every request
+
+  queries:
+    - name: "team_a_logs"
+      query: '{team="a"}'
+      enabled: true
+      headers:
+        X-Scope-OrgID: "team-a"       # overrides default; X-Environment is still sent
+```
+
+#### Merge semantics
+
+1. Default headers (`loki.headers`) are applied first.
+2. Per-query headers (`queries[].headers`) are applied on top — any key that appears in both uses the per-query value.
+3. Keys that only exist in one source are kept as-is.
+4. Endpoint calls that are not per-query (HealthCheck, GetLabels, GetLabelValues) use only the default headers.
 
 ### Sensitive Data Filtering
 
@@ -448,6 +529,11 @@ loki:
   max_concurrent_requests: 15
   query_timeout: 120
   
+  # Default headers sent with every Loki request
+  headers:
+    X-Scope-OrgID: "platform"
+    X-Environment: "production"
+  
   queries:
     - name: "application_logs"
       query: '{namespace="production", app="myapp"}'
@@ -456,12 +542,16 @@ loki:
       labels:
         environment: "production"
         source: "application"
+      # Inherits X-Scope-OrgID: "platform" and X-Environment: "production"
     
     - name: "error_logs"
       query: '{namespace="production"} |~ "ERROR|FATAL"'
       enabled: true
       labels:
         severity: "error"
+      # Override tenant for this query only
+      headers:
+        X-Scope-OrgID: "platform-errors"
         
     - name: "audit_logs"
       query: '{namespace="production", component="audit"}'
