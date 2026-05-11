@@ -43,7 +43,13 @@ loki:
   # Default instance name field - determines what field to use as default instance name/tag
   # Options: container, instance, node_name, pod, app
   default_instance_name_field: "app"
-  
+
+  # Optional: Default HTTP headers sent with every Loki request.
+  # Per-query headers (defined under each query) override these for matching keys.
+  # headers:
+  #   X-Scope-OrgID: "tenant-1"
+  #   Authorization: "Bearer <token>"
+
   # List of queries to execute
   queries:
     - name: "insightfinder_audit_logs"
@@ -55,6 +61,10 @@ loki:
       component_name_field: "container"
       # Optional: Set container name field (Options: container, instance, node_name, pod, app)
       container_name_field: "node_name"
+      # Optional: Per-query HTTP headers. Merged with loki.headers; these take
+      # precedence over default headers for matching keys.
+      # headers:
+      #   X-Scope-OrgID: "tenant-audit"
       # Optional: mask sensitive data before sending to InsightFinder.
       # Each entry matches the regex and replaces all matches with the replacement string.
       # sensitive_data_filters:
