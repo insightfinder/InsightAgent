@@ -41,9 +41,9 @@ def build_queries(
     framework: str,
     tags: dict[str, str],
     split_by: str | None = None,
-) -> tuple[str, str]:
+) -> tuple[str, str, str, str, str]:
     """
-    Build total-requests and 500-errors Datadog metric queries.
+    Build total-requests, 500-errors, 4xx-errors, and 5xx-errors Datadog metric queries.
 
     - tags      : filter tags slotted into the query scope
     - split_by  : if set, appends `by {tag}` so Datadog returns one series
@@ -57,8 +57,9 @@ def build_queries(
     by_clause = f" by {{{split_by}}}" if split_by else ""
     total_query     = f"sum:trace.{framework}.request.hits{{{tag_filter}}}{by_clause}.as_count().rollup(sum, 60)"
     error_500_query = f"sum:trace.{framework}.request.errors{{{tag_filter},http.status_code:500}}{by_clause}.as_count().rollup(sum, 60)"
-    error_5xx_query = f"sum:trace.{framework}.request.errors{{{tag_filter}}}{by_clause}.as_count().rollup(sum, 60)"
-    return total_query, error_500_query, error_5xx_query
+    error_4xx_query = f"sum:trace.{framework}.request.errors{{{tag_filter},http.status_code:4*}}{by_clause}.as_count().rollup(sum, 60)"
+    error_5xx_query = f"sum:trace.{framework}.request.errors{{{tag_filter},http.status_code:5*}}{by_clause}.as_count().rollup(sum, 60)"
+    return total_query, error_500_query, error_4xx_query, error_5xx_query
 
 
 # ---------------------------------------------------------------------------
@@ -166,10 +167,10 @@ def query_timeseries(
     start: datetime,
     end: datetime,
     base_url: str,
-) -> dict[str, tuple[list[tuple[int, float]], list[tuple[int, float]]]]:
+) -> dict[str, tuple[list[tuple[int, float]], list[tuple[int, float]], list[tuple[int, float]], list[tuple[int, float]]]]:
     """
-    Query total-requests and 500-errors across all frameworks and return
-    per-instance timeseries.
+    Query total-requests, 500-errors, 4xx-errors, and 5xx-errors across all
+    frameworks and return per-instance timeseries.
 
     When split_by is set:
         Datadog returns one series per tag value → each becomes its own
@@ -179,18 +180,20 @@ def query_timeseries(
         All series are merged into a single instance keyed by "_combined".
 
     Returns:
-        { instance_name: (total_points, error_points) }
+        { instance_name: (total_points, error_500_points, error_4xx_points, error_5xx_points) }
     where points are sorted lists of (epoch_ms, value).
     """
     # Accumulate across frameworks: instance → { ts: total/error }
     total_by_instance: dict[str, dict[int, float]] = {}
     error_500_by_instance: dict[str, dict[int, float]] = {}
+    error_4xx_by_instance: dict[str, dict[int, float]] = {}
     error_5xx_by_instance: dict[str, dict[int, float]] = {}
 
     for framework in frameworks:
-        total_query, error_500_query, error_5xx_query = build_queries(framework, tags, split_by)
+        total_query, error_500_query, error_4xx_query, error_5xx_query = build_queries(framework, tags, split_by)
         log.debug("total query  : %s", total_query)
         log.debug("500 query    : %s", error_500_query)
+        log.debug("4xx query    : %s", error_4xx_query)
         log.debug("5xx query    : %s", error_5xx_query)
 
         for scope, pts in _series_to_points(_dd_query(
@@ -213,6 +216,15 @@ def query_timeseries(
                 bucket[ts] = bucket.get(ts, 0.0) + val
 
         for scope, pts in _series_to_points(_dd_query(
+            api_key=api_key, app_key=app_key, query=error_4xx_query,
+            start=start, end=end, base_url=base_url,
+        )).items():
+            key = _extract_tag_value(scope, split_by) if split_by else "_combined"
+            bucket = error_4xx_by_instance.setdefault(key, {})
+            for ts, val in pts.items():
+                bucket[ts] = bucket.get(ts, 0.0) + val
+
+        for scope, pts in _series_to_points(_dd_query(
             api_key=api_key, app_key=app_key, query=error_5xx_query,
             start=start, end=end, base_url=base_url,
         )).items():
@@ -225,6 +237,7 @@ def query_timeseries(
         inst: (
             sorted(total_by_instance[inst].items()),
             sorted(error_500_by_instance.get(inst, {}).items()),
+            sorted(error_4xx_by_instance.get(inst, {}).items()),
             sorted(error_5xx_by_instance.get(inst, {}).items()),
         )
         for inst in total_by_instance
@@ -240,15 +253,18 @@ def build_metric_rows(
     *,
     total_points: list[tuple[int, float]],
     error_500_points: list[tuple[int, float]],
+    error_4xx_points: list[tuple[int, float]],
     error_5xx_points: list[tuple[int, float]],
     instance_name: str,
     component_name: str,
 ) -> list[dict]:
     error_500_map = dict(error_500_points)
+    error_4xx_map = dict(error_4xx_points)
     error_5xx_map = dict(error_5xx_points)
     rows = []
     for ts_ms, total in total_points:
         errors_500 = error_500_map.get(ts_ms, 0.0)
+        errors_4xx = error_4xx_map.get(ts_ms, 0.0)
         errors_5xx = error_5xx_map.get(ts_ms, 0.0)
         availability = ((total - errors_5xx) / total * 100.0) if total > 0 else 100.0
         rows.append({
@@ -256,7 +272,9 @@ def build_metric_rows(
             "componentName": component_name,
             "timestamp": ts_ms,
             "total_requests": total,
-            "http_500_requests": errors_500,
+            "http_500_errors": errors_500,
+            "http_4xx_errors": errors_4xx,
+            "http_5xx_errors": errors_5xx,
             "availability_pct": round(availability, 4),
         })
     return rows
@@ -385,20 +403,21 @@ def process_config(cfg: dict) -> None:
                 start=window_start, end=window_end, base_url=base_url,
             )
 
-            for discovered_name, (total_points, error_500_points, error_5xx_points) in results.items():
+            for discovered_name, (total_points, error_500_points, error_4xx_points, error_5xx_points) in results.items():
                 instance_name = fixed_name or discovered_name
                 resolved_component = (
                     _extract_tag_value(discovered_name, component_name_from_tag)
                     if component_name_from_tag else component_name
                 )
                 log.info(
-                    "[%s] instance=%r  component=%r  total=%d  500s=%d  5xx=%d",
+                    "[%s] instance=%r  component=%r  total=%d  500s=%d  4xx=%d  5xx=%d",
                     source, instance_name, resolved_component or "(none)",
-                    len(total_points), len(error_500_points), len(error_5xx_points),
+                    len(total_points), len(error_500_points), len(error_4xx_points), len(error_5xx_points),
                 )
                 all_rows.extend(build_metric_rows(
                     total_points=total_points,
                     error_500_points=error_500_points,
+                    error_4xx_points=error_4xx_points,
                     error_5xx_points=error_5xx_points,
                     instance_name=instance_name,
                     component_name=resolved_component,
