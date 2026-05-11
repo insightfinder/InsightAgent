@@ -474,6 +474,7 @@ func (w *Worker) fetchEntries(queryConfig config.QueryConfig, start, end time.Ti
 		Limit:     queryConfig.MaxEntries,
 		Direction: "forward",
 		Labels:    queryConfig.Labels,
+		Headers:   queryConfig.Headers,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("Loki query failed: %v", err)
