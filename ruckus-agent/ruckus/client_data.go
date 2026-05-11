@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/insightfinder/ruckus-agent/pkg/models"
@@ -338,8 +340,100 @@ func EnrichAPDataWithClientMetrics(apDetails []models.APDetail, clientMap map[st
 			enriched[i].SNRPercentBelow15 = &snrBelow15
 			enriched[i].SNRPercentBelow18 = &snrBelow18
 			enriched[i].SNRPercentBelow20 = &snrBelow20
+
+			// 5GHz-only corroboration KPIs and alert indicators
+			enrich5GHzMetrics(&enriched[i], clients, rssiThreshold)
 		}
 	}
 
 	return enriched
+}
+
+// enrich5GHzMetrics computes 5GHz-only KPIs and alert indicators for a single AP.
+// Requires at least rssiThreshold 5GHz clients; otherwise nothing is set.
+func enrich5GHzMetrics(ap *models.APDetail, clients []models.ClientInfo, minClients int) {
+	var clients5G []models.ClientInfo
+	for _, c := range clients {
+		if is5GHzClient(c.RadioType) {
+			clients5G = append(clients5G, c)
+		}
+	}
+	if len(clients5G) < minClients {
+		return
+	}
+
+	// --- Corroboration KPIs (p50) ---
+
+	snrVals := make([]float64, 0, len(clients5G))
+	retryRates := make([]float64, 0, len(clients5G))
+	mcsVals := make([]float64, 0, len(clients5G))
+
+	var rssiBelow78 int
+	for _, c := range clients5G {
+		snrVals = append(snrVals, float64(c.SNR))
+		if c.TxFrames > 0 {
+			retryRates = append(retryRates, float64(c.TxDropDataFrames)/float64(c.TxFrames)*100)
+		}
+		if c.MedianTxMCSRate > 0 {
+			mcsVals = append(mcsVals, float64(c.MedianTxMCSRate))
+		}
+		if c.RSSI < -78 {
+			rssiBelow78++
+		}
+	}
+
+	medSNR := medianFloat64(snrVals)
+	ap.MedianSNR5GHz = &medSNR
+
+	medRetry := 0.0
+	if len(retryRates) > 0 {
+		medRetry = medianFloat64(retryRates)
+	}
+	ap.TxRetryRate5GHz = &medRetry
+
+	// --- Critical alert indicators: ≥35% of 5GHz clients RSSI < -78 dBm AND KPI breached ---
+
+	pct78 := float64(rssiBelow78) / float64(len(clients5G)) * 100
+	crit35 := pct78 >= 35
+
+	medMCS := medianFloat64(mcsVals) // kbps; MCS 3 = 26000
+
+	critSNR := binaryIndicator(crit35 && medSNR < 18)
+	critRetry := binaryIndicator(crit35 && medRetry > 18)
+	critAirtime := binaryIndicator(crit35 && ap.Airtime5G > 85)
+	critMCS := binaryIndicator(crit35 && medMCS > 0 && medMCS < 26000)
+	ap.AlertCrit_RSSI_SNR = &critSNR
+	ap.AlertCrit_RSSI_TxRetry = &critRetry
+	ap.AlertCrit_RSSI_Airtime = &critAirtime
+	ap.AlertCrit_RSSI_MCS = &critMCS
+}
+
+// is5GHzClient returns true when the client's radioType indicates 5 GHz band.
+// 5 GHz types in Ruckus API start with "a/" (e.g. "a/n/ac", "a/n/ac/ax", "a/n").
+func is5GHzClient(radioType string) bool {
+	lower := strings.ToLower(radioType)
+	return strings.HasPrefix(lower, "a/") || lower == "a"
+}
+
+// medianFloat64 returns the p50 of a float64 slice (sorts a copy).
+func medianFloat64(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	sorted := make([]float64, len(values))
+	copy(sorted, values)
+	sort.Float64s(sorted)
+	n := len(sorted)
+	if n%2 == 0 {
+		return (sorted[n/2-1] + sorted[n/2]) / 2
+	}
+	return sorted[n/2]
+}
+
+// binaryIndicator converts a boolean condition to 1.0 or 0.0.
+func binaryIndicator(condition bool) float64 {
+	if condition {
+		return 1
+	}
+	return 0
 }

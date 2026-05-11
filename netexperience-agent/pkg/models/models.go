@@ -65,15 +65,25 @@ type ServiceMetric struct {
 	ClientMacAddress *MacAddress `json:"clientMacAddress"`
 }
 
+// RadioStatistics represents per-radio statistics from the AP
+type RadioStatistics struct {
+	RxLastRssi             int   `json:"rxLastRssi"`
+	NumTxRetryAttemps      int   `json:"numTxRetryAttemps"`
+	NumTxFramesTransmitted int   `json:"numTxFramesTransmitted"`
+	SourceTimestampMs      int64 `json:"sourceTimestampMs"`
+}
+
 // ApNodeMetrics represents AP node metrics
 type ApNodeMetrics struct {
-	InventoryID                string                  `json:"inventoryId"`
-	PeriodLengthSec            int                     `json:"periodLengthSec"`
-	ClientMacAddressesPerRadio map[string][]MacAddress `json:"clientMacAddressesPerRadio"`
-	ChannelUtilizationPerRadio map[string]float64      `json:"channelUtilizationPerRadio"`
-	DataType                   string                  `json:"dataType"`
-	ClientCount                int                     `json:"clientCount,omitempty"`
-	SourceTimestampMs          int64                   `json:"sourceTimestampMs"`
+	InventoryID                string                     `json:"inventoryId"`
+	PeriodLengthSec            int                        `json:"periodLengthSec"`
+	ClientMacAddressesPerRadio map[string][]MacAddress    `json:"clientMacAddressesPerRadio"`
+	ChannelUtilizationPerRadio map[string]float64         `json:"channelUtilizationPerRadio"`
+	NoiseFloorPerRadio         map[string]float64         `json:"noiseFloorPerRadio"`
+	RadioStatsPerRadio         map[string]RadioStatistics `json:"radioStatsPerRadio"`
+	DataType                   string                     `json:"dataType"`
+	ClientCount                int                        `json:"clientCount,omitempty"`
+	SourceTimestampMs          int64                      `json:"sourceTimestampMs"`
 }
 
 // ClientMetrics represents client metrics
@@ -126,6 +136,15 @@ type EquipmentMetrics struct {
 
 	// WAN Port Speed
 	WANPortSpeed int
+
+	// 5GHz corroboration KPIs
+	SNR5GHz         float64 // rxLastRssi - noiseFloor (dB)
+	TxRetryRate5GHz float64 // numTxRetryAttemps / numTxFramesTransmitted (0–100%)
+
+	// Critical RF indicators: each is 1 if ≥35% clients RSSI < -78 dBm AND the paired KPI is breached, else 0
+	CriticalRF_RSSI_SNR     float64 // RSSI condition AND SNR/SINR < 18 dB
+	CriticalRF_RSSI_Airtime float64 // RSSI condition AND Airtime Utilization > 85%
+	CriticalRF_RSSI_TxRetry float64 // RSSI condition AND TX Retry Rate > 18%
 }
 
 // CachedData represents cached customer and equipment data

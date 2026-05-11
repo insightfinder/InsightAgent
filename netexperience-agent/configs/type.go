@@ -31,6 +31,7 @@ type NetExperienceConfig struct {
 	EquipmentCacheRefreshHours   int    `yaml:"equipment_cache_refresh_hours"`
 	EquipmentIPCacheRefreshHours int    `yaml:"equipment_ip_cache_refresh_hours"`
 	MinClientsRSSIThreshold      int    `yaml:"min_clients_rssi_threshold"`
+	MinClientsSNRThreshold       int    `yaml:"min_clients_snr_threshold"`
 }
 
 type InsightFinderConfig struct {
