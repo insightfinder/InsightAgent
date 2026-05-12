@@ -330,6 +330,11 @@ def fetch_project_data(session: requests.Session, host: str, username: str,
     # 9. Process mode (logdedicatedmode API — uses cookie auth)
     result["mode"] = fetch_project_mode(session, base, username, api_key, project_name)
 
+    # 10. L2M (log-to-metric) settings
+    l2m = fetch_json(session, f"{base}/api/external/v1/logtometricsetting",
+                     headers, {"projectName": project_name})
+    result["l2m_settings"] = l2m if isinstance(l2m, list) else []
+
     return result
 
 
@@ -948,6 +953,109 @@ def _generate_holiday_settings_hcl(holidays: Dict[str, str]) -> List[str]:
     return lines
 
 
+def _l2m_field_str(lines: List[str], obj: Dict, api_key: str, tf_key: str, indent: str) -> None:
+    """Append a string field to lines only if present and non-None in obj."""
+    if api_key in obj and obj[api_key] is not None:
+        val = str(obj[api_key]).replace('\\', '\\\\').replace('"', '\\"')
+        lines.append(f'{indent}{tf_key} = "{val}"')
+
+
+def _l2m_field_int(lines: List[str], obj: Dict, api_key: str, tf_key: str, indent: str) -> None:
+    """Append an integer field to lines only if present and non-None in obj."""
+    if api_key in obj and obj[api_key] is not None:
+        lines.append(f'{indent}{tf_key} = {obj[api_key]}')
+
+
+def _l2m_field_bool(lines: List[str], obj: Dict, api_key: str, tf_key: str, indent: str) -> None:
+    """Append a boolean field to lines only if present and non-None in obj."""
+    if api_key in obj and obj[api_key] is not None:
+        lines.append(f'{indent}{tf_key} = {str(obj[api_key]).lower()}')
+
+
+def _generate_l2m_settings_hcl(l2m_settings: List[Dict]) -> List[str]:
+    """Build l2m_settings = [...] HCL lines from the API response array.
+
+    Only emits fields that are actually present in the API response so that
+    absent optional fields remain null in Terraform state.
+    """
+    if not l2m_settings:
+        return []
+
+    lines: List[str] = []
+    lines.append("")
+    lines.append("  l2m_settings = [")
+
+    for idx, setting in enumerate(l2m_settings):
+        is_last = idx == len(l2m_settings) - 1
+        lines.append("    {")
+        lines.append(f'      metric_project_name = "{setting["metricProjectName"]}"')
+        _l2m_field_bool(lines, setting, "jsonFlag",      "json_flag",      "      ")
+        _l2m_field_bool(lines, setting, "enableMapping", "enable_mapping", "      ")
+
+        # regex parsers (used when jsonFlag is false)
+        regexs = setting.get("regexs") or []
+        if regexs:
+            lines.append("      regexs = [")
+            for r_idx, r in enumerate(regexs):
+                r_is_last = r_idx == len(regexs) - 1
+                lines.append("        {")
+                _l2m_field_str(lines,  r, "metricNameRegex",    "metric_name_regex",    "          ")
+                _l2m_field_str(lines,  r, "metricValueRegex",   "metric_value_regex",   "          ")
+                _l2m_field_str(lines,  r, "baseValueKey",       "base_value_key",       "          ")
+                _l2m_field_str(lines,  r, "instanceNameRegex",  "instance_name_regex",  "          ")
+                _l2m_field_str(lines,  r, "containerNameRegex", "container_name_regex", "          ")
+                _l2m_field_str(lines,  r, "timestampRegex",     "timestamp_regex",      "          ")
+                _l2m_field_str(lines,  r, "timestampFormat",    "timestamp_format",     "          ")
+                _l2m_field_str(lines,  r, "dataFilter",         "data_filter",          "          ")
+                _l2m_field_int(lines,  r, "operation",          "operation",            "          ")
+                _l2m_field_int(lines,  r, "aggregationMode",    "aggregation_mode",     "          ")
+                _l2m_field_str(lines,  r, "metricName",         "metric_name",          "          ")
+                _l2m_field_bool(lines, r, "groupingByComponent","grouping_by_component","          ")
+                _l2m_field_int(lines,  r, "aggregationPeriod",  "aggregation_period",   "          ")
+                _l2m_field_int(lines,  r, "containerType",      "container_type",       "          ")
+                lines.append("        }" + ("" if r_is_last else ","))
+            lines.append("      ]")
+
+        # JSON parsers (used when jsonFlag is true)
+        json_parsers = setting.get("jsonParsers") or []
+        if json_parsers:
+            lines.append("      json_parsers = [")
+            for j_idx, jp in enumerate(json_parsers):
+                j_is_last = j_idx == len(json_parsers) - 1
+                lines.append("        {")
+                _l2m_field_str(lines,  jp, "metricValueKey",      "metric_value_key",      "          ")
+                _l2m_field_str(lines,  jp, "baseValueKey",        "base_value_key",        "          ")
+                _l2m_field_str(lines,  jp, "instanceNameKey",     "instance_name_key",     "          ")
+                _l2m_field_str(lines,  jp, "containerNameKey",    "container_name_key",    "          ")
+                _l2m_field_str(lines,  jp, "timestampKey",        "timestamp_key",         "          ")
+                _l2m_field_str(lines,  jp, "timestampFormat",     "timestamp_format",      "          ")
+                _l2m_field_int(lines,  jp, "operation",           "operation",             "          ")
+                _l2m_field_str(lines,  jp, "additionalMetricName","additional_metric_name","          ")
+                _l2m_field_int(lines,  jp, "aggregationMode",     "aggregation_mode",      "          ")
+                _l2m_field_bool(lines, jp, "groupingByComponent", "grouping_by_component", "          ")
+                _l2m_field_int(lines,  jp, "aggregationPeriod",   "aggregation_period",    "          ")
+                _l2m_field_int(lines,  jp, "containerType",       "container_type",        "          ")
+
+                dvm = jp.get("derivedValueModel")
+                if dvm and isinstance(dvm, dict):
+                    lines.append("          derived_value_model = {")
+                    _l2m_field_str(lines, dvm, "baseValue",   "base_value",   "            ")
+                    _l2m_field_str(lines, dvm, "actualValue", "actual_value", "            ")
+                    _l2m_field_int(lines, dvm, "operation",   "operation",    "            ")
+                    mapping_ids = dvm.get("mappingIdList") or []
+                    if mapping_ids:
+                        lines.append(f'            mapping_id_list = {json.dumps(mapping_ids)}')
+                    lines.append("          }")
+
+                lines.append("        }" + ("" if j_is_last else ","))
+            lines.append("      ]")
+
+        lines.append("    }" + ("" if is_last else ","))
+
+    lines.append("  ]")
+    return lines
+
+
 def generate_project_tf(project_name: str, project_data: Dict,
                         system_name: str, is_servicenow_project: bool,
                         data_type: str = "Log",
@@ -980,10 +1088,12 @@ def generate_project_tf(project_name: str, project_data: Dict,
         json_keys_data = jsonkeys_raw.get("jsonKeyList", [])
 
     servicenow_data = project_data.get("servicenow") if is_servicenow_project else None
+    l2m_settings_data = project_data.get("l2m_settings") or []
 
     # Skip projects with no meaningful settings to avoid generating empty stubs
     if not (settings_data or keywords_data or json_keys_data or servicenow_data
-            or any(project_data.get("holidays") or {})):
+            or any(project_data.get("holidays") or {})
+            or l2m_settings_data):
         return None
 
     # --- Build HCL ---
@@ -1180,6 +1290,9 @@ def generate_project_tf(project_name: str, project_data: Dict,
             else:
                 cfg.append('    }')
         cfg.append('  ]')
+
+    # l2m_settings
+    cfg.extend(_generate_l2m_settings_hcl(l2m_settings_data))
 
     # json_key_settings
     json_key_settings = convert_json_keys_to_terraform(
@@ -1448,11 +1561,11 @@ def _format_rouge_value(raw: Any) -> str:
     """
     if raw is None:
         # Default to NaN values when null
-        return '"{{\\"l\\":NaN,\\"s\\":NaN}}"'
+        return '"{\\"l\\":NaN,\\"s\\":NaN}"'
     s = str(raw).strip()
     if s == "" or s == "null":
         # Default to NaN values when null
-        return '"{{\\"l\\":NaN,\\"s\\":NaN}}"'
+        return '"{\\"l\\":NaN,\\"s\\":NaN}"'
     # It's a non-null string like {"l":NaN,"s":NaN} — emit as a quoted HCL string
     escaped = s.replace('\\', '\\\\').replace('"', '\\"')
     return f'"{escaped}"'
