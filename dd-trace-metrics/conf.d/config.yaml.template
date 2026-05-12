@@ -1,0 +1,59 @@
+datadog:
+  endpoint: "https://api.datadoghq.eu"   # or https://api.datadoghq.com
+  api_key: ""
+  application_key: ""
+
+  # List of APM frameworks to query for each service.
+  # Run discover.py to find which frameworks are active in your account,
+  # then use discover_services.py to narrow down per-service frameworks.
+  frameworks:
+    - aspnet_core
+    - aspnet_core_mvc
+    - aspnet
+    - servlet
+    - jakarta_rs
+    - jakarta_ws
+    - jax_rs
+    - jetty
+    - undertow_http
+    - netty
+    - netty.client
+    - okhttp
+    - rmi
+
+  services:
+    # Option A — fixed instance name, all matching series merged into one IF instance
+    # - instance_name: my-service
+    #   tags:
+    #     service: my-service-tag-value
+    #     env: prod                        # add extra tag filters as needed
+    #   frameworks:                        # optional: override global frameworks for this service
+    #     - aspnet_core
+    #   component_name: ""                 # optional: component label in InsightFinder
+
+    # Option B — one IF instance per unique value of a tag (e.g. one per service)
+    # - instance_name_from_tag: service    # tag key to split by
+    #   tags:
+    #     env: prod
+
+    # Examples:
+    - instance_name: my-service
+      tags:
+        service: my-service-tag-value
+      # component_name: ""
+
+
+insightfinder:
+  url: "https://app.insightfinder.com"
+  username: ""
+  license_key: ""
+  project: ""          # must be a METRIC type project
+  system_name: ""      # defaults to project name if blank
+
+
+agent:
+  lookback: 5              # minutes — match your cron interval
+  sampling_interval: 300   # seconds — used for project creation (defaults to lookback * 60)
+  # query_offset_minutes: 0      # shift end time back by N minutes (e.g. 30 to avoid Datadog ingestion lag)
+  # historic_time_range: "2020-04-14 00:00:00,2020-04-15 00:00:00"  # if set, disables streaming and replays this range
+  # historic_chunk_minutes: 60   # query window size for historic backfill (default: 60)
