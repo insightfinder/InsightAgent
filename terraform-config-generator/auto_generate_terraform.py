@@ -988,6 +988,7 @@ def _generate_l2m_settings_hcl(l2m_settings: List[Dict]) -> List[str]:
     for idx, setting in enumerate(l2m_settings):
         is_last = idx == len(l2m_settings) - 1
         lines.append("    {")
+        
         lines.append(f'      metric_project_name = "{setting["metricProjectName"]}"')
         _l2m_field_bool(lines, setting, "jsonFlag",      "json_flag",      "      ")
         _l2m_field_bool(lines, setting, "enableMapping", "enable_mapping", "      ")
@@ -1082,6 +1083,8 @@ def generate_project_tf(project_name: str, project_data: Dict,
     metafield_settings: List[str] = summary_meta.get("metaFieldSetting", [])
     dampening_field_settings: List[str] = summary_meta.get("dampeningFieldSetting", [])
     notification_settings: dict = summary_meta.get("notificationSetting", {})
+    sn_notification_settings: dict = summary_meta.get("serviceNowNotificationSetting", {})
+    sn_additional_setting: dict = summary_meta.get("serviceNowNotificationAdditionalSetting", {})
 
     jsonkeys_raw = project_data.get("jsonkeys") or {}
     if isinstance(jsonkeys_raw, list):
@@ -1303,6 +1306,7 @@ def generate_project_tf(project_name: str, project_data: Dict,
         metafield_settings=metafield_settings,
         dampening_field_settings=dampening_field_settings,
         notification_settings=notification_settings,
+        service_now_notification_settings=sn_notification_settings,
     )
     if json_key_settings:
         cfg.append('')
@@ -1318,11 +1322,24 @@ def generate_project_tf(project_name: str, project_data: Dict,
                 cfg.append(f'      notification_setting              = {format_terraform_value(ks["notification_setting"])}')
                 display_name = ks.get('notification_setting_display_name') or ''
                 cfg.append(f'      notification_setting_display_name = "{display_name}"')
+            if ks.get('service_now_notification_setting'):
+                cfg.append(f'      service_now_notification_setting              = {format_terraform_value(ks["service_now_notification_setting"])}')
+                sn_display_name = ks.get('service_now_notification_setting_display_name') or ''
+                cfg.append(f'      service_now_notification_setting_display_name = "{sn_display_name}"')
             if i < len(json_key_settings) - 1:
                 cfg.append('    },')
             else:
                 cfg.append('    }')
         cfg.append('  ]')
+
+    # service_now_short_description_format / service_now_description_format
+    if sn_additional_setting:
+        short_fmt = sn_additional_setting.get("shortDescriptionFormat", "")
+        desc_fmt = sn_additional_setting.get("descriptionFormat", "")
+        if short_fmt:
+            cfg.append(f'  service_now_short_description_format = "{short_fmt.replace(chr(34), chr(92)+chr(34))}"')
+        if desc_fmt:
+            cfg.append(f'  service_now_description_format       = "{desc_fmt.replace(chr(34), chr(92)+chr(34))}"')
 
     # holiday_settings
     cfg.extend(_generate_holiday_settings_hcl(project_data.get("holidays") or {}))
