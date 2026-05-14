@@ -89,7 +89,7 @@ def convert_keywords_to_log_labels(keywords_data):
     return log_labels
 
 
-def convert_json_keys_to_terraform(json_keys_data, summary_settings=None, metafield_settings=None, dampening_field_settings=None, notification_settings=None):
+def convert_json_keys_to_terraform(json_keys_data, summary_settings=None, metafield_settings=None, dampening_field_settings=None, notification_settings=None, service_now_notification_settings=None):
     """Convert JSON keys data to json_key_settings format for Terraform.
 
     Args:
@@ -98,6 +98,7 @@ def convert_json_keys_to_terraform(json_keys_data, summary_settings=None, metafi
         metafield_settings: List of field names to mark as metafield
         dampening_field_settings: List of field names to mark as dampening field
         notification_settings: Dict mapping field name -> {selected, displayName} from API
+        service_now_notification_settings: Dict mapping field name -> {selected, displayName} for ServiceNow
 
     Returns:
         List of formatted terraform json_key_settings
@@ -107,6 +108,7 @@ def convert_json_keys_to_terraform(json_keys_data, summary_settings=None, metafi
     metafield_set = set(metafield_settings) if metafield_settings else set()
     dampening_field_set = set(dampening_field_settings) if dampening_field_settings else set()
     notification_map = notification_settings if isinstance(notification_settings, dict) else {}
+    sn_notification_map = service_now_notification_settings if isinstance(service_now_notification_settings, dict) else {}
 
     if not isinstance(json_keys_data, list):
         return json_key_settings
@@ -119,6 +121,11 @@ def convert_json_keys_to_terraform(json_keys_data, summary_settings=None, metafi
             notif_entry = notification_map.get(json_key)
             notif_selected = bool(notif_entry and notif_entry.get('selected'))
             notif_display_name = notif_entry.get('displayName', '') if notif_entry else ''
+
+            sn_notif_entry = sn_notification_map.get(json_key)
+            sn_notif_selected = bool(sn_notif_entry and sn_notif_entry.get('selected'))
+            sn_notif_display_name = sn_notif_entry.get('displayName', '') if sn_notif_entry else ''
+
             setting = {
                 'json_key': json_key,
                 'type': key_type,
@@ -127,6 +134,8 @@ def convert_json_keys_to_terraform(json_keys_data, summary_settings=None, metafi
                 'dampening_field_setting': json_key in dampening_field_set,
                 'notification_setting': notif_selected,
                 'notification_setting_display_name': notif_display_name,
+                'service_now_notification_setting': sn_notif_selected,
+                'service_now_notification_setting_display_name': sn_notif_display_name,
             }
             json_key_settings.append(setting)
 
@@ -178,7 +187,6 @@ def _parse_servicenow_entry(entry):
         "service_host": service_host,
         "password": entry.get("password", ""),
         "proxy": entry.get("proxy", ""),
-        "dampening_period": int(entry.get("dampeningPeriod", 0)),
         "app_id": entry.get("appId", ""),
         "app_key": entry.get("appKey", ""),
         "system_ids": [],
@@ -192,6 +200,7 @@ def _parse_servicenow_entry(entry):
         "ticket_created_by_source_key": entry.get("ticketCreatedBySourceKey", ""),
         "ticket_created_by_source_value": entry.get("ticketCreatedBySourceValue", ""),
         "configuration_item": entry.get("configurationItem", ""),
+        "department_id": "",
         "project_configs": {},
         "table_mapping": {},
     }
@@ -232,6 +241,8 @@ def _parse_servicenow_entry(entry):
                 config["ticket_created_by_source_value"] = configs.get("ticketCreatedBySourceValue", "")
             if not config["configuration_item"]:
                 config["configuration_item"] = configs.get("configurationItem", "")
+            if not config["department_id"]:
+                config["department_id"] = configs.get("departmentId", "")
             # Fall back to projectConfigs from configs JSON if not found at root level
             if not config["project_configs"]:
                 pc_raw = configs.get("projectConfigs")
@@ -334,8 +345,6 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
         proxy = config.get("proxy", "")
         escaped_proxy = proxy.replace('"', '\\"')
         lines.append(f'  proxy        = "{escaped_proxy}"')
-
-        lines.append(f'  dampening_period = {config["dampening_period"]}')
         lines.append('')
 
         if system_names:
@@ -373,6 +382,9 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
             lines.append(f'  ticket_created_by_source_value = "{escaped}"')
         ci = config.get("configuration_item", "")
         lines.append(f'  configuration_item             = "{ci.replace(chr(34), chr(92)+chr(34))}"')
+        if config.get("department_id"):
+            dept_id = config["department_id"].replace('"', '\\"')
+            lines.append(f'  department_id                  = "{dept_id}"')
 
         if config.get("project_configs"):
             lines.append('  project_configs = {')
