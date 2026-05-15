@@ -806,10 +806,16 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
             ('rootCauseEmail',                     'root_cause_email'),
             ('incidentDampeningWindow',            'incident_dampening_window'),
             ('ticketOpenTime',                     'ticket_open_time'),
+            ('componentLevelIncidentConsolidation', 'component_level_incident_consolidation'),
         ]
         for api_key, tf_key in notif_field_map:
             if api_key in notifications_data:
                 lines.append(f'    {tf_key} = {format_terraform_value(notifications_data[api_key])}')
+
+        # enabledConsolidationAlgorithms is a string list
+        consolidation_algos = notifications_data.get('enabledConsolidationAlgorithms')
+        if consolidation_algos is not None:
+            lines.append(f'    enabled_consolidation_algorithms = {_format_string_list(consolidation_algos)}')
 
         # Complex map fields serialized as JSON strings
         for api_key, tf_key in [('incidentCountThreshold', 'incident_count_threshold'),
