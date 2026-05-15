@@ -1337,9 +1337,11 @@ def generate_project_tf(project_name: str, project_data: Dict,
         short_fmt = sn_additional_setting.get("shortDescriptionFormat", "")
         desc_fmt = sn_additional_setting.get("descriptionFormat", "")
         if short_fmt:
-            cfg.append(f'  service_now_short_description_format = "{short_fmt.replace(chr(34), chr(92)+chr(34))}"')
+            short_escaped = short_fmt.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('${', '$${')
+            cfg.append(f'  service_now_short_description_format = "{short_escaped}"')
         if desc_fmt:
-            cfg.append(f'  service_now_description_format       = "{desc_fmt.replace(chr(34), chr(92)+chr(34))}"')
+            desc_escaped = desc_fmt.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('${', '$${')
+            cfg.append(f'  service_now_description_format       = "{desc_escaped}"')
 
     # holiday_settings
     cfg.extend(_generate_holiday_settings_hcl(project_data.get("holidays") or {}))
