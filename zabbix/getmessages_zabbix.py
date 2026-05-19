@@ -122,6 +122,50 @@ def load_metric_transforms(script_path, logger):
         return []
 
 
+def load_derived_metrics(script_path, logger):
+    """Load DERIVED_METRICS list from a user-provided Python script."""
+    if not os.path.exists(script_path):
+        logger.error('derived_metrics_script not found: {}'.format(script_path))
+        return []
+    try:
+        spec = importlib.util.spec_from_file_location('derived_metrics', script_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        if not hasattr(mod, 'DERIVED_METRICS'):
+            logger.error('derived_metrics_script {} does not define DERIVED_METRICS'.format(script_path))
+            return []
+        logger.info('Loaded {} derived metric rule(s) from {}'.format(len(mod.DERIVED_METRICS), script_path))
+        return mod.DERIVED_METRICS
+    except Exception as e:
+        logger.error('Failed to load derived_metrics_script {}: {}'.format(script_path, e))
+        return []
+
+
+def apply_derived_metrics(buffer_entry, derived_metrics):
+    """Evaluate each derived metric rule against a completed instance/timestamp buffer entry.
+
+    Each rule is a dict with:
+      - 'name'          : str  — name of the new metric
+      - 'condition'     : callable(tags: dict, metrics: dict) -> bool
+      - 'value_if_true' : numeric — value to emit when condition is True
+      - 'value_if_false': numeric (optional) — value to emit when False; omit to skip entirely
+
+    If any metric referenced in the condition is missing or not numeric the rule is silently skipped.
+    """
+    if not derived_metrics:
+        return
+    tags = buffer_entry.get('instanceTags', {})
+    metrics = buffer_entry.get('data', {})
+    for rule in derived_metrics:
+        try:
+            if rule['condition'](tags, metrics):
+                metrics[rule['name']] = str(rule['value_if_true'])
+            elif 'value_if_false' in rule:
+                metrics[rule['name']] = str(rule['value_if_false'])
+        except (KeyError, TypeError, ValueError, ZeroDivisionError):
+            pass
+
+
 def apply_metric_transform(metric_name, value, transforms):
     """Apply the first matching transform from the TRANSFORMS list.
     Each entry is a (pattern, fn) tuple where pattern is either:
@@ -227,7 +271,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                         parse_messages_zabbix(logger, data_type, combined_results, all_field_map, items_ids_map, 'history',
                                               agent_config_vars, track, data_buffer, sampling_interval, sampling_now)
 
-                        clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
+                        clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer, agent_config_vars.get('derived_metrics'))
                 else:
                     if metric_allowlist_map and len(items_keys) == 0:
                         continue
@@ -250,7 +294,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                                                                                                             arrow.utcnow() - time_now).total_seconds()))
                         parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
                                             agent_config_vars, track, data_buffer, sampling_interval, sampling_now)
-                        clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer)
+                        clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer, agent_config_vars.get('derived_metrics'))
             elif data_type == 'Alert':
                 for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
                     time_now = arrow.utcnow()
@@ -360,6 +404,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
     hosts_map = {}
     hosts_group_map = {}
     hosts_ip_map = {}
+    hosts_tags_map = {}
     host_template_map = {}
     hosts_ids = []
 
@@ -367,6 +412,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
                                              'selectHostGroups': ['groupid', 'name'],
                                              'selectParentTemplates': ['templateid', 'name'],
                                              'selectInterfaces': ['ip', 'type', 'main'],
+                                             'selectTags': 'extend',
                                              'filter': {"host": agent_config_vars['hosts']}, }
 
 
@@ -407,6 +453,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
             hosts_map[host_id] = host_name
             hosts_group_map[host_id] = host_group
             hosts_ip_map[host_id] = host_ip
+            hosts_tags_map[host_id] = {t['tag']: t['value'] for t in (item.get('tags') or [])}
 
     host_template_ids = list(host_template_map.keys())
 
@@ -463,7 +510,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
 
         logger.info("Zabbix item count: %s" % len(items_keys))
 
-    all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map, 'hostip': hosts_ip_map}
+    all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map, 'hostip': hosts_ip_map, 'hosttags': hosts_tags_map}
 
     total = len(hosts_ids_list)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -678,6 +725,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
 
             if is_metric:
                 data_buffer['buffer_dict'][key]['instanceName'] = full_instance
+                data_buffer['buffer_dict'][key]['instanceTags'] = all_field_map.get('hosttags', {}).get(instance_id, {})
                 if component:
                     data_buffer['buffer_dict'][key]['componentName'] = component
                 if zone:
@@ -762,6 +810,7 @@ def get_agent_config_vars(logger, config_ini):
             metric_allowlist = config_parser.get('zabbix', 'metric_allowlist')
             metric_disallowlist = config_parser.get('zabbix', 'metric_disallowlist', fallback=None)
             metric_transform_script = config_parser.get('zabbix', 'metric_transform_script', fallback=None)
+            derived_metrics_script = config_parser.get('zabbix', 'derived_metrics_script', fallback=None)
             applications = config_parser.get('zabbix', 'applications')
 
             max_workers = config_parser.get('zabbix', 'max_workers')
@@ -917,6 +966,11 @@ def get_agent_config_vars(logger, config_ini):
         if metric_transform_script and len(metric_transform_script.strip()) != 0:
             metric_transforms = load_metric_transforms(metric_transform_script.strip(), logger)
 
+        # derived metrics script
+        derived_metrics = []
+        if derived_metrics_script and len(derived_metrics_script.strip()) != 0:
+            derived_metrics = load_derived_metrics(derived_metrics_script.strip(), logger)
+
         # add parsed variables to a global
         config_vars = {'zabbix_kwargs': zabbix_kwargs, 'host_groups': host_groups, 'hosts': hosts,
                        'host_blocklist': host_blocklist, 'host_blocklist_map': host_blocklist_map,
@@ -935,8 +989,9 @@ def get_agent_config_vars(logger, config_ini):
                        'alert_data_fields': alert_data_fields, 'timestamp_field': timestamp_fields,
                        'target_timestamp_timezone': target_timestamp_timezone, 'timezone': timezone,
                        'timestamp_format': timestamp_format, 'component_from_instance_name_re_sub': component_from_instance_name_re_sub,
-                       'component_name_script': component_name_script}
-                       'metric_transforms': metric_transforms}
+                       'component_name_script': component_name_script,
+                       'metric_transforms': metric_transforms,
+                       'derived_metrics': derived_metrics}
 
         return config_vars
 
@@ -1160,7 +1215,12 @@ def print_summary_info(logger, if_config_vars, agent_config_vars):
     logger.debug(agent_data_block)
 
 
-def clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer):
+def clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer, derived_metrics=None):
+    # Apply derived metrics before flushing
+    if derived_metrics:
+        for entry in data_buffer['buffer_dict'].values():
+            apply_derived_metrics(entry, derived_metrics)
+
     # move all buffer data to current data, and send
     buffer_values = list(data_buffer['buffer_dict'].values())
 

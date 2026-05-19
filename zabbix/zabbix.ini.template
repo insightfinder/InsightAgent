@@ -7,7 +7,11 @@ hosts =
 host_blocklist = 
 template_ids = 
 metric_allowlist = /.*ICMP.*/, /.*RSSI.*/, /Latency/, /Ethernet.*Status/, /Packet Loss/, /.*Jitter.*/, /.*Total.*Phy.*/, /.*Phy.*Total.*/
-metric_disallowlist = 
+metric_disallowlist =
+# Optional: path to a Python script defining DERIVED_METRICS rules.
+# See derived_metrics_example.py for the format.
+# metric_transform_script =
+# derived_metrics_script =
 max_workers = 1
 request_timeout = 
 max_host_per_request = 
