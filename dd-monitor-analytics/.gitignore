@@ -1,0 +1,18 @@
+# Local runtime artefacts
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtualenvs / editor cruft
+.venv/
+venv/
+.idea/
+.vscode/
+
+# Real configs (contain DD api_key, IF license_key) — only commit the template
+conf.d/*.yaml
+!conf.d/*.yaml.template
+
+# Logs and ad-hoc output
+*.log
+*.bak
