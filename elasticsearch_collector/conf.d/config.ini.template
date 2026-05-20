@@ -98,6 +98,11 @@ data_fields =
 # multiple fields with string or regex, are separated by commas, like: /0-metric\.values\.99.0/,value,doc_count
 aggregation_data_fields =
 
+## custom HTTP headers sent with every Elasticsearch request, as a JSON object.
+## Per-query header values take precedence when multiple queries are used.
+## Example: headers = {"X-Custom-Header": "value", "Authorization": "Bearer mytoken"}
+headers =
+
 ## proxy
 agent_http_proxy =
 agent_https_proxy =
