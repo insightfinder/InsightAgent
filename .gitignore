@@ -283,3 +283,9 @@ Temporary Items
 
 # End of https://www.gitignore.io/api/macos
 # End of https://www.gitignore.io/api/python,eclipse,ansible,intellij
+
+# Database files
+*.db
+*.db*
+*.sqlite
+*.sqlite3
