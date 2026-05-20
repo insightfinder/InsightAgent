@@ -113,7 +113,9 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
     # pit used
     pit = None
     try:
-        pit_response = es_conn.open_point_in_time(index=agent_config_vars['indeces'], keep_alive="1m")
+        custom_headers = agent_config_vars.get('headers') or None
+        pit_response = es_conn.open_point_in_time(index=agent_config_vars['indeces'], keep_alive="1m",
+                                                  headers=custom_headers)
         pit = pit_response['id']
     except Exception as ex:
         logger.error("ElasticSearch open PIT failed. \n{}".format(str(ex)))
@@ -171,7 +173,8 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
 
             # build query with chunk
             query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn,
-                                         query_body, messages, start_time * 1000)
+                                         query_body, messages, start_time * 1000,
+                                         agent_config_vars.get('headers') or None)
 
     else:
         logger.info('Using current time for streaming data on collector {} ...'.format(collector_id))
@@ -213,7 +216,8 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
 
         # build query with chunk
         query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn, query_body,
-                                     messages, start_time * 1000)
+                                     messages, start_time * 1000,
+                                     agent_config_vars.get('headers') or None)
 
     # send close single for each worker
     for i in range(0, worker_process):
@@ -305,13 +309,13 @@ def build_es_connection_hosts(logger, agent_config_vars):
 
 
 def query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn, query_body,
-                                 messages, sampling_timestamp):
+                                 messages, sampling_timestamp, headers=None):
     is_metric = 'METRIC' in if_config_vars['project_type']
     logger.debug('Starting query server es')
 
     # get total number of messages
     try:
-        response = es_conn.search(body=query_body, ignore_unavailable=False, )
+        response = es_conn.search(body=query_body, ignore_unavailable=False, headers=headers)
     except Exception as e:
         logger.error('Query log error.\n{}'.format(str(e)))
         return
@@ -362,6 +366,7 @@ def query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_
             response = es_conn.search(
                 body=query_body,
                 ignore_unavailable=False,
+                headers=headers,
             )
 
             if 'error' in response:
@@ -785,6 +790,7 @@ def get_agent_config_vars(logger, config_ini):
             query_chunk_size = config_parser.get('elasticsearch', 'query_chunk_size')
             indeces = config_parser.get('elasticsearch', 'indeces')
             query_time_offset_seconds = config_parser.get('elasticsearch', 'query_time_offset_seconds', fallback=0)
+            headers_str = config_parser.get('elasticsearch', 'headers', fallback='')
 
             # time range
             his_time_range = config_parser.get('elasticsearch', 'his_time_range')
@@ -943,11 +949,23 @@ def get_agent_config_vars(logger, config_ini):
                 logger.error(e)
                 return config_error(logger, 'device_field_regex')
 
+        # parse custom HTTP headers (JSON object)
+        headers = {}
+        if headers_str.strip():
+            try:
+                headers = json.loads(headers_str)
+                if not isinstance(headers, dict):
+                    logger.error('Agent not correctly configured (headers): must be a JSON object. Using empty headers.')
+                    headers = {}
+            except Exception as e:
+                logger.error('Agent not correctly configured (headers): {}. Using empty headers.'.format(e))
+
         # add parsed variables to a global
         config_vars = {
             'safe_instance_fields': safe_instance_fields,
             'elasticsearch_kwargs': elasticsearch_kwargs,
             'es_uris': es_uris,
+            'headers': headers,
             'query_json': query_json,
             'query_chunk_size': query_chunk_size,
             'indeces': indeces,
