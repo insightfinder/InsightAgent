@@ -37,23 +37,15 @@ DEFAULT_LOOKBACK_MINUTES = 5
 DEFAULT_SAMPLING_INTERVAL = 60
 IF_BATCH_SIZE = 500
 
-_NON_METRIC_CHARS = re.compile(r"[^A-Za-z0-9_]+")
-
-# Single-facet instance-name sanitiser. `_` and `,` get reserved for the
-# group-by join — we want `_` to mean "between facets" so we map any literal
-# `_` inside a facet value to `-`.
+# Single-facet instance-name sanitiser. Maps separator-ish characters
+# (underscores, spaces, colons) to `-` so the result never contains `_`.
 _INST_UNDERSCORE = re.compile(r"_+")
 _INST_SPACE = re.compile(r"\s+")
 _INST_COLON = re.compile(r":+")
 _INST_LBRACE = re.compile(r"\[")
 _INST_RBRACE = re.compile(r"\]")
 
-GROUP_JOIN = "_"
-
-
-def sanitize_metric_name(name: str) -> str:
-    cleaned = _NON_METRIC_CHARS.sub("_", name).strip("_")
-    return cleaned or "monitor_value"
+GROUP_JOIN = "."   # separator between sanitised facet values in a group_by instance name
 
 
 def make_safe_instance_string(instance: str) -> str:
@@ -111,7 +103,7 @@ def process_monitor(
     name = monitor.get("name") or "unnamed_monitor"
     mtype = monitor.get("type") or "query alert"
     query = monitor.get("query") or ""
-    metric_name = sanitize_metric_name(monitor.get("metric_name") or name)
+    metric_name = monitor.get("metric_name") or name
     instance_name = monitor.get("instance_name")  # fixed name, ignored if grouped
     component = monitor.get("component_name") or default_component
 
