@@ -114,10 +114,12 @@ def start_data_processing(logger, if_config_vars, agent_config_vars, metric_buff
                                agent_config_vars['sql_config']['hist_batch_interval']):
             for table in table_list:
                 sql_str = sql
-                start_time = arrow.get(timestamp).format(agent_config_vars['timestamp_format'])
+                start_time = arrow.get(
+                    timestamp,
+                    tzinfo=agent_config_vars['timezone'].zone).format(agent_config_vars['timestamp_format'])
                 end_time = arrow.get(
-                    timestamp + agent_config_vars['sql_config']['hist_batch_interval']).format(
-                    agent_config_vars['timestamp_format'])
+                    timestamp + agent_config_vars['sql_config']['hist_batch_interval'],
+                    tzinfo=agent_config_vars['timezone'].zone).format(agent_config_vars['timestamp_format'])
                 sql_str = sql_str.replace('{{table}}', table)
                 sql_str = sql_str.replace('{{timestamp_field}}', agent_config_vars['timestamp_field'][0])
                 sql_str = sql_str.replace('{{start_time}}', start_time)
@@ -160,13 +162,24 @@ def parse_messages_mssql(logger, if_config_vars, agent_config_vars, metric_buffe
     message_list = cursor.fetchall()
     logger.info('Reading {} messages'.format(len(message_list)))
 
+    first_message = True
     for message in message_list:
         try:
             timestamp = message[agent_config_vars['timestamp_field'][0]]
+            raw_ts = timestamp
             if isinstance(timestamp, datetime):
                 timestamp = int(arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone).float_timestamp * 1000)
             else:
                 timestamp = int(arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone).float_timestamp * 1000)
+
+            if first_message:
+                logger.info('[DEBUG] Raw DB timestamp: {} (type: {})'.format(raw_ts, type(raw_ts).__name__))
+                logger.info('[DEBUG] After timezone ({}) conversion: {} ms = {}'.format(
+                    agent_config_vars['timezone'].zone, timestamp,
+                    arrow.get(timestamp / 1000).format('YYYY-MM-DD HH:mm:ss ZZ')))
+                logger.info('[DEBUG] target_timestamp_timezone offset (s): {}'.format(
+                    agent_config_vars['target_timestamp_timezone']))
+                first_message = False
 
             timestamp += int(agent_config_vars['target_timestamp_timezone'] * 1000)
             timestamp = str(timestamp)
@@ -308,8 +321,9 @@ def get_agent_config_vars(logger, config_file):
         if len(config_parser.get('mssql', 'hist_time_range')) != 0 \
                 and len(config_parser.get('mssql', 'hist_batch_interval')) != 0:
             try:
+                hist_tz = pytz.timezone(config_parser.get('mssql', 'timezone') or 'UTC')
                 hist_time_range = [x.strip() for x in config_parser.get('mssql', 'hist_time_range').split(',') if x.strip()]
-                hist_time_range = [int(arrow.get(x).float_timestamp) for x in hist_time_range]
+                hist_time_range = [int(arrow.get(x, tzinfo=hist_tz).float_timestamp) for x in hist_time_range]
                 hist_batch_interval = int(config_parser.get('mssql', 'hist_batch_interval'))
                 sql_config = {
                     'hist_time_range': hist_time_range,
@@ -742,6 +756,11 @@ def listener_configurer():
     handler_err.setLevel(logging.WARNING)
     handler_err.setFormatter(formatter)
     root.addHandler(handler_err)
+    log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output.log')
+    handler_file = logging.FileHandler(log_file)
+    handler_file.setLevel(logging.DEBUG)
+    handler_file.setFormatter(formatter)
+    root.addHandler(handler_file)
 
 
 def listener_process(q):
