@@ -162,24 +162,13 @@ def parse_messages_mssql(logger, if_config_vars, agent_config_vars, metric_buffe
     message_list = cursor.fetchall()
     logger.info('Reading {} messages'.format(len(message_list)))
 
-    first_message = True
     for message in message_list:
         try:
             timestamp = message[agent_config_vars['timestamp_field'][0]]
-            raw_ts = timestamp
             if isinstance(timestamp, datetime):
                 timestamp = int(arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone).float_timestamp * 1000)
             else:
                 timestamp = int(arrow.get(timestamp, tzinfo=agent_config_vars['timezone'].zone).float_timestamp * 1000)
-
-            if first_message:
-                logger.info('[DEBUG] Raw DB timestamp: {} (type: {})'.format(raw_ts, type(raw_ts).__name__))
-                logger.info('[DEBUG] After timezone ({}) conversion: {} ms = {}'.format(
-                    agent_config_vars['timezone'].zone, timestamp,
-                    arrow.get(timestamp / 1000).format('YYYY-MM-DD HH:mm:ss ZZ')))
-                logger.info('[DEBUG] target_timestamp_timezone offset (s): {}'.format(
-                    agent_config_vars['target_timestamp_timezone']))
-                first_message = False
 
             timestamp += int(agent_config_vars['target_timestamp_timezone'] * 1000)
             timestamp = str(timestamp)
