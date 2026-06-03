@@ -238,9 +238,9 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 					})
 				}
 			} else {
-				// Only Save selected fields
+				filteredData := data // default: send all fields
 				if config.logDataField != "" {
-					filteredData := `{}`
+					filteredData = `{}`
 					var err error
 					dataFields := strings.Split(config.logDataField, ",")
 					for _, field := range dataFields {
@@ -253,13 +253,13 @@ func processChunks(chunks <-chan Chunk, wg *sync.WaitGroup, processed chan<- Chu
 							}
 						}
 					}
-					LogDataList = append(LogDataList, LogData{
-						ComponentName: component,
-						Tag:           instance,
-						TimeStamp:     timestamp,
-						Data:          filteredData,
-					})
 				}
+				LogDataList = append(LogDataList, LogData{
+					ComponentName: component,
+					Tag:           instance,
+					TimeStamp:     timestamp,
+					Data:          filteredData,
+				})
 			}
 		}
 
