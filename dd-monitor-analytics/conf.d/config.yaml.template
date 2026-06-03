@@ -1,0 +1,130 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  dd-trace-monitor — Datadog monitors → InsightFinder metrics
+# ═══════════════════════════════════════════════════════════════════════════
+#  Each monitor below becomes ONE metric in InsightFinder.
+#  Each group_by combination becomes one IF instance.
+#  Each minute in the time window becomes one data point.
+#
+#  Setup:  cp config.yaml.template config.yaml   and fill in REPLACE_ME values.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+# ── Source: where to pull from ─────────────────────────────────────────────
+datadog:
+  endpoint: "https://api.datadoghq.eu"          # DD region: .eu / .com / .us3 / .us5 …
+  api_key: "REPLACE_ME"
+  application_key: "REPLACE_ME"
+  default_component_name: "my-component"        # IF component label for grouping in the UI
+
+
+# ── Destination: where to push to ──────────────────────────────────────────
+insightfinder:
+  url: "https://app.insightfinder.com"
+  username: "REPLACE_ME"
+  license_key: "REPLACE_ME"
+  project: "my-dd-monitors"                     # auto-created on first run if missing
+  system_name: "My-System"                      # IF system grouping (cosmetic)
+
+
+# ── Agent behaviour: time window + aggregation math ────────────────────────
+#  These knobs control WHAT timestamps are queried and HOW the raw DD
+#  buckets get rolled up before being sent to InsightFinder.
+agent:
+
+  # — Time window ————————————————————————————————————————————————————————
+  # Live mode (default): each tick queries [now - lookback, now].
+  lookback: 5                                   # minutes back from "now" (live mode)
+  # query_offset_minutes: 2                     # shift window back to avoid DD's ~1-2min ingest lag
+
+  # Historic mode: when set, OVERRIDES live mode and replays a fixed UTC range.
+  # Useful for backfills and verification. Comment out to return to live mode.
+  # historic_time_range: "2026-05-20 00:00:00,2026-05-20 18:00:00"
+  # historic_chunk_minutes: 480                 # how the range is sliced into DD calls
+
+  # — Aggregation math (these change your numbers) ——————————————————————————
+  interval_seconds: 60                          # raw bucket width fetched from DD
+  rolling_window_seconds: 300                   # wall-clock window summed at each emit point
+                                                #   60+300 → "rolling 5-minute count, refreshed every minute"
+                                                #   (matches a DD monitor with .last("5m"))
+                                                #   omit/null → emit raw per-bucket counts, no rolling
+
+  # — DD API guard rails ————————————————————————————————————————————————
+  group_limit: 20                               # per-facet cap on trace-analytics .by(...);
+                                                # keeps (facet_cardinality^n × time_buckets) under
+                                                # DD's 400k hard limit
+
+  # — InsightFinder project metadata ———————————————————————————————————————
+  sampling_interval: 60                         # cadence label IF uses (should match interval_seconds);
+                                                # only read at project creation time
+
+
+# ── Monitors: what to fetch ────────────────────────────────────────────────
+#  Each entry → one metric in IF. Each group_by combo → one instance.
+#
+#  Required:
+#    name              human-readable label (becomes default metric_name)
+#    type              "trace-analytics alert"  → DD spans-aggregate API
+#                      "query alert"            → DD /api/v1/query (metric query)
+#
+#  Describe the query in ONE of two ways:
+#    (A) query:        raw DD monitor query string (copy-paste from DD UI).
+#                      `.last(...)` and `> threshold` parts are ignored —
+#                      rolling_window_seconds owns the aggregation window.
+#                      *** REQUIRED for type: "query alert" *** — DD's metric
+#                      query DSL is too flexible to express as YAML fields
+#                      (arithmetic, anomalies(), top(), rollup args, etc.).
+#                      For simple `<agg>:metric{…}` queries the agent auto-
+#                      appends `.rollup(<agg>, interval_seconds)` so cadence
+#                      doesn't depend on DD's window-based auto-rollup. For
+#                      arithmetic / wrapping queries you must add per-metric
+#                      `.rollup(...)`s yourself (a warning is logged).
+#    (B) structured fields  (trace-analytics only):
+#          filter:     full-text span search expression
+#          indexes:    [list] of DD span indexes
+#          aggregator: count / sum / avg / min / max / pc99 …
+#          rollup_metric: only when aggregator != "count" (e.g. "@duration")
+#          group_by:   [list] of facets; each unique combo → its own IF instance
+#
+#  Optional:
+#    metric_name       override the metric column name in IF
+#    instance_name     fixed instance name (overrides group-derived names; if
+#                      group_by returns >1 group, values collapse + a warning logs)
+#    component_name    override default_component_name
+#    enabled: false    skip this monitor on the next run
+#
+#  Per-monitor overrides for the agent math knobs:
+#    interval_seconds, rolling_window_seconds, group_limit
+monitors:
+
+  # Example 1 — trace-analytics with group_by (one IF instance per facet combo)
+  - name: "5XX errors on passenger-details page"
+    type: "trace-analytics alert"
+    metric_name: "passengerdetails_5xx_errors"
+    filter: "env:prod operation_name:servlet.request status:error resource_name:*passengerdetails"
+    indexes: ["trace-search"]
+    aggregator: "count"
+    group_by: ["service", "resource_name"]
+
+  # Example 2 — trace-analytics with a fixed instance name (no group_by)
+  - name: "Payment failures on book/flow/confirmation"
+    type: "trace-analytics alert"
+    metric_name: "payment_failures"
+    instance_name: "checkout-service"
+    filter: 'service:checkout-service resource_name:"GET /book/flow/confirmation" @responsepage:paymentfailure'
+    indexes: ["trace-search"]
+    aggregator: "count"
+
+  # Example 3 — query-alert monitor (form A only; metric DSL has no structured form)
+  # - name: "Request timeout rate"
+  #   type: "query alert"
+  #   metric_name: "request_timeouts"
+  #   query: 'sum(last_5m):sum:trace.servlet.request.hits{env:prod AND resource_name:*timeout} by {resource_name}.as_count() > 15'
+
+  # Example 4 — trace-analytics with non-count aggregator
+  # - name: "p99 latency on checkout"
+  #   type: "trace-analytics alert"
+  #   metric_name: "checkout_p99_latency_ms"
+  #   filter: "service:checkout-service operation_name:servlet.request"
+  #   aggregator: "pc99"
+  #   rollup_metric: "@duration"
+  #   group_by: ["resource_name"]
