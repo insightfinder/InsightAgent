@@ -23,6 +23,10 @@ config.yaml format:
       only_process:                   # optional; omit to process everything
         systems: ["System A"]         # process all projects in these systems
         projects: ["Project X"]       # also process these projects (original system folder structure)
+      only_include_escalated_ignored: true  # optional; default true
+                                            # true  → only emit metrics that have at least one
+                                            #          escalated-incident or ignored component rule
+                                            # false → emit every metric returned by the API
     PROD:
       base_url: https://app.insightfinder.com/
       username: mustafa
@@ -258,7 +262,8 @@ def fetch_project_mode(session: requests.Session, base: str, username: str,
 
 def fetch_project_data(session: requests.Session, host: str, username: str,
                        api_key: str, customer_name: str, project_name: str,
-                       is_metric: bool = False) -> Dict:
+                       is_metric: bool = False,
+                       only_escalated_ignored: bool = True) -> Dict:
     """Fetch all project-level API data. Returns a dict with all fetched data."""
     headers = api_headers(username, api_key)
     lic_headers = api_headers(username, api_key, use_license=True)
@@ -304,6 +309,7 @@ def fetch_project_data(session: requests.Session, host: str, username: str,
     if is_metric:
         metric_cfgs, pattern_id_rule = fetch_metric_configurations(
             session, host, username, api_key, customer_name, project_name,
+            only_escalated_ignored=only_escalated_ignored,
         )
         result["metric_configurations"] = metric_cfgs
         result["pattern_id_generation_rule"] = pattern_id_rule
@@ -340,8 +346,15 @@ def fetch_project_data(session: requests.Session, host: str, username: str,
 
 def fetch_metric_configurations(session: requests.Session, host: str, username: str,
                                 api_key: str, customer_name: str,
-                                project_name: str) -> Tuple[Dict[str, Any], int]:
+                                project_name: str,
+                                only_escalated_ignored: bool = True) -> Tuple[Dict[str, Any], int]:
     """Fetch all metric configuration data for a metric project.
+
+    Args:
+        only_escalated_ignored: When True (default), only metrics that have at least one
+            escalated-incident component or ignored component are included. When False, all
+            metrics returned by the bulk componentmetricupdate API are included regardless of
+            whether they have escalate/ignore rules.
 
     Returns:
         (metric_configs, pattern_id_generation_rule)
@@ -393,7 +406,6 @@ def fetch_metric_configurations(session: requests.Session, host: str, username: 
                 pass
 
     # 3. Alert settings — single bulk fetch for all metrics at once
-    all_metrics = sorted(set(escalate_map) | set(ignored_map))
     alert_resp = fetch_json(
         session, f"{base}/api/external/v1/componentmetricupdate", headers,
         {
@@ -419,6 +431,11 @@ def fetch_metric_configurations(session: requests.Session, host: str, username: 
             smetric = gs.get("smetric", "")
             if smetric:
                 smetric_to_entry[smetric] = entry
+
+    if only_escalated_ignored:
+        all_metrics = sorted(set(escalate_map) | set(ignored_map))
+    else:
+        all_metrics = sorted(smetric_to_entry.keys())
 
     for metric_name in all_metrics:
         entry = smetric_to_entry.get(metric_name)
@@ -1593,7 +1610,7 @@ def _format_rouge_value(raw: Any) -> str:
 
 
 def _generate_metric_configurations_hcl(metric_configs: Dict[str, Any]) -> List[str]:
-    """Build the metric_configurations = [...] HCL lines for a metric project resource.
+    """Build the metric_configurations = {...} HCL lines for a metric project resource.
 
     Each entry in metric_configs is:
       metric_name -> {
@@ -1607,16 +1624,15 @@ def _generate_metric_configurations_hcl(metric_configs: Dict[str, Any]) -> List[
 
     lines: List[str] = []
     lines.append("")
-    lines.append("  metric_configurations = [")
+    lines.append("  metric_configurations = {")
 
     metrics = [m for m in sorted(metric_configs.keys())
                if metric_configs[m].get("alert_settings")]
-    for metric_idx, metric_name in enumerate(metrics):
+    for metric_name in metrics:
         cfg = metric_configs[metric_name]
-        is_last_metric = metric_idx == len(metrics) - 1
+        escaped_name = metric_name.replace('\\', '\\\\').replace('"', '\\"')
 
-        lines.append("    {")
-        lines.append(f'      metric_name = "{metric_name}"')
+        lines.append(f'    "{escaped_name}" = {{')
 
         # escalate_incident_components
         escalate = cfg.get("escalate_incident_components") or []
@@ -1653,9 +1669,9 @@ def _generate_metric_configurations_hcl(metric_configs: Dict[str, Any]) -> List[
             lines.append("        }" + ("" if is_last_setting else ","))
         lines.append("      ]")
 
-        lines.append("    }" + ("" if is_last_metric else ","))
+        lines.append("    }")
 
-    lines.append("  ]")
+    lines.append("  }")
     return lines
 
 
@@ -1831,6 +1847,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
     project_types: List[str] = env_cfg.get("project_types", env_cfg.get("project_type", []))
     if isinstance(project_types, str):
         project_types = [project_types]
+    only_escalated_ignored: bool = env_cfg.get("only_include_escalated_ignored", True)
 
     all_projects_raw = system.get("projectDetailsList", system.get("projectDetailList", []))
     if isinstance(all_projects_raw, str):
@@ -1921,6 +1938,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
             prefetched[project_name] = fetch_project_data(
                 session, base_url, username, api_key, username, project_name,
                 is_metric=is_metric,
+                only_escalated_ignored=only_escalated_ignored,
             )
         except Exception as e:
             print(f"      Error pre-fetching {project_name!r}: {e}", file=sys.stderr)
