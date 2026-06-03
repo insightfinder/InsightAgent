@@ -107,6 +107,8 @@ query_window = 10
 # HISTORY/REPLAY: if set, the agent replays data over this time range
 # instead of streaming live. Both fields must be set together.
 # hist_time_range format: 2020-04-13 00:00:00,2020-04-14 00:00:00
+# IMPORTANT: hist_time_range must be expressed in the same timezone as the
+# 'timezone' setting above — that is what the agent uses to interpret these values.
 hist_time_range =
 # hist_batch_interval: how large each replay batch is, in seconds. Example: 3600
 hist_batch_interval =
