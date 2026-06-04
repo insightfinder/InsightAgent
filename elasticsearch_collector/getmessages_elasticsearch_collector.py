@@ -112,12 +112,36 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
 
     # pit used
     pit = None
+    custom_headers = agent_config_vars.get('headers') or None
+    pit_target = agent_config_vars['indeces']
+
+    if any(c in pit_target for c in '*?,'):
+        try:
+            resolved = es_conn.transport.perform_request(
+                'GET',
+                f'/_resolve/index/{pit_target}?expand_wildcards=open',
+                headers=custom_headers,
+            )
+            authorized = [i['name'] for i in resolved.get('indices', [])]
+            if not authorized:
+                logger.error(f"No authorized indices match pattern: {pit_target}")
+                for i in range(0, worker_process):
+                    messages.put(CLOSED_MESSAGE)
+                messages.close()
+                return False
+            if len(authorized) > 100:
+                logger.warning(
+                    f"Pattern {pit_target} resolved to {len(authorized)} indices "
+                    "- consider narrowing it to avoid shard/URL limits."
+                )
+            pit_target = ','.join(authorized)
+        except Exception as ex:
+            logger.warning(f"index resolve failed, using raw pattern. {ex}")
+
     try:
-        # Use low-level API for Elasticsearch 7.x compatibility
-        custom_headers = agent_config_vars.get('headers') or None
         pit_response = es_conn.transport.perform_request(
             'POST',
-            f'/{agent_config_vars["indeces"]}/_pit?keep_alive=1m',
+            f'/{pit_target}/_pit?keep_alive=1m',
             headers=custom_headers
         )
         pit = pit_response['id']
