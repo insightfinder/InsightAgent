@@ -1,0 +1,50 @@
+# Configurations for ServiceNow
+# Instance base URL, e.g. https://yourinstance.service-now.com (no trailing /api path)
+servicenow_url = ""
+servicenow_user = ""
+servicenow_password = ""
+
+# Authentication method for the ServiceNow REST API: "basic" or "oauth".
+# Use "oauth" if the instance rejects Basic Auth for REST (returns 401 even with
+# valid UI credentials, common when MFA/security hardening is enabled). Ask your
+# ServiceNow admin to register an OAuth API endpoint (System OAuth > Application
+# Registry > "Create an OAuth API endpoint for external clients") for these values.
+servicenow_auth_method = "basic"
+servicenow_oauth_client_id = ""
+servicenow_oauth_client_secret = ""
+
+# Application Service map(s) to ingest. Each entry is the service's sys_id --
+# this is the "sysparm_bsid" value found in a ServiceNow topology-map URL.
+# Add more sys_ids to ingest more maps.
+servicenow_service_sys_ids = []
+
+# Zone name handling.
+# If True (default), Step 1 looks up each service's display name from ServiceNow
+# and uses it as the InsightFinder zone.
+# If False, Step 1 skips the ServiceNow lookup entirely and assigns every
+# configured service the value of servicenow_default_zone below.
+servicenow_fetch_zone_name = True
+servicenow_default_zone = "NO_ZONE"
+
+# Base table used to look up each service's display name (becomes the InsightFinder zone).
+# "cmdb_ci_service" is the base class and covers both Business and Application Services.
+# Only used when servicenow_fetch_zone_name is True.
+servicenow_app_service_table = "cmdb_ci_service"
+
+# Detail level for the Application Service map getContent API: "shallow" or "full".
+# "shallow" returns sys_id/name/class per CI and is enough to build relations.
+servicenow_content_mode = "shallow"
+
+# Direction to map CMDB relations onto InsightFinder source->target edges.
+# "parent_to_child": source = parent CI, target = child CI (default).
+# "child_to_parent": source = child CI, target = parent CI.
+servicenow_relation_direction = "parent_to_child"
+
+# Configurations for InsightFinder
+insightfinder_url = ""
+insightfinder_username = ""
+license_key = ""
+insightfinder_system = ""
+user_agent = "Mozilla/5.0 (compatible; InsightFinderClient/1.0;)"
+# Relation node type: "instanceLevel" or "componentLevel"
+relation_node_type = "instanceLevel"
