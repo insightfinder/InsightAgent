@@ -1801,6 +1801,11 @@ def generate_metric_project_tf(project_name: str, project_data: Dict,
                     value['awSeverityLevel'] = 'Major'
             cfg.append(f'  {tf_key} = {format_terraform_value(value)}')
 
+    # process mode
+    process_mode = settings_data.get('processMode')
+    if process_mode is not None and process_mode != 0:
+        cfg.append(f'  mode = {process_mode}')
+
     # metric_configurations — populated from componentmetricupdate + metriccomponent APIs
     metric_configs = project_data.get("metric_configurations") or {}
     cfg.extend(_generate_metric_configurations_hcl(metric_configs))
