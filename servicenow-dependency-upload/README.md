@@ -1,33 +1,43 @@
 # ServiceNow → InsightFinder Dependency Upload
 
 Fetches Application Service dependency maps from ServiceNow and uploads them to
-InsightFinder as instance/component relation dependencies.
-
-It mirrors the `zabbix-jira-dependency-upload` pipeline, but the source of the
-dependency graph is ServiceNow's CMDB Application Service map instead of
-Zabbix + Jira.
+InsightFinder as instance relation dependencies.
 
 ## How it works
 
 ```
-ServiceNow CMDB Application Service API
+ServiceNow CMDB (svc_ci_assoc, cmdb_rel_ci, cmdb_ci)
                 |
-   get_application_services.py   -> application_services.yaml   (sys_id -> service name = IF zone)
+   get_application_services.py   -> application_services.yaml   (sys_id -> zone name)
                 |
    fetch_servicenow_dependencies.py -> servicenow_dependencies.yaml (source -> target edges)
                 |
    send_dependencies_to_IF.py    -> InsightFinder /api/v2/updaterelationdependency
 ```
 
-1. **get_application_services.py** — for each configured service `sys_id`, looks
-   up its display name from the `cmdb_ci_service` table. The name becomes the
-   InsightFinder *zone*.
-2. **fetch_servicenow_dependencies.py** — calls
-   `GET /api/now/cmdb/app_service/{sys_id}/getContent?mode=shallow` for each
-   service. That one call returns every CI in the map plus its parent/child
-   relationships, which are flattened into `source -> target` edges.
-3. **send_dependencies_to_IF.py** — sanitizes the CI names, groups edges by zone,
-   and POSTs one request per zone to InsightFinder.
+1. **get_application_services.py** — resolves each configured service `sys_id` to
+   a zone name. By default (`servicenow_fetch_zone_name = False`) it skips the
+   ServiceNow lookup and assigns every service `servicenow_default_zone`
+   (`NO_ZONE`). When enabled it queries `cmdb_ci_service` for the real display
+   name.
+
+2. **fetch_servicenow_dependencies.py** — builds each service's dependency map
+   from three CMDB tables:
+   - `svc_ci_assoc` — which CIs belong to the service
+   - `cmdb_rel_ci` — parent/child relationships between those CIs
+   - `cmdb_ci` — resolves CI sys_ids to display names
+
+   Only edges where both endpoints belong to the service are kept. Queries are
+   chunked to avoid HTTP 414 errors.
+
+   > The `app_service/getContent` API is **not used** because it only works on
+   > empty or manually-built services. Service Mapping *discovered* services
+   > (behind a `$sw_topology_map.do` URL) return HTTP 400, so the table-based
+   > approach above is used instead.
+
+3. **send_dependencies_to_IF.py** — sanitizes CI names using the IF backend
+   format, groups edges by zone, and POSTs one request per zone to
+   `/api/v2/updaterelationdependency`.
 
 `main.py` runs all three in order and stops on the first failure.
 
@@ -37,50 +47,17 @@ ServiceNow CMDB Application Service API
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-```
-
-Copy the template and fill in credentials:
-
-```bash
 cp config.py.template config.py
 ```
 
-In `config.py` set:
-- `servicenow_url`, `servicenow_user`, `servicenow_password` — a login with read
-  access to the CMDB / the service map (same permissions as the browser UI).
-- `servicenow_auth_method` — `"basic"` or `"oauth"` (see **Authentication** below).
-- `servicenow_oauth_client_id`, `servicenow_oauth_client_secret` — required only
-  when `servicenow_auth_method = "oauth"`.
-- `servicenow_service_sys_ids` — the `sys_id`(s) of the Application Service map(s)
-  to ingest. This is the `sysparm_bsid` value in a topology-map URL, e.g.
-  `.../$sw_topology_map.do?sysparm_bsid=<sys_id>&...`.
-- `insightfinder_url`, `insightfinder_username`, `license_key`,
-  `insightfinder_system` — the target InsightFinder system.
+Fill in `config.py`:
 
-### Authentication
-
-ServiceNow supports two methods here, selected by `servicenow_auth_method`:
-
-- **`basic`** — HTTP Basic Auth with `servicenow_user` / `servicenow_password`.
-- **`oauth`** — OAuth 2.0 password grant. The agent exchanges
-  `client_id`/`client_secret` + username/password at `/oauth_token.do` for a
-  Bearer token automatically.
-
-Some instances (e.g. with MFA or security hardening enabled) **reject Basic Auth
-for the REST API** — UI login works but REST returns `401 "User is not
-authenticated"`. In that case use `oauth`. To get the client credentials, ask a
-ServiceNow admin to register an OAuth endpoint:
-*System OAuth → Application Registry → Create an OAuth API endpoint for external
-clients* — which yields a `client_id` and `client_secret`.
-
-> Note on MFA: the OAuth **password grant** still sends the user's password, so
-> once MFA becomes *mandatory* for the account it can also be rejected. For a
-> durable integration, request a dedicated service account that is **exempt from
-> MFA**, or switch to a client-credentials OAuth flow.
-
-> The provided `config.py` is pre-filled with the Husqvarna instance URL and the
-> `JDE Global Web Services` service sys_id as a starting point. Add credentials
-> and any additional sys_ids you want to ingest.
+| Setting | Description |
+|---|---|
+| `servicenow_url` | Instance base URL, e.g. `https://yourinstance.service-now.com` |
+| `servicenow_user` / `servicenow_password` | Basic Auth credentials. Account needs read on `cmdb_ci`, `cmdb_rel_ci`, `cmdb_ci_service`, `svc_ci_assoc` (e.g. `cmdb_read` role). |
+| `servicenow_service_sys_ids` | List of service `sys_id`s to ingest — the `sysparm_bsid` value in a topology-map URL. |
+| `insightfinder_url` / `insightfinder_username` / `license_key` / `insightfinder_system` | Target InsightFinder system. |
 
 ## Run
 
@@ -88,21 +65,28 @@ clients* — which yields a `client_id` and `client_secret`.
 python3 main.py
 ```
 
-Or run any step individually (steps 2 and 3 depend on the YAML produced by the
-prior step).
+Or run any step individually — steps 2 and 3 depend on the YAML written by the
+prior step.
 
-## Notes / tuning
+## Configuration reference
 
-- **Zone name lookup** — `servicenow_fetch_zone_name` (default `True`) controls
-  whether Step 1 calls ServiceNow to resolve each service's display name. Set it
-  to `False` to skip that call entirely and assign every configured service the
-  `servicenow_default_zone` value instead. Useful for testing, or when the
-  account lacks read access to `cmdb_ci_service` but can still call `getContent`.
-- **Relation direction** — `servicenow_relation_direction` controls whether
-  `source = parent` (default) or `source = child`. Flip it if the arrows in
-  InsightFinder point the wrong way.
-- **Business vs Application Service** — the `getContent` API normally resolves
-  both. If a particular `sys_id` returns no content, that service may need the
-  `cmdb_rel_ci` fallback path (not yet implemented).
-- **TEST_LIMIT** — set in `send_dependencies_to_IF.py` to cap how many relations
-  are sent while testing (0 = send all).
+### Zone name (`servicenow_fetch_zone_name`)
+- **`False` (default)** — no ServiceNow call is made; all services use
+  `servicenow_default_zone` (`NO_ZONE`) as the InsightFinder zone. Any missing
+  or empty zone value also falls back to `NO_ZONE`.
+- **`True`** — Step 1 queries `cmdb_ci_service` to resolve each `sys_id` to its
+  display name. Missing or empty names fall back to `servicenow_default_zone`.
+
+### Instance name sanitization (`use_backend_sanitization`)
+- **`True` (default)** — mirrors the IF backend's `getValidatedInstance` logic:
+  `[` → `(`, `]` → `)`, `,`/`:`/`@` → `.`. Uploaded names match exactly what
+  IF stores after its own ingest.
+- **`False`** — agent-side format (matches `elasticsearch_collector`):
+  `_` → `.`, `:` → `-`, strip leading special chars.
+
+### Relation direction (`servicenow_relation_direction`)
+- **`parent_to_child` (default)** — `source = parent CI`, `target = child CI`.
+- **`child_to_parent`** — flip if the arrows in InsightFinder point the wrong way.
+
+### Test limit (`TEST_LIMIT` in `send_dependencies_to_IF.py`)
+Set to a positive integer to cap how many relations are sent per run. `0` = send all.

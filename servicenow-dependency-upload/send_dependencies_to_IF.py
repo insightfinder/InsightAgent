@@ -13,10 +13,6 @@ import sys
 import yaml
 import config
 
-# Regular expressions for safe string conversion
-UNDERSCORE = re.compile(r"\_+")
-COLONS = re.compile(r"\:+")
-
 # Configuration
 INSIGHTFINDER_API_URL = config.insightfinder_url + '/api/v2/updaterelationdependency'
 TEST_LIMIT = 0  # Limit number of relations to send for testing (0 = send all)
@@ -28,14 +24,38 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def get_validated_instance(instance):
+    """Mirrors the IF backend's getValidatedInstance logic:
+       [ -> (,  ] -> ),  [,:@] -> .
+    This ensures uploaded names match exactly what IF stores after its own ingest.
+    """
+    if not instance:
+        return 'unknown'
+    instance = instance.replace('[', '(')
+    instance = instance.replace(']', ')')
+    instance = re.sub(r'[,:@]', '.', instance)
+    return instance
+
+
 def make_safe_instance_string(instance, device=''):
-    """Make a safe instance name string for InsightFinder."""
-    instance = UNDERSCORE.sub('.', instance)
-    instance = COLONS.sub('-', instance)
+    """Agent-side sanitization (matches elasticsearch_collector convention):
+       _ -> .,  : -> -,  strip leading special chars.
+    """
+    if not instance:
+        return 'unknown'
+    instance = re.sub(r'\_+', '.', instance)
+    instance = re.sub(r'\:+', '-', instance)
     instance = re.sub(r'^[-_\W]+', '', instance)
     if device:
         instance = '{}_{}'.format(make_safe_instance_string(device), instance)
     return instance
+
+
+def sanitize_name(instance):
+    """Select sanitization method based on config."""
+    if getattr(config, 'use_backend_sanitization', True) is not False:
+        return get_validated_instance(instance)
+    return make_safe_instance_string(instance)
 
 
 def load_yaml_file(filepath):
@@ -50,12 +70,14 @@ def load_yaml_file(filepath):
 
 def sanitize_relations(relations):
     """Sanitize source/target names for InsightFinder."""
+    method = 'backend' if getattr(config, 'use_backend_sanitization', True) is not False else 'agent'
+    logger.info(f"Using {method} sanitization (use_backend_sanitization={method == 'backend'})")
     sanitized = []
     for rel in relations:
         sanitized.append({
-            'source': make_safe_instance_string(rel['source']),
-            'target': make_safe_instance_string(rel['target']),
-            'zone_name': rel.get('zone_name', 'NO_ZONE'),
+            'source': sanitize_name(rel['source']),
+            'target': sanitize_name(rel['target']),
+            'zone_name': rel.get('zone_name') or 'NO_ZONE',
             'original_source': rel.get('original_source', rel['source']),
             'original_target': rel.get('original_target', rel['target']),
         })

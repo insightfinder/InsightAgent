@@ -70,7 +70,7 @@ def main():
     logger.info("ServiceNow: Resolving Application Service names")
     logger.info("=" * 80)
 
-    fetch_zone_name = getattr(config, "servicenow_fetch_zone_name", True)
+    fetch_zone_name = getattr(config, "servicenow_fetch_zone_name", False) or False
 
     if not fetch_zone_name:
         # Skip the ServiceNow lookup entirely; assign every configured service
@@ -87,7 +87,7 @@ def main():
         service_names = fetch_service_names(
             session,
             config.servicenow_url,
-            config.servicenow_app_service_table,
+            getattr(config, "servicenow_app_service_table", None) or "cmdb_ci_service",
             config.servicenow_service_sys_ids,
         )
 
