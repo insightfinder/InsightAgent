@@ -268,21 +268,24 @@ def main():
     worker_timeout = cli_config_vars['timeout'] if cli_config_vars['timeout'] > 0 else None
     collector_process = cli_config_vars['collector']
 
+    # Start parsers first so they are already draining the queue before
+    # fetchers start pushing. Without this, fetchers block waiting for the
+    # OS pipe buffer to flush and the whole run deadlocks.
+    for _ in range(worker_process):
+        d = Process(
+            target=process_parse_messages,
+            args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, datas),
+        )
+        d.daemon = True
+        d.start()
+        processes.append(d)
+
     time_now = int(arrow.utcnow().float_timestamp)
     for collector_id in range(collector_process):
         d = Process(
             target=process_get_data_multi,
             args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars,
                   messages, worker_process, time_now, collector_id),
-        )
-        d.daemon = True
-        d.start()
-        processes.append(d)
-
-    for _ in range(worker_process):
-        d = Process(
-            target=process_parse_messages,
-            args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, datas),
         )
         d.daemon = True
         d.start()
