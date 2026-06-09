@@ -17,6 +17,7 @@ import multiprocessing
 import signal
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import Process, Queue
 from multiprocessing.pool import ThreadPool
 from threading import Lock
@@ -92,12 +93,13 @@ def resolve_indices(logger, es_conn, pattern, headers):
 
 def fetch_one_index(log_queue, cli_config_vars, if_config_vars, agent_config_vars,
                     messages, time_now, collector_id, index_name):
-    """Per-index fetcher process. Opens a PIT on a single index, runs the
+    """Per-index fetcher thread. Opens a PIT on a single index, runs the
     same query/pagination logic as the standard collector, pushes parsed
-    messages onto the shared queue, then exits. Does NOT enqueue
+    messages onto the shared queue, then returns. Does NOT enqueue
     CLOSED_MESSAGE - the coordinator does that once all fetchers are done.
+    Runs as a thread inside the coordinator process, so the queue and logger
+    are shared directly without pickling.
     """
-    worker_configurer(log_queue, cli_config_vars['log_level'])
     logger = logging.getLogger('worker')
     logger.info(f'[{index_name}] starting fetcher (collector {collector_id})')
 
@@ -205,20 +207,20 @@ def process_get_data_multi(log_queue, cli_config_vars, if_config_vars, agent_con
     logger.info(f'Fanning out across {len(indices)} indices, '
                 f'{max_workers} concurrent fetchers.')
 
-    for i in range(0, len(indices), max_workers):
-        chunk = indices[i:i + max_workers]
-        procs = []
-        for idx in chunk:
-            p = Process(
-                target=fetch_one_index,
-                args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars,
-                      messages, time_now, collector_id, idx),
-            )
-            p.daemon = True
-            p.start()
-            procs.append(p)
-        for p in procs:
-            p.join()
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(
+                fetch_one_index,
+                log_queue, cli_config_vars, if_config_vars, agent_config_vars,
+                messages, time_now, collector_id, idx
+            ): idx for idx in indices
+        }
+        for future in as_completed(futures):
+            idx = futures[future]
+            try:
+                future.result()
+            except Exception as ex:
+                logger.error(f'[{idx}] fetcher raised an exception: {ex}')
 
     for _ in range(worker_process):
         messages.put(CLOSED_MESSAGE)
