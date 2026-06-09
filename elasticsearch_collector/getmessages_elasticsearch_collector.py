@@ -149,7 +149,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
             except Exception:
                 pass  # monitor privilege not available, skip unauthorized logging
 
-            logger.info(f"Pattern '{pit_target}' resolved to {len(authorized)} authorized indices.")
+            logger.info(f"Pattern '{pit_target}' resolved to {len(authorized)} authorized indices: {authorized}")
             if len(authorized) > 100:
                 logger.warning(
                     f"Pattern {pit_target} resolved to {len(authorized)} indices "
