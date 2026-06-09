@@ -65,7 +65,25 @@ def resolve_indices(logger, es_conn, pattern, headers):
         if not names:
             logger.error(f"No authorized indices match pattern: {pattern}")
             return []
-        logger.info(f"Pattern {pattern} resolved to {len(names)} indices.")
+
+        # Try to find unauthorized indices via _cat/indices (requires monitor privilege).
+        try:
+            cat_response = es_conn.transport.perform_request(
+                'GET',
+                f'/_cat/indices/{pattern}?h=index&expand_wildcards=open',
+                headers=headers,
+            )
+            all_indices = set(cat_response.strip().splitlines())
+            unauthorized = sorted(all_indices - set(names))
+            if unauthorized:
+                logger.warning(
+                    f"The following indices matched pattern '{pattern}' but are "
+                    f"not authorized for this API key: {unauthorized}"
+                )
+        except Exception:
+            pass  # monitor privilege not available, skip unauthorized logging
+
+        logger.info(f"Pattern '{pattern}' resolved to {len(names)} authorized indices: {names}")
         return names
     except Exception as ex:
         logger.warning(f"index resolve failed, using raw pattern. {ex}")
