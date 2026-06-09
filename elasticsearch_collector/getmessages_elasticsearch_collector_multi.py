@@ -270,24 +270,11 @@ def main():
     worker_timeout = cli_config_vars['timeout'] if cli_config_vars['timeout'] > 0 else None
     collector_process = cli_config_vars['collector']
 
-    # Start parsers first so they are already draining the queue before
-    # fetchers start pushing. Without this, fetchers block waiting for the
-    # OS pipe buffer to flush and the whole run deadlocks.
+    # Start parsers first so they drain the queue as fetchers push into it.
     for _ in range(worker_process):
         d = Process(
             target=process_parse_messages,
             args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars, messages, datas),
-        )
-        d.daemon = True
-        d.start()
-        processes.append(d)
-
-    time_now = int(arrow.utcnow().float_timestamp)
-    for collector_id in range(collector_process):
-        d = Process(
-            target=process_get_data_multi,
-            args=(log_queue, cli_config_vars, if_config_vars, agent_config_vars,
-                  messages, worker_process, time_now, collector_id),
         )
         d.daemon = True
         d.start()
@@ -304,6 +291,54 @@ def main():
             logger.error(str(e))
 
     signal.signal(signal.SIGTERM, term)
+
+    # Run coordinator logic directly in main() using threads — avoids spawning
+    # a subprocess that would itself need to spawn threads, which fails when the
+    # parent is a daemon process (AssertionError on Python 3.12+/Windows).
+    time_now = int(arrow.utcnow().float_timestamp)
+    es_conn = get_es_connection(logger, agent_config_vars)
+    if not es_conn:
+        logger.error('ES connection failed; aborting.')
+        for _ in range(worker_process):
+            messages.put(CLOSED_MESSAGE)
+        messages.close()
+        sys.exit(1)
+
+    custom_headers = agent_config_vars.get('headers') or None
+    pattern = agent_config_vars['indeces']
+    indices = resolve_indices(logger, es_conn, pattern, custom_headers)
+
+    if not indices:
+        for _ in range(worker_process):
+            messages.put(CLOSED_MESSAGE)
+        messages.close()
+        sys.exit(1)
+
+    max_index_workers = int(agent_config_vars.get('max_index_workers') or DEFAULT_MAX_INDEX_WORKERS)
+    logger.info(f'Fanning out across {len(indices)} indices, {max_index_workers} concurrent fetchers.')
+
+    collector_interval = if_config_vars['sampling_interval'] // collector_process
+    with ThreadPoolExecutor(max_workers=max_index_workers) as executor:
+        futures = {}
+        for collector_id in range(collector_process):
+            for idx in indices:
+                f = executor.submit(
+                    fetch_one_index,
+                    log_queue, cli_config_vars, if_config_vars, agent_config_vars,
+                    messages, time_now, collector_id, idx,
+                )
+                futures[f] = idx
+        for future in as_completed(futures):
+            idx = futures[future]
+            try:
+                future.result()
+            except Exception as ex:
+                logger.error(f'[{idx}] fetcher raised an exception: {ex}')
+
+    for _ in range(worker_process):
+        messages.put(CLOSED_MESSAGE)
+    messages.close()
+    logger.info('All fetchers finished.')
 
     meta_info = {"projects": {}}
     project_create_lock = Lock()
