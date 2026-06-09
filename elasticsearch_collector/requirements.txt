@@ -8,3 +8,14 @@ requests
 urllib3>=2.5.0
 backports.zoneinfo;python_version<"3.9"
 kubernetes
+
+PxtlO5xBywJfxd_jfi=K
+eyJ2ZXIiOiI4LjE0LjAiLCJhZHIiOlsiMTcyLjMxLjQ5LjEyMTo5MjAwIl0sImZnciI6IjQ3YzZhMmYyNDM2MWJiNjE4YzczM2FjMjZiOGE5ZjE2ODNlMTBiZTNhNmQ2ZmJmOWVlOTgyNGU0ZWFmMzYwYTAiLCJrZXkiOiJiT2pQanA0QnBkM1hLLXkwWEJscjo4RU5VX3ZrNWRSLThIRnhZVTRYdW93In0=
+
+
+{
+  "id": "oejYjp4Bpd3XK-y0eRmC",
+  "name": "key_prod_only",
+  "api_key": "-mh2JXPv5B7ufquJlssn0w",
+  "encoded": "b2VqWWpwNEJwZDNYSy15MGVSbUM6LW1oMkpYUHY1Qjd1ZnF1Smxzc24wdw=="
+}
