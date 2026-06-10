@@ -129,6 +129,11 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
     pit = None
     custom_headers = agent_config_vars.get('headers') or None
     pit_target = agent_config_vars['indeces']
+
+    # Handle comma-separated patterns with optional whitespace
+    if ',' in pit_target:
+        pit_target = ','.join(p.strip() for p in pit_target.split(','))
+
     authorized_indices = None
 
     if any(c in pit_target for c in '*?,'):
