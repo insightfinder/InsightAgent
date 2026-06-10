@@ -23,10 +23,55 @@ servicenow_default_zone = "NO_ZONE"
 # Only used when servicenow_fetch_zone_name is True.
 servicenow_app_service_table = "cmdb_ci_service"
 
-# Direction to map CMDB relations onto InsightFinder source->target edges.
-# "parent_to_child": source = parent CI, target = child CI (default).
-# "child_to_parent": source = child CI, target = parent CI.
-servicenow_relation_direction = "parent_to_child"
+# Edge direction is determined automatically per relationship type so that
+# source -> target always means "an issue on source can impact target" (source =
+# provider/root, target = dependent). No manual direction setting is needed.
+#
+# Whether to include structural hosting/containment relationships
+# ("Runs on", "Contains", "Hosted on", ...) -- e.g. a server and the processes
+# it runs. These are real impact edges but are much more granular than the
+# server-to-server service map shown in the ServiceNow UI.
+# True  (default): include them, oriented correctly.
+# False: emit only service dependencies (closer to the collapsed UI map).
+servicenow_include_containment = True
+
+# Extend relationship-type handling WITHOUT editing code. Standard CMDB types
+# (Depends on, Contains, Runs on, ...) are built in; add any instance-specific
+# or Service Mapping types here. Each entry may be the type's parent descriptor
+# ("Applicative Flow To") or its full name
+# ("Applicative Flow To::Applicative Flow From"). Matching is case-insensitive.
+# Types not listed here or in the built-in defaults are skipped and logged
+# (watch the run log for "unrecognized relationship type" warnings).
+#
+# source = child  (parent depends on child; the child is the root/provider):
+servicenow_child_is_source_types = [
+    "Applicative Flow To",   # consumer --flow--> provider
+    "Use End Point To",      # consumer --uses--> endpoint
+]
+# source = parent  (child depends on parent; the parent is the root/provider):
+servicenow_parent_is_source_types = [
+    "Implement End Point To",  # provider --implements--> endpoint
+]
+# Extra types to treat as structural containment (gated by
+# servicenow_include_containment above). Usually left empty.
+servicenow_containment_types = []
+
+# Granularity of the uploaded map.
+# False (default): component-level -- the full CI graph (processes, app servers,
+#   endpoints, ...), matching the detailed CMDB relationships.
+# True: node-level -- roll every component up to its host node and emit
+#   host-to-host edges, mirroring the collapsed server-to-server view in the
+#   ServiceNow topology UI. Output still goes to servicenow_dependencies.yaml.
+servicenow_rollup_to_host = False
+
+# Only used when servicenow_rollup_to_host is True. A member CI is treated as a
+# host node if its sys_class_name contains any of these (case-insensitive)
+# tokens. Defaults cover servers, computers, and network gear; override to suit
+# the instance.
+servicenow_node_host_classes = [
+    "server", "computer", "hardware", "esx", "vmware",
+    "netgear", "switch", "router", "firewall", "storage", "load_balancer",
+]
 
 # Instance name sanitization method.
 # True  = backend format: [ -> (, ] -> ), [,:@] -> .  (matches IF's own ingest logic)
