@@ -22,13 +22,25 @@ ServiceNow CMDB (svc_ci_assoc, cmdb_rel_ci, cmdb_ci)
    name.
 
 2. **fetch_servicenow_dependencies.py** — builds each service's dependency map
-   from three CMDB tables:
+   from the CMDB tables:
    - `svc_ci_assoc` — which CIs belong to the service
-   - `cmdb_rel_ci` — parent/child relationships between those CIs
+   - `cmdb_rel_ci` — parent/child relationships between those CIs (with type)
+   - `cmdb_rel_type` — the semantics of each relationship type
    - `cmdb_ci` — resolves CI sys_ids to display names
 
    Only edges where both endpoints belong to the service are kept. Queries are
    chunked to avoid HTTP 414 errors.
+
+   **Edge direction** is resolved per relationship type, not from a fixed
+   setting. InsightFinder reads `source -> target` as "an issue on `source` can
+   cause issues on `target`", so each edge is oriented with the provider/root as
+   `source` and the dependent as `target`. ServiceNow's `parent`/`child` columns
+   alone don't encode this — for `Depends on::Used by` the parent depends on the
+   child, while for `Contains::Contained by` the parent contains the child — so
+   the type's parent descriptor is used to pick the direction. Edges whose type
+   isn't recognized are **skipped and logged** (extend `PARENT_IS_DEPENDENT` /
+   `PARENT_IS_PROVIDER` to include them). Structural hosting/containment edges
+   (`Runs on`, `Contains`, ...) are gated behind `servicenow_include_containment`.
 
    > The `app_service/getContent` API is **not used** because it only works on
    > empty or manually-built services. Service Mapping *discovered* services
@@ -55,7 +67,7 @@ Fill in `config.py`:
 | Setting | Description |
 |---|---|
 | `servicenow_url` | Instance base URL, e.g. `https://yourinstance.service-now.com` |
-| `servicenow_user` / `servicenow_password` | Basic Auth credentials. Account needs read on `cmdb_ci`, `cmdb_rel_ci`, `cmdb_ci_service`, `svc_ci_assoc` (e.g. `cmdb_read` role). |
+| `servicenow_user` / `servicenow_password` | Basic Auth credentials. Account needs read on `cmdb_ci`, `cmdb_rel_ci`, `cmdb_rel_type`, `cmdb_ci_service`, `svc_ci_assoc` (e.g. `cmdb_read` role). |
 | `servicenow_service_sys_ids` | List of service `sys_id`s to ingest — the `sysparm_bsid` value in a topology-map URL. |
 | `insightfinder_url` / `insightfinder_username` / `license_key` / `insightfinder_system` | Target InsightFinder system. |
 
@@ -84,9 +96,32 @@ prior step.
 - **`False`** — agent-side format (matches `elasticsearch_collector`):
   `_` → `.`, `:` → `-`, strip leading special chars.
 
-### Relation direction (`servicenow_relation_direction`)
-- **`parent_to_child` (default)** — `source = parent CI`, `target = child CI`.
-- **`child_to_parent`** — flip if the arrows in InsightFinder point the wrong way.
+### Relation direction (automatic)
+Direction is no longer configured. Each edge is oriented by its relationship
+type so `source -> target` always means "an issue on `source` can impact
+`target`". Standard CMDB types (`Depends on`, `Contains`, `Runs on`, ...) are
+built in. Unrecognized types are skipped and logged.
+
+### Custom relationship types (no code change)
+Add instance-specific or Service Mapping types in `config.py` — they extend the
+built-in defaults. Each entry may be the type's parent descriptor
+(`Applicative Flow To`) or its full name
+(`Applicative Flow To::Applicative Flow From`); matching is case-insensitive.
+- `servicenow_child_is_source_types` — `source = child` (parent depends on child).
+- `servicenow_parent_is_source_types` — `source = parent` (child depends on parent).
+- `servicenow_containment_types` — extra types treated as containment (gated by
+  `servicenow_include_containment`).
+
+The defaults already include the common Service Mapping connection types
+(`Applicative Flow To`, `Use End Point To` → child-is-source;
+`Implement End Point To` → parent-is-source). If a run logs "unrecognized
+relationship type" warnings, add those type names to the appropriate list.
+
+### Containment edges (`servicenow_include_containment`)
+- **`True` (default)** — include structural hosting/containment relationships
+  (`Runs on`, `Contains`, `Hosted on`, ...), oriented correctly. More granular
+  than the server-to-server map shown in the ServiceNow UI.
+- **`False`** — emit only service dependencies; closer to the collapsed UI map.
 
 ### Test limit (`TEST_LIMIT` in `send_dependencies_to_IF.py`)
 Set to a positive integer to cap how many relations are sent per run. `0` = send all.
