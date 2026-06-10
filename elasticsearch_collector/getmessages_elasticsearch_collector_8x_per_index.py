@@ -41,7 +41,23 @@ import warnings
 # line a second time in the raw "INFO:worker:..." format.
 
 """
-This script gathers data to send to Insightfinder
+Per-index ElasticSearch 8.x+ collector (standalone).
+
+Opens one PIT per index instead of a single multi-index PIT.
+Ideal for API keys with partial access to indices matching a pattern.
+
+Features:
+- Opens one PIT per concrete index (sequential fetching)
+- Resolves wildcard patterns with security-aware permissions check
+- Splits large index lists into chunks to avoid URL/shard limits (max_indices_per_pit)
+- Handles partial permissions automatically
+- Fully standalone with all required functions built-in
+- Compatible with Elasticsearch 8.x+
+
+Use this over getmessages_elasticsearch_collector_8x.py when:
+- Your API key doesn't have access to all indices matching the wildcard pattern
+- You want sequential per-index processing for better error isolation
+- You need a self-contained script with no external dependencies
 """
 
 # declare a few vars

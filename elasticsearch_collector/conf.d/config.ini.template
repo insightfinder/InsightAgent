@@ -29,6 +29,9 @@ query_json_file =
 query_chunk_size = 5000
 # indexes to search over, example indeces = metricbeat*
 indeces = filebeat*
+# Maximum number of indices per PIT request. For large wildcard patterns, splits indices into chunks to avoid URL length and shard limits. Default is 20.
+# Recommended: 10-20 for indices with many shards, 30-50 for small indices. Set to 0 to disable chunking.
+max_indices_per_pit = 20
 # The time offset when querying live data, default is 0.
 query_time_offset_seconds =
 
