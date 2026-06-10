@@ -33,8 +33,12 @@ from pprint import pformat
 from pathlib import Path
 
 import logging
+import warnings
 
-logging.basicConfig(level=logging.INFO)
+# NOTE: intentionally no logging.basicConfig() here. Worker processes attach a
+# QueueHandler that forwards records to the listener process (which formats them).
+# A basicConfig root StreamHandler would ALSO fire in each worker, printing every
+# line a second time in the raw "INFO:worker:..." format.
 
 """
 This script gathers data to send to Insightfinder
@@ -127,6 +131,9 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
                 f'/_resolve/index/{pit_target}?expand_wildcards=open',
                 headers=custom_headers,
             )
+            # 7.x clients return the deserialized dict directly; 8.x+ clients wrap it
+            # in a TransportApiResponse - unwrap .body so this works on either.
+            resolved = getattr(resolved, 'body', resolved)
             authorized_indices = [i['name'] for i in resolved.get('indices', [])]
             if not authorized_indices:
                 logger.error(f"No authorized indices match pattern: {pit_target}")
@@ -141,14 +148,18 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
                     f'/_cat/indices/{pit_target}?h=index&expand_wildcards=open',
                     headers=custom_headers,
                 )
-                all_indices = set(cat_response.strip().splitlines())
-                authorized_set = set(authorized_indices)
-                unauthorized = sorted(all_indices - authorized_set)
-                if unauthorized:
-                    logger.warning(
-                        f"The following indices matched pattern '{pit_target}' but are "
-                        f"not authorized for this API key: {unauthorized}"
-                    )
+                cat_body = getattr(cat_response, 'body', cat_response)
+                # _cat returns plain text on success, or an error dict if the key lacks
+                # the 'monitor' privilege - only diff when we actually got text back.
+                if isinstance(cat_body, str):
+                    all_indices = set(cat_body.strip().splitlines())
+                    authorized_set = set(authorized_indices)
+                    unauthorized = sorted(all_indices - authorized_set)
+                    if unauthorized:
+                        logger.warning(
+                            f"The following indices matched pattern '{pit_target}' but are "
+                            f"not authorized for this API key: {unauthorized}"
+                        )
             except Exception:
                 pass
 
@@ -1845,6 +1856,10 @@ def listener_configurer(c_config, if_config_vars):
     # Get the root logger
     root = logging.getLogger()
     root.setLevel(level)
+    # Drop any handlers inherited from the parent (e.g. the QueueHandler) so the
+    # listener doesn't re-enqueue records it is meant to emit.
+    for hdlr in list(root.handlers):
+        root.removeHandler(hdlr)
 
     if enable_log_rotation:
         # create log output folder if not exists
@@ -1853,9 +1868,11 @@ def listener_configurer(c_config, if_config_vars):
         handler.setFormatter(formatter)
         root.addHandler(handler)
     else:
-        # route INFO and DEBUG logging to stdout from stderr
+        # stdout gets DEBUG/INFO only; stderr gets WARNING+. The stdout filter keeps
+        # a single record from printing on both streams (which doubled warnings/errors).
         logging_handler_out = logging.StreamHandler(sys.stdout)
         logging_handler_out.setLevel(logging.DEBUG)
+        logging_handler_out.addFilter(lambda r: r.levelno < logging.WARNING)
         logging_handler_out.setFormatter(formatter)
         root.addHandler(logging_handler_out)
 
@@ -1890,9 +1907,13 @@ def listener_process(q, c_config, if_config_vars):
 
 
 def worker_configurer(q, level):
-    h = QueueHandler(q)  # Just the one handler needed
     root = logging.getLogger()
-    root.addHandler(h)
+    # Drop any handlers inherited from the parent process (forked children already
+    # carry the parent's QueueHandler); otherwise each record is enqueued - and so
+    # printed - more than once.
+    for hdlr in list(root.handlers):
+        root.removeHandler(hdlr)
+    root.addHandler(QueueHandler(q))  # the one handler each worker needs
     root.setLevel(level)
 
 
@@ -1903,12 +1924,24 @@ def main():
     # get config
     cli_config_vars = get_cli_config_vars()
 
-    # capture warnings to logging system
+    # capture warnings to logging system, but drop the noisy Elasticsearch client
+    # warning emitted on every request when xpack security hides the server version
+    # ("unable to verify that the server is Elasticsearch").
     logging.captureWarnings(True)
+    try:
+        from elasticsearch.exceptions import ElasticsearchWarning
+        warnings.filterwarnings('ignore', category=ElasticsearchWarning)
+    except Exception:
+        pass
+    # The ES client warns once per query that the `body=` kwarg is deprecated; the
+    # collector relies on it intentionally, so drop that specific notice.
+    warnings.filterwarnings('ignore', message=r".*'body' parameter is deprecated.*")
 
-    # change elasticsearch logger level
-    es_logger = logging.getLogger('elasticsearch')
-    es_logger.setLevel(logging.WARNING)
+    # Quiet the ES client's per-request logging (e.g. an expected 403 on _cat when the
+    # API key lacks the 'monitor' privilege, or 4xx that the code already handles).
+    # Real failures are still surfaced by the agent's own error logging.
+    logging.getLogger('elasticsearch').setLevel(logging.ERROR)
+    logging.getLogger('elastic_transport').setLevel(logging.ERROR)
 
     # logger queue, must use Manager().Queue() because agent may use pool create process
     m = multiprocessing.Manager()
