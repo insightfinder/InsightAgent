@@ -110,10 +110,10 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
         time.sleep(1)
         return False
 
-    # pit used
     pit = None
     custom_headers = agent_config_vars.get('headers') or None
     pit_target = agent_config_vars['indeces']
+    authorized_indices = None
 
     if any(c in pit_target for c in '*?,'):
         try:
@@ -122,16 +122,14 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
                 f'/_resolve/index/{pit_target}?expand_wildcards=open',
                 headers=custom_headers,
             )
-            authorized = [i['name'] for i in resolved.get('indices', [])]
-            if not authorized:
+            authorized_indices = [i['name'] for i in resolved.get('indices', [])]
+            if not authorized_indices:
                 logger.error(f"No authorized indices match pattern: {pit_target}")
                 for i in range(0, worker_process):
                     messages.put(CLOSED_MESSAGE)
                 messages.close()
                 return False
 
-            # Try to find indices the key cannot access by comparing against
-            # _cat/indices (requires monitor privilege — skipped if unavailable).
             try:
                 cat_response = es_conn.transport.perform_request(
                     'GET',
@@ -139,7 +137,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
                     headers=custom_headers,
                 )
                 all_indices = set(cat_response.strip().splitlines())
-                authorized_set = set(authorized)
+                authorized_set = set(authorized_indices)
                 unauthorized = sorted(all_indices - authorized_set)
                 if unauthorized:
                     logger.warning(
@@ -147,47 +145,88 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
                         f"not authorized for this API key: {unauthorized}"
                     )
             except Exception:
-                pass  # monitor privilege not available, skip unauthorized logging
+                pass
 
-            logger.info(f"Pattern '{pit_target}' resolved to {len(authorized)} authorized indices: {authorized}")
-            if len(authorized) > 100:
-                logger.warning(
-                    f"Pattern {pit_target} resolved to {len(authorized)} indices "
-                    "- consider narrowing it to avoid shard/URL limits."
-                )
-            pit_target = ','.join(authorized)
+            logger.info(f"Pattern '{pit_target}' resolved to {len(authorized_indices)} authorized indices: {authorized_indices}")
         except Exception as ex:
             logger.warning(f"index resolve failed, using raw pattern. {ex}")
+            authorized_indices = [pit_target]
+    else:
+        authorized_indices = [pit_target]
 
-    try:
-        pit_response = es_conn.open_point_in_time(index=pit_target, keep_alive="1m",
-                                                  headers=custom_headers)
-        pit = pit_response['id']
-    except Exception as ex:
-        logger.error("ElasticSearch open PIT failed. \n{}".format(str(ex)))
-        # send close single for each worker
-        for i in range(0, worker_process):
-            messages.put(CLOSED_MESSAGE)
-        messages.close()
-        logger.error("Failed to get data from ElasticSearch")
-        sleep(1)
-        return False
+    # Split indices into chunks to avoid URL/shard limits
+    max_indices_per_pit = agent_config_vars['max_indices_per_pit']
+    index_chunks = [authorized_indices[i:i + max_indices_per_pit]
+                    for i in range(0, len(authorized_indices), max_indices_per_pit)]
+
+    if len(index_chunks) > 1:
+        logger.info(f"Split {len(authorized_indices)} indices into {len(index_chunks)} chunks of max {max_indices_per_pit} each")
 
     # time query
     timestamp_field = agent_config_vars['timestamp_field']
     timestamp_field = timestamp_field.replace('_source.', '')
 
-    # parse sql string by params
-    logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
-    if agent_config_vars['his_time_range']:
-        logger.debug('Using time range for replay data')
-        for timestamp in range(agent_config_vars['his_time_range'][0],
-                               agent_config_vars['his_time_range'][1],
-                               if_config_vars['sampling_interval']):
-            start_time = timestamp + (collector_id) * collector_interval
+    # Process each chunk
+    for chunk_idx, index_chunk in enumerate(index_chunks):
+        pit_target_chunk = ','.join(index_chunk)
+        logger.debug(f'Processing index chunk {chunk_idx + 1}/{len(index_chunks)}: {pit_target_chunk}')
+
+        try:
+            pit_response = es_conn.open_point_in_time(index=pit_target_chunk, keep_alive="1m",
+                                                      headers=custom_headers)
+            pit = pit_response['id']
+        except Exception as ex:
+            logger.error(f"ElasticSearch open PIT failed for chunk {chunk_idx}: {ex}")
+            continue
+
+        logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
+        if agent_config_vars['his_time_range']:
+            logger.debug('Using time range for replay data')
+            for timestamp in range(agent_config_vars['his_time_range'][0],
+                                   agent_config_vars['his_time_range'][1],
+                                   if_config_vars['sampling_interval']):
+                start_time = timestamp + (collector_id) * collector_interval
+                end_time = start_time + collector_interval
+
+                query_body = {
+                    "size": agent_config_vars['query_chunk_size'],
+                    "query": {
+                        "bool": {
+                            "must": [
+                                {
+                                    "range": {
+                                        timestamp_field: {
+                                            "format": "epoch_second",
+                                            'gte': start_time,
+                                            'lt': end_time
+                                        }
+                                    }
+                                }
+                            ],
+                        },
+                    },
+                    "pit": {'id': pit, 'keep_alive': '1m'},
+                    "sort": [
+                        {timestamp_field: {"order": "asc"}}
+                    ]
+                }
+
+                if isinstance(agent_config_vars['query_json'], dict):
+                    merge(agent_config_vars['query_json'], query_body)
+
+                logger.debug('Getting data from ElasticSearch with query:' + str(query_body))
+                query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn,
+                                             query_body, messages, start_time * 1000,
+                                             agent_config_vars.get('headers') or None)
+
+        else:
+            logger.info('Using current time for streaming data on collector {} ...'.format(collector_id))
+
+            query_time_offset_seconds = agent_config_vars['query_time_offset_seconds']
+            start_time = time_now - query_time_offset_seconds
+            start_time = start_time - (collector_id + 1) * collector_interval
             end_time = start_time + collector_interval
 
-            # build query
             query_body = {
                 "size": agent_config_vars['query_chunk_size'],
                 "query": {
@@ -211,59 +250,13 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
                 ]
             }
 
-            # add user-defined query
             if isinstance(agent_config_vars['query_json'], dict):
                 merge(agent_config_vars['query_json'], query_body)
 
             logger.debug('Getting data from ElasticSearch with query:' + str(query_body))
-
-            # build query with chunk
-            query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn,
-                                         query_body, messages, start_time * 1000,
+            query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn, query_body,
+                                         messages, start_time * 1000,
                                          agent_config_vars.get('headers') or None)
-
-    else:
-        logger.info('Using current time for streaming data on collector {} ...'.format(collector_id))
-
-        query_time_offset_seconds = agent_config_vars['query_time_offset_seconds']
-        start_time = time_now - query_time_offset_seconds
-        start_time = start_time - (collector_id + 1) * collector_interval
-        end_time = start_time + collector_interval
-
-        # build query
-        query_body = {
-            "size": agent_config_vars['query_chunk_size'],
-            "query": {
-                "bool": {
-                    "must": [
-                        {
-                            "range": {
-                                timestamp_field: {
-                                    "format": "epoch_second",
-                                    'gte': start_time,
-                                    'lt': end_time
-                                }
-                            }
-                        }
-                    ],
-                },
-            },
-            "pit": {'id': pit, 'keep_alive': '1m'},
-            "sort": [
-                {timestamp_field: {"order": "asc"}}
-            ]
-        }
-
-        # add user-defined query
-        if isinstance(agent_config_vars['query_json'], dict):
-            merge(agent_config_vars['query_json'], query_body)
-
-        logger.debug('Getting data from ElasticSearch with query:' + str(query_body))
-
-        # build query with chunk
-        query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_config_vars, es_conn, query_body,
-                                     messages, start_time * 1000,
-                                     agent_config_vars.get('headers') or None)
 
     # send close single for each worker
     for i in range(0, worker_process):
@@ -837,6 +830,7 @@ def get_agent_config_vars(logger, config_ini):
             indeces = config_parser.get('elasticsearch', 'indeces')
             query_time_offset_seconds = config_parser.get('elasticsearch', 'query_time_offset_seconds', fallback=0)
             headers_str = config_parser.get('elasticsearch', 'headers', fallback='')
+            max_indices_per_pit = config_parser.get('elasticsearch', 'max_indices_per_pit', fallback='20')
 
             # time range
             his_time_range = config_parser.get('elasticsearch', 'his_time_range')
@@ -1006,6 +1000,15 @@ def get_agent_config_vars(logger, config_ini):
             except Exception as e:
                 logger.error('Agent not correctly configured (headers): {}. Using empty headers.'.format(e))
 
+        if max_indices_per_pit:
+            try:
+                max_indices_per_pit = int(max_indices_per_pit)
+            except Exception as e:
+                logger.error('Agent not correctly configured (max_indices_per_pit). Use 20 by default.')
+                max_indices_per_pit = 20
+        else:
+            max_indices_per_pit = 20
+
         # add parsed variables to a global
         config_vars = {
             'safe_instance_fields': safe_instance_fields,
@@ -1017,6 +1020,7 @@ def get_agent_config_vars(logger, config_ini):
             'indeces': indeces,
             'query_time_offset_seconds': query_time_offset_seconds,
             'his_time_range': his_time_range,
+            'max_indices_per_pit': max_indices_per_pit,
             'project_field': project_field,
             'project_whitelist_regex': project_whitelist_regex,
             'document_root_field': document_root_field,
