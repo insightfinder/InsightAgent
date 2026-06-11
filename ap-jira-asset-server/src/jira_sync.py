@@ -74,6 +74,9 @@ COLUMN_FIELDS = {"object_key", "device_name", "ip_address", "mac_address",
 UPSTREAM_DEVICE_ATTR = 400
 UPSTREAM_JUNCTION_ATTR = 461
 
+# Subvenue attribute that holds the parent Venue reference (objecttype Subvenue, attr 225)
+SUBVENUE_VENUE_ATTR_ID = 225
+
 # ── Model attribute map (objecttype 13, verified 2026-05-19) ─────────────────
 MODEL_ATTR_MAP: Dict[int, str] = {
     92:  "object_key",
@@ -241,7 +244,18 @@ def transform_models(raw: List[Dict]) -> List[Dict]:
     return out
 
 
-def _transform_one_device(obj: Dict) -> Tuple[Dict, List[Dict]]:
+def transform_subvenues(raw: List[Dict]) -> Dict[str, str]:
+    """Returns {subvenue_id: venue_name} by reading attr 225 from each Subvenue object."""
+    result: Dict[str, str] = {}
+    for obj in raw:
+        obj_id = str(obj["id"])
+        venue_name = _attr_display(obj, SUBVENUE_VENUE_ATTR_ID)
+        if venue_name:
+            result[obj_id] = venue_name
+    return result
+
+
+def _transform_one_device(obj: Dict, subvenue_map: Optional[Dict[str, str]] = None) -> Tuple[Dict, List[Dict]]:
     """Transform a single raw Jira object into (device_record, edge_records)."""
     obj_id = str(obj["id"])
     object_key = obj.get("objectKey", "")
@@ -322,6 +336,15 @@ def _transform_one_device(obj: Dict) -> Tuple[Dict, List[Dict]]:
                 device["name"] = val_str
             device["meta"]["full_name"] = val_str
 
+        elif field == "subvenue":
+            if val_str:
+                device["meta"]["subvenue"] = val_str
+            ref_id = str((vals[0].get("referencedObject") or {}).get("id") or "")
+            if ref_id and subvenue_map:
+                venue = subvenue_map.get(ref_id)
+                if venue:
+                    device["meta"]["venue"] = venue
+
         elif field in COLUMN_FIELDS:
             device[field] = val_str
             device["meta"][field] = val_str
@@ -333,11 +356,14 @@ def _transform_one_device(obj: Dict) -> Tuple[Dict, List[Dict]]:
     return device, edges
 
 
-def transform_devices(raw: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
+def transform_devices(
+    raw: List[Dict],
+    subvenue_map: Optional[Dict[str, str]] = None,
+) -> Tuple[List[Dict], List[Dict]]:
     devices: List[Dict] = []
     edges: List[Dict] = []
     for obj in raw:
-        d, e = _transform_one_device(obj)
+        d, e = _transform_one_device(obj, subvenue_map=subvenue_map)
         devices.append(d)
         edges.extend(e)
     return devices, edges
@@ -348,19 +374,21 @@ async def run_sync() -> Dict[str, Any]:
     client = JiraClient()
     t0 = time.time()
 
-    # Fetch models and devices in parallel — write order still matters (models first for FK)
-    logger.info("Fetching Model and Device objects from Jira in parallel...")
-    raw_models, raw_devices = await asyncio.gather(
+    # Fetch models, devices, and subvenues in parallel
+    logger.info("Fetching Model, Device, and Subvenue objects from Jira in parallel...")
+    raw_models, raw_devices, raw_subvenues = await asyncio.gather(
         client.fetch_all("Model"),
         client.fetch_all("Device"),
+        client.fetch_all("Subvenue"),
     )
 
     fetch_time = time.time() - t0
-    logger.info("Fetched %d models, %d devices in %.1fs",
-                len(raw_models), len(raw_devices), fetch_time)
+    logger.info("Fetched %d models, %d devices, %d subvenues in %.1fs",
+                len(raw_models), len(raw_devices), len(raw_subvenues), fetch_time)
 
+    subvenue_map = transform_subvenues(raw_subvenues)
     model_records = transform_models(raw_models)
-    device_records, edge_records = transform_devices(raw_devices)
+    device_records, edge_records = transform_devices(raw_devices, subvenue_map=subvenue_map)
 
     t1 = time.time()
     async with SessionLocal() as session:
