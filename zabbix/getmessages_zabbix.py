@@ -271,7 +271,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                         parse_messages_zabbix(logger, data_type, combined_results, all_field_map, items_ids_map, 'history',
                                               agent_config_vars, track, data_buffer, sampling_interval, sampling_now)
 
-                        clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer, agent_config_vars.get('derived_metrics'))
+                        clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer, agent_config_vars.get('derived_metrics'), host_groups=agent_config_vars.get('host_groups'), save_metrics_debug=agent_config_vars.get('save_metrics_debug', False))
                 else:
                     if metric_allowlist_map and len(items_keys) == 0:
                         continue
@@ -294,7 +294,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                                                                                                             arrow.utcnow() - time_now).total_seconds()))
                         parse_messages_zabbix(logger, data_type, items_res['result'], all_field_map, items_map, 'live',
                                             agent_config_vars, track, data_buffer, sampling_interval, sampling_now)
-                        clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer, agent_config_vars.get('derived_metrics'))
+                        clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer, agent_config_vars.get('derived_metrics'), host_groups=agent_config_vars.get('host_groups'), save_metrics_debug=agent_config_vars.get('save_metrics_debug', False))
             elif data_type == 'Alert':
                 for timestamp in range(timestamp_start, timestamp_end, log_request_interval):
                     time_now = arrow.utcnow()
@@ -403,6 +403,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
     # get hosts
     hosts_map = {}
     hosts_group_map = {}
+    hosts_allgroups_map = {}
     hosts_ip_map = {}
     hosts_tags_map = {}
     host_template_map = {}
@@ -452,6 +453,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
             hosts_ids.append(host_id)
             hosts_map[host_id] = host_name
             hosts_group_map[host_id] = host_group
+            hosts_allgroups_map[host_id] = [hg.get('name', '') for hg in hostgroups]
             hosts_ip_map[host_id] = host_ip
             hosts_tags_map[host_id] = {t['tag']: t['value'] for t in (item.get('tags') or [])}
 
@@ -510,7 +512,7 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
 
         logger.info("Zabbix item count: %s" % len(items_keys))
 
-    all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map, 'hostip': hosts_ip_map, 'hosttags': hosts_tags_map}
+    all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map, 'hostallgroups': hosts_allgroups_map, 'hostip': hosts_ip_map, 'hosttags': hosts_tags_map}
 
     total = len(hosts_ids_list)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -726,6 +728,7 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             if is_metric:
                 data_buffer['buffer_dict'][key]['instanceName'] = full_instance
                 data_buffer['buffer_dict'][key]['instanceTags'] = all_field_map.get('hosttags', {}).get(instance_id, {})
+                data_buffer['buffer_dict'][key]['hostgroups'] = all_field_map.get('hostallgroups', {}).get(instance_id, [])
                 if component:
                     data_buffer['buffer_dict'][key]['componentName'] = component
                 if zone:
@@ -807,6 +810,7 @@ def get_agent_config_vars(logger, config_ini):
             host_blocklist = config_parser.get('zabbix', 'host_blocklist')
             template_ids = config_parser.get('zabbix', 'template_ids')
             collect_dedicated_items = config_parser.get('zabbix', 'collect_dedicated_items', fallback=False)
+            save_metrics_debug = config_parser.get('zabbix', 'save_metrics_debug', fallback='false')
             metric_allowlist = config_parser.get('zabbix', 'metric_allowlist')
             metric_disallowlist = config_parser.get('zabbix', 'metric_disallowlist', fallback=None)
             metric_transform_script = config_parser.get('zabbix', 'metric_transform_script', fallback=None)
@@ -961,6 +965,8 @@ def get_agent_config_vars(logger, config_ini):
         else:
             collect_dedicated_items = False
 
+        save_metrics_debug = str(save_metrics_debug).lower() == 'true'
+
         # metric transform script
         metric_transforms = []
         if metric_transform_script and len(metric_transform_script.strip()) != 0:
@@ -991,7 +997,8 @@ def get_agent_config_vars(logger, config_ini):
                        'timestamp_format': timestamp_format, 'component_from_instance_name_re_sub': component_from_instance_name_re_sub,
                        'component_name_script': component_name_script,
                        'metric_transforms': metric_transforms,
-                       'derived_metrics': derived_metrics}
+                       'derived_metrics': derived_metrics,
+                       'save_metrics_debug': save_metrics_debug}
 
         return config_vars
 
@@ -1116,7 +1123,7 @@ def get_cli_config_vars():
     elif options.quiet:
         config_vars['log_level'] = logging.WARNING
 
-    config_vars['timeout'] = int(options.timeout) * 60 if options.timeout else 0
+    config_vars['timeout'] = int(options.timeout) * 60 if options.timeout else 120  # default 2 min
 
     return config_vars
 
@@ -1215,11 +1222,37 @@ def print_summary_info(logger, if_config_vars, agent_config_vars):
     logger.debug(agent_data_block)
 
 
-def clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer, derived_metrics=None):
+def save_metrics_to_file(data_buffer, host_groups=None):
+    metrics_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metrics')
+    os.makedirs(metrics_dir, exist_ok=True)
+
+    for entry in data_buffer['buffer_dict'].values():
+        data = entry.get('data')
+        if not isinstance(data, dict):
+            continue
+        if host_groups and not any(g in host_groups for g in entry.get('hostgroups', [])):
+            continue
+        timestamp_ms = int(entry.get('timestamp', 0))
+        if not timestamp_ms:
+            continue
+        formatted_time = arrow.get(timestamp_ms / 1000).to('local').format('YYYY-MM-DD hh:mm:ss A')
+        instance_name = re.sub(r'[^\w\-]', '_', entry.get('instanceName', 'unknown'))
+        for metric_name, metric_value in data.items():
+            safe_metric = re.sub(r'[^\w\-]', '_', metric_name)
+            file_path = os.path.join(metrics_dir, '{}_{}.txt'.format(instance_name, safe_metric))
+            with open(file_path, 'a') as f:
+                f.write(formatted_time + '\n')
+                f.write(str(metric_value) + '\n')
+
+
+def clear_data_buffer(logger, cli_config_vars, if_config_vars, track, data_buffer, derived_metrics=None, host_groups=None, save_metrics_debug=False):
     # Apply derived metrics before flushing
     if derived_metrics:
         for entry in data_buffer['buffer_dict'].values():
             apply_derived_metrics(entry, derived_metrics)
+
+    if save_metrics_debug:
+        save_metrics_to_file(data_buffer, host_groups=host_groups)
 
     # move all buffer data to current data, and send
     buffer_values = list(data_buffer['buffer_dict'].values())
@@ -1629,28 +1662,31 @@ def worker_process(args):
     logger.info("Setup logger in PID {}".format(os.getpid()))
     logger.info("Process start with config: {}".format(config_file))
 
-    if_config_vars = get_if_config_vars(logger, config_file)
-    if not if_config_vars:
-        return
+    try:
+        if_config_vars = get_if_config_vars(logger, config_file)
+        if not if_config_vars:
+            return
 
-    agent_config_vars = get_agent_config_vars(logger, config_file)
-    if not agent_config_vars:
-        return
+        agent_config_vars = get_agent_config_vars(logger, config_file)
+        if not agent_config_vars:
+            return
 
-    print_summary_info(logger, if_config_vars, agent_config_vars)
-    if not c_config['testing']:
-        # check project first if project_name is set
-        project_name = if_config_vars['project_name']
-        if project_name:
-            check_success = check_project_exist(logger, agent_config_vars, if_config_vars, project_name, None)
-            if not check_success:
-                return
+        print_summary_info(logger, if_config_vars, agent_config_vars)
+        if not c_config['testing']:
+            # check project first if project_name is set
+            project_name = if_config_vars['project_name']
+            if project_name:
+                check_success = check_project_exist(logger, agent_config_vars, if_config_vars, project_name, None)
+                if not check_success:
+                    return
 
-    target_timestamp_timezone = agent_config_vars['target_timestamp_timezone']
-    sampling_interval = if_config_vars['sampling_interval']
+        target_timestamp_timezone = agent_config_vars['target_timestamp_timezone']
+        sampling_interval = if_config_vars['sampling_interval']
 
-    sampling_now = align_timestamp((utc_now_time + target_timestamp_timezone) * 1000, sampling_interval)
-    start_data_processing(logger, config_name, c_config, agent_config_vars, if_config_vars, sampling_now)
+        sampling_now = align_timestamp((utc_now_time + target_timestamp_timezone) * 1000, sampling_interval)
+        start_data_processing(logger, config_name, c_config, agent_config_vars, if_config_vars, sampling_now)
+    except Exception as e:
+        logger.error('Worker failed for config {}: {}'.format(config_file, e))
 
 
 def main():
@@ -1689,7 +1725,7 @@ def main():
     arg_list = [(f, cli_config_vars, utc_now_time, queue) for f in config_files]
 
     # start sub process by pool
-    pool = multiprocessing.Pool(len(arg_list))
+    pool = multiprocessing.Pool(min(len(arg_list), 40))
     pool_result = pool.map_async(worker_process, arg_list)
     pool.close()
 
