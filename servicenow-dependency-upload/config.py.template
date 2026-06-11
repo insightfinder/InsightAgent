@@ -1,0 +1,87 @@
+# Configurations for ServiceNow
+# Instance base URL, e.g. https://yourinstance.service-now.com (no trailing /api path)
+servicenow_url = ""
+servicenow_user = ""
+servicenow_password = ""
+
+# Application Service map(s) to ingest. Each entry is the service's sys_id --
+# this is the "sysparm_bsid" value found in a ServiceNow topology-map URL.
+# Add more sys_ids to ingest more maps.
+servicenow_service_sys_ids = []
+
+# Zone name handling.
+# False (default): skip the ServiceNow name lookup; every service is assigned
+#   servicenow_default_zone as the InsightFinder zone.
+# True: Step 1 queries cmdb_ci_service to resolve each sys_id to its display
+#   name, which is then used as the zone. Missing or empty values still fall
+#   back to servicenow_default_zone.
+servicenow_fetch_zone_name = False
+servicenow_default_zone = "NO_ZONE"
+
+# Table used to look up each service's display name.
+# "cmdb_ci_service" is the base class covering all service subclasses.
+# Only used when servicenow_fetch_zone_name is True.
+servicenow_app_service_table = "cmdb_ci_service"
+
+# Edge direction is determined automatically per relationship type so that
+# source -> target always means "an issue on source can impact target" (source =
+# provider/root, target = dependent). No manual direction setting is needed.
+#
+# Whether to include structural hosting/containment relationships
+# ("Runs on", "Contains", "Hosted on", ...) -- e.g. a server and the processes
+# it runs. These are real impact edges but are much more granular than the
+# server-to-server service map shown in the ServiceNow UI.
+# True  (default): include them, oriented correctly.
+# False: emit only service dependencies (closer to the collapsed UI map).
+servicenow_include_containment = True
+
+# Extend relationship-type handling WITHOUT editing code. Standard CMDB types
+# (Depends on, Contains, Runs on, ...) are built in; add any instance-specific
+# or Service Mapping types here. Each entry may be the type's parent descriptor
+# ("Applicative Flow To") or its full name
+# ("Applicative Flow To::Applicative Flow From"). Matching is case-insensitive.
+# Types not listed here or in the built-in defaults are skipped and logged
+# (watch the run log for "unrecognized relationship type" warnings).
+#
+# source = child  (parent depends on child; the child is the root/provider):
+servicenow_child_is_source_types = [
+    "Applicative Flow To",   # consumer --flow--> provider
+    "Use End Point To",      # consumer --uses--> endpoint
+]
+# source = parent  (child depends on parent; the parent is the root/provider):
+servicenow_parent_is_source_types = [
+    "Implement End Point To",  # provider --implements--> endpoint
+]
+# Extra types to treat as structural containment (gated by
+# servicenow_include_containment above). Usually left empty.
+servicenow_containment_types = []
+
+# Granularity of the uploaded map.
+# False (default): component-level -- the full CI graph (processes, app servers,
+#   endpoints, ...), matching the detailed CMDB relationships.
+# True: node-level -- roll every component up to its host node and emit
+#   host-to-host edges, mirroring the collapsed server-to-server view in the
+#   ServiceNow topology UI. Output still goes to servicenow_dependencies.yaml.
+servicenow_rollup_to_host = False
+
+# Only used when servicenow_rollup_to_host is True. A member CI is treated as a
+# host node if its sys_class_name contains any of these (case-insensitive)
+# tokens. Defaults cover servers, computers, and network gear; override to suit
+# the instance.
+servicenow_node_host_classes = [
+    "server", "computer", "hardware", "esx", "vmware",
+    "netgear", "switch", "router", "firewall", "storage", "load_balancer",
+]
+
+# Instance name sanitization method.
+# True  = backend format: [ -> (, ] -> ), [,:@] -> .  (matches IF's own ingest logic)
+# False = agent format:   _ -> ., : -> -, strip leading special chars
+use_backend_sanitization = True
+
+# Configurations for InsightFinder
+insightfinder_url = ""
+insightfinder_username = ""
+license_key = ""
+insightfinder_system = ""
+# Relation node type: "instanceLevel" or "componentLevel"
+relation_node_type = "instanceLevel"
