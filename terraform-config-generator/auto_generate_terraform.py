@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fully automated Terraform configuration generator for InsightFinder.
+Fully automated Terraform configuration generator for InsightFinder (provider v1.9.6+).
 
 Reads config.yaml and auto-discovers all owned systems + projects via API,
 then generates a complete TerraformFiles directory structure.
@@ -263,7 +263,8 @@ def fetch_project_mode(session: requests.Session, base: str, username: str,
 def fetch_project_data(session: requests.Session, host: str, username: str,
                        api_key: str, customer_name: str, project_name: str,
                        is_metric: bool = False,
-                       only_escalated_ignored: bool = True) -> Dict:
+                       only_escalated_ignored: bool = True,
+                       disable_metric_collection: bool = False) -> Dict:
     """Fetch all project-level API data. Returns a dict with all fetched data."""
     headers = api_headers(username, api_key)
     lic_headers = api_headers(username, api_key, use_license=True)
@@ -306,7 +307,7 @@ def fetch_project_data(session: requests.Session, host: str, username: str,
     result["holidays"] = holidays if isinstance(holidays, dict) else {}
 
     # 7. Metric configurations (only for Metric-type projects)
-    if is_metric:
+    if is_metric and not disable_metric_collection:
         metric_cfgs, pattern_id_rule = fetch_metric_configurations(
             session, host, username, api_key, customer_name, project_name,
             only_escalated_ignored=only_escalated_ignored,
@@ -1300,8 +1301,10 @@ def generate_project_tf(project_name: str, project_data: Dict,
 
     # log_label_settings
     log_labels = convert_keywords_to_log_labels(keywords_data)
-    if log_labels:
-        cfg.append('')
+    cfg.append('')
+    if not log_labels:
+        cfg.append('  log_label_settings = []')
+    else:
         cfg.append('  log_label_settings = [')
         for i, label in enumerate(log_labels):
             cfg.append('    {')
@@ -1853,6 +1856,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
     if isinstance(project_types, str):
         project_types = [project_types]
     only_escalated_ignored: bool = env_cfg.get("only_include_escalated_ignored", True)
+    disable_metric_collection: bool = env_cfg.get("disable_metric_collection", False)
 
     all_projects_raw = system.get("projectDetailsList", system.get("projectDetailList", []))
     if isinstance(all_projects_raw, str):
@@ -1944,6 +1948,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
                 session, base_url, username, api_key, username, project_name,
                 is_metric=is_metric,
                 only_escalated_ignored=only_escalated_ignored,
+                disable_metric_collection=disable_metric_collection,
             )
         except Exception as e:
             print(f"      Error pre-fetching {project_name!r}: {e}", file=sys.stderr)
