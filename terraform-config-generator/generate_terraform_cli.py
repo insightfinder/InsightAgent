@@ -139,6 +139,7 @@ def convert_json_keys_to_terraform(json_keys_data, summary_settings=None, metafi
             }
             json_key_settings.append(setting)
 
+    json_key_settings.sort(key=lambda x: x['json_key'])
     return json_key_settings
 
 
