@@ -763,9 +763,7 @@ def process_build_buffer(args):
             project_tracks[project]['line_count'] += 1
             project_tracks[project]['data_size'] += message.pop('data_size')
 
-            # check the buffer every BUFFER_CHECK_COUNT lines
-            if project_tracks[project]['line_count'] % BUFFER_CHECK_COUNT == 0 \
-                    and project_tracks[project]['data_size'] >= if_config_vars['chunk_size']:
+            if project_tracks[project]['data_size'] >= if_config_vars['chunk_size']:
                 logger.debug(f'Sending buffer chunk: {project_tracks[project]["data_size"]}')
                 send_data_to_if(logger, c_config, if_config_vars, project_tracks[project],
                                 project_tracks[project]['current_row'], project)
