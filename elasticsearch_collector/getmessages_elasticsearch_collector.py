@@ -187,15 +187,22 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
         pit_target_chunk = ','.join(index_chunk)
         logger.debug(f'Processing index chunk {chunk_idx + 1}/{len(index_chunks)}: {pit_target_chunk}')
 
-        try:
-            pit_response = es_conn.transport.perform_request(
-                'POST',
-                f'/{pit_target_chunk}/_pit?keep_alive=1m',
-                headers=custom_headers
-            )
-            pit = pit_response['id']
-        except Exception as ex:
-            logger.error(f"ElasticSearch open PIT failed for chunk {chunk_idx}: {ex}")
+        pit = None
+        for attempt in range(1, 4):
+            try:
+                pit_response = es_conn.transport.perform_request(
+                    'POST',
+                    f'/{pit_target_chunk}/_pit?keep_alive=1m',
+                    headers=custom_headers
+                )
+                pit = pit_response['id']
+                break
+            except Exception as ex:
+                logger.error(f"ElasticSearch open PIT failed for chunk {chunk_idx} (attempt {attempt}/3): {ex}")
+                if attempt < 3:
+                    time.sleep(2 ** attempt)
+        if pit is None:
+            logger.error(f"Skipping index chunk {chunk_idx} after 3 failed attempts: {pit_target_chunk}")
             continue
 
         logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
