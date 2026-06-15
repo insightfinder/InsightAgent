@@ -139,6 +139,7 @@ def convert_json_keys_to_terraform(json_keys_data, summary_settings=None, metafi
             }
             json_key_settings.append(setting)
 
+    json_key_settings.sort(key=lambda x: x['json_key'])
     return json_key_settings
 
 
@@ -655,9 +656,11 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
 
         config.append('  }')
     
-    # Add log_label_settings if present
-    if log_labels:
-        config.append('')
+    # Add log_label_settings
+    config.append('')
+    if not log_labels:
+        config.append('  log_label_settings = []')
+    else:
         config.append('  log_label_settings = [')
         for i, label in enumerate(log_labels):
             config.append('      {')
@@ -807,6 +810,7 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
             ('incidentDampeningWindow',            'incident_dampening_window'),
             ('ticketOpenTime',                     'ticket_open_time'),
             ('componentLevelIncidentConsolidation', 'component_level_incident_consolidation'),
+            ('maxNotificationDelayTolerance',       'max_notification_delay_tolerance'),
         ]
         for api_key, tf_key in notif_field_map:
             if api_key in notifications_data:
@@ -879,6 +883,89 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
                 lines.append(f'        target_customer = "{entry.get("ct", "")}"')
                 lines.append(f'        duration        = {entry.get("d", 0)}')
                 lines.append('      }' + ('' if is_last else ','))
+            lines.append('    ]')
+
+        # custom_consolidation_rules
+        ccr = notifications_data.get('customConsolidationRules') or []
+        if not ccr:
+            lines.append('    custom_consolidation_rules = []')
+        else:
+            lines.append('')
+            lines.append('    custom_consolidation_rules = [')
+            for r_idx, rule in enumerate(ccr):
+                r_is_last = r_idx == len(ccr) - 1
+                lines.append('      {')
+
+                # project_entries
+                project_entries = rule.get('projectEntries') or []
+                if project_entries:
+                    lines.append('        project_entries = [')
+                    for pe_idx, pe in enumerate(project_entries):
+                        pe_is_last = pe_idx == len(project_entries) - 1
+                        pname = str(pe.get('projectName', '')).replace('\\', '\\\\').replace('"', '\\"')
+                        lines.append('          {')
+                        lines.append(f'            project_name = "{pname}"')
+                        conditions = pe.get('conditions') or []
+                        if conditions:
+                            lines.append('            conditions = [')
+                            for c_idx, cond in enumerate(conditions):
+                                c_is_last = c_idx == len(conditions) - 1
+                                ctype = str(cond.get('type', '')).replace('"', '\\"')
+                                ckw   = str(cond.get('keyword', '')).replace('\\', '\\\\').replace('"', '\\"')
+                                lines.append('              {')
+                                lines.append(f'                type    = "{ctype}"')
+                                lines.append(f'                keyword = "{ckw}"')
+                                lines.append('              }' + ('' if c_is_last else ','))
+                            lines.append('            ]')
+                        lines.append('          }' + ('' if pe_is_last else ','))
+                    lines.append('        ]')
+
+                # field_correlations
+                field_correlations = rule.get('fieldCorrelations') or []
+                if field_correlations:
+                    lines.append('        field_correlations = [')
+                    for fc_idx, fc in enumerate(field_correlations):
+                        fc_is_last = fc_idx == len(field_correlations) - 1
+                        lines.append('          {')
+                        pfks = fc.get('projectFieldKeys') or []
+                        if pfks:
+                            lines.append('            project_field_keys = [')
+                            for pk_idx, pk in enumerate(pfks):
+                                pk_is_last = pk_idx == len(pfks) - 1
+                                pkname = str(pk.get('projectName', '')).replace('\\', '\\\\').replace('"', '\\"')
+                                pktype = str(pk.get('type', '')).replace('"', '\\"')
+                                lines.append('              {')
+                                lines.append(f'                project_name = "{pkname}"')
+                                lines.append(f'                type         = "{pktype}"')
+                                fk = pk.get('fieldKey')
+                                if fk is not None:
+                                    fk_escaped = str(fk).replace('\\', '\\\\').replace('"', '\\"')
+                                    lines.append(f'                field_key    = "{fk_escaped}"')
+                                lines.append('              }' + ('' if pk_is_last else ','))
+                            lines.append('            ]')
+                        lines.append('          }' + ('' if fc_is_last else ','))
+                    lines.append('        ]')
+
+                lines.append('      }' + ('' if r_is_last else ','))
+            lines.append('    ]')
+
+        # metric_log_consolidation_configs
+        mlcc = notifications_data.get('metricLogConsolidationConfigs') or []
+        if not mlcc:
+            lines.append('    metric_log_consolidation_configs = []')
+        else:
+            lines.append('')
+            lines.append('    metric_log_consolidation_configs = [')
+            for m_idx, cfg in enumerate(mlcc):
+                m_is_last = m_idx == len(mlcc) - 1
+                mp = str(cfg.get('metricProjectName', '')).replace('\\', '\\\\').replace('"', '\\"')
+                lp = str(cfg.get('logProjectName', '')).replace('\\', '\\\\').replace('"', '\\"')
+                field_keys = cfg.get('fieldKeys') or []
+                lines.append('      {')
+                lines.append(f'        metric_project_name = "{mp}"')
+                lines.append(f'        log_project_name    = "{lp}"')
+                lines.append(f'        field_keys          = {_format_string_list(field_keys)}')
+                lines.append('      }' + ('' if m_is_last else ','))
             lines.append('    ]')
 
         lines.append('  }')
