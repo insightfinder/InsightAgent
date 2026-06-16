@@ -592,11 +592,12 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                                         break
 
                     if not instance:
-                        instance_field = agent_config_vars['instance_field'][0] if agent_config_vars[
-                                                                                       'instance_field'] and len(
-                            agent_config_vars['instance_field']) > 0 else 'agent.hostname'
-                        instance_field = instance_field.split('.')
-                        instance = safe_get(message_source, instance_field)
+                        instance_fields = agent_config_vars['instance_field'] if agent_config_vars[
+                            'instance_field'] else ['agent.hostname']
+                        for instance_field in instance_fields:
+                            instance = safe_get(message_source, instance_field.split('.'))
+                            if instance:
+                                break
 
                     # filter by instance whitelist
                     if agent_config_vars['instance_whitelist_regex'] \
