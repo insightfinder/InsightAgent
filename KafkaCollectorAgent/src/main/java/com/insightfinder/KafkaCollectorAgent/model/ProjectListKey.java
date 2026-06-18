@@ -4,6 +4,8 @@ import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.JSON_K
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.JSON_KEY_DATASET_NAME;
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.JSON_KEY_ITEM_ID;
 
+import java.util.HashMap;
+import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -26,6 +28,9 @@ public class ProjectListKey {
   private boolean hasDatasetName;
   @Accessors(fluent = true)
   private boolean hasItemId;
+  // Constraints for configurable id fields other than the three built-in ones.
+  // fieldName -> required value (empty means "match any value for this field").
+  private Map<String, String> fieldConstraints;
 
   public static ProjectListKey parseFromString(String s) {
     ProjectListKey projectListKey = new ProjectListKey();
@@ -36,9 +41,9 @@ public class ProjectListKey {
         return null;
       }
       String key = pair[0].trim();
+      String value = pair.length == 1 ? EMPTY_STRING : pair[1];
       switch (key) {
         case JSON_KEY_DATASET_ID:
-          String value = pair.length == 1 ? EMPTY_STRING : pair[1];
           projectListKey.setDatasetId(value);
           break;
         case JSON_KEY_ITEM_ID:
@@ -46,9 +51,21 @@ public class ProjectListKey {
           break;
         case JSON_KEY_DATASET_NAME:
           projectListKey.hasDatasetName(true);
+          break;
+        default:
+          if (!key.isEmpty()) {
+            projectListKey.addFieldConstraint(key, value.trim());
+          }
       }
     }
     return projectListKey;
+  }
+
+  public void addFieldConstraint(String field, String value) {
+    if (fieldConstraints == null) {
+      fieldConstraints = new HashMap<>();
+    }
+    fieldConstraints.put(field, value);
   }
 
   public boolean matchedMessageId(KafkaMessageId messageId) {
@@ -57,11 +74,29 @@ public class ProjectListKey {
     }
     String id = messageId.getId();
     String idName = messageId.getName();
-    if (JSON_KEY_DATASET_ID.equalsIgnoreCase(idName)) {
-      return StringUtils.isEmpty(datasetId) || datasetId.equals(id);
-    } else {
-      return (JSON_KEY_DATASET_NAME.equalsIgnoreCase(idName) && hasDatasetName)
-          || (JSON_KEY_ITEM_ID.equalsIgnoreCase(idName) && hasItemId);
+    if (idName == null) {
+      return false;
     }
+    // Built-in id fields keep their original matching semantics.
+    if (JSON_KEY_DATASET_ID.equalsIgnoreCase(idName)) {
+      // A null datasetId means the key never declared a dataset_id constraint, so it must
+      // not match dataset_id messages. An empty (but non-null) datasetId matches any value.
+      if (datasetId == null) {
+        return false;
+      }
+      return datasetId.isEmpty() || datasetId.equals(id);
+    }
+    if (JSON_KEY_DATASET_NAME.equalsIgnoreCase(idName)) {
+      return hasDatasetName;
+    }
+    if (JSON_KEY_ITEM_ID.equalsIgnoreCase(idName)) {
+      return hasItemId;
+    }
+    // Any other configurable id field is matched through fieldConstraints.
+    if (fieldConstraints != null && fieldConstraints.containsKey(idName)) {
+      String requiredValue = fieldConstraints.get(idName);
+      return StringUtils.isEmpty(requiredValue) || requiredValue.equals(id);
+    }
+    return false;
   }
 }
