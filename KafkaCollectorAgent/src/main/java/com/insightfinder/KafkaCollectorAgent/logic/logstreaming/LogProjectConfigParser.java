@@ -44,22 +44,4 @@ public class LogProjectConfigParser {
     }
     return resultMapping;
   }
-
-  public Map<ProjectListKey, ProjectInfo> getLogMetadataProjectMapping() {
-    Map<String, ProjectInfo> mapping;
-    mapping = gson.fromJson(ifConfig.getProjectList(), PROJECT_LIST_TYPE);
-    Map<ProjectListKey, ProjectInfo> resultMapping = new HashMap<>();
-    for (String projectKey : mapping.keySet()) {
-      String[] keys = projectKey.split(ifConfig.getProjectDelimiter());
-      for (String key : keys) {
-        ProjectListKey projectListKey = ProjectListKey.parseFromString(key);
-        if (projectListKey != null) {
-          if (!projectListKey.hasDatasetName()) {
-            resultMapping.put(projectListKey, mapping.get(projectKey));
-          }
-        }
-      }
-    }
-    return resultMapping;
-  }
 }

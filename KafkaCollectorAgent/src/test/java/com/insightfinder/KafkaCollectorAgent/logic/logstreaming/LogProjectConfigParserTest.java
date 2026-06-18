@@ -6,6 +6,7 @@ import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
 import com.insightfinder.KafkaCollectorAgent.model.ProjectInfo;
 import com.insightfinder.KafkaCollectorAgent.model.ProjectListKey;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -30,16 +31,25 @@ public class LogProjectConfigParserTest {
     when(ifConfig.getProjectDelimiter()).thenReturn("\\|");
   }
 
+  private ProjectListKey key(String... fieldValuePairs) {
+    Map<String, String> constraints = new LinkedHashMap<>();
+    for (String pair : fieldValuePairs) {
+      int colon = pair.indexOf(':');
+      if (colon < 0) {
+        constraints.put(pair, "");
+      } else {
+        constraints.put(pair.substring(0, colon), pair.substring(colon + 1));
+      }
+    }
+    return ProjectListKey.builder().fieldConstraints(constraints).build();
+  }
+
   @Test
   public void testParseLogConfigParserWithItemId() {
     when(ifConfig.getProjectList()).thenReturn(
         "{'dataset_id:326CE741-4E1F-404F-BDA2-0D0D48AE4039,item_id': {'project': 'DeviceProcessEvent','system': 'Lower env Crash'}}");
     Map<ProjectListKey, ProjectInfo> expectedMapping = new HashMap<>();
-    ProjectListKey key = ProjectListKey.builder()
-        .datasetId("326CE741-4E1F-404F-BDA2-0D0D48AE4039")
-        .hasItemId(true)
-        .hasDatasetName(false)
-        .build();
+    ProjectListKey key = key("dataset_id:326CE741-4E1F-404F-BDA2-0D0D48AE4039", "item_id");
     expectedMapping.put(key,
         ProjectInfo.builder()
             .project("DeviceProcessEvent")
@@ -53,11 +63,7 @@ public class LogProjectConfigParserTest {
     when(ifConfig.getProjectList()).thenReturn(
         "{'dataset_id:326CE741-4E1F-404F-BDA2-0D0D48AE4039,dataset_name': {'project': 'DeviceProcessEvent','system': 'Lower env Crash'}}");
     Map<ProjectListKey, ProjectInfo> expectedMapping = new HashMap<>();
-    ProjectListKey key = ProjectListKey.builder()
-        .datasetId("326CE741-4E1F-404F-BDA2-0D0D48AE4039")
-        .hasItemId(false)
-        .hasDatasetName(true)
-        .build();
+    ProjectListKey key = key("dataset_id:326CE741-4E1F-404F-BDA2-0D0D48AE4039", "dataset_name");
     expectedMapping.put(key,
         ProjectInfo.builder()
             .project("DeviceProcessEvent")
@@ -72,14 +78,8 @@ public class LogProjectConfigParserTest {
     when(ifConfig.getProjectList()).thenReturn(
         "{'dataset_id:E0542A84-B528-44F3-8717-82BF93DFC2FC,item_id | dataset_id:AE8EE408-9F2A-40EF-B2AF-EA0154B67468,dataset_name': {'project': 'DeviceProcessEvent','system': 'Lower env Crash'}}");
     Map<ProjectListKey, ProjectInfo> expectedMapping = new HashMap<>();
-    ProjectListKey key1 = ProjectListKey.builder()
-        .datasetId("E0542A84-B528-44F3-8717-82BF93DFC2FC")
-        .hasItemId(true)
-        .build();
-    ProjectListKey key2 = ProjectListKey.builder()
-        .datasetId("AE8EE408-9F2A-40EF-B2AF-EA0154B67468")
-        .hasDatasetName(true)
-        .build();
+    ProjectListKey key1 = key("dataset_id:E0542A84-B528-44F3-8717-82BF93DFC2FC", "item_id");
+    ProjectListKey key2 = key("dataset_id:AE8EE408-9F2A-40EF-B2AF-EA0154B67468", "dataset_name");
     expectedMapping.put(key1,
         ProjectInfo.builder()
             .project("DeviceProcessEvent")

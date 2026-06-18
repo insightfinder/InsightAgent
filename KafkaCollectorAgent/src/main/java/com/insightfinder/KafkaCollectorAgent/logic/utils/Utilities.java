@@ -17,9 +17,6 @@ public class Utilities {
   private static final Logger logger = Logger.getLogger(Utilities.class.getName());
 
   private static final String DOT = "\\.";
-  public static final String JSON_KEY_DATASET_ID = "dataset_id";
-  public static final String JSON_KEY_DATASET_NAME = "dataset_name";
-  public static final String JSON_KEY_ITEM_ID = "item_id";
 
   public static String getKeyFromJson(JsonObject jsonObject, List<String> paths) {
     String value;
