@@ -18,6 +18,8 @@ public class ProjectListKey {
   private static final String COMMA = ",";
   private static final String COLON = ":";
   private static final String EMPTY_STRING = "";
+  // The only field whose value is significant for matching (kept value-aware to mirror master).
+  private static final String DATASET_ID = "dataset_id";
 
   // Constraints on the message id fields, keyed by field name. The value is the required value
   // for that field; an empty value means "match any value of this field". Field names are not
@@ -36,7 +38,13 @@ public class ProjectListKey {
       if (field.isEmpty()) {
         continue;
       }
-      String value = pair.length == 1 ? EMPTY_STRING : pair[1].trim();
+      // Mirror master: only dataset_id keeps its value (matched by value). Every other field
+      // discards its value, so keys differing only by a non-dataset_id value are equal — matching
+      // master, where such fields were stored as a plain boolean.
+      String value = EMPTY_STRING;
+      if (DATASET_ID.equalsIgnoreCase(field) && pair.length == 2) {
+        value = pair[1].trim();
+      }
       constraints.put(field, value);
     }
     if (constraints.isEmpty()) {
@@ -50,11 +58,18 @@ public class ProjectListKey {
       return false;
     }
     String idName = messageId.getName();
-    if (idName == null || !fieldConstraints.containsKey(idName)) {
+    if (idName == null) {
       return false;
     }
-    String requiredValue = fieldConstraints.get(idName);
-    return StringUtils.isEmpty(requiredValue) || requiredValue.equals(messageId.getId());
+    // Mirror master's matching semantics:
+    // - dataset_id is value-aware: an absent or empty constraint matches any dataset_id value
+    //   (master matched on StringUtils.isEmpty(datasetId)), otherwise the value must be equal.
+    // - every other field is matched by presence only; its configured value is ignored.
+    if (DATASET_ID.equalsIgnoreCase(idName)) {
+      String datasetId = fieldConstraints.get(DATASET_ID);
+      return StringUtils.isEmpty(datasetId) || datasetId.equals(messageId.getId());
+    }
+    return fieldConstraints.containsKey(idName);
   }
 
   /**
