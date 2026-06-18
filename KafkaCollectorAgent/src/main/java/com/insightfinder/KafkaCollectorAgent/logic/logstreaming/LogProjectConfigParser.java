@@ -6,6 +6,7 @@ import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
 import com.insightfinder.KafkaCollectorAgent.model.ProjectInfo;
 import com.insightfinder.KafkaCollectorAgent.model.ProjectListKey;
 import java.lang.reflect.Type;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +39,26 @@ public class LogProjectConfigParser {
           ProjectListKey projectListKey = ProjectListKey.parseFromString(key);
           if (projectListKey != null) {
             resultMapping.put(ProjectListKey.parseFromString(key), mapping.get(projectKey));
+          }
+        }
+      }
+    }
+    return resultMapping;
+  }
+
+  public Map<ProjectListKey, ProjectInfo> getLogMetadataProjectMapping() {
+    Map<String, ProjectInfo> mapping;
+    mapping = gson.fromJson(ifConfig.getProjectList(), PROJECT_LIST_TYPE);
+    Map<ProjectListKey, ProjectInfo> resultMapping = new HashMap<>();
+    for (String projectKey : mapping.keySet()) {
+      String[] keys = projectKey.split(ifConfig.getProjectDelimiter());
+      for (String key : keys) {
+        ProjectListKey projectListKey = ProjectListKey.parseFromString(key);
+        if (projectListKey != null) {
+          // master excluded keys that declared dataset_name; the generic equivalent checks
+          // whether the key references the dataset_name field.
+          if (!projectListKey.referencesAnyField(Collections.singleton("dataset_name"))) {
+            resultMapping.put(projectListKey, mapping.get(projectKey));
           }
         }
       }
