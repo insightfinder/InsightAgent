@@ -3,8 +3,8 @@ package com.insightfinder.KafkaCollectorAgent.logic.logstreaming;
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.JSON_KEY_DATASET_ID;
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.JSON_KEY_DATASET_NAME;
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.JSON_KEY_ITEM_ID;
-import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getGMTinHourFromMillis;
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getKeyFromJson;
+import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getTimestampInMillis;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -32,6 +32,8 @@ public class LogMessageHandler {
   private final IFConfig ifConfig;
   @Autowired
   private final Gson gson;
+  private static final List<String> DEFAULT_LOG_MESSAGE_ID_FIELDS =
+      Arrays.asList(JSON_KEY_DATASET_ID, JSON_KEY_DATASET_NAME, JSON_KEY_ITEM_ID);
   private static final String JSON_NAME_INSTANCE_NAME = "instanceName";
   private static final String JSON_NAME_COMPONENT_NAME = "componentName";
   private static final String JSON_NAME_TIMESTAMP = "timestamp";
@@ -76,7 +78,7 @@ public class LogMessageHandler {
       }
       return null;
     }
-    long timestamp = getGMTinHourFromMillis(timestampStr, ifConfig.getLogTimestampFormat());
+    long timestamp = getTimestampInMillis(timestampStr, ifConfig.getLogTimestampFormat());
     if (timestamp < 0) {
       if (ifConfig.isLogParsingInfo()) {
         logger.log(Level.INFO, "can not parse timestamp from raw data: " + jsonContent);
@@ -102,7 +104,10 @@ public class LogMessageHandler {
   }
 
   private LogMessageId getLogMessageId(JsonObject jsonObject) {
-    List<String> supportedKeys = Arrays.asList(JSON_KEY_DATASET_ID, JSON_KEY_DATASET_NAME, JSON_KEY_ITEM_ID);
+    List<String> supportedKeys = ifConfig.getLogMessageIdFieldList();
+    if (supportedKeys == null || supportedKeys.isEmpty()) {
+      supportedKeys = DEFAULT_LOG_MESSAGE_ID_FIELDS;
+    }
     LogMessageId.LogMessageIdBuilder logMessageIdBuilder = LogMessageId.builder();
     for (String jsonName: supportedKeys) {
       if (jsonObject.has(jsonName) && !StringUtils.isEmpty(jsonObject.get(jsonName).getAsString())) {

@@ -51,6 +51,7 @@ public class IFConfig {
   private List<String> logTimestampFieldPathList;
   private List<String> logInstanceFieldPathList;
   private List<String> logComponentFieldPathList;
+  private List<String> logMessageIdFieldList;
   private Set<String> logMetadataTopics;
   private List<List<String>> logComponentList;
 
