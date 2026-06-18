@@ -44,6 +44,7 @@ JSON_LEVEL_DELIM = '.'
 CSV_DELIM = r",|\t"
 ATTEMPTS = 3
 REQUESTS = dict()
+_DEVICE_LOOKUP = {}
 
 """
 This script gathers data to send to Insightfinder
@@ -668,12 +669,9 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             if _serial:
                 inv_serial = _serial
             inv_object_key = _dev.get('object_key') or None
-            _manufacturer = _model.get('manufacturer') or _meta.get('manufacturer') or ''
-            _device_class = _model.get('device_class') or ''
-            if _manufacturer and _device_class:
-                inv_cn = '{}-{}'.format(_manufacturer, _device_class)
-            elif _manufacturer:
-                inv_cn = _manufacturer
+            _manufacturer = _model.get('manufacturer') or _meta.get('manufacturer') or 'NONE'
+            _device_class = _model.get('device_class') or 'NONE'
+            inv_cn = '{}-{}'.format(_manufacturer, _device_class)
             inv_ip = _dev.get('ip_address') or ip_address
             inv_venue = _meta.get('venue')
 
@@ -1392,7 +1390,14 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
         inv_venue = chunk.get('invVenue')
 
         # 'in': mac_address → serial_number → object_key (jira_device_key tag)
-        effective_in = inv_mac.upper() if inv_mac else (inv_serial or inv_object_key)
+        if inv_mac:
+            effective_in = 'MAC ' + inv_mac
+        elif inv_serial:
+            effective_in = 'SERIAL ' + inv_serial
+        elif inv_object_key:
+            effective_in = 'JIRAKEY ' + inv_object_key
+        else:
+            effective_in = None
         effective_cn = inv_cn if inv_cn is not None else component_name
         effective_i = inv_ip if inv_ip is not None else ip_address
         effective_z = inv_venue if inv_venue is not None else zone
@@ -1732,7 +1737,8 @@ def queue_configurer(q):
 
 
 def worker_process(args):
-    (config_file, c_config, utc_now_time, q, device_lookup) = args
+    (config_file, c_config, utc_now_time, q) = args
+    device_lookup = _DEVICE_LOOKUP
 
     config_name = Path(config_file).stem
     level = c_config['log_level']
@@ -1806,22 +1812,23 @@ def main():
         cli_data_block += '\n\t{}: {}'.format(kk, kv)
     main_logger.info(cli_data_block)
 
-    # load device inventory lookup once — shared (via pickle) across all worker processes
-    device_lookup = {}
+    # Load device lookup into a module-level global BEFORE forking the pool.
+    # Workers inherit it via fork() copy-on-write — no pickling, no per-task serialization cost.
+    global _DEVICE_LOOKUP
     device_lookup_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'devicelookup.json')
     if os.path.exists(device_lookup_path):
         try:
             with open(device_lookup_path) as _f:
                 _raw = json.load(_f)
-                device_lookup = {k: v for k, v in _raw.items()
-                                 if k != 'lastmodifiedtimedata' and isinstance(v, dict)}
-            main_logger.info('Loaded %d entries from devicelookup.json', len(device_lookup))
+                _DEVICE_LOOKUP = {k: v for k, v in _raw.items()
+                                  if k != 'lastmodifiedtimedata' and isinstance(v, dict)}
+            main_logger.info('Loaded %d entries from devicelookup.json', len(_DEVICE_LOOKUP))
         except Exception as _e:
             main_logger.warning('Failed to load devicelookup.json: %s', _e)
 
     # get args
     utc_now_time = int(arrow.utcnow().float_timestamp)
-    arg_list = [(f, cli_config_vars, utc_now_time, queue, device_lookup) for f in config_files]
+    arg_list = [(f, cli_config_vars, utc_now_time, queue) for f in config_files]
 
     # start sub process by pool
     pool = multiprocessing.Pool(min(len(arg_list), 40))
