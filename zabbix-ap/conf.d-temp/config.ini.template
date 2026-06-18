@@ -1,0 +1,109 @@
+[zabbix]
+## zabbix info
+# required
+url = http://127.0.0.1:80
+user = Admin
+password = zabbix
+
+# pipe-separated (|) host groups name to query for. If none specified, all host groups will be used
+host_groups =
+
+# hosts to query for. If none specified, all hosts will be used
+hosts =
+
+# comma-separated list of host to ignore, id, full name or regex are supported
+host_blocklist =
+
+# get metrics defined in these templates
+template_ids =
+
+# Collect individual items other than those in templates
+collect_dedicated_items = false
+
+# comma-separated list of regex or string of the metric names to query. For regex, should surround with /, e.g. /cpu/
+metric_allowlist = /.*Space utilization*/,/.*Used space.*/,/.*Total space.*/,/.*Disk read rate.*/,/.*Disk read request avg waiting time.*/,/.*Disk write rate.*/,/.*Disk write request avg waiting time.*/,/.*Available memory.*/,/.*Docker.*/,/^CPU.*/,/.*OOMKilled.*/,/.*Restart count.*/,/^Memory.*/,/.*Networks.*/,/^Interface.*/,/.*Load average.*/,/.*Network interfaces.*/,/.*Processor load.*/,/.*CPU percent usage.*/,/.*Memory usage.*/,/.*ICMP.*/,/.*Failed.*/,/(?i).*error.*/
+
+# comma-separated list of regex or string of the metric names to exclude from the result. For regex, should surround with /, e.g. /cpu/
+metric_disallowlist =
+
+# Entries are evaluated top-to-bottom; the first matching entry is applied.
+# Specific (exact string) entries should come before general (regex) entries.
+# If not set, no transforms are applied.
+# Example: metric_transform_script = /etc/insightfinder/my_transforms.py
+metric_transform_script =
+
+# max number of workers to query and process data, default is cpu cores but max is 10 (connection pool size)
+max_workers =
+# request timeout in seconds, default is 60
+request_timeout =
+# max number of hosts to query per request, default is 100
+max_host_per_request =
+# the interval between two requests for retrieving log, in seconds, default is 60
+log_request_interval =
+# applications to query for. If none specified, all applications will be used
+applications =
+
+# history data time config. If these options is set, the agent will query results by time range
+# time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00
+his_time_range =
+
+# raw, rawtail, csv, csvtail, xls, xlsx, json, jsontail, avro, or xml
+# *tail formats keep track of the current file & position + completed files in [state] below
+data_format = json
+
+## message parsing
+# timestamp format, as library [arrow]. multiple fields can be formatted together to create the timestamp a la `YYYY-MM-DD HH:mm:ss ZZ`. If multiple fields could contain the timestamp, a comma-delimited list may be entered (no value of which may use the aforementioned {formatting}), of which the first found will be selected (treating the list as a priority list). ex `timestamp1,timestamp2`
+timestamp_format =
+# timezone, as per pytz
+timezone =
+timestamp_field =
+# Timezone of the timestamp data to be sent and stored in target DB (InsightFinder). Default is UTC. Only if you wish the data to be stored in other time zones in InsightFinder, this field should be specified to be the desired time zone.
+target_timestamp_timezone = UTC
+# if no instance given, the local hostname will be used. Can also use {field} formatting or a priority list.
+instance_field = hostid
+# flag to indicate whether to gather component name from host group. If set to true, not send component name, default is false
+component_from_host_group = false
+
+# The re.sub statement to generate component name from instance_name
+# each pair of re.sub params will be seperated by comma,
+component_from_instance_name_re_sub = ^([^-]+).*?([^-]+)$,\1-\2,      (.*)(-swt|-switch),-Switch
+
+# Path to a Python script that defines a generate_component_name function used to generate component names.
+# When set, this takes precedence over component_from_host_group and component_from_instance_name_re_sub.
+# The script must define:
+#   def generate_component_name(instance_name=None, hostgroup_name=None, tags=None) -> str:
+component_name_script =
+
+# Set up zone field
+zone_from_host_group = false
+
+# Set up subzone
+subzone_from_instance_name_regex =
+
+device_field =
+# multiple fields are separated by commas. a field can be named with the syntax `<name>::<value>` or `<name>::==<value>`, where `<name>` and `<value>` can each be either a literal value (`name::value`) or formatted (`total time [{step}]::=={timing.end}-{timing.start}`). Use `::==` as a separator to treat `<value>` as a mathematical formula, which must be parseable by `eval()`.
+data_fields =
+# alert fields to gather, separated by commas. If it's empty, all fields will be gathered. For example: eventid,name,severity
+alert_data_fields =
+
+## proxy
+agent_http_proxy =
+agent_https_proxy =
+
+[insightfinder]
+user_name =
+license_key =
+token =
+# Name of the project created in the InsightFinder UI. If this project does not exist, agent will create it automatically.
+project_name =
+# Name of system owned by project. If system_name does not exist in InsightFinder, agent will create a new system automatically from this field or project_name.
+system_name =
+# metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay
+project_type = metric
+sampling_interval = 5
+run_interval = 5
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
