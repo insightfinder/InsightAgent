@@ -85,7 +85,22 @@ public class Utilities {
   }
 
   public static long getGMTinHourFromMillis(String date, String format) {
-    return getEpochMillisFromFormattedDate(date, format);
+    DateTimeFormatter rfc3339Formatter = DateTimeFormatter.ofPattern(format)
+        .withResolverStyle(ResolverStyle.LENIENT);
+    ZonedDateTime zonedDateTime = parseRfc3339(date, rfc3339Formatter);
+    if (zonedDateTime != null) {
+      return zonedDateTime.toInstant().toEpochMilli();
+    }
+    return -1;
+  }
+
+  public static ZonedDateTime parseRfc3339(String rfcDateTime, DateTimeFormatter rfc3339Formatter) {
+    try {
+      return ZonedDateTime.parse(rfcDateTime, rfc3339Formatter);
+    } catch (DateTimeParseException exception) {
+      logger.log(Level.INFO, " can not pare date :" + rfcDateTime);
+    }
+    return null;
   }
 
   /**
