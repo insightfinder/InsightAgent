@@ -3,6 +3,7 @@ package com.insightfinder.KafkaCollectorAgent.logic.logstreaming;
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.JSON_KEY_DATASET_ID;
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.JSON_KEY_DATASET_NAME;
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.JSON_KEY_ITEM_ID;
+import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getGMTinHourFromMillis;
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getKeyFromJson;
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getTimestampInMillis;
 
@@ -78,7 +79,15 @@ public class LogMessageHandler {
       }
       return null;
     }
-    long timestamp = getTimestampInMillis(timestampStr, ifConfig.getLogTimestampFormat());
+    // Prefer the original dev-branch conversion; fall back to the epoch/format-aware parser.
+    String timestampFormat = ifConfig.getLogTimestampFormat();
+    long timestamp = -1;
+    if (!StringUtils.isEmpty(timestampFormat)) {
+      timestamp = getGMTinHourFromMillis(timestampStr, timestampFormat);
+    }
+    if (timestamp < 0) {
+      timestamp = getTimestampInMillis(timestampStr, timestampFormat);
+    }
     if (timestamp < 0) {
       if (ifConfig.isLogParsingInfo()) {
         logger.log(Level.INFO, "can not parse timestamp from raw data: " + jsonContent);
