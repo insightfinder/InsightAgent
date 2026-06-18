@@ -75,6 +75,8 @@ public class LogMessageHandlerTest {
     when(ifConfig.getLogTimestampFieldPathList()).thenReturn(Collections.singletonList("item_time"));
     when(ifConfig.getLogTimestampFormat()).thenReturn("yyyy-MM-dd'T'HH:mm:ssZZZZZ");
     when(ifConfig.getLogInstanceFieldPathList()).thenReturn(Collections.singletonList("device_context_id"));
+    when(ifConfig.getLogMessageIdFieldList())
+        .thenReturn(Arrays.asList("dataset_id", "dataset_name", "item_id"));
     JsonObject outputJson = new JsonObject();
     outputJson.addProperty("timestamp", "1719705616000");
     outputJson.addProperty("tag", "device_context_id");

@@ -24,6 +24,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -69,6 +70,19 @@ class IFStreamingBufferManagerTest {
         logMessageHandler, webClientEndpoints);
   }
 
+  private static ProjectListKey key(String... fieldValuePairs) {
+    Map<String, String> constraints = new LinkedHashMap<>();
+    for (String pair : fieldValuePairs) {
+      int colon = pair.indexOf(':');
+      if (colon < 0) {
+        constraints.put(pair, "");
+      } else {
+        constraints.put(pair.substring(0, colon), pair.substring(colon + 1));
+      }
+    }
+    return ProjectListKey.builder().fieldConstraints(constraints).build();
+  }
+
   @AfterEach
   void tearDown() {
     // Shut down real executor threads so they don't prevent JVM exit after tests.
@@ -91,15 +105,16 @@ class IFStreamingBufferManagerTest {
       when(ifConfig.getInstanceList()).thenReturn(new HashSet<>());
       Map<ProjectListKey, ProjectInfo> logProjectList = new HashMap<>();
       logProjectList.put(
-          ProjectListKey.builder().datasetId("326CE741-4E1F-404F-BDA2-0D0D48AE4039").hasDatasetName(true).build(),
+          key("dataset_id:326CE741-4E1F-404F-BDA2-0D0D48AE4039", "dataset_name"),
           ProjectInfo.builder().project("DeviceProcessEvent").system("Lower env Crash").build());
       logProjectList.put(
-          ProjectListKey.builder().datasetId("326CE741-4E1F-404F-BDA2-0D0D48AE4039").hasItemId(true).build(),
+          key("dataset_id:326CE741-4E1F-404F-BDA2-0D0D48AE4039", "item_id"),
           ProjectInfo.builder().project("DeviceProcessEvent1").system("Lower env Crash").build());
       logProjectList.put(
-          ProjectListKey.builder().datasetId("326CE741-4E1F-404F-BDA2-0D0D48AE4038").hasItemId(true).build(),
+          key("dataset_id:326CE741-4E1F-404F-BDA2-0D0D48AE4038", "item_id"),
           ProjectInfo.builder().project("DeviceProcessEvent2").system("Lower env Crash").build());
       when(ifConfig.getProjectList()).thenReturn("");
+      when(ifConfig.getLogMetadataExcludeFields()).thenReturn(Collections.singleton("dataset_name"));
       when(logProjectConfigParser.getLogProjectMapping()).thenReturn(logProjectList);
       ifStreamingBufferManager.init();
     }
@@ -205,10 +220,10 @@ class IFStreamingBufferManagerTest {
 
     @Test
     void testParseLogData() {
-      // Use name("dataset_name") so matchedMessageId hits the hasDatasetName branch,
-      // which only matches the one key with hasDatasetName=true → "DeviceProcessEvent".
-      // Using name("dataset_id") would match all keys whose datasetId equals the id,
-      // making the result non-deterministic over HashMap iteration order.
+      // Use name("dataset_name") so matchedMessageId matches only the single key whose
+      // fieldConstraints include "dataset_name" → "DeviceProcessEvent". Using name("dataset_id")
+      // would match all keys whose dataset_id constraint equals the id, making the result
+      // non-deterministic over HashMap iteration order.
       LogMessage logMessage = LogMessage.builder()
           .id(LogMessageId.builder().name("dataset_name")
               .id("326CE741-4E1F-404F-BDA2-0D0D48AE4039").build())

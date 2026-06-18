@@ -140,8 +140,9 @@ public class IFStreamingBufferManager {
     if (ifConfig.getProjectList() != null) {
       if (ifConfig.isLogProject()) {
         logProjectList = logProjectConfigParser.getLogProjectMapping();
+        Set<String> metadataExcludeFields = ifConfig.getLogMetadataExcludeFields();
         logMetadataProjectList = logProjectList.entrySet().stream()
-            .filter(entry -> !entry.getKey().hasDatasetName())
+            .filter(entry -> !entry.getKey().referencesAnyField(metadataExcludeFields))
             .map(Entry::getValue)
             .collect(Collectors.toList());
         logMetadataProjectList.forEach(projectInfo -> collectingLogMetadataMap.put(projectInfo,
