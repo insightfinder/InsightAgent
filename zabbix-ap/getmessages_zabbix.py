@@ -104,6 +104,124 @@ def is_matching_block_regex(item_id, name, block_regex_map):
     return False
 
 
+def _tokenize_device_rule(rule_str):
+    """Split a rule string into (type, value) tokens.
+
+    Tokens: LPAREN, RPAREN, AND, OR, COND (field=pattern).
+    Spaces are skipped; AND/OR must be surrounded by whitespace or parens.
+    """
+    tokens = []
+    i = 0
+    s = rule_str.strip()
+    while i < len(s):
+        if s[i] == '(':
+            tokens.append(('LPAREN', '('))
+            i += 1
+        elif s[i] == ')':
+            tokens.append(('RPAREN', ')'))
+            i += 1
+        elif s[i].isspace():
+            i += 1
+        else:
+            j = i
+            while j < len(s) and s[j] not in ' \t\n()':
+                j += 1
+            word = s[i:j]
+            if word.upper() == 'AND':
+                tokens.append(('AND', 'AND'))
+            elif word.upper() == 'OR':
+                tokens.append(('OR', 'OR'))
+            elif '=' in word:
+                tokens.append(('COND', word))
+            else:
+                raise ValueError('Unexpected token in ignore_devices rule: {!r}'.format(word))
+            i = j
+    return tokens
+
+
+def _parse_device_rule(rule_str):
+    """Parse a boolean rule string into an AST node.
+
+    Grammar (AND binds tighter than OR):
+      expr     = and_expr (OR and_expr)*
+      and_expr = atom (AND atom)*
+      atom     = '(' expr ')' | field=pattern
+    """
+    tokens = _tokenize_device_rule(rule_str)
+    pos = [0]
+
+    def parse_expr():
+        node = parse_and()
+        while pos[0] < len(tokens) and tokens[pos[0]][0] == 'OR':
+            pos[0] += 1
+            node = ('OR', node, parse_and())
+        return node
+
+    def parse_and():
+        node = parse_atom()
+        while pos[0] < len(tokens) and tokens[pos[0]][0] == 'AND':
+            pos[0] += 1
+            node = ('AND', node, parse_atom())
+        return node
+
+    def parse_atom():
+        if pos[0] >= len(tokens):
+            raise ValueError('Unexpected end of ignore_devices rule')
+        tok_type, tok_val = tokens[pos[0]]
+        if tok_type == 'LPAREN':
+            pos[0] += 1
+            node = parse_expr()
+            if pos[0] >= len(tokens) or tokens[pos[0]][0] != 'RPAREN':
+                raise ValueError('Missing closing ) in ignore_devices rule')
+            pos[0] += 1
+            return node
+        elif tok_type == 'COND':
+            pos[0] += 1
+            field_path, _, pattern = tok_val.partition('=')
+            return ('COND', field_path.strip(), pattern.strip())
+        else:
+            raise ValueError('Unexpected token in ignore_devices rule: {!r}'.format(tok_val))
+
+    return parse_expr()
+
+
+def _eval_device_rule(node, inv_entry):
+    """Evaluate a parsed rule AST node against a device lookup entry."""
+    kind = node[0]
+    if kind == 'AND':
+        return _eval_device_rule(node[1], inv_entry) and _eval_device_rule(node[2], inv_entry)
+    if kind == 'OR':
+        return _eval_device_rule(node[1], inv_entry) or _eval_device_rule(node[2], inv_entry)
+    if kind == 'COND':
+        _, field_path, pattern = node
+        val = inv_entry
+        for part in field_path.split('.'):
+            if isinstance(val, dict):
+                val = val.get(part)
+            else:
+                val = None
+                break
+        if val is None:
+            return False
+        return bool(re.search(pattern, str(val)))
+    return False
+
+
+def is_device_ignored(inv_entry, ignore_device_rules):
+    """Return True if any parsed ignore rule evaluates to True for this device entry.
+
+    ignore_device_rules is a list of AST nodes produced by _parse_device_rule().
+    Each rule supports AND / OR / grouping:
+      e.g. (device.meta.device_name=.*GPON.* OR device.model.name=.*GPON.*) AND device.meta.venue=.*MHC.*
+    """
+    if not ignore_device_rules or not inv_entry:
+        return False
+    for rule_node in ignore_device_rules:
+        if _eval_device_rule(rule_node, inv_entry):
+            return True
+    return False
+
+
 def load_metric_transforms(script_path, logger):
     """Load TRANSFORMS list from a user-provided Python script."""
     if not os.path.exists(script_path):
@@ -651,6 +769,9 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             _inv_entry = _device_lookup.get(_actual_host_id) if _actual_host_id else None
             if not _inv_entry:
                 continue
+            if is_device_ignored(_inv_entry, agent_config_vars.get('ignore_device_rules', [])):
+                logger.debug('Skipping ignored device host_id=%s', _actual_host_id)
+                continue
 
             inv_mac = None
             inv_serial = None
@@ -860,6 +981,7 @@ def get_agent_config_vars(logger, config_ini):
             metric_disallowlist = config_parser.get('zabbix', 'metric_disallowlist', fallback=None)
             metric_transform_script = config_parser.get('zabbix', 'metric_transform_script', fallback=None)
             derived_metrics_script = config_parser.get('zabbix', 'derived_metrics_script', fallback=None)
+            ignore_devices = config_parser.get('zabbix', 'ignore_devices', fallback='')
             applications = config_parser.get('zabbix', 'applications')
 
             max_workers = config_parser.get('zabbix', 'max_workers')
@@ -1022,6 +1144,20 @@ def get_agent_config_vars(logger, config_ini):
         if derived_metrics_script and len(derived_metrics_script.strip()) != 0:
             derived_metrics = load_derived_metrics(derived_metrics_script.strip(), logger)
 
+        # ignore_devices rules: pipe-separated boolean expressions, e.g.:
+        #   device.meta.device_name=.*GPON.*
+        #   (device.meta.device_name=.*GPON.* OR device.model.name=.*GPON.*) AND device.meta.venue=.*MHC.*
+        ignore_device_rules = []
+        if ignore_devices and ignore_devices.strip():
+            for rule in ignore_devices.split('|'):
+                rule = rule.strip()
+                if not rule:
+                    continue
+                try:
+                    ignore_device_rules.append(_parse_device_rule(rule))
+                except ValueError as e:
+                    logger.error('Invalid ignore_devices rule %r: %s', rule, e)
+
         # device_lookup is loaded once in main() and injected by worker_process
         device_lookup = {}
 
@@ -1047,6 +1183,7 @@ def get_agent_config_vars(logger, config_ini):
                        'metric_transforms': metric_transforms,
                        'derived_metrics': derived_metrics,
                        'save_metrics_debug': save_metrics_debug,
+                       'ignore_device_rules': ignore_device_rules,
                        'device_lookup': device_lookup}
 
         return config_vars
