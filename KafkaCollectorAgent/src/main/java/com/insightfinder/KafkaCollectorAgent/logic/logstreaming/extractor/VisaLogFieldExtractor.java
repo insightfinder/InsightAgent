@@ -1,49 +1,51 @@
 package com.insightfinder.KafkaCollectorAgent.logic.logstreaming.extractor;
 
+import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getGMTinHourFromMillis;
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getKeyFromJson;
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getTimestampInMillis;
 
 import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
-import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * Visa field extraction. Placeholder implementation: instance is read from the configured
- * {@code logInstanceFieldPathList}, and there is no component name yet.
+ * Visa field extraction.
  *
- * <p>TODO: replace with Visa's real rules once they are known (the actual fields and any
- * value/combination logic for instance and component name).
+ * <p>For now {@code extractInstance} and {@code extractComponentName} reuse the Lenovo
+ * implementation (inherited unchanged); only the timestamp logic differs, using this branch's
+ * latest "format-aware first, then epoch/format-aware" parsing.
+ *
+ * <p>TODO(visa): once Visa's real instance/component rules are known, override the inherited
+ * methods here.
  *
  * <p>Selected when {@code insight-finder.vendor=visa}.
  */
 @Component
-@RequiredArgsConstructor
 @ConditionalOnProperty(name = "insight-finder.vendor", havingValue = "visa")
-public class VisaLogFieldExtractor implements LogFieldExtractor {
+public class VisaLogFieldExtractor extends LenovoLogFieldExtractor {
 
-  private final IFConfig ifConfig;
-
-  @Override
-  public String extractInstance(JsonObject content) {
-    // TODO(visa): confirm the real instance field(s) and any transformation rules.
-    return getKeyFromJson(content, ifConfig.getLogInstanceFieldPathList());
-  }
-
-  @Override
-  public String extractComponentName(JsonObject content) {
-    // TODO(visa): implement Visa's component name rule. No component for now.
-    return null;
+  public VisaLogFieldExtractor(IFConfig ifConfig) {
+    super(ifConfig);
   }
 
   @Override
   public long extractTimestamp(JsonObject content) {
-    // TODO(visa): confirm the real timestamp field(s) and format.
+    // Use the current branch's latest timestamp logic: try the format-aware conversion first,
+    // then fall back to the epoch/format-aware parser.
     String timestampStr = getKeyFromJson(content, ifConfig.getLogTimestampFieldPathList());
     if (timestampStr == null) {
       return -1;
     }
-    return getTimestampInMillis(timestampStr, ifConfig.getLogTimestampFormat());
+    String timestampFormat = ifConfig.getLogTimestampFormat();
+    long timestamp = -1;
+    if (!StringUtils.isEmpty(timestampFormat)) {
+      timestamp = getGMTinHourFromMillis(timestampStr, timestampFormat);
+    }
+    if (timestamp < 0) {
+      timestamp = getTimestampInMillis(timestampStr, timestampFormat);
+    }
+    return timestamp;
   }
 }
