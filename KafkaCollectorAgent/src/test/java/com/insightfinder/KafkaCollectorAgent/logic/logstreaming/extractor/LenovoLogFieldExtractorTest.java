@@ -84,12 +84,12 @@ class LenovoLogFieldExtractorTest {
   }
 
   @Test
-  void extractsEpochMillisTimestampWithoutFormat() {
+  void extractTimestampReturnsNegativeWhenValueUnparseable() {
     JsonObject json = new JsonObject();
-    json.addProperty("ts", "1719705616000");
+    json.addProperty("ts", "not-a-date");
     when(ifConfig.getLogTimestampFieldPathList()).thenReturn(Collections.singletonList("ts"));
-    when(ifConfig.getLogTimestampFormat()).thenReturn(null);
-    assertThat(extractor.extractTimestamp(json)).isEqualTo(1719705616000L);
+    when(ifConfig.getLogTimestampFormat()).thenReturn("yyyy-MM-dd'T'HH:mm:ssZZZZZ");
+    assertThat(extractor.extractTimestamp(json)).isNegative();
   }
 
   @Test

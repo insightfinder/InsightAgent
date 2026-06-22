@@ -2,7 +2,6 @@ package com.insightfinder.KafkaCollectorAgent.logic.logstreaming.extractor;
 
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getGMTinHourFromMillis;
 import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getKeyFromJson;
-import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getTimestampInMillis;
 
 import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
@@ -10,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -28,7 +26,7 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(name = "insight-finder.vendor", havingValue = "lenovo", matchIfMissing = true)
 public class LenovoLogFieldExtractor implements LogFieldExtractor {
 
-  private final IFConfig ifConfig;
+  protected final IFConfig ifConfig;
 
   @Override
   public String extractInstance(JsonObject content) {
@@ -62,19 +60,12 @@ public class LenovoLogFieldExtractor implements LogFieldExtractor {
 
   @Override
   public long extractTimestamp(JsonObject content) {
+    // Keep this identical to the master branch: read the raw value, then convert via
+    // getGMTinHourFromMillis using the configured format (no epoch fallback).
     String timestampStr = getKeyFromJson(content, ifConfig.getLogTimestampFieldPathList());
     if (timestampStr == null) {
       return -1;
     }
-    // Prefer the original dev-branch conversion; fall back to the epoch/format-aware parser.
-    String timestampFormat = ifConfig.getLogTimestampFormat();
-    long timestamp = -1;
-    if (!StringUtils.isEmpty(timestampFormat)) {
-      timestamp = getGMTinHourFromMillis(timestampStr, timestampFormat);
-    }
-    if (timestamp < 0) {
-      timestamp = getTimestampInMillis(timestampStr, timestampFormat);
-    }
-    return timestamp;
+    return getGMTinHourFromMillis(timestampStr, ifConfig.getLogTimestampFormat());
   }
 }
