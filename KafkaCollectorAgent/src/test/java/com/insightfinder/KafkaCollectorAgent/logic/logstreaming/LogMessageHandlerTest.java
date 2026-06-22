@@ -9,8 +9,6 @@ import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessageId;
 import com.insightfinder.KafkaCollectorAgent.model.logmetadatamessage.LogMetadataMessage;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.Arrays;
-import java.util.Collections;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -73,8 +71,8 @@ public class LogMessageHandlerTest {
     String rawMessage = getExampleLogDataMessage();
     when(logFieldExtractor.extractTimestamp(any())).thenReturn(1719705616000L);
     when(logFieldExtractor.extractInstance(any())).thenReturn("device_context_id");
-    when(ifConfig.getLogMessageIdFieldList())
-        .thenReturn(Arrays.asList("dataset_id", "dataset_name", "item_id"));
+    when(logFieldExtractor.extractMessageId(any()))
+        .thenReturn(LogMessageId.builder().name("dataset_id").id("dataset_id").build());
     JsonObject outputJson = new JsonObject();
     outputJson.addProperty("timestamp", "1719705616000");
     outputJson.addProperty("tag", "device_context_id");

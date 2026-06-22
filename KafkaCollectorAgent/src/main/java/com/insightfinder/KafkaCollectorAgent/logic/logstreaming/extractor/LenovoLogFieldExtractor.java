@@ -5,10 +5,12 @@ import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getKey
 
 import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
+import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessageId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -67,5 +69,22 @@ public class LenovoLogFieldExtractor implements LogFieldExtractor {
       return -1;
     }
     return getGMTinHourFromMillis(timestampStr, ifConfig.getLogTimestampFormat());
+  }
+
+  @Override
+  public LogMessageId extractMessageId(JsonObject content) {
+    LogMessageId.LogMessageIdBuilder logMessageIdBuilder = LogMessageId.builder();
+    List<String> supportedKeys = ifConfig.getLogMessageIdFieldList();
+    if (supportedKeys != null) {
+      for (String jsonName : supportedKeys) {
+        if (content.has(jsonName) && !StringUtils.isEmpty(content.get(jsonName).getAsString())) {
+          return logMessageIdBuilder
+              .name(jsonName)
+              .id(content.get(jsonName).getAsString())
+              .build();
+        }
+      }
+    }
+    return logMessageIdBuilder.build();
   }
 }
