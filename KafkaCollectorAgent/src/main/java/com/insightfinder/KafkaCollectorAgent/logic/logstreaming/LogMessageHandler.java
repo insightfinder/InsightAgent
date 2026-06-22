@@ -7,11 +7,9 @@ import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.extractor.LogFie
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessage;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessageId;
 import com.insightfinder.KafkaCollectorAgent.model.logmetadatamessage.LogMetadataMessage;
-import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import lombok.RequiredArgsConstructor;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -78,27 +76,11 @@ public class LogMessageHandler {
     data.addProperty(JSON_NAME_TIMESTAMP, Long.toString(timestamp));
     data.addProperty(JSON_NAME_TAG, instanceStr);
     data.add(JSON_NAME_DATA, jsonContent);
-    LogMessageId logMessageId = getLogMessageId(jsonContent);
+    LogMessageId logMessageId = logFieldExtractor.extractMessageId(jsonContent);
     return LogMessage.builder()
         .id(logMessageId)
         .outputMessage(data)
         .build();
-  }
-
-  private LogMessageId getLogMessageId(JsonObject jsonObject) {
-    LogMessageId.LogMessageIdBuilder logMessageIdBuilder = LogMessageId.builder();
-    List<String> supportedKeys = ifConfig.getLogMessageIdFieldList();
-    if (supportedKeys != null) {
-      for (String jsonName : supportedKeys) {
-        if (jsonObject.has(jsonName) && !StringUtils.isEmpty(jsonObject.get(jsonName).getAsString())) {
-          return logMessageIdBuilder
-              .name(jsonName)
-              .id(jsonObject.get(jsonName).getAsString())
-              .build();
-        }
-      }
-    }
-    return logMessageIdBuilder.build();
   }
 
 }
