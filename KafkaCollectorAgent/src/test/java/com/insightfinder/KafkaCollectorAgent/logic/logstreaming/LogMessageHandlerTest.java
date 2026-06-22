@@ -3,15 +3,14 @@ package com.insightfinder.KafkaCollectorAgent.logic.logstreaming;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
+import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.extractor.LogFieldExtractor;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessage;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessageId;
 import com.insightfinder.KafkaCollectorAgent.model.logmetadatamessage.LogMetadataMessage;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -19,6 +18,7 @@ import org.mockito.MockitoAnnotations;
 import org.springframework.util.ResourceUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 public class LogMessageHandlerTest {
@@ -26,6 +26,8 @@ public class LogMessageHandlerTest {
   private LogMessageHandler logMessageHandler;
   @Mock
   IFConfig ifConfig;
+  @Mock
+  LogFieldExtractor logFieldExtractor;
   Gson gson;
 
 
@@ -33,8 +35,7 @@ public class LogMessageHandlerTest {
   void setup() {
     MockitoAnnotations.openMocks(this);
     gson = new Gson();
-    logMessageHandler = new LogMessageHandler(ifConfig, gson);
-    when(ifConfig.getLogInstanceFieldPathList()).thenReturn(Collections.singletonList("device_id"));
+    logMessageHandler = new LogMessageHandler(ifConfig, gson, logFieldExtractor);
   }
 
   private String getExampleMetadataMessage() throws IOException {
@@ -54,11 +55,9 @@ public class LogMessageHandlerTest {
   @Test
   void testProcessLogMetadataMessage() throws IOException {
     String rawMessage = getExampleMetadataMessage();
-    when(ifConfig.getLogInstanceFieldPathList()).thenReturn(Collections.singletonList("device_id"));
-    List<List<String>> componentList = new ArrayList<>();
-    componentList.add(Arrays.asList("device_info.device_brand", "device_info.device_modeltype"));
-    componentList.add(Collections.singletonList("device_info.device_name"));
-    when(ifConfig.getLogComponentList()).thenReturn(componentList);
+    when(logFieldExtractor.extractInstance(any())).thenReturn("device_id");
+    when(logFieldExtractor.extractComponentName(any()))
+        .thenReturn("device_brand-device_modeltype");
     JsonObject outputJson = new JsonObject();
     outputJson.addProperty("instanceName",
         "device_id");
@@ -72,9 +71,8 @@ public class LogMessageHandlerTest {
   @Test
   void testProcessLogDataMessage() throws IOException {
     String rawMessage = getExampleLogDataMessage();
-    when(ifConfig.getLogTimestampFieldPathList()).thenReturn(Collections.singletonList("item_time"));
-    when(ifConfig.getLogTimestampFormat()).thenReturn("yyyy-MM-dd'T'HH:mm:ssZZZZZ");
-    when(ifConfig.getLogInstanceFieldPathList()).thenReturn(Collections.singletonList("device_context_id"));
+    when(logFieldExtractor.extractTimestamp(any())).thenReturn(1719705616000L);
+    when(logFieldExtractor.extractInstance(any())).thenReturn("device_context_id");
     when(ifConfig.getLogMessageIdFieldList())
         .thenReturn(Arrays.asList("dataset_id", "dataset_name", "item_id"));
     JsonObject outputJson = new JsonObject();
