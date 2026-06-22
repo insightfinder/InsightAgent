@@ -786,10 +786,10 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             _mac = (_dev.get('mac_address') or '').strip()
             if _mac:
                 _mac_converted = _mac.replace(':', '-').strip('-').strip()
-                if _mac_converted:
+                if _mac_converted and any(c.isalnum() for c in _mac_converted):
                     inv_mac = _mac_converted
             _serial = (_dev.get('serial_number') or '').strip()
-            if _serial:
+            if _serial and any(c.isalnum() for c in _serial):
                 inv_serial = _serial
             inv_object_key = _dev.get('object_key') or None
             _manufacturer = _model.get('manufacturer') or _meta.get('manufacturer') or 'NONE'

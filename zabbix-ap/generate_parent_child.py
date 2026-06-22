@@ -20,7 +20,7 @@ DEVICELOOKUP_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'de
 OUTPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'parent_child_relationships.json')
 
 API_BASE = 'http://54.234.90.98/devices'
-API_KEY = 'accessparks-keyInsight-87654321'
+API_KEY = ''
 API_HEADERS = {'accept': 'application/json', 'X-API-Key': API_KEY}
 
 MAX_WORKERS = 20
@@ -43,11 +43,11 @@ def make_instance_name(mac_address, serial_number, object_key):
     """Mirror the effective_in logic in getmessages_zabbix.py."""
     if mac_address:
         candidate = mac_address.replace(':', '-').strip('-').strip()
-        if candidate:
+        if candidate and any(c.isalnum() for c in candidate):
             return 'MAC ' + candidate
-    if serial_number:
+    if serial_number and any(c.isalnum() for c in serial_number):
         return 'SERIAL ' + serial_number
-    if object_key:
+    if object_key and any(c.isalnum() for c in object_key):
         return 'JIRAKEY ' + object_key
     return None
 
