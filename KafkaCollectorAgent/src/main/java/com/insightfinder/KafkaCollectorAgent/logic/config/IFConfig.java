@@ -15,6 +15,8 @@ import org.springframework.context.annotation.Configuration;
 @Data
 public class IFConfig {
 
+  // Selects the vendor-specific log project resolution strategy: "lenovo" (default) or "visa".
+  private String vendor = "lenovo";
   private String userName;
   private String serverUrl;
   private String serverUri;
@@ -52,6 +54,9 @@ public class IFConfig {
   private List<String> logInstanceFieldPathList;
   private List<String> logComponentFieldPathList;
   private List<String> logMessageIdFieldList;
+  // Visa: JSON field paths used to read the project / system directly from a log message.
+  private List<String> logProjectFieldPathList;
+  private List<String> logSystemFieldPathList;
   private Set<String> logMetadataExcludeFields;
   private Set<String> logMetadataTopics;
   private List<List<String>> logComponentList;

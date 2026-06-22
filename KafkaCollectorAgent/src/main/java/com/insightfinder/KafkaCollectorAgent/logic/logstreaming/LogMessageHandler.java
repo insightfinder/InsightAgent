@@ -1,17 +1,12 @@
 package com.insightfinder.KafkaCollectorAgent.logic.logstreaming;
 
-import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getGMTinHourFromMillis;
-import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getKeyFromJson;
-import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getTimestampInMillis;
-
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
+import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.extractor.LogFieldExtractor;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessage;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessageId;
 import com.insightfinder.KafkaCollectorAgent.model.logmetadatamessage.LogMetadataMessage;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -29,6 +24,8 @@ public class LogMessageHandler {
   private final IFConfig ifConfig;
   @Autowired
   private final Gson gson;
+  @Autowired
+  private final LogFieldExtractor logFieldExtractor;
   private static final String JSON_NAME_INSTANCE_NAME = "instanceName";
   private static final String JSON_NAME_COMPONENT_NAME = "componentName";
   private static final String JSON_NAME_TIMESTAMP = "timestamp";
@@ -40,7 +37,7 @@ public class LogMessageHandler {
    */
   public LogMetadataMessage processMetadataMessage(String message) {
     JsonObject jsonContent = gson.fromJson(message, JsonObject.class);
-    String instanceStr = getKeyFromJson(jsonContent, ifConfig.getLogInstanceFieldPathList());
+    String instanceStr = logFieldExtractor.extractInstance(jsonContent);
     if (instanceStr == null) {
       if (ifConfig.isLogParsingInfo()) {
         logger.log(Level.INFO, "can not find instance in raw data:" + message);
@@ -49,12 +46,9 @@ public class LogMessageHandler {
     }
     JsonObject data = new JsonObject();
     data.addProperty(JSON_NAME_INSTANCE_NAME, instanceStr);
-    List<List<String>> logComponentList = ifConfig.getLogComponentList();
-    if (!logComponentList.isEmpty()) {
-      String componentName = getComponentName(jsonContent, logComponentList);
-      if (componentName != null) {
-        data.addProperty(JSON_NAME_COMPONENT_NAME, componentName);
-      }
+    String componentName = logFieldExtractor.extractComponentName(jsonContent);
+    if (componentName != null) {
+      data.addProperty(JSON_NAME_COMPONENT_NAME, componentName);
     }
     return LogMetadataMessage.builder()
         .outputMessage(data)
@@ -66,29 +60,14 @@ public class LogMessageHandler {
    */
   public LogMessage processLogDataMessage(String message) {
     JsonObject jsonContent = gson.fromJson(message, JsonObject.class);
-    String timestampStr = getKeyFromJson(jsonContent, ifConfig.getLogTimestampFieldPathList());
-    if (timestampStr == null) {
-      if (ifConfig.isLogParsingInfo()) {
-        logger.log(Level.INFO, "can not find timestamp in raw data: " + jsonContent);
-      }
-      return null;
-    }
-    // Prefer the original dev-branch conversion; fall back to the epoch/format-aware parser.
-    String timestampFormat = ifConfig.getLogTimestampFormat();
-    long timestamp = -1;
-    if (!StringUtils.isEmpty(timestampFormat)) {
-      timestamp = getGMTinHourFromMillis(timestampStr, timestampFormat);
-    }
-    if (timestamp < 0) {
-      timestamp = getTimestampInMillis(timestampStr, timestampFormat);
-    }
+    long timestamp = logFieldExtractor.extractTimestamp(jsonContent);
     if (timestamp < 0) {
       if (ifConfig.isLogParsingInfo()) {
         logger.log(Level.INFO, "can not parse timestamp from raw data: " + jsonContent);
       }
       return null;
     }
-    String instanceStr = getKeyFromJson(jsonContent, ifConfig.getLogInstanceFieldPathList());
+    String instanceStr = logFieldExtractor.extractInstance(jsonContent);
     if (instanceStr == null) {
       if (ifConfig.isLogParsingInfo()) {
         logger.log(Level.INFO, "can not find instance in raw data:" + jsonContent);
@@ -120,28 +99,6 @@ public class LogMessageHandler {
       }
     }
     return logMessageIdBuilder.build();
-  }
-
-  private String getComponentName(JsonObject srcData, List<List<String>> logComponentList) {
-    String componentName = null;
-    if (logComponentList != null) {
-      List<String> subComponents = new ArrayList<>();
-      for (List<String> componentPaths : logComponentList) {
-        componentPaths.forEach(componentPath -> {
-          String value = getKeyFromJson(srcData, Collections.singletonList(componentPath));
-          if (value != null) {
-            subComponents.add(value);
-          }
-        });
-        if (subComponents.size() == componentPaths.size()) {
-          componentName = String.join("-", subComponents);
-          return componentName;
-        } else {
-          subComponents.clear();
-        }
-      }
-    }
-    return componentName;
   }
 
 }
