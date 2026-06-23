@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
 import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.extractor.LogFieldExtractor;
+import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.extractor.LogMessageIdExtractor;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessage;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessageId;
 import com.insightfinder.KafkaCollectorAgent.model.logmetadatamessage.LogMetadataMessage;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.ResourceUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,6 +28,8 @@ public class LogMessageHandlerTest {
   IFConfig ifConfig;
   @Mock
   LogFieldExtractor logFieldExtractor;
+  @Mock
+  LogMessageIdExtractor logMessageIdExtractor;
   Gson gson;
 
 
@@ -34,6 +38,7 @@ public class LogMessageHandlerTest {
     MockitoAnnotations.openMocks(this);
     gson = new Gson();
     logMessageHandler = new LogMessageHandler(ifConfig, gson, logFieldExtractor);
+    ReflectionTestUtils.setField(logMessageHandler, "logMessageIdExtractor", logMessageIdExtractor);
   }
 
   private String getExampleMetadataMessage() throws IOException {
@@ -71,7 +76,7 @@ public class LogMessageHandlerTest {
     String rawMessage = getExampleLogDataMessage();
     when(logFieldExtractor.extractTimestamp(any())).thenReturn(1719705616000L);
     when(logFieldExtractor.extractInstance(any())).thenReturn("device_context_id");
-    when(logFieldExtractor.extractMessageId(any()))
+    when(logMessageIdExtractor.extractMessageId(any()))
         .thenReturn(LogMessageId.builder().name("dataset_id").id("dataset_id").build());
     JsonObject outputJson = new JsonObject();
     outputJson.addProperty("timestamp", "1719705616000");
