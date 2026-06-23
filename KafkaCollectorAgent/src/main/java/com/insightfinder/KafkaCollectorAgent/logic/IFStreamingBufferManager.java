@@ -1,5 +1,7 @@
 package com.insightfinder.KafkaCollectorAgent.logic;
 
+import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.convertTimestampToMS;
+
 import com.google.common.collect.Lists;
 import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
@@ -9,14 +11,16 @@ import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
 import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.LogMessageHandler;
 import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.resolver.LogProjectResolver;
-import com.insightfinder.KafkaCollectorAgent.logic.metricstreaming.parser.MetricMessageParser;
-import com.insightfinder.KafkaCollectorAgent.logic.metricstreaming.parser.MetricRecord;
+import com.insightfinder.KafkaCollectorAgent.logic.metricstreaming.MetricProjectConfigParser;
 import com.insightfinder.KafkaCollectorAgent.model.ProjectInfo;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessage;
 import com.insightfinder.KafkaCollectorAgent.model.logmetadatamessage.LogMetadataMessage;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -32,6 +36,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -77,24 +83,62 @@ public class IFStreamingBufferManager {
   @Autowired
   private final WebClient webClient;
   @Autowired
-  private final MetricMessageParser metricMessageParser;
+  private final MetricProjectConfigParser metricProjectConfigParser;
   @Autowired
   private final LogProjectResolver logProjectResolver;
   @Autowired
   private final LogMessageHandler logMessageHandler;
   @Autowired
   private final WebClientEndpoints webClientEndpoints;
+  private Map<String, ProjectInfo> metricProjectList; // project name -> info
+  private boolean isJSON;
+  private Pattern dataFormatPattern;
+  private Map<String, Integer> namedGroups;
+  private Pattern metricPattern;
+  private Set<String> instanceList;
   private ScheduledExecutorService timerExecutor;
   private ExecutorService workerExecutor;
 
+  @SuppressWarnings("unchecked")
+  private static Map<String, Integer> getNamedGroups(Pattern regex)
+      throws NoSuchMethodException, SecurityException,
+      IllegalAccessException, IllegalArgumentException,
+      InvocationTargetException {
+    Method namedGroupsMethod = Pattern.class.getDeclaredMethod("namedGroups");
+    namedGroupsMethod.setAccessible(true);
+    Map<String, Integer> namedGroups;
+    namedGroups = (Map<String, Integer>) namedGroupsMethod.invoke(regex);
+    if (namedGroups == null) {
+      throw new InternalError();
+    }
+    return Collections.unmodifiableMap(namedGroups);
+  }
+
   @PostConstruct
-  public void init() {
+  public void init()
+      throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
     if (ifConfig.isLogProject()) {
       logProjectResolver.init();
       logProjectResolver.getMetadataProjects().forEach(projectInfo ->
           collectingLogMetadataMap.put(projectInfo, ConcurrentHashMap.newKeySet()));
     } else {
-      metricMessageParser.init();
+      if (ifConfig.getDataFormat().equalsIgnoreCase("JSON")) {
+        isJSON = true;
+        dataFormatPattern = null;
+      } else {
+        isJSON = false;
+        if (ifConfig.getDataFormatRegex() != null) {
+          dataFormatPattern = Pattern.compile(ifConfig.getDataFormatRegex());
+          namedGroups = getNamedGroups(dataFormatPattern);
+        }
+      }
+      if (ifConfig.getMetricRegex() != null) {
+        metricPattern = Pattern.compile(ifConfig.getMetricRegex());
+      }
+      instanceList = ifConfig.getInstanceList();
+      if (ifConfig.getProjectList() != null) {
+        metricProjectList = metricProjectConfigParser.getMetricProjectMapping();
+      }
     }
     workerExecutor = new ThreadPoolExecutor(
         5, 5, 0L, TimeUnit.MILLISECONDS,
@@ -182,22 +226,85 @@ public class IFStreamingBufferManager {
         handleLogMessage(content);
       }
     } else {
-      // handle metric message (JSON or otherwise, per the vendor parser)
-      for (MetricRecord record : metricMessageParser.parse(content)) {
-        bufferMetricRecord(record);
+      if (isJSON) {
+        //to do
+      } else {
+        // handle metric message
+        if (content.startsWith("\"") && content.endsWith("\"")) {
+          content = content.substring(1, content.length() - 1);
+        }
+        Matcher matcher = dataFormatPattern.matcher(content.trim());
+        if (matcher.matches() && namedGroups != null) {
+          List<String> projects = new ArrayList<>();
+          String projectNameStr, instanceName = null, timeStamp = null, metricName = null;
+          double metricValue = 0.0;
+          for (String key : namedGroups.keySet()) {
+            if (key.equalsIgnoreCase(ifConfig.getProjectKey())) {
+              projectNameStr = String.valueOf(matcher.group(key));
+              String[] projectNames = projectNameStr.split(ifConfig.getProjectDelimiter());
+              for (String projectName : projectNames) {
+                if (!metricProjectList.containsKey(projectName)) {
+                  if (ifConfig.isLogParsingInfo()) {
+                    logger.log(Level.INFO, projectName + " not in the projectList ");
+                  }
+                } else {
+                  projects.add(projectName);
+                }
+              }
+
+            } else if (key.equalsIgnoreCase(ifConfig.getInstanceKey())) {
+              instanceName = String.valueOf(matcher.group(key));
+              if (!instanceList.contains(instanceName)) {
+                if (ifConfig.isLogParsingInfo()) {
+                  logger.log(Level.INFO, instanceName + " not in the instanceList ");
+                }
+                return;
+              }
+            } else if (key.equalsIgnoreCase(ifConfig.getTimestampKey())) {
+              timeStamp = convertTimestampToMS(matcher.group(key));
+            } else if (key.equalsIgnoreCase(ifConfig.getMetricKey())) {
+              Matcher metricMatcher = metricPattern.matcher(matcher.group(key));
+              if (metricMatcher.matches()) {
+                metricName = matcher.group(key);
+                metricValue = Double.parseDouble(matcher.group(ifConfig.getValueKey()));
+              } else {
+                if (ifConfig.isLogParsingInfo()) {
+                  logger.log(Level.INFO, "Not match the metric regex " + content);
+                }
+                return;
+              }
+            }
+          }
+          if (!projects.isEmpty() && instanceName != null && metricName != null
+              && timeStamp != null) {
+            if (ifConfig.isLogParsingInfo()) {
+              logger.log(Level.INFO, "Parse success " + content);
+            }
+
+            if (ifConfig.getMetricNameFilter() != null && ifConfig.getMetricNameFilter()
+                .equalsIgnoreCase(metricName)) {
+              logger.log(Level.INFO,
+                  String.format("%s %s %s", instanceName, metricName, timeStamp));
+            }
+
+            for (String projectName : projects) {
+              ProjectInfo ifProjectInfo = metricProjectList.get(projectName);
+              String ifProjectName = ifProjectInfo.getProject();
+              String ifSystemName = ifProjectInfo.getSystem();
+              IFStreamingBuffer ifStreamingBuffer = collectedBufferMap.getOrDefault(ifProjectName,
+                  new IFStreamingBuffer(ifProjectName, ifSystemName));
+              ifStreamingBuffer.addData(instanceName, Long.parseLong(timeStamp), metricName,
+                  metricValue);
+              collectedBufferMap.put(ifSystemName, ifStreamingBuffer);
+            }
+          }
+        } else {
+          if (ifConfig.isLogParsingInfo()) {
+            logger.log(Level.INFO, " Parse failed, not match the regex " + content);
+          }
+        }
       }
     }
-  }
-
-  private void bufferMetricRecord(MetricRecord record) {
-    ProjectInfo ifProjectInfo = record.getProjectInfo();
-    String ifProjectName = ifProjectInfo.getProject();
-    String ifSystemName = ifProjectInfo.getSystem();
-    IFStreamingBuffer ifStreamingBuffer = collectedBufferMap.getOrDefault(ifProjectName,
-        new IFStreamingBuffer(ifProjectName, ifSystemName));
-    ifStreamingBuffer.addData(record.getInstanceName(), record.getTimestamp(),
-        record.getMetricName(), record.getValue());
-    collectedBufferMap.put(ifSystemName, ifStreamingBuffer);
   }
 
   private boolean isLogMetadataMessage(String topic) {

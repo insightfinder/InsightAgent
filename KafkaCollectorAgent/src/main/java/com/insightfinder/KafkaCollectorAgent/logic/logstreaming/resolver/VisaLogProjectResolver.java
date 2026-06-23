@@ -42,7 +42,7 @@ public class VisaLogProjectResolver implements LogProjectResolver {
   public ProjectInfo resolveProject(LogMessage logMessage) {
     JsonObject data = extractData(logMessage);
 
-    String project = getKeyFromJson(data, ifConfig.getLogProjectFieldPathList());
+    String project = ifConfig.getLogProjectFieldPathList().get(0);
     if (StringUtils.isEmpty(project)) {
       project = ifConfig.getLogProjectName();
     }
@@ -50,7 +50,7 @@ public class VisaLogProjectResolver implements LogProjectResolver {
       return null;
     }
 
-    String system = getKeyFromJson(data, ifConfig.getLogSystemFieldPathList());
+    String system = ifConfig.getLogSystemFieldPathList().get(0);
     if (StringUtils.isEmpty(system)) {
       system = ifConfig.getLogSystemName();
     }
