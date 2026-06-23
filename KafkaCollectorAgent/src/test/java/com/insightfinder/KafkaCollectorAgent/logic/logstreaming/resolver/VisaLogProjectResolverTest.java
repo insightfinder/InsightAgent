@@ -36,11 +36,10 @@ class VisaLogProjectResolverTest {
   }
 
   @Test
-  void systemFallsBackToProjectWhenSystemNameAbsent() {
+  void returnsNullWhenSystemNameAbsent() {
     when(ifConfig.getLogProjectName()).thenReturn("VisaProject");
 
-    assertThat(resolver.resolveProject(LogMessage.builder().build())).isEqualTo(
-        ProjectInfo.builder().project("VisaProject").system("VisaProject").build());
+    assertThat(resolver.resolveProject(LogMessage.builder().build())).isNull();
   }
 
   @Test
