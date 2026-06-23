@@ -1,14 +1,11 @@
 package com.insightfinder.KafkaCollectorAgent.logic.logstreaming.resolver;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
-import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
 import com.insightfinder.KafkaCollectorAgent.model.ProjectInfo;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessage;
-import java.util.Collections;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,50 +26,25 @@ class VisaLogProjectResolverTest {
     resolver.init();
   }
 
-  private static LogMessage messageWithData(JsonObject data) {
-    JsonObject output = new JsonObject();
-    output.add("data", data);
-    return LogMessage.builder().outputMessage(output).build();
-  }
-
   @Test
-  void readsProjectAndSystemFromMessage() {
-    when(ifConfig.getLogProjectFieldPathList()).thenReturn(Collections.singletonList("project"));
-    when(ifConfig.getLogSystemFieldPathList()).thenReturn(Collections.singletonList("system"));
-    JsonObject data = new JsonObject();
-    data.addProperty("project", "VisaProject");
-    data.addProperty("system", "VisaSystem");
+  void usesConfiguredProjectAndSystem() {
+    when(ifConfig.getLogProjectName()).thenReturn("VisaProject");
+    when(ifConfig.getLogSystemName()).thenReturn("VisaSystem");
 
-    assertThat(resolver.resolveProject(messageWithData(data))).isEqualTo(
+    assertThat(resolver.resolveProject(LogMessage.builder().build())).isEqualTo(
         ProjectInfo.builder().project("VisaProject").system("VisaSystem").build());
   }
 
   @Test
-  void fallsBackToConfiguredProjectAndSystem() {
-    when(ifConfig.getLogProjectFieldPathList()).thenReturn(Collections.singletonList("project"));
-    when(ifConfig.getLogSystemFieldPathList()).thenReturn(Collections.singletonList("system"));
-    when(ifConfig.getLogProjectName()).thenReturn("DefaultProject");
-    when(ifConfig.getLogSystemName()).thenReturn("DefaultSystem");
+  void systemFallsBackToProjectWhenSystemNameAbsent() {
+    when(ifConfig.getLogProjectName()).thenReturn("VisaProject");
 
-    assertThat(resolver.resolveProject(messageWithData(new JsonObject()))).isEqualTo(
-        ProjectInfo.builder().project("DefaultProject").system("DefaultSystem").build());
-  }
-
-  @Test
-  void systemFallsBackToProjectWhenAbsent() {
-    when(ifConfig.getLogProjectFieldPathList()).thenReturn(Collections.singletonList("project"));
-    lenient().when(ifConfig.getLogSystemFieldPathList())
-        .thenReturn(Collections.singletonList("system"));
-    JsonObject data = new JsonObject();
-    data.addProperty("project", "VisaProject");
-
-    assertThat(resolver.resolveProject(messageWithData(data))).isEqualTo(
+    assertThat(resolver.resolveProject(LogMessage.builder().build())).isEqualTo(
         ProjectInfo.builder().project("VisaProject").system("VisaProject").build());
   }
 
   @Test
-  void returnsNullWhenNoProjectResolvable() {
-    when(ifConfig.getLogProjectFieldPathList()).thenReturn(Collections.singletonList("project"));
-    assertThat(resolver.resolveProject(messageWithData(new JsonObject()))).isNull();
+  void returnsNullWhenProjectNameAbsent() {
+    assertThat(resolver.resolveProject(LogMessage.builder().build())).isNull();
   }
 }
