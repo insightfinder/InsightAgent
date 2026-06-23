@@ -12,7 +12,7 @@ import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
 import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.LogMessageHandler;
 import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.resolver.LogProjectResolver;
-import com.insightfinder.KafkaCollectorAgent.logic.metricstreaming.parser.MetricMessageParser;
+import com.insightfinder.KafkaCollectorAgent.logic.metricstreaming.MetricProjectConfigParser;
 import com.insightfinder.KafkaCollectorAgent.model.ProjectInfo;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessage;
 import com.insightfinder.KafkaCollectorAgent.model.logmetadatamessage.LogMetadataMessage;
@@ -48,7 +48,7 @@ class IFStreamingBufferManagerTest {
   @Mock
   WebClient webClient;
   @Mock
-  MetricMessageParser metricMessageParser;
+  MetricProjectConfigParser metricProjectConfigParser;
   @Mock
   LogProjectResolver logProjectResolver;
   @Mock
@@ -64,7 +64,7 @@ class IFStreamingBufferManagerTest {
     when(ifConfig.getLogMetadataBufferingTime()).thenReturn(Integer.MAX_VALUE);
     when(ifConfig.getKafkaMetricLogInterval()).thenReturn(Integer.MAX_VALUE);
     ifStreamingBufferManager = new IFStreamingBufferManager(registry, new Gson(), ifConfig,
-        projectManager, webClient, metricMessageParser, logProjectResolver,
+        projectManager, webClient, metricProjectConfigParser, logProjectResolver,
         logMessageHandler, webClientEndpoints);
   }
 
