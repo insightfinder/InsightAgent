@@ -70,21 +70,4 @@ public class LenovoLogFieldExtractor implements LogFieldExtractor {
     }
     return getGMTinHourFromMillis(timestampStr, ifConfig.getLogTimestampFormat());
   }
-
-  @Override
-  public LogMessageId extractMessageId(JsonObject content) {
-    LogMessageId.LogMessageIdBuilder logMessageIdBuilder = LogMessageId.builder();
-    List<String> supportedKeys = ifConfig.getLogMessageIdFieldList();
-    if (supportedKeys != null) {
-      for (String jsonName : supportedKeys) {
-        if (content.has(jsonName) && !StringUtils.isEmpty(content.get(jsonName).getAsString())) {
-          return logMessageIdBuilder
-              .name(jsonName)
-              .id(content.get(jsonName).getAsString())
-              .build();
-        }
-      }
-    }
-    return logMessageIdBuilder.build();
-  }
 }

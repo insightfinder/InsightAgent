@@ -6,7 +6,6 @@ import static org.mockito.Mockito.when;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
-import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessageId;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -98,22 +97,5 @@ class LenovoLogFieldExtractorTest {
     JsonObject json = new JsonObject();
     when(ifConfig.getLogTimestampFieldPathList()).thenReturn(Collections.singletonList("ts"));
     assertThat(extractor.extractTimestamp(json)).isNegative();
-  }
-
-  @Test
-  void extractsMessageIdFromFirstMatchingField() {
-    when(ifConfig.getLogMessageIdFieldList())
-        .thenReturn(Arrays.asList("missing", "dataset_id", "item_id"));
-    LogMessageId id = extractor.extractMessageId(content);
-    assertThat(id.getName()).isEqualTo("dataset_id");
-    assertThat(id.getId()).isEqualTo("dataset_id");
-  }
-
-  @Test
-  void extractMessageIdReturnsEmptyWhenNoFieldMatches() {
-    when(ifConfig.getLogMessageIdFieldList()).thenReturn(Collections.singletonList("missing"));
-    LogMessageId id = extractor.extractMessageId(content);
-    assertThat(id.getName()).isNull();
-    assertThat(id.getId()).isNull();
   }
 }

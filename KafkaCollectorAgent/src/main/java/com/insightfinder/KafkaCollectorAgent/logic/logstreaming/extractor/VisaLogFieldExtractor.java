@@ -6,7 +6,6 @@ import static com.insightfinder.KafkaCollectorAgent.logic.utils.Utilities.getTim
 
 import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
-import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessageId;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -48,13 +47,6 @@ public class VisaLogFieldExtractor extends LenovoLogFieldExtractor {
       timestamp = getTimestampInMillis(timestampStr, timestampFormat);
     }
     return timestamp;
-  }
-
-  @Override
-  public LogMessageId extractMessageId(JsonObject content) {
-    // Visa routes by reading the project directly from the message (see VisaLogProjectResolver),
-    // so there is no log message id to extract.
-    return null;
   }
 }
 

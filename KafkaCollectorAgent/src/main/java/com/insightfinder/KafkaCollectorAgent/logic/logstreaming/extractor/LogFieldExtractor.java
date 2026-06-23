@@ -1,7 +1,6 @@
 package com.insightfinder.KafkaCollectorAgent.logic.logstreaming.extractor;
 
 import com.google.gson.JsonObject;
-import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessageId;
 
 /**
  * Strategy for extracting the instance and component name from a raw log JSON message.
@@ -33,11 +32,4 @@ public interface LogFieldExtractor {
    *     parsed.
    */
   long extractTimestamp(JsonObject content);
-
-  /**
-   * Build the log message id used to route the message to a project.
-   *
-   * @return the message id, or {@code null} when the vendor does not route by a message id.
-   */
-  LogMessageId extractMessageId(JsonObject content);
 }

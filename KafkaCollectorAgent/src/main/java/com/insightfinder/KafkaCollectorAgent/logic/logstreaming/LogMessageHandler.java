@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
 import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.extractor.LogFieldExtractor;
+import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.extractor.LogMessageIdExtractor;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessage;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessageId;
 import com.insightfinder.KafkaCollectorAgent.model.logmetadatamessage.LogMetadataMessage;
@@ -24,6 +25,9 @@ public class LogMessageHandler {
   private final Gson gson;
   @Autowired
   private final LogFieldExtractor logFieldExtractor;
+  // Optional: only vendors that route by a message id (Lenovo) provide a bean; Visa has none.
+  @Autowired(required = false)
+  private LogMessageIdExtractor logMessageIdExtractor;
   private static final String JSON_NAME_INSTANCE_NAME = "instanceName";
   private static final String JSON_NAME_COMPONENT_NAME = "componentName";
   private static final String JSON_NAME_TIMESTAMP = "timestamp";
@@ -76,7 +80,8 @@ public class LogMessageHandler {
     data.addProperty(JSON_NAME_TIMESTAMP, Long.toString(timestamp));
     data.addProperty(JSON_NAME_TAG, instanceStr);
     data.add(JSON_NAME_DATA, jsonContent);
-    LogMessageId logMessageId = logFieldExtractor.extractMessageId(jsonContent);
+    LogMessageId logMessageId =
+        logMessageIdExtractor == null ? null : logMessageIdExtractor.extractMessageId(jsonContent);
     return LogMessage.builder()
         .id(logMessageId)
         .outputMessage(data)
