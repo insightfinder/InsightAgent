@@ -40,24 +40,8 @@ public class VisaLogProjectResolver implements LogProjectResolver {
 
   @Override
   public ProjectInfo resolveProject(LogMessage logMessage) {
-    JsonObject data = extractData(logMessage);
-
-    String project = ifConfig.getLogProjectFieldPathList().get(0);
-    if (StringUtils.isEmpty(project)) {
-      project = ifConfig.getLogProjectName();
-    }
-    if (StringUtils.isEmpty(project)) {
-      return null;
-    }
-
-    String system = ifConfig.getLogSystemFieldPathList().get(0);
-    if (StringUtils.isEmpty(system)) {
-      system = ifConfig.getLogSystemName();
-    }
-    if (StringUtils.isEmpty(system)) {
-      system = project;
-    }
-
+    String project = ifConfig.getLogProjectName();
+    String system = ifConfig.getLogSystemName();
     return ProjectInfo.builder().project(project).system(system).build();
   }
 
