@@ -1,5 +1,7 @@
 package com.insightfinder.KafkaCollectorAgent.logic.config;
 
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -60,6 +62,19 @@ public class IFConfig {
   private Set<String> logMetadataExcludeFields;
   private Set<String> logMetadataTopics;
   private List<List<String>> logComponentList;
+  // Timezone used when parsing zone-less timestamps (e.g. "America/New_York", "+05:30", "UTC").
+  private String logTimestampTimezone = "UTC";
+
+  public ZoneId resolvedLogTimestampTimezone() {
+    if (logTimestampTimezone == null || logTimestampTimezone.isEmpty()) {
+      return ZoneOffset.UTC;
+    }
+    try {
+      return ZoneId.of(logTimestampTimezone);
+    } catch (Exception e) {
+      return ZoneOffset.UTC;
+    }
+  }
 
   @PostConstruct
   public void init() {
