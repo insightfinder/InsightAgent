@@ -2,6 +2,7 @@ package com.insightfinder.KafkaCollectorAgent.logic.utils;
 
 import com.google.gson.JsonObject;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -81,8 +82,29 @@ public class Utilities {
     return getEpochMillisFromFormattedDate(trimmed, format);
   }
 
+  public static long getTimestampInMillis(String value, String format, ZoneId timezone) {
+    if (StringUtils.isEmpty(value)) {
+      return -1;
+    }
+    String trimmed = value.trim();
+    if (trimmed.matches("\\d+")) {
+      try {
+        long epoch = Long.parseLong(trimmed);
+        return trimmed.length() <= 10 ? epoch * 1000 : epoch;
+      } catch (NumberFormatException e) {
+        logger.log(Level.INFO, "can not parse epoch timestamp: " + trimmed);
+        return -1;
+      }
+    }
+    if (StringUtils.isEmpty(format)) {
+      logger.log(Level.INFO, "no timestamp format configured for non-numeric timestamp: " + trimmed);
+      return -1;
+    }
+    return getEpochMillisFromFormattedDate(trimmed, format, timezone);
+  }
+
   public static long getGMTinHourFromMillis(String date, String format) {
-    DateTimeFormatter rfc3339Formatter = DateTimeFormatter.ofPattern(format)
+    DateTimeFormatter rfc3339Formatter = DateTimeFormatter.ofPattern(format, Locale.ENGLISH)
         .withResolverStyle(ResolverStyle.LENIENT);
     ZonedDateTime zonedDateTime = parseRfc3339(date, rfc3339Formatter);
     if (zonedDateTime != null) {
@@ -103,9 +125,9 @@ public class Utilities {
   /**
    * Convert a formatted date string to epoch milliseconds. Dates carrying a zone/offset (e.g.
    * {@code 2024-06-30T03:00:16+03:00}) are honored; zone-less dates (e.g.
-   * {@code Jun 8, 2026 @ 18:44:15.551}) are assumed to be in UTC.
+   * {@code Jun 8, 2026 @ 18:44:15.551}) are interpreted in the given {@code timezone}.
    */
-  public static long getEpochMillisFromFormattedDate(String date, String format) {
+  public static long getEpochMillisFromFormattedDate(String date, String format, ZoneId timezone) {
     if (StringUtils.isEmpty(date) || StringUtils.isEmpty(format)) {
       return -1;
     }
@@ -117,11 +139,16 @@ public class Utilities {
       // fall through and try parsing without a zone
     }
     try {
-      return LocalDateTime.parse(date, formatter).toInstant(ZoneOffset.UTC).toEpochMilli();
+      return LocalDateTime.parse(date, formatter).atZone(timezone).toInstant().toEpochMilli();
     } catch (DateTimeParseException exception) {
       logger.log(Level.INFO, " can not parse date :" + date);
       return -1;
     }
+  }
+
+  /** UTC convenience overload — calls {@link #getEpochMillisFromFormattedDate(String, String, ZoneId)}. */
+  public static long getEpochMillisFromFormattedDate(String date, String format) {
+    return getEpochMillisFromFormattedDate(date, format, ZoneOffset.UTC);
   }
 
   public static String convertTimestampToMS(String timestamp) {
