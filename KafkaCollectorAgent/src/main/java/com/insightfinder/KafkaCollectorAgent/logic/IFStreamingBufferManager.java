@@ -9,12 +9,10 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
-import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.LogProjectConfigParser;
 import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.LogMessageHandler;
+import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.resolver.LogProjectResolver;
 import com.insightfinder.KafkaCollectorAgent.logic.metricstreaming.MetricProjectConfigParser;
-import com.insightfinder.KafkaCollectorAgent.model.KafkaMessageId;
 import com.insightfinder.KafkaCollectorAgent.model.ProjectInfo;
-import com.insightfinder.KafkaCollectorAgent.model.ProjectListKey;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessage;
 import com.insightfinder.KafkaCollectorAgent.model.logmetadatamessage.LogMetadataMessage;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -27,7 +25,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -41,7 +38,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import javax.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -89,14 +85,12 @@ public class IFStreamingBufferManager {
   @Autowired
   private final MetricProjectConfigParser metricProjectConfigParser;
   @Autowired
-  private final LogProjectConfigParser logProjectConfigParser;
+  private final LogProjectResolver logProjectResolver;
   @Autowired
   private final LogMessageHandler logMessageHandler;
   @Autowired
   private final WebClientEndpoints webClientEndpoints;
   private Map<String, ProjectInfo> metricProjectList; // project name -> info
-  private Map<ProjectListKey, ProjectInfo> logProjectList; // datasetId -> info
-  private List<ProjectInfo> logMetadataProjectList;
   private boolean isJSON;
   private Pattern dataFormatPattern;
   private Map<String, Integer> namedGroups;
@@ -123,30 +117,26 @@ public class IFStreamingBufferManager {
   @PostConstruct
   public void init()
       throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-    if (ifConfig.getDataFormat().equalsIgnoreCase("JSON")) {
-      isJSON = true;
-      dataFormatPattern = null;
+    if (ifConfig.isLogProject()) {
+      logProjectResolver.init();
+      logProjectResolver.getMetadataProjects().forEach(projectInfo ->
+          collectingLogMetadataMap.put(projectInfo, ConcurrentHashMap.newKeySet()));
     } else {
-      isJSON = false;
-      if (ifConfig.getDataFormatRegex() != null) {
-        dataFormatPattern = Pattern.compile(ifConfig.getDataFormatRegex());
-        namedGroups = getNamedGroups(dataFormatPattern);
-      }
-    }
-    if (ifConfig.getMetricRegex() != null) {
-      metricPattern = Pattern.compile(ifConfig.getMetricRegex());
-    }
-    instanceList = ifConfig.getInstanceList();
-    if (ifConfig.getProjectList() != null) {
-      if (ifConfig.isLogProject()) {
-        logProjectList = logProjectConfigParser.getLogProjectMapping();
-        logMetadataProjectList = logProjectList.entrySet().stream()
-            .filter(entry -> !entry.getKey().hasDatasetName())
-            .map(Entry::getValue)
-            .collect(Collectors.toList());
-        logMetadataProjectList.forEach(projectInfo -> collectingLogMetadataMap.put(projectInfo,
-            ConcurrentHashMap.newKeySet()));
+      if (ifConfig.getDataFormat().equalsIgnoreCase("JSON")) {
+        isJSON = true;
+        dataFormatPattern = null;
       } else {
+        isJSON = false;
+        if (ifConfig.getDataFormatRegex() != null) {
+          dataFormatPattern = Pattern.compile(ifConfig.getDataFormatRegex());
+          namedGroups = getNamedGroups(dataFormatPattern);
+        }
+      }
+      if (ifConfig.getMetricRegex() != null) {
+        metricPattern = Pattern.compile(ifConfig.getMetricRegex());
+      }
+      instanceList = ifConfig.getInstanceList();
+      if (ifConfig.getProjectList() != null) {
         metricProjectList = metricProjectConfigParser.getMetricProjectMapping();
       }
     }
@@ -317,15 +307,6 @@ public class IFStreamingBufferManager {
     }
   }
 
-  private ProjectInfo getIFProjectInfoFromLogMessageId(KafkaMessageId messageId) {
-    for (ProjectListKey projectListKey : logProjectList.keySet()) {
-      if (projectListKey.matchedMessageId(messageId)) {
-        return logProjectList.get(projectListKey);
-      }
-    }
-    return null;
-  }
-
   private boolean isLogMetadataMessage(String topic) {
     return ifConfig.getLogMetadataTopics() != null && ifConfig.getLogMetadataTopics()
         .contains(topic);
@@ -342,7 +323,7 @@ public class IFStreamingBufferManager {
   private void handleLogMessage(String message) {
     LogMessage logMessage = logMessageHandler.processLogDataMessage(message);
     if (logMessage != null) {
-      ProjectInfo projectInfo = getIFProjectInfoFromLogMessageId(logMessage.getId());
+      ProjectInfo projectInfo = logProjectResolver.resolveProject(logMessage);
       if (projectInfo != null) {
         Set<JsonObject> jsonArray = collectingLogDataMap.getOrDefault(projectInfo,
             ConcurrentHashMap.newKeySet());

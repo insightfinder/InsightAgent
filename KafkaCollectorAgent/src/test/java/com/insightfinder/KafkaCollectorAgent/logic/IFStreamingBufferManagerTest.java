@@ -10,21 +10,20 @@ import static org.mockito.Mockito.when;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.insightfinder.KafkaCollectorAgent.logic.config.IFConfig;
-import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.LogProjectConfigParser;
 import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.LogMessageHandler;
+import com.insightfinder.KafkaCollectorAgent.logic.logstreaming.resolver.LogProjectResolver;
 import com.insightfinder.KafkaCollectorAgent.logic.metricstreaming.MetricProjectConfigParser;
 import com.insightfinder.KafkaCollectorAgent.model.ProjectInfo;
-import com.insightfinder.KafkaCollectorAgent.model.ProjectListKey;
 import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessage;
-import com.insightfinder.KafkaCollectorAgent.model.logmessage.LogMessageId;
 import com.insightfinder.KafkaCollectorAgent.model.logmetadatamessage.LogMetadataMessage;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Map;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.junit.jupiter.api.AfterEach;
@@ -51,7 +50,7 @@ class IFStreamingBufferManagerTest {
   @Mock
   MetricProjectConfigParser metricProjectConfigParser;
   @Mock
-  LogProjectConfigParser logProjectConfigParser;
+  LogProjectResolver logProjectResolver;
   @Mock
   LogMessageHandler logMessageHandler;
   @Mock
@@ -65,7 +64,7 @@ class IFStreamingBufferManagerTest {
     when(ifConfig.getLogMetadataBufferingTime()).thenReturn(Integer.MAX_VALUE);
     when(ifConfig.getKafkaMetricLogInterval()).thenReturn(Integer.MAX_VALUE);
     ifStreamingBufferManager = new IFStreamingBufferManager(registry, new Gson(), ifConfig,
-        projectManager, webClient, metricProjectConfigParser, logProjectConfigParser,
+        projectManager, webClient, metricProjectConfigParser, logProjectResolver,
         logMessageHandler, webClientEndpoints);
   }
 
@@ -87,20 +86,12 @@ class IFStreamingBufferManagerTest {
     @BeforeEach
     void setup() throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
       when(ifConfig.isLogProject()).thenReturn(true);
-      when(ifConfig.getDataFormat()).thenReturn("JSON");
-      when(ifConfig.getInstanceList()).thenReturn(new HashSet<>());
-      Map<ProjectListKey, ProjectInfo> logProjectList = new HashMap<>();
-      logProjectList.put(
-          ProjectListKey.builder().datasetId("326CE741-4E1F-404F-BDA2-0D0D48AE4039").hasDatasetName(true).build(),
-          ProjectInfo.builder().project("DeviceProcessEvent").system("Lower env Crash").build());
-      logProjectList.put(
-          ProjectListKey.builder().datasetId("326CE741-4E1F-404F-BDA2-0D0D48AE4039").hasItemId(true).build(),
-          ProjectInfo.builder().project("DeviceProcessEvent1").system("Lower env Crash").build());
-      logProjectList.put(
-          ProjectListKey.builder().datasetId("326CE741-4E1F-404F-BDA2-0D0D48AE4038").hasItemId(true).build(),
+      // The manager seeds the metadata map from the resolver's metadata projects; the matching
+      // algorithm itself now lives in (and is tested via) the LogProjectResolver implementations.
+      List<ProjectInfo> metadataProjects = Arrays.asList(
+          ProjectInfo.builder().project("DeviceProcessEvent1").system("Lower env Crash").build(),
           ProjectInfo.builder().project("DeviceProcessEvent2").system("Lower env Crash").build());
-      when(ifConfig.getProjectList()).thenReturn("");
-      when(logProjectConfigParser.getLogProjectMapping()).thenReturn(logProjectList);
+      when(logProjectResolver.getMetadataProjects()).thenReturn(metadataProjects);
       ifStreamingBufferManager.init();
     }
 
@@ -205,20 +196,18 @@ class IFStreamingBufferManagerTest {
 
     @Test
     void testParseLogData() {
-      // Use name("dataset_name") so matchedMessageId hits the hasDatasetName branch,
-      // which only matches the one key with hasDatasetName=true → "DeviceProcessEvent".
-      // Using name("dataset_id") would match all keys whose datasetId equals the id,
-      // making the result non-deterministic over HashMap iteration order.
+      // The manager delegates routing to the resolver and buckets the message under whatever
+      // ProjectInfo it returns. The matching algorithm is covered by the resolver's own test.
       LogMessage logMessage = LogMessage.builder()
-          .id(LogMessageId.builder().name("dataset_name")
-              .id("326CE741-4E1F-404F-BDA2-0D0D48AE4039").build())
           .outputMessage(new JsonObject())
           .build();
+      ProjectInfo projectInfo =
+          ProjectInfo.builder().project("DeviceProcessEvent").system("Lower env Crash").build();
       when(logMessageHandler.processLogDataMessage(anyString())).thenReturn(logMessage);
+      when(logProjectResolver.resolveProject(logMessage)).thenReturn(projectInfo);
       ifStreamingBufferManager.parseString("logTopic", "", 1L);
       ConcurrentHashMap<ProjectInfo, Set<JsonObject>> expected = new ConcurrentHashMap<>();
-      expected.put(
-          ProjectInfo.builder().project("DeviceProcessEvent").system("Lower env Crash").build(),
+      expected.put(projectInfo,
           new HashSet<>(Collections.singletonList(new JsonObject())));
       assertThat(ifStreamingBufferManager.getCollectingLogDataMap()).isEqualTo(expected);
     }
@@ -226,11 +215,10 @@ class IFStreamingBufferManagerTest {
     @Test
     void testParseLogDataUnRecognizedId() {
       LogMessage logMessage = LogMessage.builder()
-          .id(LogMessageId.builder().name("dataset_id")
-              .id("000").build())
           .outputMessage(new JsonObject())
           .build();
       when(logMessageHandler.processLogDataMessage(anyString())).thenReturn(logMessage);
+      when(logProjectResolver.resolveProject(logMessage)).thenReturn(null);
       ifStreamingBufferManager.parseString("logTopic", "", 1L);
       assertThat(ifStreamingBufferManager.getCollectingLogDataMap()).isEmpty();
     }
