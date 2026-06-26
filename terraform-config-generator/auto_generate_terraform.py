@@ -1568,6 +1568,7 @@ _ALERT_SETTING_FIELD_MAP: List[Tuple[str, str, str]] = [
     ("isFlappingResultOnly",               "is_flapping_result_only",                 "bool"),
     ("incidentDurationThreshold",          "incident_duration_threshold",             "int"),
     ("detectionType",                      "detection_type",                          "string"),
+    ("detectionAnomalyType",               "detection_anomaly_type",                  "int"),
     ("cValueOverride",                     "c_value_override",                        "nullable_int"),
     ("highCValueOverride",                 "high_c_value_override",                   "nullable_int"),
     ("patternNameHigher",                  "pattern_name_higher",                     "string"),
