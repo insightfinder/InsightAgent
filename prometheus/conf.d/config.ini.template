@@ -13,6 +13,9 @@ ca_certs =
 client_cert =
 # path to client key
 client_key =
+# Custom headers to send with every request to prometheus. Comma separated `Header-Name: value` pairs.
+# For example: X-Scope-OrgID: tenant1, Authorization: Bearer abc123
+custom_headers =
 
 ## metrics
 # Prometheus query used to query all the needed metrics. If not set, it will use `{__name__=~".+"}` to query all metrics. It has
