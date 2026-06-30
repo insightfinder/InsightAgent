@@ -161,7 +161,8 @@ def query_prometheus_labels(args):
         # execute sql string
         url = urllib.parse.urljoin(agent_config_vars['api_url'], 'label/__name__/values')
         response = send_request(logger, url, proxies=agent_config_vars['proxies'],
-                                **agent_config_vars['auth_kwargs'], **agent_config_vars['ssl_kwargs'])
+                                **agent_config_vars['auth_kwargs'], **agent_config_vars['ssl_kwargs'],
+                                **agent_config_vars['headers_kwargs'])
         if response == -1:
             logger.error('Query label error')
         else:
@@ -185,7 +186,8 @@ def query_messages_prometheus(args):
         # execute sql string
         url = urllib.parse.urljoin(agent_config_vars['api_url'], 'query_range')
         response = send_request(logger, url, params=params, proxies=agent_config_vars['proxies'],
-                                **agent_config_vars['auth_kwargs'], **agent_config_vars['ssl_kwargs'])
+                                **agent_config_vars['auth_kwargs'], **agent_config_vars['ssl_kwargs'],
+                                **agent_config_vars['headers_kwargs'])
         if response == -1:
             logger.error('Query error: {}'.format(params))
         else:
@@ -373,6 +375,7 @@ def get_agent_config_vars(logger, config_ini):
         prometheus_kwargs = {}
         auth_kwargs = {}
         ssl_kwargs = {}
+        headers_kwargs = {}
         api_url = ''
         metrics_name_field = None
         instance_whitelist = ''
@@ -407,6 +410,19 @@ def get_agent_config_vars(logger, config_ini):
             client_key = prometheus_kwargs.get('client_key')
             cert = (client_cert, client_key) if client_cert and client_key else client_cert if client_cert else None
             ssl_kwargs = {'verify': verify_certs, 'cert': cert if verify_certs else None}
+
+            # handle custom headers. Comma separated `Header-Name: value` pairs.
+            custom_headers = config_parser.get('prometheus', 'custom_headers', fallback='') or ''
+            headers = {}
+            for pair in custom_headers.split(','):
+                pair = pair.strip()
+                if not pair:
+                    continue
+                if ':' not in pair:
+                    return config_error(logger, 'custom_headers')
+                key, value = pair.split(':', 1)
+                headers[key.strip()] = value.strip()
+            headers_kwargs = {'headers': headers} if headers else {}
 
             # handle required arrays
             if len(config_parser.get('prometheus', 'prometheus_uri')) != 0:
@@ -568,6 +584,7 @@ def get_agent_config_vars(logger, config_ini):
 
         # add parsed variables to a global
         config_vars = {'prometheus_kwargs': prometheus_kwargs, 'auth_kwargs': auth_kwargs, 'ssl_kwargs': ssl_kwargs,
+                       'headers_kwargs': headers_kwargs,
                        'api_url': api_url, 'prometheus_query': prometheus_query,
                        'metrics_name_field': metrics_name_field, 'his_time_range': his_time_range,
                        'proxies': agent_proxies, 'data_format': data_format,  # 'project_field': project_fields,
