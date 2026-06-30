@@ -245,13 +245,15 @@ def transform_models(raw: List[Dict]) -> List[Dict]:
 
 
 def transform_subvenues(raw: List[Dict]) -> Dict[str, Dict[str, Optional[str]]]:
-    """Returns {subvenue_id: {name, venue_id, venue_name}} by reading attr 225 from each Subvenue."""
+    """Returns {subvenue_id: {name, key, venue_id, venue_name, venue_key}} by reading attr 225 from each Subvenue."""
     result: Dict[str, Dict[str, Optional[str]]] = {}
     for obj in raw:
         obj_id = str(obj["id"])
         subvenue_name = obj.get("label") or ""
+        subvenue_key = obj.get("objectKey") or ""
         venue_id: Optional[str] = None
         venue_name: Optional[str] = None
+        venue_key: Optional[str] = None
         for attr in obj.get("attributes", []):
             if str(attr.get("objectTypeAttributeId")) == str(SUBVENUE_VENUE_ATTR_ID):
                 vals = attr.get("objectAttributeValues", [])
@@ -260,11 +262,14 @@ def transform_subvenues(raw: List[Dict]) -> Dict[str, Dict[str, Optional[str]]]:
                     ref_obj = vals[0].get("referencedObject") or {}
                     raw_vid = ref_obj.get("id")
                     venue_id = str(raw_vid) if raw_vid else None
+                    venue_key = ref_obj.get("objectKey")
                 break
         result[obj_id] = {
             "name": subvenue_name,
+            "key": subvenue_key,
             "venue_id": venue_id,
             "venue_name": venue_name,
+            "venue_key": venue_key,
         }
     return result
 
@@ -351,24 +356,32 @@ def _transform_one_device(obj: Dict, subvenue_map: Optional[Dict[str, Dict[str, 
             device["meta"]["full_name"] = val_str
 
         elif field == "subvenue":
-            ref_id = str((vals[0].get("referencedObject") or {}).get("id") or "")
+            ref_obj = vals[0].get("referencedObject") or {}
+            ref_id = str(ref_obj.get("id") or "")
             if val_str:
                 device["meta"]["subvenue"] = val_str
             if ref_id:
                 device["meta"]["subvenue_id"] = ref_id
+            if ref_obj.get("objectKey"):
+                device["meta"]["subvenue_key"] = ref_obj["objectKey"]
             if ref_id and subvenue_map:
                 sv = subvenue_map.get(ref_id)
                 if sv:
                     device["meta"]["venue"] = sv.get("venue_name")
                     if sv.get("venue_id"):
                         device["meta"]["venue_id"] = sv["venue_id"]
+                    if sv.get("venue_key"):
+                        device["meta"]["venue_key"] = sv["venue_key"]
 
         elif field == "location":
-            ref_id = str((vals[0].get("referencedObject") or {}).get("id") or "")
+            ref_obj = vals[0].get("referencedObject") or {}
+            ref_id = str(ref_obj.get("id") or "")
             if val_str:
                 device["meta"]["location"] = val_str
             if ref_id:
                 device["meta"]["location_id"] = ref_id
+            if ref_obj.get("objectKey"):
+                device["meta"]["location_key"] = ref_obj["objectKey"]
 
         elif field in COLUMN_FIELDS:
             device[field] = val_str

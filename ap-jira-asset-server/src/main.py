@@ -101,6 +101,7 @@ app = FastAPI(title="Asset Registry", lifespan=lifespan)
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _device_to_dict(device) -> Dict[str, Any]:
+    meta = device.meta or {}
     d = {
         "id": device.id,
         "object_key": device.object_key,
@@ -112,7 +113,12 @@ def _device_to_dict(device) -> Dict[str, Any]:
         "zabbix_host_id": device.zabbix_host_id,
         "model_id": device.model_id,
         "updated_at": device.updated_at.isoformat() if device.updated_at else None,
-        "meta": device.meta or {},
+        "meta": meta,
+        "jira_device_key": device.object_key,
+        "jira_location_key": meta.get("location_key"),
+        "jira_subvenue_key": meta.get("subvenue_key"),
+        "jira_venue_key": meta.get("venue_key"),
+        "jira_model_key": (device.model.meta or {}).get("object_key") if device.model else None,
     }
     if device.model:
         d["model"] = {
