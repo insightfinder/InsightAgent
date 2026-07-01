@@ -146,6 +146,7 @@ type DeviceResponse struct {
 	ObjectKey  string                 `json:"object_key"`
 	Name       string                 `json:"name"`
 	DeviceName string                 `json:"device_name"`
+	MacAddress string                 `json:"mac_address"`
 	Meta       map[string]interface{} `json:"meta"`
 
 	// Pre-resolved Jira object keys (e.g. "IHS-20846"). May be null/empty when
@@ -319,11 +320,11 @@ func buildJiraFields(meta map[string]interface{}, fieldMapping map[string]string
 }
 
 // buildKeyJiraFields returns the asset server's pre-resolved Jira object keys
-// (jira_device_key, jira_venue_key, etc.) plus the derived upstream device key,
-// keyed by their own field name with the raw Jira key value (e.g. "IHS-20846").
-// Empty/null values are omitted.
+// (jira_device_key, jira_venue_key, etc.) plus the derived upstream device key
+// and the device's MAC address, keyed by their own field name with the raw
+// value (e.g. "IHS-20846" or "FC:11:65:B6:A3:42"). Empty/null values are omitted.
 func buildKeyJiraFields(device *DeviceResponse, upstreamDeviceKey string) map[string]string {
-	out := make(map[string]string, 6)
+	out := make(map[string]string, 7)
 	add := func(key, value string) {
 		if value != "" {
 			out[key] = value
@@ -335,6 +336,7 @@ func buildKeyJiraFields(device *DeviceResponse, upstreamDeviceKey string) map[st
 	add("jira_venue_key", device.JiraVenueKey)
 	add("jira_model_key", device.JiraModelKey)
 	add("jira_upstream_device_key", upstreamDeviceKey)
+	add("device_mac", device.MacAddress)
 	return out
 }
 
