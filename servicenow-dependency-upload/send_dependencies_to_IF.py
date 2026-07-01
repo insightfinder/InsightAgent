@@ -96,6 +96,15 @@ def send_relations_to_insightfinder(relations):
 
     logger.info(f"Relations grouped into {len(relations_by_zone)} zone(s)")
 
+    # An empty causal_key -> POST (create a new causal group from scratch).
+    # A non-empty causal_key -> PUT (update the existing causal group identified
+    # by this key). The backend 404s if no group matches the key.
+    causal_key = (getattr(config, 'causal_key', '') or '').strip()
+    if causal_key:
+        logger.info(f"causal_key set -> PUT (update existing causal group '{causal_key}')")
+    else:
+        logger.info("causal_key empty -> POST (create new causal group)")
+
     total_sent = 0
     total_failed = 0
 
@@ -119,9 +128,12 @@ def send_relations_to_insightfinder(relations):
             "projectLevelAddRelationSetStr": instance_relation_list_str,
             "zoneName": zone_name
         }
+        if causal_key:
+            payload["causalKey"] = causal_key
 
         try:
-            response = requests.post(
+            request_fn = requests.put if causal_key else requests.post
+            response = request_fn(
                 INSIGHTFINDER_API_URL,
                 json=payload,
                 headers={"Content-Type": "application/json"},
@@ -146,6 +158,8 @@ def main():
     """Main execution function."""
     logger.info("=" * 80)
     logger.info("Sending ServiceNow Dependency Relations to InsightFinder")
+    causal_key = (getattr(config, 'causal_key', '') or '').strip()
+    logger.info(f"Mode: {'UPDATE existing causal group (PUT)' if causal_key else 'CREATE new causal group (POST)'}")
     if TEST_LIMIT > 0:
         logger.info(f"TEST MODE: Limiting to first {TEST_LIMIT} relations")
     logger.info("=" * 80)
