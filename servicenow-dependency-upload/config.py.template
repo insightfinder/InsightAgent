@@ -103,3 +103,9 @@ license_key = ""
 insightfinder_system = ""
 # Relation node type: "instanceLevel" or "componentLevel"
 relation_node_type = "instanceLevel"
+# Causal key for the upload.
+# "" (empty, default) -> POST: create a new causal group for the system.
+# Non-empty          -> PUT: update the EXISTING causal group with this key,
+#   adding the relations to it. Copy the key from the group you want to update;
+#   the backend returns HTTP 404 if no causal group matches the key.
+causal_key = ""
