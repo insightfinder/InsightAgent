@@ -221,6 +221,44 @@ def resolve_hosts(member_ids, classes, edges, type_map, type_sets, host_classes)
     return {ci: resolve(ci) for ci in member_ids}
 
 
+def build_display_names(member_ids, names, classes, edges, type_map, type_sets,
+                        host_classes, qualify_common, name_counts, host_of=None):
+    """Return {sys_id: display_name} used to identify each CI in the output.
+
+    Default (qualify_common=False): the raw display name, matching the original
+    behavior -- distinct CIs that share a name will merge downstream.
+
+    qualify_common=True: any name held by more than one CI (per name_counts,
+    tallied across all ingested services) is disambiguated as "<name>@<host>",
+    where host is the CI's nearest host-class ancestor. Unique names, and common
+    names whose host cannot be resolved, are returned unchanged.
+    """
+    if not qualify_common:
+        return {ci: names.get(ci, ci) for ci in member_ids}
+
+    if host_of is None:
+        host_of = resolve_hosts(member_ids, classes, edges, type_map, type_sets,
+                                host_classes)
+
+    display = {}
+    qualified = unresolved = 0
+    for ci in member_ids:
+        base = names.get(ci, ci)
+        if name_counts.get(base, 0) > 1:
+            host_id = host_of.get(ci)
+            if host_id and host_id != ci:
+                display[ci] = f"{base}@{names.get(host_id, host_id)}"
+                qualified += 1
+                continue
+            unresolved += 1
+        display[ci] = base
+
+    if qualified or unresolved:
+        logger.info(f"  Common-name qualification: {qualified} CI(s) -> name@host; "
+                    f"{unresolved} common-named CI(s) had no resolvable host (left bare)")
+    return display
+
+
 def build_type_sets():
     """Merge the built-in defaults with the config-provided type lists.
 
@@ -403,7 +441,7 @@ def get_relationships(session, base_url, ci_ids):
     return edges
 
 
-def build_relations(edges, names, type_map, type_sets, zone_name, include_containment,
+def build_relations(edges, display_names, type_map, type_sets, zone_name, include_containment,
                     skip_stats, host_of=None):
     """Turn (parent, child, type) sys_id edges into named source/target relations.
 
@@ -446,8 +484,8 @@ def build_relations(edges, names, type_map, type_sets, zone_name, include_contai
             if source_id == target_id:
                 continue  # intra-host edge collapses away
 
-        source_name = names.get(source_id, source_id)
-        target_name = names.get(target_id, target_id)
+        source_name = display_names.get(source_id, source_id)
+        target_name = display_names.get(target_id, target_id)
 
         relations.append({
             "source": source_name,
@@ -472,6 +510,7 @@ def main():
 
     include_containment = getattr(config, "servicenow_include_containment", True)
     rollup = getattr(config, "servicenow_rollup_to_host", False)
+    qualify_common = getattr(config, "servicenow_qualify_common_names", False)
     host_classes = _normalize(getattr(config, "servicenow_node_host_classes", None)) or DEFAULT_HOST_CLASSES
     if rollup:
         logger.info("Granularity: NODE-level (rolling components up to host nodes)")
@@ -479,6 +518,8 @@ def main():
         logger.info("Granularity: component-level (full CI graph)")
         logger.info(f"Containment relationships (Runs on/Contains/...): "
                     f"{'included' if include_containment else 'excluded'}")
+    logger.info(f"Common-name qualification (name@host): "
+                f"{'on' if qualify_common else 'off'}")
 
     session = get_servicenow_session()
 
@@ -490,7 +531,11 @@ def main():
     # Skip tallies, shared across services, reported once at the end.
     skip_stats = {"unknown": Counter(), "containment": Counter(), "unresolved": Counter()}
 
-    all_relations = []
+    # Phase 1: pull each service's CIs/edges, and tally how many distinct CIs
+    # share each display name (across all services) so build_display_names can
+    # tell which names are "common" and need host qualification.
+    fetched = []
+    name_sysids = {}  # display name -> set of sys_ids that use it
     for sys_id, zone_name in service_names.items():
         zone_name = zone_name or "NO_ZONE"
         logger.info(f"\nProcessing service '{zone_name}' ({sys_id})...")
@@ -504,6 +549,15 @@ def main():
         names, classes = get_ci_details(session, config.servicenow_url, member_ids)
         edges = get_relationships(session, config.servicenow_url, member_ids)
 
+        fetched.append((zone_name, member_ids, names, classes, edges))
+        for ci in set(member_ids):
+            name_sysids.setdefault(names.get(ci, ci), set()).add(ci)
+
+    name_counts = {name: len(ids) for name, ids in name_sysids.items()}
+
+    # Phase 2: orient and name each service's edges.
+    all_relations = []
+    for zone_name, member_ids, names, classes, edges in fetched:
         host_of = None
         if rollup:
             host_of = resolve_hosts(member_ids, classes, edges, type_map, type_sets, host_classes)
@@ -512,8 +566,13 @@ def main():
             logger.info(f"  Resolved {n_hosts} host node(s); "
                         f"{n_unmapped} member(s) could not be attributed to a host")
 
+        display_names = build_display_names(
+            member_ids, names, classes, edges, type_map, type_sets, host_classes,
+            qualify_common, name_counts, host_of=host_of
+        )
+
         relations = build_relations(
-            edges, names, type_map, type_sets, zone_name, include_containment,
+            edges, display_names, type_map, type_sets, zone_name, include_containment,
             skip_stats, host_of=host_of
         )
         logger.info(f"  Built {len(relations)} relation(s) for '{zone_name}'")

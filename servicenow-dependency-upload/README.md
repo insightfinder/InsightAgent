@@ -123,5 +123,31 @@ relationship type" warnings, add those type names to the appropriate list.
   than the server-to-server map shown in the ServiceNow UI.
 - **`False`** — emit only service dependencies; closer to the collapsed UI map.
 
+### Common-name disambiguation (`servicenow_qualify_common_names`)
+ServiceNow display names are **not unique** — generic process/software names
+like `java` or `Weblogic Server` are shared by many distinct CIs. Because
+relations are keyed on the display name, same-named CIs otherwise collapse into
+one InsightFinder node (and same-named CIs that relate to each other become
+self-loops).
+- **`False` (default)** — use the raw display name (names may merge).
+- **`True`** — any name shared by more than one CI (across all ingested
+  services) is qualified as `<name>@<host>`, where `host` is the CI's nearest
+  host-class ancestor (same host detection as `servicenow_node_host_classes`).
+  Unique names are left untouched. A common name whose host can't be resolved
+  (no hosting/containment edge up to a host CI) is left bare and logged — it
+  will still merge, so watch the "had no resolvable host" count in the run log.
+
+  > Note: under backend sanitization the `@` is rewritten to `.`, so
+  > `java@SU03137` is uploaded as `java.SU03137`.
+
+### Create vs. update (`causal_key`)
+Controls how step 3 calls `/api/v2/updaterelationdependency`:
+- **empty (default)** — **POST**: creates a new causal group for the system from
+  scratch (`systemDisplayName`-based, processed asynchronously).
+- **non-empty** — **PUT**: updates the *existing* causal group identified by this
+  causal key, adding the relations (confirmed, probability 1.0) to it. The
+  backend returns HTTP 404 if no causal group matches the key, so copy the key
+  from the existing group you want to update.
+
 ### Test limit (`TEST_LIMIT` in `send_dependencies_to_IF.py`)
 Set to a positive integer to cap how many relations are sent per run. `0` = send all.
