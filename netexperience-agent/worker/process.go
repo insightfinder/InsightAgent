@@ -2,6 +2,7 @@ package worker
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/insightfinder/netexperience-agent/pkg/models"
@@ -97,6 +98,8 @@ func (w *Worker) processEquipmentMetrics(equipment *models.Equipment, customer *
 	result := &models.EquipmentMetrics{
 		EquipmentID:   equipment.ID,
 		EquipmentName: equipment.Name,
+		MACAddress:    equipment.BaseMacAddress.AddressAsString,
+		SerialNumber:  equipment.Serial,
 		CustomerID:    customer.ID,
 		CustomerName:  customer.Name,
 		IPAddress:     equipment.IPAddress,
@@ -220,7 +223,20 @@ func (w *Worker) sendMetricBatch(timestamp int64, metrics []*models.EquipmentMet
 	metricDataList := make([]models.MetricData, 0, len(metrics))
 
 	for _, em := range metrics {
-		instanceName := models.CleanDeviceName(em.EquipmentName)
+		// Priority: MAC(NE) > serial(NE) > serial(devicelookup) > object_key(devicelookup) > equipment name
+		devInfo := w.getDeviceLookup().GetDeviceInfo(em.MACAddress)
+		var instanceName string
+		if em.MACAddress != "" {
+			instanceName = "MAC " + strings.ReplaceAll(em.MACAddress, ":", "-")
+		} else if em.SerialNumber != "" {
+			instanceName = "SERIAL " + em.SerialNumber
+		} else if devInfo.SerialNumber != "" {
+			instanceName = "SERIAL " + devInfo.SerialNumber
+		} else if devInfo.ObjectKey != "" {
+			instanceName = "JIRAKEY " + devInfo.ObjectKey
+		} else {
+			instanceName = models.CleanDeviceName(em.EquipmentName)
+		}
 
 		data := map[string]interface{}{
 			"Total Clients":              float64(em.TotalClients),
@@ -252,13 +268,27 @@ func (w *Worker) sendMetricBatch(timestamp int64, metrics []*models.EquipmentMet
 			data["≥ 35% of clients RSSI < -78 dBm AND TX Retry Rate > 18%"] = em.CriticalRF_RSSI_TxRetry
 		}
 
+		zone := em.CustomerName
+		if devInfo.Venue != "" {
+			zone = devInfo.Venue
+		}
+		componentName := "AP"
+		if devInfo.ComponentName != "" && devInfo.ComponentName != "NONE-NONE" {
+			componentName = devInfo.ComponentName
+		}
+		ipAddress := em.IPAddress
+		if devInfo.IPAddress != "" {
+			ipAddress = devInfo.IPAddress
+		}
+
 		metricData := models.MetricData{
 			Timestamp:     timestamp * 1000, // Convert to milliseconds
 			InstanceName:  instanceName,
+			DisplayName:   em.EquipmentName,
 			Data:          data,
-			Zone:          em.CustomerName,
-			ComponentName: "AP",
-			IP:            em.IPAddress,
+			Zone:          zone,
+			ComponentName: componentName,
+			IP:            ipAddress,
 		}
 
 		metricDataList = append(metricDataList, metricData)
