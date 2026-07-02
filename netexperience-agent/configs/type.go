@@ -32,6 +32,11 @@ type NetExperienceConfig struct {
 	EquipmentIPCacheRefreshHours int    `yaml:"equipment_ip_cache_refresh_hours"`
 	MinClientsRSSIThreshold      int    `yaml:"min_clients_rssi_threshold"`
 	MinClientsSNRThreshold       int    `yaml:"min_clients_snr_threshold"`
+	DeviceInventoryAPIKey        string `yaml:"device_inventory_api_key"`
+	DeviceInventoryBaseURL       string `yaml:"device_inventory_base_url"`
+	DeviceInventoryTimeoutSec    int    `yaml:"device_inventory_timeout_sec"`
+	DeviceInventoryMaxRetry      int    `yaml:"device_inventory_max_retry"`
+	DeviceInventoryRetryDelayMs  int    `yaml:"device_inventory_retry_delay_ms"`
 }
 
 type InsightFinderConfig struct {
