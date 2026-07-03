@@ -223,8 +223,21 @@ def _extract_device_info(raw):
     }
 
 
+def _inventory_api_is_healthy(logger, base_url, timeout):
+    """Quick health check against the device inventory API before a bulk refresh."""
+    try:
+        resp = requests.get(f'{base_url}/health', timeout=timeout)
+        if resp.status_code == 200:
+            return True
+        logger.warning(f'DeviceLookup: health check returned HTTP {resp.status_code}')
+    except Exception as e:
+        logger.warning(f'DeviceLookup: health check failed: {e}')
+    return False
+
+
 def refresh_device_lookup(logger, macs, agent_config_vars):
-    """Query device inventory API for all MACs (20 concurrent) and save to disk."""
+    """Query device inventory API for all MACs (20 concurrent) and save to disk.
+    If the API is unreachable, keeps the existing lookup (devices fall back to UNKNOWN zone etc.)."""
     global DEVICE_LOOKUP
     api_key = agent_config_vars.get('device_inventory_api_key', '')
     base_url = agent_config_vars.get('device_inventory_base_url', '')
@@ -233,6 +246,12 @@ def refresh_device_lookup(logger, macs, agent_config_vars):
         return
     timeout = agent_config_vars.get('device_inventory_timeout_sec', 5)
     max_retry = agent_config_vars.get('device_inventory_max_retry', 2)
+
+    # fast-fail: skip the whole refresh if the API is down, keep existing cache
+    if not _inventory_api_is_healthy(logger, base_url, timeout):
+        logger.warning('DeviceLookup: inventory API unreachable, keeping existing lookup '
+                       f'({len(DEVICE_LOOKUP)} entries); unmatched devices will use fallback values')
+        return
 
     macs = sorted({m.lower() for m in macs if m})
     logger.info(f'DeviceLookup: refreshing {len(macs)} devices (concurrency=20)...')
@@ -251,6 +270,13 @@ def refresh_device_lookup(logger, macs, agent_config_vars):
 
     elapsed = round(time.time() - start_time, 1)
     logger.info(f'DeviceLookup: done - {found} found, {len(macs) - found} not found, elapsed={elapsed}s')
+
+    # safety: if nothing was found but we had a non-empty cache, the API likely failed
+    # mid-run — keep the old cache instead of wiping it
+    if found == 0 and DEVICE_LOOKUP:
+        logger.warning('DeviceLookup: refresh found 0 devices, keeping previous '
+                       f'{len(DEVICE_LOOKUP)} entries')
+        return
 
     # atomic write: tmp file + replace
     path = abs_path_from_cur(DEVICE_LOOKUP_PATH)
