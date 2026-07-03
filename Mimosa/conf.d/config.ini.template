@@ -19,6 +19,11 @@ thread_pool = 5
 his_time_range =
 agent_http_proxy =
 agent_https_proxy =
+## Device Inventory API (MAC -> serial/venue/component lookup)
+device_inventory_api_key =
+device_inventory_base_url = http://54.234.90.98
+device_inventory_timeout_sec = 5
+device_inventory_max_retry = 2
 
 [insightfinder]
 user_name =
