@@ -152,6 +152,119 @@ def initialize_cache_connection():
     return cache_con, cache_cur
 
 
+#########################
+#    DEVICE LOOKUP      #
+#########################
+
+DEVICE_LOOKUP_PATH = 'devicelookup.json'
+DEVICE_LOOKUP_REFRESH_HOURS = 24
+# module-level cache: mac(lower) -> device info dict
+DEVICE_LOOKUP = {}
+
+
+def load_device_lookup(logger):
+    """Load devicelookup.json from disk into DEVICE_LOOKUP; returns entry count."""
+    global DEVICE_LOOKUP
+    path = abs_path_from_cur(DEVICE_LOOKUP_PATH)
+    if not os.path.exists(path):
+        DEVICE_LOOKUP = {}
+        return 0
+    try:
+        with open(path) as f:
+            DEVICE_LOOKUP = json.load(f)
+        logger.info(f'DeviceLookup: loaded {len(DEVICE_LOOKUP)} entries from disk')
+        return len(DEVICE_LOOKUP)
+    except Exception as e:
+        logger.warning(f'DeviceLookup: failed to load {path}: {e}')
+        DEVICE_LOOKUP = {}
+        return 0
+
+
+def device_lookup_is_stale():
+    """Return True if devicelookup.json is missing or older than refresh interval."""
+    path = abs_path_from_cur(DEVICE_LOOKUP_PATH)
+    if not os.path.exists(path):
+        return True
+    age_hours = (time.time() - os.path.getmtime(path)) / 3600
+    return age_hours >= DEVICE_LOOKUP_REFRESH_HOURS
+
+
+def _lookup_device_by_mac(mac, api_key, base_url, timeout, max_retry):
+    """Query device inventory API for a single MAC. Returns device dict or None."""
+    url = f'{base_url}/devices/{mac}'
+    headers = {'X-API-Key': api_key, 'Accept': 'application/json'}
+    for attempt in range(max_retry):
+        try:
+            resp = requests.get(url, headers=headers, timeout=timeout)
+            if resp.status_code == 404:
+                return None
+            if resp.status_code != 200:
+                continue
+            return resp.json()
+        except Exception:
+            if attempt < max_retry - 1:
+                time.sleep(0.5)
+    return None
+
+
+def _extract_device_info(raw):
+    """Parse device inventory API response into the fields we need."""
+    meta = raw.get('meta') or {}
+    model = raw.get('model') or {}
+    manufacturer = model.get('manufacturer') or meta.get('manufacturer') or 'NONE'
+    device_class = model.get('device_class') or 'NONE'
+    return {
+        'serial_number': raw.get('serial_number') or '',
+        'object_key': raw.get('object_key') or '',
+        'name': raw.get('name') or '',
+        'venue': meta.get('venue') or '',
+        'component_name': f'{manufacturer}-{device_class}',
+        'ip_address': raw.get('ip_address') or '',
+    }
+
+
+def refresh_device_lookup(logger, macs, agent_config_vars):
+    """Query device inventory API for all MACs (20 concurrent) and save to disk."""
+    global DEVICE_LOOKUP
+    api_key = agent_config_vars.get('device_inventory_api_key', '')
+    base_url = agent_config_vars.get('device_inventory_base_url', '')
+    if not api_key or not base_url:
+        logger.warning('DeviceLookup: device_inventory_api_key/base_url not configured, skipping refresh')
+        return
+    timeout = agent_config_vars.get('device_inventory_timeout_sec', 5)
+    max_retry = agent_config_vars.get('device_inventory_max_retry', 2)
+
+    macs = sorted({m.lower() for m in macs if m})
+    logger.info(f'DeviceLookup: refreshing {len(macs)} devices (concurrency=20)...')
+    start_time = time.time()
+
+    new_lookup = {}
+    found = 0
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        results = executor.map(
+            lambda m: (m, _lookup_device_by_mac(m, api_key, base_url, timeout, max_retry)), macs)
+        for mac, raw in results:
+            if raw:
+                new_lookup[mac] = _extract_device_info(raw)
+                found += 1
+
+    elapsed = round(time.time() - start_time, 1)
+    logger.info(f'DeviceLookup: done - {found} found, {len(macs) - found} not found, elapsed={elapsed}s')
+
+    # atomic write: tmp file + replace
+    path = abs_path_from_cur(DEVICE_LOOKUP_PATH)
+    tmp = path + '.tmp'
+    try:
+        with open(tmp, 'w') as f:
+            json.dump(new_lookup, f, indent=2)
+        os.replace(tmp, path)
+    except Exception as e:
+        logger.warning(f'DeviceLookup: failed to save to disk: {e}')
+
+    DEVICE_LOOKUP = new_lookup
+
+
 def mimosa_login(mimosa_uri, username, password, verify_certs=True):
     """Login to Mimosa device and get session token"""
     session = requests.Session()
@@ -228,7 +341,7 @@ def fetch_device_metrics_batch(session, mimosa_uri, network_id, action_names, de
         response.raise_for_status()
         
         series_data = response.json()
-        
+
         # Track which devices we got data for
         devices_with_data = set()
         
@@ -708,6 +821,12 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             except Exception as e:
                 logger.error(f'Failed to save metrics data to file: {str(e)}')
 
+            # Refresh device lookup (MAC -> serial/venue/component) if stale, then load
+            load_device_lookup(logger)
+            if device_lookup_is_stale() or not DEVICE_LOOKUP:
+                macs = {m.get('mac_address') for m in metrics_data if m.get('mac_address')}
+                refresh_device_lookup(logger, macs, agent_config_vars)
+
             # Process the collected data
             for metric_data in metrics_data:
                 parse_messages_mimosa(
@@ -753,17 +872,41 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
         # Align timestamp to sampling interval
         aligned_timestamp = align_timestamp(timestamp, sampling_interval)
         
-        # Create instance name using device name for better identification
         device_name = metric_data.get('device_name', 'unknown_device')
-        instance_name = make_safe_instance_string(device_name)
-        
+        mac_address = metric_data.get('mac_address', '')
+        dev_info = DEVICE_LOOKUP.get(mac_address.lower(), {}) if mac_address else {}
+
+        # Instance name priority: MAC > serial(devicelookup) > object_key(devicelookup) > device name
+        if mac_address:
+            instance_name = 'MAC ' + mac_address.upper().replace(':', '-')
+        elif dev_info.get('serial_number'):
+            instance_name = 'SERIAL ' + dev_info['serial_number']
+        elif dev_info.get('object_key'):
+            instance_name = 'JIRAKEY ' + dev_info['object_key']
+        else:
+            instance_name = make_safe_instance_string(device_name)
+
+        # Component name: devicelookup manufacturer-device_class > config default
+        component_name = default_component_name
+        if dev_info.get('component_name') and dev_info['component_name'] != 'NONE-NONE':
+            component_name = dev_info['component_name']
+
+        # Zone: devicelookup meta.venue > UNKNOWN
+        zone = dev_info.get('venue') or 'UNKNOWN'
+
+        # IP: devicelookup > Mimosa API
+        if dev_info.get('ip_address'):
+            ipAddress = dev_info['ip_address']
+
         # Create safe metric key
         safe_metric_key = make_safe_metric_key(metric_name)
-        
+
         # Prepare metric data point
         metric_data_point = {
             'instanceName': instance_name,
-            'componentName': default_component_name,
+            'displayName': device_name,
+            'componentName': component_name,
+            'zone': zone,
             'metricName': safe_metric_key,
             'data': value,
             'timestamp': timestamp,
@@ -834,7 +977,13 @@ def get_agent_config_vars(logger, config_ini):
         thread_pool = config_parser.getint(agent_section, 'thread_pool', fallback=20)
         default_component_name = config_parser.get(agent_section, 'default_component_name', fallback='')
         instance_name = config_parser.get(agent_section, 'instance_name', fallback='mimosa_instance')
-        
+
+        # Device Inventory API settings (for MAC -> serial/venue/component lookup)
+        device_inventory_api_key = config_parser.get(agent_section, 'device_inventory_api_key', fallback='')
+        device_inventory_base_url = config_parser.get(agent_section, 'device_inventory_base_url', fallback='')
+        device_inventory_timeout_sec = config_parser.getint(agent_section, 'device_inventory_timeout_sec', fallback=5)
+        device_inventory_max_retry = config_parser.getint(agent_section, 'device_inventory_max_retry', fallback=2)
+
         return {
             'mimosa_uri': mimosa_uri,
             'username': username,
@@ -849,6 +998,10 @@ def get_agent_config_vars(logger, config_ini):
             'thread_pool': thread_pool,
             'default_component_name': default_component_name,
             'instance_name': instance_name,
+            'device_inventory_api_key': device_inventory_api_key,
+            'device_inventory_base_url': device_inventory_base_url,
+            'device_inventory_timeout_sec': device_inventory_timeout_sec,
+            'device_inventory_max_retry': device_inventory_max_retry,
             'his_time_range': config_parser.get(agent_section, 'his_time_range', fallback=''),
         }
         
@@ -1112,6 +1265,9 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
     data_dict['userName'] = if_config_vars['user_name']
     if 'system_name' in if_config_vars and if_config_vars['system_name']:
         data_dict['systemName'] = if_config_vars['system_name']
+    data_dict['iat'] = 'Custom'
+    if if_config_vars.get('sampling_interval'):
+        data_dict['si'] = str(int(if_config_vars['sampling_interval'] / 1000))  # ms -> seconds
     
     instance_data_map = dict()
     
@@ -1128,14 +1284,29 @@ def convert_to_metric_data(logger, chunk_metric_data, cli_config_vars, if_config
         # device_type = chunk.get('device_type', 'mimosa_device')
         host_id = chunk.get('host_id')
         ipAddress = chunk.get('ipAddress', '')
-        
+        display_name = chunk.get('displayName', '')
+        zone = chunk.get('zone', '')
+
         if instance_name not in instance_data_map:
+            # build instance metadata string (im): idn=display name, cn=component, i=ip, z=zone
+            im_data = {}
+            if display_name:
+                im_data['idn'] = display_name
+            if component_name:
+                im_data['cn'] = component_name
+            if ipAddress:
+                im_data['i'] = ipAddress
+            if zone:
+                im_data['z'] = zone
+
             instance_data_map[instance_name] = {
                 'in': instance_name,
                 'cn': component_name,
                 'i': ipAddress,
                 'dit': {}
             }
+            if im_data:
+                instance_data_map[instance_name]['im'] = json.dumps(im_data)
         
         if timestamp not in instance_data_map[instance_name]['dit']:
             timestamp_entry = {
@@ -1214,9 +1385,9 @@ def send_data_to_if(logger, cli_config_vars, if_config_vars, track, chunk_metric
 
     logger.info('--- Send data time: %s seconds ---' % round(time.time() - send_data_time, 2))
     
-    # Send instance metadata after successful data upload
-    if not cli_config_vars['testing'] and data_to_post:
-        send_instance_metadata(logger, if_config_vars, data_to_post, agent_config_vars)
+    # NOTE: instance metadata is carried in the 'im' field of the v2 payload (like zabbix-ap).
+    # The separate agent-upload-instancemetadata call is disabled: it only sent
+    # instanceName+ipAddress with override=true, wiping display name/component/zone.
 
 
 def send_instance_metadata(logger, if_config_vars, data_to_post, agent_config_vars=None):
@@ -1346,6 +1517,73 @@ def get_data_type_from_project_type(if_config_vars):
         return 'Metric'
 
 
+def check_and_create_project(logger, if_config_vars):
+    """Check if the project exists in InsightFinder; create it (with system) if not.
+    Mirrors the netexperience Go agent's IsProjectExist/CreateProject logic."""
+    if_url = if_config_vars['if_url']
+    project_endpoint = urljoin(if_url, '/api/v1/check-and-add-custom-project')
+    project_name = if_config_vars['project_name']
+    system_name = if_config_vars.get('system_name') or project_name
+
+    check_form = {
+        'operation': 'check',
+        'userName': if_config_vars['user_name'],
+        'licenseKey': if_config_vars['license_key'],
+        'projectName': project_name,
+        'systemName': system_name,
+    }
+
+    try:
+        resp = requests.post(project_endpoint, data=check_form, verify=False, timeout=30)
+        if resp.status_code != 200:
+            logger.error(f'Project check failed with status: {resp.status_code}')
+            return False
+        check_result = resp.json()
+    except Exception as e:
+        logger.error(f'Failed to check project existence: {e}')
+        return False
+
+    if not check_result.get('success', check_result.get('isSuccess', False)):
+        logger.error(f'Project check failed: {check_result.get("message", "")}')
+        return False
+
+    if check_result.get('isProjectExist', False):
+        logger.info(f"Project '{project_name}' exists in InsightFinder")
+        return True
+
+    logger.info(f"Project '{project_name}' does not exist, creating...")
+
+    sampling_interval_sec = int(if_config_vars.get('sampling_interval', 60000) / 1000) or 60
+    create_form = {
+        'operation': 'create',
+        'userName': if_config_vars['user_name'],
+        'licenseKey': if_config_vars['license_key'],
+        'projectName': project_name,
+        'systemName': system_name,
+        'instanceType': 'OnPremise',
+        'projectCloudType': 'OnPremise',
+        'dataType': get_data_type_from_project_type(if_config_vars),
+        'insightAgentType': 'Custom',
+        'samplingInterval': sampling_interval_sec,
+        'samplingIntervalInSeconds': sampling_interval_sec,
+    }
+
+    try:
+        resp = requests.post(project_endpoint, params=create_form, verify=False, timeout=30)
+        if resp.status_code != 200:
+            logger.error(f'Project creation failed with status: {resp.status_code}, response: {resp.text}')
+            return False
+        create_result = resp.json()
+        if create_result.get('success', create_result.get('isSuccess', False)):
+            logger.info(f"Project '{project_name}' created successfully in system '{system_name}'")
+            return True
+        logger.error(f'Project creation failed: {create_result.get("message", "")}')
+        return False
+    except Exception as e:
+        logger.error(f'Failed to create project: {e}')
+        return False
+
+
 def main():
     """Main function"""
     # get CLI config
@@ -1367,7 +1605,13 @@ def main():
     
     # print summary
     print_summary_info(logger, if_config_vars, agent_config_vars)
-    
+
+    # ensure project (and system) exist in InsightFinder before sending data
+    if not cli_config_vars['testing']:
+        if not check_and_create_project(logger, if_config_vars):
+            logger.error('Failed to create/verify InsightFinder project, exiting')
+            sys.exit(1)
+
     # initialize cache
     cache_con, cache_cur = initialize_cache_connection()
     
