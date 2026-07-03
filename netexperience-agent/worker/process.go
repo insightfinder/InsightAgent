@@ -227,7 +227,7 @@ func (w *Worker) sendMetricBatch(timestamp int64, metrics []*models.EquipmentMet
 		devInfo := w.getDeviceLookup().GetDeviceInfo(em.MACAddress)
 		var instanceName string
 		if em.MACAddress != "" {
-			instanceName = "MAC " + strings.ReplaceAll(em.MACAddress, ":", "-")
+			instanceName = "MAC " + strings.ToUpper(strings.ReplaceAll(em.MACAddress, ":", "-"))
 		} else if em.SerialNumber != "" {
 			instanceName = "SERIAL " + em.SerialNumber
 		} else if devInfo.SerialNumber != "" {
@@ -268,11 +268,11 @@ func (w *Worker) sendMetricBatch(timestamp int64, metrics []*models.EquipmentMet
 			data["≥ 35% of clients RSSI < -78 dBm AND TX Retry Rate > 18%"] = em.CriticalRF_RSSI_TxRetry
 		}
 
-		zone := em.CustomerName
+		zone := "UNKNOWN"
 		if devInfo.Venue != "" {
 			zone = devInfo.Venue
 		}
-		componentName := "AP"
+		componentName := "AP-Edgecore"
 		if devInfo.ComponentName != "" && devInfo.ComponentName != "NONE-NONE" {
 			componentName = devInfo.ComponentName
 		}
@@ -284,7 +284,12 @@ func (w *Worker) sendMetricBatch(timestamp int64, metrics []*models.EquipmentMet
 		metricData := models.MetricData{
 			Timestamp:     timestamp * 1000, // Convert to milliseconds
 			InstanceName:  instanceName,
-			DisplayName:   em.EquipmentName,
+			DisplayName:   func() string {
+				if em.EquipmentName != "" {
+					return em.EquipmentName
+				}
+				return "AP-Edgecore"
+			}(),
 			Data:          data,
 			Zone:          zone,
 			ComponentName: componentName,
