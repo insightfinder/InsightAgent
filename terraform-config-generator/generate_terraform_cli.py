@@ -415,6 +415,202 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
     return '\n'.join(lines)
 
 
+def _slack_safe_name(account, channel_name):
+    """Generate a safe Terraform resource/variable name suffix from a Slack account ID and channel."""
+    short_account = (account or "")[:8]
+    combined = f"{short_account}_{channel_name or 'channel'}"
+    return re.sub(r'[^a-z0-9_]', '_', combined.lower())
+
+
+def _parse_slack_project_configs(raw) -> list:
+    """Convert a raw projectConfigs array from the Slack API into a normalised list of dicts."""
+    result = []
+    if not isinstance(raw, list):
+        return result
+    for pc in raw:
+        if not isinstance(pc, dict):
+            continue
+        options_raw = pc.get("options")
+        levels_raw = pc.get("priorityLevels")
+        entry = {
+            "project_name": pc.get("projectName", ""),
+            "channel": pc.get("channel", ""),
+            "webhook": pc.get("webhook", ""),
+            "options": [str(o) for o in options_raw] if isinstance(options_raw, list) else [],
+            "enable_consolidation_info_update": bool(pc.get("enableConsolidationInfoUpdate", False)),
+            "priority_levels": [int(float(l)) for l in levels_raw] if isinstance(levels_raw, list) else [],
+            "rule": None,
+        }
+        rule = pc.get("rule")
+        if isinstance(rule, dict):
+            entry["rule"] = {
+                "type": rule.get("type", ""),
+                "keyword": rule.get("keyword", ""),
+            }
+        result.append(entry)
+    return result
+
+
+def _parse_slack_entry(entry):
+    """Parse a single Slack entry from extServiceAllInfo API response.
+
+    Returns a dict with normalized fields, or None if the entry is invalid.
+    """
+    account = entry.get("account", "")
+    if not account:
+        return None
+
+    config = {
+        "account": account,
+        "system_id": entry.get("systemId", ""),
+        "system_name": "",
+        "webhook": entry.get("webHook", ""),
+        "channel_name": entry.get("channelName", ""),
+        "options": [],
+        "project_configs": [],
+    }
+
+    options_str = entry.get("options", "")
+    if options_str:
+        try:
+            config["options"] = json.loads(options_str)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    configs_str = entry.get("configs", "")
+    if configs_str:
+        try:
+            configs = json.loads(configs_str)
+            pc_raw = configs.get("projectConfigs")
+            if isinstance(pc_raw, list):
+                config["project_configs"] = _parse_slack_project_configs(pc_raw)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+    return config
+
+
+def _hcl_escape_string(value: str) -> str:
+    """Escape a Python string for safe embedding in an HCL double-quoted string literal.
+
+    Backslashes must be escaped before quotes, since values such as regex rule
+    keywords (e.g. "apple\\s?tv") contain literal backslashes that HCL would
+    otherwise interpret as invalid escape sequences.
+    """
+    return value.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+
+
+def generate_slack_env_config(slack_entries, include_provider=True, base_url="",
+                              system_id_to_name=None):
+    """Generate Terraform configuration for insightfinder_slack resources.
+
+    One resource block is generated per entry. This is an environment-level resource,
+    not tied to any specific project — each entry is its own independent Slack
+    integration (webhook + channel) for a single system.
+
+    All values, including webhooks, are inlined directly as literals — no
+    Terraform variables are generated for Slack configuration.
+
+    Args:
+        slack_entries: List of parsed Slack config dicts (from _parse_slack_entry).
+        include_provider: Whether to include terraform/provider blocks.
+        base_url: InsightFinder base URL (used in provider block when include_provider=True).
+        system_id_to_name: Optional dict mapping system IDs to display names. When provided,
+                           system_id is resolved to a name for the system_name attribute.
+
+    Returns:
+        HCL string for all insightfinder_slack resources.
+    """
+    if not slack_entries:
+        return ""
+
+    if system_id_to_name is None:
+        system_id_to_name = {}
+
+    lines = []
+
+    if include_provider:
+        lines += [
+            'terraform {',
+            '  required_providers {',
+            '    insightfinder = {',
+            '      source  = "insightfinder/insightfinder"',
+            '      version = ">= 1.6.1"',
+            '    }',
+            '  }',
+            '}',
+            '',
+            'provider "insightfinder" {',
+            f'  base_url = "{base_url}"',
+            '}',
+            '',
+        ]
+
+    for config in slack_entries:
+        account = config["account"]
+        channel_name = config.get("channel_name", "")
+        safe_name = _slack_safe_name(account, channel_name)
+
+        system_name = (config.get("system_name")
+                       or system_id_to_name.get(config.get("system_id", ""), config.get("system_id", "")))
+
+        lines.append(f'resource "insightfinder_slack" "{safe_name}" {{')
+
+        if system_name:
+            escaped = _hcl_escape_string(system_name)
+            lines.append(f'  system_name  = "{escaped}"')
+        else:
+            lines.append(f'  # TODO: could not resolve system name for system ID: {config.get("system_id", "")}')
+            lines.append(f'  system_name  = ""')
+
+        webhook_e = _hcl_escape_string(config.get("webhook", ""))
+        lines.append(f'  webhook      = "{webhook_e}"')
+
+        channel_e = _hcl_escape_string(channel_name)
+        lines.append(f'  channel_name = "{channel_e}"')
+        lines.append('')
+
+        if config.get("options"):
+            lines.append(f'  options = {json.dumps(config["options"])}')
+
+        if config.get("project_configs"):
+            lines.append('')
+            lines.append('  project_configs = [')
+            for pc in config["project_configs"]:
+                lines.append('    {')
+                proj_e = _hcl_escape_string(pc.get("project_name", ""))
+                lines.append(f'      project_name = "{proj_e}"')
+                if pc.get("channel"):
+                    ch_e = _hcl_escape_string(pc["channel"])
+                    lines.append(f'      channel      = "{ch_e}"')
+                if pc.get("webhook"):
+                    pc_webhook_e = _hcl_escape_string(pc["webhook"])
+                    lines.append(f'      webhook      = "{pc_webhook_e}"')
+                if pc.get("options"):
+                    lines.append(f'      options = {json.dumps(pc["options"])}')
+                lines.append(f'      enable_consolidation_info_update = '
+                             f'{str(pc.get("enable_consolidation_info_update", False)).lower()}')
+                if pc.get("priority_levels"):
+                    lines.append(f'      priority_levels = {json.dumps(pc["priority_levels"])}')
+                if pc.get("rule"):
+                    rule = pc["rule"]
+                    lines.append('      rule = {')
+                    if rule.get("type"):
+                        rtype_e = _hcl_escape_string(rule["type"])
+                        lines.append(f'        type    = "{rtype_e}"')
+                    if rule.get("keyword"):
+                        rkw_e = _hcl_escape_string(rule["keyword"])
+                        lines.append(f'        keyword = "{rkw_e}"')
+                    lines.append('      }')
+                lines.append('    },')
+            lines.append('  ]')
+
+        lines.append('}')
+        lines.append('')
+
+    return '\n'.join(lines)
+
+
 def generate_terraform_config(project_name, settings_data, keywords_data, servicenow_data=None,
                               json_keys_data=None, summary_settings=None, metafield_settings=None,
                               dampening_field_settings=None, notification_settings=None,
