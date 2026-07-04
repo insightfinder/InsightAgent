@@ -67,6 +67,9 @@ from generate_terraform_cli import (
     generate_servicenow_env_config,
     _parse_servicenow_entry,
     _sn_safe_name,
+    generate_slack_env_config,
+    _parse_slack_entry,
+    _slack_safe_name,
     parse_project_settings,
 )
 
@@ -731,6 +734,125 @@ def process_env_servicenow(session: requests.Session, env_name: str, env_cfg: Di
               + (f" → {len(config['system_names'])} system(s)" if config.get('system_names') else ""))
 
     return len(sn_configs)
+
+
+def fetch_slack_env_configs(session: requests.Session, host: str,
+                            username: str, api_key: str) -> List[Dict]:
+    """Fetch all environment-level Slack configurations from the API.
+
+    Returns a list of parsed config dicts (one per extServiceAllInfo entry).
+    """
+    url = f"{host.rstrip('/')}/api/external/v1/system/externalServlies/list"
+    headers = api_headers(username, api_key)
+    params = {"serviceProvider": "Slack", "tzOffset": "-14400000"}
+
+    data = fetch_json(session, url, headers, params)
+    if not data or not data.get("success"):
+        return []
+
+    entries_raw = data.get("extServiceAllInfo", [])
+    configs = []
+    for entry in entries_raw:
+        parsed = _parse_slack_entry(entry)
+        if parsed:
+            configs.append(parsed)
+    return configs
+
+
+def _slack_env_variables_tf() -> str:
+    """Generate variables.tf for the env-level slack root module.
+
+    Slack webhooks are inlined directly into each resource file (no secrets/vars),
+    so this only declares the variables needed by the shared provider block.
+    """
+    return '''\
+variable "if_username" {
+  description = "InsightFinder account username"
+  type        = string
+}
+
+variable "if_licensekey" {
+  description = "InsightFinder license key"
+  type        = string
+  sensitive   = true
+}
+
+variable "base_url" {
+  description = "Base URL of the InsightFinder instance"
+  type        = string
+}
+'''
+
+
+def _slack_env_tfvars(base_url: str) -> str:
+    """Generate terraform.tfvars for the env-level slack root module."""
+    return f'''\
+# Environment-level Slack integration settings.
+# Webhooks are inlined directly in the generated resource files.
+
+base_url = "{base_url}"
+
+# InsightFinder credentials — loaded from secrets
+# if_username   = "..."  # Set via GitHub Secrets
+# if_licensekey = "..."  # Set via GitHub Secrets
+'''
+
+
+def process_env_slack(session: requests.Session, env_name: str, env_cfg: Dict,
+                      systems: List[Dict], output_dir: str,
+                      dry_run: bool) -> int:
+    """Generate env-level Slack Terraform files under ENV/slack/.
+
+    Returns the number of Slack configs generated (0 if none found).
+    """
+    base_url = env_cfg["base_url"].rstrip('/')
+    username = env_cfg["username"]
+    api_key = env_cfg["licensekey"]
+    terraform_version = str(env_cfg.get("terraform_version", ">= 1.6.1"))
+
+    print(f"\n  Fetching environment-level Slack configurations...")
+    slack_configs = fetch_slack_env_configs(session, base_url, username, api_key)
+
+    if not slack_configs:
+        print(f"  No Slack configurations found — skipping slack module.")
+        return 0
+
+    print(f"  Found {len(slack_configs)} Slack configuration(s).")
+
+    # Resolve system IDs → display names using the already-fetched systems list
+    system_id_to_name = _build_system_id_to_name(systems)
+    for config in slack_configs:
+        config["system_name"] = system_id_to_name.get(config.get("system_id", ""), config.get("system_id", ""))
+
+    env_slack_dir = os.path.join(output_dir, env_name, "slack")
+
+    # versions.tf — dedicated S3 backend key for the slack root module
+    write_file(os.path.join(env_slack_dir, "versions.tf"),
+               _versions_tf(env_name, "slack", terraform_version), dry_run)
+
+    write_file(os.path.join(env_slack_dir, "provider.tf"),
+               _provider_tf(), dry_run)
+
+    write_file(os.path.join(env_slack_dir, "variables.tf"),
+               _slack_env_variables_tf(), dry_run)
+
+    write_file(os.path.join(env_slack_dir, "terraform.tfvars"),
+               _slack_env_tfvars(base_url), dry_run)
+
+    # Write one dedicated .tf file per Slack config, named by account + channel
+    for config in slack_configs:
+        safe_name = _slack_safe_name(config["account"], config.get("channel_name", ""))
+        tf_filename = re.sub(r'[^a-z0-9-]', '-', safe_name.lower()) + ".tf"
+        slack_hcl = generate_slack_env_config(
+            slack_entries=[config],
+            include_provider=False,
+            system_id_to_name=system_id_to_name,
+        )
+        write_file(os.path.join(env_slack_dir, tf_filename), slack_hcl, dry_run)
+        print(f"    Slack: {config['account']} / {config.get('channel_name', '')}"
+              + (f" → system {config['system_name']}" if config.get('system_name') else ""))
+
+    return len(slack_configs)
 
 
 # ---------------------------------------------------------------------------
@@ -2342,6 +2464,9 @@ def run(config_path: str, output_dir: str, env_filter: Optional[str],
 
         # Generate environment-level ServiceNow root module (ENV/servicenow/)
         process_env_servicenow(session, env_name, env_cfg, systems, output_dir, dry_run)
+
+        # Generate environment-level Slack root module (ENV/slack/)
+        process_env_slack(session, env_name, env_cfg, systems, output_dir, dry_run)
 
         for system in systems:
             system_display = get_system_display_name(system)
