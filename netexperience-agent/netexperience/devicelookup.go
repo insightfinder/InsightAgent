@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"strings"
 	"sync"
@@ -68,8 +69,9 @@ func (dl DeviceLookup) GetDeviceInfo(mac string) DeviceInfo {
 const lookupConcurrency = 20
 
 // RefreshDeviceLookup queries the device inventory API for all cached equipment
-// (MAC first, fallback serial) and returns the new DeviceLookup map.
-// The caller is responsible for storing it safely (e.g. under a mutex).
+// (MAC, then serial, then IP address, then device name, first match wins) and
+// returns the new DeviceLookup map. The caller is responsible for storing it
+// safely (e.g. under a mutex).
 func (s *Service) RefreshDeviceLookup() DeviceLookup {
 	apiKey := s.config.DeviceInventoryAPIKey
 	baseURL := s.config.DeviceInventoryBaseURL
@@ -79,13 +81,15 @@ func (s *Service) RefreshDeviceLookup() DeviceLookup {
 	client := &http.Client{Timeout: timeout}
 
 	s.cacheMutex.RLock()
-	type equip struct{ mac, serial string }
+	type equip struct{ mac, serial, ip, name string }
 	var items []equip
 	for _, equipList := range s.cache.EquipmentByCustomer {
 		for _, eq := range equipList {
 			items = append(items, equip{
 				mac:    eq.BaseMacAddress.AddressAsString,
 				serial: eq.Serial,
+				ip:     eq.IPAddress,
+				name:   eq.Name,
 			})
 		}
 	}
@@ -110,7 +114,7 @@ func (s *Service) RefreshDeviceLookup() DeviceLookup {
 	var wg sync.WaitGroup
 
 	for _, item := range items {
-		if item.mac == "" && item.serial == "" {
+		if item.mac == "" && item.serial == "" && item.ip == "" && item.name == "" {
 			continue
 		}
 		wg.Add(1)
@@ -119,11 +123,18 @@ func (s *Service) RefreshDeviceLookup() DeviceLookup {
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			identifier := it.mac
-			raw := lookupDeviceByIdentifier(client, apiKey, baseURL, maxRetry, retryDelay, identifier)
-			if raw == nil && it.serial != "" {
-				identifier = it.serial
-				raw = lookupDeviceByIdentifier(client, apiKey, baseURL, maxRetry, retryDelay, identifier)
+			// Try identifiers in priority order: MAC -> serial -> IP address -> device name
+			var identifier string
+			var raw map[string]interface{}
+			for _, candidate := range [...]string{it.mac, it.serial, it.ip, it.name} {
+				if candidate == "" {
+					continue
+				}
+				identifier = candidate
+				raw = lookupDeviceByIdentifier(client, apiKey, baseURL, maxRetry, retryDelay, candidate)
+				if raw != nil {
+					break
+				}
 			}
 
 			if raw == nil {
@@ -134,6 +145,12 @@ func (s *Service) RefreshDeviceLookup() DeviceLookup {
 			key := it.mac
 			if key == "" {
 				key = it.serial
+			}
+			if key == "" {
+				key = it.ip
+			}
+			if key == "" {
+				key = it.name
 			}
 			resultCh <- result{
 				key: key,
@@ -186,7 +203,7 @@ func lookupDeviceByIdentifier(client *http.Client, apiKey, baseURL string, maxRe
 	if identifier == "" {
 		return nil
 	}
-	url := fmt.Sprintf("%s/devices/%s", baseURL, identifier)
+	url := fmt.Sprintf("%s/devices/%s", baseURL, neturl.PathEscape(identifier))
 
 	var lastErr error
 	for attempt := 1; attempt <= maxRetry; attempt++ {
