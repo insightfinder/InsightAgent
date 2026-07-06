@@ -1,5 +1,5 @@
 from typing import Any, Dict, List, Optional
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import selectinload
 
@@ -49,18 +49,22 @@ class DeviceRepository:
 
     async def find_device(self, identifier: str) -> Optional[Device]:
         """Smart lookup by: Jira ID, object_key (IHS-xxxxx), name, device_name,
-        ip_address, mac_address, serial_number, or zabbix_host_id."""
+        ip_address, mac_address, serial_number, or zabbix_host_id.
+
+        Matching is case-insensitive on all fields.
+        """
+        ident_lower = identifier.lower()
         stmt = (
             select(Device)
             .where(
-                (Device.id == identifier)
-                | (Device.object_key == identifier)
-                | (Device.name == identifier)
-                | (Device.device_name == identifier)
-                | (Device.ip_address == identifier)
-                | (Device.mac_address == identifier)
-                | (Device.serial_number == identifier)
-                | (Device.zabbix_host_id == identifier)
+                (func.lower(Device.id) == ident_lower)
+                | (func.lower(Device.object_key) == ident_lower)
+                | (func.lower(Device.name) == ident_lower)
+                | (func.lower(Device.device_name) == ident_lower)
+                | (func.lower(Device.ip_address) == ident_lower)
+                | (func.lower(Device.mac_address) == ident_lower)
+                | (func.lower(Device.serial_number) == ident_lower)
+                | (func.lower(Device.zabbix_host_id) == ident_lower)
             )
             .options(selectinload(Device.model))
             .limit(1)
@@ -83,19 +87,19 @@ class DeviceRepository:
     ) -> List[Device]:
         stmt = select(Device).options(selectinload(Device.model))
         if ip:
-            stmt = stmt.where(Device.ip_address == ip)
+            stmt = stmt.where(func.lower(Device.ip_address) == ip.lower())
         if mac:
-            stmt = stmt.where(Device.mac_address == mac)
+            stmt = stmt.where(func.lower(Device.mac_address) == mac.lower())
         if serial:
-            stmt = stmt.where(Device.serial_number == serial)
+            stmt = stmt.where(func.lower(Device.serial_number) == serial.lower())
         if name:
             stmt = stmt.where(Device.name.ilike(f"%{name}%"))
         if device_name:
             stmt = stmt.where(Device.device_name.ilike(f"%{device_name}%"))
         if object_key:
-            stmt = stmt.where(Device.object_key == object_key)
+            stmt = stmt.where(func.lower(Device.object_key) == object_key.lower())
         if zabbix_host_id:
-            stmt = stmt.where(Device.zabbix_host_id == zabbix_host_id)
+            stmt = stmt.where(func.lower(Device.zabbix_host_id) == zabbix_host_id.lower())
         stmt = stmt.limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
