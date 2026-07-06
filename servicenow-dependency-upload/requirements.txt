@@ -1,0 +1,12 @@
+# HTTP Requests (ServiceNow + InsightFinder REST APIs)
+requests>=2.31.0
+
+# YAML Support
+pyyaml
+
+# Standard library modules (no installation needed):
+# - json
+# - logging
+# - sys
+# - re
+# - subprocess

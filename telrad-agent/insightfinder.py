@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import json
 import logging
 import urllib.parse
@@ -26,7 +27,12 @@ logger = logging.getLogger(__name__)
 def _build_session() -> requests.Session:
     """Create a requests session with retry logic for transient errors."""
     s = requests.Session()
-    retry = Retry(
+    # Retry()'s accepted kwargs vary across urllib3 versions (e.g.
+    # backoff_jitter added in 1.26.9; allowed_methods replaced the older
+    # method_whitelist in 1.26.0). Only pass what this install supports so
+    # the agent works across whatever urllib3 happens to be installed.
+    supported = inspect.signature(Retry.__init__).parameters
+    retry_kwargs = dict(
         total=3,
         connect=3,
         read=3,
@@ -34,10 +40,15 @@ def _build_session() -> requests.Session:
         backoff_factor=1.0,
         backoff_jitter=0.3,
         status_forcelist=(429, 500, 502, 503, 504),
-        allowed_methods=("POST",),
         respect_retry_after_header=True,
         raise_on_status=False,
     )
+    if "allowed_methods" in supported:
+        retry_kwargs["allowed_methods"] = ("POST",)
+    elif "method_whitelist" in supported:
+        retry_kwargs["method_whitelist"] = ("POST",)
+    retry_kwargs = {k: v for k, v in retry_kwargs.items() if k in supported}
+    retry = Retry(**retry_kwargs)
     adapter = HTTPAdapter(max_retries=retry)
     s.mount("http://", adapter)
     s.mount("https://", adapter)
