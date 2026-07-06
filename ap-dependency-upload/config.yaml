@@ -1,0 +1,28 @@
+insightfinder:
+  url: "https://app.insightfinder.com"
+  username: ""
+  license_key: ""
+  password: ""
+
+asset_server:
+  url: ""
+  api_key: ""
+  # max_depth param sent to GET /devices/{id}/upstream. Defaults to 1 (immediate parent only).
+  upstream_max_depth: 1
+
+# Causal dependency group that every project's relations are uploaded into.
+causal_key: ""
+
+projects:
+  - "example-project-1"
+  - "example-project-2"
+
+# false (default): upsert all valid pairs (existing ones get their status refreshed).
+# true: fetch the current map first and skip any pair that already exists there.
+fresh_only: false
+
+# Number of instances resolved against the asset server concurrently, per project.
+max_workers: 20
+
+# Batch size for InsightFinder groupingstorage IP lookups (unprefixed instance fallback).
+metadata_batch_size: 500

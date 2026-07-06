@@ -35,6 +35,13 @@ netexperience:
   min_clients_rssi_threshold: 10  # Minimum clients required for RSSI percentage calculations
   min_clients_snr_threshold: 10  # Minimum clients required for SNR/retry rate calculations
 
+  # Device Inventory API
+  device_inventory_api_key: YOUR_DEVICE_INVENTORY_API_KEY  # Replace with your device inventory API key
+  device_inventory_base_url: http://54.234.90.98
+  device_inventory_timeout_sec: 5
+  device_inventory_max_retry: 2
+  device_inventory_retry_delay_ms: 500
+
 insightfinder:
   # InsightFinder Platform Configuration
   server_url: https://stg.insightfinder.com  # or https://app.insightfinder.com for production

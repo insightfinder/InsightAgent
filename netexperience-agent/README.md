@@ -66,6 +66,12 @@ netexperience:
   min_clients_rssi_threshold: 10
   min_clients_snr_threshold: 10
 
+  # Device Inventory API (MAC -> serial/venue/component lookup)
+  device_inventory_api_key: your-api-key
+  device_inventory_base_url: http://54.234.90.98
+  device_inventory_timeout_sec: 5
+  device_inventory_max_retry: 2
+
 insightfinder:
   server_url: https://stg.insightfinder.com
   username: your-username
@@ -129,7 +135,26 @@ insightfinder:
 4. **Data Delivery**:
    - Formats metrics for InsightFinder API
    - Sends to InsightFinder platform
-   - Instance naming: `{EquipmentName}`
+
+### Instance Naming & Metadata
+
+The agent maintains a device lookup cache (`devicelookup.json`, refreshed every 24 hours) built from the Device Inventory API, queried by equipment MAC address.
+
+Instance name priority:
+
+1. `MAC E0-01-A6-80-80-9A` — equipment MAC address (uppercase, colons replaced by dashes)
+2. `SERIAL <serial>` — equipment serial from NetExperience, then from device inventory
+3. `JIRAKEY <object_key>` — device inventory object key
+4. Cleaned equipment name
+
+Instance metadata sent with each metric payload (`im` field):
+
+| Field | Source | Fallback |
+|-------|--------|----------|
+| Display name (`idn`) | NetExperience equipment name | `AP-Edgecore` |
+| Component name (`cn`) | Inventory `manufacturer-device_class` (e.g. `Edgecore-AP`) | `AP-Edgecore` |
+| Zone (`z`) | Inventory `meta.venue` | `UNKNOWN` |
+| IP (`i`) | Inventory `ip_address` | NetExperience equipment IP |
 
 ### Metrics Collected
 

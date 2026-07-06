@@ -6,6 +6,7 @@ import "time"
 type MetricData struct {
 	Timestamp     int64                  `json:"timestamp"`
 	InstanceName  string                 `json:"instanceName"`
+	DisplayName   string                 `json:"displayName,omitempty"`
 	Data          map[string]interface{} `json:"data"`
 	Zone          string                 `json:"zone,omitempty"`
 	ComponentName string                 `json:"componentName,omitempty"`
@@ -29,6 +30,7 @@ type Equipment struct {
 	InventoryID    string     `json:"inventoryId"`
 	Name           string     `json:"name"`
 	BaseMacAddress MacAddress `json:"baseMacAddress"`
+	Serial         string     `json:"serial,omitempty"`
 	IPAddress      string     `json:"ipAddress,omitempty"` // Fetched from status endpoint
 }
 
@@ -109,6 +111,9 @@ type ClientMetrics struct {
 type EquipmentMetrics struct {
 	EquipmentID   int
 	EquipmentName string
+	MACAddress    string // baseMacAddress.addressAsString (colon-hex format)
+	SerialNumber  string // serial field from equipment API
+	ObjectKey     string // object_key field from equipment API (may not exist)
 	CustomerID    int
 	CustomerName  string
 	IPAddress     string

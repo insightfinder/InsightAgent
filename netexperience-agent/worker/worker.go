@@ -15,11 +15,25 @@ import (
 
 // Worker handles the main data collection and processing logic
 type Worker struct {
-	config        *config.Config
-	netexpService *netexperience.Service
-	ifService     *insightfinder.Service
-	stopChan      chan struct{}
-	wg            sync.WaitGroup
+	config           *config.Config
+	netexpService    *netexperience.Service
+	ifService        *insightfinder.Service
+	stopChan         chan struct{}
+	wg               sync.WaitGroup
+	deviceLookup     netexperience.DeviceLookup
+	deviceLookupMu   sync.RWMutex
+}
+
+func (w *Worker) getDeviceLookup() netexperience.DeviceLookup {
+	w.deviceLookupMu.RLock()
+	defer w.deviceLookupMu.RUnlock()
+	return w.deviceLookup
+}
+
+func (w *Worker) setDeviceLookup(dl netexperience.DeviceLookup) {
+	w.deviceLookupMu.Lock()
+	w.deviceLookup = dl
+	w.deviceLookupMu.Unlock()
 }
 
 // NewWorker creates a new worker instance
@@ -59,14 +73,29 @@ func (w *Worker) Start(quit <-chan os.Signal) {
 		logrus.Errorf("Initial cache refresh failed: %v", err)
 	}
 
+	// Load device lookup from disk; if empty (first run), refresh synchronously so
+	// the first metric cycle has correct component/zone/ip data.
+	w.setDeviceLookup(netexperience.LoadDeviceLookup())
+	if len(w.getDeviceLookup()) == 0 {
+		logrus.Info("DeviceLookup cache empty, running initial refresh before first metric cycle...")
+		w.setDeviceLookup(w.netexpService.RefreshDeviceLookup())
+	} else {
+		go func() { w.setDeviceLookup(w.netexpService.RefreshDeviceLookup()) }()
+	}
+
 	// Start main collection loop
 	ticker := time.NewTicker(time.Duration(w.config.InsightFinder.SamplingInterval) * time.Second)
 	defer ticker.Stop()
+
+	deviceLookupTicker := time.NewTicker(24 * time.Hour)
+	defer deviceLookupTicker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
 			w.collectAndSendMetrics()
+		case <-deviceLookupTicker.C:
+			go func() { w.setDeviceLookup(w.netexpService.RefreshDeviceLookup()) }()
 		case <-quit:
 			logrus.Info("Shutdown signal received, stopping worker...")
 			close(w.stopChan)
