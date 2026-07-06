@@ -33,13 +33,17 @@ func (s *Service) RefreshCustomerCache() error {
 	return nil
 }
 
-// RefreshEquipmentCache refreshes the equipment cache for all customers
+// RefreshEquipmentCache refreshes the equipment cache for all customers.
+// Customers whose fetch fails this cycle keep their previously cached
+// equipment rather than being dropped, so a transient API error doesn't
+// blank out that customer's device/metric coverage until the next refresh.
 func (s *Service) RefreshEquipmentCache() error {
 	s.cacheMutex.RLock()
 	customers := make([]*models.Customer, 0, len(s.cache.Customers))
 	for _, customer := range s.cache.Customers {
 		customers = append(customers, customer)
 	}
+	previousEquipment := s.cache.EquipmentByCustomer
 	s.cacheMutex.RUnlock()
 
 	if len(customers) == 0 {
@@ -58,8 +62,16 @@ func (s *Service) RefreshEquipmentCache() error {
 	for _, customer := range customers {
 		equipment, err := s.GetEquipmentForCustomer(customer.ID)
 		if err != nil {
-			logrus.Warnf("Failed to get equipment for customer %d (%s): %v", customer.ID, customer.Name, err)
 			failedCustomers++
+			if prev, ok := previousEquipment[customer.ID]; ok && len(prev) > 0 {
+				logrus.Warnf("Failed to get equipment for customer %d (%s): %v, keeping %d previously cached equipment items",
+					customer.ID, customer.Name, err, len(prev))
+				newEquipmentCache[customer.ID] = prev
+				totalEquipment += len(prev)
+			} else {
+				logrus.Warnf("Failed to get equipment for customer %d (%s): %v, no previous equipment to fall back on",
+					customer.ID, customer.Name, err)
+			}
 			continue
 		}
 		newEquipmentCache[customer.ID] = equipment
@@ -80,8 +92,13 @@ func (s *Service) RefreshEquipmentCache() error {
 	s.cacheMutex.Unlock()
 
 	duration := time.Since(startTime)
-	logrus.Infof("Equipment cache refreshed: %d equipment items across %d customers in %v",
-		totalEquipment, processedCustomers, duration.Round(time.Millisecond))
+	if failedCustomers > 0 {
+		logrus.Warnf("Equipment cache refreshed: %d equipment items across %d customers in %v (%d customers failed and fell back to previous cache)",
+			totalEquipment, processedCustomers, duration.Round(time.Millisecond), failedCustomers)
+	} else {
+		logrus.Infof("Equipment cache refreshed: %d equipment items across %d customers in %v",
+			totalEquipment, processedCustomers, duration.Round(time.Millisecond))
+	}
 	return nil
 }
 

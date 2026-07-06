@@ -2,11 +2,49 @@ package worker
 
 import (
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/insightfinder/netexperience-agent/pkg/models"
 	"github.com/sirupsen/logrus"
 )
+
+// normalizeMACIdentifier mirrors the zabbix agent's inv_mac normalization:
+// replace ':' with '-', trim leading/trailing '-', trim whitespace, and
+// require at least one alphanumeric character. No case conversion — the
+// original casing must be preserved so the same physical device produces
+// the same instance identifier across agents.
+func normalizeMACIdentifier(mac string) string {
+	mac = strings.TrimSpace(mac)
+	if mac == "" {
+		return ""
+	}
+	converted := strings.TrimSpace(strings.Trim(strings.ReplaceAll(mac, ":", "-"), "-"))
+	if converted == "" || !containsAlnum(converted) {
+		return ""
+	}
+	return converted
+}
+
+// normalizeSerialIdentifier mirrors the zabbix agent's inv_serial normalization:
+// trim whitespace and require at least one alphanumeric character.
+func normalizeSerialIdentifier(serial string) string {
+	serial = strings.TrimSpace(serial)
+	if serial == "" || !containsAlnum(serial) {
+		return ""
+	}
+	return serial
+}
+
+func containsAlnum(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return true
+		}
+	}
+	return false
+}
 
 // processCustomer processes metrics for a single customer
 func (w *Worker) processCustomer(customer *models.Customer, fromTime, toTime int64) []*models.EquipmentMetrics {
@@ -97,6 +135,8 @@ func (w *Worker) processEquipmentMetrics(equipment *models.Equipment, customer *
 	result := &models.EquipmentMetrics{
 		EquipmentID:   equipment.ID,
 		EquipmentName: equipment.Name,
+		MACAddress:    equipment.BaseMacAddress.AddressAsString,
+		SerialNumber:  equipment.Serial,
 		CustomerID:    customer.ID,
 		CustomerName:  customer.Name,
 		IPAddress:     equipment.IPAddress,
@@ -220,7 +260,29 @@ func (w *Worker) sendMetricBatch(timestamp int64, metrics []*models.EquipmentMet
 	metricDataList := make([]models.MetricData, 0, len(metrics))
 
 	for _, em := range metrics {
-		instanceName := models.CleanDeviceName(em.EquipmentName)
+		// Priority (matches zabbix agent's device-inventory rules):
+		// MAC(devicelookup) > serial(devicelookup) > object_key(devicelookup) > MAC(NE) > serial(NE) > equipment name
+		devInfo := w.getDeviceLookup().GetDeviceInfo(em.MACAddress)
+		invMAC := normalizeMACIdentifier(devInfo.MACAddress)
+		ownMAC := normalizeMACIdentifier(em.MACAddress)
+		invSerial := normalizeSerialIdentifier(devInfo.SerialNumber)
+		ownSerial := normalizeSerialIdentifier(em.SerialNumber)
+
+		var instanceName string
+		switch {
+		case invMAC != "":
+			instanceName = "MAC " + invMAC
+		case invSerial != "":
+			instanceName = "SERIAL " + invSerial
+		case devInfo.ObjectKey != "":
+			instanceName = "JIRAKEY " + devInfo.ObjectKey
+		case ownMAC != "":
+			instanceName = "MAC " + ownMAC
+		case ownSerial != "":
+			instanceName = "SERIAL " + ownSerial
+		default:
+			instanceName = models.CleanDeviceName(em.EquipmentName)
+		}
 
 		data := map[string]interface{}{
 			"Total Clients":              float64(em.TotalClients),
@@ -252,13 +314,32 @@ func (w *Worker) sendMetricBatch(timestamp int64, metrics []*models.EquipmentMet
 			data["≥ 35% of clients RSSI < -78 dBm AND TX Retry Rate > 18%"] = em.CriticalRF_RSSI_TxRetry
 		}
 
+		zone := "UNKNOWN"
+		if devInfo.Venue != "" {
+			zone = devInfo.Venue
+		}
+		componentName := "AP-Edgecore"
+		if devInfo.ComponentName != "" && devInfo.ComponentName != "NONE-NONE" {
+			componentName = devInfo.ComponentName
+		}
+		ipAddress := em.IPAddress
+		if devInfo.IPAddress != "" {
+			ipAddress = devInfo.IPAddress
+		}
+
 		metricData := models.MetricData{
 			Timestamp:     timestamp * 1000, // Convert to milliseconds
 			InstanceName:  instanceName,
+			DisplayName:   func() string {
+				if em.EquipmentName != "" {
+					return em.EquipmentName
+				}
+				return "AP-Edgecore"
+			}(),
 			Data:          data,
-			Zone:          em.CustomerName,
-			ComponentName: "AP",
-			IP:            em.IPAddress,
+			Zone:          zone,
+			ComponentName: componentName,
+			IP:            ipAddress,
 		}
 
 		metricDataList = append(metricDataList, metricData)
