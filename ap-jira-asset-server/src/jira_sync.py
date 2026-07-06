@@ -244,18 +244,37 @@ def transform_models(raw: List[Dict]) -> List[Dict]:
     return out
 
 
-def transform_subvenues(raw: List[Dict]) -> Dict[str, str]:
-    """Returns {subvenue_id: venue_name} by reading attr 225 from each Subvenue object."""
-    result: Dict[str, str] = {}
+def transform_subvenues(raw: List[Dict]) -> Dict[str, Dict[str, Optional[str]]]:
+    """Returns {subvenue_id: {name, key, venue_id, venue_name, venue_key}} by reading attr 225 from each Subvenue."""
+    result: Dict[str, Dict[str, Optional[str]]] = {}
     for obj in raw:
         obj_id = str(obj["id"])
-        venue_name = _attr_display(obj, SUBVENUE_VENUE_ATTR_ID)
-        if venue_name:
-            result[obj_id] = venue_name
+        subvenue_name = obj.get("label") or ""
+        subvenue_key = obj.get("objectKey") or ""
+        venue_id: Optional[str] = None
+        venue_name: Optional[str] = None
+        venue_key: Optional[str] = None
+        for attr in obj.get("attributes", []):
+            if str(attr.get("objectTypeAttributeId")) == str(SUBVENUE_VENUE_ATTR_ID):
+                vals = attr.get("objectAttributeValues", [])
+                if vals:
+                    venue_name = vals[0].get("displayValue") or vals[0].get("value")
+                    ref_obj = vals[0].get("referencedObject") or {}
+                    raw_vid = ref_obj.get("id")
+                    venue_id = str(raw_vid) if raw_vid else None
+                    venue_key = ref_obj.get("objectKey")
+                break
+        result[obj_id] = {
+            "name": subvenue_name,
+            "key": subvenue_key,
+            "venue_id": venue_id,
+            "venue_name": venue_name,
+            "venue_key": venue_key,
+        }
     return result
 
 
-def _transform_one_device(obj: Dict, subvenue_map: Optional[Dict[str, str]] = None) -> Tuple[Dict, List[Dict]]:
+def _transform_one_device(obj: Dict, subvenue_map: Optional[Dict[str, Dict[str, Optional[str]]]] = None) -> Tuple[Dict, List[Dict]]:
     """Transform a single raw Jira object into (device_record, edge_records)."""
     obj_id = str(obj["id"])
     object_key = obj.get("objectKey", "")
@@ -273,7 +292,7 @@ def _transform_one_device(obj: Dict, subvenue_map: Optional[Dict[str, str]] = No
         "object_key": object_key,
         "zabbix_host_id": None,
         "model_id": None,
-        "meta": {"object_key": object_key},
+        "meta": {"object_key": object_key, "device_id": obj_id},
     }
     edges: List[Dict] = []
 
@@ -337,13 +356,32 @@ def _transform_one_device(obj: Dict, subvenue_map: Optional[Dict[str, str]] = No
             device["meta"]["full_name"] = val_str
 
         elif field == "subvenue":
+            ref_obj = vals[0].get("referencedObject") or {}
+            ref_id = str(ref_obj.get("id") or "")
             if val_str:
                 device["meta"]["subvenue"] = val_str
-            ref_id = str((vals[0].get("referencedObject") or {}).get("id") or "")
+            if ref_id:
+                device["meta"]["subvenue_id"] = ref_id
+            if ref_obj.get("objectKey"):
+                device["meta"]["subvenue_key"] = ref_obj["objectKey"]
             if ref_id and subvenue_map:
-                venue = subvenue_map.get(ref_id)
-                if venue:
-                    device["meta"]["venue"] = venue
+                sv = subvenue_map.get(ref_id)
+                if sv:
+                    device["meta"]["venue"] = sv.get("venue_name")
+                    if sv.get("venue_id"):
+                        device["meta"]["venue_id"] = sv["venue_id"]
+                    if sv.get("venue_key"):
+                        device["meta"]["venue_key"] = sv["venue_key"]
+
+        elif field == "location":
+            ref_obj = vals[0].get("referencedObject") or {}
+            ref_id = str(ref_obj.get("id") or "")
+            if val_str:
+                device["meta"]["location"] = val_str
+            if ref_id:
+                device["meta"]["location_id"] = ref_id
+            if ref_obj.get("objectKey"):
+                device["meta"]["location_key"] = ref_obj["objectKey"]
 
         elif field in COLUMN_FIELDS:
             device[field] = val_str
@@ -358,7 +396,7 @@ def _transform_one_device(obj: Dict, subvenue_map: Optional[Dict[str, str]] = No
 
 def transform_devices(
     raw: List[Dict],
-    subvenue_map: Optional[Dict[str, str]] = None,
+    subvenue_map: Optional[Dict[str, Dict[str, Optional[str]]]] = None,
 ) -> Tuple[List[Dict], List[Dict]]:
     devices: List[Dict] = []
     edges: List[Dict] = []
