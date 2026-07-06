@@ -46,7 +46,7 @@ BREEZEVIEW_CLI_POLL_INTERVAL=10       # seconds between snapshot status polls
 
 ## What gets sent to InsightFinder
 
-Wire format matches `getmessages_zabbix.py`'s device-inventory convention: the instance identifier (`in`) and all metadata (`cn`, `idn`, `i`, `z`) come from the AccessParks asset-cache server (a REST cache of Jira Assets / device-inventory data), packed into a single JSON-stringified `im` field alongside `in` and `dit` — not sent as direct `cn`/`z`/`i` keys.
+Wire format matches `getmessages_zabbix.py`'s device-inventory convention: the instance identifier (`in`) and all metadata (`cn`, `idn`, `i`, `z`) prefer the AccessParks asset-cache server (a REST cache of Jira Assets / device-inventory data) when a device resolves to one, packed into a single JSON-stringified `im` field alongside `in` and `dit` — not sent as direct `cn`/`z`/`i` keys. Each field falls back to BreezeVIEW's own data only when the device has no inventory match at all.
 
 **Instance identifier (`in`) priority**, per eNB/CPE:
 1. MAC address (device inventory) → `MAC <mac>`
@@ -58,7 +58,7 @@ A device with no inventory match still sends data under its native fallback iden
 
 **`im` metadata** (all optional, included only when non-empty):
 - `cn` — component name: device-inventory `manufacturer-device_class`, else the static `eNB-Telrad` / `CPE-Telrad` default
-- `idn` — native display name: BreezeVIEW's own `device_name` (eNB) or serial/IMSI (CPE) — always the *native* identity, regardless of inventory match
+- `idn` — display name: the device-inventory's resolved Jira asset label (e.g. `Tus-TennisCourt-eNodeB200`) when the device matched one, else BreezeVIEW's own `device_name` (eNB) or serial/IMSI (CPE). CPEs have no useful native display name of their own (BreezeVIEW's is just their serial number, redundant with `in`), so the inventory label is what makes `idn` worth showing
 - `i` — IP address: device-inventory `ip_address`; eNBs fall back to BreezeVIEW's own `device_ip` if inventory has none; CPEs do **not** fall back to their own WAN IP, since those are DHCP'd/NAT'd and can be shared or stale
 - `z` — zone: device-inventory `venue` only, no native fallback
 

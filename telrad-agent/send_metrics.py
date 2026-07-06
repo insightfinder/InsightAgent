@@ -11,10 +11,12 @@ Metrics sent per CPE (BreezeVIEW CLI, optional — see BREEZEVIEW_CLI_* below):
 
 Wire format matches the zabbix agent's device-inventory convention (see
 getmessages_zabbix.py's convert_to_metric_data()): the instance identifier ("in")
-and all metadata (component name, IP, zone, native display name) come from the
-AccessParks asset-cache server (a REST cache of Jira Assets / device-inventory
-data — see jira_assets.py), packed into a single JSON-stringified "im" field
-alongside "in" and "dit" — not sent as direct cn/z/i keys.
+and all metadata (component name, IP, zone, display name) prefer the AccessParks
+asset-cache server (a REST cache of Jira Assets / device-inventory data — see
+jira_assets.py) when a device resolves to one, packed into a single
+JSON-stringified "im" field alongside "in" and "dit" — not sent as direct
+cn/z/i keys. Each field falls back to BreezeVIEW's own data only when the
+device has no inventory match at all.
 
 Instance identifier priority, per eNB/CPE (see _resolve_instance_id()):
   1. MAC address (device inventory)      → "MAC <mac>"
@@ -29,8 +31,12 @@ native fallback identifier, with a WARNING log.
 "im" metadata packed per instance (all optional, only included when non-empty):
   - cn:  component name — inventory manufacturer-device_class, else the static
          'eNB-Telrad' / 'CPE-Telrad' default
-  - idn: native display name — BreezeVIEW's own device_name (eNB) or serial/IMSI
-         (CPE), always the *native* identity regardless of inventory match
+  - idn: display name — the device-inventory's resolved Jira asset label (e.g.
+         "Tus-TennisCourt-eNodeB200") when the device matched one; falls back to
+         BreezeVIEW's own device_name (eNB) or serial/IMSI (CPE) only when
+         unresolved. CPEs have no meaningful native display name of their own
+         (BreezeVIEW's is just their serial number, redundant with "in"), so the
+         inventory label is what actually makes idn useful.
   - i:   IP address — inventory ip_address; eNBs fall back to BreezeVIEW's own
          device_ip if inventory has none, CPEs do not fall back to their own WAN
          IP (DHCP'd/NAT'd, can be shared/stale)
@@ -149,15 +155,15 @@ def _resolve_instance_id(asset: dict | None, native_fallback: str) -> str:
     return native_fallback
 
 
-def _pack_im(component_name: str, native_name: str, ip_address: str, zone: str) -> str | None:
+def _pack_im(component_name: str, display_name: str, ip_address: str, zone: str) -> str | None:
     """Pack cn/idn/i/z into a JSON string, matching getmessages_zabbix.py's
     convert_to_metric_data() 'im' (instance metadata) field. Returns None if every
     field is empty, so callers can omit "im" entirely rather than send "{}"."""
     im_data = {}
     if component_name:
         im_data["cn"] = component_name
-    if native_name:
-        im_data["idn"] = native_name
+    if display_name:
+        im_data["idn"] = display_name
     if ip_address:
         im_data["i"] = ip_address
     if zone:
@@ -208,6 +214,7 @@ def build_idm(devices: list[dict], ts_ms: int, by_device_id: dict[str, dict]) ->
         component_name = (asset.get("component_name") if asset else "") or COMPONENT_NAME
         zone = (asset.get("venue") if asset else "") or ""
         ip_address = (asset.get("ip") if asset else "") or device.get("device_ip") or ""
+        display_name = (asset.get("label") if asset else "") or native_name
 
         avg_rssi = round(sum(rssi_vals) / len(rssi_vals))
 
@@ -220,7 +227,7 @@ def build_idm(devices: list[dict], ts_ms: int, by_device_id: dict[str, dict]) ->
                 }
             },
         }
-        im = _pack_im(component_name, native_name, ip_address, zone)
+        im = _pack_im(component_name, display_name, ip_address, zone)
         if im:
             entry["im"] = im
         idm[instance_name] = entry
@@ -332,6 +339,7 @@ def build_cpe_idm(cpes: list[dict], ts_ms: int, by_serial: dict[str, dict]) -> d
         component_name = (asset.get("component_name") if asset else "") or CPE_COMPONENT_NAME
         zone = (asset.get("venue") if asset else "") or ""
         ip_address = (asset.get("ip") if asset else "") or ""
+        display_name = (asset.get("label") if asset else "") or native_name
 
         cpe_ts_ms = _cpe_ts_ms(cpe, ts_ms)
         entry = {
@@ -343,7 +351,7 @@ def build_cpe_idm(cpes: list[dict], ts_ms: int, by_serial: dict[str, dict]) -> d
                 }
             },
         }
-        im = _pack_im(component_name, native_name, ip_address, zone)
+        im = _pack_im(component_name, display_name, ip_address, zone)
         if im:
             entry["im"] = im
         idm[instance_name] = entry
