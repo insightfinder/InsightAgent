@@ -1,0 +1,25 @@
+insightfinder:
+  url: "https://app.insightfinder.com"
+  username: ""
+  license_key: ""
+  password: ""
+
+asset_server:
+  url: ""
+  api_key: ""
+  upstream_max_depth: 1
+
+jira:
+  workspace_id: ""
+  field_mapping:
+    venue_id:    "customfield_10060"
+    subvenue_id: "customfield_10078"
+    location_id: "customfield_10062"
+    device_id:   "customfield_10076"
+  # jira_device_key, jira_subvenue_key, jira_location_key, jira_venue_key,
+  # jira_model_key, and jira_upstream_device_key are always included (when
+  # non-empty) as their own jiraIssueFields keys — no mapping needed here.
+
+projects:
+  - "example-project-1"
+  - "example-project-2"
