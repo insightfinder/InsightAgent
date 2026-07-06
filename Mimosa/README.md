@@ -59,7 +59,7 @@ Edit `conf.d/config.ini` with your specific settings:
 
 | Parameter | Description | Required | Default | Example |
 |-----------|-------------|----------|---------|---------|
-| `default_component_name` | Fallback component name (used when device not in inventory) | No | `""` | `mimosa_network` |
+| `default_component_name` | Fallback for both display name and component name when device not in inventory | No | `AP-Mimosa` | `AP-Mimosa` |
 | `thread_pool` | Number of worker threads | No | `20` | `5` |
 | `his_time_range` | Historical time range (not supported) | No | `""` | - |
 | `device_inventory_api_key` | Device Inventory API key | No | `""` | `your-api-key` |
@@ -119,21 +119,24 @@ This will:
 
 The agent maintains a device lookup cache (`devicelookup.json`) built from the Device Inventory API, queried by device MAC address and refreshed every 24 hours. If the inventory API is unreachable (health check on `/health` fails), the existing cache is kept and unmatched devices use fallback values.
 
-Instance name priority:
+Instance name priority (matches the netexperience/zabbix agents' device-inventory rules):
 
-1. `MAC 20-B5-C6-F0-68-66` — device MAC address (uppercase, colons replaced by dashes)
+1. `MAC 20-b5-c6-f0-68-66` — MAC from device inventory (colons replaced by dashes, original casing preserved)
 2. `SERIAL <serial>` — serial number from device inventory
 3. `JIRAKEY <object_key>` — device inventory object key
-4. Sanitized Mimosa device name
+4. `MAC <mac>` — MAC address reported by Mimosa (normalized the same way), used if the inventory lookup missed
+5. Sanitized Mimosa device name
 
 Instance metadata sent with each metric payload (`im` field):
 
 | Field | Source | Fallback |
 |-------|--------|----------|
-| Display name (`idn`) | Mimosa device friendly name | - |
-| Component name (`cn`) | Inventory `manufacturer-device_class` (e.g. `Mimosa-Radio+Antenna`) | `default_component_name` |
+| Display name (`idn`) | Mimosa device friendly name | `default_component_name` (used when Mimosa reports no device name) |
+| Component name (`cn`) | Inventory `manufacturer-device_class` (e.g. `Mimosa-Radio+Antenna`) | `default_component_name` (used when the device is not in inventory) |
 | Zone (`z`) | Inventory `meta.venue` | `UNKNOWN` |
 | IP (`i`) | Inventory `ip_address` | Mimosa device IP |
+
+`default_component_name` (config: `[agent]` section, default `AP-Mimosa`) is a single fallback keyword reused for both display name and component name, mirroring the `AP-<Manufacturer>` convention used by the netexperience agent's `AP-Edgecore` fallback.
 
 Note: metadata is applied asynchronously by the InsightFinder backend — display names/zones may take a few minutes to appear after the first data upload.
 

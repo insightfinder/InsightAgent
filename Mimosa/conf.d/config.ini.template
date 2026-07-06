@@ -14,7 +14,9 @@ api_batch_size = 25
 data_points_count = 5
 
 [agent]
-default_component_name =
+## Fallback used for both component name and display name when a device
+## is not found in the Device Inventory API (default: AP-Mimosa)
+default_component_name = AP-Mimosa
 thread_pool = 5
 his_time_range =
 agent_http_proxy =

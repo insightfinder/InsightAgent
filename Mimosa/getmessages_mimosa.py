@@ -214,6 +214,7 @@ def _extract_device_info(raw):
     manufacturer = model.get('manufacturer') or meta.get('manufacturer') or 'NONE'
     device_class = model.get('device_class') or 'NONE'
     return {
+        'mac_address': raw.get('mac_address') or '',
         'serial_number': raw.get('serial_number') or '',
         'object_key': raw.get('object_key') or '',
         'name': raw.get('name') or '',
@@ -221,6 +222,31 @@ def _extract_device_info(raw):
         'component_name': f'{manufacturer}-{device_class}',
         'ip_address': raw.get('ip_address') or '',
     }
+
+
+def normalize_mac_identifier(mac):
+    """Mirror the netexperience/zabbix agents' MAC normalization: replace ':'
+    with '-', trim leading/trailing '-', trim whitespace, and require at
+    least one alphanumeric character. No case conversion — the original
+    casing is preserved so the same physical device produces the same
+    instance identifier across agents."""
+    if not mac:
+        return ''
+    converted = mac.strip().replace(':', '-').strip('-').strip()
+    if not converted or not any(c.isalnum() for c in converted):
+        return ''
+    return converted
+
+
+def normalize_serial_identifier(serial):
+    """Mirror the netexperience/zabbix agents' serial normalization: trim
+    whitespace and require at least one alphanumeric character."""
+    if not serial:
+        return ''
+    serial = serial.strip()
+    if not serial or not any(c.isalnum() for c in serial):
+        return ''
+    return serial
 
 
 def _inventory_api_is_healthy(logger, base_url, timeout):
@@ -882,37 +908,51 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
                           metric_data, sampling_time):
     """Parse Mimosa metric data and add to buffer"""
     
-    default_component_name = agent_config_vars.get('default_component_name', '')
+    # default_component_name doubles as the fallback for both component name and
+    # display name when the device inventory lookup misses (mirrors the
+    # netexperience/zabbix agents' "AP-<Manufacturer>" fallback convention).
+    default_component_name = agent_config_vars.get('default_component_name', 'AP-Mimosa')
     sampling_interval = if_config_vars['sampling_interval']
-    
+
     try:
         # Extract metric information
         metric_name = metric_data.get('metric_name')
         value = metric_data.get('value')
         timestamp = metric_data.get('timestamp', sampling_time)
         ipAddress = metric_data.get('ip_address', '')
-        
+
         if value is None or metric_name is None:
             return
-        
+
         # Align timestamp to sampling interval
         aligned_timestamp = align_timestamp(timestamp, sampling_interval)
-        
-        device_name = metric_data.get('device_name', 'unknown_device')
+
+        device_name = metric_data.get('device_name') or ''
         mac_address = metric_data.get('mac_address', '')
         dev_info = DEVICE_LOOKUP.get(mac_address.lower(), {}) if mac_address else {}
 
-        # Instance name priority: MAC > serial(devicelookup) > object_key(devicelookup) > device name
-        if mac_address:
-            instance_name = 'MAC ' + mac_address.upper().replace(':', '-')
-        elif dev_info.get('serial_number'):
-            instance_name = 'SERIAL ' + dev_info['serial_number']
+        # Instance name priority (matches the netexperience/zabbix agents'
+        # device-inventory rules):
+        # MAC(devicelookup) > serial(devicelookup) > object_key(devicelookup) > MAC(Mimosa) > device name
+        inv_mac = normalize_mac_identifier(dev_info.get('mac_address'))
+        own_mac = normalize_mac_identifier(mac_address)
+        inv_serial = normalize_serial_identifier(dev_info.get('serial_number'))
+
+        if inv_mac:
+            instance_name = 'MAC ' + inv_mac
+        elif inv_serial:
+            instance_name = 'SERIAL ' + inv_serial
         elif dev_info.get('object_key'):
             instance_name = 'JIRAKEY ' + dev_info['object_key']
+        elif own_mac:
+            instance_name = 'MAC ' + own_mac
         else:
             instance_name = make_safe_instance_string(device_name)
 
-        # Component name: devicelookup manufacturer-device_class > config default
+        # Display name: Mimosa device name > fallback
+        display_name = device_name if device_name else default_component_name
+
+        # Component name: devicelookup manufacturer-device_class > fallback
         component_name = default_component_name
         if dev_info.get('component_name') and dev_info['component_name'] != 'NONE-NONE':
             component_name = dev_info['component_name']
@@ -930,7 +970,7 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
         # Prepare metric data point
         metric_data_point = {
             'instanceName': instance_name,
-            'displayName': device_name,
+            'displayName': display_name,
             'componentName': component_name,
             'zone': zone,
             'metricName': safe_metric_key,
