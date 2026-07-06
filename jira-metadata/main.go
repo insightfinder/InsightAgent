@@ -156,14 +156,23 @@ type DeviceResponse struct {
 	JiraSubvenueKey string `json:"jira_subvenue_key"`
 	JiraVenueKey    string `json:"jira_venue_key"`
 	JiraModelKey    string `json:"jira_model_key"`
+
+	// Human-readable names for the objects above. May be empty when the
+	// corresponding Jira object hasn't been created yet.
+	JiraDeviceName   string `json:"jira_device_name"`
+	JiraLocationName string `json:"jira_location_name"`
+	JiraSubvenueName string `json:"jira_subvenue_name"`
+	JiraVenueName    string `json:"jira_venue_name"`
+	JiraModelName    string `json:"jira_model_name"`
 }
 
 // UpstreamDevice mirrors one entry of the GET /devices/{id}/upstream response.
 type UpstreamDevice struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	ObjectKey string `json:"object_key"`
-	Depth     int    `json:"depth"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	ObjectKey  string `json:"object_key"`
+	MacAddress string `json:"mac_address"`
+	Depth      int    `json:"depth"`
 }
 
 func (a *assetClient) lookup(ctx context.Context, identifier string) (*DeviceResponse, error) {
@@ -320,11 +329,13 @@ func buildJiraFields(meta map[string]interface{}, fieldMapping map[string]string
 }
 
 // buildKeyJiraFields returns the asset server's pre-resolved Jira object keys
-// (jira_device_key, jira_venue_key, etc.) plus the derived upstream device key
-// and the device's MAC address, keyed by their own field name with the raw
-// value (e.g. "IHS-20846" or "FC:11:65:B6:A3:42"). Empty/null values are omitted.
-func buildKeyJiraFields(device *DeviceResponse, upstreamDeviceKey string) map[string]string {
-	out := make(map[string]string, 7)
+// (jira_device_key, jira_venue_key, etc.) and their human-readable names
+// (jira_device_name, jira_venue_name, etc.), plus the derived upstream
+// device's key/name/MAC address and the device's own MAC address, keyed by
+// their own field name with the raw value (e.g. "IHS-20846" or
+// "FC:11:65:B6:A3:42"). Empty/null values are omitted.
+func buildKeyJiraFields(device *DeviceResponse, upstreamDeviceKey, upstreamDeviceName, upstreamDeviceMac string) map[string]string {
+	out := make(map[string]string, 14)
 	add := func(key, value string) {
 		if value != "" {
 			out[key] = value
@@ -335,7 +346,14 @@ func buildKeyJiraFields(device *DeviceResponse, upstreamDeviceKey string) map[st
 	add("jira_location_key", device.JiraLocationKey)
 	add("jira_venue_key", device.JiraVenueKey)
 	add("jira_model_key", device.JiraModelKey)
+	add("jira_device_name", device.JiraDeviceName)
+	add("jira_subvenue_name", device.JiraSubvenueName)
+	add("jira_location_name", device.JiraLocationName)
+	add("jira_venue_name", device.JiraVenueName)
+	add("jira_model_name", device.JiraModelName)
 	add("jira_upstream_device_key", upstreamDeviceKey)
+	add("jira_upstream_device_name", upstreamDeviceName)
+	add("jira_upstream_device_mac", upstreamDeviceMac)
 	add("device_mac", device.MacAddress)
 	return out
 }
@@ -403,15 +421,17 @@ func processProject(
 
 		fields := buildJiraFields(device.Meta, cfg.Jira.FieldMapping, cfg.Jira.WorkspaceID)
 
-		var upstreamDeviceKey string
+		var upstreamDeviceKey, upstreamDeviceName, upstreamDeviceMac string
 		upstream, err := assets.lookupUpstream(ctx, identifier, cfg.AssetServer.UpstreamMaxDepth)
 		if err != nil {
 			log.Printf("  WARN  %q → upstream lookup error: %v", instanceName, err)
 		} else if len(upstream) > 0 {
 			upstreamDeviceKey = upstream[0].ObjectKey
+			upstreamDeviceName = upstream[0].Name
+			upstreamDeviceMac = upstream[0].MacAddress
 		}
 
-		for key, value := range buildKeyJiraFields(device, upstreamDeviceKey) {
+		for key, value := range buildKeyJiraFields(device, upstreamDeviceKey, upstreamDeviceName, upstreamDeviceMac) {
 			fields[key] = value
 		}
 
