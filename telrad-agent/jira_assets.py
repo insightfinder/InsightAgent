@@ -16,11 +16,14 @@ now applied to asset-cache device records instead of Jira AQL objectEntries:
                                       embedded device ID (e.g. "eNB", "RoofeNodeB").
   CPEs:
     1. serial_number                — the CPE's serial number matched against the asset's
-                                       serial_number field. Serial-only, no IP fallback
-                                       (WAN IPs are DHCP/NAT'd and unstable). Serial search
-                                       is case-sensitive (uppercase) — callers must pass
-                                       already-uppercased serials (see get_cli_metrics.py's
-                                       parse_cpe_kpi(), the single point of capture).
+                                       serial_number field. Serial search is case-sensitive
+                                       (uppercase) — callers must pass already-uppercased
+                                       serials (see get_cli_metrics.py's parse_cpe_kpi(),
+                                       the single point of capture).
+    2. ip_address (WAN IP fallback) — tried only when serial doesn't match (see
+                                       build_asset_map._resolve_map_by_serial's
+                                       ip_fallback_map). Weaker than serial: WAN IPs are
+                                       DHCP'd/NAT'd and can be shared or stale.
 """
 
 from __future__ import annotations
@@ -109,13 +112,20 @@ def _first_token(name: str) -> str:
 
 
 def _to_asset(obj: dict) -> dict:
-    """Map an asset-cache device record to the {label, ip, device_id_hint, serial} shape.
+    """Map an asset-cache device record to the
+    {label, ip, device_id_hint, serial, mac, object_key, venue, component_name} shape.
 
     - label: the first whitespace-delimited token of the device's asset name (e.g.
       "Tus-TennisCourt-eNodeB200"), trimming any trailing note/MAC — see _first_token()
     - ip: ip_address value, or "" if unset
     - device_id_hint: trailing digits from device_name (e.g. "200"), or "" if none
     - serial: serial_number value, or "" if unset
+    - mac: mac_address value, or "" if unset — used for the MAC-first instance identifier
+    - object_key: object_key value (Jira key, e.g. "IHS-35111"), or "" if unset
+    - venue: meta.venue value, or "" if unset — used as the reported zone
+    - component_name: "{manufacturer}-{device_class}" (each defaulting to "NONE" if
+      unset), same formula as the zabbix/netexperience agents; "" if both are unset
+      (NONE-NONE), so callers can fall back to their own static component name
     """
     label = _first_token(obj.get("name") or "")
     ip = obj.get("ip_address") or ""
@@ -123,7 +133,26 @@ def _to_asset(obj: dict) -> dict:
     m = _DIGITS_RE.search(device_name)
     device_id_hint = m.group() if m else ""
     serial = obj.get("serial_number") or ""
-    return {"label": label, "ip": ip, "device_id_hint": device_id_hint, "serial": serial}
+    mac = obj.get("mac_address") or ""
+    object_key = obj.get("object_key") or ""
+    meta = obj.get("meta") or {}
+    model = obj.get("model") or {}
+    venue = meta.get("venue") or ""
+    manufacturer = model.get("manufacturer") or meta.get("manufacturer") or "NONE"
+    device_class = model.get("device_class") or "NONE"
+    component_name = f"{manufacturer}-{device_class}"
+    if component_name == "NONE-NONE":
+        component_name = ""
+    return {
+        "label": label,
+        "ip": ip,
+        "device_id_hint": device_id_hint,
+        "serial": serial,
+        "mac": mac,
+        "object_key": object_key,
+        "venue": venue,
+        "component_name": component_name,
+    }
 
 
 def fetch_assets(

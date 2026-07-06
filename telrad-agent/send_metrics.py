@@ -2,34 +2,50 @@
 """
 Continuously poll BreezeVIEW eNB and CPE signal metrics and forward them to InsightFinder.
 
-Metric sent per eNB (REST NBI):
+Metric sent per eNB (REST NBI) — disabled by default, set ENABLE_ENB_METRICS=true to enable:
   - avg_ulrssi: average abs(UlRSSI) in dBm across all attached UEs
 
 Metrics sent per CPE (BreezeVIEW CLI, optional — see BREEZEVIEW_CLI_* below):
-  - RSRP0-3, SINR0-3, RSRQ/RSRQ1-3, CINR0/1, RSSI/RSSI0-3: individual antenna-port
-    readings, sent as abs() dBm/dB (no averaging) — only the fields a given CPE
-    actually reports are included in its payload
+  - UlMCS, DlMCS, UlCINR, UlRSSI: sent as abs() (no averaging) — only the fields a
+    given CPE actually reports are included in its payload
 
-One InsightFinder instance per eNB, named after the corresponding Jira asset
-(e.g. 'Tus-TennisCourt-eNodeB200'). One InsightFinder instance per CPE, likewise
-named after the corresponding Jira asset when its serial number matches a
-serial_number field. Instance names are resolved via the AccessParks asset-cache
-server (a REST cache of Jira Assets device data — see jira_assets.py). Per-device
-and per-CPE mappings are cached in memory (keyed by device_id and serial number
-respectively) and only re-queried when a new one appears or a previously unmapped
-entry's cooldown expires (1 hour). No asset_map.json file is written.
+Wire format matches the zabbix agent's device-inventory convention (see
+getmessages_zabbix.py's convert_to_metric_data()): the instance identifier ("in")
+and all metadata (component name, IP, zone, native display name) come from the
+AccessParks asset-cache server (a REST cache of Jira Assets / device-inventory
+data — see jira_assets.py), packed into a single JSON-stringified "im" field
+alongside "in" and "dit" — not sent as direct cn/z/i keys.
 
-Fallback: if the asset cache is unreachable or no asset matches, the BreezeVIEW
-device name (e.g. 'DeathValley-Oasis') or CPE serial number (falling back to IMSI)
-is used, with a WARNING log.
+Instance identifier priority, per eNB/CPE (see _resolve_instance_id()):
+  1. MAC address (device inventory)      → "MAC <mac>"
+  2. Serial number (device inventory)    → "SERIAL <serial>"
+  3. Object key / Jira key (inventory)   → "JIRAKEY <object_key>"
+  4. Native fallback (no inventory match): CPEs fall back to "SERIAL <own serial>"
+     (BreezeVIEW's own serial number), then IMSI; eNBs fall back to the BreezeVIEW
+     device name, then bare device_id — eNBs have no native MAC/serial to prefix.
+A device with no inventory match still sends data (never skipped), just under its
+native fallback identifier, with a WARNING log.
 
-Component name is 'eNB-Telrad' for eNB instances and 'CPE-Telrad' for per-CPE instances.
+"im" metadata packed per instance (all optional, only included when non-empty):
+  - cn:  component name — inventory manufacturer-device_class, else the static
+         'eNB-Telrad' / 'CPE-Telrad' default
+  - idn: native display name — BreezeVIEW's own device_name (eNB) or serial/IMSI
+         (CPE), always the *native* identity regardless of inventory match
+  - i:   IP address — inventory ip_address; eNBs fall back to BreezeVIEW's own
+         device_ip if inventory has none, CPEs do not fall back to their own WAN
+         IP (DHCP'd/NAT'd, can be shared/stale)
+  - z:   zone — inventory venue only, no native fallback (no BreezeVIEW zone concept)
+
+Per-device and per-CPE inventory mappings are cached in memory (keyed by device_id
+and serial number respectively) and only re-queried when a new one appears or a
+previously unmapped entry's cooldown expires (1 hour). No asset_map.json file is written.
 
 CLI-based CPE metrics are best-effort: if BREEZEVIEW_CLI_* is not configured, or the CLI
 collection fails, the eNB metrics are still sent — see CLAUDE.md for the CLI's strict
 metrics-only / never-modify command policy.
 
 Configuration via .env:
+  ENABLE_ENB_METRICS  (default: false — required ACCESSPARKS_TELRAD_* only when true)
   ACCESSPARKS_TELRAD_URL, ACCESSPARKS_TELRAD_USERNAME, ACCESSPARKS_TELRAD_PASSWORD
   INSIGHTFINDER_BASE_URL, INSIGHTFINDER_USER_NAME, INSIGHTFINDER_LICENSE_KEY
   INSIGHTFINDER_PROJECT_NAME, INSIGHTFINDER_SYSTEM_NAME
@@ -74,34 +90,93 @@ COMPONENT_NAME = "eNB-Telrad"
 CPE_COMPONENT_NAME = "CPE-Telrad"
 UNMAPPED_RETRY_S = 3600
 
-# Per-CPE signal metrics sent to InsightFinder, one point per field present and numeric
-# for that CPE, sent as abs(value) (no avg). Fields not reported by a given CPE
-# (e.g. RSRP2/3 on a 2-antenna device) are simply omitted from its payload.
-_CPE_METRIC_FIELDS = (
-    "RSRP0", "RSRP1", "RSRP2", "RSRP3",
-    "SINR0", "SINR1", "SINR2", "SINR3",
-    "RSRQ", "RSRQ1", "RSRQ2", "RSRQ3",
-    "CINR0", "CINR1",
-    "RSSI", "RSSI0", "RSSI1", "RSSI2", "RSSI3",
-)
+# Per-CPE signal metrics sent to InsightFinder: UL MCS, DL MCS, UL CINR, UL RSSI only
+# (field names as parsed by get_cli_metrics.parse_cpe_kpi — see its _NUMERIC_FIELDS).
+# One point per field present and numeric for that CPE, sent as abs(value) (no avg);
+# a field a given CPE doesn't report is simply omitted from its payload.
+_CPE_METRIC_FIELDS = ("UlMCS", "DlMCS", "UlCINR", "UlRSSI")
 
 
 @dataclass
 class JiraState:
     base_url: str
     api_key: str
-    asset_map: dict[str, str] = field(default_factory=dict)
+    # Each asset_map/cpe_asset_map value is
+    # {label, venue, component_name, ip, mac, object_key, serial} — see
+    # build_asset_map.resolve_with_assets(). All fields but label are "" for
+    # entries that fell back to a BreezeVIEW-native name (no Jira match).
+    asset_map: dict[str, dict] = field(default_factory=dict)
     unmapped_retry_at: dict[str, float] = field(default_factory=dict)
-    cpe_asset_map: dict[str, str] = field(default_factory=dict)
+    cpe_asset_map: dict[str, dict] = field(default_factory=dict)
     cpe_unmapped_retry_at: dict[str, float] = field(default_factory=dict)
 
 
-def build_idm(devices: list[dict], ts_ms: int, by_device_id: dict[str, str]) -> dict:
+def _normalize_mac(mac: str | None) -> str:
+    """Mirror the zabbix agent's inv_mac normalization: ':' -> '-', trim leading/
+    trailing '-' and whitespace, require at least one alphanumeric character."""
+    mac = (mac or "").strip()
+    if not mac:
+        return ""
+    converted = mac.replace(":", "-").strip("-").strip()
+    if not converted or not any(c.isalnum() for c in converted):
+        return ""
+    return converted
+
+
+def _normalize_serial(serial: str | None) -> str:
+    """Mirror the zabbix agent's inv_serial normalization: trim whitespace,
+    require at least one alphanumeric character."""
+    serial = (serial or "").strip()
+    if not serial or not any(c.isalnum() for c in serial):
+        return ""
+    return serial
+
+
+def _resolve_instance_id(asset: dict | None, native_fallback: str) -> str:
+    """Return the instance identifier ("in"): device-inventory MAC -> Serial ->
+    JiraKey (object_key), else native_fallback when the asset has none of those
+    (already computed by the caller — e.g. "SERIAL <own serial>" for CPEs, or the
+    bare BreezeVIEW device name/id for eNBs, which have no native MAC/serial)."""
+    if asset:
+        mac = _normalize_mac(asset.get("mac"))
+        if mac:
+            return f"MAC {mac}"
+        serial = _normalize_serial(asset.get("serial"))
+        if serial:
+            return f"SERIAL {serial}"
+        if asset.get("object_key"):
+            return f"JIRAKEY {asset['object_key']}"
+    return native_fallback
+
+
+def _pack_im(component_name: str, native_name: str, ip_address: str, zone: str) -> str | None:
+    """Pack cn/idn/i/z into a JSON string, matching getmessages_zabbix.py's
+    convert_to_metric_data() 'im' (instance metadata) field. Returns None if every
+    field is empty, so callers can omit "im" entirely rather than send "{}"."""
+    im_data = {}
+    if component_name:
+        im_data["cn"] = component_name
+    if native_name:
+        im_data["idn"] = native_name
+    if ip_address:
+        im_data["i"] = ip_address
+    if zone:
+        im_data["z"] = zone
+    return json.dumps(im_data) if im_data else None
+
+
+def build_idm(devices: list[dict], ts_ms: int, by_device_id: dict[str, dict]) -> dict:
     """Transform device results into InsightFinder v2 idm structure.
 
     One instance per eNB. Metric: average abs(UlRSSI) across all attached UEs.
     UEs without UlRSSI data are excluded from the average. eNBs with no UE
     RSSI data are skipped entirely.
+
+    Instance identifier ("in") and metadata packed into "im" (cn/idn/i/z) follow
+    the device-inventory-first rules documented in this module's docstring and in
+    _resolve_instance_id()/_pack_im(). A device with no inventory match still
+    sends data under its native fallback identifier (never skipped), logged as a
+    WARNING.
     """
     idm: dict = {}
 
@@ -122,18 +197,22 @@ def build_idm(devices: list[dict], ts_ms: int, by_device_id: dict[str, str]) -> 
             logger.debug(f"eNB {enb_id}: no UE RSSI data, skipping")
             continue
 
-        instance_name = by_device_id.get(enb_id)
-        if not instance_name:
-            instance_name = device.get("device_name") or enb_id
+        asset = by_device_id.get(enb_id)
+        native_name = device.get("device_name") or enb_id
+        instance_name = _resolve_instance_id(asset, native_fallback=native_name)
+        if not (asset and (asset.get("mac") or asset.get("serial") or asset.get("object_key"))):
             logger.warning(
-                f"No asset map entry for eNB {enb_id} — sending under BreezeVIEW name '{instance_name}'"
+                f"No device-inventory identifier for eNB {enb_id} — sending under BreezeVIEW name '{instance_name}'"
             )
+
+        component_name = (asset.get("component_name") if asset else "") or COMPONENT_NAME
+        zone = (asset.get("venue") if asset else "") or ""
+        ip_address = (asset.get("ip") if asset else "") or device.get("device_ip") or ""
 
         avg_rssi = round(sum(rssi_vals) / len(rssi_vals))
 
-        idm[instance_name] = {
+        entry = {
             "in": instance_name,
-            "cn": COMPONENT_NAME,
             "dit": {
                 str(ts_ms): {
                     "t": ts_ms,
@@ -141,6 +220,10 @@ def build_idm(devices: list[dict], ts_ms: int, by_device_id: dict[str, str]) -> 
                 }
             },
         }
+        im = _pack_im(component_name, native_name, ip_address, zone)
+        if im:
+            entry["im"] = im
+        idm[instance_name] = entry
 
     return idm
 
@@ -174,16 +257,32 @@ def _cpe_ts_ms(cpe: dict, fallback_ts_ms: int) -> int:
         return fallback_ts_ms
 
 
-def build_cpe_idm(cpes: list[dict], ts_ms: int, by_serial: dict[str, str]) -> dict:
+def _cpe_native_fallback(serial: str | None, imsi: str | None) -> str | None:
+    """CPE native fallback identifier when there's no device-inventory match:
+    "SERIAL <own serial>" (mirroring the netexperience agent's own-serial
+    fallback convention), else the bare IMSI, else None."""
+    norm = _normalize_serial(serial)
+    if norm:
+        return f"SERIAL {norm}"
+    return imsi or None
+
+
+def build_cpe_idm(cpes: list[dict], ts_ms: int, by_serial: dict[str, dict]) -> dict:
     """Transform per-CPE KPI dicts (from get_cli_metrics) into InsightFinder v2 idm structure.
 
-    One instance per CPE, named after the corresponding Jira asset when the CPE's
-    serial number has been resolved (see refresh_jira_mappings()); falls back to the
-    BreezeVIEW serial number, then IMSI, when unresolved. Offline CPEs and CPEs with
-    no usable KPI data are skipped. RSRP0-3, SINR0-3, RSRQ/RSRQ1-3, CINR0/1, and
-    RSSI/RSSI0-3 are each sent individually as abs() dBm/dB (no averaging), matching
-    the eNB-side convention in build_idm() — a CPE that doesn't report a given
-    antenna-port field simply omits that point.
+    One instance per CPE. Instance identifier ("in") and "im" metadata (cn/idn/i/z)
+    follow the device-inventory-first rules in this module's docstring — see
+    _resolve_instance_id()/_cpe_native_fallback()/_pack_im(). Offline CPEs and CPEs
+    with no usable KPI data are skipped. UlMCS, DlMCS, UlCINR, UlRSSI (see
+    _CPE_METRIC_FIELDS) are each sent individually as abs() (no averaging), matching
+    the eNB-side convention in build_idm() — a CPE that doesn't report a given field
+    simply omits that point.
+
+    IP ("i" in "im") is sent only when the *device-inventory record's* ip_address is
+    set — deliberately never the CPE's own current WAN IP, even though that WAN IP is
+    now used as a fallback *matching* tier (see refresh_jira_mappings()): WAN IPs are
+    DHCP'd/NAT'd and can be shared or stale, fine as a last-resort way to find a
+    record but not something we want to report as this CPE's authoritative IP.
 
     Each CPE's timestamp is its own collection-date reported by the CLI (per-CPE, since
     the network-wide snapshot completes each device's KPI read at a slightly different
@@ -201,13 +300,16 @@ def build_cpe_idm(cpes: list[dict], ts_ms: int, by_serial: dict[str, str]) -> di
             continue
 
         serial = cpe.get("serial_number")
-        resolved_name = by_serial.get(serial) if serial else None
-        instance_name = resolved_name or serial or cpe.get("IMSI")
+        asset = by_serial.get(serial) if serial else None
+        native_name = serial or cpe.get("IMSI") or ""
+        instance_name = _resolve_instance_id(
+            asset, native_fallback=_cpe_native_fallback(serial, cpe.get("IMSI"))
+        )
         if not instance_name:
             continue
-        if not resolved_name:
+        if not (asset and (asset.get("mac") or asset.get("serial") or asset.get("object_key"))):
             logger.warning(
-                f"No asset map entry for CPE {instance_name} — sending under BreezeVIEW name '{instance_name}'"
+                f"No device-inventory identifier for CPE {native_name or instance_name} — sending under fallback '{instance_name}'"
             )
 
         if instance_name in idm:
@@ -227,10 +329,13 @@ def build_cpe_idm(cpes: list[dict], ts_ms: int, by_serial: dict[str, str]) -> di
             logger.debug(f"CPE {instance_name}: no usable KPI data, skipping")
             continue
 
+        component_name = (asset.get("component_name") if asset else "") or CPE_COMPONENT_NAME
+        zone = (asset.get("venue") if asset else "") or ""
+        ip_address = (asset.get("ip") if asset else "") or ""
+
         cpe_ts_ms = _cpe_ts_ms(cpe, ts_ms)
-        idm[instance_name] = {
+        entry = {
             "in": instance_name,
-            "cn": CPE_COMPONENT_NAME,
             "dit": {
                 str(cpe_ts_ms): {
                     "t": cpe_ts_ms,
@@ -238,6 +343,10 @@ def build_cpe_idm(cpes: list[dict], ts_ms: int, by_serial: dict[str, str]) -> di
                 }
             },
         }
+        im = _pack_im(component_name, native_name, ip_address, zone)
+        if im:
+            entry["im"] = im
+        idm[instance_name] = entry
 
     return idm
 
@@ -253,7 +362,7 @@ def _select_candidates(
     id_key: str,
     ip_key: str,
     is_eligible,
-    asset_map: dict[str, str],
+    asset_map: dict[str, dict],
     retry_at: dict[str, float],
     now: float,
     name_key: str | None = None,
@@ -277,16 +386,16 @@ def _select_candidates(
 
 
 def _apply_resolution(
-    resolved: dict[str, str],
+    resolved: dict[str, dict],
     name_map: dict[str, str],
-    asset_map: dict[str, str],
+    asset_map: dict[str, dict],
     retry_at: dict[str, float],
     now: float,
 ) -> None:
-    for item_id, label in resolved.items():
+    for item_id, entry in resolved.items():
         fallback = name_map.get(item_id) or item_id
-        asset_map[item_id] = label
-        if label == fallback:
+        asset_map[item_id] = entry
+        if entry["label"] == fallback:
             retry_at[item_id] = now + UNMAPPED_RETRY_S
         else:
             retry_at.pop(item_id, None)
@@ -298,10 +407,12 @@ def refresh_jira_mappings(
     """Resolve asset names for new/unmapped eNBs and CPEs in one asset-cache lookup.
 
     eNBs are keyed by device_id and matched by management_ip (device_ip). CPEs are keyed
-    and matched by serial_number only (no WAN-IP fallback — see build_asset_map's
-    match_by="serial" path). Both candidate sets are fetched from the asset cache in one
-    fetch_assets() call instead of two separate round-trips, then resolved independently
-    against the shared result via resolve_with_assets().
+    and matched by serial_number first, falling back to their current WAN IP (ip-wan)
+    only when serial doesn't match — see build_asset_map's match_by="serial" path and
+    its ip_fallback_map. Both candidate sets (plus the CPE WAN-IP fallback values) are
+    fetched from the asset cache in one fetch_assets() call instead of separate
+    round-trips, then resolved independently against the shared result via
+    resolve_with_assets().
     """
     now = time.monotonic()
     _prune_stale_retries(
@@ -331,6 +442,14 @@ def refresh_jira_mappings(
         jira.cpe_unmapped_retry_at,
         now,
     )
+    # WAN-IP fallback values for the same CPE candidate set — cpe_serial_map's keys
+    # are serial numbers, so look each one's current ip-wan up directly from cpes.
+    cpes_by_serial = {c["serial_number"]: c for c in cpes if c.get("serial_number")}
+    cpe_ip_map = {
+        key: (cpes_by_serial[key].get("ip-wan") or "")
+        for key in cpe_serial_map
+        if key in cpes_by_serial
+    }
 
     if not enb_ip_map and not cpe_serial_map:
         return
@@ -345,10 +464,15 @@ def refresh_jira_mappings(
         )
 
     try:
+        # dict.fromkeys dedupes while preserving order, in case a CPE's WAN IP happens
+        # to equal an eNB's management IP already being queried this tick.
+        combined_ips = list(dict.fromkeys(
+            list(enb_ip_map.values()) + [ip for ip in cpe_ip_map.values() if ip]
+        ))
         assets = fetch_assets(
             jira.base_url,
             jira.api_key,
-            ips=list(enb_ip_map.values()),
+            ips=combined_ips,
             serials=list(cpe_serial_map.values()),
         )
     except Exception as e:
@@ -366,7 +490,8 @@ def refresh_jira_mappings(
         )
     if cpe_serial_map:
         resolved = resolve_with_assets(
-            cpe_serial_map, assets, cpe_name_map, entity_label="CPE", match_by="serial"
+            cpe_serial_map, assets, cpe_name_map, entity_label="CPE", match_by="serial",
+            ip_fallback_map=cpe_ip_map,
         )
         _apply_resolution(
             resolved, cpe_name_map, jira.cpe_asset_map, jira.cpe_unmapped_retry_at, now
@@ -382,9 +507,8 @@ def run_tick(
     jira: JiraState,
     dry_run: bool,
     cli_config: dict | None = None,
+    enb_enabled: bool = False,
 ) -> None:
-    logger.info(f"Processing eNB metrics via REST NBI ({base_url})...")
-
     cpe_result = {}
     cpe_thread = None
     if cli_config:
@@ -410,14 +534,16 @@ def run_tick(
         cpe_thread.start()
 
     ts_ms, devices = None, []
-    try:
-        ts_ms, devices = collect_metrics(
-            base_url, telrad_username, telrad_password, timeout
-        )
-    except Exception as e:
-        logger.error(
-            f"eNB REST metric collection FAILED ({base_url}): {type(e).__name__}: {e}"
-        )
+    if enb_enabled:
+        logger.info(f"Processing eNB metrics via REST NBI ({base_url})...")
+        try:
+            ts_ms, devices = collect_metrics(
+                base_url, telrad_username, telrad_password, timeout
+            )
+        except Exception as e:
+            logger.error(
+                f"eNB REST metric collection FAILED ({base_url}): {type(e).__name__}: {e}"
+            )
 
     cpe_ts_ms, cpes = None, []
     if cpe_thread is not None:
@@ -489,13 +615,16 @@ def main():
 
     env = load_env()
 
+    enb_enabled = (_cfg(env, "ENABLE_ENB_METRICS") or "false").strip().lower() in ("1", "true", "yes", "on")
+
     base_url = _cfg(env, "ACCESSPARKS_TELRAD_URL").rstrip("/")
     telrad_username = _cfg(env, "ACCESSPARKS_TELRAD_USERNAME")
     telrad_password = _cfg(env, "ACCESSPARKS_TELRAD_PASSWORD")
 
-    if not base_url or not telrad_username or not telrad_password:
+    if enb_enabled and (not base_url or not telrad_username or not telrad_password):
         print(
-            "ERROR: set ACCESSPARKS_TELRAD_URL, ACCESSPARKS_TELRAD_USERNAME, ACCESSPARKS_TELRAD_PASSWORD in .env",
+            "ERROR: ENABLE_ENB_METRICS=true requires ACCESSPARKS_TELRAD_URL, "
+            "ACCESSPARKS_TELRAD_USERNAME, ACCESSPARKS_TELRAD_PASSWORD in .env",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -556,6 +685,7 @@ def main():
         f"Sampling interval: {interval_minutes} min | InsightFinder project: {if_project}"
     )
     logger.info(f"Components: {COMPONENT_NAME}, {CPE_COMPONENT_NAME}")
+    logger.info(f"eNB REST NBI metric collection: {'enabled' if enb_enabled else 'disabled (set ENABLE_ENB_METRICS=true to enable)'}")
     logger.info(f"CLI CPE metric collection: {'enabled' if cli_config else 'disabled'}")
 
     config = Config(
@@ -579,6 +709,7 @@ def main():
         timeout=args.timeout,
         jira=jira,
         cli_config=cli_config,
+        enb_enabled=enb_enabled,
     )
 
     with InsightFinder(config) as client:
