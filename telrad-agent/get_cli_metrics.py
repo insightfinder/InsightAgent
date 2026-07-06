@@ -27,9 +27,10 @@ Usage:
   python3 get_cli_metrics.py --no-jira           # skip Jira asset name resolution
 
 Each online CPE's Jira asset name is resolved by matching its serial number against
-the asset-cache server's 'serial_number' field (serial-only match, no WAN-IP fallback —
-via build_asset_map's match_by="serial" path), and shown as its own "jira=" field in the
-summary (and a "jira_asset_name" key in JSON output) alongside the serial number.
+the asset-cache server's 'serial_number' field, falling back to its current WAN IP
+(ip-wan) only when serial doesn't match (via build_asset_map's match_by="serial" path),
+and shown as its own "jira=" field in the summary (and a "jira_asset_name" key in JSON
+output) alongside the serial number.
 Best-effort: if ASSET_CACHE_* is not configured, the `requests` package (needed by
 jira_assets.py) isn't installed, or no asset matches, that field is left empty,
 with a WARNING log — this never blocks the KPI output.
@@ -410,11 +411,12 @@ def collect_cpe_metrics(
 def resolve_cpe_asset_names(cpes: list, asset_cache_url: str, asset_cache_key: str) -> None:
     """Best-effort: set cpe["jira_asset_name"] for each online CPE with a matched asset.
 
-    Matches by the CPE's serial number against the asset cache's serial_number field
-    (serial-only, no WAN-IP fallback), the same lookup used in send_metrics.py (see
-    build_asset_map.resolve_subset, match_by="serial"). Never raises — a
-    missing/unreachable asset-cache config, a missing `requests` package, or a failed
-    lookup just means jira_asset_name stays unset and the diagnostic still prints KPIs.
+    Matches by the CPE's serial number against the asset cache's serial_number field,
+    falling back to its current WAN IP (ip-wan) only when serial doesn't match — the
+    same lookup used in send_metrics.py (see build_asset_map.resolve_subset,
+    match_by="serial"). Never raises — a missing/unreachable asset-cache config, a
+    missing `requests` package, or a failed lookup just means jira_asset_name stays
+    unset and the diagnostic still prints KPIs.
 
     build_asset_map/jira_assets are imported here (not at module level) so this script
     has no import-time dependency on `requests` when asset resolution isn't needed.
@@ -427,16 +429,18 @@ def resolve_cpe_asset_names(cpes: list, asset_cache_url: str, asset_cache_key: s
         from build_asset_map import resolve_subset
 
         serial_map = {c["serial_number"]: c["serial_number"] for c in candidates}
+        ip_fallback_map = {c["serial_number"]: (c.get("ip-wan") or "") for c in candidates}
         resolved = resolve_subset(
             asset_cache_url, asset_cache_key, serial_map, serial_map,
-            entity_label="CPE", match_by="serial",
+            entity_label="CPE", match_by="serial", ip_fallback_map=ip_fallback_map,
         )
     except Exception as e:
         logger.warning(f"Asset cache lookup failed for CPE(s): {e} — showing serial numbers only")
         return
 
     for c in candidates:
-        label = resolved.get(c["serial_number"])
+        entry = resolved.get(c["serial_number"])
+        label = entry.get("label") if entry else None
         if label and label != c["serial_number"]:
             c["jira_asset_name"] = label
 
