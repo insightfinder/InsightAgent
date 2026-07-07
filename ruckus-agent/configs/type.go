@@ -26,6 +26,17 @@ type RuckusConfig struct {
 	VerifySSL             bool   `yaml:"verify_ssl"`
 	MaxConcurrentRequests int    `yaml:"max_concurrent_requests"`
 	SendComponentNameAsAP bool   `yaml:"send_component_name_as_AP"`
+
+	// Fallback used for both component name and display name when a device is
+	// not found in the Device Inventory API (mirrors the netexperience agent's
+	// "AP-Edgecore" convention).
+	DefaultComponentName string `yaml:"default_component_name"`
+
+	// Device Inventory API (MAC/serial -> serial/venue/component lookup)
+	DeviceInventoryAPIKey     string `yaml:"device_inventory_api_key"`
+	DeviceInventoryBaseURL    string `yaml:"device_inventory_base_url"`
+	DeviceInventoryTimeoutSec int    `yaml:"device_inventory_timeout_sec"`
+	DeviceInventoryMaxRetry   int    `yaml:"device_inventory_max_retry"`
 }
 
 type InsightFinderConfig struct {
