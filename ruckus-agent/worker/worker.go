@@ -172,23 +172,27 @@ func (w *Worker) Start(quit <-chan os.Signal) {
 }
 
 // applyDeviceMetadata sets instance name, display name, component name, zone and IP
-// on a metric using the device inventory lookup.
+// on a metric using the device inventory lookup. It returns false when the metric
+// must be discarded (not reported to InsightFinder).
 //
-// Instance name priority (matches the netexperience/zabbix agents'
-// device-inventory rules):
-// MAC(devicelookup) > serial(devicelookup) > object_key(devicelookup) > MAC(Ruckus) > serial(Ruckus) > cleaned name
+// A device is discarded if it is not found in the inventory (looked up by
+// MAC -> Serial -> IP -> Name during RefreshDeviceLookup), or if the inventory
+// record has no usable instance identifier.
 //
-// Zone comes from the inventory venue only (Ruckus zoneName is ignored); fallback UNKNOWN.
-// Display name and component name share one configurable fallback
-// (config.DefaultComponentName) when the device is not found in inventory,
-// mirroring the netexperience agent's "AP-Edgecore" convention.
-func (w *Worker) applyDeviceMetadata(metric *models.MetricData, ap *models.APDetail) {
-	devInfo := w.getDeviceLookup().GetDeviceInfo(ap.APMAC)
+// Value mapping (fallbacks in parentheses):
+//   - Instance:     MAC {inv_mac} > SERIAL {inv_serial} > JIRAKEY {object_key} (else discard)
+//   - Display name: inventory name (config.DefaultComponentName, e.g. AP-Ruckus)
+//   - Component:    inventory manufacturer-device_class, excluding NONE-NONE (config.DefaultComponentName)
+//   - Zone:         inventory venue (UNKNOWN)
+//   - IP:           inventory ip_address (Ruckus AP IP)
+func (w *Worker) applyDeviceMetadata(metric *models.MetricData, ap *models.APDetail) bool {
+	devInfo, found := w.getDeviceLookup().Lookup(ap.APMAC)
+	if !found {
+		return false
+	}
 
 	invMAC := normalizeMACIdentifier(devInfo.MACAddress)
-	ownMAC := normalizeMACIdentifier(ap.APMAC)
 	invSerial := normalizeSerialIdentifier(devInfo.SerialNumber)
-	ownSerial := normalizeSerialIdentifier(ap.Serial)
 
 	switch {
 	case invMAC != "":
@@ -197,16 +201,13 @@ func (w *Worker) applyDeviceMetadata(metric *models.MetricData, ap *models.APDet
 		metric.InstanceName = "SERIAL " + invSerial
 	case devInfo.ObjectKey != "":
 		metric.InstanceName = "JIRAKEY " + devInfo.ObjectKey
-	case ownMAC != "":
-		metric.InstanceName = "MAC " + ownMAC
-	case ownSerial != "":
-		metric.InstanceName = "SERIAL " + ownSerial
+	default:
+		return false
 	}
-	// else: keep the cleaned device name set by ToMetricData
 
 	fallback := w.config.Ruckus.DefaultComponentName
 
-	metric.DisplayName = ap.DeviceName
+	metric.DisplayName = devInfo.Name
 	if metric.DisplayName == "" {
 		metric.DisplayName = fallback
 	}
@@ -221,9 +222,12 @@ func (w *Worker) applyDeviceMetadata(metric *models.MetricData, ap *models.APDet
 		metric.Zone = devInfo.Venue
 	}
 
+	metric.IP = ap.IP
 	if devInfo.IPAddress != "" {
 		metric.IP = devInfo.IPAddress
 	}
+
+	return true
 }
 
 // New streaming collection method using bulk query
@@ -303,10 +307,19 @@ func (w *Worker) collectAndSendStreaming() {
 		// Process zone mappings
 		chunkMetrics = models.ProcessZoneMappings(chunkMetrics)
 
-		// Apply device inventory metadata (instance name, display name, component, zone, ip)
+		// Apply device inventory metadata (instance name, display name, component, zone, ip).
+		// Devices not found in the inventory are discarded and not reported to InsightFinder.
+		filtered := make([]models.MetricData, 0, len(chunkMetrics))
 		for i := range chunkMetrics {
-			w.applyDeviceMetadata(&chunkMetrics[i], &enrichedChunk[i])
+			if w.applyDeviceMetadata(&chunkMetrics[i], &enrichedChunk[i]) {
+				filtered = append(filtered, chunkMetrics[i])
+			}
 		}
+		dropped := len(chunkMetrics) - len(filtered)
+		if dropped > 0 {
+			logrus.Infof("Discarded %d AP(s) not found in device inventory", dropped)
+		}
+		chunkMetrics = filtered
 
 		if w.testMode {
 			// Write chunk to test file

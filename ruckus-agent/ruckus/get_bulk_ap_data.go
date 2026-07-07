@@ -18,7 +18,12 @@ func (s *Service) GetAllAPIdentifiers() ([]APIdentifier, error) {
 	}
 	identifiers := make([]APIdentifier, 0, len(details))
 	for _, ap := range details {
-		identifiers = append(identifiers, APIdentifier{MAC: ap.APMAC, Serial: ap.Serial})
+		identifiers = append(identifiers, APIdentifier{
+			MAC:    ap.APMAC,
+			Serial: ap.Serial,
+			IP:     ap.IP,
+			Name:   ap.DeviceName,
+		})
 	}
 	return identifiers, nil
 }
