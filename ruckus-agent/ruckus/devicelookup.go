@@ -39,10 +39,13 @@ type DeviceLookupEntry struct {
 // DeviceLookup maps AP MAC (lowercase) -> DeviceLookupEntry
 type DeviceLookup map[string]DeviceLookupEntry
 
-// APIdentifier carries the identifiers used to query the inventory API
+// APIdentifier carries the identifiers used to query the inventory API,
+// tried in priority order: MAC -> Serial -> IP -> Name.
 type APIdentifier struct {
 	MAC    string
 	Serial string
+	IP     string
+	Name   string
 }
 
 // LoadDeviceLookup loads devicelookup.json from disk; returns empty map if not found
@@ -72,17 +75,19 @@ func DeviceLookupIsStale() bool {
 	return time.Since(info.ModTime()) >= 24*time.Hour
 }
 
-// GetDeviceInfo returns cached DeviceInfo for a given AP MAC; zero value if not found.
+// Lookup returns the cached DeviceInfo for a given AP MAC and whether the device
+// was found in the inventory. A device that is not found must be discarded (not
+// reported to InsightFinder), so callers rely on the bool rather than the zero value.
 // DeviceLookup maps are immutable once stored — no lock needed here.
-func (dl DeviceLookup) GetDeviceInfo(mac string) DeviceInfo {
+func (dl DeviceLookup) Lookup(mac string) (DeviceInfo, bool) {
 	if dl == nil || mac == "" {
-		return DeviceInfo{}
+		return DeviceInfo{}, false
 	}
 	entry, ok := dl[strings.ToLower(mac)]
 	if !ok {
-		return DeviceInfo{}
+		return DeviceInfo{}, false
 	}
-	return entry.Device
+	return entry.Device, true
 }
 
 // inventoryAPIIsHealthy does a quick health check before a bulk refresh
@@ -141,7 +146,7 @@ func (s *Service) RefreshDeviceLookup(identifiers []APIdentifier, previous Devic
 	var wg sync.WaitGroup
 
 	for _, item := range identifiers {
-		if item.MAC == "" && item.Serial == "" {
+		if item.MAC == "" && item.Serial == "" && item.IP == "" && item.Name == "" {
 			continue
 		}
 		wg.Add(1)
@@ -150,10 +155,19 @@ func (s *Service) RefreshDeviceLookup(identifiers []APIdentifier, previous Devic
 			defer wg.Done()
 			defer func() { <-sem }()
 
+			// Query priority: MAC -> Serial -> IP -> Name.
 			identifier := strings.ToLower(it.MAC)
 			raw := lookupDeviceByIdentifier(client, apiKey, baseURL, maxRetry, identifier)
 			if raw == nil && it.Serial != "" {
 				identifier = it.Serial
+				raw = lookupDeviceByIdentifier(client, apiKey, baseURL, maxRetry, identifier)
+			}
+			if raw == nil && it.IP != "" {
+				identifier = it.IP
+				raw = lookupDeviceByIdentifier(client, apiKey, baseURL, maxRetry, identifier)
+			}
+			if raw == nil && it.Name != "" {
+				identifier = it.Name
 				raw = lookupDeviceByIdentifier(client, apiKey, baseURL, maxRetry, identifier)
 			}
 
@@ -163,8 +177,14 @@ func (s *Service) RefreshDeviceLookup(identifiers []APIdentifier, previous Devic
 			}
 
 			key := strings.ToLower(it.MAC)
-			if key == "" {
+			switch {
+			case key != "":
+			case it.Serial != "":
 				key = it.Serial
+			case it.IP != "":
+				key = it.IP
+			default:
+				key = it.Name
 			}
 			resultCh <- result{
 				key: key,
