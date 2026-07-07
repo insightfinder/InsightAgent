@@ -468,6 +468,8 @@ def _parse_slack_entry(entry):
         "channel_name": entry.get("channelName", ""),
         "options": [],
         "project_configs": [],
+        "priority_upgrade_channel": "",
+        "priority_upgrade_webhook": "",
     }
 
     options_str = entry.get("options", "")
@@ -484,6 +486,8 @@ def _parse_slack_entry(entry):
             pc_raw = configs.get("projectConfigs")
             if isinstance(pc_raw, list):
                 config["project_configs"] = _parse_slack_project_configs(pc_raw)
+            config["priority_upgrade_channel"] = configs.get("priorityUpgradeChannel", "") or ""
+            config["priority_upgrade_webhook"] = configs.get("priorityUpgradeWebhook", "") or ""
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
@@ -572,6 +576,14 @@ def generate_slack_env_config(slack_entries, include_provider=True, base_url="",
 
         if config.get("options"):
             lines.append(f'  options = {json.dumps(config["options"])}')
+
+        if config.get("priority_upgrade_channel"):
+            puc_e = _hcl_escape_string(config["priority_upgrade_channel"])
+            lines.append(f'  priority_upgrade_channel = "{puc_e}"')
+
+        if config.get("priority_upgrade_webhook"):
+            puw_e = _hcl_escape_string(config["priority_upgrade_webhook"])
+            lines.append(f'  priority_upgrade_webhook = "{puw_e}"')
 
         if config.get("project_configs"):
             lines.append('')
