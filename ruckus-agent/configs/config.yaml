@@ -30,12 +30,12 @@ insightfinder:
   username: your_if_username
   license_key: your_license_key_here
   project_name: RuckusWiFiMonitoring
-  system_name: production
+  system_name: RuckusController
   project_type: Metric
   cloud_type: OnPremise
   instance_type: OnPremise
   is_container: false
-  sampling_interval: 60
+  sampling_interval: 300
 
 state:
   # Internal state (automatically managed)
