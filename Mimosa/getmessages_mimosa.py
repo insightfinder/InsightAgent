@@ -22,7 +22,7 @@ from multiprocessing.pool import ThreadPool
 from optparse import OptionParser
 from sys import getsizeof
 from time import sleep
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 import urllib3
 
 # Disable SSL warnings when verify_certs is False
@@ -189,9 +189,13 @@ def device_lookup_is_stale():
     return age_hours >= DEVICE_LOOKUP_REFRESH_HOURS
 
 
-def _lookup_device_by_mac(mac, api_key, base_url, timeout, max_retry):
-    """Query device inventory API for a single MAC. Returns device dict or None."""
-    url = f'{base_url}/devices/{mac}'
+def _lookup_device_by_identifier(identifier, api_key, base_url, timeout, max_retry):
+    """Query the Asset Registry API for a single identifier (MAC, IP, name,
+    serial, object key, or Jira ID — the endpoint accepts any of them).
+    Returns the device dict on match, None on 404/error."""
+    if not identifier:
+        return None
+    url = f'{base_url}/devices/{quote(str(identifier), safe="")}'
     headers = {'X-API-Key': api_key, 'Accept': 'application/json'}
     for attempt in range(max_retry):
         try:
@@ -204,6 +208,17 @@ def _lookup_device_by_mac(mac, api_key, base_url, timeout, max_retry):
         except Exception:
             if attempt < max_retry - 1:
                 time.sleep(0.5)
+    return None
+
+
+def _lookup_device(identifiers, api_key, base_url, timeout, max_retry):
+    """Try each identifier in priority order; first match wins.
+    Mirrors the netexperience agent's MAC -> IP -> name fallback chain
+    (Mimosa devices carry no serial, so that rung is skipped)."""
+    for ident in identifiers:
+        raw = _lookup_device_by_identifier(ident, api_key, base_url, timeout, max_retry)
+        if raw:
+            return raw
     return None
 
 
@@ -261,8 +276,10 @@ def _inventory_api_is_healthy(logger, base_url, timeout):
     return False
 
 
-def refresh_device_lookup(logger, macs, agent_config_vars):
-    """Query device inventory API for all MACs (20 concurrent) and save to disk.
+def refresh_device_lookup(logger, devices, agent_config_vars):
+    """Query the Asset Registry API for all devices (20 concurrent) and save to disk.
+    Each device is looked up by MAC -> IP -> name (first match wins); the result is
+    cached under the device's lowercased MAC so parse_messages_mimosa can retrieve it.
     If the API is unreachable, keeps the existing lookup (devices fall back to UNKNOWN zone etc.)."""
     global DEVICE_LOOKUP
     api_key = agent_config_vars.get('device_inventory_api_key', '')
@@ -279,23 +296,37 @@ def refresh_device_lookup(logger, macs, agent_config_vars):
                        f'({len(DEVICE_LOOKUP)} entries); unmatched devices will use fallback values')
         return
 
-    macs = sorted({m.lower() for m in macs if m})
-    logger.info(f'DeviceLookup: refreshing {len(macs)} devices (concurrency=20)...')
+    # dedup devices by MAC; each entry keeps its identifiers for the fallback chain
+    uniq = {}
+    for d in devices:
+        mac = (d.get('mac_address') or '').strip()
+        if not mac:
+            continue
+        uniq[mac.lower()] = {
+            'mac': mac.lower(),
+            'ip': (d.get('ip_address') or '').strip(),
+            'name': (d.get('device_name') or '').strip(),
+        }
+    device_list = list(uniq.values())
+    logger.info(f'DeviceLookup: refreshing {len(device_list)} devices (concurrency=20)...')
     start_time = time.time()
+
+    def _lookup_one(dev):
+        # Priority chain mirrors the netexperience agent: MAC -> IP -> name
+        raw = _lookup_device([dev['mac'], dev['ip'], dev['name']], api_key, base_url, timeout, max_retry)
+        return dev['mac'], raw
 
     new_lookup = {}
     found = 0
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=20) as executor:
-        results = executor.map(
-            lambda m: (m, _lookup_device_by_mac(m, api_key, base_url, timeout, max_retry)), macs)
-        for mac, raw in results:
+        for mac_key, raw in executor.map(_lookup_one, device_list):
             if raw:
-                new_lookup[mac] = _extract_device_info(raw)
+                new_lookup[mac_key] = _extract_device_info(raw)
                 found += 1
 
     elapsed = round(time.time() - start_time, 1)
-    logger.info(f'DeviceLookup: done - {found} found, {len(macs) - found} not found, elapsed={elapsed}s')
+    logger.info(f'DeviceLookup: done - {found} found, {len(device_list) - found} not found, elapsed={elapsed}s')
 
     # safety: if nothing was found but we had a non-empty cache, the API likely failed
     # mid-run — keep the old cache instead of wiping it
@@ -873,11 +904,10 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             except Exception as e:
                 logger.error(f'Failed to save metrics data to file: {str(e)}')
 
-            # Refresh device lookup (MAC -> serial/venue/component) if stale, then load
+            # Refresh device lookup (MAC -> IP -> name against Asset Registry) if stale, then load
             load_device_lookup(logger)
             if device_lookup_is_stale() or not DEVICE_LOOKUP:
-                macs = {m.get('mac_address') for m in metrics_data if m.get('mac_address')}
-                refresh_device_lookup(logger, macs, agent_config_vars)
+                refresh_device_lookup(logger, metrics_data, agent_config_vars)
 
             # Process the collected data
             for metric_data in metrics_data:
@@ -927,15 +957,14 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
         # Align timestamp to sampling interval
         aligned_timestamp = align_timestamp(timestamp, sampling_interval)
 
-        device_name = metric_data.get('device_name') or ''
         mac_address = metric_data.get('mac_address', '')
         dev_info = DEVICE_LOOKUP.get(mac_address.lower(), {}) if mac_address else {}
 
-        # Instance name priority (matches the netexperience/zabbix agents'
-        # device-inventory rules):
-        # MAC(devicelookup) > serial(devicelookup) > object_key(devicelookup) > MAC(Mimosa) > device name
+        # Instance name priority (matches the zabbix agent's device-inventory rules):
+        # MAC(inventory) > serial(inventory) > object_key(inventory).
+        # Only inventory identifiers are used — a device not found in the Asset
+        # Registry is dropped entirely (not reported to InsightFinder).
         inv_mac = normalize_mac_identifier(dev_info.get('mac_address'))
-        own_mac = normalize_mac_identifier(mac_address)
         inv_serial = normalize_serial_identifier(dev_info.get('serial_number'))
 
         if inv_mac:
@@ -944,20 +973,20 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
             instance_name = 'SERIAL ' + inv_serial
         elif dev_info.get('object_key'):
             instance_name = 'JIRAKEY ' + dev_info['object_key']
-        elif own_mac:
-            instance_name = 'MAC ' + own_mac
         else:
-            instance_name = make_safe_instance_string(device_name)
+            # device not in inventory (or inventory record has no usable
+            # identifier) — skip it, do not report to InsightFinder
+            return
 
-        # Display name: Mimosa device name > fallback
-        display_name = device_name if device_name else default_component_name
+        # Display name: inventory name > fallback
+        display_name = dev_info.get('name') or default_component_name
 
-        # Component name: devicelookup manufacturer-device_class > fallback
+        # Component name: inventory manufacturer-device_class (exclude NONE-NONE) > fallback
         component_name = default_component_name
         if dev_info.get('component_name') and dev_info['component_name'] != 'NONE-NONE':
             component_name = dev_info['component_name']
 
-        # Zone: devicelookup meta.venue > UNKNOWN
+        # Zone: inventory meta.venue > UNKNOWN
         zone = dev_info.get('venue') or 'UNKNOWN'
 
         # IP: devicelookup > Mimosa API
