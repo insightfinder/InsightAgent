@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	config "github.com/insightfinder/ruckus-agent/configs"
 	"github.com/insightfinder/ruckus-agent/insightfinder"
@@ -13,6 +15,43 @@ import (
 	"github.com/insightfinder/ruckus-agent/ruckus"
 	"github.com/sirupsen/logrus"
 )
+
+// normalizeMACIdentifier mirrors the netexperience/zabbix agents' MAC
+// normalization: replace ':' with '-', trim leading/trailing '-', trim
+// whitespace, and require at least one alphanumeric character. No case
+// conversion — the original casing must be preserved so the same physical
+// device produces the same instance identifier across agents.
+func normalizeMACIdentifier(mac string) string {
+	mac = strings.TrimSpace(mac)
+	if mac == "" {
+		return ""
+	}
+	converted := strings.TrimSpace(strings.Trim(strings.ReplaceAll(mac, ":", "-"), "-"))
+	if converted == "" || !containsAlnum(converted) {
+		return ""
+	}
+	return converted
+}
+
+// normalizeSerialIdentifier mirrors the netexperience/zabbix agents' serial
+// normalization: trim whitespace and require at least one alphanumeric
+// character.
+func normalizeSerialIdentifier(serial string) string {
+	serial = strings.TrimSpace(serial)
+	if serial == "" || !containsAlnum(serial) {
+		return ""
+	}
+	return serial
+}
+
+func containsAlnum(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return true
+		}
+	}
+	return false
+}
 
 type Worker struct {
 	config               *config.Config
@@ -25,6 +64,31 @@ type Worker struct {
 	// Stats tracking
 	statsLock    sync.RWMutex
 	currentStats *CollectionStats
+	// Device inventory lookup (MAC/serial -> venue/component/serial)
+	deviceLookup   ruckus.DeviceLookup
+	deviceLookupMu sync.RWMutex
+}
+
+func (w *Worker) getDeviceLookup() ruckus.DeviceLookup {
+	w.deviceLookupMu.RLock()
+	defer w.deviceLookupMu.RUnlock()
+	return w.deviceLookup
+}
+
+func (w *Worker) setDeviceLookup(dl ruckus.DeviceLookup) {
+	w.deviceLookupMu.Lock()
+	w.deviceLookup = dl
+	w.deviceLookupMu.Unlock()
+}
+
+// refreshDeviceLookup fetches all AP identifiers and refreshes the inventory lookup
+func (w *Worker) refreshDeviceLookup() {
+	identifiers, err := w.ruckusService.GetAllAPIdentifiers()
+	if err != nil {
+		logrus.Errorf("DeviceLookup: failed to fetch AP identifiers, keeping existing lookup: %v", err)
+		return
+	}
+	w.setDeviceLookup(w.ruckusService.RefreshDeviceLookup(identifiers, w.getDeviceLookup()))
 }
 
 type CollectionStats struct {
@@ -71,10 +135,23 @@ func (w *Worker) Start(quit <-chan os.Signal) {
 
 	logrus.Info("InsightFinder connection established successfully")
 
+	// Load device lookup from disk; if empty (first run), refresh synchronously so
+	// the first metric cycle has correct instance/component/zone data.
+	w.setDeviceLookup(ruckus.LoadDeviceLookup())
+	if len(w.getDeviceLookup()) == 0 {
+		logrus.Info("DeviceLookup cache empty, running initial refresh before first metric cycle...")
+		w.refreshDeviceLookup()
+	} else if ruckus.DeviceLookupIsStale() {
+		go w.refreshDeviceLookup()
+	}
+
 	// Use sampling_interval from InsightFinder config instead of collection_interval
 	samplingInterval := time.Duration(w.config.InsightFinder.SamplingInterval) * time.Second
 	ticker := time.NewTicker(samplingInterval)
 	defer ticker.Stop()
+
+	deviceLookupTicker := time.NewTicker(24 * time.Hour)
+	defer deviceLookupTicker.Stop()
 
 	logrus.Infof("Starting data collection with %d second intervals", w.config.InsightFinder.SamplingInterval)
 
@@ -85,10 +162,67 @@ func (w *Worker) Start(quit <-chan os.Signal) {
 		select {
 		case <-ticker.C:
 			w.collectAndSendStreaming()
+		case <-deviceLookupTicker.C:
+			go w.refreshDeviceLookup()
 		case <-quit:
 			logrus.Info("Worker received shutdown signal")
 			return
 		}
+	}
+}
+
+// applyDeviceMetadata sets instance name, display name, component name, zone and IP
+// on a metric using the device inventory lookup.
+//
+// Instance name priority (matches the netexperience/zabbix agents'
+// device-inventory rules):
+// MAC(devicelookup) > serial(devicelookup) > object_key(devicelookup) > MAC(Ruckus) > serial(Ruckus) > cleaned name
+//
+// Zone comes from the inventory venue only (Ruckus zoneName is ignored); fallback UNKNOWN.
+// Display name and component name share one configurable fallback
+// (config.DefaultComponentName) when the device is not found in inventory,
+// mirroring the netexperience agent's "AP-Edgecore" convention.
+func (w *Worker) applyDeviceMetadata(metric *models.MetricData, ap *models.APDetail) {
+	devInfo := w.getDeviceLookup().GetDeviceInfo(ap.APMAC)
+
+	invMAC := normalizeMACIdentifier(devInfo.MACAddress)
+	ownMAC := normalizeMACIdentifier(ap.APMAC)
+	invSerial := normalizeSerialIdentifier(devInfo.SerialNumber)
+	ownSerial := normalizeSerialIdentifier(ap.Serial)
+
+	switch {
+	case invMAC != "":
+		metric.InstanceName = "MAC " + invMAC
+	case invSerial != "":
+		metric.InstanceName = "SERIAL " + invSerial
+	case devInfo.ObjectKey != "":
+		metric.InstanceName = "JIRAKEY " + devInfo.ObjectKey
+	case ownMAC != "":
+		metric.InstanceName = "MAC " + ownMAC
+	case ownSerial != "":
+		metric.InstanceName = "SERIAL " + ownSerial
+	}
+	// else: keep the cleaned device name set by ToMetricData
+
+	fallback := w.config.Ruckus.DefaultComponentName
+
+	metric.DisplayName = ap.DeviceName
+	if metric.DisplayName == "" {
+		metric.DisplayName = fallback
+	}
+
+	metric.ComponentName = fallback
+	if devInfo.ComponentName != "" && devInfo.ComponentName != "NONE-NONE" {
+		metric.ComponentName = devInfo.ComponentName
+	}
+
+	metric.Zone = "UNKNOWN"
+	if devInfo.Venue != "" {
+		metric.Zone = devInfo.Venue
+	}
+
+	if devInfo.IPAddress != "" {
+		metric.IP = devInfo.IPAddress
 	}
 }
 
@@ -168,6 +302,11 @@ func (w *Worker) collectAndSendStreaming() {
 
 		// Process zone mappings
 		chunkMetrics = models.ProcessZoneMappings(chunkMetrics)
+
+		// Apply device inventory metadata (instance name, display name, component, zone, ip)
+		for i := range chunkMetrics {
+			w.applyDeviceMetadata(&chunkMetrics[i], &enrichedChunk[i])
+		}
 
 		if w.testMode {
 			// Write chunk to test file

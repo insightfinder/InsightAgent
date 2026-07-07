@@ -80,6 +80,7 @@ type APDetail struct {
 	// Context Fields (Always Include)
 	DeviceName    string  `json:"deviceName"`
 	APMAC         string  `json:"apMac"`
+	Serial        string  `json:"serial"`
 	IP            string  `json:"ip"`
 	ZoneName      string  `json:"zoneName"`
 	NumClients    int     `json:"numClients"`
@@ -118,6 +119,7 @@ type APDetail struct {
 type MetricData struct {
 	Timestamp     int64                  `json:"timestamp"`
 	InstanceName  string                 `json:"instanceName"`
+	DisplayName   string                 `json:"displayName,omitempty"`
 	Data          map[string]interface{} `json:"data"`
 	Zone          string                 `json:"zone,omitempty"`
 	ComponentName string                 `json:"componentName,omitempty"`

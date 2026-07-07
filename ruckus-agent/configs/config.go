@@ -53,6 +53,9 @@ func setDefaults(config *Config) {
 	if config.Ruckus.MaxConcurrentRequests == 0 {
 		config.Ruckus.MaxConcurrentRequests = 20
 	}
+	if config.Ruckus.DefaultComponentName == "" {
+		config.Ruckus.DefaultComponentName = "AP-Ruckus"
+	}
 
 	// Agent defaults
 	if config.Agent.LogLevel == "" {

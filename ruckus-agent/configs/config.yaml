@@ -16,6 +16,13 @@ ruckus:
   verify_ssl: false
   max_concurrent_requests: 20
   send_component_name_as_AP: true
+  # Fallback used for both component name and display name when a device is
+  # not found in the Device Inventory API (default: AP-Ruckus)
+  default_component_name: AP-Ruckus
+  device_inventory_api_key: your_device_inventory_api_key
+  device_inventory_base_url: http://54.234.90.98
+  device_inventory_timeout_sec: 5
+  device_inventory_max_retry: 2
 
 insightfinder:
   # InsightFinder Platform Configuration
@@ -23,12 +30,12 @@ insightfinder:
   username: your_if_username
   license_key: your_license_key_here
   project_name: RuckusWiFiMonitoring
-  system_name: RuckusController
+  system_name: production
   project_type: Metric
   cloud_type: OnPremise
   instance_type: OnPremise
   is_container: false
-  sampling_interval: 300
+  sampling_interval: 60
 
 state:
   # Internal state (automatically managed)
