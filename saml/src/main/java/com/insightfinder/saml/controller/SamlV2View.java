@@ -52,7 +52,7 @@ public class SamlV2View {
     if (state == null || state.isEmpty()) {
       return new RedirectView(ifConfig.getServerUrl());
     }
-    return new RedirectView(ifConfig.getServerUrl() + "/ui/auth/login2?state=" + state);
+    return new RedirectView(ifConfig.getServerUrl() + "/ui/login-uie?state=" + state);
   }
 
   private String verify(String email, String firstName, String lastName) {
