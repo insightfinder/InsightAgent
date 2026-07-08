@@ -107,7 +107,7 @@ func inventoryAPIIsHealthy(baseURL string, timeout time.Duration) bool {
 }
 
 // RefreshDeviceLookup queries the device inventory API for all APs (MAC first,
-// fallback serial) and returns the new DeviceLookup map. If the API is unreachable
+// fallback serial, fallback IP address) and returns the new DeviceLookup map. If the API is unreachable
 // or the refresh finds nothing, the previous lookup is returned unchanged so a good
 // cache is never wiped by an outage. The caller stores the result under its own lock.
 func (s *Service) RefreshDeviceLookup(identifiers []APIdentifier, previous DeviceLookup) DeviceLookup {
@@ -185,6 +185,9 @@ func (s *Service) RefreshDeviceLookup(identifiers []APIdentifier, previous Devic
 				key = it.IP
 			default:
 				key = it.Name
+			}
+			if key == "" {
+				key = it.IP
 			}
 			resultCh <- result{
 				key: key,

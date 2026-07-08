@@ -179,9 +179,19 @@ func (w *Worker) Start(quit <-chan os.Signal) {
 // MAC -> Serial -> IP -> Name during RefreshDeviceLookup), or if the inventory
 // record has no usable instance identifier.
 //
+// Instance name priority — MAC, SERIAL, and JIRAKEY values always come from the
+// Device Inventory API record, never from the AP's own Ruckus-reported fields,
+// so an "in" value is only ever emitted when it has been verified against
+// inventory:
+//
+//	MAC(inventory) > SERIAL(inventory) > JIRAKEY(inventory) (else discard)
+//
+// The MAC is used exactly as inventory returns it (no case change) with ':'
+// replaced by '-' — see normalizeMACIdentifier.
+//
 // Value mapping (fallbacks in parentheses):
 //   - Instance:     MAC {inv_mac} > SERIAL {inv_serial} > JIRAKEY {object_key} (else discard)
-//   - Display name: inventory name (config.DefaultComponentName, e.g. AP-Ruckus)
+//   - Display name: Ruckus deviceName, unmodified (config.DefaultComponentName, e.g. AP-Ruckus)
 //   - Component:    inventory manufacturer-device_class, excluding NONE-NONE (config.DefaultComponentName)
 //   - Zone:         inventory venue (UNKNOWN)
 //   - IP:           inventory ip_address (Ruckus AP IP)
@@ -207,7 +217,7 @@ func (w *Worker) applyDeviceMetadata(metric *models.MetricData, ap *models.APDet
 
 	fallback := w.config.Ruckus.DefaultComponentName
 
-	metric.DisplayName = devInfo.Name
+	metric.DisplayName = ap.DeviceName
 	if metric.DisplayName == "" {
 		metric.DisplayName = fallback
 	}
@@ -303,9 +313,6 @@ func (w *Worker) collectAndSendStreaming() {
 			metric := ap.ToMetricData(w.ruckusService.Config.SendComponentNameAsAP, &w.config.MetricFilter)
 			chunkMetrics = append(chunkMetrics, *metric)
 		}
-
-		// Process zone mappings
-		chunkMetrics = models.ProcessZoneMappings(chunkMetrics)
 
 		// Apply device inventory metadata (instance name, display name, component, zone, ip).
 		// Devices not found in the inventory are discarded and not reported to InsightFinder.
