@@ -1,8 +1,6 @@
 package models
 
 import (
-	"encoding/json"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -106,32 +104,4 @@ func ExtractMbpsFromPOEPortStatus(portStatus string) *float64 {
 
 	logrus.Debugf("Failed to extract numeric value from POE port status: %s", portStatus)
 	return nil
-}
-
-func ProcessZoneMappings(metricData []MetricData) []MetricData {
-	zoneMappingFile := "pkg/models/mapping.json"
-
-	// Read zone mapping data
-	zoneMappingData, err := os.ReadFile(zoneMappingFile)
-	if err != nil {
-		logrus.Warn("Failed to read zone mapping file:", err)
-		return metricData // Return original data if zone mapping file cannot be read
-	}
-
-	var instanceZoneMap map[string]string
-	err = json.Unmarshal(zoneMappingData, &instanceZoneMap)
-	if err != nil {
-		logrus.Warn("Failed to parse zone mapping JSON:", err)
-		return metricData // Return original data if zone mapping JSON cannot be parsed
-	}
-
-	for i := range metricData {
-		zoneName, exists := instanceZoneMap[metricData[i].Zone]
-
-		if exists && zoneName != "" {
-			metricData[i].Zone = zoneName
-		}
-	}
-
-	return metricData
 }

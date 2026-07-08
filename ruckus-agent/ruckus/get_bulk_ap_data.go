@@ -10,7 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// GetAllAPIdentifiers fetches MAC+serial for every AP (for device inventory lookup)
+// GetAllAPIdentifiers fetches MAC+serial+IP for every AP (for device inventory lookup)
 func (s *Service) GetAllAPIdentifiers() ([]APIdentifier, error) {
 	details, err := s.GetAllAPDetailsBulk()
 	if err != nil {
