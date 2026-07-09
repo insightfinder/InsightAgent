@@ -43,9 +43,6 @@ func (w *Worker) collectSpecificMACs(macAddresses []string) error {
 		metrics = append(metrics, *metric)
 	}
 
-	// zone mapping
-	metrics = models.ProcessZoneMappings(metrics)
-
 	if w.testMode {
 		// Save to test file
 		testFile, err := w.createTestFile("specific_macs_data")

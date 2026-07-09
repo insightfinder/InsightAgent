@@ -8,22 +8,29 @@ agent:
 
 ruckus:
   # Ruckus Wireless Controller Configuration
-  controller_host: 192.168.1.100
+  controller_host: 209.170.222.171
   controller_port: 8443
-  username: your_ruckus_username
-  password: your_ruckus_password
+  username: ${RUCKUS_USERNAME}
+  password: ${RUCKUS_PASSWORD}
   api_version: v11_1
   verify_ssl: false
   max_concurrent_requests: 20
   send_component_name_as_AP: true
+  # Fallback used for both component name and display name when a device is
+  # not found in the Device Inventory API (default: AP-Ruckus)
+  default_component_name: AP-Ruckus
+  device_inventory_api_key: ${Jira Asset Inventory API Key}
+  device_inventory_base_url: http://54.234.90.98
+  device_inventory_timeout_sec: 5
+  device_inventory_max_retry: 2
 
 insightfinder:
   # InsightFinder Platform Configuration
-  server_url: https://app.insightfinder.com
-  username: your_if_username
-  license_key: your_license_key_here
-  project_name: RuckusWiFiMonitoring
-  system_name: RuckusController
+  server_url: https://stg.insightfinder.com
+  username: ${INSIGHTFINDER_USERNAME}
+  license_key: ${INSIGHTFINDER_LICENSE_KEY}
+  project_name: ${INSIGHTFINDER_PROJECT_NAME}
+  system_name: ${INSIGHTFINDER_SYSTEM_NAME}
   project_type: Metric
   cloud_type: OnPremise
   instance_type: OnPremise

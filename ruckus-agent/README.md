@@ -10,6 +10,7 @@ Ruckus Agent is a Go-based data collection agent that fetches network performanc
 - **Metric Filtering**: Per-metric enable/disable flags to control exactly what is sent to InsightFinder
 - **Zone Mapping**: Optional JSON-based zone name remapping
 - **Streaming Processing**: Processes APs in configurable chunks to bound memory usage
+- **Device Inventory Lookup**: Enriches instances with serial/venue/component data from the Device Inventory API (cached in `devicelookup.json`, refreshed every 24h)
 
 ## Architecture
 
@@ -53,6 +54,16 @@ ruckus:
   verify_ssl: false
   max_concurrent_requests: 20
   send_component_name_as_AP: true
+
+  # Fallback used for both component name and display name when a device is
+  # not found in the Device Inventory API (default: AP-Ruckus)
+  default_component_name: AP-Ruckus
+
+  # Device Inventory API (MAC/serial -> serial/venue/component lookup)
+  device_inventory_api_key: your-api-key
+  device_inventory_base_url: http://54.234.90.98
+  device_inventory_timeout_sec: 5
+  device_inventory_max_retry: 2
 
 insightfinder:
   server_url: https://app.insightfinder.com
@@ -110,6 +121,30 @@ go build -o ruckus-agent
 ```bash
 ./ruckus-agent
 ```
+
+## Instance Naming & Metadata
+
+The agent maintains a device lookup cache (`devicelookup.json`) built from the Device Inventory API, queried by AP MAC address and refreshed every 24 hours. If the inventory API is unreachable (health check on `/health` fails), the existing cache is kept and unmatched devices use fallback values.
+
+Instance name priority (matches the netexperience/zabbix agents' device-inventory rules):
+
+1. `MAC 6c-aa-b3-05-23-c0` — MAC from device inventory (colons replaced by dashes, original casing preserved)
+2. `SERIAL <serial>` — serial number from device inventory
+3. `JIRAKEY <object_key>` — device inventory object key
+4. `MAC <mac>` — AP MAC address reported by the Ruckus controller (normalized the same way), used if the inventory lookup missed
+5. `SERIAL <serial>` — AP serial number reported by the Ruckus controller
+6. Cleaned AP device name
+
+Instance metadata:
+
+| Field | Source | Fallback |
+|-------|--------|----------|
+| Display name | Ruckus `deviceName` | `default_component_name` (used when Ruckus reports no device name) |
+| Component name | Inventory `manufacturer-device_class` (e.g. `Ruckus-Wifi.Indoor`) | `default_component_name` (used when the device is not in inventory) |
+| Zone | Inventory `meta.venue` only — the Ruckus controller's own `zoneName` is intentionally ignored | `UNKNOWN` |
+| IP | Inventory `ip_address` | Ruckus `ip` |
+
+`default_component_name` (config: `ruckus` section, default `AP-Ruckus`) is a single fallback keyword reused for both display name and component name, mirroring the `AP-<Manufacturer>` convention used by the netexperience agent's `AP-Edgecore` fallback.
 
 ## Metrics Collected
 

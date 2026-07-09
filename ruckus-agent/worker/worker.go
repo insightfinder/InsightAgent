@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	config "github.com/insightfinder/ruckus-agent/configs"
 	"github.com/insightfinder/ruckus-agent/insightfinder"
@@ -13,6 +15,43 @@ import (
 	"github.com/insightfinder/ruckus-agent/ruckus"
 	"github.com/sirupsen/logrus"
 )
+
+// normalizeMACIdentifier mirrors the netexperience/zabbix agents' MAC
+// normalization: replace ':' with '-', trim leading/trailing '-', trim
+// whitespace, and require at least one alphanumeric character. No case
+// conversion — the original casing must be preserved so the same physical
+// device produces the same instance identifier across agents.
+func normalizeMACIdentifier(mac string) string {
+	mac = strings.TrimSpace(mac)
+	if mac == "" {
+		return ""
+	}
+	converted := strings.TrimSpace(strings.Trim(strings.ReplaceAll(mac, ":", "-"), "-"))
+	if converted == "" || !containsAlnum(converted) {
+		return ""
+	}
+	return converted
+}
+
+// normalizeSerialIdentifier mirrors the netexperience/zabbix agents' serial
+// normalization: trim whitespace and require at least one alphanumeric
+// character.
+func normalizeSerialIdentifier(serial string) string {
+	serial = strings.TrimSpace(serial)
+	if serial == "" || !containsAlnum(serial) {
+		return ""
+	}
+	return serial
+}
+
+func containsAlnum(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return true
+		}
+	}
+	return false
+}
 
 type Worker struct {
 	config               *config.Config
@@ -25,6 +64,31 @@ type Worker struct {
 	// Stats tracking
 	statsLock    sync.RWMutex
 	currentStats *CollectionStats
+	// Device inventory lookup (MAC/serial -> venue/component/serial)
+	deviceLookup   ruckus.DeviceLookup
+	deviceLookupMu sync.RWMutex
+}
+
+func (w *Worker) getDeviceLookup() ruckus.DeviceLookup {
+	w.deviceLookupMu.RLock()
+	defer w.deviceLookupMu.RUnlock()
+	return w.deviceLookup
+}
+
+func (w *Worker) setDeviceLookup(dl ruckus.DeviceLookup) {
+	w.deviceLookupMu.Lock()
+	w.deviceLookup = dl
+	w.deviceLookupMu.Unlock()
+}
+
+// refreshDeviceLookup fetches all AP identifiers and refreshes the inventory lookup
+func (w *Worker) refreshDeviceLookup() {
+	identifiers, err := w.ruckusService.GetAllAPIdentifiers()
+	if err != nil {
+		logrus.Errorf("DeviceLookup: failed to fetch AP identifiers, keeping existing lookup: %v", err)
+		return
+	}
+	w.setDeviceLookup(w.ruckusService.RefreshDeviceLookup(identifiers, w.getDeviceLookup()))
 }
 
 type CollectionStats struct {
@@ -71,10 +135,23 @@ func (w *Worker) Start(quit <-chan os.Signal) {
 
 	logrus.Info("InsightFinder connection established successfully")
 
+	// Load device lookup from disk; if empty (first run), refresh synchronously so
+	// the first metric cycle has correct instance/component/zone data.
+	w.setDeviceLookup(ruckus.LoadDeviceLookup())
+	if len(w.getDeviceLookup()) == 0 {
+		logrus.Info("DeviceLookup cache empty, running initial refresh before first metric cycle...")
+		w.refreshDeviceLookup()
+	} else if ruckus.DeviceLookupIsStale() {
+		go w.refreshDeviceLookup()
+	}
+
 	// Use sampling_interval from InsightFinder config instead of collection_interval
 	samplingInterval := time.Duration(w.config.InsightFinder.SamplingInterval) * time.Second
 	ticker := time.NewTicker(samplingInterval)
 	defer ticker.Stop()
+
+	deviceLookupTicker := time.NewTicker(24 * time.Hour)
+	defer deviceLookupTicker.Stop()
 
 	logrus.Infof("Starting data collection with %d second intervals", w.config.InsightFinder.SamplingInterval)
 
@@ -85,11 +162,82 @@ func (w *Worker) Start(quit <-chan os.Signal) {
 		select {
 		case <-ticker.C:
 			w.collectAndSendStreaming()
+		case <-deviceLookupTicker.C:
+			go w.refreshDeviceLookup()
 		case <-quit:
 			logrus.Info("Worker received shutdown signal")
 			return
 		}
 	}
+}
+
+// applyDeviceMetadata sets instance name, display name, component name, zone and IP
+// on a metric using the device inventory lookup. It returns false when the metric
+// must be discarded (not reported to InsightFinder).
+//
+// A device is discarded if it is not found in the inventory (looked up by
+// MAC -> Serial -> IP -> Name during RefreshDeviceLookup), or if the inventory
+// record has no usable instance identifier.
+//
+// Instance name priority — MAC, SERIAL, and JIRAKEY values always come from the
+// Device Inventory API record, never from the AP's own Ruckus-reported fields,
+// so an "in" value is only ever emitted when it has been verified against
+// inventory:
+//
+//	MAC(inventory) > SERIAL(inventory) > JIRAKEY(inventory) (else discard)
+//
+// The MAC is used exactly as inventory returns it (no case change) with ':'
+// replaced by '-' — see normalizeMACIdentifier.
+//
+// Value mapping (fallbacks in parentheses):
+//   - Instance:     MAC {inv_mac} > SERIAL {inv_serial} > JIRAKEY {object_key} (else discard)
+//   - Display name: Ruckus deviceName, unmodified (config.DefaultComponentName, e.g. AP-Ruckus)
+//   - Component:    inventory manufacturer-device_class, excluding NONE-NONE (config.DefaultComponentName)
+//   - Zone:         inventory venue (UNKNOWN)
+//   - IP:           inventory ip_address (Ruckus AP IP)
+func (w *Worker) applyDeviceMetadata(metric *models.MetricData, ap *models.APDetail) bool {
+	devInfo, found := w.getDeviceLookup().Lookup(ap.APMAC)
+	if !found {
+		return false
+	}
+
+	invMAC := normalizeMACIdentifier(devInfo.MACAddress)
+	invSerial := normalizeSerialIdentifier(devInfo.SerialNumber)
+
+	switch {
+	case invMAC != "":
+		metric.InstanceName = "MAC " + invMAC
+	case invSerial != "":
+		metric.InstanceName = "SERIAL " + invSerial
+	case devInfo.ObjectKey != "":
+		metric.InstanceName = "JIRAKEY " + devInfo.ObjectKey
+	default:
+		return false
+	}
+
+	fallback := w.config.Ruckus.DefaultComponentName
+
+	metric.DisplayName = ap.DeviceName
+	if metric.DisplayName == "" {
+		metric.DisplayName = fallback
+	}
+
+	metric.ComponentName = fallback
+	if devInfo.ComponentName != "" && devInfo.ComponentName != "NONE-NONE" {
+		metric.ComponentName = devInfo.ComponentName
+	}
+
+	metric.Zone = "UNKNOWN"
+	if devInfo.Venue != "" {
+		metric.Zone = devInfo.Venue
+	}
+
+	metric.IP = ap.IP
+	if devInfo.IPAddress != "" {
+		metric.IP = devInfo.IPAddress
+	}
+
+	return true
 }
 
 // New streaming collection method using bulk query
@@ -166,8 +314,19 @@ func (w *Worker) collectAndSendStreaming() {
 			chunkMetrics = append(chunkMetrics, *metric)
 		}
 
-		// Process zone mappings
-		chunkMetrics = models.ProcessZoneMappings(chunkMetrics)
+		// Apply device inventory metadata (instance name, display name, component, zone, ip).
+		// Devices not found in the inventory are discarded and not reported to InsightFinder.
+		filtered := make([]models.MetricData, 0, len(chunkMetrics))
+		for i := range chunkMetrics {
+			if w.applyDeviceMetadata(&chunkMetrics[i], &enrichedChunk[i]) {
+				filtered = append(filtered, chunkMetrics[i])
+			}
+		}
+		dropped := len(chunkMetrics) - len(filtered)
+		if dropped > 0 {
+			logrus.Infof("Discarded %d AP(s) not found in device inventory", dropped)
+		}
+		chunkMetrics = filtered
 
 		if w.testMode {
 			// Write chunk to test file
