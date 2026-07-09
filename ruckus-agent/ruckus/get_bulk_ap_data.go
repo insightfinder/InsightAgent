@@ -10,6 +10,24 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// GetAllAPIdentifiers fetches MAC+serial+IP for every AP (for device inventory lookup)
+func (s *Service) GetAllAPIdentifiers() ([]APIdentifier, error) {
+	details, err := s.GetAllAPDetailsBulk()
+	if err != nil {
+		return nil, err
+	}
+	identifiers := make([]APIdentifier, 0, len(details))
+	for _, ap := range details {
+		identifiers = append(identifiers, APIdentifier{
+			MAC:    ap.APMAC,
+			Serial: ap.Serial,
+			IP:     ap.IP,
+			Name:   ap.DeviceName,
+		})
+	}
+	return identifiers, nil
+}
+
 // Get all AP details using bulk query with concurrent pagination
 func (s *Service) GetAllAPDetailsBulk() ([]models.APDetail, error) {
 	logrus.Info("Starting bulk AP details collection using concurrent pagination")

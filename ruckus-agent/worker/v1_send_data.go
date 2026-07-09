@@ -44,9 +44,6 @@ func (w *Worker) collectAllBulk() error {
 		metrics = append(metrics, *metric)
 	}
 
-	// Process zone mappings
-	metrics = models.ProcessZoneMappings(metrics)
-
 	if w.testMode {
 		// Save to test file
 		testFile, err := w.createTestFile("bulk_all_data")
