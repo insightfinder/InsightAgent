@@ -158,6 +158,20 @@ async def get_device(identifier: str, session: AsyncSession = Depends(get_sessio
     return _device_to_dict(device)
 
 
+@app.get("/devices/by-zabbix-host-id/{host_id}", dependencies=[Depends(require_api_key)])
+async def get_device_by_zabbix_host_id(host_id: str, session: AsyncSession = Depends(get_session)):
+    """
+    Look up a device strictly by zabbix_host_id — no fallback to id/name/ip/etc.
+    Use this instead of /devices/{identifier} when the identifier is a Zabbix host id,
+    since that endpoint can match a different device's internal id/object_key first.
+    """
+    repo = DeviceRepository(session)
+    device = await repo.find_by_zabbix_host_id(host_id)
+    if not device:
+        raise HTTPException(status_code=404, detail=f"Device not found for zabbix_host_id: {host_id}")
+    return _device_to_dict(device)
+
+
 @app.get("/devices", dependencies=[Depends(require_api_key)])
 async def search_devices(
     ip: Optional[str] = None,
@@ -210,6 +224,34 @@ async def get_downstream(
     device = await repo.find_device(identifier)
     if not device:
         raise HTTPException(status_code=404, detail=f"Device not found: {identifier}")
+    return await repo.get_downstream(device.id, max_depth=max_depth)
+
+
+@app.get("/devices/by-zabbix-host-id/{host_id}/upstream", dependencies=[Depends(require_api_key)])
+async def get_upstream_by_zabbix_host_id(
+    host_id: str,
+    max_depth: int = 10,
+    session: AsyncSession = Depends(get_session),
+):
+    """All nodes that feed into this device (ancestors / upstream path), looked up strictly by zabbix_host_id."""
+    repo = DeviceRepository(session)
+    device = await repo.find_by_zabbix_host_id(host_id)
+    if not device:
+        raise HTTPException(status_code=404, detail=f"Device not found for zabbix_host_id: {host_id}")
+    return await repo.get_upstream(device.id, max_depth=max_depth)
+
+
+@app.get("/devices/by-zabbix-host-id/{host_id}/downstream", dependencies=[Depends(require_api_key)])
+async def get_downstream_by_zabbix_host_id(
+    host_id: str,
+    max_depth: int = 10,
+    session: AsyncSession = Depends(get_session),
+):
+    """All nodes that depend on this device (descendants / downstream path), looked up strictly by zabbix_host_id."""
+    repo = DeviceRepository(session)
+    device = await repo.find_by_zabbix_host_id(host_id)
+    if not device:
+        raise HTTPException(status_code=404, detail=f"Device not found for zabbix_host_id: {host_id}")
     return await repo.get_downstream(device.id, max_depth=max_depth)
 
 

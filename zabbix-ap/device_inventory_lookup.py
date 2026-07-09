@@ -50,13 +50,17 @@ _session.headers.update({"Accept": "application/json", "X-API-Key": INVENTORY_AP
 _session.verify = False
 
 
-def lookup_device(identifier: str):
-    """GET /devices/{identifier}.
+def lookup_device(identifier: str, by_zabbix_host_id: bool = False):
+    """GET /devices/{identifier}, or GET /devices/by-zabbix-host-id/{identifier} when
+    by_zabbix_host_id=True (strict zabbix_host_id match — avoids colliding with an
+    unrelated device whose own id/object_key happens to equal the same numeric string).
     Returns:
       list of dicts  — success (empty list = 404 / not found)
       None           — network/server error (caller should treat as API down)
     """
-    url = "{}/devices/{}".format(INVENTORY_BASE_URL, urllib.parse.quote(str(identifier), safe=""))
+    quoted = urllib.parse.quote(str(identifier), safe="")
+    path = "devices/by-zabbix-host-id/{}".format(quoted) if by_zabbix_host_id else "devices/{}".format(quoted)
+    url = "{}/{}".format(INVENTORY_BASE_URL, path)
     try:
         resp = _session.get(url, timeout=10)
         if resp.status_code == 404:
@@ -82,10 +86,14 @@ def find_in_inventory(host: dict):
       (None,  None,        False)  — not found (all returned 404)
       (None,  None,        True)   — API/network error; existing entry should be preserved
     """
-    for ident in (host.get("jira_key"), host["hostid"], host["ip"]):
+    for ident, strict_zabbix_id in (
+        (host.get("jira_key"), False),
+        (host["hostid"], True),
+        (host["ip"], False),
+    ):
         if not ident:
             continue
-        result = lookup_device(ident)
+        result = lookup_device(ident, by_zabbix_host_id=strict_zabbix_id)
         if result is None:
             return None, None, True   # server error — stop, preserve existing data
         if result:
