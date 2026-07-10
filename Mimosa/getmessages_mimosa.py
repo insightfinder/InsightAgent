@@ -950,6 +950,7 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
         value = metric_data.get('value')
         timestamp = metric_data.get('timestamp', sampling_time)
         ipAddress = metric_data.get('ip_address', '')
+        device_name = metric_data.get('device_name', '')
 
         if value is None or metric_name is None:
             return
@@ -973,13 +974,15 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
             instance_name = 'SERIAL ' + inv_serial
         elif dev_info.get('object_key'):
             instance_name = 'JIRAKEY ' + dev_info['object_key']
+        elif metric_data.get('device_name'):
+            instance_name = str(metric_data['device_name'])
         else:
             # device not in inventory (or inventory record has no usable
             # identifier) — skip it, do not report to InsightFinder
             return
 
         # Display name: inventory name > fallback
-        display_name = dev_info.get('name') or default_component_name
+        display_name = metric_data.get('device_name') or dev_info.get('name') or 'UNKNOWN'
 
         # Component name: inventory manufacturer-device_class (exclude NONE-NONE) > fallback
         component_name = default_component_name
