@@ -313,7 +313,7 @@ def refresh_device_lookup(logger, devices, agent_config_vars):
 
     def _lookup_one(dev):
         # Priority chain mirrors the netexperience agent: MAC -> IP -> name
-        raw = _lookup_device([dev['mac'], dev['ip'], dev['name']], api_key, base_url, timeout, max_retry)
+        raw = _lookup_device([dev['mac'], dev['name']], api_key, base_url, timeout, max_retry)
         return dev['mac'], raw
 
     new_lookup = {}
