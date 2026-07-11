@@ -213,7 +213,7 @@ def _lookup_device_by_identifier(identifier, api_key, base_url, timeout, max_ret
 
 def _lookup_device(identifiers, api_key, base_url, timeout, max_retry):
     """Try each identifier in priority order; first match wins.
-    Mirrors the netexperience agent's MAC -> IP -> name fallback chain
+    Mirrors the mimosa agent's MAC -> IP -> name fallback chain
     (Mimosa devices carry no serial, so that rung is skipped)."""
     for ident in identifiers:
         raw = _lookup_device_by_identifier(ident, api_key, base_url, timeout, max_retry)
@@ -240,7 +240,7 @@ def _extract_device_info(raw):
 
 
 def normalize_mac_identifier(mac):
-    """Mirror the netexperience/zabbix agents' MAC normalization: replace ':'
+    """Mirror the mimosa/zabbix agents' MAC normalization: replace ':'
     with '-', trim leading/trailing '-', trim whitespace, and require at
     least one alphanumeric character. No case conversion — the original
     casing is preserved so the same physical device produces the same
@@ -254,7 +254,7 @@ def normalize_mac_identifier(mac):
 
 
 def normalize_serial_identifier(serial):
-    """Mirror the netexperience/zabbix agents' serial normalization: trim
+    """Mirror the mimosa/zabbix agents' serial normalization: trim
     whitespace and require at least one alphanumeric character."""
     if not serial:
         return ''
@@ -312,7 +312,7 @@ def refresh_device_lookup(logger, devices, agent_config_vars):
     start_time = time.time()
 
     def _lookup_one(dev):
-        # Priority chain mirrors the netexperience agent: MAC -> IP -> name
+        # Priority chain mirrors the mimosa agent: MAC -> IP -> name
         raw = _lookup_device([dev['mac'], dev['name']], api_key, base_url, timeout, max_retry)
         return dev['mac'], raw
 
@@ -940,7 +940,7 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
     
     # default_component_name doubles as the fallback for both component name and
     # display name when the device inventory lookup misses (mirrors the
-    # netexperience/zabbix agents' "AP-<Manufacturer>" fallback convention).
+    # mimosa/zabbix agents' "AP-<Manufacturer>" fallback convention).
     default_component_name = agent_config_vars.get('default_component_name', 'AP-Mimosa')
     sampling_interval = if_config_vars['sampling_interval']
 
@@ -1617,7 +1617,7 @@ def get_data_type_from_project_type(if_config_vars):
 
 def check_and_create_project(logger, if_config_vars):
     """Check if the project exists in InsightFinder; create it (with system) if not.
-    Mirrors the netexperience Go agent's IsProjectExist/CreateProject logic."""
+    Mirrors the mimosa Go agent's IsProjectExist/CreateProject logic."""
     if_url = if_config_vars['if_url']
     project_endpoint = urljoin(if_url, '/api/v1/check-and-add-custom-project')
     project_name = if_config_vars['project_name']
