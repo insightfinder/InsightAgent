@@ -49,9 +49,11 @@ class DeviceRepository:
 
     async def find_device(self, identifier: str) -> Optional[Device]:
         """Smart lookup by: Jira ID, object_key (IHS-xxxxx), name, device_name,
-        ip_address, mac_address, serial_number, or zabbix_host_id.
+        ip_address, mac_address, or serial_number.
 
-        Matching is case-insensitive on all fields.
+        Matching is case-insensitive on all fields. Does NOT match zabbix_host_id —
+        use find_by_zabbix_host_id() for that, since a zabbix host id can collide
+        with an unrelated device's own id/object_key.
         """
         ident_lower = identifier.lower()
         stmt = (
@@ -64,8 +66,22 @@ class DeviceRepository:
                 | (func.lower(Device.ip_address) == ident_lower)
                 | (func.lower(Device.mac_address) == ident_lower)
                 | (func.lower(Device.serial_number) == ident_lower)
-                | (func.lower(Device.zabbix_host_id) == ident_lower)
             )
+            .options(selectinload(Device.model))
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def find_by_zabbix_host_id(self, host_id: str) -> Optional[Device]:
+        """Strict lookup by zabbix_host_id only — no fallback to id/name/ip/etc.
+
+        Unlike find_device(), this cannot collide with a different device whose
+        internal id/object_key happens to equal the same numeric string.
+        """
+        stmt = (
+            select(Device)
+            .where(func.lower(Device.zabbix_host_id) == host_id.lower())
             .options(selectinload(Device.model))
             .limit(1)
         )
