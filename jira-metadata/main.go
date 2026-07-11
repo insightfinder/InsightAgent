@@ -159,11 +159,12 @@ type DeviceResponse struct {
 
 	// Human-readable names for the objects above. May be empty when the
 	// corresponding Jira object hasn't been created yet.
-	JiraDeviceName   string `json:"jira_device_name"`
-	JiraLocationName string `json:"jira_location_name"`
-	JiraSubvenueName string `json:"jira_subvenue_name"`
-	JiraVenueName    string `json:"jira_venue_name"`
-	JiraModelName    string `json:"jira_model_name"`
+	JiraDeviceName     string `json:"jira_device_name"`
+	JiraLocationName   string `json:"jira_location_name"`
+	JiraSubvenueName   string `json:"jira_subvenue_name"`
+	JiraVenueName      string `json:"jira_venue_name"`
+	JiraModelName      string `json:"jira_model_name"`
+	JiraModelclassName string `json:"jira_modelclass_name"`
 }
 
 // UpstreamDevice mirrors one entry of the GET /devices/{id}/upstream response.
@@ -335,7 +336,7 @@ func buildJiraFields(meta map[string]interface{}, fieldMapping map[string]string
 // their own field name with the raw value (e.g. "IHS-20846" or
 // "FC:11:65:B6:A3:42"). Empty/null values are omitted.
 func buildKeyJiraFields(device *DeviceResponse, upstreamDeviceKey, upstreamDeviceName, upstreamDeviceMac string) map[string]string {
-	out := make(map[string]string, 14)
+	out := make(map[string]string, 15)
 	add := func(key, value string) {
 		if value != "" {
 			out[key] = value
@@ -351,6 +352,7 @@ func buildKeyJiraFields(device *DeviceResponse, upstreamDeviceKey, upstreamDevic
 	add("jira_location_name", device.JiraLocationName)
 	add("jira_venue_name", device.JiraVenueName)
 	add("jira_model_name", device.JiraModelName)
+	add("jira_modelclass_name", device.JiraModelclassName)
 	add("jira_upstream_device_key", upstreamDeviceKey)
 	add("jira_upstream_device_name", upstreamDeviceName)
 	add("jira_upstream_device_mac", upstreamDeviceMac)

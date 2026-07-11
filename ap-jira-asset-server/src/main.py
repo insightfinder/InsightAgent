@@ -124,6 +124,11 @@ def _device_to_dict(device) -> Dict[str, Any]:
         "jira_subvenue_name": meta.get("subvenue"),
         "jira_venue_name": meta.get("venue"),
         "jira_model_name": device.model.name if device.model else None,
+        "jira_modelclass_name": (
+            f"{device.model.name} ({device.model.device_class})"
+            if device.model and device.model.device_class
+            else (device.model.name if device.model else None)
+        ),
     }
     if device.model:
         d["model"] = {
