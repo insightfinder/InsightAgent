@@ -213,8 +213,7 @@ def _lookup_device_by_identifier(identifier, api_key, base_url, timeout, max_ret
 
 def _lookup_device(identifiers, api_key, base_url, timeout, max_retry):
     """Try each identifier in priority order; first match wins.
-    Mirrors the mimosa agent's MAC -> IP -> name fallback chain
-    (Mimosa devices carry no serial, so that rung is skipped)."""
+    Mirrors the mimosa agent's MAC -> serial -> name fallback chain."""
     for ident in identifiers:
         raw = _lookup_device_by_identifier(ident, api_key, base_url, timeout, max_retry)
         if raw:
@@ -278,7 +277,7 @@ def _inventory_api_is_healthy(logger, base_url, timeout):
 
 def refresh_device_lookup(logger, devices, agent_config_vars):
     """Query the Asset Registry API for all devices (20 concurrent) and save to disk.
-    Each device is looked up by MAC -> IP -> name (first match wins); the result is
+    Each device is looked up by MAC -> serial -> name (first match wins); the result is
     cached under the device's lowercased MAC so parse_messages_mimosa can retrieve it.
     If the API is unreachable, keeps the existing lookup (devices fall back to UNKNOWN zone etc.)."""
     global DEVICE_LOOKUP
@@ -306,14 +305,15 @@ def refresh_device_lookup(logger, devices, agent_config_vars):
             'mac': mac.lower(),
             'ip': (d.get('ip_address') or '').strip(),
             'name': (d.get('device_name') or '').strip(),
+            'serial': (d.get('serial_number') or '').strip(),
         }
     device_list = list(uniq.values())
     logger.info(f'DeviceLookup: refreshing {len(device_list)} devices (concurrency=20)...')
     start_time = time.time()
 
     def _lookup_one(dev):
-        # Priority chain mirrors the mimosa agent: MAC -> IP -> name
-        raw = _lookup_device([dev['mac'], dev['name']], api_key, base_url, timeout, max_retry)
+        # Priority chain mirrors the mimosa agent: MAC -> serial -> name
+        raw = _lookup_device([dev['mac'], dev['serial'], dev['name']], api_key, base_url, timeout, max_retry)
         return dev['mac'], raw
 
     new_lookup = {}
@@ -467,6 +467,7 @@ def fetch_device_metrics_batch(session, mimosa_uri, network_id, action_names, de
                                     'device_type': device.get('deviceType', 'Unknown'),
                                     'ip_address': device.get('ipAddress', ''),
                                     'mac_address': device.get('macAddress', ''),
+                                    'serial_number': device.get('serialNumber', ''),
                                     'sw_version': device.get('swVersion', '')
                                 })
                     else:
@@ -599,6 +600,7 @@ def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_name
                                         'device_type': device.get('deviceType', 'Unknown'),
                                         'ip_address': device.get('ipAddress', ''),
                                         'mac_address': device.get('macAddress', ''),
+                                        'serial_number': device.get('serialNumber', ''),
                                         'sw_version': device.get('swVersion', '')
                                     })
                             return device_metrics, device_failures
@@ -686,6 +688,7 @@ def fetch_device_metrics_individual(session, mimosa_uri, network_id, action_name
                                         'device_type': device.get('deviceType', 'Unknown'),
                                         'ip_address': device.get('ipAddress', ''),
                                         'mac_address': device.get('macAddress', ''),
+                                        'serial_number': device.get('serialNumber', ''),
                                         'sw_version': device.get('swVersion', '')
                                     })
                         else:
