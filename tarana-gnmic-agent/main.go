@@ -14,13 +14,15 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/tarana/gnmic-agent/collector"
 	"github.com/tarana/gnmic-agent/config"
+	"github.com/tarana/gnmic-agent/devicelookup"
 	"github.com/tarana/gnmic-agent/insightfinder"
 	"github.com/tarana/gnmic-agent/models"
 )
 
 var (
-	configPath = flag.String("config", "config/config.yaml", "Path to configuration file")
-	logger     *logrus.Logger
+	configPath   = flag.String("config", "config/config.yaml", "Path to configuration file")
+	logger       *logrus.Logger
+	deviceLookup devicelookup.Lookup
 )
 
 func init() {
@@ -70,6 +72,8 @@ func main() {
 		logger.Warn("InsightFinder is disabled in configuration")
 	}
 
+	deviceLookup = devicelookup.Load()
+
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -81,13 +85,13 @@ func main() {
 	logger.Infof("Starting metrics collection loop (interval: %d seconds)", cfg.InsightFinder.SamplingInterval)
 
 	// Run first collection immediately
-	collectAndSend(metricsCollector, ifService, cfg.InsightFinder.Enabled)
+	collectAndSend(metricsCollector, ifService, cfg.InsightFinder.Enabled, cfg.DeviceInventory)
 
 	// Main loop
 	for {
 		select {
 		case <-ticker.C:
-			collectAndSend(metricsCollector, ifService, cfg.InsightFinder.Enabled)
+			collectAndSend(metricsCollector, ifService, cfg.InsightFinder.Enabled, cfg.DeviceInventory)
 		case sig := <-sigChan:
 			logger.Infof("Received signal: %v", sig)
 			logger.Info("Shutting down gracefully...")
@@ -97,7 +101,7 @@ func main() {
 }
 
 // collectAndSend collects metrics and sends them to InsightFinder
-func collectAndSend(collector *collector.Collector, ifService *insightfinder.Service, enabled bool) {
+func collectAndSend(collector *collector.Collector, ifService *insightfinder.Service, enabled bool, invCfg config.DeviceInventoryConfig) {
 	logger.Info("========================================================")
 	logger.Info("Starting metrics collection...")
 	logger.Info("========================================================")
@@ -122,6 +126,8 @@ func collectAndSend(collector *collector.Collector, ifService *insightfinder.Ser
 
 	// Send to InsightFinder if enabled
 	if enabled && ifService != nil {
+		refreshDeviceLookupIfNeeded(rnDevices, bnDevices, invCfg)
+
 		logger.Info("Converting metrics for InsightFinder...")
 
 		var allMetrics []models.MetricData
@@ -132,13 +138,7 @@ func collectAndSend(collector *collector.Collector, ifService *insightfinder.Ser
 				continue // Skip devices without hostnames
 			}
 
-			metricData := models.MetricData{
-				Timestamp:     device.Timestamp.UnixMilli(),
-				InstanceName:  insightfinder.CleanDeviceName(device.Hostname),
-				ComponentName: "RN-Tarana",
-				IP:            getIPFromSource(device.Source),
-				Data:          make(map[string]interface{}),
-			}
+			metricData := buildMetricData(device.Timestamp, device.Hostname, device.MACAddress, device.DeviceID, device.Source, "RN-Tarana")
 
 			// Add all metrics (convert to float64/int as appropriate)
 			// Add all metrics - check for empty strings, convert to float, and apply absolute value
@@ -192,13 +192,7 @@ func collectAndSend(collector *collector.Collector, ifService *insightfinder.Ser
 				continue // Skip devices without hostnames
 			}
 
-			metricData := models.MetricData{
-				Timestamp:     device.Timestamp.UnixMilli(),
-				InstanceName:  insightfinder.CleanDeviceName(device.Hostname),
-				ComponentName: "BN-Tarana",
-				IP:            getIPFromSource(device.Source),
-				Data:          make(map[string]interface{}),
-			}
+			metricData := buildMetricData(device.Timestamp, device.Hostname, device.MACAddress, device.Measurement, device.Source, "BN-Tarana")
 
 			// Add all metrics - convert negative values to positive
 			if device.ActiveConnections != "" {
@@ -251,6 +245,93 @@ func collectAndSend(collector *collector.Collector, ifService *insightfinder.Ser
 
 	logger.Info("Collection cycle completed")
 	logger.Info("========================================================")
+}
+
+// refreshDeviceLookupIfNeeded refreshes the device inventory cache (MAC -> serial ->
+// name, first match wins) from this cycle's devices, if the cache is empty or stale.
+func refreshDeviceLookupIfNeeded(rnDevices map[string]*collector.RNDevice, bnDevices map[string]*collector.BNDevice, invCfg config.DeviceInventoryConfig) {
+	if len(deviceLookup) > 0 && !devicelookup.IsStale(invCfg.RefreshHours) {
+		return
+	}
+
+	var items []devicelookup.Identifiers
+	for _, d := range rnDevices {
+		if d.Hostname == "" {
+			continue
+		}
+		items = append(items, devicelookup.Identifiers{
+			MAC:    devicelookup.NormalizeMAC(d.MACAddress),
+			Serial: devicelookup.NormalizeSerial(d.DeviceID),
+			Name:   insightfinder.CleanDeviceName(d.Hostname),
+		})
+	}
+	for _, d := range bnDevices {
+		if d.Hostname == "" {
+			continue
+		}
+		items = append(items, devicelookup.Identifiers{
+			MAC:    devicelookup.NormalizeMAC(d.MACAddress),
+			Serial: devicelookup.NormalizeSerial(d.Measurement),
+			Name:   insightfinder.CleanDeviceName(d.Hostname),
+		})
+	}
+	if len(items) == 0 {
+		return
+	}
+
+	logger.Infof("Refreshing device inventory lookup for %d devices...", len(items))
+	if newLookup := devicelookup.Refresh(invCfg, items); newLookup != nil {
+		deviceLookup = newLookup
+		logger.Infof("Device inventory lookup refreshed: %d entries", len(deviceLookup))
+	}
+}
+
+// buildMetricData builds a MetricData for one device, enriching its instance
+// name, component name, zone, and IP from the device inventory lookup when
+// available (MAC > serial > object key > own MAC > own serial > hostname).
+func buildMetricData(timestamp time.Time, hostname, mac, serial, source, defaultComponentName string) models.MetricData {
+	ownMAC := devicelookup.NormalizeMAC(mac)
+	ownSerial := devicelookup.NormalizeSerial(serial)
+	cleanedName := insightfinder.CleanDeviceName(hostname)
+
+	devInfo := deviceLookup.GetDeviceInfo(ownMAC, ownSerial, cleanedName)
+	invMAC := devicelookup.NormalizeMAC(devInfo.MACAddress)
+	invSerial := devicelookup.NormalizeSerial(devInfo.SerialNumber)
+
+	var instanceName string
+	switch {
+	case invMAC != "":
+		instanceName = "MAC " + invMAC
+	case invSerial != "":
+		instanceName = "SERIAL " + invSerial
+	case devInfo.ObjectKey != "":
+		instanceName = "JIRAKEY " + devInfo.ObjectKey
+	case ownMAC != "":
+		instanceName = "MAC " + ownMAC
+	case ownSerial != "":
+		instanceName = "SERIAL " + ownSerial
+	default:
+		instanceName = cleanedName
+	}
+
+	componentName := defaultComponentName
+	if devInfo.ComponentName != "" && devInfo.ComponentName != "NONE-NONE" {
+		componentName = devInfo.ComponentName
+	}
+
+	ip := getIPFromSource(source)
+	if devInfo.IPAddress != "" {
+		ip = devInfo.IPAddress
+	}
+
+	return models.MetricData{
+		Timestamp:     timestamp.UnixMilli(),
+		InstanceName:  instanceName,
+		ComponentName: componentName,
+		Zone:          devInfo.Venue,
+		IP:            ip,
+		Data:          make(map[string]interface{}),
+	}
 }
 
 // setupLogging configures the logger based on configuration

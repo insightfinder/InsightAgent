@@ -9,8 +9,8 @@ agent:
 
 # InfluxDB Configuration
 influxdb:
-  url: "http://localhost:9092"
-  token: "my-super-secret-auth-token"
+  url: "http://52.91.59.217:9092"
+  token: "bRNbK09AG0K9DbDa0tqzLygRrf9bgd"
   org: "tarana"
   bucket: "gnmic-data"
   
@@ -37,16 +37,28 @@ gnmic:
 collector:
   # Time range for querying metrics from InfluxDB
   time_range: "-5m"
+
+# Device Inventory API Configuration
+# Used to look up each device (by MAC, then serial number, then hostname) in the
+# Asset Registry so metrics can be enriched with the inventory's own identifiers,
+# component name, and venue/zone. Same API used by the mimosa and netexperience agents.
+device_inventory:
+  api_key: "accessparks-keyInsight-87654321"
+  base_url: "http://54.234.90.98"
+  timeout_sec: 5
+  max_retry: 2
+  retry_delay_ms: 500
+  refresh_hours: 24
   
 # InsightFinder Configuration
 insightfinder:
   enabled: true
   server_url: "https://stg.insightfinder.com"
-  username: ""
-  license_key: ""
+  username: "haichao_insightfinder"
+  license_key: "874c17a9982235e38f50f27b39fce68e4c7452fb"
   
   # Metrics Project Configuration
-  metrics_project_name: "tarana-gnmic-metrics"
+  metrics_project_name: "tarana-gnmic-metrics-1"
   metrics_system_name: "tarana-network"
   
   # Agent Settings
