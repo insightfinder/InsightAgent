@@ -965,9 +965,9 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
         dev_info = DEVICE_LOOKUP.get(mac_address.lower(), {}) if mac_address else {}
 
         # Instance name priority (matches the zabbix agent's device-inventory rules):
-        # MAC(inventory) > serial(inventory) > object_key(inventory).
-        # Only inventory identifiers are used — a device not found in the Asset
-        # Registry is dropped entirely (not reported to InsightFinder).
+        # MAC(inventory) > serial(inventory) > object_key(inventory) > MAC(Mimosa's own).
+        # A device not found in the Asset Registry falls back to its own MAC;
+        # only a device with no usable MAC at all is dropped.
         inv_mac = normalize_mac_identifier(dev_info.get('mac_address'))
         inv_serial = normalize_serial_identifier(dev_info.get('serial_number'))
 
@@ -977,15 +977,19 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
             instance_name = 'SERIAL ' + inv_serial
         elif dev_info.get('object_key'):
             instance_name = 'JIRAKEY ' + dev_info['object_key']
-        elif metric_data.get('device_name'):
-            instance_name = str(metric_data['device_name'])
         else:
-            # device not in inventory (or inventory record has no usable
-            # identifier) — skip it, do not report to InsightFinder
-            return
+            own_mac = normalize_mac_identifier(metric_data.get('mac_address'))
+            if own_mac:
+                instance_name = 'MAC ' + own_mac
+            else:
+                # no inventory match and no usable MAC of its own — skip it,
+                # do not report to InsightFinder
+                return
 
         # Display name: inventory name > fallback
         display_name = metric_data.get('device_name') or dev_info.get('name') or 'UNKNOWN'
+        # Underscores/colons read as noise in the IF UI — normalize to dashes
+        display_name = display_name.replace('_', '-').replace(':', '-')
 
         # Component name: inventory manufacturer-device_class (exclude NONE-NONE) > fallback
         component_name = default_component_name
