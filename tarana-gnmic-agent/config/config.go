@@ -9,11 +9,24 @@ import (
 
 // Config represents the entire configuration file
 type Config struct {
-	Agent         AgentConfig         `yaml:"agent"`
-	InfluxDB      InfluxDBConfig      `yaml:"influxdb"`
-	Gnmic         GnmicConfig         `yaml:"gnmic"`
-	Collector     CollectorConfig     `yaml:"collector"`
-	InsightFinder InsightFinderConfig `yaml:"insightfinder"`
+	Agent           AgentConfig           `yaml:"agent"`
+	InfluxDB        InfluxDBConfig        `yaml:"influxdb"`
+	Gnmic           GnmicConfig           `yaml:"gnmic"`
+	Collector       CollectorConfig       `yaml:"collector"`
+	InsightFinder   InsightFinderConfig   `yaml:"insightfinder"`
+	DeviceInventory DeviceInventoryConfig `yaml:"device_inventory"`
+}
+
+// DeviceInventoryConfig contains settings for looking up devices (by MAC,
+// serial number, or device name) in the Device Inventory / Asset Registry API.
+// Mirrors the config used by the mimosa and netexperience agents.
+type DeviceInventoryConfig struct {
+	APIKey       string `yaml:"api_key"`
+	BaseURL      string `yaml:"base_url"`
+	TimeoutSec   int    `yaml:"timeout_sec"`
+	MaxRetry     int    `yaml:"max_retry"`
+	RetryDelayMs int    `yaml:"retry_delay_ms"`
+	RefreshHours int    `yaml:"refresh_hours"`
 }
 
 // AgentConfig contains agent-level settings
@@ -115,6 +128,18 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 	if config.InsightFinder.InstanceType == "" {
 		config.InsightFinder.InstanceType = "Tarana"
+	}
+	if config.DeviceInventory.TimeoutSec == 0 {
+		config.DeviceInventory.TimeoutSec = 5
+	}
+	if config.DeviceInventory.MaxRetry == 0 {
+		config.DeviceInventory.MaxRetry = 2
+	}
+	if config.DeviceInventory.RetryDelayMs == 0 {
+		config.DeviceInventory.RetryDelayMs = 500
+	}
+	if config.DeviceInventory.RefreshHours == 0 {
+		config.DeviceInventory.RefreshHours = 24
 	}
 
 	return &config, nil

@@ -15,7 +15,8 @@ import (
 type RNDevice struct {
 	Hostname    string
 	Source      string
-	DeviceID    string
+	DeviceID    string // the RN's own serial number (connection_device-id tag)
+	MACAddress  string // the RN's own MAC address
 	Measurement string
 	Timestamp   time.Time
 	DLSNR       string
@@ -32,7 +33,8 @@ type RNDevice struct {
 type BNDevice struct {
 	Hostname          string
 	Source            string
-	Measurement       string
+	Measurement       string // also the BN's own serial number
+	MACAddress        string // the BN's own MAC address (from its first reporting component)
 	Timestamp         time.Time
 	ActiveConnections string
 	RXSignal0         string
@@ -328,6 +330,25 @@ func (c *Collector) CollectRNDevices() (map[string]*RNDevice, error) {
 		}
 	}
 
+	// Query MAC Address (the RN's own MAC, reported on its platform state)
+	c.logger.Info("Querying RN MAC Address...")
+	macQuery := fmt.Sprintf(`from(bucket: "%s")
+  |> range(start: %s)
+  |> filter(fn: (r) => r._field == "/connections/connection/platform/state/mac-address")
+  |> group(columns: ["_measurement", "source", "connection_device-id"])
+  |> last()`, c.config.InfluxBucket, c.config.TimeRange)
+
+	data, err = c.queryInflux(macQuery)
+	if err == nil {
+		rows, _ = c.parseCSVResponse(data)
+		for _, row := range rows {
+			key := fmt.Sprintf("%s|%s|%s", row.Measurement, row.Source, row.DeviceID)
+			if devices[key] != nil {
+				devices[key].MACAddress = row.Value
+			}
+		}
+	}
+
 	// Count devices with hostnames
 	hostnameCount := 0
 	for _, device := range devices {
@@ -417,6 +438,26 @@ func (c *Collector) CollectBNDevices() (map[string]*BNDevice, error) {
 				case "3":
 					devices[key].RXSignal3 = row.Value
 				}
+			}
+		}
+	}
+
+	// Query MAC Address (BN reports one per hardware component - digboard,
+	// rfboard, etc. - so take the first one seen per device, whichever it is)
+	c.logger.Info("Querying BN MAC Address...")
+	macQuery := fmt.Sprintf(`from(bucket: "%s")
+  |> range(start: %s)
+  |> filter(fn: (r) => r._field == "/platform/components/component/state/mac-address")
+  |> group(columns: ["_measurement", "source", "component_name"])
+  |> last()`, c.config.InfluxBucket, c.config.TimeRange)
+
+	data, err = c.queryInflux(macQuery)
+	if err == nil {
+		rows, _ = c.parseCSVResponse(data)
+		for _, row := range rows {
+			key := fmt.Sprintf("%s|%s", row.Measurement, row.Source)
+			if devices[key] != nil && devices[key].MACAddress == "" {
+				devices[key].MACAddress = row.Value
 			}
 		}
 	}
