@@ -4,6 +4,9 @@ conf.d/config.ini
 # Mimosa Agent Generated Files
 *.json
 
+# Raw API response samples (manual inspection dumps)
+raw_json_samples/
+
 # Cache and temporary files
 cache/
 *.db

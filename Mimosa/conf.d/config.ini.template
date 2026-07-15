@@ -14,11 +14,20 @@ api_batch_size = 25
 data_points_count = 5
 
 [agent]
-default_component_name =
+## Fallback componentName when a device is not found in the Device Inventory API (default: AP-Mimosa)
+default_component_name = AP-Mimosa
+## Fallback displayName when a device is not found in the Device Inventory API
+## and Mimosa itself reports no device name (default: UNKNOWN)
+default_display_name = UNKNOWN
 thread_pool = 5
 his_time_range =
 agent_http_proxy =
 agent_https_proxy =
+## Device Inventory API (MAC -> serial/venue/component lookup)
+device_inventory_api_key =
+device_inventory_base_url = http://54.234.90.98
+device_inventory_timeout_sec = 5
+device_inventory_max_retry = 2
 
 [insightfinder]
 user_name =

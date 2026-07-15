@@ -11,8 +11,11 @@ The Mimosa agent connects to Mimosa Cloud platform, retrieves device metrics in 
 - **Batch Processing**: Efficiently collects metrics from multiple devices in single API calls
 - **Configurable Data Points**: Collect multiple historical data points per metric (not just the latest)
 - **Device Filtering**: Option to limit the number of devices for testing or performance
-- **Component Name Mapping**: Configurable component names for better organization in InsightFinder
-- **Robust Error Handling**: Fallback mechanisms and retry logic
+- **MAC-based Instance Naming**: Instances are named by device MAC address for consistent identification
+- **Device Inventory Lookup**: Enriches instances with serial/venue/component data from the Device Inventory API (cached in `devicelookup.json`, refreshed every 24h)
+- **Instance Metadata**: Sends display name, component name, zone, and IP via the `im` field of the v2 metric payload
+- **Auto Project Creation**: Creates the InsightFinder project (and system) automatically if it doesn't exist
+- **Robust Error Handling**: Fallback mechanisms and retry logic; inventory API outages fall back to cached/default values
 - **Debug Output**: Saves collected data to JSON files for inspection
 
 ## Prerequisites
@@ -56,9 +59,13 @@ Edit `conf.d/config.ini` with your specific settings:
 
 | Parameter | Description | Required | Default | Example |
 |-----------|-------------|----------|---------|---------|
-| `default_component_name` | Component name for InsightFinder | No | `""` | `mimosa_network` |
+| `default_component_name` | Fallback for both display name and component name when device not in inventory | No | `AP-Mimosa` | `AP-Mimosa` |
 | `thread_pool` | Number of worker threads | No | `20` | `5` |
 | `his_time_range` | Historical time range (not supported) | No | `""` | - |
+| `device_inventory_api_key` | Device Inventory API key | No | `""` | `your-api-key` |
+| `device_inventory_base_url` | Device Inventory API base URL | No | `""` | `http://54.234.90.98` |
+| `device_inventory_timeout_sec` | Inventory API request timeout (seconds) | No | `5` | `5` |
+| `device_inventory_max_retry` | Inventory API retry attempts | No | `2` | `2` |
 
 ### InsightFinder Settings (`[insightfinder]` section)
 
@@ -108,6 +115,31 @@ This will:
 - Show what would be sent to InsightFinder
 - Skip actual data transmission
 
+## Instance Naming & Metadata
+
+The agent maintains a device lookup cache (`devicelookup.json`) built from the Device Inventory API, queried by device MAC address and refreshed every 24 hours. If the inventory API is unreachable (health check on `/health` fails), the existing cache is kept and unmatched devices use fallback values.
+
+Instance name priority (matches the netexperience/zabbix agents' device-inventory rules):
+
+1. `MAC 20-b5-c6-f0-68-66` — MAC from device inventory (colons replaced by dashes, original casing preserved)
+2. `SERIAL <serial>` — serial number from device inventory
+3. `JIRAKEY <object_key>` — device inventory object key
+4. `MAC <mac>` — MAC address reported by Mimosa (normalized the same way), used if the inventory lookup missed
+5. Sanitized Mimosa device name
+
+Instance metadata sent with each metric payload (`im` field):
+
+| Field | Source | Fallback |
+|-------|--------|----------|
+| Display name (`idn`) | Mimosa device friendly name | `default_component_name` (used when Mimosa reports no device name) |
+| Component name (`cn`) | Inventory `manufacturer-device_class` (e.g. `Mimosa-Radio+Antenna`) | `default_component_name` (used when the device is not in inventory) |
+| Zone (`z`) | Inventory `meta.venue` | `UNKNOWN` |
+| IP (`i`) | Inventory `ip_address` | Mimosa device IP |
+
+`default_component_name` (config: `[agent]` section, default `AP-Mimosa`) is a single fallback keyword reused for both display name and component name, mirroring the `AP-<Manufacturer>` convention used by the netexperience agent's `AP-Edgecore` fallback.
+
+Note: metadata is applied asynchronously by the InsightFinder backend — display names/zones may take a few minutes to appear after the first data upload.
+
 ## Data Collection Behavior
 
 ### Single Data Point (Default)
@@ -133,6 +165,7 @@ The agent creates these files for debugging and inspection:
 
 - `mimosa_metrics_data.json` - Raw metrics data from Mimosa API
 - `mimosa_insightfinder_data.json` - Formatted data sent to InsightFinder
+- `devicelookup.json` - Device Inventory lookup cache (MAC -> serial/venue/component)
 - `cache/cache.db` - SQLite cache for device aliases
 
 ## Metrics Collected
