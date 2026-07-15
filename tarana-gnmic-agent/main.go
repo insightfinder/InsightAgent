@@ -316,14 +316,12 @@ func buildMetricData(timestamp time.Time, hostname, mac, serial, source, default
 	}
 
 	// Display name: the device's own raw hostname (as reported, uncleaned) >
-	// inventory name > fallback. Sent to InsightFinder as-is - it must not
-	// collapse to the same formatted "MAC ..."/"SERIAL ..." instanceName.
+	// inventory name. Sent to InsightFinder as-is - it must not collapse to
+	// the same formatted "MAC ..."/"SERIAL ..." instanceName. Left blank (not
+	// defaulted) when neither source has one, so it's simply omitted.
 	displayName := hostname
 	if displayName == "" {
 		displayName = devInfo.Name
-	}
-	if displayName == "" {
-		displayName = defaults.DisplayName
 	}
 
 	componentName := defaultComponentName
