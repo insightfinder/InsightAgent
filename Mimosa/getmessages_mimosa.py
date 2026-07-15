@@ -971,11 +971,11 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
         inv_serial = normalize_serial_identifier(dev_info.get('serial_number'))
 
         if inv_mac:
-            instance_name = ('MAC ' + inv_mac).upper()
+            instance_name = 'MAC ' + inv_mac
         elif inv_serial:
-            instance_name = ('SERIAL ' + inv_serial).upper()
+            instance_name = 'SERIAL ' + inv_serial
         elif dev_info.get('object_key'):
-            instance_name = ('JIRAKEY ' + dev_info['object_key']).upper()
+            instance_name = 'JIRAKEY ' + dev_info['object_key']
         elif metric_data.get('device_name'):
             instance_name = str(metric_data['device_name'])
         else:
@@ -994,8 +994,8 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
         if dev_info.get('component_name') and dev_info['component_name'] != 'NONE-NONE':
             component_name = dev_info['component_name']
 
-        # Zone: inventory meta.venue > UNKNOWN
-        zone = dev_info.get('venue') or 'UNKNOWN'
+        # Zone: inventory meta.venue > empty
+        zone = dev_info.get('venue') or ''
 
         # IP: devicelookup > Mimosa API
         if dev_info.get('ip_address'):
