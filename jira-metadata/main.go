@@ -336,7 +336,7 @@ func buildJiraFields(meta map[string]interface{}, fieldMapping map[string]string
 // their own field name with the raw value (e.g. "IHS-20846" or
 // "FC:11:65:B6:A3:42"). Empty/null values are omitted.
 func buildKeyJiraFields(device *DeviceResponse, upstreamDeviceKey, upstreamDeviceName, upstreamDeviceMac string) map[string]string {
-	out := make(map[string]string, 15)
+	out := make(map[string]string, 16)
 	add := func(key, value string) {
 		if value != "" {
 			out[key] = value
@@ -353,6 +353,9 @@ func buildKeyJiraFields(device *DeviceResponse, upstreamDeviceKey, upstreamDevic
 	add("jira_venue_name", device.JiraVenueName)
 	add("jira_model_name", device.JiraModelName)
 	add("jira_modelclass_name", device.JiraModelclassName)
+	if manufacturer, ok := device.Meta["manufacturer"].(string); ok {
+		add("jira_technology_name", manufacturer)
+	}
 	add("jira_upstream_device_key", upstreamDeviceKey)
 	add("jira_upstream_device_name", upstreamDeviceName)
 	add("jira_upstream_device_mac", upstreamDeviceMac)
