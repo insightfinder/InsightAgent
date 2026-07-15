@@ -1,0 +1,8 @@
+# Device inventory lookup cache (generated at runtime by devicelookup.go)
+devicelookup.json
+
+# Debug/example data dumps
+example-data/
+
+# Real config with live credentials - copy config.yaml.example to config.yaml
+config/config.yaml
