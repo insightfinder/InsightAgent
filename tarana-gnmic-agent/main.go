@@ -85,13 +85,13 @@ func main() {
 	logger.Infof("Starting metrics collection loop (interval: %d seconds)", cfg.InsightFinder.SamplingInterval)
 
 	// Run first collection immediately
-	collectAndSend(metricsCollector, ifService, cfg.InsightFinder.Enabled, cfg.DeviceInventory)
+	collectAndSend(metricsCollector, ifService, cfg.InsightFinder.Enabled, cfg.DeviceInventory, cfg.Defaults)
 
 	// Main loop
 	for {
 		select {
 		case <-ticker.C:
-			collectAndSend(metricsCollector, ifService, cfg.InsightFinder.Enabled, cfg.DeviceInventory)
+			collectAndSend(metricsCollector, ifService, cfg.InsightFinder.Enabled, cfg.DeviceInventory, cfg.Defaults)
 		case sig := <-sigChan:
 			logger.Infof("Received signal: %v", sig)
 			logger.Info("Shutting down gracefully...")
@@ -101,7 +101,7 @@ func main() {
 }
 
 // collectAndSend collects metrics and sends them to InsightFinder
-func collectAndSend(collector *collector.Collector, ifService *insightfinder.Service, enabled bool, invCfg config.DeviceInventoryConfig) {
+func collectAndSend(collector *collector.Collector, ifService *insightfinder.Service, enabled bool, invCfg config.DeviceInventoryConfig, defaults config.DefaultsConfig) {
 	logger.Info("========================================================")
 	logger.Info("Starting metrics collection...")
 	logger.Info("========================================================")
@@ -138,7 +138,7 @@ func collectAndSend(collector *collector.Collector, ifService *insightfinder.Ser
 				continue // Skip devices without hostnames
 			}
 
-			metricData := buildMetricData(device.Timestamp, device.Hostname, device.MACAddress, device.DeviceID, device.Source, "RN-Tarana")
+			metricData := buildMetricData(device.Timestamp, device.Hostname, device.MACAddress, device.DeviceID, device.Source, defaults.ComponentNameRN, defaults)
 
 			// Add all metrics (convert to float64/int as appropriate)
 			// Add all metrics - check for empty strings, convert to float, and apply absolute value
@@ -192,7 +192,7 @@ func collectAndSend(collector *collector.Collector, ifService *insightfinder.Ser
 				continue // Skip devices without hostnames
 			}
 
-			metricData := buildMetricData(device.Timestamp, device.Hostname, device.MACAddress, device.Measurement, device.Source, "BN-Tarana")
+			metricData := buildMetricData(device.Timestamp, device.Hostname, device.MACAddress, device.Measurement, device.Source, defaults.ComponentNameBN, defaults)
 
 			// Add all metrics - convert negative values to positive
 			if device.ActiveConnections != "" {
@@ -287,9 +287,11 @@ func refreshDeviceLookupIfNeeded(rnDevices map[string]*collector.RNDevice, bnDev
 }
 
 // buildMetricData builds a MetricData for one device, enriching its instance
-// name, component name, zone, and IP from the device inventory lookup when
-// available (MAC > serial > object key > own MAC > own serial > hostname).
-func buildMetricData(timestamp time.Time, hostname, mac, serial, source, defaultComponentName string) models.MetricData {
+// name, display name, component name, zone, and IP from the device inventory
+// lookup when available (MAC > serial > object key > hostname). A device
+// inventory miss never drops the device - it falls back to the device's own
+// reported hostname/defaults instead.
+func buildMetricData(timestamp time.Time, hostname, mac, serial, source, defaultComponentName string, defaults config.DefaultsConfig) models.MetricData {
 	ownMAC := devicelookup.NormalizeMAC(mac)
 	ownSerial := devicelookup.NormalizeSerial(serial)
 	cleanedName := insightfinder.CleanDeviceName(hostname)
@@ -298,6 +300,9 @@ func buildMetricData(timestamp time.Time, hostname, mac, serial, source, default
 	invMAC := devicelookup.NormalizeMAC(devInfo.MACAddress)
 	invSerial := devicelookup.NormalizeSerial(devInfo.SerialNumber)
 
+	// Only inventory-returned identifiers are used here - a device inventory
+	// miss falls straight through to the device's own hostname, not its own
+	// MAC/serial.
 	var instanceName string
 	switch {
 	case invMAC != "":
@@ -306,12 +311,19 @@ func buildMetricData(timestamp time.Time, hostname, mac, serial, source, default
 		instanceName = "SERIAL " + invSerial
 	case devInfo.ObjectKey != "":
 		instanceName = "JIRAKEY " + devInfo.ObjectKey
-	case ownMAC != "":
-		instanceName = "MAC " + ownMAC
-	case ownSerial != "":
-		instanceName = "SERIAL " + ownSerial
 	default:
 		instanceName = cleanedName
+	}
+
+	// Display name: the device's own raw hostname (as reported, uncleaned) >
+	// inventory name > fallback. Sent to InsightFinder as-is - it must not
+	// collapse to the same formatted "MAC ..."/"SERIAL ..." instanceName.
+	displayName := hostname
+	if displayName == "" {
+		displayName = devInfo.Name
+	}
+	if displayName == "" {
+		displayName = defaults.DisplayName
 	}
 
 	componentName := defaultComponentName
@@ -319,16 +331,29 @@ func buildMetricData(timestamp time.Time, hostname, mac, serial, source, default
 		componentName = devInfo.ComponentName
 	}
 
-	ip := getIPFromSource(source)
-	if devInfo.IPAddress != "" {
-		ip = devInfo.IPAddress
+	// Zone: inventory venue > fallback (an unmatched device must not show a
+	// blank zone).
+	zone := devInfo.Venue
+	if zone == "" {
+		zone = defaults.Zone
+	}
+
+	// IP: inventory ip_address > the influx "source" tag, but only if that
+	// tag is a real address - "0.0.0.0" is gNMI's unset/unreachable-target
+	// placeholder, not a real device IP, and must not be reported as one.
+	ip := devInfo.IPAddress
+	if ip == "" {
+		if sourceIP := getIPFromSource(source); sourceIP != "" && sourceIP != "0.0.0.0" {
+			ip = sourceIP
+		}
 	}
 
 	return models.MetricData{
 		Timestamp:     timestamp.UnixMilli(),
 		InstanceName:  instanceName,
+		DisplayName:   displayName,
 		ComponentName: componentName,
-		Zone:          devInfo.Venue,
+		Zone:          zone,
 		IP:            ip,
 		Data:          make(map[string]interface{}),
 	}
