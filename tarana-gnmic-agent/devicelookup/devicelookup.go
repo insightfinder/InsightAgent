@@ -29,6 +29,7 @@ type DeviceInfo struct {
 	SerialNumber  string `json:"serial_number"`
 	ObjectKey     string `json:"object_key"`
 	MACAddress    string `json:"mac_address"`
+	Name          string `json:"name"`
 	Venue         string `json:"venue"`
 	ComponentName string `json:"component_name"`
 	IPAddress     string `json:"ip_address"`
@@ -326,12 +327,16 @@ func extractDeviceInfo(raw map[string]interface{}) DeviceInfo {
 		SerialNumber:  stringVal(dev, "serial_number"),
 		ObjectKey:     stringVal(dev, "object_key"),
 		MACAddress:    stringVal(dev, "mac_address"),
+		Name:          stringVal(dev, "name"),
 		Venue:         stringVal(meta, "venue"),
 		ComponentName: manufacturer + "-" + deviceClass,
 		IPAddress:     stringVal(dev, "ip_address"),
 	}
 }
 
+// stringVal reads a string field, treating the inventory's own "unknown
+// value" placeholders ("-", "n/a", etc.) the same as a missing field so
+// callers can fall back to the device's own reported identity instead.
 func stringVal(m map[string]interface{}, key string) string {
 	if m == nil {
 		return ""
@@ -341,7 +346,23 @@ func stringVal(m map[string]interface{}, key string) string {
 		return ""
 	}
 	s, _ := v.(string)
+	if isPlaceholder(s) {
+		return ""
+	}
 	return s
+}
+
+// isPlaceholder recognizes the inventory's various "no data" conventions:
+// known placeholder words, plus - generically - any value with no letter or
+// digit at all (".", "-", "--", "...", "?", etc.), since a real MAC/IP/serial
+// always contains at least one alphanumeric character.
+func isPlaceholder(s string) bool {
+	trimmed := strings.TrimSpace(s)
+	switch strings.ToLower(trimmed) {
+	case "", "n/a", "na", "none", "null", "unknown", "tbd":
+		return true
+	}
+	return !containsAlnum(trimmed)
 }
 
 func firstNonEmpty(values ...string) string {
