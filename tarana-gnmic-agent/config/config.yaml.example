@@ -54,9 +54,10 @@ device_inventory:
   refresh_hours: 24
 
 # Fallback values used when a device isn't found in the Device Inventory (or
-# the inventory record is missing that particular field)
+# the inventory record is missing that particular field). display_name has no
+# fallback - if the device's own hostname and the inventory name are both
+# missing, it's simply omitted.
 defaults:
-  display_name: "UNKNOWN"
   zone: "UNKNOWN"
   component_name_rn: "RN-Tarana"
   component_name_bn: "BN-Tarana"

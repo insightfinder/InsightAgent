@@ -21,7 +21,6 @@ type Config struct {
 // DefaultsConfig contains the fallback values used when a device isn't found
 // in the Device Inventory (or the inventory record is missing that field).
 type DefaultsConfig struct {
-	DisplayName     string `yaml:"display_name"`
 	Zone            string `yaml:"zone"`
 	ComponentNameRN string `yaml:"component_name_rn"`
 	ComponentNameBN string `yaml:"component_name_bn"`
@@ -150,9 +149,6 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 	if config.DeviceInventory.RefreshHours == 0 {
 		config.DeviceInventory.RefreshHours = 24
-	}
-	if config.Defaults.DisplayName == "" {
-		config.Defaults.DisplayName = "UNKNOWN"
 	}
 	if config.Defaults.Zone == "" {
 		config.Defaults.Zone = "UNKNOWN"
