@@ -941,10 +941,11 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
                           metric_data, sampling_time):
     """Parse Mimosa metric data and add to buffer"""
     
-    # default_component_name doubles as the fallback for both component name and
-    # display name when the device inventory lookup misses (mirrors the
-    # mimosa/zabbix agents' "AP-<Manufacturer>" fallback convention).
+    # default_component_name is the fallback componentName when the device
+    # inventory lookup misses (mirrors the mimosa/zabbix agents'
+    # "AP-<Manufacturer>" fallback convention).
     default_component_name = agent_config_vars.get('default_component_name', 'AP-Mimosa')
+    default_display_name = agent_config_vars.get('default_display_name', 'UNKNOWN')
     sampling_interval = if_config_vars['sampling_interval']
 
     try:
@@ -965,31 +966,28 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
         dev_info = DEVICE_LOOKUP.get(mac_address.lower(), {}) if mac_address else {}
 
         # Instance name priority (matches the zabbix agent's device-inventory rules):
-        # MAC(inventory) > serial(inventory) > object_key(inventory) > MAC(Mimosa's own).
-        # A device not found in the Asset Registry falls back to its own MAC;
-        # only a device with no usable MAC at all is dropped.
+        # MAC(inventory) > serial(inventory) > object_key(inventory) > device_name (Mimosa's own).
         inv_mac = normalize_mac_identifier(dev_info.get('mac_address'))
         inv_serial = normalize_serial_identifier(dev_info.get('serial_number'))
 
         if inv_mac:
-            instance_name = 'MAC ' + inv_mac
+            instance_name = ('MAC ' + inv_mac).upper()
         elif inv_serial:
-            instance_name = 'SERIAL ' + inv_serial
+            instance_name = ('SERIAL ' + inv_serial).upper()
         elif dev_info.get('object_key'):
-            instance_name = 'JIRAKEY ' + dev_info['object_key']
+            instance_name = ('JIRAKEY ' + dev_info['object_key']).upper()
+        elif metric_data.get('device_name'):
+            instance_name = str(metric_data['device_name'])
         else:
-            own_mac = normalize_mac_identifier(metric_data.get('mac_address'))
-            if own_mac:
-                instance_name = 'MAC ' + own_mac
-            else:
-                # no inventory match and no usable MAC of its own — skip it,
-                # do not report to InsightFinder
-                return
+            # device not in inventory (or inventory record has no usable
+            # identifier) — skip it, do not report to InsightFinder
+            return
 
-        # Display name: inventory name > fallback
-        display_name = metric_data.get('device_name') or dev_info.get('name') or 'UNKNOWN'
-        # Underscores/colons read as noise in the IF UI — normalize to dashes
-        display_name = display_name.replace('_', '-').replace(':', '-')
+        # Underscores/colons are not safe instance-identifier characters — normalize to dashes
+        instance_name = instance_name.replace('_', '-').replace(':', '-')
+
+        # Display name: inventory name > fallback — sent to InsightFinder as-is, no cleanup
+        display_name = metric_data.get('device_name') or dev_info.get('name') or default_display_name
 
         # Component name: inventory manufacturer-device_class (exclude NONE-NONE) > fallback
         component_name = default_component_name
@@ -1081,6 +1079,7 @@ def get_agent_config_vars(logger, config_ini):
         agent_section = 'agent'
         thread_pool = config_parser.getint(agent_section, 'thread_pool', fallback=20)
         default_component_name = config_parser.get(agent_section, 'default_component_name', fallback='')
+        default_display_name = config_parser.get(agent_section, 'default_display_name', fallback='UNKNOWN')
         instance_name = config_parser.get(agent_section, 'instance_name', fallback='mimosa_instance')
 
         # Device Inventory API settings (for MAC -> serial/venue/component lookup)
@@ -1102,6 +1101,7 @@ def get_agent_config_vars(logger, config_ini):
             'metrics_config': metrics_config,
             'thread_pool': thread_pool,
             'default_component_name': default_component_name,
+            'default_display_name': default_display_name,
             'instance_name': instance_name,
             'device_inventory_api_key': device_inventory_api_key,
             'device_inventory_base_url': device_inventory_base_url,
