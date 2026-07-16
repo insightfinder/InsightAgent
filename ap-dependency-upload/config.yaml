@@ -9,6 +9,18 @@ asset_server:
   api_key: ""
   # max_depth param sent to GET /devices/{id}/upstream. Defaults to 1 (immediate parent only).
   upstream_max_depth: 1
+  # Manufacturer/model pairs treated as passive pass-through hardware that is
+  # never itself a monitored instance. When an instance's immediate (depth-1)
+  # upstream device matches one of these, the depth-2 device from the same
+  # upstream lookup is ALSO wired up as a parent of the instance (in addition
+  # to the normal depth-1 relation), so the instance still gets a valid parent
+  # once the unmonitored depth-1 device is filtered out. Automatically bumps
+  # the effective upstream lookup depth to at least 2 when non-empty.
+  passthrough_devices:
+    - manufacturer: "example-manufacturer1"
+      model_name: "example-model1"
+    - manufacturer: "example-manufacturer2"
+      model_name: "example-model2"
 
 # Causal dependency group that every project's relations are uploaded into.
 causal_key: ""
@@ -26,3 +38,8 @@ max_workers: 20
 
 # Batch size for InsightFinder groupingstorage IP lookups (unprefixed instance fallback).
 metadata_batch_size: 500
+
+# Local JSON dump of every final validated parent/child relation (child, parent, zone,
+# source project and InsightFinder display name for both ends), for debugging/search.
+# Written on every run, including -dry-run. Defaults to "relations_debug.json".
+debug_output_file: "relations_debug.json"

@@ -66,6 +66,11 @@ type Config struct {
 	FreshOnly         bool        `yaml:"fresh_only"`
 	MaxWorkers        int         `yaml:"max_workers"`
 	MetadataBatchSize int         `yaml:"metadata_batch_size"`
+	// DebugOutputFile is where the final validated parent/child relations are
+	// dumped as JSON (with source project and InsightFinder display name for
+	// both ends of every relation), for local debugging/search. Written on
+	// every run, including -dry-run. Defaults to "relations_debug.json".
+	DebugOutputFile string `yaml:"debug_output_file"`
 }
 
 type IFConfig struct {
@@ -156,6 +161,9 @@ func validateConfig(cfg *Config) error {
 	}
 	if cfg.MetadataBatchSize <= 0 {
 		cfg.MetadataBatchSize = 500
+	}
+	if cfg.DebugOutputFile == "" {
+		cfg.DebugOutputFile = "relations_debug.json"
 	}
 	return nil
 }
@@ -348,6 +356,18 @@ type relationCandidate struct {
 	Zone   string
 }
 
+// relationDebugEntry is one validated, deduped parent→child relation enriched
+// with debugging context, dumped to Config.DebugOutputFile every run.
+type relationDebugEntry struct {
+	Child               string `json:"child"`
+	Parent              string `json:"parent"`
+	Zone                string `json:"zone"`
+	ChildSourceProject  string `json:"child_source_project"`
+	ParentSourceProject string `json:"parent_source_project"`
+	ChildDisplayName    string `json:"child_display_name"`
+	ParentDisplayName   string `json:"parent_display_name"`
+}
+
 // resolveProjectRelations discovers parent/child relation candidates for every
 // instance in a project by querying the asset server's upstream API.
 func resolveProjectRelations(
@@ -525,6 +545,11 @@ func main() {
 	// ── Step 1: list instances for every project, building the combined set ────
 
 	instanceSet := map[string]struct{}{}
+	// instanceProject and displayNameByInstance track which project each instance
+	// came from and its InsightFinder display name, keyed by raw instance name —
+	// used only to enrich the local debug JSON dump, not for relation resolution.
+	instanceProject := map[string]string{}
+	displayNameByInstance := map[string]string{}
 	var allCandidates []relationCandidate
 
 	for _, project := range cfg.Projects {
@@ -538,11 +563,34 @@ func main() {
 		log.Printf("  %d instances", len(instances))
 		for _, name := range instances {
 			instanceSet[name] = struct{}{}
+			if _, exists := instanceProject[name]; !exists {
+				instanceProject[name] = project
+			}
+		}
+
+		displayNames, err := client.GetInstanceDisplayNames(ctx, project, cfg.InsightFinder.Username)
+		if err != nil {
+			log.Printf("  WARN  display name lookup failed: %v (debug dump will fall back to instance names)", err)
+		} else {
+			for _, d := range displayNames {
+				for _, instName := range d.InstanceSet {
+					if _, exists := displayNameByInstance[instName]; !exists {
+						displayNameByInstance[instName] = d.DisplayName
+					}
+				}
+			}
 		}
 
 		candidates := resolveProjectRelations(ctx, project, instances, client, assets, cfg)
 		log.Printf("  %d candidate relation(s) discovered", len(candidates))
 		allCandidates = append(allCandidates, candidates...)
+	}
+
+	displayNameFor := func(instanceName string) string {
+		if v, ok := displayNameByInstance[instanceName]; ok && v != "" {
+			return v
+		}
+		return instanceName
 	}
 
 	log.Printf("Discovered %d candidate relation(s) across %d project(s)", len(allCandidates), len(cfg.Projects))
@@ -557,6 +605,7 @@ func main() {
 	zoneOrder := []string{}
 	zoneMap := map[string]*zoneRelations{}
 	seenPair := map[string]struct{}{}
+	var debugEntries []relationDebugEntry
 
 	skipped, duplicates := 0, 0
 	for _, cand := range allCandidates {
@@ -581,11 +630,29 @@ func main() {
 			zoneMap[cand.Zone] = &zoneRelations{zone: cand.Zone}
 		}
 		zoneMap[cand.Zone].relations = append(zoneMap[cand.Zone].relations, dr)
+
+		debugEntries = append(debugEntries, relationDebugEntry{
+			Child:               cand.Child,
+			Parent:              cand.Parent,
+			Zone:                cand.Zone,
+			ChildSourceProject:  instanceProject[cand.Child],
+			ParentSourceProject: instanceProject[cand.Parent],
+			ChildDisplayName:    displayNameFor(cand.Child),
+			ParentDisplayName:   displayNameFor(cand.Parent),
+		})
 	}
 
 	valid := len(allCandidates) - skipped - duplicates
 	log.Printf("Valid pairs: %d / %d (skipped %d with missing instances, %d duplicates)",
 		valid, len(allCandidates), skipped, duplicates)
+
+	if b, err := json.MarshalIndent(debugEntries, "", "  "); err != nil {
+		log.Printf("  WARN  failed to marshal debug relations: %v", err)
+	} else if err := os.WriteFile(cfg.DebugOutputFile, b, 0644); err != nil {
+		log.Printf("  WARN  failed to write debug relations to %q: %v", cfg.DebugOutputFile, err)
+	} else {
+		log.Printf("Wrote %d relation(s) to debug file %q", len(debugEntries), cfg.DebugOutputFile)
+	}
 
 	if valid == 0 {
 		log.Println("No valid pairs to upload — exiting.")
