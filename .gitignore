@@ -289,3 +289,7 @@ Temporary Items
 *.db*
 *.sqlite
 *.sqlite3
+
+# baicells-agent: runtime device inventory cache, regenerated on every run -
+# contains live device MAC/serial/venue data, should not be committed
+baicells-agent/devicelookup.json

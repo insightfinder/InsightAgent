@@ -15,6 +15,14 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 
+def _is_token_error(message: str | None) -> bool:
+    """True if the API's own error message indicates the session token was
+    invalidated (e.g. by a concurrent login on the same account) rather than
+    some other failure."""
+    m = (message or "").lower()
+    return "token" in m and "invalid" in m
+
+
 class BaiCellsClient:
     """Client for BaiCells OMC RESTful API operations."""
 
@@ -110,6 +118,54 @@ class BaiCellsClient:
             "Content-Type": "application/json;charset=UTF-8",
         }
 
+    def _invalidate_token(self) -> None:
+        """Drop the cached token so the next request re-authenticates from
+        scratch, instead of retrying with a token the API has already
+        rejected."""
+        self.token = None
+        self.token_expires_at = 0
+
+    def _call(
+        self,
+        method: str,
+        endpoint: str,
+        error_prefix: str,
+        retry_on_token_error: bool = True,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Make an authenticated request and validate BaiCells' own success
+        code (data.get("code") in (0, 200)). If the API reports the token is
+        invalid - which happens if another login on the same account
+        invalidates this session server-side, independent of our local
+        expiry timer - clear the cached token, re-authenticate, and retry
+        this exact request once. This recovers automatically instead of
+        failing every subsequent call until the process is restarted.
+        """
+        headers = self._get_headers()
+        try:
+            response = requests.request(
+                method, endpoint, headers=headers, timeout=self.timeout, **kwargs
+            )
+            response.raise_for_status()
+            data = response.json()
+        except requests.RequestException as e:
+            raise Exception(f"{error_prefix} request failed: {e}")
+
+        if data.get("code") not in (0, 200):
+            message = data.get("message", "Unknown error")
+            if retry_on_token_error and _is_token_error(message):
+                logger.warning(
+                    f"{error_prefix}: token invalid (likely invalidated by another "
+                    "login on this account) - re-authenticating and retrying once"
+                )
+                self._invalidate_token()
+                return self._call(
+                    method, endpoint, error_prefix, retry_on_token_error=False, **kwargs
+                )
+            raise Exception(f"{error_prefix} failed: {message}")
+
+        return data
+
     def get_all_groups(self, search_text: str | None = None) -> list[dict[str, Any]]:
         """
         Get all device groups with hierarchical structure flattened.
@@ -121,35 +177,20 @@ class BaiCellsClient:
             List of group dictionaries with keys: id, name, description, built_in, parent_name
         """
         endpoint = f"{self.base_url}/northboundApi/v1/device/group"
-        headers = self._get_headers()
 
         params = {}
         if search_text:
             params["searchText"] = search_text
 
-        try:
-            response = requests.get(
-                endpoint, headers=headers, params=params, timeout=self.timeout
-            )
-            response.raise_for_status()
+        data = self._call("GET", endpoint, "Get groups", params=params)
+        groups_data = data.get("data", {})
+        rows = groups_data.get("rows", [])
 
-            data = response.json()
-            if data.get("code") not in (0, 200):
-                raise Exception(
-                    f"Get groups failed: {data.get('message', 'Unknown error')}"
-                )
+        # Flatten hierarchical structure
+        all_groups = []
+        self._flatten_groups(rows, all_groups, parent_name=None)
 
-            groups_data = data.get("data", {})
-            rows = groups_data.get("rows", [])
-
-            # Flatten hierarchical structure
-            all_groups = []
-            self._flatten_groups(rows, all_groups, parent_name=None)
-
-            return all_groups
-
-        except requests.RequestException as e:
-            raise Exception(f"Get groups request failed: {e}")
+        return all_groups
 
     def _flatten_groups(
         self, groups: list[dict], result: list[dict], parent_name: str | None = None
@@ -265,7 +306,6 @@ class BaiCellsClient:
             List of device dictionaries
         """
         endpoint = f"{self.base_url}/northboundApi/v1/device/query"
-        headers = self._get_headers()
 
         all_devices = []
         page_no = 0
@@ -279,34 +319,23 @@ class BaiCellsClient:
                 "pageNo": page_no,
             }
 
-            try:
-                response = requests.post(
-                    endpoint, json=payload, headers=headers, timeout=self.timeout
-                )
-                response.raise_for_status()
+            data = self._call(
+                "POST",
+                endpoint,
+                f"Get devices for group {group_id}, page {page_no}",
+                json=payload,
+            )
+            result_data = data.get("data", {})
+            devices = result_data.get("rows", [])
+            total = result_data.get("total", 0)
 
-                data = response.json()
-                if data.get("code") not in (0, 200):
-                    raise Exception(
-                        f"Get devices failed: {data.get('message', 'Unknown error')}"
-                    )
+            all_devices.extend(devices)
 
-                result_data = data.get("data", {})
-                devices = result_data.get("rows", [])
-                total = result_data.get("total", 0)
+            # Check if we have all devices
+            if len(all_devices) >= total or len(devices) == 0:
+                break
 
-                all_devices.extend(devices)
-
-                # Check if we have all devices
-                if len(all_devices) >= total or len(devices) == 0:
-                    break
-
-                page_no += 1
-
-            except requests.RequestException as e:
-                raise Exception(
-                    f"Get devices request failed for group {group_id}, page {page_no}: {e}"
-                )
+            page_no += 1
 
         return all_devices
 
@@ -460,22 +489,8 @@ class BaiCellsClient:
         endpoint = (
             f"{self.base_url}/northboundApi/v1/enodeb/infos/status/{serial_number}"
         )
-        headers = self._get_headers()
-
-        try:
-            response = requests.get(endpoint, headers=headers, timeout=self.timeout)
-            response.raise_for_status()
-
-            data = response.json()
-            if data.get("code") not in (0, 200):
-                raise Exception(
-                    f"Get eNB status failed: {data.get('message', 'Unknown error')}"
-                )
-
-            return data.get("data", {})
-
-        except requests.RequestException as e:
-            raise Exception(f"Get eNB status request failed: {e}")
+        data = self._call("GET", endpoint, "Get eNB status")
+        return data.get("data", {})
 
     def get_cpe_status(self, serial_number: str) -> dict[str, Any]:
         """
@@ -488,22 +503,8 @@ class BaiCellsClient:
             CPE status dictionary with connection_status, serialNumber
         """
         endpoint = f"{self.base_url}/v1/cpe/status/{serial_number}"
-        headers = self._get_headers()
-
-        try:
-            response = requests.get(endpoint, headers=headers, timeout=self.timeout)
-            response.raise_for_status()
-
-            data = response.json()
-            if data.get("code") not in (0, 200):
-                raise Exception(
-                    f"Get CPE status failed: {data.get('message', 'Unknown error')}"
-                )
-
-            return data.get("data", {})
-
-        except requests.RequestException as e:
-            raise Exception(f"Get CPE status request failed: {e}")
+        data = self._call("GET", endpoint, "Get CPE status")
+        return data.get("data", {})
 
     def get_cpe_info(self, serial_number: str) -> dict[str, Any]:
         """
@@ -524,19 +525,5 @@ class BaiCellsClient:
             - Status: connectionStatus, lteStatus, onlineTime, offlineTime
         """
         endpoint = f"{self.base_url}/northboundApi/v1/cpe/infos/{serial_number}"
-        headers = self._get_headers()
-
-        try:
-            response = requests.get(endpoint, headers=headers, timeout=self.timeout)
-            response.raise_for_status()
-
-            data = response.json()
-            if data.get("code") not in (0, 200):
-                raise Exception(
-                    f"Get CPE info failed: {data.get('message', 'Unknown error')}"
-                )
-
-            return data.get("data", {})
-
-        except requests.RequestException as e:
-            raise Exception(f"Get CPE info request failed: {e}")
+        data = self._call("GET", endpoint, "Get CPE info")
+        return data.get("data", {})
