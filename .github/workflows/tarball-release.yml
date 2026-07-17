@@ -37,7 +37,9 @@ jobs:
         run: echo '${{ steps.changed-files.outputs.all_changed_files }}'
 
       - id: set-matrix
-        run: echo "matrix={\"dirs\":${{ steps.changed-files.outputs.all_changed_files }}}" >> "$GITHUB_OUTPUT"
+        run: |
+          dirs=$(echo '${{ steps.changed-files.outputs.all_changed_files }}' | jq -c '[.[] | select(. != ".")]')
+          echo "matrix={\"dirs\":$dirs}" >> "$GITHUB_OUTPUT"
 
   tarball-release:
     needs: changed-files
