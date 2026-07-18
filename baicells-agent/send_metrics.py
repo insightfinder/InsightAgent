@@ -26,24 +26,52 @@ from dotenv import load_dotenv
 from baicells_client import BaiCellsClient
 from get_metrics import add_device_args, resolve_serial_numbers
 from insightfinder import Config, InsightFinder
+import device_inventory
+from device_inventory import DeviceInfo, Identifiers, InventoryConfig
 
 logger = logging.getLogger(__name__)
+
+
+def build_instance_name(device_info: DeviceInfo, own_name: str) -> str | None:
+    """Instance name priority: Inventory's MAC (MAC ...) > Inventory's serial
+    (SERIAL ...) > Inventory's object key (JIRAKEY ...) > the device's own
+    reported name (cleaned). Case is preserved as-is - values are never
+    upper/lower-cased. If none of these are available, returns None - the
+    caller must drop the device rather than sending it under any other
+    fallback identifier."""
+    inv_mac = device_inventory.normalize_mac(device_info.mac_address)
+    inv_serial = device_inventory.normalize_serial(device_info.serial_number)
+
+    if inv_mac:
+        return f"MAC {inv_mac}"
+    if inv_serial:
+        return f"SERIAL {inv_serial}"
+    if device_info.object_key:
+        return f"JIRAKEY {device_info.object_key}"
+    return own_name or None
 
 
 def transform_to_insightfinder(
     serial_number: str,
     cpe_info: dict[str, Any],
     timestamp_ms: int,
-) -> dict[str, Any]:
+    device_info: DeviceInfo,
+) -> dict[str, Any] | None:
     """Transform CPE signal metrics into InsightFinder v2 instance data format.
 
     Args:
-        serial_number: CPE device serial number (used as the instance name)
+        serial_number: CPE device serial number (unused for instance identity -
+            kept for logging by the caller)
         cpe_info: Raw CPE info dict from BaiCellsClient.get_cpe_info()
         timestamp_ms: Unix timestamp in milliseconds for this data point
+        device_info: Device Inventory lookup result for this device (empty
+            DeviceInfo() if not found)
 
     Returns:
-        Per-device data structure suitable for merging into an InsightFinder payload
+        Per-device data structure suitable for merging into an InsightFinder
+        payload, or None if the device has no usable instance name (Inventory
+        MAC/serial/object key all missing and the device's own name is also
+        empty) and must be dropped instead of sent.
     """
     metrics: list[dict[str, Any]] = []
 
@@ -71,18 +99,50 @@ def transform_to_insightfinder(
             except (ValueError, TypeError):
                 logger.debug(f"Skipping non-numeric value for {src_key}: {value!r}")
 
+    raw_own_name = cpe_info.get("cpeName") or ""
+    own_name = device_inventory.clean_own_name(raw_own_name)
+    instance_name = build_instance_name(device_info, own_name)
+    if not instance_name:
+        return None
+
+    # Display name: always the device's own raw name as reported by BaiCells
+    # (cpeName, uncleaned) - never falls back to Inventory's name, matching
+    # zabbix-ap's convention of always showing the source system's own name.
+    display_name = raw_own_name
+
+    # IP: inventory ip_address > the device's own reported IP (excluding the
+    # "0.0.0.0" unset/unreachable placeholder some agents use).
+    own_ip = cpe_info.get("ipAddress") or ""
+    ip_address = device_info.ip_address or (own_ip if own_ip != "0.0.0.0" else "")
+
+    # Instance metadata (display name / component name / IP / zone) must be
+    # packed into a single "im" JSON string, not sent as flat top-level keys -
+    # this matches the tarana-gnmic-agent's validated wire format. Component
+    # name / zone: inventory only, no default - omitted if not found.
+    im_data: dict[str, str] = {}
+    if display_name:
+        im_data["idn"] = display_name
+    if device_info.component_name:
+        im_data["cn"] = device_info.component_name
+    if ip_address:
+        im_data["i"] = ip_address
+    if device_info.venue:
+        im_data["z"] = device_info.venue
+
     ts_str = str(timestamp_ms)
-    return {
-        serial_number: {
-            "in": serial_number,
-            "dit": {
-                ts_str: {
-                    "t": timestamp_ms,
-                    "metricDataPointSet": metrics,
-                }
-            },
-        }
+    instance_data: dict[str, Any] = {
+        "in": instance_name,
+        "dit": {
+            ts_str: {
+                "t": timestamp_ms,
+                "metricDataPointSet": metrics,
+            }
+        },
     }
+    if im_data:
+        instance_data["im"] = json.dumps(im_data)
+
+    return {instance_name: instance_data}
 
 
 def poll_and_send(
@@ -92,6 +152,7 @@ def poll_and_send(
     interval_seconds: int = 60,
     max_iterations: int | None = None,
     verbose: bool = False,
+    per_device_delay_sec: float = 0.0,
 ) -> None:
     """Poll CPE signal metrics at regular intervals and send them to InsightFinder.
 
@@ -101,6 +162,11 @@ def poll_and_send(
         serial_numbers: List of CPE serial numbers to monitor
         interval_seconds: Polling interval in seconds (default: 60)
         max_iterations: Maximum number of polls (None = infinite)
+        per_device_delay_sec: Extra delay after each individual device's
+            request, on top of the existing per-batch pacing. Off (0) by
+            default so production behavior is unchanged; only meant to be
+            set locally (via BAICELLS_PER_DEVICE_DELAY_SEC) when the BaiCells
+            API is rate-limiting aggressively during testing.
     """
     BATCH_SIZE = 20
     device_count = len(serial_numbers)
@@ -117,6 +183,9 @@ def poll_and_send(
     start_time = time.time()
     iteration = 0
 
+    inv_cfg = InventoryConfig.from_env()
+    device_cache = device_inventory.load_device_lookup()
+
     try:
         while True:
             iteration_start = time.time()
@@ -128,46 +197,123 @@ def poll_and_send(
             )
 
             iteration_timestamp_ms = int(iteration_start * 1000)
+            # Decided once per iteration (not re-checked per batch) so a
+            # cache write mid-iteration doesn't make is_stale() flip to
+            # False and skip refreshing the remaining batches.
+            should_refresh = (not device_cache) or device_inventory.is_stale(
+                inv_cfg.refresh_hours
+            )
+
             for batch_idx, batch in enumerate(batches):
                 batch_start = time.time()
                 batch_payload: dict[str, Any] = {}
                 batch_offset = batch_idx * BATCH_SIZE
 
+                # Pass 1: fetch this batch's CPE info and identifiers first,
+                # so the device inventory refresh below (a separate, non
+                # rate-limited API) can run - and be applied - before any of
+                # this batch's data is transformed/sent, not just on the
+                # *next* iteration.
+                batch_cpe_info: dict[str, dict[str, Any]] = {}
+                batch_identifiers: dict[str, Identifiers] = {}
                 for idx, serial_number in enumerate(batch, batch_offset + 1):
                     logger.info(
                         f"[{idx}/{device_count}] Fetching metrics for {serial_number}"
                     )
                     try:
                         cpe_info = client.get_cpe_info(serial_number)
-                        device_data = transform_to_insightfinder(
-                            serial_number, cpe_info, iteration_timestamp_ms
+                        batch_cpe_info[serial_number] = cpe_info
+                        batch_identifiers[serial_number] = Identifiers(
+                            mac=device_inventory.normalize_mac(
+                                cpe_info.get("macAddress")
+                            ),
+                            serial=device_inventory.normalize_serial(serial_number),
+                            name=device_inventory.clean_own_name(
+                                cpe_info.get("cpeName") or ""
+                            ),
                         )
-                        batch_payload.update(device_data)
-
-                        if verbose:
-                            rsrp0 = cpe_info.get("rsrp0", "N/A")
-                            rsrp1 = cpe_info.get("rsrp1", "N/A")
-                            sinr = cpe_info.get("cpeSinr", "N/A")
-                            cinr0 = cpe_info.get("cinr0", "N/A")
-                            cinr1 = cpe_info.get("cinr1", "N/A")
-                            logger.info(
-                                f"  ✓ {serial_number:<22} "
-                                f"rsrp0={str(rsrp0):<8} rsrp1={str(rsrp1):<8} "
-                                f"sinr={str(sinr):<8} cinr0={str(cinr0):<8} cinr1={str(cinr1)}"
-                            )
-                            nr_rsrp = cpe_info.get("nrRsrp")
-                            nr_rsrq = cpe_info.get("nrRsrq")
-                            nr_sinr = cpe_info.get("nrSinr")
-                            nr_cinr = cpe_info.get("nrCinr")
-                            if any(
-                                v is not None and str(v).strip() != ""
-                                for v in [nr_rsrp, nr_rsrq, nr_sinr, nr_cinr]
-                            ):
-                                logger.info(
-                                    f"    └─ 5G NR: rsrp={nr_rsrp} rsrq={nr_rsrq} sinr={nr_sinr} cinr={nr_cinr}"
-                                )
                     except Exception as e:
                         logger.warning(f"  ✗ {serial_number:<22} ERROR: {e}")
+
+                    if per_device_delay_sec > 0:
+                        time.sleep(per_device_delay_sec)
+
+                # Devices never resolved before must be looked up this very
+                # batch regardless of should_refresh - otherwise a device
+                # seen for the first time between scheduled refreshes would
+                # be sent under a non mac/serial/jirakey name until the next
+                # refresh happens to come around (this is what caused the
+                # mimosa agent incident: a batch of never-before-seen devices
+                # all came online at once while the cache was still "fresh").
+                unresolved = [
+                    it
+                    for sn, it in batch_identifiers.items()
+                    if not device_inventory.is_resolved(
+                        device_cache, it.mac, it.serial, it.name
+                    )
+                ]
+                to_query = list(batch_identifiers.values()) if should_refresh else unresolved
+
+                if to_query:
+                    logger.info(
+                        f"Refreshing device inventory lookup for {len(to_query)} device(s)"
+                        f"{' (full batch refresh)' if should_refresh else ' (new/unresolved devices)'}..."
+                    )
+                    new_entries = device_inventory.refresh_device_lookup(
+                        to_query, inv_cfg
+                    )
+                    if new_entries is not None:
+                        device_cache.update(new_entries)
+                        device_inventory.save_device_lookup(device_cache)
+                        logger.info(
+                            f"Device inventory lookup refreshed: {len(device_cache)} entries total"
+                        )
+
+                # Pass 2: build and send this batch's InsightFinder payload,
+                # now using whatever the cache has (including entries just
+                # refreshed above for this very batch).
+                for serial_number, cpe_info in batch_cpe_info.items():
+                    identifiers = batch_identifiers[serial_number]
+                    device_info = device_inventory.get_device_info(
+                        device_cache,
+                        identifiers.mac,
+                        identifiers.serial,
+                        identifiers.name,
+                    )
+
+                    device_data = transform_to_insightfinder(
+                        serial_number, cpe_info, iteration_timestamp_ms, device_info
+                    )
+                    if device_data is None:
+                        logger.warning(
+                            f"  ✗ {serial_number:<22} dropped: no Inventory MAC/serial/"
+                            f"object key match and no own name reported"
+                        )
+                        continue
+                    batch_payload.update(device_data)
+
+                    if verbose:
+                        rsrp0 = cpe_info.get("rsrp0", "N/A")
+                        rsrp1 = cpe_info.get("rsrp1", "N/A")
+                        sinr = cpe_info.get("cpeSinr", "N/A")
+                        cinr0 = cpe_info.get("cinr0", "N/A")
+                        cinr1 = cpe_info.get("cinr1", "N/A")
+                        logger.info(
+                            f"  ✓ {serial_number:<22} "
+                            f"rsrp0={str(rsrp0):<8} rsrp1={str(rsrp1):<8} "
+                            f"sinr={str(sinr):<8} cinr0={str(cinr0):<8} cinr1={str(cinr1)}"
+                        )
+                        nr_rsrp = cpe_info.get("nrRsrp")
+                        nr_rsrq = cpe_info.get("nrRsrq")
+                        nr_sinr = cpe_info.get("nrSinr")
+                        nr_cinr = cpe_info.get("nrCinr")
+                        if any(
+                            v is not None and str(v).strip() != ""
+                            for v in [nr_rsrp, nr_rsrq, nr_sinr, nr_cinr]
+                        ):
+                            logger.info(
+                                f"    └─ 5G NR: rsrp={nr_rsrp} rsrq={nr_rsrq} sinr={nr_sinr} cinr={nr_cinr}"
+                            )
 
                 if batch_payload:
                     try:
@@ -317,6 +463,10 @@ def main() -> int:
     if_system = os.getenv("INSIGHTFINDER_SYSTEM_NAME")
     sampling_interval_min = int(os.getenv("INSIGHTFINDER_SAMPLING_INTERVAL", "1"))
 
+    # Off (0) by default so production behavior is unchanged. Only set locally
+    # when the BaiCells API is rate-limiting aggressively during testing.
+    per_device_delay_sec = float(os.getenv("BAICELLS_PER_DEVICE_DELAY_SEC", "0"))
+
     missing = [
         name
         for name, val in [
@@ -379,6 +529,7 @@ def main() -> int:
                 interval_seconds=interval_seconds,
                 max_iterations=args.iterations,
                 verbose=args.verbose,
+                per_device_delay_sec=per_device_delay_sec,
             )
         except Exception as e:
             logger.error(f"Polling error: {e}")
