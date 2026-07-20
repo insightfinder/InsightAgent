@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+logs/
+*.log
+log.out
+nohup.out
+# never bake local credentials into the image; config comes from the configMap
+conf.d/*.ini
+!conf.d/config.ini.template
+.git
+.gitignore
+Dockerfile
+.dockerignore
