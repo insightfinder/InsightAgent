@@ -1,9 +1,10 @@
-FROM python:3.13-slim
+FROM python:3.13
 ENV TZ=UTC
 SHELL ["/bin/bash", "-c"]
 
 WORKDIR /app
 
+# Full python image already includes procps (pgrep), used by the k8s probes.
 COPY requirements.txt /app/
 RUN python3 -m pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
