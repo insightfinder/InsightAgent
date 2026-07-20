@@ -34,10 +34,15 @@ jobs:
           files_ignore: '.github/**'
 
       - name: List all changed files
-        run: echo '${{ steps.changed-files.outputs.all_changed_files }}'
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: echo "$ALL_CHANGED_FILES"
 
       - id: set-matrix
-        run: echo "matrix={\"dirs\":${{ steps.changed-files.outputs.all_changed_files }}}" >> "$GITHUB_OUTPUT"
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: |
+          echo "matrix=$(jq -c '{dirs: [.[] | select(. != ".")]}' <<< "${ALL_CHANGED_FILES:-[]}")" >> "$GITHUB_OUTPUT"
 
   tarball-release:
     needs: changed-files
@@ -55,7 +60,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Create tarball
-        run: tar zcf /tmp/${{ matrix.dirs }}.tar.gz --exclude='*.tar.gz' ${{ matrix.dirs }}
+        env:
+          DIR: ${{ matrix.dirs }}
+        run: tar zcf "/tmp/${DIR}.tar.gz" --exclude='*.tar.gz' -- "$DIR"
 
       - name: Release
         uses: softprops/action-gh-release@v1
