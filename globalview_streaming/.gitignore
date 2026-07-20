@@ -1,0 +1,15 @@
+# local config files may contain license keys / credentials
+conf.d/*.ini
+!conf.d/config.ini.template
+
+# runtime output that can contain the license key from verbose logs
+logs
+log.out
+output-*.log
+nohup.out
+*.log
+
+# python / env
+venv
+__pycache__/
+testing
