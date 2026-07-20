@@ -1,0 +1,10 @@
+# Device inventory lookup cache (generated at runtime by devicelookup.go)
+devicelookup.json
+
+# Real config with live credentials - copy config.yaml.example to config.yaml
+configs/config.yaml
+
+# Debug tool output - contains live customer device/network data
+dumpraw.exe
+raw_devices.json
+raw_endpoints.json

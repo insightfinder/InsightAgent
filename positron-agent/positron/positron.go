@@ -31,7 +31,12 @@ func NewService(config config.PositronConfig) *Service {
 
 	client := &http.Client{
 		Transport: tr,
-		Timeout:   180 * time.Second,
+		// Generous timeout: some deployments reach the controller over a slow
+		// or unreliable tunnel where a single endpoint/device/alarm listing
+		// can legitimately take many minutes. Production's direct connection
+		// finishes in a couple of seconds regardless, so this ceiling is only
+		// ever exercised on slow links.
+		Timeout: 30 * time.Minute,
 	}
 
 	baseURL := fmt.Sprintf("https://%s:%d/api/v1",

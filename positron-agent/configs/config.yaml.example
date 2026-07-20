@@ -15,6 +15,20 @@ positron:
   verify_ssl: false
   max_concurrent_requests: 20
 
+# Device Inventory API Configuration
+# Used to look up each device (by MAC, then serial number, then own name) in the
+# Asset Registry so metrics can be enriched with the inventory's own identifiers,
+# component name, zone, and IP. Same API used by the mimosa, netexperience,
+# tarana-gnmic, and baicells agents. Leave api_key/base_url blank to disable
+# enrichment entirely.
+device_inventory:
+  api_key: ""
+  base_url: "http://{ip address}"
+  timeout_sec: 5
+  max_retry: 2
+  retry_delay_ms: 500
+  refresh_hours: 24
+
 insightfinder:
   # InsightFinder Platform Configuration
   server_url: https://stg.insightfinder.com

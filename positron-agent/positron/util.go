@@ -1,22 +1,71 @@
 package positron
 
 import (
+	"regexp"
+	"strings"
 	"time"
 
+	"github.com/insightfinder/positron-agent/devicelookup"
 	"github.com/insightfinder/positron-agent/pkg/models"
 )
 
-// Convert Endpoint to MetricData
-func (e *Endpoint) ToMetricData() *models.MetricData {
-	cleanName := models.CleanDeviceName(e.ConfEndpointName)
+var bareNumberRe = regexp.MustCompile(`^[0-9]+$`)
+
+// looksLikeName reports whether s is usable as a device name: non-empty and
+// not just a bare number (a port/slot index, not a hostname).
+func looksLikeName(s string) bool {
+	s = strings.TrimSpace(s)
+	return s != "" && !bareNumberRe.MatchString(s)
+}
+
+// OwnName picks the endpoint's real name from the two competing fields
+// Positron exposes. ConfEndpointName holds the assigned hostname for the
+// large majority (~93%) of endpoints, so it's preferred whenever it looks
+// like a real name; ConfUserName is only used as a fallback when
+// ConfEndpointName is empty or has been reduced to a bare port/slot number
+// (e.g. "10105", "155") - which is otherwise sent as the instance name
+// verbatim. Neither field is reliably populated on its own: provisioning
+// sometimes updates one and not the other, so this is a best-effort pick,
+// not a guarantee of a real name.
+func (e *Endpoint) OwnName() string {
+	if looksLikeName(e.ConfEndpointName) {
+		return e.ConfEndpointName
+	}
+	if looksLikeName(e.ConfUserName) {
+		return e.ConfUserName
+	}
+	return e.ConfEndpointName
+}
+
+// ToMetricData converts an Endpoint to MetricData, enriching it from the
+// Device Inventory lookup (MAC > serial > own name, first match wins).
+// Returns ok=false if the device has no usable instance name (Inventory
+// miss and no own name) - the caller must drop it rather than send it under
+// any other fallback identifier.
+func (e *Endpoint) ToMetricData(dl devicelookup.Lookup) (*models.MetricData, bool) {
+	ownMAC := devicelookup.NormalizeMAC(e.MacAddress)
+	ownSerial := devicelookup.NormalizeSerial(e.SerialNumber)
+	rawOwnName := e.OwnName()
+	ownName := devicelookup.CleanOwnName(rawOwnName)
+
+	devInfo := dl.GetDeviceInfo(ownMAC, ownSerial, ownName)
+	instanceName, ok := devicelookup.BuildInstanceName(devInfo, ownName)
+	if !ok {
+		return nil, false
+	}
 
 	// Use current Unix timestamp in seconds, will be converted to ms later
 	currentTime := time.Now().Unix()
 
 	metric := &models.MetricData{
-		Timestamp:     currentTime,
-		InstanceName:  cleanName,
-		ComponentName: "Endpoint",
+		Timestamp: currentTime,
+		// Display name: always the device's own raw name (as reported,
+		// uncleaned) - never falls back to Inventory's name field.
+		InstanceName:  instanceName,
+		DisplayName:   rawOwnName,
+		ComponentName: devInfo.ComponentName, // Inventory only, no default
+		Zone:          devInfo.Venue,         // Inventory only, no default
+		IP:            devInfo.IPAddress,     // Endpoints report no IP of their own
 		Data: map[string]interface{}{
 			// Format metric names using safe formatting
 			models.MakeSafeDataKey("DS PHY rate"): e.RxPhyRate,
@@ -26,20 +75,41 @@ func (e *Endpoint) ToMetricData() *models.MetricData {
 		},
 	}
 
-	return metric
+	return metric, true
 }
 
-// Convert Device to MetricData
-func (d *Device) ToMetricData() *models.MetricData {
-	cleanName := models.CleanDeviceName(d.Name)
+// ToMetricData converts a Device to MetricData, enriching it from the Device
+// Inventory lookup (serial > own name, first match wins - devices report no
+// MAC of their own). Returns ok=false if the device has no usable instance
+// name (Inventory miss and no own name).
+func (d *Device) ToMetricData(dl devicelookup.Lookup) (*models.MetricData, bool) {
+	ownSerial := devicelookup.NormalizeSerial(d.SerialNumber)
+	rawOwnName := d.Name
+	ownName := devicelookup.CleanOwnName(rawOwnName)
+
+	devInfo := dl.GetDeviceInfo(ownSerial, ownName)
+	instanceName, ok := devicelookup.BuildInstanceName(devInfo, ownName)
+	if !ok {
+		return nil, false
+	}
+
+	// IP: Inventory ip_address > the device's own reported IP (excluding the
+	// "0.0.0.0" unset/unreachable placeholder).
+	ip := devInfo.IPAddress
+	if ip == "" && d.IPAddress != "0.0.0.0" {
+		ip = d.IPAddress
+	}
 
 	// Use current Unix timestamp in seconds, will be converted to ms later
 	currentTime := time.Now().Unix()
 
 	metric := &models.MetricData{
 		Timestamp:     currentTime,
-		InstanceName:  cleanName,
-		ComponentName: "Device",
+		InstanceName:  instanceName,
+		DisplayName:   rawOwnName,
+		ComponentName: devInfo.ComponentName, // Inventory only, no default
+		Zone:          devInfo.Venue,         // Inventory only, no default
+		IP:            ip,
 		Data: map[string]interface{}{
 			// Format metric names using safe formatting - Capacity Metrics
 			models.MakeSafeDataKey("Ports"):       d.Ports,
@@ -47,10 +117,9 @@ func (d *Device) ToMetricData() *models.MetricData {
 			models.MakeSafeDataKey("Subscribers"): d.Subscribers,
 			models.MakeSafeDataKey("Bandwidths"):  d.Bandwidths,
 		},
-		IP: d.IPAddress,
 	}
 
-	return metric
+	return metric, true
 }
 
 // Convert Alarm to LogData
@@ -77,10 +146,10 @@ func (a *Alarm) ToLogData() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"timestamp":     currentTimeMs,
-		"tag":           models.CleanDeviceName(a.SystemName),
+		"timestamp": currentTimeMs,
+		"tag":       models.CleanDeviceName(a.SystemName),
 		// "componentName": models.CleanDeviceName(a.SystemName),
-		"data":          data,
+		"data": data,
 	}
 }
 
