@@ -1110,7 +1110,7 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
                 lines.append(f'        target_customer = "{entry.get("ct", "")}"')
                 lines.append(f'        duration        = {entry.get("d", 0)}')
                 if "st" in entry:
-                    lines.append(f'        score_threshold = {entry.get("st")}')
+                    lines.append(f'        similarity_threshold = {entry.get("st")}')
                 lines.append('      }' + ('' if is_last else ','))
             lines.append('    ]')
 
