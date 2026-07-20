@@ -33,11 +33,9 @@ type DataInTimestamp struct {
 }
 
 type InstanceData struct {
-	InstanceName       string                    `json:"in"`
-	ComponentName      string                    `json:"cn,omitempty"`
-	DataInTimestampMap map[int64]DataInTimestamp `json:"dit"`
-	Zone               string                    `json:"z,omitempty"`
-	IP                 string                    `json:"i,omitempty"`
+	InstanceName        string                    `json:"in"`
+	DataInTimestampMap  map[int64]DataInTimestamp `json:"dit"`
+	InstanceMetadataStr string                    `json:"im,omitempty"`
 }
 
 type MetricDataReceivePayload struct {
