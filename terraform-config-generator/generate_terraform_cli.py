@@ -1022,7 +1022,9 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
             ('incidentDampeningWindow',            'incident_dampening_window'),
             ('ticketOpenTime',                     'ticket_open_time'),
             ('componentLevelIncidentConsolidation', 'component_level_incident_consolidation'),
+            ('componentLevelDampening',             'component_level_dampening'),
             ('maxNotificationDelayTolerance',       'max_notification_delay_tolerance'),
+            ('metricCoOccurrenceBufferMs',          'metric_co_occurrence_buffer_ms'),
         ]
         # Always emitted even when the API omits them (empty string default),
         # so a later drop from the API response doesn't silently delete the
@@ -1107,6 +1109,8 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
                 lines.append(f'        source_customer = "{entry.get("cs", "")}"')
                 lines.append(f'        target_customer = "{entry.get("ct", "")}"')
                 lines.append(f'        duration        = {entry.get("d", 0)}')
+                if "st" in entry:
+                    lines.append(f'        score_threshold = {entry.get("st")}')
                 lines.append('      }' + ('' if is_last else ','))
             lines.append('    ]')
 
