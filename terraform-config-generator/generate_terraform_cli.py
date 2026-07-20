@@ -49,6 +49,34 @@ def format_terraform_value(value):
         return str(value)
 
 
+def _ensure_keyword_trailing_equals(keyword_str):
+    """Ensure each ' AND '-separated field in a keyword string ends with '='.
+
+    e.g. "alert->error->name" -> "alert->error->name="
+         "alert->core->status=active AND alert->core->summary" ->
+         "alert->core->status=active AND alert->core->summary="
+    Segments that already contain '=' are left untouched.
+    """
+    if not keyword_str:
+        return keyword_str
+    parts = keyword_str.split(" AND ")
+    parts = [part if "=" in part else part + "=" for part in parts]
+    return " AND ".join(parts)
+
+
+def _fix_log_label_keywords(obj):
+    """Recursively fix 'keyword' string fields within a log label structure."""
+    if isinstance(obj, dict):
+        return {
+            k: (_ensure_keyword_trailing_equals(v) if k == "keyword" and isinstance(v, str)
+                else _fix_log_label_keywords(v))
+            for k, v in obj.items()
+        }
+    if isinstance(obj, list):
+        return [_fix_log_label_keywords(item) for item in obj]
+    return obj
+
+
 def convert_keywords_to_log_labels(keywords_data):
     """Convert keywords JSON to log_label_settings format."""
     log_labels = []
@@ -83,7 +111,7 @@ def convert_keywords_to_log_labels(keywords_data):
         if keyword_type in keywords_data and keywords_data[keyword_type]:
             log_labels.append({
                 'label_type': label_type,
-                'log_label_string': keywords_data[keyword_type]
+                'log_label_string': _fix_log_label_keywords(keywords_data[keyword_type])
             })
     
     return log_labels
@@ -1022,7 +1050,9 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
             ('incidentDampeningWindow',            'incident_dampening_window'),
             ('ticketOpenTime',                     'ticket_open_time'),
             ('componentLevelIncidentConsolidation', 'component_level_incident_consolidation'),
+            ('componentLevelDampening',             'component_level_dampening'),
             ('maxNotificationDelayTolerance',       'max_notification_delay_tolerance'),
+            ('metricCoOccurrenceBufferMs',          'metric_co_occurrence_buffer_ms'),
         ]
         # Always emitted even when the API omits them (empty string default),
         # so a later drop from the API response doesn't silently delete the
@@ -1107,6 +1137,8 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
                 lines.append(f'        source_customer = "{entry.get("cs", "")}"')
                 lines.append(f'        target_customer = "{entry.get("ct", "")}"')
                 lines.append(f'        duration        = {entry.get("d", 0)}')
+                if "st" in entry:
+                    lines.append(f'        similarity_threshold = {entry.get("st")}')
                 lines.append('      }' + ('' if is_last else ','))
             lines.append('    ]')
 

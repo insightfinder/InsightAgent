@@ -340,10 +340,13 @@ def fetch_project_data(session: requests.Session, host: str, username: str,
     # 9. Process mode (logdedicatedmode API — uses cookie auth)
     result["mode"] = fetch_project_mode(session, base, username, api_key, project_name)
 
-    # 10. L2M (log-to-metric) settings
-    l2m = fetch_json(session, f"{base}/api/external/v1/logtometricsetting",
-                     headers, {"projectName": project_name})
-    result["l2m_settings"] = l2m if isinstance(l2m, list) else []
+    # 10. L2M (log-to-metric) settings (only applies to log-type projects)
+    if not is_metric:
+        l2m = fetch_json(session, f"{base}/api/external/v1/logtometricsetting",
+                         headers, {"projectName": project_name})
+        result["l2m_settings"] = l2m if isinstance(l2m, list) else []
+    else:
+        result["l2m_settings"] = []
 
     return result
 
