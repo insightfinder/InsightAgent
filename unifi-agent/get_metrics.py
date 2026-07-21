@@ -162,6 +162,7 @@ def extract_radio_rows(ap: dict, site_name: str) -> list[dict]:
     name = ap.get("name", "")
     ip = ap.get("ip", "")
     ap_mac = (ap.get("mac") or "").lower()
+    ap_serial = ap.get("serial") or ""
     state = ap.get("state")
     if isinstance(state, int):
         status = "online" if state == 1 else "offline"
@@ -183,6 +184,7 @@ def extract_radio_rows(ap: dict, site_name: str) -> list[dict]:
             "ap_name": name,
             "ip": ip,
             "ap_mac": ap_mac,
+            "ap_serial": ap_serial,
             "band": band,
             "ChUtil_Busy": stats.get("cu_total"),
             "ChUtil_Rx": stats.get("cu_self_rx"),
@@ -197,6 +199,7 @@ def extract_radio_rows(ap: dict, site_name: str) -> list[dict]:
             "ap_name": name,
             "ip": ip,
             "ap_mac": ap_mac,
+            "ap_serial": ap_serial,
             "band": "-",
             "ChUtil_Busy": None,
             "ChUtil_Rx": None,
