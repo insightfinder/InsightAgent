@@ -839,7 +839,7 @@ def clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track):
             track['component_map_list'].append(component_map)
 
         track['current_row'].append(row)
-        track['current_row_bytes'] += get_json_size_bytes(row)
+        track['current_row_bytes'] += len(json.dumps(row))
         count += 1
         if count % 100 == 0 or track['current_row_bytes'] >= if_config_vars['chunk_size']:
             logger.debug('Sending buffer chunk')
