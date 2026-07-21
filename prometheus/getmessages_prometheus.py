@@ -138,21 +138,32 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
         # clear metric buffer when piece of time range end
         clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
 
-    if agent_config_vars['his_time_range']:
-        logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
-        for timestamp in range(agent_config_vars['his_time_range'][0], agent_config_vars['his_time_range'][1],
-                               if_config_vars['run_interval']):
-            run_prometheus_query(timestamp)
-    else:
-        logger.debug('Using current time for streaming data')
+    try:
+        if agent_config_vars['his_time_range']:
+            logger.debug('history range config: {}'.format(agent_config_vars['his_time_range']))
+            his_start = agent_config_vars['his_time_range'][0]
+            his_end = agent_config_vars['his_time_range'][1]
+            run_interval = if_config_vars['run_interval']
+            # Build window end-times so the queried windows tile [his_start, his_end]
+            # exactly. Each run_prometheus_query(ts) queries [ts - run_interval, ts],
+            # so the first window is [his_start, his_start + run_interval] and the last
+            # window always ends at his_end -- no leading overshoot, no missing tail.
+            timestamps = list(range(his_start + run_interval, his_end, run_interval))
+            if his_end > his_start:
+                timestamps.append(his_end)
+            for timestamp in timestamps:
+                run_prometheus_query(timestamp)
+        else:
+            logger.debug('Using current time for streaming data')
 
-        # Add delay to query
-        time_now = time_now - agent_config_vars['query_delay']
+            # Add delay to query
+            time_now = time_now - agent_config_vars['query_delay']
 
-        run_prometheus_query(time_now)
-
-    thread_pool.close()
-    thread_pool.join()
+            run_prometheus_query(time_now)
+    finally:
+        # always release the thread pool, even if a query/parse raised
+        thread_pool.close()
+        thread_pool.join()
     logger.info('Closed......')
 
 
@@ -568,6 +579,10 @@ def get_agent_config_vars(logger, config_ini):
         else:
             processes = multiprocessing.cpu_count() * 4
 
+        # a pool needs at least one worker
+        if processes < 1:
+            processes = 1
+
         if len(timeout) != 0:
             timeout = int(timeout) * 60
         else:
@@ -813,17 +828,18 @@ def initialize_data_gathering(logger, c_config, if_config_vars, agent_config_var
     # get cache
     (cache_con, cache_cur) = initialize_cache_connection()
 
-    start_data_processing(logger, c_config, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
-                          cache_cur, time_now)
+    try:
+        start_data_processing(logger, c_config, if_config_vars, agent_config_vars, metric_buffer, track, cache_con,
+                              cache_cur, time_now)
 
-    # clear metric buffer when data processing end
-    clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
+        # clear metric buffer when data processing end
+        clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track)
 
-    logger.info('Total chunks created: ' + str(track['chunk_count']))
-    logger.info('Total {} entries: {}'.format(if_config_vars['project_type'].lower(), track['entry_count']))
-
-    # close cache
-    cache_con.close()
+        logger.info('Total chunks created: ' + str(track['chunk_count']))
+        logger.info('Total {} entries: {}'.format(if_config_vars['project_type'].lower(), track['entry_count']))
+    finally:
+        # always close cache so the sqlite handle is never leaked on error paths
+        cache_con.close()
     return True
 
 
@@ -839,7 +855,7 @@ def clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track):
             track['component_map_list'].append(component_map)
 
         track['current_row'].append(row)
-        track['current_row_bytes'] += get_json_size_bytes(row)
+        track['current_row_bytes'] += len(json.dumps(row))
         count += 1
         if count % 100 == 0 or track['current_row_bytes'] >= if_config_vars['chunk_size']:
             logger.debug('Sending buffer chunk')
@@ -1242,22 +1258,28 @@ def worker_process(args):
     logger.info("Setup logger in PID {}".format(os.getpid()))
     logger.info("Process start with config: {}".format(config_name))
 
-    if_config_vars = get_if_config_vars(logger, config_file)
-    if not if_config_vars:
-        return
-    agent_config_vars = get_agent_config_vars(logger, config_file)
-    if not agent_config_vars:
-        return
-    print_summary_info(logger, if_config_vars, agent_config_vars)
-
-    if not c_config['testing']:
-        # check project name first
-        check_success = check_project_exist(logger, if_config_vars)
-        if not check_success:
+    # isolate each config's run so a failure in one does not poison the pool
+    try:
+        if_config_vars = get_if_config_vars(logger, config_file)
+        if not if_config_vars:
             return
+        agent_config_vars = get_agent_config_vars(logger, config_file)
+        if not agent_config_vars:
+            return
+        print_summary_info(logger, if_config_vars, agent_config_vars)
 
-    # start run
-    initialize_data_gathering(logger, c_config, if_config_vars, agent_config_vars, time_now)
+        if not c_config['testing']:
+            # check project name first
+            check_success = check_project_exist(logger, if_config_vars)
+            if not check_success:
+                return
+
+        # start run
+        initialize_data_gathering(logger, c_config, if_config_vars, agent_config_vars, time_now)
+    except Exception as e:
+        logger.error('Error processing config {}: {}'.format(config_name, e))
+        logger.debug(traceback.format_exc())
+        return
 
     logger.info("Process is done with config: {}".format(config_name))
     return True
@@ -1274,51 +1296,67 @@ if __name__ == "__main__":
     listener = multiprocessing.Process(target=listener_process, args=(queue, cli_config_vars))
     listener.start()
 
-    # set up main logger following example from work_process
-    worker_configurer(queue, cli_config_vars['log_level'])
-    main_logger = logging.getLogger('main')
+    try:
+        # set up main logger following example from work_process
+        worker_configurer(queue, cli_config_vars['log_level'])
+        main_logger = logging.getLogger('main')
 
-    # variables from cli config
-    cli_data_block = '\nCLI settings:'
-    for kk, kv in sorted(cli_config_vars.items()):
-        cli_data_block += '\n\t{}: {}'.format(kk, kv)
-    main_logger.info(cli_data_block)
+        # variables from cli config
+        cli_data_block = '\nCLI settings:'
+        for kk, kv in sorted(cli_config_vars.items()):
+            cli_data_block += '\n\t{}: {}'.format(kk, kv)
+        main_logger.info(cli_data_block)
 
-    # get all config files
-    files_path = os.path.join(cli_config_vars['config'], "*.ini")
-    config_files = glob.glob(files_path)
+        # get all config files
+        files_path = os.path.join(cli_config_vars['config'], "*.ini")
+        config_files = glob.glob(files_path)
 
-    # get agent config from first config
-    agent_config_vars = get_agent_config_vars(main_logger, config_files[0])
-    if not agent_config_vars:
-        main_logger.error('Failed to get agent config')
-    else:
-        # get args
-        utc_time_now = int(arrow.utcnow().float_timestamp)
-        arg_list = [(f, cli_config_vars, utc_time_now, queue) for f in config_files]
+        if len(config_files) == 0:
+            main_logger.error('No config files found in {}'.format(cli_config_vars['config']))
+        else:
+            # get agent config from first config
+            agent_config_vars = get_agent_config_vars(main_logger, config_files[0])
+            if not agent_config_vars:
+                main_logger.error('Failed to get agent config')
+            else:
+                # get args
+                utc_time_now = int(arrow.utcnow().float_timestamp)
+                arg_list = [(f, cli_config_vars, utc_time_now, queue) for f in config_files]
 
-        # start sub process by pool
-        pool = Pool(agent_config_vars['processes'])
-        pool_result = pool.map_async(worker_process, arg_list)
-        pool.close()
+                # start sub process by pool
+                pool = Pool(agent_config_vars['processes'])
+                try:
+                    pool_result = pool.map_async(worker_process, arg_list)
+                    pool.close()
 
-        # wait 5 minutes for every worker to finish
-        need_timeout = agent_config_vars['timeout'] > 0
-        if need_timeout:
-            pool_result.wait(timeout=agent_config_vars['timeout'])
+                    # wait 5 minutes for every worker to finish
+                    need_timeout = agent_config_vars['timeout'] > 0
+                    if need_timeout:
+                        pool_result.wait(timeout=agent_config_vars['timeout'])
 
+                    results = pool_result.get(timeout=1 if need_timeout else None)
+                    pool.join()
+                except TimeoutError:
+                    main_logger.error("We lacked patience and got a multiprocessing.TimeoutError")
+                    pool.terminate()
+                    pool.join()
+                except Exception as e:
+                    main_logger.error('Unexpected error running worker pool: {}'.format(e))
+                    main_logger.debug(traceback.format_exc())
+                    pool.terminate()
+                    pool.join()
+
+                # end
+                main_logger.info("Now the pool is closed and no longer available")
+    finally:
+        # always send kill signal and clean up the listener + manager so no
+        # orphaned processes leak on error paths (cron relaunches this often)
+        time.sleep(1)
         try:
-            results = pool_result.get(timeout=1 if need_timeout else None)
-            pool.join()
-        except TimeoutError:
-            main_logger.error("We lacked patience and got a multiprocessing.TimeoutError")
-            pool.terminate()
-
-        # end
-        main_logger.info("Now the pool is closed and no longer available")
-
-    # send kill signal
-    time.sleep(1)
-    kill_logger = logging.getLogger('KILL')
-    kill_logger.info('KILL')
-    listener.join()
+            kill_logger = logging.getLogger('KILL')
+            kill_logger.info('KILL')
+            listener.join(timeout=10)
+        finally:
+            if listener.is_alive():
+                listener.terminate()
+            m.shutdown()
