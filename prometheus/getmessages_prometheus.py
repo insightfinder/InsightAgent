@@ -53,6 +53,10 @@ CSV_DELIM = r",|\t"
 ATTEMPTS = 3
 CACHE_NAME = 'cache/cache.db'
 
+# reuse a single session per process for connection pooling/keep-alive
+requests.packages.urllib3.disable_warnings()
+SESSION = requests.Session()
+
 
 def align_timestamp(timestamp, sampling_interval):
     if sampling_interval == 0 or not timestamp:
@@ -345,18 +349,21 @@ def parse_messages_prometheus(logger, if_config_vars, agent_config_vars, metric_
             logger.info('Parse {0} messages'.format(count))
     logger.info('Parse {0} messages'.format(count))
 
+    # commit any new cache aliases once per batch instead of per row
+    if cache_con:
+        cache_con.commit()
+
 
 def get_alias_from_cache(cache_con, cache_cur, alias):
     try:
         if cache_cur:
-            cache_cur.execute('select alias from cache where instance="%s"' % alias)
+            cache_cur.execute('select alias from cache where instance=?', (alias,))
             instance = cache_cur.fetchone()
             if instance:
                 return instance[0]
             else:
                 # Hard coded if alias hasn't been added to cache, add it
-                cache_cur.execute('insert into cache (instance, alias) values ("%s", "%s")' % (alias, alias))
-                cache_con.commit()
+                cache_cur.execute('insert into cache (instance, alias) values (?, ?)', (alias, alias))
                 return alias
     except Exception as e:
         return alias
@@ -832,8 +839,9 @@ def clear_metric_buffer(logger, c_config, if_config_vars, metric_buffer, track):
             track['component_map_list'].append(component_map)
 
         track['current_row'].append(row)
+        track['current_row_bytes'] += get_json_size_bytes(row)
         count += 1
-        if count % 100 == 0 or get_json_size_bytes(track['current_row']) >= if_config_vars['chunk_size']:
+        if count % 100 == 0 or track['current_row_bytes'] >= if_config_vars['chunk_size']:
             logger.debug('Sending buffer chunk')
             send_data_wrapper(logger, c_config, if_config_vars, track)
 
@@ -859,6 +867,7 @@ def reset_track(track):
     track['start_time'] = time.time()
     track['line_count'] = 0
     track['current_row'] = []
+    track['current_row_bytes'] = 0
     track['component_map_list'] = []
 
 
@@ -975,10 +984,9 @@ def send_request(logger, url, mode='GET', failure_message='Failure!', success_me
                  **request_passthrough):
     """ sends a request to the given url """
     # determine if post or get (default)
-    requests.packages.urllib3.disable_warnings()
-    req = requests.get
+    req = SESSION.get
     if mode.upper() == 'POST':
-        req = requests.post
+        req = SESSION.post
 
     req_num = 0
     for req_num in range(ATTEMPTS):
