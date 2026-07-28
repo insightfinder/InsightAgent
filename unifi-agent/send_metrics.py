@@ -321,6 +321,7 @@ def build_idm(rows: list[dict], ts: int, derived_rules: list | None = None, ap_l
 def main() -> None:
     parser = argparse.ArgumentParser(description="Send UniFi AP 5GHz metrics to InsightFinder.")
     parser.add_argument("-v", "--verbose", action="store_true", help="Print full metric payload before sending.")
+    parser.add_argument("--once", action="store_true", help="Collect and send metrics once, then exit.")
     args = parser.parse_args()
 
     if args.verbose:
@@ -427,7 +428,10 @@ def main() -> None:
                 if args.verbose:
                     logger.debug("Payload:\n%s", json.dumps(idm, indent=2))
                 client.send_metric(idm)
-                logger.info("Done. Next run in %d minute(s).", interval // 60)
+                logger.info("Done.%s", "" if args.once else f" Next run in {interval // 60} minute(s).")
+
+            if args.once:
+                break
 
             elapsed = time.time() - ts / 1000
             time.sleep(max(0, interval - elapsed))
