@@ -142,6 +142,10 @@ env/
 venv/
 ENV/
 env.bak/
+
+# Device inventory lookup cache (generated at runtime by ap_inventory_lookup.py / send_metrics.py)
+aplookup.json
+aplookupnotfound.json
 venv.bak/
 
 # Spyder project settings
