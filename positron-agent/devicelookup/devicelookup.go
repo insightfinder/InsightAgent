@@ -369,8 +369,12 @@ func Refresh(cfg config.DeviceInventoryConfig, items []Identifiers) Lookup {
 		found, failed, time.Since(startTime).Round(time.Second))
 
 	if found == 0 && len(uniq) > 0 {
-		logrus.Warn("DeviceLookup: refresh found 0 devices, keeping previous cache")
-		return nil
+		// Legitimate for an incremental refresh of already-known-not-found
+		// devices - they're still not in the inventory. Still return the
+		// (empty) result rather than nil so the caller can record these as
+		// not-found and stop re-querying them every cycle; nil is reserved
+		// for "the API itself is unreachable/misconfigured" (see above).
+		logrus.Warn("DeviceLookup: refresh found 0 devices among the queried set")
 	}
 
 	return newLookup
