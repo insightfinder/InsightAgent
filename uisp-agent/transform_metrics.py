@@ -1,34 +1,80 @@
 """Transform UISP metrics to InsightFinder format."""
 
+import json
 import logging
 import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
+_PLACEHOLDER_VALUES = {"", "n/a", "na", "none", "null", "unknown", "tbd", "-"}
 
-def sanitize_instance_name(name: str) -> str:
-    """Sanitize instance name to comply with InsightFinder requirements.
 
-    InsightFinder requires instance names to not include: _ @ # :
+def _is_placeholder(value: str) -> bool:
+    """Recognizes the inventory's various "no data" conventions the same way
+    devicelookup.go's isPlaceholder does: known placeholder words, plus any
+    value with no letter/digit at all."""
+    trimmed = (value or "").strip()
+    if trimmed.lower() in _PLACEHOLDER_VALUES:
+        return True
+    return not any(c.isalnum() for c in trimmed)
 
-    Args:
-        name: Original instance name (device name)
 
-    Returns:
-        Sanitized instance name with underscores replaced by hyphens
-        and special characters removed
-    """
-    # Strip leading/trailing whitespace first
-    sanitized = name.strip()
-    
-    # Replace underscores with hyphens
-    sanitized = sanitized.replace("_", "-")
+def inv_field(d: dict, key: str) -> str:
+    """Read a string field from an Inventory dict, treating placeholders as missing."""
+    v = (d or {}).get(key)
+    if not isinstance(v, str) or _is_placeholder(v):
+        return ""
+    return v
 
-    # Remove disallowed special characters: @ # :
-    sanitized = re.sub(r"[@#:]", "", sanitized)
 
-    return sanitized
+def normalize_mac(mac: str) -> str:
+    """':' -> '-', trim leading/trailing '-'. No case conversion."""
+    mac = (mac or "").strip()
+    if not mac:
+        return ""
+    converted = mac.replace(":", "-").strip("-")
+    return converted if any(c.isalnum() for c in converted) else ""
+
+
+def clean_own_name(name: str) -> str:
+    """'_' and ':' both -> '-' (matches devicelookup.go's CleanOwnName)."""
+    name = (name or "").strip()
+    if not name:
+        return ""
+    return name.replace("_", "-").replace(":", "-").strip("-")
+
+
+def build_instance_name(inv_record: dict, own_name: str) -> str | None:
+    """Instance name preference: Inventory MAC > Inventory serial > Inventory
+    object_key > the device's own name (cleaned). Returns None if none of
+    these are available - the caller must drop the device rather than send
+    it under any other fallback identifier. No uppercase/lowercase conversion
+    anywhere."""
+    inv_mac = normalize_mac(inv_field(inv_record, "mac_address"))
+    if inv_mac:
+        return f"MAC {inv_mac}"
+    inv_serial = inv_field(inv_record, "serial_number")
+    if inv_serial:
+        return f"SERIAL {inv_serial}"
+    inv_object_key = inv_field(inv_record, "object_key")
+    if inv_object_key:
+        return f"JIRAKEY {inv_object_key}"
+    cleaned_own = clean_own_name(own_name)
+    if cleaned_own:
+        return cleaned_own
+    return None
+
+
+def component_name_from_lookup(inv_record: dict) -> str:
+    """Return 'Manufacturer-DeviceClass' from the matched Inventory record, or
+    empty string. Only set when both are present in Inventory - no default."""
+    model = (inv_record or {}).get("model") or {}
+    manufacturer = inv_field(model, "manufacturer")
+    device_class = inv_field(model, "device_class")
+    if manufacturer and device_class:
+        return f"{manufacturer}-{device_class}"
+    return ""
 
 
 def sanitize_metric_name(name: str) -> str:
@@ -53,6 +99,7 @@ def sanitize_metric_name(name: str) -> str:
 
 def transform_uisp_to_insightfinder(
     device_data: dict[str, Any],
+    device_lookup: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Transform UISP device metrics to InsightFinder v2 API format.
 
@@ -94,8 +141,20 @@ def transform_uisp_to_insightfinder(
     """
     device_name = device_data.get("name", "unknown") or "unknown"
     device_type = device_data.get("type", "unknown")
-    sanitized_instance = sanitize_instance_name(device_name)
-    
+    mac_raw = (device_data.get("mac") or "").lower()
+
+    lookup = device_lookup or {}
+    inv_record = (lookup.get(mac_raw) or {}).get("devices") or {}
+
+    # Instance name: Inventory MAC > Inventory serial > Inventory object_key >
+    # the device's own name. If none of these are available (Inventory miss
+    # and no own name), drop the device - never sent under any other fallback
+    # identifier. An Inventory miss alone does NOT drop the device.
+    instance = build_instance_name(inv_record, device_name)
+    if instance is None:
+        logger.debug(f"{device_name}: dropped - no Inventory match and no usable own name")
+        return {}
+
     # Use current timestamp in milliseconds
     import time
     current_timestamp_ms = int(time.time() * 1000)
@@ -217,13 +276,30 @@ def transform_uisp_to_insightfinder(
     if not metric_data_point_set:
         logger.debug(f"{device_name}: No metrics extracted for device type {device_type}")
         return {}
-    
-    # Extract IP address (clean CIDR notation)
-    device_ip = device_data.get("ipAddress", "")
-    
-    return {
-        "in": sanitized_instance,
-        "i": device_ip,
+
+    # Instance metadata (display name / component name / IP / zone) must be
+    # packed into a single "im" JSON string, not sent as flat top-level keys -
+    # matches baicells-agent/tarana-gnmic-agent's validated wire format.
+    own_ip = device_data.get("ipAddress", "") or ""
+    im_data: dict[str, str] = {}
+    # Display name: always the device's own raw name as reported, uncleaned -
+    # never falls back to the Inventory's name field.
+    if device_name:
+        im_data["idn"] = device_name
+    cn = component_name_from_lookup(inv_record)
+    if cn:
+        im_data["cn"] = cn
+    # IP: Inventory ip_address > the device's own reported IP.
+    ip = inv_field(inv_record, "ip_address") or own_ip
+    if ip:
+        im_data["i"] = ip
+    # Zone: Inventory's subvenue only - omitted if not in Inventory.
+    zone = inv_field(inv_record.get("meta") or {}, "subvenue")
+    if zone:
+        im_data["z"] = zone
+
+    result = {
+        "in": instance,
         "dit": {
             str(current_timestamp_ms): {
                 "t": current_timestamp_ms,
@@ -231,31 +307,37 @@ def transform_uisp_to_insightfinder(
             }
         }
     }
+    if im_data:
+        result["im"] = json.dumps(im_data)
+    return result
 
 
 def transform_all_devices(
     devices_metrics: list[dict[str, Any]],
+    device_lookup: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Transform metrics for all devices into v2 API format (idm structure).
 
     Args:
         devices_metrics: List of device data with metrics
+        device_lookup: Matched Device Inventory cache (devicelookup.json),
+            keyed by lowercased MAC - see build_instance_name for how it's used
 
     Returns:
         Dictionary with instance data map (idm) containing all devices
-        in v2 format, keyed by sanitized device names
+        in v2 format, keyed by the resolved instance name (see
+        build_instance_name) - not the raw device name
     """
     idm = {}
 
     for device_entry in devices_metrics:
         # Transform to InsightFinder v2 format
-        instance_data = transform_uisp_to_insightfinder(device_entry)
+        instance_data = transform_uisp_to_insightfinder(device_entry, device_lookup)
 
         if instance_data:
-            sanitized_name = sanitize_instance_name(device_entry.get("name", "unknown"))
-            idm[sanitized_name] = instance_data
+            idm[instance_data["in"]] = instance_data
             logger.info(f"Transformed {device_entry.get('type')} device: {device_entry.get('name')}")
         else:
-            logger.debug(f"Skipped device (no metrics): {device_entry.get('name')}")
+            logger.debug(f"Skipped device (no metrics or no usable identity): {device_entry.get('name')}")
 
     return idm

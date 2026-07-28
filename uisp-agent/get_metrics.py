@@ -98,6 +98,8 @@ def extract_device_metrics(device):
     metrics = {
         "id": identification.get("id", ""),
         "name": identification.get("name", "Unknown"),
+        "mac": identification.get("mac") or "",
+        "serialNumber": identification.get("serialNumber") or "",
         "model": identification.get("model", ""),
         "type": device_type,
         "role": identification.get("role", ""),
