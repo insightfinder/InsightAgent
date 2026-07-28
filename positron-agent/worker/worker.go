@@ -334,20 +334,23 @@ func (w *Worker) refreshDeviceLookupIfNeeded(endpoints []positron.Endpoint, devi
 	if shouldRefresh {
 		toQuery = items
 	} else {
-		skipped := 0
+		resolved, held := 0, 0
 		for _, it := range items {
 			if w.deviceLookup.IsResolved(it.MAC, it.Serial, it.Name) {
+				resolved++
 				continue
 			}
 			if w.notFoundLookup.IsKnownNotFound(it.MAC, it.Serial, it.Name) {
-				skipped++
+				held++
 				continue
 			}
+			// Never seen before (not resolved, not a known not-found) - a
+			// new device always gets queried immediately, regardless of the
+			// held/not-found set.
 			toQuery = append(toQuery, it)
 		}
-		if skipped > 0 {
-			logrus.Infof("DeviceLookup: holding %d not-found device(s) until next full refresh", skipped)
-		}
+		logrus.Infof("DeviceLookup: %d already resolved, %d already checked and not found (held until next full refresh), %d new device(s) to query",
+			resolved, held, len(toQuery))
 	}
 	if len(toQuery) == 0 {
 		return
