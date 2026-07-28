@@ -293,8 +293,8 @@ def transform_uisp_to_insightfinder(
     ip = inv_field(inv_record, "ip_address") or own_ip
     if ip:
         im_data["i"] = ip
-    # Zone: Inventory's subvenue only - omitted if not in Inventory.
-    zone = inv_field(inv_record.get("meta") or {}, "subvenue")
+    # Zone: Inventory's venue only - omitted if not in Inventory.
+    zone = inv_field(inv_record.get("meta") or {}, "venue")
     if zone:
         im_data["z"] = zone
 
