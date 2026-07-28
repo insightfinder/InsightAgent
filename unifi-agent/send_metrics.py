@@ -275,7 +275,7 @@ def build_idm(rows: list[dict], ts: int, derived_rules: list | None = None, ap_l
             if ip:
                 im_data["i"] = ip
             # Zone: Inventory's subvenue only - omitted if not in Inventory.
-            zone = inv_field(devices.get("meta") or {}, "subvenue")
+            zone = inv_field(devices.get("meta") or {}, "venue")
             if zone:
                 im_data["z"] = zone
             if im_data:
