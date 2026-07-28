@@ -21,6 +21,7 @@ type Worker struct {
 	insightFinderService *insightfinder.Service
 	testMode             bool
 	deviceLookup         devicelookup.Lookup
+	notFoundLookup       devicelookup.NotFoundCache
 	// Stats tracking
 	statsLock    sync.RWMutex
 	currentStats *CollectionStats
@@ -45,6 +46,7 @@ func NewWorker(config *config.Config, positronService *positron.Service, ifServi
 		insightFinderService: ifService,
 		testMode:             false,
 		deviceLookup:         devicelookup.Load(),
+		notFoundLookup:       devicelookup.LoadNotFound(),
 		currentStats:         &CollectionStats{},
 	}
 }
@@ -298,7 +300,11 @@ func (w *Worker) updateErrorCount() {
 // empty or stale; otherwise only devices never resolved before are queried -
 // a device seen for the first time must be looked up immediately regardless
 // of the staleness timer, so it doesn't stream under a non mac/serial/jirakey
-// name until the next scheduled refresh happens to come around.
+// name until the next scheduled refresh happens to come around. Devices that
+// came back not-found are held in notFoundLookup and skipped on incremental
+// refreshes until the next full refresh runs (which rebuilds the not-found
+// cache from scratch) - otherwise every 5-minute cycle re-queries the entire
+// not-found set, which can take longer than the collection interval itself.
 func (w *Worker) refreshDeviceLookupIfNeeded(endpoints []positron.Endpoint, devices []positron.Device) {
 	var items []devicelookup.Identifiers
 	for _, e := range endpoints {
@@ -328,10 +334,19 @@ func (w *Worker) refreshDeviceLookupIfNeeded(endpoints []positron.Endpoint, devi
 	if shouldRefresh {
 		toQuery = items
 	} else {
+		skipped := 0
 		for _, it := range items {
-			if !w.deviceLookup.IsResolved(it.MAC, it.Serial, it.Name) {
-				toQuery = append(toQuery, it)
+			if w.deviceLookup.IsResolved(it.MAC, it.Serial, it.Name) {
+				continue
 			}
+			if w.notFoundLookup.IsKnownNotFound(it.MAC, it.Serial, it.Name) {
+				skipped++
+				continue
+			}
+			toQuery = append(toQuery, it)
+		}
+		if skipped > 0 {
+			logrus.Infof("DeviceLookup: holding %d not-found device(s) until next full refresh", skipped)
 		}
 	}
 	if len(toQuery) == 0 {
@@ -352,4 +367,22 @@ func (w *Worker) refreshDeviceLookupIfNeeded(endpoints []positron.Endpoint, devi
 	}
 	devicelookup.Save(w.deviceLookup)
 	logrus.Infof("Device inventory lookup refreshed: %d entries total", len(w.deviceLookup))
+
+	if shouldRefresh {
+		w.notFoundLookup = make(devicelookup.NotFoundCache)
+	} else if w.notFoundLookup == nil {
+		w.notFoundLookup = make(devicelookup.NotFoundCache)
+	}
+	for _, it := range toQuery {
+		key := devicelookup.Key(it.MAC, it.Serial, it.Name)
+		if key == "" {
+			continue
+		}
+		if _, found := newEntries[key]; found {
+			delete(w.notFoundLookup, key)
+		} else {
+			w.notFoundLookup[key] = true
+		}
+	}
+	devicelookup.SaveNotFound(w.notFoundLookup)
 }

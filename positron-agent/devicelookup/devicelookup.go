@@ -26,6 +26,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -34,6 +35,7 @@ import (
 )
 
 const lookupPath = "devicelookup.json"
+const notFoundPath = "devicelookup_notfound.json"
 const lookupConcurrency = 20
 
 // DeviceInfo holds the fields we need from the device inventory API response.
@@ -119,6 +121,57 @@ func (dl Lookup) IsResolved(candidates ...string) bool {
 			continue
 		}
 		if _, ok := dl[c]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// Key returns the dedup key Refresh/NotFoundCache use for one device: the
+// first non-empty of MAC, serial, name, in that priority order.
+func Key(mac, serial, name string) string {
+	return firstNonEmpty(mac, serial, name)
+}
+
+// NotFoundCache remembers which identifier keys came back not-found from
+// the inventory API. It lets the incremental ("new/unresolved devices")
+// refresh skip devices that genuinely don't exist in the inventory instead
+// of re-querying all of them every collection cycle - they're only retried
+// once the next full refresh runs, which also rebuilds this cache from
+// scratch.
+type NotFoundCache map[string]bool
+
+// LoadNotFound reads devicelookup_notfound.json from disk; returns an empty
+// cache if absent or invalid.
+func LoadNotFound() NotFoundCache {
+	data, err := os.ReadFile(notFoundPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			logrus.Warnf("DeviceLookup: failed to read %s: %v", notFoundPath, err)
+		}
+		return make(NotFoundCache)
+	}
+	var nf NotFoundCache
+	if err := json.Unmarshal(data, &nf); err != nil {
+		logrus.Warnf("DeviceLookup: failed to parse %s, starting fresh: %v", notFoundPath, err)
+		return make(NotFoundCache)
+	}
+	return nf
+}
+
+// SaveNotFound persists the not-found cache to disk.
+func SaveNotFound(nf NotFoundCache) {
+	atomicWriteJSON(notFoundPath, nf)
+}
+
+// IsKnownNotFound reports whether any candidate key already came back
+// not-found on a previous incremental refresh since the last full refresh.
+func (nf NotFoundCache) IsKnownNotFound(candidates ...string) bool {
+	for _, c := range candidates {
+		if c == "" {
+			continue
+		}
+		if nf[c] {
 			return true
 		}
 	}
@@ -239,6 +292,8 @@ func Refresh(cfg config.DeviceInventoryConfig, items []Identifiers) Lookup {
 	sem := make(chan struct{}, lookupConcurrency)
 	resultCh := make(chan result, len(uniq))
 	var wg sync.WaitGroup
+	var completed int64
+	total := len(uniq)
 
 	for key, it := range uniq {
 		wg.Add(1)
@@ -246,6 +301,7 @@ func Refresh(cfg config.DeviceInventoryConfig, items []Identifiers) Lookup {
 		go func(key string, it Identifiers) {
 			defer wg.Done()
 			defer func() { <-sem }()
+			defer func() { atomic.AddInt64(&completed, 1) }()
 
 			var identifier string
 			var raw map[string]interface{}
@@ -274,9 +330,28 @@ func Refresh(cfg config.DeviceInventoryConfig, items []Identifiers) Lookup {
 		}(key, it)
 	}
 
+	done := make(chan struct{})
 	go func() {
 		wg.Wait()
 		close(resultCh)
+		close(done)
+	}()
+
+	// Log progress periodically since a full refresh of thousands of devices
+	// can take many minutes and would otherwise look hung.
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				n := atomic.LoadInt64(&completed)
+				logrus.Infof("DeviceLookup: progress %d/%d (%.0f%%), elapsed=%v",
+					n, total, 100*float64(n)/float64(total), time.Since(startTime).Round(time.Second))
+			}
+		}
 	}()
 
 	newLookup := make(Lookup, len(uniq))
