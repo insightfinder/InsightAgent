@@ -22,14 +22,21 @@ type Service struct {
 // Endpoint represents an endpoint from the API response
 type Endpoint struct {
 	// ID                  string `json:"id"`
-	// MacAddress          string `json:"macAddress"`
+	MacAddress string `json:"macAddress"`
 	// ConfEndpointID      int    `json:"confEndpointId"`
+	// ConfEndpointName is usually the assigned CPE hostname, but for some
+	// endpoints it has been reduced to a bare port/slot index instead (e.g.
+	// "206", "10105") - see Endpoint.OwnName in util.go, which picks whichever
+	// of this and ConfUserName actually looks like a name.
 	ConfEndpointName string `json:"confEndpointName"`
 	// ConfPortIfIndex     string `json:"confPortIfIndex"`
 	// ConfAutoPort        bool   `json:"confAutoPort"`
 	// DetectedPortIfIndex string `json:"detectedPortIfIndex"`
 	// ConfUserID          int    `json:"confUserId"`
-	// ConfUserName        string `json:"confUserName"`
+	// ConfUserName is an alternate hostname field - not consistently kept in
+	// sync with ConfEndpointName by Positron's provisioning flows, but often
+	// still populated when ConfEndpointName has degraded to a bare number.
+	ConfUserName string `json:"confUserName"`
 	// ConfUserUid         int    `json:"confUserUid"`
 	// ConfBwProfileID     int    `json:"confBwProfileId"`
 	// ConfBwProfileName   string `json:"confBwProfileName"`
@@ -40,7 +47,7 @@ type Endpoint struct {
 	// FwMismatch          bool   `json:"fwMismatch"`
 	// Alive               bool   `json:"alive"`
 	// HwProduct           string `json:"hwProduct"`
-	// SerialNumber        string `json:"serialNumber"`
+	SerialNumber string `json:"serialNumber"`
 	// UpTime              string `json:"upTime"`
 	// FwVersion           string `json:"fwVersion"`
 	// XputIndicator       int    `json:"xputIndicator"`
@@ -62,9 +69,9 @@ type Endpoint struct {
 
 // Device represents a device from the device list API
 type Device struct {
-	Name string `json:"name"`
-	// SerialNumber              string  `json:"serialNumber"`
-	IPAddress string `json:"ipAddress"`
+	Name         string `json:"name"`
+	SerialNumber string `json:"serialNumber"`
+	IPAddress    string `json:"ipAddress"`
 	// ProductClass              string  `json:"productClass"`
 	// SoftwareVersion           string  `json:"softwareVersion"`
 	// SyncError                 *string `json:"syncError"`

@@ -49,6 +49,22 @@ insightfinder:
   sampling_interval: 60        # Data collection interval in seconds
 ```
 
+## Device Inventory Enrichment
+
+If `device_inventory.api_key` and `device_inventory.base_url` are set in `configs/config.yaml`, the agent looks up each endpoint and device in the internal Device Inventory (Asset Registry) API - by MAC (endpoints only), then serial number, then own name (first match wins) - and caches the result in `devicelookup.json` (refreshed every `device_inventory.refresh_hours`, default 24; a device seen for the first time is always looked up immediately, regardless of that timer). If the two settings are left blank, enrichment is skipped entirely and no device is ever matched.
+
+Values sent to InsightFinder, in priority order:
+
+- **Instance name** (`in`): Inventory MAC (`MAC {mac}`, endpoints only) > Inventory serial (`SERIAL {serial}`) > Inventory object key (`JIRAKEY {object_key}`) > the device's own name (cleaned - `_`/`:` become `-`). If none of these are available, the device is **dropped** (not sent to InsightFinder) rather than sent under any other identifier. Values are never upper/lower-cased.
+- **Instance display name** (`idn`): the device's own name as reported, raw/uncleaned - never falls back to the Inventory's name field. For devices this is always `name`; for endpoints, Positron exposes two competing name fields (`confEndpointName` and `confUserName`) that aren't reliably kept in sync with each other, so `confEndpointName` is used whenever it looks like a real name, falling back to `confUserName` only when `confEndpointName` is empty or has degraded to a bare port/slot number (e.g. `"10105"`).
+- **Component name** (`cn`): Inventory's `component_name` only (`{manufacturer}-{device_class}`, only set when both are present). Omitted if not in Inventory - no default.
+- **Zone** (`z`): Inventory's `venue` only. Omitted if not in Inventory - no default.
+- **IP address** (`i`): Inventory's `ip_address` > the device's own reported IP (devices only - endpoints report none; excludes the `0.0.0.0` placeholder). Omitted if both are empty.
+
+`idn`/`cn`/`i`/`z` are packed into a single JSON string in the `im` field of each instance (not sent as flat top-level keys) - this is required for InsightFinder to pick up the display name correctly.
+
+`devicelookup.json` is a runtime cache regenerated on every run (gitignored) - delete it to force a full re-lookup.
+
 ## API Endpoints Monitored
 
 ### Endpoints API (`/api/v1/endpoint/list/all`)
@@ -75,19 +91,11 @@ Collects alarm and event data including:
 ## Metrics Collected
 
 ### Endpoint Metrics
-- `State`, `Alive`, `FW_Mismatch` - Connection status
-- `Xput_Indicator_Mbps`, `Rx_Phy_Rate_Mbps`, `Tx_Phy_Rate_Mbps` - Throughput
-- `Rx_Max_Xput_Mbps`, `Tx_Max_Xput_Mbps` - Maximum throughput
-- `Rx_Usage_Percent`, `Tx_Usage_Percent` - Usage percentages
-- `Wire_Length_Meters`, `Wire_Length_Feet` - Physical layer
-- `Mode` - Operating mode (e.g., "coax")
-- `Uptime_Seconds` - Device uptime
+- `DS PHY rate`, `US PHY rate` - Downstream/upstream physical layer rate (`rxPhyRate`/`txPhyRate`)
+- `DS Max BW`, `US Max BW` - Downstream/upstream max throughput (`rxMaxXput`/`txMaxXput`)
 
 ### Device Metrics
-- `Ports_Total`, `Endpoints_Total`, `Subscribers_Total` - Capacity
-- `Software_Version`, `Product_Class` - Device info
-- `Uptime_Seconds` - Device uptime
-- `Firmware_Upgrade_In_Progress` - Status flags
+- `Ports`, `Endpoints`, `Subscribers`, `Bandwidths` - Capacity counts reported by `/device/list`
 
 ## Usage
 

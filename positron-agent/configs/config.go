@@ -53,6 +53,20 @@ func setDefaults(config *Config) {
 		config.Agent.LogLevel = "info"
 	}
 
+	// Device Inventory defaults
+	if config.DeviceInventory.TimeoutSec == 0 {
+		config.DeviceInventory.TimeoutSec = 5
+	}
+	if config.DeviceInventory.MaxRetry == 0 {
+		config.DeviceInventory.MaxRetry = 2
+	}
+	if config.DeviceInventory.RetryDelayMs == 0 {
+		config.DeviceInventory.RetryDelayMs = 500
+	}
+	if config.DeviceInventory.RefreshHours == 0 {
+		config.DeviceInventory.RefreshHours = 24
+	}
+
 	// InsightFinder defaults - sampling_interval is now the main collection interval
 	if config.InsightFinder.SamplingInterval == 0 {
 		config.InsightFinder.SamplingInterval = 300 // 5 minutes default
