@@ -130,7 +130,7 @@ def send_data(log_data):
     to_send_data_json = json.dumps(to_send_data_dict)
 
     # send the data
-    post_url = config_vars['server_url'] + "/customprojectrawdata"
+    post_url = config_vars['server_url'] + "/api/v1/customprojectrawdata"
     send_data_to_receiver(post_url, to_send_data_json, len(log_data))
     print("--- Send data time: %s seconds ---" + str(time.time() - send_data_time))
 
