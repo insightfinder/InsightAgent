@@ -1,0 +1,7 @@
+logs/
+venv/
+config.yaml
+.python-version
+__pycache__/
+*.pyc
+nohup.out
