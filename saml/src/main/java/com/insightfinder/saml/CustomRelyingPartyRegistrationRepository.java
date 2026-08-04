@@ -11,11 +11,11 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import org.apache.commons.codec.binary.Base64;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
-import org.springframework.security.saml2.credentials.Saml2X509Credential;
+import org.springframework.security.saml2.core.Saml2X509Credential;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrations;
@@ -78,26 +78,24 @@ public class CustomRelyingPartyRegistrationRepository implements
       IdpConfig idpConfig)
       throws Exception {
     X509Certificate verificationCertificate = loadCertificate(idpConfig.getIdpCert());
-    Saml2X509Credential verificationCredential = new Saml2X509Credential(
-        verificationCertificate, Saml2X509Credential.Saml2X509CredentialType.VERIFICATION);
+    Saml2X509Credential verificationCredential = Saml2X509Credential.verification(
+        verificationCertificate);
 
     X509Certificate spCertificate = loadCertificate(ifConfig.getSpCert());
     PrivateKey spPrivateKey = loadPrivateKey(ifConfig.getSpKey());
-    Saml2X509Credential signingCredential = new Saml2X509Credential(
-        spPrivateKey, spCertificate, Saml2X509Credential.Saml2X509CredentialType.SIGNING);
+    Saml2X509Credential signingCredential = Saml2X509Credential.signing(
+        spPrivateKey, spCertificate);
 
     return RelyingPartyRegistration.withRegistrationId(idp)
-        .assertingPartyDetails(details -> details
+        .assertingPartyMetadata(details -> details
             .entityId(
                 idpConfig.getEntityId()) // The IdP's Entity ID
             .singleSignOnServiceLocation(
                 idpConfig.getSinglesignonUrl()) // The IdP's SSO URL
             .singleSignOnServiceBinding(Saml2MessageBinding.REDIRECT) // The SSO binding
-            .wantAuthnRequestsSigned(true)) // Indicates you want to sign requests
-        .credentials(c -> {
-          c.add(verificationCredential);
-          c.add(signingCredential); // Add the signing credential here
-        })
+            .wantAuthnRequestsSigned(true) // Indicates you want to sign requests
+            .verificationX509Credentials(c -> c.add(verificationCredential))) // The IdP's verification cert
+        .signingX509Credentials(c -> c.add(signingCredential)) // The SP's signing credential
         .build();
   }
 

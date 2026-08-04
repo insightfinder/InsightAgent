@@ -6,7 +6,6 @@ import com.insightfinder.saml.SamlProperties;
 import com.insightfinder.saml.SamlProperties.IdpConfig;
 import com.insightfinder.saml.config.IFConfig;
 import java.util.logging.Logger;
-import org.apache.http.util.TextUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -18,6 +17,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.view.RedirectView;
@@ -43,10 +43,10 @@ public class SamlV2View {
     String email = principal.getFirstAttribute(
         idpConfig.getEmailKey());
     String firstname =
-        TextUtils.isEmpty(idpConfig.getFirstnameKey()) ? "John" : principal.getFirstAttribute(
+        !StringUtils.hasLength(idpConfig.getFirstnameKey()) ? "John" : principal.getFirstAttribute(
             idpConfig.getFirstnameKey());
     String lastName =
-        TextUtils.isEmpty(idpConfig.getLastnameKey()) ? "Doe" : principal.getFirstAttribute(
+        !StringUtils.hasLength(idpConfig.getLastnameKey()) ? "Doe" : principal.getFirstAttribute(
             idpConfig.getLastnameKey());
     String state = verify(email, firstname, lastName);
     if (state == null || state.isEmpty()) {

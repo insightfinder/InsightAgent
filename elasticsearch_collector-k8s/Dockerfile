@@ -1,4 +1,4 @@
-FROM python:3.13
+FROM python:3.13-alpine
 ENV TZ=UTC
 
 WORKDIR /app
@@ -6,7 +6,7 @@ WORKDIR /app
 COPY . /app
 
 
-RUN apt-get update -y && apt-get upgrade -y && \
+RUN apk update && apk upgrade --no-cache && \
     python3 -m pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     chown -R 1001:1001 ./

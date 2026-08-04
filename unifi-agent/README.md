@@ -35,6 +35,11 @@ INSIGHTFINDER_LICENSE_KEY="your-license-key"
 INSIGHTFINDER_PROJECT_NAME="unifi-metrics"
 INSIGHTFINDER_SYSTEM_NAME="your-system-name"   # optional
 INSIGHTFINDER_SAMPLING_INTERVAL="5"            # minutes between collections
+
+# Optional: Device Inventory (Asset Registry) enrichment - leave both blank to disable.
+# See "Device Inventory Enrichment" below.
+JIRAASSET_BASE="http://your-accessparks-host"
+JIRAASSET_API_KEY="your-accessparks-api-key"
 ```
 
 ---
@@ -77,18 +82,43 @@ Bamboo MHC      U6+       5GHz    7            2          5          online
 
 ## Metrics sent to InsightFinder
 
-Per AP instance, per supported band (2.4GHz / 5GHz):
+Per AP instance, per supported band (5GHz only - see `SUPPORTED_BANDS` in `get_metrics.py`):
 
 | Metric | Description |
 |--------|-------------|
-| `ChUtil_Busy_2.4GHz` | Channel busy % on 2.4 GHz |
-| `ChUtil_Rx_2.4GHz` | Receive utilization % on 2.4 GHz |
-| `ChUtil_Tx_2.4GHz` | Transmit utilization % on 2.4 GHz |
-| `ChUtil_Busy_5GHz` | Channel busy % on 5 GHz |
-| `ChUtil_Rx_5GHz` | Receive utilization % on 5 GHz |
-| `ChUtil_Tx_5GHz` | Transmit utilization % on 5 GHz |
+| `Channel Utilization (5GHz)` | Total airtime utilization % |
+| `Clients (5GHz)` | Number of associated 5 GHz clients |
+| `RSSI Average (5GHz)` | Average client RSSI (absolute dBm) |
+| `SNR Average (5GHz)` | Average client SNR (dB) |
+| `% Clients RSSI < -74/-78/-80 dBm (5GHz)` | % of clients below each RSSI threshold |
+| `% Clients SNR < 15/18/20 dB (5GHz)` | % of clients below each SNR threshold |
 
-**Instance names** use the AP's IP address if available, otherwise the AP name (sanitized: spaces/commas/underscores/`@#:` → `-`). Component names are set to the sanitized site name.
+Plus any rules defined in `DERIVED_METRICS_SCRIPT` (see `derived_metrics.py`).
+
+---
+
+## Device Inventory Enrichment
+
+If `JIRAASSET_BASE` and `JIRAASSET_API_KEY` are set in `.env`, each AP is looked up in the internal Device Inventory (Asset Registry) API - by MAC, then serial number, then own name (first match wins) - and the result is cached in `aplookup.json` (matched) / `aplookupnotfound.json` (not found). Same API and lookup convention used by the baicells/positron/mimosa/netexperience/tarana-gnmic agents. If the two settings are left blank, enrichment is skipped entirely and no AP is ever matched.
+
+The cache is refreshed two ways:
+- **Immediately** for any AP seen for the first time (not yet in either cache file) - it doesn't wait for the schedule below.
+- **Once daily**, in the 00:00–00:20 UTC window, `ap_inventory_lookup.py` re-runs against every AP - revalidating existing matches and retrying previous misses.
+
+Values sent to InsightFinder, in priority order:
+
+- **Instance name** (`in`): Inventory MAC (`MAC {mac}`) > Inventory serial (`SERIAL {serial}`) > Inventory object key (`JIRAKEY {object_key}`) > the AP's own name (cleaned - `_`/`:` become `-`). If none of these are available, the AP is **dropped** (not sent to InsightFinder) rather than sent under any other identifier. An Inventory miss alone does not drop the AP - it streams under its own name until Inventory resolves it. Values are never upper/lower-cased.
+- **Instance display name** (`idn`): always the AP's own name as reported, raw/uncleaned - never falls back to the Inventory's name field.
+- **Component name** (`cn`): Inventory's `manufacturer-device_class` only (from the matched record's `model`). Omitted if not in Inventory - no default.
+- **Zone** (`z`): Inventory's `meta.subvenue` only. Omitted if not in Inventory - no default.
+- **IP address** (`i`): Inventory's `ip_address` > the AP's own reported IP. Omitted if both are empty.
+
+`aplookup.json`/`aplookupnotfound.json` are runtime caches regenerated as APs are seen (gitignored) - delete them to force a full re-lookup.
+
+**Safety guarantees:**
+- A brand-new AP is never sent under a bare/unenriched identity just because the cache doesn't have it yet - it's looked up immediately, and only sent (under its own name) once that lookup actually completes (found or confirmed not-found).
+- If the lookup itself errors (Inventory API down), the AP is skipped entirely for that cycle and retried next time - it does not fall back to sending raw.
+- Inventory API errors never evict an existing good match from the cache - only a confirmed miss updates `aplookupnotfound.json`.
 
 ---
 
@@ -98,6 +128,7 @@ Per AP instance, per supported band (2.4GHz / 5GHz):
 |------|---------|
 | `get_metrics.py` | Fetch AP radio stats and print to terminal |
 | `send_metrics.py` | Collect metrics and send to InsightFinder in a loop |
+| `ap_inventory_lookup.py` | Device Inventory (Asset Registry) lookup - batch script and the `resolve_ap()` helper `send_metrics.py` uses for first-seen APs |
 | `insightfinder.py` | InsightFinder API client (metric + log ingestion) |
 | `example.env` | Config template — copy to `.env` |
 

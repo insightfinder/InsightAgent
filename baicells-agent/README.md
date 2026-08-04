@@ -10,6 +10,7 @@ This project provides:
 - **`get_metrics.py`**: CLI tool to poll and display CPE signal metrics
 - **`send_metrics.py`**: CLI tool to poll CPE metrics and send to InsightFinder
 - **`insightfinder.py`**: InsightFinder client library for metric streaming
+- **`device_inventory.py`**: Device Inventory (Asset Registry) lookup/cache used by `send_metrics.py` to enrich devices with instance identity, component name, zone, and IP
 - **`cpe-device-sn.txt`**: Static CPE devices serial number copying from <https://cloudcore.baicells.com>
 
 **Note: Currently, the CPE device serial number can not be get by API on runtime. The only way is to use the serial number in cpe-device-sn.txt**
@@ -36,10 +37,10 @@ This project provides:
 
 2. **Configure credentials:**
 
-   Copy `example.env` to `.env` and fill in your credentials:
+   Copy `.env.example` to `.env` and fill in your credentials:
 
    ```bash
-   cp example.env .env
+   cp .env.example .env
    ```
 
    Then edit `.env` with your values:
@@ -48,6 +49,20 @@ This project provides:
    BAICELLS_URL=https://cloudcore.baicells.com:7085
    BAICELLS_USERNAME=your_username
    BAICELLS_PASSWORD=your_password
+
+   # Device Inventory API (only needed for send_metrics.py) - see "Device
+   # Inventory Enrichment" below. Leave DEVICE_INVENTORY_API_KEY/BASE_URL
+   # blank to disable enrichment entirely.
+   DEVICE_INVENTORY_API_KEY=your_api_key
+   DEVICE_INVENTORY_BASE_URL=http://your-inventory-host
+   DEVICE_INVENTORY_TIMEOUT_SEC=5
+   DEVICE_INVENTORY_MAX_RETRY=2
+   DEVICE_INVENTORY_RETRY_DELAY_MS=500
+   DEVICE_INVENTORY_REFRESH_HOURS=24
+
+   # Local testing only - extra delay after each device's BaiCells API call.
+   # Leave at 0 in production.
+   BAICELLS_PER_DEVICE_DELAY_SEC=0
 
    # InsightFinder Configuration (only needed for send_metrics.py)
    INSIGHTFINDER_BASE_URL="https://stg.insightfinder.com"
@@ -141,6 +156,22 @@ All device-selection flags from `get_metrics.py`, plus:
 **Rate Limiting:**
 
 Devices are processed in batches of 20 with 60-second intervals between batches to respect API rate limits.
+
+#### Device Inventory Enrichment
+
+If `DEVICE_INVENTORY_API_KEY` and `DEVICE_INVENTORY_BASE_URL` are set, `send_metrics.py` looks up each device in the internal Device Inventory (Asset Registry) API - by MAC, then serial number, then own name (first match wins) - and caches the result in `devicelookup.json` (refreshed every `DEVICE_INVENTORY_REFRESH_HOURS`, default 24; a device seen for the first time is always looked up immediately, regardless of that timer). If the two env vars are left blank, enrichment is skipped entirely and no device is ever matched.
+
+Values sent to InsightFinder, in priority order:
+
+- **Instance name** (`in`): Inventory MAC (`MAC {mac}`) > Inventory serial (`SERIAL {serial}`) > Inventory object key (`JIRAKEY {object_key}`) > the device's own `cpeName` (cleaned - `_`/`:` become `-`). If none of these are available, the device is **dropped** (not sent to InsightFinder) rather than sent under any other identifier. Values are never upper/lower-cased.
+- **Instance display name** (`idn`): always the device's own `cpeName` as reported by BaiCells (raw, uncleaned) - never falls back to the Inventory's name field.
+- **Component name** (`cn`): Inventory's `component_name` only (`{manufacturer}-{device_class}`). Omitted if not in Inventory - no default.
+- **Zone** (`z`): Inventory's `venue` only. Omitted if not in Inventory - no default.
+- **IP address** (`i`): Inventory's `ip_address` > the device's own reported `ipAddress` (excluding the `0.0.0.0` placeholder). Omitted if both are empty.
+
+`idn`/`cn`/`i`/`z` are packed into a single JSON string in the `im` field of each instance (not sent as flat top-level keys) - this is required for InsightFinder to pick up the display name correctly.
+
+`devicelookup.json` is a runtime cache regenerated on every run (gitignored) - delete it to force a full re-lookup.
 
 ### 3. Using the Client Library (`baicells_client.py`)
 
@@ -380,8 +411,8 @@ Get detailed CPE information including comprehensive signal quality metrics. Thi
 **Device Information:**
 
 - `cpeName`: CPE device name
-- `macaddress`: MAC address
-- `ipaddress`: IP address
+- `macAddress`: MAC address
+- `ipAddress`: IP address
 - `softwareVersion`: Software version
 - `connectionStatus`: Connection status
 - `onlineTime`, `offlineTime`: Connection timestamps
@@ -418,8 +449,10 @@ baicells-agent/
 ├── get_metrics.py         # CLI tool to poll CPE signal metrics
 ├── send_metrics.py        # CLI tool to send metrics to InsightFinder
 ├── insightfinder.py       # InsightFinder client library
+├── device_inventory.py    # Device Inventory (Asset Registry) lookup/cache
+├── devicelookup.json      # Runtime inventory cache (generated, gitignored)
 ├── cpe-device-sn.txt      # Default CPE serial numbers file
-├── example.env            # Example environment configuration
+├── .env.example           # Example environment configuration
 ├── requirements.txt       # Python dependencies
 └── README.md              # This file
 ```

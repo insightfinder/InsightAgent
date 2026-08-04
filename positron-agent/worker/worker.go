@@ -8,6 +8,7 @@ import (
 	"time"
 
 	config "github.com/insightfinder/positron-agent/configs"
+	"github.com/insightfinder/positron-agent/devicelookup"
 	"github.com/insightfinder/positron-agent/insightfinder"
 	"github.com/insightfinder/positron-agent/pkg/models"
 	"github.com/insightfinder/positron-agent/positron"
@@ -19,6 +20,8 @@ type Worker struct {
 	positronService      *positron.Service
 	insightFinderService *insightfinder.Service
 	testMode             bool
+	deviceLookup         devicelookup.Lookup
+	notFoundLookup       devicelookup.NotFoundCache
 	// Stats tracking
 	statsLock    sync.RWMutex
 	currentStats *CollectionStats
@@ -42,6 +45,8 @@ func NewWorker(config *config.Config, positronService *positron.Service, ifServi
 		positronService:      positronService,
 		insightFinderService: ifService,
 		testMode:             false,
+		deviceLookup:         devicelookup.Load(),
+		notFoundLookup:       devicelookup.LoadNotFound(),
 		currentStats:         &CollectionStats{},
 	}
 }
@@ -138,15 +143,6 @@ func (w *Worker) collectMetrics(ctx context.Context) {
 	w.currentStats.TotalEndpoints = len(endpoints)
 	w.statsLock.Unlock()
 
-	for _, endpoint := range endpoints {
-		metric := endpoint.ToMetricData()
-		metricsBuffer = append(metricsBuffer, *metric)
-
-		w.statsLock.Lock()
-		w.currentStats.ProcessedEndpoints++
-		w.statsLock.Unlock()
-	}
-
 	// Collect device metrics
 	logrus.Info("Collecting device metrics...")
 	devices, err := w.positronService.GetDevices()
@@ -160,8 +156,27 @@ func (w *Worker) collectMetrics(ctx context.Context) {
 	w.currentStats.TotalDevices = len(devices)
 	w.statsLock.Unlock()
 
+	w.refreshDeviceLookupIfNeeded(endpoints, devices)
+
+	for _, endpoint := range endpoints {
+		metric, ok := endpoint.ToMetricData(w.deviceLookup)
+		if !ok {
+			logrus.Warnf("Dropping endpoint (port %q): no Inventory MAC/serial/object key match and no own name reported", endpoint.ConfEndpointName)
+			continue
+		}
+		metricsBuffer = append(metricsBuffer, *metric)
+
+		w.statsLock.Lock()
+		w.currentStats.ProcessedEndpoints++
+		w.statsLock.Unlock()
+	}
+
 	for _, device := range devices {
-		metric := device.ToMetricData()
+		metric, ok := device.ToMetricData(w.deviceLookup)
+		if !ok {
+			logrus.Warnf("Dropping device %q: no Inventory serial/object key match and no own name reported", device.Name)
+			continue
+		}
 		metricsBuffer = append(metricsBuffer, *metric)
 
 		w.statsLock.Lock()
@@ -278,4 +293,99 @@ func (w *Worker) updateErrorCount() {
 	w.statsLock.Lock()
 	w.currentStats.ErrorCount++
 	w.statsLock.Unlock()
+}
+
+// refreshDeviceLookupIfNeeded refreshes the device inventory cache (MAC ->
+// serial -> name, first match wins). A full refresh runs if the cache is
+// empty or stale; otherwise only devices never resolved before are queried -
+// a device seen for the first time must be looked up immediately regardless
+// of the staleness timer, so it doesn't stream under a non mac/serial/jirakey
+// name until the next scheduled refresh happens to come around. Devices that
+// came back not-found are held in notFoundLookup and skipped on incremental
+// refreshes until the next full refresh runs (which rebuilds the not-found
+// cache from scratch) - otherwise every 5-minute cycle re-queries the entire
+// not-found set, which can take longer than the collection interval itself.
+func (w *Worker) refreshDeviceLookupIfNeeded(endpoints []positron.Endpoint, devices []positron.Device) {
+	var items []devicelookup.Identifiers
+	for _, e := range endpoints {
+		name := devicelookup.CleanOwnName(e.OwnName())
+		mac := devicelookup.NormalizeMAC(e.MacAddress)
+		serial := devicelookup.NormalizeSerial(e.SerialNumber)
+		if mac == "" && serial == "" && name == "" {
+			continue
+		}
+		items = append(items, devicelookup.Identifiers{MAC: mac, Serial: serial, Name: name})
+	}
+	for _, d := range devices {
+		name := devicelookup.CleanOwnName(d.Name)
+		serial := devicelookup.NormalizeSerial(d.SerialNumber)
+		if serial == "" && name == "" {
+			continue
+		}
+		items = append(items, devicelookup.Identifiers{Serial: serial, Name: name})
+	}
+	if len(items) == 0 {
+		return
+	}
+
+	shouldRefresh := len(w.deviceLookup) == 0 || devicelookup.IsStale(w.config.DeviceInventory.RefreshHours)
+
+	var toQuery []devicelookup.Identifiers
+	if shouldRefresh {
+		toQuery = items
+	} else {
+		resolved, held := 0, 0
+		for _, it := range items {
+			if w.deviceLookup.IsResolved(it.MAC, it.Serial, it.Name) {
+				resolved++
+				continue
+			}
+			if w.notFoundLookup.IsKnownNotFound(it.MAC, it.Serial, it.Name) {
+				held++
+				continue
+			}
+			// Never seen before (not resolved, not a known not-found) - a
+			// new device always gets queried immediately, regardless of the
+			// held/not-found set.
+			toQuery = append(toQuery, it)
+		}
+		logrus.Infof("DeviceLookup: %d already resolved, %d already checked and not found (held until next full refresh), %d new device(s) to query",
+			resolved, held, len(toQuery))
+	}
+	if len(toQuery) == 0 {
+		return
+	}
+
+	logrus.Infof("Refreshing device inventory lookup for %d device(s)%s...",
+		len(toQuery), map[bool]string{true: " (full refresh)", false: " (new/unresolved devices)"}[shouldRefresh])
+	newEntries := devicelookup.Refresh(w.config.DeviceInventory, toQuery)
+	if newEntries == nil {
+		return
+	}
+	if w.deviceLookup == nil {
+		w.deviceLookup = make(devicelookup.Lookup)
+	}
+	for k, v := range newEntries {
+		w.deviceLookup[k] = v
+	}
+	devicelookup.Save(w.deviceLookup)
+	logrus.Infof("Device inventory lookup refreshed: %d entries total", len(w.deviceLookup))
+
+	if shouldRefresh {
+		w.notFoundLookup = make(devicelookup.NotFoundCache)
+	} else if w.notFoundLookup == nil {
+		w.notFoundLookup = make(devicelookup.NotFoundCache)
+	}
+	for _, it := range toQuery {
+		key := devicelookup.Key(it.MAC, it.Serial, it.Name)
+		if key == "" {
+			continue
+		}
+		if _, found := newEntries[key]; found {
+			delete(w.notFoundLookup, key)
+		} else {
+			w.notFoundLookup[key] = true
+		}
+	}
+	devicelookup.SaveNotFound(w.notFoundLookup)
 }

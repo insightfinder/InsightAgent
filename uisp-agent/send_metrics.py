@@ -21,11 +21,14 @@ Usage:
 """
 
 import argparse
+import datetime
 import json
 import logging
 import os
+import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 import requests
 import urllib3
@@ -38,6 +41,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from get_metrics import extract_device_metrics, get_devices
 from transform_metrics import transform_all_devices
 from insightfinder import InsightFinder, Config
+from device_inventory_lookup import resolve_device, atomic_write_json
 
 # Load environment variables
 load_dotenv()
@@ -47,6 +51,119 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+DEVICE_LOOKUP_PATH = Path(__file__).parent / "devicelookup.json"
+DEVICE_NOT_FOUND_PATH = Path(__file__).parent / "devicelookupnotfound.json"
+DEVICE_INVENTORY_SCRIPT = Path(__file__).parent / "device_inventory_lookup.py"
+
+
+def load_device_lookup(path: Path = DEVICE_LOOKUP_PATH) -> dict:
+    try:
+        data = json.loads(path.read_text())
+        return {k: v for k, v in data.items() if k != "lastmodifiedtimedata"}
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def load_device_not_found(path: Path = DEVICE_NOT_FOUND_PATH) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def load_lastmodified(path: Path = DEVICE_LOOKUP_PATH) -> str:
+    try:
+        return json.loads(path.read_text()).get("lastmodifiedtimedata", "")
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return ""
+
+
+def maybe_refresh_device_lookup() -> bool:
+    """Run device_inventory_lookup.py once per day during the 00:00-00:20 UTC
+    window. Reads lastmodifiedtimedata from devicelookup.json to skip if
+    already run today. Never raises. Returns True if a refresh was executed."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if not (now.hour == 0 and now.minute < 20):
+        return False
+    ts = load_lastmodified()
+    if ts:
+        try:
+            if datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").date() == now.date():
+                return False  # already refreshed today
+        except ValueError:
+            pass
+    logger.info("Device inventory refresh triggered (00:00-00:20 UTC window).")
+    try:
+        subprocess.run(
+            [sys.executable, str(DEVICE_INVENTORY_SCRIPT)],
+            timeout=600,
+            check=False,
+            capture_output=True,
+        )
+    except Exception as exc:
+        logger.warning(f"Device inventory refresh failed (ignored): {exc}")
+    return True
+
+
+def resolve_new_devices(
+    devices: list[dict], device_lookup: dict, device_not_found: dict,
+    base_url: str, api_key: str,
+) -> set[str]:
+    """Look up any device seen for the first time immediately, rather than
+    waiting for the once-daily inventory refresh window - a device seen for
+    the first time must be looked up right away, not stream under its bare
+    own name until the next scheduled refresh happens to come around.
+    Mutates device_lookup/device_not_found in place and persists both files
+    if anything changed.
+
+    Returns the set of macs that errored this cycle (API/network error, so no
+    conclusive answer yet) - the caller MUST exclude these from this run's
+    transform rather than falling back to their own name: a device that has
+    never actually been through a completed Inventory lookup is not the same
+    as one Inventory has confirmed it doesn't have, and must not be sent under
+    any identity until an actual lookup attempt resolves it one way or the
+    other."""
+    seen: set[str] = set()
+    pending: set[str] = set()
+    changed = False
+    for device in devices:
+        mac = (device.get("mac") or "").lower()
+        if not mac or mac in seen or mac in device_lookup or mac in device_not_found:
+            continue
+        seen.add(mac)
+        device_stub = {
+            "mac": mac,
+            "serialNumber": device.get("serialNumber") or "",
+            "name": device.get("name") or "",
+            "ip": device.get("ipAddress") or "",
+        }
+        device_key, matched_entry, had_error = resolve_device(device_stub, base_url, api_key)
+        if had_error:
+            pending.add(mac)
+            logger.warning(f"Inventory: API error resolving new device {mac} - will retry next run")
+            continue
+        if matched_entry:
+            device_lookup[device_key] = matched_entry
+            logger.info(f"Inventory: resolved new device {mac} via {matched_entry['identifier_used']!r}")
+        else:
+            device_not_found[device_key] = {"device": device_stub}
+            logger.info(f"Inventory: new device {mac} not found in Inventory")
+        changed = True
+
+    if changed:
+        # Preserve whatever full-refresh timestamp is currently on disk -
+        # incremental saves must never advance it, or the once-daily full
+        # refresh (which revalidates existing matches and retries misses)
+        # would never fire again today.
+        payload = dict(device_lookup)
+        last_modified = load_lastmodified()
+        if last_modified:
+            payload["lastmodifiedtimedata"] = last_modified
+        atomic_write_json(DEVICE_LOOKUP_PATH, payload)
+        atomic_write_json(DEVICE_NOT_FOUND_PATH, device_not_found)
+
+    return pending
 
 
 def load_config(create_project: bool = False) -> Config:
@@ -301,6 +418,12 @@ Examples:
         logger.error("Missing UISP_API_TOKEN or API_TOKEN in .env file")
         sys.exit(1)
 
+    # Device Inventory (Asset Registry) enrichment - leave both blank to disable.
+    inv_base_url = os.getenv("JIRAASSET_BASE")
+    inv_api_key = os.getenv("JIRAASSET_API_KEY")
+    if not (inv_base_url and inv_api_key):
+        logger.warning("JIRAASSET_BASE/JIRAASSET_API_KEY not set - Inventory enrichment disabled.")
+
     logger.info(f"Using UISP URL: {uisp_url}")
 
     # Step 1: Fetch devices from UISP
@@ -331,12 +454,41 @@ Examples:
         logger.warning("No devices with metrics found")
         sys.exit(0)
 
+    # Step 2b: Device Inventory enrichment
+    device_lookup: dict = {}
+    if inv_base_url and inv_api_key:
+        logger.info("\n" + "=" * 60)
+        logger.info("STEP 2b: Device Inventory lookup")
+        logger.info("=" * 60)
+
+        if maybe_refresh_device_lookup():
+            logger.info("Full Inventory refresh completed for today.")
+
+        device_lookup = load_device_lookup()
+        device_not_found = load_device_not_found()
+        logger.info(f"Loaded {len(device_lookup)} matched / {len(device_not_found)} not-found Inventory entries")
+
+        # Resolve any device seen for the first time immediately, rather than
+        # waiting for the once-daily inventory refresh window above.
+        pending = resolve_new_devices(devices_with_metrics, device_lookup, device_not_found, inv_base_url, inv_api_key)
+
+        if pending:
+            # Never seen a completed lookup (API error, not a confirmed
+            # miss) - exclude entirely rather than sending under its own
+            # name; it'll be retried next run.
+            before = len(devices_with_metrics)
+            devices_with_metrics = [d for d in devices_with_metrics if (d.get("mac") or "").lower() not in pending]
+            logger.warning(
+                f"Excluding {before - len(devices_with_metrics)} device(s) still pending "
+                f"Inventory resolution - will retry next run"
+            )
+
     # Step 3: Transform metrics to InsightFinder format
     logger.info("\n" + "=" * 60)
     logger.info("STEP 3: Transforming metrics to InsightFinder format")
     logger.info("=" * 60)
 
-    transformed_metrics = transform_all_devices(devices_with_metrics)
+    transformed_metrics = transform_all_devices(devices_with_metrics, device_lookup)
 
     logger.info(f"Transformed metrics for {len(transformed_metrics)} devices")
 

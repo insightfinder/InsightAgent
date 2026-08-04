@@ -340,10 +340,13 @@ def fetch_project_data(session: requests.Session, host: str, username: str,
     # 9. Process mode (logdedicatedmode API — uses cookie auth)
     result["mode"] = fetch_project_mode(session, base, username, api_key, project_name)
 
-    # 10. L2M (log-to-metric) settings
-    l2m = fetch_json(session, f"{base}/api/external/v1/logtometricsetting",
-                     headers, {"projectName": project_name})
-    result["l2m_settings"] = l2m if isinstance(l2m, list) else []
+    # 10. L2M (log-to-metric) settings (only applies to log-type projects)
+    if not is_metric:
+        l2m = fetch_json(session, f"{base}/api/external/v1/logtometricsetting",
+                         headers, {"projectName": project_name})
+        result["l2m_settings"] = l2m if isinstance(l2m, list) else []
+    else:
+        result["l2m_settings"] = []
 
     return result
 
@@ -1300,6 +1303,7 @@ def generate_project_tf(project_name: str, project_data: Dict,
         'componentNameAutoOverwrite': 'component_name_auto_overwrite',
         'dailyModelSpan': 'daily_model_span',
         'disableLogCompressEvent': 'disable_log_compress_event',
+        'disableLogProcessingFlag': 'disable_log_processing_flag',
         'disableModelKeywordStatsCollection': 'disable_model_keyword_stats_collection',
         'emailSetting': 'email_setting',
         'enableAnomalyScoreEscalation': 'enable_anomaly_score_escalation',
@@ -1318,6 +1322,7 @@ def generate_project_tf(project_name: str, project_data: Dict,
         'incidentPredictionEventLimit': 'incident_prediction_event_limit',
         'incidentPredictionWindow': 'incident_prediction_window',
         'incidentPriorityByAnomalyScoreSetting': 'incident_priority_by_anomaly_score_setting',
+        'incidentPriorityCapSetting': 'incident_priority_cap_setting',
         'incidentRelationSearchWindow': 'incident_relation_search_window',
         'instanceConvertFlag': 'instance_convert_flag',
         'instanceDownEnable': 'instance_down_enable',
@@ -1341,7 +1346,9 @@ def generate_project_tf(project_name: str, project_data: Dict,
         'maximumThreads': 'maximum_threads',
         'minIncidentPredictionWindow': 'min_incident_prediction_window',
         'minValidModelSpan': 'min_valid_model_span',
+        'modelKeywordSegmentK': 'model_keyword_segment_k',
         'modelKeywordSetting': 'model_keyword_setting',
+        'modelMatchThreshold': 'model_match_threshold',
         'multiHopSearchLevel': 'multi_hop_search_level',
         'multiHopSearchLimit': 'multi_hop_search_limit',
         'multiLineFlag': 'multi_line_flag',
@@ -1891,6 +1898,7 @@ def generate_metric_project_tf(project_name: str, project_data: Dict,
         'incidentRelationSearchWindow': 'incident_relation_search_window',
         'incidentPredictionEventLimit': 'incident_prediction_event_limit',
         'incidentPriorityByAnomalyScoreSetting': 'incident_priority_by_anomaly_score_setting',
+        'incidentPriorityCapSetting': 'incident_priority_cap_setting',
         'rootCauseCountThreshold': 'root_cause_count_threshold',
         'rootCauseProbabilityThreshold': 'root_cause_probability_threshold',
         'compositeRCALimit': 'composite_rca_limit',

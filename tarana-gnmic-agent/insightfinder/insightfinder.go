@@ -279,11 +279,29 @@ func (s *Service) SendMetricsBulk(metrics []models.MetricData) error {
 		// Get or create instance data
 		instanceData, exists := instanceDataMap[instanceName]
 		if !exists {
+			imData := map[string]string{}
+			if metric.DisplayName != "" {
+				imData["idn"] = metric.DisplayName
+			}
+			if metric.ComponentName != "" {
+				imData["cn"] = metric.ComponentName
+			}
+			if metric.IP != "" {
+				imData["i"] = metric.IP
+			}
+			if metric.Zone != "" {
+				imData["z"] = metric.Zone
+			}
+			var imStr string
+			if len(imData) > 0 {
+				if imBytes, err := json.Marshal(imData); err == nil {
+					imStr = string(imBytes)
+				}
+			}
 			instanceData = InstanceData{
-				InstanceName:       instanceName,
-				ComponentName:      metric.ComponentName,
-				DataInTimestampMap: make(map[int64]DataInTimestamp),
-				IP:                 metric.IP,
+				InstanceName:        instanceName,
+				InstanceMetadataStr: imStr,
+				DataInTimestampMap:  make(map[int64]DataInTimestamp),
 			}
 		}
 
@@ -309,7 +327,6 @@ func (s *Service) SendMetricsBulk(metrics []models.MetricData) error {
 			}
 		}
 
-		instanceData.Zone = metric.Zone
 		instanceData.DataInTimestampMap[timestamp] = dataInTimestamp
 		instanceDataMap[instanceName] = instanceData
 	}

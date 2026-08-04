@@ -1,0 +1,72 @@
+[globalview]
+# Base URL of the InsightFinder backend that serves the GlobalView timeline API
+# (the InfrastructureCore server). Often the same host as if_url, but keep it
+# separate in case GlobalView is served from a different host.
+gv_url = https://app.insightfinder.com
+
+# Credentials used to authenticate against the GlobalView timeline API.
+# These are sent as the X-User-Name / X-License-Key request headers and must
+# belong to the user that owns the GlobalView system below.
+gv_user_name =
+gv_license_key =
+
+# Display name of the GlobalView system to pull the timeline for (required).
+# This is the `systemName` query parameter of /api/v2/timeline.
+gv_system_name =
+
+# Optional. Restrict the timeline to a single event type. Leave empty for all types.
+# Accepted values (case-insensitive): trace, loganomaly, metricanomaly, incident,
+# deployment, all. Any other value is rejected by the API ("Bad parameter").
+timeline_event_type = incident
+
+# Whether to include prediction entries in the timeline (true/false).
+predict = false
+
+# Which list from the timeline response to stream:
+#   raw          - stream `timelineList`
+#   consolidated - stream `consolidatedTimelineList`
+#   both         - stream both (deduplicated by id)
+timeline_source = raw
+
+# When querying live data, subtract this many seconds from "now" for the end of
+# the query window (lets late-arriving anomalies settle). Default 0.
+query_time_offset_seconds = 0
+
+# History mode. If set, the agent queries this fixed window instead of a live
+# sliding window. Format: 2020-04-14 00:00:00,2020-04-15 00:00:00 (UTC).
+his_time_range =
+
+# Keep only records whose start time falls inside the query window (true/false).
+# GlobalView loads incidents by day and reports each incident's earliest start
+# time, so records can fall outside the window and long-running incidents repeat
+# every run. With this on, each start time lands in exactly one window: results
+# stay in-window and the same incident is not re-sent. Set false to send
+# everything GlobalView returns for the window's day(s).
+only_start_in_window = true
+
+# Verify TLS certificates when calling the GlobalView API (true/false).
+verify_certs = true
+
+# Proxies for reaching the GlobalView API.
+agent_http_proxy =
+agent_https_proxy =
+
+[insightfinder]
+# Target InsightFinder LOG project the timeline data is streamed into.
+user_name =
+license_key =
+project_name =
+# Name of system owned by project. If project_name does not exist in
+# InsightFinder, the agent creates a new system automatically from this field.
+system_name =
+# This agent streams anomaly timeline records as logs -> keep this as log.
+project_type = log
+# Sampling interval (minutes) assigned to the project when it is first created.
+sampling_interval = 10
+# How often (minutes) the agent runs; also sets the live query window length.
+run_interval = 1
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =
