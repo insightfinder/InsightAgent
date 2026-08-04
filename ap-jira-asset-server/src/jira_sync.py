@@ -77,6 +77,10 @@ UPSTREAM_JUNCTION_ATTR = 461
 # Subvenue attribute that holds the parent Venue reference (objecttype Subvenue, attr 225)
 SUBVENUE_VENUE_ATTR_ID = 225
 
+# Venue attribute that holds the Support Engineer reference (objecttype Venue/9, attr 595,
+# references objecttype 51 "AccessParks Personel")
+VENUE_SUPPORT_ENGINEER_ATTR_ID = 595
+
 # ── Model attribute map (objecttype 13, verified 2026-05-19) ─────────────────
 MODEL_ATTR_MAP: Dict[int, str] = {
     92:  "object_key",
@@ -274,6 +278,39 @@ def transform_subvenues(raw: List[Dict]) -> Dict[str, Dict[str, Optional[str]]]:
     return result
 
 
+def transform_venues(raw: List[Dict]) -> List[Dict]:
+    """Returns one record per Venue object, with its Support Engineer (attr 595) resolved."""
+    out = []
+    for obj in raw:
+        obj_id = str(obj["id"])
+        venue_key = obj.get("objectKey") or ""
+        venue_name = obj.get("label") or venue_key
+
+        support_engineer_id: Optional[str] = None
+        support_engineer_key: Optional[str] = None
+        support_engineer_name: Optional[str] = None
+        for attr in obj.get("attributes", []):
+            if str(attr.get("objectTypeAttributeId")) == str(VENUE_SUPPORT_ENGINEER_ATTR_ID):
+                vals = attr.get("objectAttributeValues", [])
+                if vals:
+                    support_engineer_name = vals[0].get("displayValue") or vals[0].get("value")
+                    ref_obj = vals[0].get("referencedObject") or {}
+                    raw_id = ref_obj.get("id")
+                    support_engineer_id = str(raw_id) if raw_id else None
+                    support_engineer_key = ref_obj.get("objectKey")
+                break
+
+        out.append({
+            "id": obj_id,
+            "key": venue_key,
+            "name": venue_name,
+            "support_engineer_id": support_engineer_id,
+            "support_engineer_key": support_engineer_key,
+            "support_engineer_name": support_engineer_name,
+        })
+    return out
+
+
 def _transform_one_device(obj: Dict, subvenue_map: Optional[Dict[str, Dict[str, Optional[str]]]] = None) -> Tuple[Dict, List[Dict]]:
     """Transform a single raw Jira object into (device_record, edge_records)."""
     obj_id = str(obj["id"])
@@ -407,26 +444,57 @@ def transform_devices(
     return devices, edges
 
 
+async def run_venue_sync() -> Dict[str, Any]:
+    """Sync just Venue objects (name + Support Engineer) — fast path, skips Model/Device/Subvenue/edges."""
+    client = JiraClient()
+    t0 = time.time()
+
+    raw_venues = await client.fetch_all("Venue")
+    fetch_time = time.time() - t0
+    logger.info("Fetched %d venues in %.1fs", len(raw_venues), fetch_time)
+
+    venue_records = transform_venues(raw_venues)
+
+    t1 = time.time()
+    async with SessionLocal() as session:
+        repo = DeviceRepository(session)
+        for i in range(0, len(venue_records) or 1, BATCH_SIZE):
+            batch = venue_records[i: i + BATCH_SIZE]
+            if batch:
+                await repo.upsert_venues(batch)
+                await session.commit()
+    write_time = time.time() - t1
+
+    return {
+        "venues": len(venue_records),
+        "fetch_seconds": round(fetch_time, 1),
+        "write_seconds": round(write_time, 1),
+        "total_seconds": round(time.time() - t0, 1),
+    }
+
+
 async def run_sync() -> Dict[str, Any]:
     """Full sync: Jira → SQLite. Returns counts and timing."""
     client = JiraClient()
     t0 = time.time()
 
-    # Fetch models, devices, and subvenues in parallel
-    logger.info("Fetching Model, Device, and Subvenue objects from Jira in parallel...")
-    raw_models, raw_devices, raw_subvenues = await asyncio.gather(
+    # Fetch models, devices, subvenues, and venues in parallel
+    logger.info("Fetching Model, Device, Subvenue, and Venue objects from Jira in parallel...")
+    raw_models, raw_devices, raw_subvenues, raw_venues = await asyncio.gather(
         client.fetch_all("Model"),
         client.fetch_all("Device"),
         client.fetch_all("Subvenue"),
+        client.fetch_all("Venue"),
     )
 
     fetch_time = time.time() - t0
-    logger.info("Fetched %d models, %d devices, %d subvenues in %.1fs",
-                len(raw_models), len(raw_devices), len(raw_subvenues), fetch_time)
+    logger.info("Fetched %d models, %d devices, %d subvenues, %d venues in %.1fs",
+                len(raw_models), len(raw_devices), len(raw_subvenues), len(raw_venues), fetch_time)
 
     subvenue_map = transform_subvenues(raw_subvenues)
     model_records = transform_models(raw_models)
     device_records, edge_records = transform_devices(raw_devices, subvenue_map=subvenue_map)
+    venue_records = transform_venues(raw_venues)
 
     t1 = time.time()
     async with SessionLocal() as session:
@@ -450,11 +518,18 @@ async def run_sync() -> Dict[str, Any]:
                 await repo.upsert_edges(batch)
                 await session.commit()
 
+        for i in range(0, len(venue_records) or 1, BATCH_SIZE):
+            batch = venue_records[i: i + BATCH_SIZE]
+            if batch:
+                await repo.upsert_venues(batch)
+                await session.commit()
+
     write_time = time.time() - t1
     return {
         "models": len(model_records),
         "devices": len(device_records),
         "edges": len(edge_records),
+        "venues": len(venue_records),
         "fetch_seconds": round(fetch_time, 1),
         "write_seconds": round(write_time, 1),
         "total_seconds": round(time.time() - t0, 1),
