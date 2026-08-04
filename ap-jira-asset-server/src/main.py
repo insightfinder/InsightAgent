@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 load_dotenv()
 
 from .database import SessionLocal, get_session, init_db
-from .jira_sync import run_sync
+from .jira_sync import run_sync, run_venue_sync
 from .repository import DeviceRepository
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -65,6 +65,37 @@ async def _do_sync():
         logger.error("sync_failed", error=str(exc))
     finally:
         _sync_state["running"] = False
+
+
+_venue_sync_state: Dict[str, Any] = {
+    "running": False,
+    "last_started": None,
+    "last_finished": None,
+    "last_result": None,
+    "last_error": None,
+}
+_venue_sync_lock = asyncio.Lock()
+
+
+async def _do_venue_sync():
+    async with _venue_sync_lock:
+        if _venue_sync_state["running"]:
+            return
+        _venue_sync_state["running"] = True
+        _venue_sync_state["last_started"] = datetime.now(timezone.utc).isoformat()
+        _venue_sync_state["last_error"] = None
+
+    try:
+        result = await run_venue_sync()
+        _venue_sync_state["last_result"] = result
+        _venue_sync_state["last_finished"] = datetime.now(timezone.utc).isoformat()
+        logger.info("venue_sync_complete", **result)
+    except Exception as exc:
+        _venue_sync_state["last_error"] = str(exc)
+        _venue_sync_state["last_finished"] = datetime.now(timezone.utc).isoformat()
+        logger.error("venue_sync_failed", error=str(exc))
+    finally:
+        _venue_sync_state["running"] = False
 
 
 # ── scheduler ────────────────────────────────────────────────────────────────
@@ -283,6 +314,26 @@ async def get_dependency_map(
     }
 
 
+@app.get("/support-engineers", dependencies=[Depends(require_api_key)])
+async def get_support_engineers(session: AsyncSession = Depends(get_session)):
+    """
+    Venue → Support Engineer mapping, sourced from the Venue object's
+    "Support Engineer" field in Jira Assets.
+    """
+    repo = DeviceRepository(session)
+    venues = await repo.list_venues()
+    return [
+        {
+            "venue_name": v.name,
+            "venue_key": v.key,
+            "support_engineer_name": v.support_engineer_name,
+            "support_engineer_id": v.support_engineer_id,
+            "support_engineer_key": v.support_engineer_key,
+        }
+        for v in venues
+    ]
+
+
 @app.post("/sync", dependencies=[Depends(require_api_key)])
 async def trigger_sync():
     """Trigger a full sync from Jira Assets. Returns immediately; sync runs in background."""
@@ -298,3 +349,22 @@ async def sync_status(session: AsyncSession = Depends(get_session)):
     repo = DeviceRepository(session)
     counts = await repo.counts()
     return {**_sync_state, "db": counts}
+
+
+@app.post("/sync/support-engineers", dependencies=[Depends(require_api_key)])
+async def trigger_venue_sync():
+    """
+    Trigger a Venue-only sync (name + Support Engineer). Much faster than the
+    full /sync since it skips Model/Device/Subvenue/edges. Returns immediately;
+    sync runs in background.
+    """
+    if _venue_sync_state["running"]:
+        return JSONResponse(status_code=202, content={"status": "already_running"})
+    asyncio.create_task(_do_venue_sync())
+    return JSONResponse(status_code=202, content={"status": "started"})
+
+
+@app.get("/sync/support-engineers/status", dependencies=[Depends(require_api_key)])
+async def venue_sync_status():
+    """Last venue-sync info."""
+    return _venue_sync_state
