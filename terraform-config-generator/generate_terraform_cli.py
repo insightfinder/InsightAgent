@@ -201,6 +201,21 @@ def _parse_project_configs(raw: dict) -> dict:
     return result
 
 
+def _parse_resolution_code_rules(raw) -> list:
+    """Convert a raw resolutionCodeRules list from the API into a normalised list of dicts."""
+    result = []
+    if not isinstance(raw, list):
+        return result
+    for rule in raw:
+        if not isinstance(rule, dict):
+            continue
+        result.append({
+            "pattern": rule.get("pattern", ""),
+            "outcome": rule.get("outcome", ""),
+        })
+    return result
+
+
 def _parse_servicenow_entry(entry):
     """Parse a single ServiceNow entry from extServiceAllInfo API response.
 
@@ -232,12 +247,18 @@ def _parse_servicenow_entry(entry):
         "department_id": "",
         "project_configs": {},
         "table_mapping": {},
+        "resolution_code_rules": [],
     }
 
     # Parse projectConfigs from root level
     root_project_configs = entry.get("projectConfigs")
     if isinstance(root_project_configs, dict):
         config["project_configs"] = _parse_project_configs(root_project_configs)
+
+    # Parse resolutionCodeRules from root level
+    root_resolution_code_rules = entry.get("resolutionCodeRules")
+    if isinstance(root_resolution_code_rules, list):
+        config["resolution_code_rules"] = _parse_resolution_code_rules(root_resolution_code_rules)
 
     # Parse options JSON array string
     options_str = entry.get("options", "")
@@ -277,6 +298,11 @@ def _parse_servicenow_entry(entry):
                 pc_raw = configs.get("projectConfigs")
                 if isinstance(pc_raw, dict):
                     config["project_configs"] = _parse_project_configs(pc_raw)
+            # Fall back to resolutionCodeRules from configs JSON if not found at root level
+            if not config["resolution_code_rules"]:
+                rr_raw = configs.get("resolutionCodeRules")
+                if isinstance(rr_raw, list):
+                    config["resolution_code_rules"] = _parse_resolution_code_rules(rr_raw)
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
@@ -436,6 +462,17 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
                 table_e = table.replace('"', '\\"')
                 lines.append(f'    "{proj_e}" = "{table_e}"')
             lines.append('  }')
+
+        if config.get("resolution_code_rules"):
+            lines.append('  resolution_code_rules = [')
+            for rule in config["resolution_code_rules"]:
+                pattern_e = rule.get("pattern", "").replace('"', '\\"')
+                outcome_e = rule.get("outcome", "").replace('"', '\\"')
+                lines.append('    {')
+                lines.append(f'      pattern = "{pattern_e}"')
+                lines.append(f'      outcome = "{outcome_e}"')
+                lines.append('    },')
+            lines.append('  ]')
 
         lines.append('}')
         lines.append('')
