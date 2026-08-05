@@ -417,7 +417,9 @@ def setup_opentelemetry():
         trace_server_host = os.getenv("TRACE_SERVER_HOST", "localhost")
         trace_server_port = os.getenv("TRACE_SERVER_PORT", "4517")
         otlp_endpoint = f"{trace_server_host}:{trace_server_port}"
+        use_tls = False
     else:
+        use_tls = not otlp_endpoint.startswith("http://")
         otlp_endpoint = otlp_endpoint.replace("http://", "").replace("https://", "")
 
     ifuser = os.getenv("TRACE_ADMIN_USER", "admin")
@@ -433,7 +435,7 @@ def setup_opentelemetry():
 
     otlp_exporter = OTLPSpanExporter(
         endpoint=otlp_endpoint,
-        insecure=True,
+        insecure=not use_tls,
         headers=(
             ("ifuser", ifuser),
             ("iflicensekey", iflicensekey),
