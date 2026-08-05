@@ -39,10 +39,12 @@ func (e *Endpoint) OwnName() string {
 
 // ToMetricData converts an Endpoint to MetricData, enriching it from the
 // Device Inventory lookup (MAC > serial > own name, first match wins).
+// componentName comes from config (positron.endpoint_component_name) rather
+// than Inventory - endpoints are GN instances.
 // Returns ok=false if the device has no usable instance name (Inventory
 // miss and no own name) - the caller must drop it rather than send it under
 // any other fallback identifier.
-func (e *Endpoint) ToMetricData(dl devicelookup.Lookup) (*models.MetricData, bool) {
+func (e *Endpoint) ToMetricData(dl devicelookup.Lookup, componentName string) (*models.MetricData, bool) {
 	ownMAC := devicelookup.NormalizeMAC(e.MacAddress)
 	ownSerial := devicelookup.NormalizeSerial(e.SerialNumber)
 	rawOwnName := e.OwnName()
@@ -63,9 +65,9 @@ func (e *Endpoint) ToMetricData(dl devicelookup.Lookup) (*models.MetricData, boo
 		// uncleaned) - never falls back to Inventory's name field.
 		InstanceName:  instanceName,
 		DisplayName:   rawOwnName,
-		ComponentName: devInfo.ComponentName, // Inventory only, no default
-		Zone:          devInfo.Venue,         // Inventory only, no default
-		IP:            devInfo.IPAddress,     // Endpoints report no IP of their own
+		ComponentName: componentName,
+		Zone:          devInfo.Venue,     // Inventory only, no default
+		IP:            devInfo.IPAddress, // Endpoints report no IP of their own
 		Data: map[string]interface{}{
 			// Format metric names using safe formatting
 			models.MakeSafeDataKey("DS PHY rate"): e.RxPhyRate,
@@ -80,9 +82,11 @@ func (e *Endpoint) ToMetricData(dl devicelookup.Lookup) (*models.MetricData, boo
 
 // ToMetricData converts a Device to MetricData, enriching it from the Device
 // Inventory lookup (serial > own name, first match wins - devices report no
-// MAC of their own). Returns ok=false if the device has no usable instance
-// name (Inventory miss and no own name).
-func (d *Device) ToMetricData(dl devicelookup.Lookup) (*models.MetricData, bool) {
+// MAC of their own). componentName comes from config
+// (positron.gam_component_name) rather than Inventory - devices are GAM
+// instances. Returns ok=false if the device has no usable instance name
+// (Inventory miss and no own name).
+func (d *Device) ToMetricData(dl devicelookup.Lookup, componentName string) (*models.MetricData, bool) {
 	ownSerial := devicelookup.NormalizeSerial(d.SerialNumber)
 	rawOwnName := d.Name
 	ownName := devicelookup.CleanOwnName(rawOwnName)
@@ -107,8 +111,8 @@ func (d *Device) ToMetricData(dl devicelookup.Lookup) (*models.MetricData, bool)
 		Timestamp:     currentTime,
 		InstanceName:  instanceName,
 		DisplayName:   rawOwnName,
-		ComponentName: devInfo.ComponentName, // Inventory only, no default
-		Zone:          devInfo.Venue,         // Inventory only, no default
+		ComponentName: componentName,
+		Zone:          devInfo.Venue, // Inventory only, no default
 		IP:            ip,
 		Data: map[string]interface{}{
 			// Format metric names using safe formatting - Capacity Metrics

@@ -36,6 +36,11 @@ type PositronConfig struct {
 	Password              string `yaml:"password"`
 	VerifySSL             bool   `yaml:"verify_ssl"`
 	MaxConcurrentRequests int    `yaml:"max_concurrent_requests"`
+
+	// ComponentName sent to InsightFinder for each source - endpoints are
+	// GN instances, devices are GAM instances.
+	EndpointComponentName string `yaml:"endpoint_component_name"`
+	GAMComponentName      string `yaml:"gam_component_name"`
 }
 
 type InsightFinderConfig struct {

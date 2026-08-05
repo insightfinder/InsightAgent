@@ -15,6 +15,10 @@ positron:
   verify_ssl: false
   max_concurrent_requests: 20
 
+  # Component name sent to InsightFinder for each source (not from Inventory)
+  endpoint_component_name: Positron-Endpoint  # GN instances (/endpoint/list/all)
+  gam_component_name: Positron-GAM            # GAM instances (/device/list)
+
 # Device Inventory API Configuration
 # Used to look up each device (by MAC, then serial number, then own name) in the
 # Asset Registry so metrics can be enriched with the inventory's own identifiers,

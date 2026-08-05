@@ -57,7 +57,7 @@ Values sent to InsightFinder, in priority order:
 
 - **Instance name** (`in`): Inventory MAC (`MAC {mac}`, endpoints only) > Inventory serial (`SERIAL {serial}`) > Inventory object key (`JIRAKEY {object_key}`) > the device's own name (cleaned - `_`/`:` become `-`). If none of these are available, the device is **dropped** (not sent to InsightFinder) rather than sent under any other identifier. Values are never upper/lower-cased.
 - **Instance display name** (`idn`): the device's own name as reported, raw/uncleaned - never falls back to the Inventory's name field. For devices this is always `name`; for endpoints, Positron exposes two competing name fields (`confEndpointName` and `confUserName`) that aren't reliably kept in sync with each other, so `confEndpointName` is used whenever it looks like a real name, falling back to `confUserName` only when `confEndpointName` is empty or has degraded to a bare port/slot number (e.g. `"10105"`).
-- **Component name** (`cn`): Inventory's `component_name` only (`{manufacturer}-{device_class}`, only set when both are present). Omitted if not in Inventory - no default.
+- **Component name** (`cn`): fixed per source via config, not from Inventory - `positron.endpoint_component_name` for endpoints (GN instances, default `Positron-Endpoint`), `positron.gam_component_name` for devices (GAM instances, default `Positron-GAM`).
 - **Zone** (`z`): Inventory's `venue` only. Omitted if not in Inventory - no default.
 - **IP address** (`i`): Inventory's `ip_address` > the device's own reported IP (devices only - endpoints report none; excludes the `0.0.0.0` placeholder). Omitted if both are empty.
 
