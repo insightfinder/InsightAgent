@@ -37,14 +37,33 @@ func (e *Endpoint) OwnName() string {
 	return e.ConfEndpointName
 }
 
+// resolveComponentName picks endpointName or gamName from config based on
+// what this record actually is - a GAM headend unit also gets surfaced
+// through /endpoint/list/all (not just /device/list), identified by
+// ModelType "GAM-C" as opposed to a regular CPE's "G1001-C"/"G1001-CR".
+// ModelType is empty/"Unknown" when the endpoint is offline and Positron
+// couldn't detect its model; in that case fall back to checking the
+// endpoint's own name for a "GAM" marker before defaulting to endpointName.
+func (e *Endpoint) resolveComponentName(endpointName, gamName string) string {
+	if e.ModelType == "GAM-C" {
+		return gamName
+	}
+	own := strings.ToUpper(e.ConfEndpointName + " " + e.ConfUserName)
+	if strings.Contains(own, "GAM") {
+		return gamName
+	}
+	return endpointName
+}
+
 // ToMetricData converts an Endpoint to MetricData, enriching it from the
 // Device Inventory lookup (MAC > serial > own name, first match wins).
-// componentName comes from config (positron.endpoint_component_name) rather
-// than Inventory - endpoints are GN instances.
+// componentName is endpointName or gamName from config
+// (positron.endpoint_component_name / positron.gam_component_name) - see
+// resolveComponentName.
 // Returns ok=false if the device has no usable instance name (Inventory
 // miss and no own name) - the caller must drop it rather than send it under
 // any other fallback identifier.
-func (e *Endpoint) ToMetricData(dl devicelookup.Lookup, componentName string) (*models.MetricData, bool) {
+func (e *Endpoint) ToMetricData(dl devicelookup.Lookup, endpointName, gamName string) (*models.MetricData, bool) {
 	ownMAC := devicelookup.NormalizeMAC(e.MacAddress)
 	ownSerial := devicelookup.NormalizeSerial(e.SerialNumber)
 	rawOwnName := e.OwnName()
@@ -65,7 +84,7 @@ func (e *Endpoint) ToMetricData(dl devicelookup.Lookup, componentName string) (*
 		// uncleaned) - never falls back to Inventory's name field.
 		InstanceName:  instanceName,
 		DisplayName:   rawOwnName,
-		ComponentName: componentName,
+		ComponentName: e.resolveComponentName(endpointName, gamName),
 		Zone:          devInfo.Venue,     // Inventory only, no default
 		IP:            devInfo.IPAddress, // Endpoints report no IP of their own
 		Data: map[string]interface{}{
@@ -80,13 +99,29 @@ func (e *Endpoint) ToMetricData(dl devicelookup.Lookup, componentName string) (*
 	return metric, true
 }
 
+// resolveComponentName picks gamName or endpointName from config. Every
+// device seen on /device/list is a GAM headend unit in practice (confirmed
+// by ProductClass, e.g. "GAM4CX"/"GAM4CXAC" - always populated), so gamName
+// is the default; the ProductClass/name checks only guard against a future
+// device that's genuinely not a GAM (ProductClass changes, or - like the
+// name says - isn't one).
+func (d *Device) resolveComponentName(gamName, endpointName string) string {
+	if strings.Contains(strings.ToUpper(d.ProductClass), "GAM") {
+		return gamName
+	}
+	if strings.Contains(strings.ToUpper(d.Name), "GN") {
+		return endpointName
+	}
+	return gamName
+}
+
 // ToMetricData converts a Device to MetricData, enriching it from the Device
 // Inventory lookup (serial > own name, first match wins - devices report no
-// MAC of their own). componentName comes from config
-// (positron.gam_component_name) rather than Inventory - devices are GAM
-// instances. Returns ok=false if the device has no usable instance name
-// (Inventory miss and no own name).
-func (d *Device) ToMetricData(dl devicelookup.Lookup, componentName string) (*models.MetricData, bool) {
+// MAC of their own). componentName is gamName or endpointName from config
+// (positron.gam_component_name / positron.endpoint_component_name) - see
+// resolveComponentName. Returns ok=false if the device has no usable
+// instance name (Inventory miss and no own name).
+func (d *Device) ToMetricData(dl devicelookup.Lookup, gamName, endpointName string) (*models.MetricData, bool) {
 	ownSerial := devicelookup.NormalizeSerial(d.SerialNumber)
 	rawOwnName := d.Name
 	ownName := devicelookup.CleanOwnName(rawOwnName)
@@ -111,7 +146,7 @@ func (d *Device) ToMetricData(dl devicelookup.Lookup, componentName string) (*mo
 		Timestamp:     currentTime,
 		InstanceName:  instanceName,
 		DisplayName:   rawOwnName,
-		ComponentName: componentName,
+		ComponentName: d.resolveComponentName(gamName, endpointName),
 		Zone:          devInfo.Venue, // Inventory only, no default
 		IP:            ip,
 		Data: map[string]interface{}{

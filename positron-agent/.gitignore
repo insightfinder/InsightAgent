@@ -1,5 +1,6 @@
 # Device inventory lookup cache (generated at runtime by devicelookup.go)
 devicelookup.json
+devicelookup_notfound.json
 
 # Real config with live credentials - copy config.yaml.example to config.yaml
 configs/config.yaml

@@ -159,7 +159,7 @@ func (w *Worker) collectMetrics(ctx context.Context) {
 	w.refreshDeviceLookupIfNeeded(endpoints, devices)
 
 	for _, endpoint := range endpoints {
-		metric, ok := endpoint.ToMetricData(w.deviceLookup, w.config.Positron.EndpointComponentName)
+		metric, ok := endpoint.ToMetricData(w.deviceLookup, w.config.Positron.EndpointComponentName, w.config.Positron.GAMComponentName)
 		if !ok {
 			logrus.Warnf("Dropping endpoint (port %q): no Inventory MAC/serial/object key match and no own name reported", endpoint.ConfEndpointName)
 			continue
@@ -172,7 +172,7 @@ func (w *Worker) collectMetrics(ctx context.Context) {
 	}
 
 	for _, device := range devices {
-		metric, ok := device.ToMetricData(w.deviceLookup, w.config.Positron.GAMComponentName)
+		metric, ok := device.ToMetricData(w.deviceLookup, w.config.Positron.GAMComponentName, w.config.Positron.EndpointComponentName)
 		if !ok {
 			logrus.Warnf("Dropping device %q: no Inventory serial/object key match and no own name reported", device.Name)
 			continue
