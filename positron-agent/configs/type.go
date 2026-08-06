@@ -36,6 +36,13 @@ type PositronConfig struct {
 	Password              string `yaml:"password"`
 	VerifySSL             bool   `yaml:"verify_ssl"`
 	MaxConcurrentRequests int    `yaml:"max_concurrent_requests"`
+
+	// ComponentName sent to InsightFinder for GN (regular CPE) vs GAM
+	// (headend) units - see positron.Endpoint/Device.resolveComponentName,
+	// which picks per-record rather than assuming by API source (both
+	// /endpoint/list/all and /device/list mix in GAM units).
+	EndpointComponentName string `yaml:"endpoint_component_name"`
+	GAMComponentName      string `yaml:"gam_component_name"`
 }
 
 type InsightFinderConfig struct {

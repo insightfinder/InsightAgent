@@ -42,7 +42,11 @@ type Endpoint struct {
 	// ConfBwProfileName   string `json:"confBwProfileName"`
 	// ConfBwProfileUid    int    `json:"confBwProfileUid"`
 	// State               string `json:"state"`
-	// ModelType           string `json:"modelType"`
+	// ModelType distinguishes a GAM headend unit ("GAM-C") exposed through
+	// this endpoint API from a regular CPE ("G1001-C"/"G1001-CR") - see
+	// resolveComponentName in util.go. Empty/"Unknown" when the endpoint is
+	// offline and Positron couldn't detect its model.
+	ModelType string `json:"modelType"`
 	// ModelString         string `json:"modelString"`
 	// FwMismatch          bool   `json:"fwMismatch"`
 	// Alive               bool   `json:"alive"`
@@ -72,7 +76,9 @@ type Device struct {
 	Name         string `json:"name"`
 	SerialNumber string `json:"serialNumber"`
 	IPAddress    string `json:"ipAddress"`
-	// ProductClass              string  `json:"productClass"`
+	// ProductClass identifies the GAM model (e.g. "GAM4CX", "GAM4CXAC") -
+	// see resolveComponentName in util.go.
+	ProductClass string `json:"productClass"`
 	// SoftwareVersion           string  `json:"softwareVersion"`
 	// SyncError                 *string `json:"syncError"`
 	// NtpServer1                string  `json:"ntpServer1"`

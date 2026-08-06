@@ -15,6 +15,12 @@ positron:
   verify_ssl: false
   max_concurrent_requests: 20
 
+  # Component name sent to InsightFinder (not from Inventory) - picked per
+  # record by ModelType/ProductClass (falling back to name), not by which API
+  # it came from; see positron.ToMetricData/resolveComponentName.
+  endpoint_component_name: Positron-Endpoint  # GN (regular CPE) units
+  gam_component_name: Positron-GAM            # GAM headend units
+
 # Device Inventory API Configuration
 # Used to look up each device (by MAC, then serial number, then own name) in the
 # Asset Registry so metrics can be enriched with the inventory's own identifiers,
