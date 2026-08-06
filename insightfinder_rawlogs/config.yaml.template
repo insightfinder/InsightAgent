@@ -1,0 +1,80 @@
+# Copy this file to config.yaml and fill in the blanks.
+source:
+  # InsightFinder server to export logs FROM
+  url: https://test.insightfinder.com
+  # The account authenticating this request
+  user_name:
+  # Overridden by IF_SOURCE_LICENSE_KEY env var
+  license_key:
+  # whose projects to read from; usually the same as user_name, but can differ. Defaults to user_name.
+  data_user_name:
+
+  # REQUIRED: map of source project -> destination project
+  projects:
+    TD-infrastructure-core: copy-core
+    TD-HAProxy: copy-haproxy
+
+  verify_ssl: true
+  # request timeout, in seconds
+  timeout_seconds: 300
+  proxies: {}
+  # http:
+  # https:
+
+destination:
+  # InsightFinder server to send logs TO
+  url: https://app.insightfinder.com
+  user_name:
+  # overridden by IF_DEST_LICENSE_KEY env var
+  license_key:
+  # used only when auto-creating a destination project
+  system_name:
+  # log or logreplay
+  project_type: log
+  # only used if the destination project doesn't exist yet and gets auto-created; has no effect on an existing project
+  sampling_interval_seconds: 60
+  auto_create_projects: true
+  # max size per ingest request
+  chunk_size_kb: 2048
+  verify_ssl: true
+  timeout_seconds: 120
+  proxies: {}
+
+collection:
+  # live window length; default replay slice length
+  interval_seconds: 60
+  # If true (default), window end is snapped to the nearest interval_seconds
+  # clock boundary (e.g. :00/:10/:20 for a 600s interval). If false, window
+  # end is the exact trigger time instead.
+  # Set false only if your own scheduler (cron.py, crontab, k8s CronJob) fires at a precise, reliable cadence.
+  align_to_interval: true
+  # lag behind "now", to allow for source indexing delay
+  offset_seconds: 0
+  # cap per export request's range; defaults to interval_seconds
+  # only matters for large windows (e.g. a multi-day replay); a normal live run doesn't need this set
+  slice_seconds:
+  # Backfill: when set, replay this range once (in slice_seconds chunks) and exit.
+  # replay:
+  #   start: "2026-07-27 18:00:00"
+  #   end: "2026-07-27 18:10:00"
+  #   timezone: UTC
+  replay:
+  # how many time-slices to fetch/send at once; only relevant if slice_seconds splits the window into more than one
+  workers: 4
+
+transform:
+  # send {rawData, patternId, patternName, eventType} instead of just rawData
+  include_metadata: false
+  # prepended to every instance name
+  instance_prefix: ''
+  # regex on source instanceName; empty keeps everything
+  # matches anywhere in the name (not anchored); non-matching instances are dropped entirely, not just excluded from the count
+  instance_whitelist: ''
+  # used when an event has no instanceName
+  default_instance_name: unknown
+
+logging:
+  level: INFO
+  file: ./logs/agent.log
+  rotate: true
+  backup_count: 14
