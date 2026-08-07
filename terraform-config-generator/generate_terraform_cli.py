@@ -867,6 +867,7 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
         'proxy': 'proxy',
         'rareAnomalyType': 'rare_anomaly_type',
         'rareEventAlertThresholds': 'rare_event_alert_thresholds',
+        'rareEventAutoIncidentFlag': 'rare_event_auto_incident_flag',
         'rareNumberLimit': 'rare_number_limit',
         'rootCauseCountThreshold': 'root_cause_count_threshold',
         'rootCauseLogMessageSearchRange': 'root_cause_log_message_search_range',
