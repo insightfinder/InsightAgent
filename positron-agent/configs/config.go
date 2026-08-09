@@ -47,6 +47,12 @@ func setDefaults(config *Config) {
 	if config.Positron.MaxConcurrentRequests == 0 {
 		config.Positron.MaxConcurrentRequests = 20
 	}
+	if config.Positron.EndpointComponentName == "" {
+		config.Positron.EndpointComponentName = "Positron-Endpoint"
+	}
+	if config.Positron.GAMComponentName == "" {
+		config.Positron.GAMComponentName = "Positron-GAM"
+	}
 
 	// Agent defaults
 	if config.Agent.LogLevel == "" {
