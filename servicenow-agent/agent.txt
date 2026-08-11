@@ -1,0 +1,2 @@
+name = servicenow-agent
+script_name = getmessages_servicenow.py
