@@ -1,0 +1,13 @@
+logs
+cache/*.json
+.env
+conf.d/*
+!conf.d/config.ini.template
+venv/
+.idea
+.DS_Store
+.python-version
+nohup.out
+__pycache__/
+*.pyc
+.pytest_cache/

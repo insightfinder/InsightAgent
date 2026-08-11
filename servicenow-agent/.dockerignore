@@ -1,0 +1,22 @@
+conf.d/
+!conf.d/config.ini.template
+cache/
+!cache/.gitkeep
+# never bake credentials into the image -- supply them at runtime via
+# `docker run -e` / --env-file, or a .env mounted alongside conf.d
+.env
+.idea
+.DS_Store
+logs/
+venv/
+.dockerignore
+.python-version
+nohup.out
+Dockerfile
+testing/
+__pycache__/
+*.pyc
+# Exclude large tar.gz archives
+*.tar.gz
+# Exclude offline packages
+offline/

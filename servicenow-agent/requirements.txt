@@ -1,0 +1,7 @@
+APScheduler
+arrow
+pytz
+regex
+requests
+urllib3>=2.5.0
+backports.zoneinfo;python_version<"3.9"
