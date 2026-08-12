@@ -198,8 +198,11 @@ def _resolve_ref_value(display_value, value):
 def normalize_record(row):
     """Collapses ServiceNow's {"display_value": ..., "value": ...} reference
     shape (returned because sysparm_display_value=all) to a single value per
-    field via _resolve_ref_value(). Strips any residual `link`. Drops empty
-    fields from the result."""
+    field via _resolve_ref_value(). Strips any residual `link`. Keeps every
+    field even when its resolved value is empty/null -- data_fields does a
+    plain key lookup against this result (safe_get_data()), so dropping an
+    empty field here would silently vanish it from the output even though
+    the caller explicitly asked for it."""
     out = {}
     for k, v in row.items():
         if isinstance(v, dict) and ('display_value' in v or 'value' in v):
@@ -208,7 +211,7 @@ def normalize_record(row):
             out[k] = {kk: vv for kk, vv in v.items() if kk != 'link'}
         else:
             out[k] = v
-    return {k: v for k, v in out.items() if v not in (None, '', [], {})}
+    return out
 
 
 def get_field(rec, path):
