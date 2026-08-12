@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -314,7 +315,11 @@ func (w *Worker) refreshDeviceLookupIfNeeded(endpoints []positron.Endpoint, devi
 		if mac == "" && serial == "" && name == "" {
 			continue
 		}
-		items = append(items, devicelookup.Identifiers{MAC: mac, Serial: serial, Name: name})
+		rawMAC := ""
+		if mac != "" {
+			rawMAC = strings.TrimSpace(e.MacAddress)
+		}
+		items = append(items, devicelookup.Identifiers{MAC: mac, Serial: serial, Name: name, RawMAC: rawMAC})
 	}
 	for _, d := range devices {
 		name := devicelookup.CleanOwnName(d.Name)

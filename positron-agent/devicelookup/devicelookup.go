@@ -61,9 +61,18 @@ type Lookup map[string]Entry
 
 // Identifiers is one device's set of candidate lookup keys, in priority order.
 type Identifiers struct {
+	// MAC is normalized (":" -> "-") for use as the cache key / instance
+	// name, matching the baicells-agent convention. NOT used for the live
+	// Inventory API query - the Inventory stores/matches MACs in their
+	// original ":"-separated form, so a dash-normalized identifier 404s.
+	// See RawMAC.
 	MAC    string
 	Serial string
 	Name   string
+	// RawMAC is the device's MAC as originally reported (not normalized,
+	// colons intact) - used only for the live Inventory API query, see
+	// MAC's doc comment.
+	RawMAC string
 }
 
 // Load reads devicelookup.json from disk; returns an empty Lookup if absent or invalid.
@@ -305,7 +314,7 @@ func Refresh(cfg config.DeviceInventoryConfig, items []Identifiers) Lookup {
 
 			var identifier string
 			var raw map[string]interface{}
-			for _, candidate := range [...]string{it.MAC, it.Serial, it.Name} {
+			for _, candidate := range [...]string{it.RawMAC, it.Serial, it.Name} {
 				if candidate == "" {
 					continue
 				}
