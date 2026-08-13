@@ -1,0 +1,112 @@
+[servicenow]
+## ---- connection --------------------------------------------------------
+# Instance base URL, no trailing path. e.g. https://acme.service-now.com
+base_url =
+
+# oauth2 | basic
+# OAuth2 (password grant against /oauth_token.do -- not configurable, see
+# README) is the recommended/documented path. `basic` exists because some
+# instances only allow Basic Auth for integration users.
+auth_type = oauth2
+
+## ---- credentials -----------------------------------------------------
+# Credentials are NOT set here. Copy example.env to .env and fill in the
+# SERVICENOW_* variables that match auth_type above
+# (SERVICENOW_OAUTH_CLIENT_ID/SECRET/USERNAME/PASSWORD for oauth2, or
+# SERVICENOW_USERNAME/PASSWORD for basic). See README "Credentials (.env)".
+
+## ---- transport -----------------------------------------------------------
+verify_certs = true
+ca_certs =
+agent_http_proxy =
+agent_https_proxy =
+
+## ---- querying --------------------------------------------------------
+# records per page (sysparm_limit). ServiceNow's own default is 10000 max.
+query_chunk_size = 1000
+# The time offset when querying live data, to absorb clock skew between this
+# host and the ServiceNow instance. Default is 0.
+# Every run queries exactly the last [insightfinder] sampling_interval seconds
+# back from now (minus this offset) -- no state is kept between runs, so
+# run_interval and sampling_interval below must match, or you'll get gaps
+# (run_interval > sampling_interval) or duplicate tickets (the reverse).
+query_time_offset_seconds = 0
+# history data time config. If set, the agent queries this fixed range once
+# instead of the live sampling_interval-sized window.
+# Example: 2026-01-01 00:00:00,2026-01-08 00:00:00
+his_time_range =
+
+## ---- defaults inherited by every [query:NAME] section below ------------
+timestamp_field = sys_created_on
+# timestamp format, as library [arrow]
+timestamp_format = YYYY-MM-DD HH:mm:ss
+# timezone the timestamp_field value is expressed in, as per pytz
+timezone = UTC
+# Timezone of the timestamp data to be stored in InsightFinder. Default UTC.
+target_timestamp_timezone = UTC
+
+# if no instance given, default_instance_name is used. Supports a
+# comma-separated priority list of fields -- first non-empty value wins.
+# Fields returned by ServiceNow reference lookups keep their dotted name,
+# e.g. cmdb_ci.name -- use that literal string here, not nested syntax.
+instance_field =
+# instance_field_regex is a field name and a regex string used to extract the
+# instance from a field, syntax `<field1>::<regex1>,<field2>::<regex2>`.
+instance_field_regex =
+# instance_whitelist is a regex string used to define which instances will be
+# sent; anything not matching is dropped.
+instance_whitelist =
+default_instance_name =
+
+# Comma-separated list of ServiceNow fields to fetch (sent as sysparm_fields)
+# and to emit as `data`. Dot-walk reference fields to fetch a related record's
+# column in the same request, e.g. cmdb_ci.name, assignment_group.name.
+# LEAVE BLANK to fetch and send every field on the record.
+data_fields =
+
+# Default InsightFinder project for this query's data. Overridden per-query.
+project_name =
+
+## =========================================================================
+## QUERIES -- one [query:NAME] section per ServiceNow query. NAME must be
+## unique; it is attached to every record as data._query. Comment out a
+## whole section (or just its `table` line) to disable it.
+## =========================================================================
+
+[query:P1P2_Incidents]
+table = incident
+# Encoded ServiceNow query, written literally -- `%` and `^` need no
+# escaping here. The agent appends its own time filter and ORDERBY; do not
+# add your own sys_updated_on filter or ORDERBY clause.
+sysparm_query = "active=true^priority<=2"
+data_fields =
+# assignment_group.name are used as fallbacks when no CI is attached.
+instance_field = cmdb_ci.name,business_service.name,assignment_group.name
+default_instance_name = servicenow-incident
+
+[insightfinder]
+user_name =
+license_key =
+token =
+project_name =
+# Name of system owned by project. If project_name doesn't exist in
+# InsightFinder, agent will create a new system automatically from this
+# field or project_name.
+system_name =
+# This agent only supports LOG.
+project_type = log
+# Set to `YES` if project is container.
+containerize = no
+enable_holistic_model = false
+sampling_interval = 10
+frequency_sampling_interval = 10
+log_compression_interval = 1
+enable_log_rotation = false
+log_backup_count = 14
+run_interval = 10
+worker_timeout =
+# what size to limit chunks sent to IF to, as kb
+chunk_size_kb = 2048
+if_url = https://app.insightfinder.com
+if_http_proxy =
+if_https_proxy =

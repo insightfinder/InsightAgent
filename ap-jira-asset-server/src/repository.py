@@ -3,7 +3,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import selectinload
 
-from .models import Device, DeviceEdge, DeviceModel
+from .models import Device, DeviceEdge, DeviceModel, Venue
 
 
 class DeviceRepository:
@@ -38,6 +38,17 @@ class DeviceRepository:
         if not records:
             return 0
         stmt = insert(DeviceEdge).values(records)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["id"],
+            set_={c: stmt.excluded[c] for c in records[0] if c != "id"},
+        )
+        await self.session.execute(stmt)
+        return len(records)
+
+    async def upsert_venues(self, records: List[Dict[str, Any]]) -> int:
+        if not records:
+            return 0
+        stmt = insert(Venue).values(records)
         stmt = stmt.on_conflict_do_update(
             index_elements=["id"],
             set_={c: stmt.excluded[c] for c in records[0] if c != "id"},
@@ -179,6 +190,12 @@ class DeviceRepository:
         result = await self.session.execute(sql, {"device_id": device_id, "max_depth": max_depth})
         return [dict(row._mapping) for row in result]
 
+    # ── venues ───────────────────────────────────────────────────────────────
+
+    async def list_venues(self) -> List[Venue]:
+        result = await self.session.execute(select(Venue).order_by(Venue.name))
+        return list(result.scalars().all())
+
     # ── counts ───────────────────────────────────────────────────────────────
 
     async def counts(self) -> Dict[str, int]:
@@ -186,7 +203,8 @@ class DeviceRepository:
             "SELECT "
             "(SELECT COUNT(*) FROM devices) AS devices,"
             "(SELECT COUNT(*) FROM device_models) AS models,"
-            "(SELECT COUNT(*) FROM device_edges) AS edges"
+            "(SELECT COUNT(*) FROM device_edges) AS edges,"
+            "(SELECT COUNT(*) FROM venues) AS venues"
         ))
         row = r.mappings().one()
         return dict(row)

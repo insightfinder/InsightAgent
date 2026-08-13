@@ -48,6 +48,18 @@ class Device(Base):
     )
 
 
+class Venue(Base):
+    __tablename__ = "venues"
+
+    id = Column(String(255), primary_key=True)
+    key = Column(String(100), index=True, nullable=True)            # IHS-xxxxx
+    name = Column(String(500), index=True, nullable=True)
+    support_engineer_id = Column(String(255), index=True, nullable=True)     # AccessParks Personel object id
+    support_engineer_key = Column(String(100), nullable=True)               # IHS-xxxxx
+    support_engineer_name = Column(String(255), index=True, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class DeviceEdge(Base):
     """source → target means source is upstream of target."""
     __tablename__ = "device_edges"

@@ -47,10 +47,30 @@ func setDefaults(config *Config) {
 	if config.Positron.MaxConcurrentRequests == 0 {
 		config.Positron.MaxConcurrentRequests = 20
 	}
+	if config.Positron.EndpointComponentName == "" {
+		config.Positron.EndpointComponentName = "Positron-Endpoint"
+	}
+	if config.Positron.GAMComponentName == "" {
+		config.Positron.GAMComponentName = "Positron-GAM"
+	}
 
 	// Agent defaults
 	if config.Agent.LogLevel == "" {
 		config.Agent.LogLevel = "info"
+	}
+
+	// Device Inventory defaults
+	if config.DeviceInventory.TimeoutSec == 0 {
+		config.DeviceInventory.TimeoutSec = 5
+	}
+	if config.DeviceInventory.MaxRetry == 0 {
+		config.DeviceInventory.MaxRetry = 2
+	}
+	if config.DeviceInventory.RetryDelayMs == 0 {
+		config.DeviceInventory.RetryDelayMs = 500
+	}
+	if config.DeviceInventory.RefreshHours == 0 {
+		config.DeviceInventory.RefreshHours = 24
 	}
 
 	// InsightFinder defaults - sampling_interval is now the main collection interval

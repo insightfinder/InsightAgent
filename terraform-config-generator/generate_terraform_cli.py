@@ -49,6 +49,34 @@ def format_terraform_value(value):
         return str(value)
 
 
+def _ensure_keyword_trailing_equals(keyword_str):
+    """Ensure each ' AND '-separated field in a keyword string ends with '='.
+
+    e.g. "alert->error->name" -> "alert->error->name="
+         "alert->core->status=active AND alert->core->summary" ->
+         "alert->core->status=active AND alert->core->summary="
+    Segments that already contain '=' are left untouched.
+    """
+    if not keyword_str:
+        return keyword_str
+    parts = keyword_str.split(" AND ")
+    parts = [part if "=" in part else part + "=" for part in parts]
+    return " AND ".join(parts)
+
+
+def _fix_log_label_keywords(obj):
+    """Recursively fix 'keyword' string fields within a log label structure."""
+    if isinstance(obj, dict):
+        return {
+            k: (_ensure_keyword_trailing_equals(v) if k == "keyword" and isinstance(v, str)
+                else _fix_log_label_keywords(v))
+            for k, v in obj.items()
+        }
+    if isinstance(obj, list):
+        return [_fix_log_label_keywords(item) for item in obj]
+    return obj
+
+
 def convert_keywords_to_log_labels(keywords_data):
     """Convert keywords JSON to log_label_settings format."""
     log_labels = []
@@ -83,7 +111,7 @@ def convert_keywords_to_log_labels(keywords_data):
         if keyword_type in keywords_data and keywords_data[keyword_type]:
             log_labels.append({
                 'label_type': label_type,
-                'log_label_string': keywords_data[keyword_type]
+                'log_label_string': _fix_log_label_keywords(keywords_data[keyword_type])
             })
     
     return log_labels
@@ -173,6 +201,21 @@ def _parse_project_configs(raw: dict) -> dict:
     return result
 
 
+def _parse_resolution_code_rules(raw) -> list:
+    """Convert a raw resolutionCodeRules list from the API into a normalised list of dicts."""
+    result = []
+    if not isinstance(raw, list):
+        return result
+    for rule in raw:
+        if not isinstance(rule, dict):
+            continue
+        result.append({
+            "pattern": rule.get("pattern", ""),
+            "outcome": rule.get("outcome", ""),
+        })
+    return result
+
+
 def _parse_servicenow_entry(entry):
     """Parse a single ServiceNow entry from extServiceAllInfo API response.
 
@@ -204,12 +247,18 @@ def _parse_servicenow_entry(entry):
         "department_id": "",
         "project_configs": {},
         "table_mapping": {},
+        "resolution_code_rules": [],
     }
 
     # Parse projectConfigs from root level
     root_project_configs = entry.get("projectConfigs")
     if isinstance(root_project_configs, dict):
         config["project_configs"] = _parse_project_configs(root_project_configs)
+
+    # Parse resolutionCodeRules from root level
+    root_resolution_code_rules = entry.get("resolutionCodeRules")
+    if isinstance(root_resolution_code_rules, list):
+        config["resolution_code_rules"] = _parse_resolution_code_rules(root_resolution_code_rules)
 
     # Parse options JSON array string
     options_str = entry.get("options", "")
@@ -249,6 +298,11 @@ def _parse_servicenow_entry(entry):
                 pc_raw = configs.get("projectConfigs")
                 if isinstance(pc_raw, dict):
                     config["project_configs"] = _parse_project_configs(pc_raw)
+            # Fall back to resolutionCodeRules from configs JSON if not found at root level
+            if not config["resolution_code_rules"]:
+                rr_raw = configs.get("resolutionCodeRules")
+                if isinstance(rr_raw, list):
+                    config["resolution_code_rules"] = _parse_resolution_code_rules(rr_raw)
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
@@ -409,6 +463,17 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
                 lines.append(f'    "{proj_e}" = "{table_e}"')
             lines.append('  }')
 
+        if config.get("resolution_code_rules"):
+            lines.append('  resolution_code_rules = [')
+            for rule in config["resolution_code_rules"]:
+                pattern_e = rule.get("pattern", "").replace('"', '\\"')
+                outcome_e = rule.get("outcome", "").replace('"', '\\"')
+                lines.append('    {')
+                lines.append(f'      pattern = "{pattern_e}"')
+                lines.append(f'      outcome = "{outcome_e}"')
+                lines.append('    },')
+            lines.append('  ]')
+
         lines.append('}')
         lines.append('')
 
@@ -470,6 +535,7 @@ def _parse_slack_entry(entry):
         "project_configs": [],
         "priority_upgrade_channel": "",
         "priority_upgrade_webhook": "",
+        "disable_slack_for_non_insightfinder_incidents": False,
     }
 
     options_str = entry.get("options", "")
@@ -486,8 +552,10 @@ def _parse_slack_entry(entry):
             pc_raw = configs.get("projectConfigs")
             if isinstance(pc_raw, list):
                 config["project_configs"] = _parse_slack_project_configs(pc_raw)
-            config["priority_upgrade_channel"] = configs.get("priorityUpgradeChannel", "") or ""
-            config["priority_upgrade_webhook"] = configs.get("priorityUpgradeWebhook", "") or ""
+            config["priority_upgrade_channel"] = configs.get("priorityUpgradeChannel", "")
+            config["priority_upgrade_webhook"] = configs.get("priorityUpgradeWebhook", "")
+            config["disable_slack_for_non_insightfinder_incidents"] = bool(
+                configs.get("disableSlackForNonInsightFinderIncidents", False))
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
@@ -580,10 +648,11 @@ def generate_slack_env_config(slack_entries, include_provider=True, base_url="",
         if config.get("priority_upgrade_channel"):
             puc_e = _hcl_escape_string(config["priority_upgrade_channel"])
             lines.append(f'  priority_upgrade_channel = "{puc_e}"')
-
         if config.get("priority_upgrade_webhook"):
             puw_e = _hcl_escape_string(config["priority_upgrade_webhook"])
             lines.append(f'  priority_upgrade_webhook = "{puw_e}"')
+        if config.get("disable_slack_for_non_insightfinder_incidents"):
+            lines.append('  disable_slack_for_non_insightfinder_incidents = true')
 
         if config.get("project_configs"):
             lines.append('')
@@ -798,6 +867,7 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
         'proxy': 'proxy',
         'rareAnomalyType': 'rare_anomaly_type',
         'rareEventAlertThresholds': 'rare_event_alert_thresholds',
+        'rareEventAutoIncidentFlag': 'rare_event_auto_incident_flag',
         'rareNumberLimit': 'rare_number_limit',
         'rootCauseCountThreshold': 'root_cause_count_threshold',
         'rootCauseLogMessageSearchRange': 'root_cause_log_message_search_range',
@@ -1018,11 +1088,24 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
             ('incidentDampeningWindow',            'incident_dampening_window'),
             ('ticketOpenTime',                     'ticket_open_time'),
             ('componentLevelIncidentConsolidation', 'component_level_incident_consolidation'),
+            ('componentLevelDampening',             'component_level_dampening'),
             ('maxNotificationDelayTolerance',       'max_notification_delay_tolerance'),
+            ('metricCoOccurrenceBufferMs',          'metric_co_occurrence_buffer_ms'),
         ]
+        # Always emitted even when the API omits them (empty string default),
+        # so a later drop from the API response doesn't silently delete the
+        # attribute from state.
+        always_include_defaults = {
+            'predictionEmail': '',
+            'healthAlertEmail': '',
+            'incidentDetectionEmail': '',
+            'rootCauseEmail': '',
+        }
         for api_key, tf_key in notif_field_map:
             if api_key in notifications_data:
                 lines.append(f'    {tf_key} = {format_terraform_value(notifications_data[api_key])}')
+            elif api_key in always_include_defaults:
+                lines.append(f'    {tf_key} = {format_terraform_value(always_include_defaults[api_key])}')
 
         # enabledConsolidationAlgorithms is a string list
         consolidation_algos = notifications_data.get('enabledConsolidationAlgorithms')
@@ -1030,9 +1113,11 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
             lines.append(f'    enabled_consolidation_algorithms = {_format_string_list(consolidation_algos)}')
 
         # Complex map fields serialized as JSON strings
-        for api_key, tf_key in [('incidentCountThreshold', 'incident_count_threshold'),
-                                  ('assignmentMap', 'assignment_map')]:
-            val = notifications_data.get(api_key)
+        # incident_count_threshold is always emitted (empty map default) so a
+        # later drop from the API response doesn't silently delete the attribute.
+        for api_key, tf_key, default in [('incidentCountThreshold', 'incident_count_threshold', {}),
+                                          ('assignmentMap', 'assignment_map', None)]:
+            val = notifications_data.get(api_key, default)
             if val is not None:
                 lines.append(f'    {tf_key} = {format_terraform_value(val)}')
 
@@ -1090,6 +1175,22 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
                 lines.append(f'        source_customer = "{entry.get("cs", "")}"')
                 lines.append(f'        target_customer = "{entry.get("ct", "")}"')
                 lines.append(f'        duration        = {entry.get("d", 0)}')
+                if "st" in entry:
+                    lines.append(f'        similarity_threshold = {entry.get("st")}')
+                lines.append('      }' + ('' if is_last else ','))
+            lines.append('    ]')
+
+        # project_level_dampening_periods — one block per entry in projectLevelDampeningPeriods
+        pldp = notifications_data.get('projectLevelDampeningPeriods') or []
+        if pldp:
+            lines.append('')
+            lines.append('    project_level_dampening_periods = [')
+            for i, entry in enumerate(pldp):
+                is_last = i == len(pldp) - 1
+                lines.append('      {')
+                lines.append(f'        project  = "{entry.get("p", "")}"')
+                lines.append(f'        customer = "{entry.get("c", "")}"')
+                lines.append(f'        duration = {entry.get("d", 0)}')
                 lines.append('      }' + ('' if is_last else ','))
             lines.append('    ]')
 

@@ -22,4 +22,7 @@ timestamp_format =
 #The timestamp timezone - Default is UTC
 timestamp_timezone = 
 #Comma separated list of columns to omit from the data sending to IF - Optional
-omit_columns = 
+omit_columns =
+#The data format to send to IF: log (default, sends each row as a raw log event) or metric (sends the numeric columns as metric data, one instance/timestamp per row)
+data_format = log
+zone_field = 

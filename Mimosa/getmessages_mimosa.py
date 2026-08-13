@@ -157,7 +157,7 @@ def initialize_cache_connection():
 #########################
 
 DEVICE_LOOKUP_PATH = 'devicelookup.json'
-DEVICE_LOOKUP_REFRESH_HOURS = 24
+DEVICE_LOOKUP_REFRESH_MINUTES_DEFAULT = 30
 # module-level cache: mac(lower) -> device info dict
 DEVICE_LOOKUP = {}
 
@@ -180,13 +180,13 @@ def load_device_lookup(logger):
         return 0
 
 
-def device_lookup_is_stale():
+def device_lookup_is_stale(refresh_minutes=DEVICE_LOOKUP_REFRESH_MINUTES_DEFAULT):
     """Return True if devicelookup.json is missing or older than refresh interval."""
     path = abs_path_from_cur(DEVICE_LOOKUP_PATH)
     if not os.path.exists(path):
         return True
-    age_hours = (time.time() - os.path.getmtime(path)) / 3600
-    return age_hours >= DEVICE_LOOKUP_REFRESH_HOURS
+    age_minutes = (time.time() - os.path.getmtime(path)) / 60
+    return age_minutes >= refresh_minutes
 
 
 def _lookup_device_by_identifier(identifier, api_key, base_url, timeout, max_retry):
@@ -909,7 +909,9 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
 
             # Refresh device lookup (MAC -> IP -> name against Asset Registry) if stale, then load
             load_device_lookup(logger)
-            if device_lookup_is_stale() or not DEVICE_LOOKUP:
+            device_lookup_refresh_minutes = agent_config_vars.get(
+                'device_lookup_refresh_minutes', DEVICE_LOOKUP_REFRESH_MINUTES_DEFAULT)
+            if device_lookup_is_stale(device_lookup_refresh_minutes) or not DEVICE_LOOKUP:
                 refresh_device_lookup(logger, metrics_data, agent_config_vars)
 
             # Process the collected data
@@ -1087,6 +1089,8 @@ def get_agent_config_vars(logger, config_ini):
         device_inventory_base_url = config_parser.get(agent_section, 'device_inventory_base_url', fallback='')
         device_inventory_timeout_sec = config_parser.getint(agent_section, 'device_inventory_timeout_sec', fallback=5)
         device_inventory_max_retry = config_parser.getint(agent_section, 'device_inventory_max_retry', fallback=2)
+        device_lookup_refresh_minutes = config_parser.getint(
+            agent_section, 'device_lookup_refresh_minutes', fallback=DEVICE_LOOKUP_REFRESH_MINUTES_DEFAULT)
 
         return {
             'mimosa_uri': mimosa_uri,
@@ -1107,6 +1111,7 @@ def get_agent_config_vars(logger, config_ini):
             'device_inventory_base_url': device_inventory_base_url,
             'device_inventory_timeout_sec': device_inventory_timeout_sec,
             'device_inventory_max_retry': device_inventory_max_retry,
+            'device_lookup_refresh_minutes': device_lookup_refresh_minutes,
             'his_time_range': config_parser.get(agent_section, 'his_time_range', fallback=''),
         }
         

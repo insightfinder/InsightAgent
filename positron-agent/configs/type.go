@@ -1,10 +1,24 @@
 package config
 
 type Config struct {
-	Agent         AgentConfig         `yaml:"agent"`
-	Positron      PositronConfig      `yaml:"positron"`
-	InsightFinder InsightFinderConfig `yaml:"insightfinder"`
-	State         StateConfig         `yaml:"state"`
+	Agent           AgentConfig           `yaml:"agent"`
+	Positron        PositronConfig        `yaml:"positron"`
+	InsightFinder   InsightFinderConfig   `yaml:"insightfinder"`
+	DeviceInventory DeviceInventoryConfig `yaml:"device_inventory"`
+	State           StateConfig           `yaml:"state"`
+}
+
+// DeviceInventoryConfig contains settings for looking up devices (by MAC,
+// serial number, or device name) in the Device Inventory / Asset Registry
+// API. Mirrors the config used by the mimosa, netexperience, tarana-gnmic,
+// and baicells agents.
+type DeviceInventoryConfig struct {
+	APIKey       string `yaml:"api_key"`
+	BaseURL      string `yaml:"base_url"`
+	TimeoutSec   int    `yaml:"timeout_sec"`
+	MaxRetry     int    `yaml:"max_retry"`
+	RetryDelayMs int    `yaml:"retry_delay_ms"`
+	RefreshHours int    `yaml:"refresh_hours"`
 }
 
 type AgentConfig struct {
@@ -22,6 +36,13 @@ type PositronConfig struct {
 	Password              string `yaml:"password"`
 	VerifySSL             bool   `yaml:"verify_ssl"`
 	MaxConcurrentRequests int    `yaml:"max_concurrent_requests"`
+
+	// ComponentName sent to InsightFinder for GN (regular CPE) vs GAM
+	// (headend) units - see positron.Endpoint/Device.resolveComponentName,
+	// which picks per-record rather than assuming by API source (both
+	// /endpoint/list/all and /device/list mix in GAM units).
+	EndpointComponentName string `yaml:"endpoint_component_name"`
+	GAMComponentName      string `yaml:"gam_component_name"`
 }
 
 type InsightFinderConfig struct {
