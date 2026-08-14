@@ -1,15 +1,23 @@
 // upload-deps — generate AP parent/child dependency relations directly from the
-// asset server's upstream API and upsert them into an InsightFinder causal
+// asset server's device/edge data and upsert them into an InsightFinder causal
 // dependency map.
+//
+// Once per run, it bulk-fetches every device and dependency edge from the
+// AccessParks asset server (GET /devices/export, /devices/edges/export) and
+// builds in-memory indexes — one HTTP round trip per dataset instead of one
+// per instance, since a run resolves upstream relations for every instance
+// across every configured project.
 //
 // Flow (for every configured project):
 //  1. List all instance names for the project.
 //  2. Resolve each instance name to an asset-server identifier (MAC/SERIAL/JIRAKEY
 //     prefix, same convention as getmessages_zabbix.py; unprefixed names fall back
 //     to IP lookup, then the raw/underscored instance name).
-//  3. Call GET /devices/{identifier}/upstream to find the immediate parent
-//     device(s), building an instance name for each parent the same way
-//     (MAC > SERIAL > JIRAKEY), and reading its zone from meta.venue.
+//  3. Resolve the identifier against the local device index and walk the local
+//     edge index to find the immediate parent device(s) (mirrors the asset
+//     server's GET /devices/{id}/upstream), building an instance name for each
+//     parent the same way (MAC > SERIAL > JIRAKEY), and reading its zone from
+//     meta.venue.
 //
 //     If the immediate (depth-1) parent's manufacturer/model matches a
 //     configured "passthrough_devices" entry (e.g. Tarana BN, Positron
@@ -45,10 +53,9 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
+	"sort"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
@@ -178,74 +185,212 @@ type assetClient struct {
 
 func newAssetClient(baseURL, apiKey string) *assetClient {
 	return &assetClient{
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		apiKey:     apiKey,
-		httpClient: &http.Client{Timeout: 15 * time.Second},
+		baseURL: strings.TrimRight(baseURL, "/"),
+		apiKey:  apiKey,
+		// This client now makes exactly 2 bulk-export requests per run rather
+		// than one per instance, so a generous timeout is fine — 32k+ device
+		// rows with model joins can take a while to query and serialize.
+		httpClient: &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
-// UpstreamDevice mirrors one entry of the GET /devices/{id}/upstream response.
+// DeviceResponse mirrors one entry of the GET /devices/export response (same
+// shape as GET /devices/{id}).
+type DeviceResponse struct {
+	ID           string                 `json:"id"`
+	ObjectKey    string                 `json:"object_key"`
+	Name         string                 `json:"name"`
+	DeviceName   string                 `json:"device_name"`
+	IPAddress    string                 `json:"ip_address"`
+	MacAddress   string                 `json:"mac_address"`
+	SerialNumber string                 `json:"serial_number"`
+	Meta         map[string]interface{} `json:"meta"`
+	Model        *struct {
+		Name         string `json:"name"`
+		Manufacturer string `json:"manufacturer"`
+	} `json:"model"`
+}
+
+// EdgeResponse mirrors one entry of the GET /devices/edges/export response.
+// source_id → target_id means source is upstream of target.
+type EdgeResponse struct {
+	SourceID         string `json:"source_id"`
+	TargetID         string `json:"target_id"`
+	RelationshipType string `json:"relationship_type"`
+}
+
+// UpstreamDevice is the nearest-first upstream chain of a device, computed
+// locally by edgeIndex.upstream() (mirrors the asset server's
+// GET /devices/{id}/upstream response shape).
 type UpstreamDevice struct {
-	ID           string          `json:"id"`
-	Name         string          `json:"name"`
-	ObjectKey    string          `json:"object_key"`
-	MacAddress   string          `json:"mac_address"`
-	SerialNumber string          `json:"serial_number"`
-	Depth        int             `json:"depth"`
-	Manufacturer string          `json:"manufacturer"`
-	ModelName    string          `json:"model_name"`
-	Meta         json.RawMessage `json:"meta"`
+	ID           string
+	Name         string
+	ObjectKey    string
+	MacAddress   string
+	SerialNumber string
+	Depth        int
+	Manufacturer string
+	ModelName    string
+	Meta         map[string]interface{}
 }
 
-// decodeMeta parses a device's meta field, which different asset-server endpoints
-// return either as a native JSON object or as a JSON-encoded string.
-func decodeMeta(raw json.RawMessage) map[string]interface{} {
-	if len(raw) == 0 {
-		return nil
+// bulkGet issues an authenticated GET against the asset server and decodes
+// the JSON response body into out.
+func (a *assetClient) bulkGet(ctx context.Context, path string, out interface{}) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.baseURL+path, nil)
+	if err != nil {
+		return err
 	}
-	var meta map[string]interface{}
-	if err := json.Unmarshal(raw, &meta); err == nil {
-		return meta
+	req.Header.Set("X-API-Key", a.apiKey)
+	req.Header.Set("Accept", "application/json")
+	// Deliberately not setting Accept-Encoding: net/http only auto-decompresses
+	// gzip responses when it adds that header itself — an explicit value here
+	// would disable transparent decompression and leave the raw gzip bytes.
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return err
 	}
-	var asString string
-	if err := json.Unmarshal(raw, &asString); err == nil && asString != "" {
-		if err := json.Unmarshal([]byte(asString), &meta); err == nil {
-			return meta
-		}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode: %w", err)
 	}
 	return nil
 }
 
-// lookupUpstream calls GET /devices/{identifier}/upstream?max_depth={maxDepth}
-// and returns the upstream device chain (nearest first).
-func (a *assetClient) lookupUpstream(ctx context.Context, identifier string, maxDepth int) ([]UpstreamDevice, error) {
-	endpoint := fmt.Sprintf("%s/devices/%s/upstream?max_depth=%d", a.baseURL, url.PathEscape(identifier), maxDepth)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
+// exportDevices fetches every device in one call via GET /devices/export.
+func (a *assetClient) exportDevices(ctx context.Context) ([]DeviceResponse, error) {
+	var devices []DeviceResponse
+	if err := a.bulkGet(ctx, "/devices/export", &devices); err != nil {
 		return nil, err
 	}
-	req.Header.Set("X-API-Key", a.apiKey)
-	req.Header.Set("Accept", "application/json")
+	return devices, nil
+}
 
-	resp, err := a.httpClient.Do(req)
-	if err != nil {
+// exportEdges fetches every dependency edge in one call via
+// GET /devices/edges/export.
+func (a *assetClient) exportEdges(ctx context.Context) ([]EdgeResponse, error) {
+	var edges []EdgeResponse
+	if err := a.bulkGet(ctx, "/devices/edges/export", &edges); err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	return edges, nil
+}
 
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, nil
+// ── In-memory indexes ─────────────────────────────────────────────────────────
+// Built once per run from the bulk exports above, so per-instance resolution
+// is a map lookup instead of an HTTP request.
+
+// deviceIndex is a case-insensitive multi-key index over every device,
+// mirroring DeviceRepository.find_device()'s OR-matching semantics
+// (id, object_key, name, device_name, ip_address, mac_address, serial_number).
+type deviceIndex struct {
+	byID  map[string]*DeviceResponse
+	byKey map[string]*DeviceResponse
+}
+
+func newDeviceIndex(devices []DeviceResponse) *deviceIndex {
+	idx := &deviceIndex{
+		byID:  make(map[string]*DeviceResponse, len(devices)),
+		byKey: make(map[string]*DeviceResponse, len(devices)*4),
 	}
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	for i := range devices {
+		d := &devices[i]
+		idx.byID[d.ID] = d
+		for _, key := range []string{d.ID, d.ObjectKey, d.Name, d.DeviceName, d.IPAddress, d.MacAddress, d.SerialNumber} {
+			if key == "" {
+				continue
+			}
+			lk := strings.ToLower(key)
+			if _, exists := idx.byKey[lk]; !exists {
+				idx.byKey[lk] = d
+			}
+		}
+	}
+	return idx
+}
+
+// find looks up a device by any identifier (case-insensitive), or nil if none match.
+func (idx *deviceIndex) find(identifier string) *DeviceResponse {
+	return idx.byKey[strings.ToLower(identifier)]
+}
+
+// edgeIndex is an adjacency index over every dependency edge, for computing a
+// device's upstream chain locally instead of via GET /devices/{id}/upstream.
+type edgeIndex struct {
+	upstreamOf map[string][]string // target_id → []source_id
+}
+
+func newEdgeIndex(edges []EdgeResponse) *edgeIndex {
+	idx := &edgeIndex{upstreamOf: make(map[string][]string, len(edges))}
+	for _, e := range edges {
+		idx.upstreamOf[e.TargetID] = append(idx.upstreamOf[e.TargetID], e.SourceID)
+	}
+	return idx
+}
+
+// upstream returns deviceID's upstream chain (nearest first) up to maxDepth
+// hops, mirroring DeviceRepository.get_upstream()'s "ORDER BY MIN(depth)".
+func (idx *edgeIndex) upstream(deviceID string, maxDepth int, devices *deviceIndex) []UpstreamDevice {
+	depthOf := map[string]int{}
+	seen := map[string]bool{deviceID: true}
+	frontier := []string{deviceID}
+
+	for depth := 1; depth <= maxDepth && len(frontier) > 0; depth++ {
+		var next []string
+		for _, id := range frontier {
+			for _, srcID := range idx.upstreamOf[id] {
+				if seen[srcID] {
+					continue
+				}
+				seen[srcID] = true
+				depthOf[srcID] = depth
+				next = append(next, srcID)
+			}
+		}
+		frontier = next
+	}
+	if len(depthOf) == 0 {
+		return nil
 	}
 
-	var upstream []UpstreamDevice
-	if err := json.NewDecoder(resp.Body).Decode(&upstream); err != nil {
-		return nil, fmt.Errorf("decode: %w", err)
+	ids := make([]string, 0, len(depthOf))
+	for id := range depthOf {
+		ids = append(ids, id)
 	}
-	return upstream, nil
+	sort.SliceStable(ids, func(i, j int) bool { return depthOf[ids[i]] < depthOf[ids[j]] })
+
+	out := make([]UpstreamDevice, 0, len(ids))
+	for _, id := range ids {
+		d := devices.byID[id]
+		if d == nil {
+			continue
+		}
+		u := UpstreamDevice{
+			ID: d.ID, Name: d.Name, ObjectKey: d.ObjectKey,
+			MacAddress: d.MacAddress, SerialNumber: d.SerialNumber,
+			Depth: depthOf[id], Meta: d.Meta,
+		}
+		if d.Model != nil {
+			u.Manufacturer = d.Model.Manufacturer
+			u.ModelName = d.Model.Name
+		}
+		out = append(out, u)
+	}
+	return out
+}
+
+// assetData bundles the in-memory indexes built once per run from the asset
+// server's bulk exports (GET /devices/export, /devices/edges/export), shared
+// across every project.
+type assetData struct {
+	devices *deviceIndex
+	edges   *edgeIndex
 }
 
 // ── Instance name parsing ─────────────────────────────────────────────────────
@@ -369,13 +514,13 @@ type relationDebugEntry struct {
 }
 
 // resolveProjectRelations discovers parent/child relation candidates for every
-// instance in a project by querying the asset server's upstream API.
+// instance in a project using the asset server's bulk-fetched device/edge indexes.
 func resolveProjectRelations(
 	ctx context.Context,
 	project string,
 	instances []string,
 	ifClient *iflib.Client,
-	assets *assetClient,
+	assets *assetData,
 	cfg *Config,
 ) []relationCandidate {
 	// Instances with no recognized MAC/SERIAL/JIRAKEY prefix (e.g. "host.13884")
@@ -400,38 +545,18 @@ func resolveProjectRelations(
 		queryDepth = 2
 	}
 
-	jobs := make(chan string)
-	results := make(chan []relationCandidate)
-
-	var wg sync.WaitGroup
-	for w := 0; w < cfg.MaxWorkers; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for instanceName := range jobs {
-				results <- resolveInstanceRelations(ctx, instanceName, ipByInstance[instanceName], assets, queryDepth, cfg.AssetServer.PassthroughDevices)
-			}
-		}()
-	}
-
-	go func() {
-		for _, instanceName := range instances {
-			jobs <- instanceName
-		}
-		close(jobs)
-		wg.Wait()
-		close(results)
-	}()
-
+	// Resolution is now pure in-memory index lookups (no I/O), so a plain loop
+	// replaces what used to be a worker pool spreading out HTTP round trips.
 	var candidates []relationCandidate
-	for rels := range results {
+	for _, instanceName := range instances {
+		rels := resolveInstanceRelations(instanceName, ipByInstance[instanceName], assets, queryDepth, cfg.AssetServer.PassthroughDevices)
 		candidates = append(candidates, rels...)
 	}
 	return candidates
 }
 
-// resolveInstanceRelations finds the parent(s) of a single instance via the asset
-// server's upstream API, trying identifier candidates in order until one resolves.
+// resolveInstanceRelations finds the parent(s) of a single instance via the local
+// device/edge indexes, trying identifier candidates in order until one resolves.
 //
 // Normally only the depth-1 (immediate upstream) device becomes a parent relation.
 // If the depth-1 device matches one of passthroughDevices (e.g. a Tarana BN bridge
@@ -439,7 +564,7 @@ func resolveProjectRelations(
 // device from the same lookup is ALSO wired up as a parent, so the instance still
 // gets a valid relation once the unmonitored depth-1 device is filtered out during
 // instance-set validation.
-func resolveInstanceRelations(ctx context.Context, instanceName, ip string, assets *assetClient, maxDepth int, passthroughDevices []PassthroughDevice) []relationCandidate {
+func resolveInstanceRelations(instanceName, ip string, assets *assetData, maxDepth int, passthroughDevices []PassthroughDevice) []relationCandidate {
 	var candidates []string
 	if identifier, ok := parseIdentifier(instanceName); ok {
 		candidates = []string{identifier}
@@ -447,18 +572,18 @@ func resolveInstanceRelations(ctx context.Context, instanceName, ip string, asse
 		candidates = identifierCandidates(instanceName, ip)
 	}
 
-	var upstream []UpstreamDevice
+	var device *DeviceResponse
 	for _, candidate := range candidates {
-		u, err := assets.lookupUpstream(ctx, candidate, maxDepth)
-		if err != nil {
-			log.Printf("  WARN  %q → upstream lookup error for %q: %v", instanceName, candidate, err)
-			continue
-		}
-		if len(u) > 0 {
-			upstream = u
+		if d := assets.devices.find(candidate); d != nil {
+			device = d
 			break
 		}
 	}
+	if device == nil {
+		return nil
+	}
+
+	upstream := assets.edges.upstream(device.ID, maxDepth, assets.devices)
 	if len(upstream) == 0 {
 		return nil
 	}
@@ -488,8 +613,8 @@ func resolveInstanceRelations(ctx context.Context, instanceName, ip string, asse
 			return
 		}
 		var zone string
-		if meta := decodeMeta(parent.Meta); meta != nil {
-			if v, ok := meta["venue"].(string); ok {
+		if parent.Meta != nil {
+			if v, ok := parent.Meta["venue"].(string); ok {
 				zone = v
 			}
 		}
@@ -536,7 +661,26 @@ func main() {
 		log.Fatalf("create client: %v", err)
 	}
 
-	assets := newAssetClient(cfg.AssetServer.URL, cfg.AssetServer.APIKey)
+	assetHTTPClient := newAssetClient(cfg.AssetServer.URL, cfg.AssetServer.APIKey)
+
+	// Bulk-fetch once for the whole run — shared across every project below —
+	// instead of one HTTP round trip per instance.
+	t0 := time.Now()
+	rawDevices, err := assetHTTPClient.exportDevices(ctx)
+	if err != nil {
+		log.Fatalf("export devices: %v", err)
+	}
+	rawEdges, err := assetHTTPClient.exportEdges(ctx)
+	if err != nil {
+		log.Fatalf("export edges: %v", err)
+	}
+	log.Printf("fetched %d devices, %d edges in %s",
+		len(rawDevices), len(rawEdges), time.Since(t0).Round(time.Millisecond))
+
+	assets := &assetData{
+		devices: newDeviceIndex(rawDevices),
+		edges:   newEdgeIndex(rawEdges),
+	}
 
 	if *dryRun {
 		log.Println("--- DRY RUN: no data will be sent to InsightFinder ---")
