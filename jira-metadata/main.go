@@ -484,6 +484,28 @@ func buildJiraFields(meta map[string]interface{}, fieldMapping map[string]string
 	return out
 }
 
+// positronModelclassOverride returns the jira_modelclass_name override for
+// Positron GN/GAM devices, or "" if no override applies. The asset server's
+// modelclass ("<jira_model_name> (<device_class>)", e.g. "G1001-C G.hnEndPoint
+// (Switch-Coax)") doesn't distinguish between the GN (endpoint) and GAM
+// (headend) roles that share the same underlying Jira Model object, so
+// devices whose manufacturer is Positron and whose jira_device_name ends in
+// "-GN" or "-GAM" get their modelclass rewritten to reflect the actual role.
+func positronModelclassOverride(device *DeviceResponse) string {
+	manufacturer, _ := device.Meta["manufacturer"].(string)
+	if !strings.EqualFold(manufacturer, "positron") || device.JiraModelName == "" {
+		return ""
+	}
+	switch {
+	case strings.HasSuffix(device.JiraDeviceName, "-GN"):
+		return device.JiraModelName + " (Positron-Endpoint)"
+	case strings.HasSuffix(device.JiraDeviceName, "-GAM"):
+		return device.JiraModelName + " (Positron-GAM)"
+	default:
+		return ""
+	}
+}
+
 // buildKeyJiraFields returns the asset server's pre-resolved Jira object keys
 // (jira_device_key, jira_venue_key, etc.) and their human-readable names
 // (jira_device_name, jira_venue_name, etc.), plus the derived upstream
@@ -507,7 +529,11 @@ func buildKeyJiraFields(device *DeviceResponse, upstreamDeviceKey, upstreamDevic
 	add("jira_location_name", device.JiraLocationName)
 	add("jira_venue_name", device.JiraVenueName)
 	add("jira_model_name", device.JiraModelName)
-	add("jira_modelclass_name", device.JiraModelclassName)
+	modelclassName := device.JiraModelclassName
+	if override := positronModelclassOverride(device); override != "" {
+		modelclassName = override
+	}
+	add("jira_modelclass_name", modelclassName)
 	if manufacturer, ok := device.Meta["manufacturer"].(string); ok {
 		add("jira_technology_name", manufacturer)
 	}
