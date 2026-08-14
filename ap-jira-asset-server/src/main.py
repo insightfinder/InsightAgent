@@ -1,17 +1,20 @@
 import asyncio
+import gzip
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Security
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi.responses import JSONResponse, Response
 from fastapi.security.api_key import APIKeyHeader
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.middleware.gzip import GZipMiddleware
 
 load_dotenv()
 
@@ -59,6 +62,7 @@ async def _do_sync():
         _sync_state["last_result"] = result
         _sync_state["last_finished"] = datetime.now(timezone.utc).isoformat()
         logger.info("sync_complete", **result)
+        _invalidate_bulk_cache("devices", "edges", "venues")
     except Exception as exc:
         _sync_state["last_error"] = str(exc)
         _sync_state["last_finished"] = datetime.now(timezone.utc).isoformat()
@@ -90,12 +94,102 @@ async def _do_venue_sync():
         _venue_sync_state["last_result"] = result
         _venue_sync_state["last_finished"] = datetime.now(timezone.utc).isoformat()
         logger.info("venue_sync_complete", **result)
+        _invalidate_bulk_cache("venues")
     except Exception as exc:
         _venue_sync_state["last_error"] = str(exc)
         _venue_sync_state["last_finished"] = datetime.now(timezone.utc).isoformat()
         logger.error("venue_sync_failed", error=str(exc))
     finally:
         _venue_sync_state["running"] = False
+
+
+# ── bulk export cache ────────────────────────────────────────────────────────
+# Building these lists means walking every device/edge/venue row through the
+# ORM and re-serializing it — tens of thousands of rows, 10+ seconds for
+# devices. Multiple clients (jira-metadata, ap-dependency-upload) each fetch
+# these once per run, so the blob is cached in-process until the sync that
+# changed the underlying data invalidates it — no TTL, since /sync and
+# /sync/support-engineers are the only two things that ever mutate this data.
+#
+# The cache stores the fully-encoded response bytes (both plain and gzipped),
+# not the Python list — encoding ~32k nested dicts to JSON and gzip-compressing
+# the result (tens of MB) is itself multiple seconds of work, and would
+# otherwise repeat on every request even with the DB query skipped.
+
+_CacheEntry = Tuple[bytes, bytes]  # (raw_json_bytes, gzip_compressed_bytes)
+
+
+def _encode_cache_entry(data: Any) -> _CacheEntry:
+    raw = json.dumps(data).encode("utf-8")
+    return raw, gzip.compress(raw)
+
+
+async def _build_devices_cache() -> _CacheEntry:
+    async with SessionLocal() as session:
+        repo = DeviceRepository(session)
+        devices = await repo.list_all_devices()
+        return _encode_cache_entry([_device_to_dict(d) for d in devices])
+
+
+async def _build_edges_cache() -> _CacheEntry:
+    async with SessionLocal() as session:
+        repo = DeviceRepository(session)
+        edges = await repo.list_all_edges()
+        return _encode_cache_entry([
+            {"source_id": e.source_id, "target_id": e.target_id, "relationship_type": e.relationship_type}
+            for e in edges
+        ])
+
+
+async def _build_venues_cache() -> _CacheEntry:
+    async with SessionLocal() as session:
+        repo = DeviceRepository(session)
+        venues = await repo.list_venue_abbreviations()
+        return _encode_cache_entry([
+            {
+                "abbreviation": v.abbreviation,
+                "venue_name": v.name,
+                "venue_key": v.key,
+                "venue_id": v.id,
+            }
+            for v in venues
+        ])
+
+
+_BULK_CACHE_BUILDERS = {
+    "devices": _build_devices_cache,
+    "edges": _build_edges_cache,
+    "venues": _build_venues_cache,
+}
+_bulk_cache: Dict[str, Optional[_CacheEntry]] = {key: None for key in _BULK_CACHE_BUILDERS}
+_bulk_cache_locks: Dict[str, asyncio.Lock] = {key: asyncio.Lock() for key in _BULK_CACHE_BUILDERS}
+
+
+async def _get_bulk_cached(key: str) -> _CacheEntry:
+    if _bulk_cache[key] is not None:
+        return _bulk_cache[key]
+    async with _bulk_cache_locks[key]:
+        if _bulk_cache[key] is None:  # still None after acquiring the lock — build it
+            _bulk_cache[key] = await _BULK_CACHE_BUILDERS[key]()
+        return _bulk_cache[key]
+
+
+def _invalidate_bulk_cache(*keys: str) -> None:
+    """Drop the given cache entries and immediately kick off a background
+    rebuild, so the first real request after a sync doesn't pay for it."""
+    for key in keys:
+        _bulk_cache[key] = None
+        asyncio.create_task(_get_bulk_cached(key))
+
+
+async def _serve_bulk_cached(key: str, request: Request) -> Response:
+    """Serve a cached bulk blob as-is — gzipped if the client accepts it,
+    otherwise plain — with zero re-serialization or re-compression per request.
+    """
+    raw, compressed = await _get_bulk_cached(key)
+    if "gzip" in request.headers.get("accept-encoding", ""):
+        return Response(content=compressed, media_type="application/json", headers={"Content-Encoding": "gzip"})
+    return Response(content=raw, media_type="application/json")
 
 
 # ── scheduler ────────────────────────────────────────────────────────────────
@@ -121,12 +215,17 @@ async def lifespan(app: FastAPI):
     scheduler.start()
     logger.info("scheduler_started", cron=SYNC_CRON)
 
+    for key in _BULK_CACHE_BUILDERS:
+        asyncio.create_task(_get_bulk_cached(key))
+    logger.info("bulk_cache_prewarm_started")
+
     yield
 
     scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="Asset Registry", lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -180,6 +279,29 @@ def _device_to_dict(device) -> Dict[str, Any]:
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/devices/export", dependencies=[Depends(require_api_key)])
+async def export_devices(request: Request):
+    """
+    Bulk dump of every device, same shape as GET /devices/{identifier}.
+
+    For clients resolving thousands of identifiers per run (e.g. jira-metadata,
+    ap-dependency-upload) — fetch this once and build a local index instead of
+    one request per identifier. Served from an in-memory cache invalidated by
+    /sync; registered ahead of /devices/{identifier} so the literal path
+    "export" isn't swallowed by that route's path parameter.
+    """
+    return await _serve_bulk_cached("devices", request)
+
+
+@app.get("/devices/edges/export", dependencies=[Depends(require_api_key)])
+async def export_device_edges(request: Request):
+    """
+    Bulk dump of every dependency edge, for local upstream/downstream traversal.
+    Served from an in-memory cache invalidated by /sync.
+    """
+    return await _serve_bulk_cached("edges", request)
 
 
 @app.get("/devices/{identifier}", dependencies=[Depends(require_api_key)])
@@ -332,6 +454,31 @@ async def get_support_engineers(session: AsyncSession = Depends(get_session)):
         }
         for v in venues
     ]
+
+
+@app.get("/venues/abbreviations", dependencies=[Depends(require_api_key)])
+async def list_venue_abbreviations(request: Request):
+    """
+    Abbreviation → Venue mapping, sourced from the Venue object's linked
+    Abbreviation in Jira Assets. Served from an in-memory cache invalidated by
+    /sync and /sync/support-engineers.
+    """
+    return await _serve_bulk_cached("venues", request)
+
+
+@app.get("/venues/abbreviations/{abbreviation}", dependencies=[Depends(require_api_key)])
+async def get_venue_by_abbreviation(abbreviation: str, session: AsyncSession = Depends(get_session)):
+    """Look up the venue linked to a given abbreviation code."""
+    repo = DeviceRepository(session)
+    venue = await repo.find_venue_by_abbreviation(abbreviation)
+    if not venue:
+        raise HTTPException(status_code=404, detail=f"No venue found for abbreviation: {abbreviation}")
+    return {
+        "abbreviation": venue.abbreviation,
+        "venue_name": venue.name,
+        "venue_key": venue.key,
+        "venue_id": venue.id,
+    }
 
 
 @app.post("/sync", dependencies=[Depends(require_api_key)])

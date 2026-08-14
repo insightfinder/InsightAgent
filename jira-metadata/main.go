@@ -1,14 +1,25 @@
 // venue-ids — set Jira venue/subvenue/location/device IDs on InsightFinder instances.
 //
-// For each configured project it:
+// Once per run, it bulk-fetches every device, dependency edge, and venue
+// abbreviation from the AccessParks asset server (GET /devices/export,
+// /devices/edges/export, /venues/abbreviations) and builds in-memory indexes —
+// one HTTP round trip per dataset instead of one per instance, since a run
+// processes thousands of instances across all configured projects.
+//
+// For each configured project it then:
 //  1. Lists all instances from InsightFinder.
 //  2. Strips the "MAC ", "SERIAL ", or "JIRAKEY " prefix from each instance name to
 //     obtain the raw identifier (e.g. "4C:B1:CD:38:3C:60", "IHS-23344", "ABC123SS").
 //     Instances with none of these prefixes (e.g. "host.13884") fall back to: the
 //     instance's IP address, then the instance name as-is, then the instance name
 //     with "." replaced by "_".
-//  3. Queries the AccessParks asset server GET /devices/{identifier}.
+//  3. Resolves the identifier against the local device index (mirrors the asset
+//     server's GET /devices/{identifier} matching).
 //  4. Reads venue_id, subvenue_id, location_id, device_id from the device meta.
+//     If no device matches by any of the above, falls back to the venue
+//     abbreviation prefix of the instance name (e.g. "HE-RAD_C5-Helena62" →
+//     "he") via the local venue-abbreviation index, populating whatever
+//     venue-level fields are available.
 //  5. Uploads the Jira custom-field values to InsightFinder via
 //     /api/v1/agent-upload-third-party-instancemetadata.
 //
@@ -25,8 +36,8 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -134,20 +145,26 @@ type assetClient struct {
 
 func newAssetClient(baseURL, apiKey string) *assetClient {
 	return &assetClient{
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		apiKey:     apiKey,
-		httpClient: &http.Client{Timeout: 15 * time.Second},
+		baseURL: strings.TrimRight(baseURL, "/"),
+		apiKey:  apiKey,
+		// This client now makes exactly 3 bulk-export requests per run rather
+		// than one per instance, so a generous timeout is fine — 32k+ device
+		// rows with model joins can take a while to query and serialize.
+		httpClient: &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
-// DeviceResponse mirrors the GET /devices/{id} response from the asset server.
+// DeviceResponse mirrors one entry of the GET /devices/export response (same
+// shape as GET /devices/{id}).
 type DeviceResponse struct {
-	ID         string                 `json:"id"`
-	ObjectKey  string                 `json:"object_key"`
-	Name       string                 `json:"name"`
-	DeviceName string                 `json:"device_name"`
-	MacAddress string                 `json:"mac_address"`
-	Meta       map[string]interface{} `json:"meta"`
+	ID           string                 `json:"id"`
+	ObjectKey    string                 `json:"object_key"`
+	Name         string                 `json:"name"`
+	DeviceName   string                 `json:"device_name"`
+	IPAddress    string                 `json:"ip_address"`
+	MacAddress   string                 `json:"mac_address"`
+	SerialNumber string                 `json:"serial_number"`
+	Meta         map[string]interface{} `json:"meta"`
 
 	// Pre-resolved Jira object keys (e.g. "IHS-20846"). May be null/empty when
 	// the corresponding Jira object hasn't been created yet.
@@ -167,7 +184,25 @@ type DeviceResponse struct {
 	JiraModelclassName string `json:"jira_modelclass_name"`
 }
 
-// UpstreamDevice mirrors one entry of the GET /devices/{id}/upstream response.
+// VenueResponse mirrors one entry of the GET /venues/abbreviations response.
+type VenueResponse struct {
+	Abbreviation string `json:"abbreviation"`
+	VenueName    string `json:"venue_name"`
+	VenueKey     string `json:"venue_key"`
+	VenueID      string `json:"venue_id"`
+}
+
+// EdgeResponse mirrors one entry of the GET /devices/edges/export response.
+// source_id → target_id means source is upstream of target.
+type EdgeResponse struct {
+	SourceID         string `json:"source_id"`
+	TargetID         string `json:"target_id"`
+	RelationshipType string `json:"relationship_type"`
+}
+
+// UpstreamDevice is the nearest-first upstream chain of a device, computed
+// locally by edgeIndex.upstream() (mirrors the asset server's
+// GET /devices/{id}/upstream response shape).
 type UpstreamDevice struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
@@ -176,66 +211,173 @@ type UpstreamDevice struct {
 	Depth      int    `json:"depth"`
 }
 
-func (a *assetClient) lookup(ctx context.Context, identifier string) (*DeviceResponse, error) {
-	endpoint := fmt.Sprintf("%s/devices/%s", a.baseURL, url.PathEscape(identifier))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+// bulkGet issues an authenticated GET against the asset server and decodes
+// the JSON response body into out.
+func (a *assetClient) bulkGet(ctx context.Context, path string, out interface{}) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.baseURL+path, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	req.Header.Set("X-API-Key", a.apiKey)
 	req.Header.Set("Accept", "application/json")
+	// Deliberately not setting Accept-Encoding: net/http only auto-decompresses
+	// gzip responses when it adds that header itself — an explicit value here
+	// would disable transparent decompression and leave the raw gzip bytes.
 
 	resp, err := a.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, nil
-	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-
-	var device DeviceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&device); err != nil {
-		return nil, fmt.Errorf("decode: %w", err)
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode: %w", err)
 	}
-	return &device, nil
+	return nil
 }
 
-// lookupUpstream calls GET /devices/{identifier}/upstream?max_depth={maxDepth}
-// and returns the upstream device chain (nearest first).
-func (a *assetClient) lookupUpstream(ctx context.Context, identifier string, maxDepth int) ([]UpstreamDevice, error) {
-	endpoint := fmt.Sprintf("%s/devices/%s/upstream?max_depth=%d", a.baseURL, url.PathEscape(identifier), maxDepth)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
+// exportDevices fetches every device in one call via GET /devices/export.
+func (a *assetClient) exportDevices(ctx context.Context) ([]DeviceResponse, error) {
+	var devices []DeviceResponse
+	if err := a.bulkGet(ctx, "/devices/export", &devices); err != nil {
 		return nil, err
 	}
-	req.Header.Set("X-API-Key", a.apiKey)
-	req.Header.Set("Accept", "application/json")
+	return devices, nil
+}
 
-	resp, err := a.httpClient.Do(req)
-	if err != nil {
+// exportEdges fetches every dependency edge in one call via
+// GET /devices/edges/export.
+func (a *assetClient) exportEdges(ctx context.Context) ([]EdgeResponse, error) {
+	var edges []EdgeResponse
+	if err := a.bulkGet(ctx, "/devices/edges/export", &edges); err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	return edges, nil
+}
 
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, nil
+// exportVenueAbbreviations fetches every abbreviation → venue mapping in one
+// call via GET /venues/abbreviations.
+func (a *assetClient) exportVenueAbbreviations(ctx context.Context) ([]VenueResponse, error) {
+	var venues []VenueResponse
+	if err := a.bulkGet(ctx, "/venues/abbreviations", &venues); err != nil {
+		return nil, err
 	}
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	return venues, nil
+}
+
+// ── In-memory indexes ─────────────────────────────────────────────────────────
+// Built once per run from the bulk exports above, so per-instance resolution
+// is a map lookup instead of an HTTP request.
+
+// deviceIndex is a case-insensitive multi-key index over every device,
+// mirroring DeviceRepository.find_device()'s OR-matching semantics
+// (id, object_key, name, device_name, ip_address, mac_address, serial_number).
+type deviceIndex struct {
+	byID  map[string]*DeviceResponse
+	byKey map[string]*DeviceResponse
+}
+
+func newDeviceIndex(devices []DeviceResponse) *deviceIndex {
+	idx := &deviceIndex{
+		byID:  make(map[string]*DeviceResponse, len(devices)),
+		byKey: make(map[string]*DeviceResponse, len(devices)*4),
+	}
+	for i := range devices {
+		d := &devices[i]
+		idx.byID[d.ID] = d
+		for _, key := range []string{d.ID, d.ObjectKey, d.Name, d.DeviceName, d.IPAddress, d.MacAddress, d.SerialNumber} {
+			if key == "" {
+				continue
+			}
+			lk := strings.ToLower(key)
+			if _, exists := idx.byKey[lk]; !exists {
+				idx.byKey[lk] = d
+			}
+		}
+	}
+	return idx
+}
+
+// find looks up a device by any identifier (case-insensitive), or nil if none match.
+func (idx *deviceIndex) find(identifier string) *DeviceResponse {
+	return idx.byKey[strings.ToLower(identifier)]
+}
+
+// edgeIndex is an adjacency index over every dependency edge, for computing a
+// device's upstream chain locally instead of via GET /devices/{id}/upstream.
+type edgeIndex struct {
+	upstreamOf map[string][]string // target_id → []source_id
+}
+
+func newEdgeIndex(edges []EdgeResponse) *edgeIndex {
+	idx := &edgeIndex{upstreamOf: make(map[string][]string, len(edges))}
+	for _, e := range edges {
+		idx.upstreamOf[e.TargetID] = append(idx.upstreamOf[e.TargetID], e.SourceID)
+	}
+	return idx
+}
+
+// upstream returns deviceID's upstream chain (nearest first) up to maxDepth
+// hops, mirroring DeviceRepository.get_upstream()'s "ORDER BY MIN(depth)".
+func (idx *edgeIndex) upstream(deviceID string, maxDepth int, devices *deviceIndex) []UpstreamDevice {
+	depthOf := map[string]int{}
+	seen := map[string]bool{deviceID: true}
+	frontier := []string{deviceID}
+
+	for depth := 1; depth <= maxDepth && len(frontier) > 0; depth++ {
+		var next []string
+		for _, id := range frontier {
+			for _, srcID := range idx.upstreamOf[id] {
+				if seen[srcID] {
+					continue
+				}
+				seen[srcID] = true
+				depthOf[srcID] = depth
+				next = append(next, srcID)
+			}
+		}
+		frontier = next
+	}
+	if len(depthOf) == 0 {
+		return nil
 	}
 
-	var upstream []UpstreamDevice
-	if err := json.NewDecoder(resp.Body).Decode(&upstream); err != nil {
-		return nil, fmt.Errorf("decode: %w", err)
+	ids := make([]string, 0, len(depthOf))
+	for id := range depthOf {
+		ids = append(ids, id)
 	}
-	return upstream, nil
+	sort.SliceStable(ids, func(i, j int) bool { return depthOf[ids[i]] < depthOf[ids[j]] })
+
+	out := make([]UpstreamDevice, 0, len(ids))
+	for _, id := range ids {
+		d := devices.byID[id]
+		if d == nil {
+			continue
+		}
+		out = append(out, UpstreamDevice{
+			ID: d.ID, Name: d.Name, ObjectKey: d.ObjectKey, MacAddress: d.MacAddress, Depth: depthOf[id],
+		})
+	}
+	return out
+}
+
+// venueIndex is a case-insensitive index over every abbreviation → venue mapping.
+type venueIndex map[string]*VenueResponse
+
+func newVenueIndex(venues []VenueResponse) venueIndex {
+	idx := make(venueIndex, len(venues))
+	for i := range venues {
+		idx[strings.ToLower(venues[i].Abbreviation)] = &venues[i]
+	}
+	return idx
+}
+
+func (idx venueIndex) find(abbreviation string) *VenueResponse {
+	return idx[strings.ToLower(abbreviation)]
 }
 
 // ── Instance name parsing ─────────────────────────────────────────────────────
@@ -309,6 +451,19 @@ func identifierCandidates(instanceName, ip string) []string {
 	return candidates
 }
 
+// abbreviationCandidate extracts the venue-abbreviation prefix from an instance
+// name, used as the final fallback when no device match is found by any other
+// identifier (IP, name, underscored name, MAC/SERIAL/JIRAKEY). Convention: the
+// venue abbreviation is the segment before the first "-"
+// (e.g. "HE-RAD_C5-Helena62" → "he").
+func abbreviationCandidate(instanceName string) (string, bool) {
+	idx := strings.Index(instanceName, "-")
+	if idx <= 0 {
+		return "", false
+	}
+	return strings.ToLower(instanceName[:idx]), true
+}
+
 // ── Jira field builder ────────────────────────────────────────────────────────
 
 // buildJiraFields maps device meta keys → Jira custom fields formatted as "{workspaceID}:{objectID}".
@@ -329,6 +484,28 @@ func buildJiraFields(meta map[string]interface{}, fieldMapping map[string]string
 	return out
 }
 
+// positronModelclassOverride returns the jira_modelclass_name override for
+// Positron GN/GAM devices, or "" if no override applies. The asset server's
+// modelclass ("<jira_model_name> (<device_class>)", e.g. "G1001-C G.hnEndPoint
+// (Switch-Coax)") doesn't distinguish between the GN (endpoint) and GAM
+// (headend) roles that share the same underlying Jira Model object, so
+// devices whose manufacturer is Positron and whose jira_device_name ends in
+// "-GN" or "-GAM" get their modelclass rewritten to reflect the actual role.
+func positronModelclassOverride(device *DeviceResponse) string {
+	manufacturer, _ := device.Meta["manufacturer"].(string)
+	if !strings.EqualFold(manufacturer, "positron") || device.JiraModelName == "" {
+		return ""
+	}
+	switch {
+	case strings.HasSuffix(device.JiraDeviceName, "-GN"):
+		return device.JiraModelName + " (Positron-Endpoint)"
+	case strings.HasSuffix(device.JiraDeviceName, "-GAM"):
+		return device.JiraModelName + " (Positron-GAM)"
+	default:
+		return ""
+	}
+}
+
 // buildKeyJiraFields returns the asset server's pre-resolved Jira object keys
 // (jira_device_key, jira_venue_key, etc.) and their human-readable names
 // (jira_device_name, jira_venue_name, etc.), plus the derived upstream
@@ -336,7 +513,7 @@ func buildJiraFields(meta map[string]interface{}, fieldMapping map[string]string
 // their own field name with the raw value (e.g. "IHS-20846" or
 // "FC:11:65:B6:A3:42"). Empty/null values are omitted.
 func buildKeyJiraFields(device *DeviceResponse, upstreamDeviceKey, upstreamDeviceName, upstreamDeviceMac string) map[string]string {
-	out := make(map[string]string, 15)
+	out := make(map[string]string, 16)
 	add := func(key, value string) {
 		if value != "" {
 			out[key] = value
@@ -352,7 +529,14 @@ func buildKeyJiraFields(device *DeviceResponse, upstreamDeviceKey, upstreamDevic
 	add("jira_location_name", device.JiraLocationName)
 	add("jira_venue_name", device.JiraVenueName)
 	add("jira_model_name", device.JiraModelName)
-	add("jira_modelclass_name", device.JiraModelclassName)
+	modelclassName := device.JiraModelclassName
+	if override := positronModelclassOverride(device); override != "" {
+		modelclassName = override
+	}
+	add("jira_modelclass_name", modelclassName)
+	if manufacturer, ok := device.Meta["manufacturer"].(string); ok {
+		add("jira_technology_name", manufacturer)
+	}
 	add("jira_upstream_device_key", upstreamDeviceKey)
 	add("jira_upstream_device_name", upstreamDeviceName)
 	add("jira_upstream_device_mac", upstreamDeviceMac)
@@ -360,14 +544,42 @@ func buildKeyJiraFields(device *DeviceResponse, upstreamDeviceKey, upstreamDevic
 	return out
 }
 
+// buildVenueOnlyFields maps a venue-abbreviation match to whatever Jira fields
+// can be derived from the venue alone — used when a device couldn't be
+// resolved by any other identifier, so subvenue/location/device stay unknown.
+func buildVenueOnlyFields(venue *VenueResponse, fieldMapping map[string]string, workspaceID string) map[string]string {
+	out := make(map[string]string, 3)
+	if venue.VenueID != "" {
+		if customField, ok := fieldMapping["venue_id"]; ok {
+			out[customField] = workspaceID + ":" + venue.VenueID
+		}
+	}
+	if venue.VenueKey != "" {
+		out["jira_venue_key"] = venue.VenueKey
+	}
+	if venue.VenueName != "" {
+		out["jira_venue_name"] = venue.VenueName
+	}
+	return out
+}
+
 // ── Per-project processing ────────────────────────────────────────────────────
+
+// assetData bundles the in-memory indexes built once per run from the asset
+// server's bulk exports (GET /devices/export, /devices/edges/export,
+// /venues/abbreviations), shared across every project.
+type assetData struct {
+	devices *deviceIndex
+	edges   *edgeIndex
+	venues  venueIndex
+}
 
 func processProject(
 	ctx context.Context,
 	project string,
 	cfg *Config,
 	ifClient *iflib.Client,
-	assets *assetClient,
+	assets *assetData,
 	dryRun bool,
 ) error {
 	instances, err := ifClient.ListProjectInstances(ctx, project)
@@ -391,7 +603,7 @@ func processProject(
 	}
 
 	var entries []iflib.ThirdPartyInstanceEntry
-	var noPrefix, notFound, noIDs int
+	var noPrefix, notFound, noIDs, abbrMatched int
 
 	for _, instanceName := range instances {
 		var candidates []string
@@ -403,19 +615,31 @@ func processProject(
 		}
 
 		var device *DeviceResponse
-		var identifier string
 		for _, candidate := range candidates {
-			d, err := assets.lookup(ctx, candidate)
-			if err != nil {
-				log.Printf("  WARN  %q → lookup error for %q: %v", instanceName, candidate, err)
-				continue
-			}
-			if d != nil {
-				device, identifier = d, candidate
+			if d := assets.devices.find(candidate); d != nil {
+				device = d
 				break
 			}
 		}
 		if device == nil {
+			// Last resort: derive a venue abbreviation from the instance name
+			// itself (e.g. "HE-RAD_C5-Helena62" → "he") and look up the venue
+			// directly, so at least venue-level fields can be populated.
+			if abbr, ok := abbreviationCandidate(instanceName); ok {
+				if venue := assets.venues.find(abbr); venue != nil {
+					if fields := buildVenueOnlyFields(venue, cfg.Jira.FieldMapping, cfg.Jira.WorkspaceID); len(fields) > 0 {
+						abbrMatched++
+						log.Printf("  ABBR  %q → venue %q (abbreviation %q) %v", instanceName, venue.VenueName, abbr, fields)
+						entries = append(entries, iflib.ThirdPartyInstanceEntry{
+							InstanceName: instanceName,
+							JiraConfigs: iflib.ThirdPartyJiraConfigs{
+								JiraIssueFields: fields,
+							},
+						})
+						continue
+					}
+				}
+			}
 			notFound++
 			log.Printf("  MISS  %q (tried %v)", instanceName, candidates)
 			continue
@@ -424,10 +648,7 @@ func processProject(
 		fields := buildJiraFields(device.Meta, cfg.Jira.FieldMapping, cfg.Jira.WorkspaceID)
 
 		var upstreamDeviceKey, upstreamDeviceName, upstreamDeviceMac string
-		upstream, err := assets.lookupUpstream(ctx, identifier, cfg.AssetServer.UpstreamMaxDepth)
-		if err != nil {
-			log.Printf("  WARN  %q → upstream lookup error: %v", instanceName, err)
-		} else if len(upstream) > 0 {
+		if upstream := assets.edges.upstream(device.ID, cfg.AssetServer.UpstreamMaxDepth, assets.devices); len(upstream) > 0 {
 			upstreamDeviceKey = upstream[0].ObjectKey
 			upstreamDeviceName = upstream[0].Name
 			upstreamDeviceMac = upstream[0].MacAddress
@@ -452,8 +673,8 @@ func processProject(
 		})
 	}
 
-	log.Printf("  ready=%d  no-prefix-fallback=%d  not-found=%d  no-ids=%d",
-		len(entries), noPrefix, notFound, noIDs)
+	log.Printf("  ready=%d  no-prefix-fallback=%d  abbreviation-fallback=%d  not-found=%d  no-ids=%d",
+		len(entries), noPrefix, abbrMatched, notFound, noIDs)
 
 	if len(entries) == 0 {
 		return nil
@@ -501,7 +722,31 @@ func main() {
 		log.Fatalf("create IF client: %v", err)
 	}
 
-	assets := newAssetClient(cfg.AssetServer.URL, cfg.AssetServer.APIKey)
+	client := newAssetClient(cfg.AssetServer.URL, cfg.AssetServer.APIKey)
+
+	// Bulk-fetch once for the whole run — shared across every project below —
+	// instead of one HTTP round trip per instance.
+	t0 := time.Now()
+	rawDevices, err := client.exportDevices(ctx)
+	if err != nil {
+		log.Fatalf("export devices: %v", err)
+	}
+	rawEdges, err := client.exportEdges(ctx)
+	if err != nil {
+		log.Fatalf("export edges: %v", err)
+	}
+	rawVenues, err := client.exportVenueAbbreviations(ctx)
+	if err != nil {
+		log.Fatalf("export venue abbreviations: %v", err)
+	}
+	log.Printf("fetched %d devices, %d edges, %d venue abbreviations in %s",
+		len(rawDevices), len(rawEdges), len(rawVenues), time.Since(t0).Round(time.Millisecond))
+
+	assets := &assetData{
+		devices: newDeviceIndex(rawDevices),
+		edges:   newEdgeIndex(rawEdges),
+		venues:  newVenueIndex(rawVenues),
+	}
 
 	if *dryRun {
 		log.Println("--- DRY RUN: no data will be sent to InsightFinder ---")

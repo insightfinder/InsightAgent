@@ -278,8 +278,30 @@ def transform_subvenues(raw: List[Dict]) -> Dict[str, Dict[str, Optional[str]]]:
     return result
 
 
-def transform_venues(raw: List[Dict]) -> List[Dict]:
-    """Returns one record per Venue object, with its Support Engineer (attr 595) resolved."""
+def transform_abbreviations(raw: List[Dict]) -> Dict[str, str]:
+    """Returns {abbreviation_object_key: abbreviation_label} for use in transform_venues()."""
+    return {obj["objectKey"]: (obj.get("label") or "") for obj in raw if obj.get("objectKey")}
+
+
+def _get_abbreviation_key(obj: Dict) -> Optional[str]:
+    """Returns the objectKey of the Abbreviation object linked to this Venue, or None.
+
+    No dedicated attribute ID is known for this link (unlike VENUE_SUPPORT_ENGINEER_ATTR_ID
+    or SUBVENUE_VENUE_ATTR_ID above), so this scans every attribute for a referenced object
+    whose type is named "Abbreviation" — same approach as the reference script this was
+    ported from (old-files/generate_abbreviation_venue_mapping.py).
+    """
+    for attr in obj.get("attributes", []):
+        for val in attr.get("objectAttributeValues", []):
+            ref = val.get("referencedObject") or {}
+            if ref.get("objectType", {}).get("name", "").lower() == "abbreviation":
+                return ref.get("objectKey")
+    return None
+
+
+def transform_venues(raw: List[Dict], abbr_lookup: Optional[Dict[str, str]] = None) -> List[Dict]:
+    """Returns one record per Venue object, with its Support Engineer (attr 595)
+    and linked Abbreviation resolved."""
     out = []
     for obj in raw:
         obj_id = str(obj["id"])
@@ -300,6 +322,13 @@ def transform_venues(raw: List[Dict]) -> List[Dict]:
                     support_engineer_key = ref_obj.get("objectKey")
                 break
 
+        abbreviation_key = _get_abbreviation_key(obj)
+        abbreviation = None
+        if abbreviation_key and abbr_lookup:
+            label = abbr_lookup.get(abbreviation_key)
+            if label:
+                abbreviation = label.lower()
+
         out.append({
             "id": obj_id,
             "key": venue_key,
@@ -307,6 +336,8 @@ def transform_venues(raw: List[Dict]) -> List[Dict]:
             "support_engineer_id": support_engineer_id,
             "support_engineer_key": support_engineer_key,
             "support_engineer_name": support_engineer_name,
+            "abbreviation": abbreviation,
+            "abbreviation_key": abbreviation_key,
         })
     return out
 
@@ -445,15 +476,20 @@ def transform_devices(
 
 
 async def run_venue_sync() -> Dict[str, Any]:
-    """Sync just Venue objects (name + Support Engineer) — fast path, skips Model/Device/Subvenue/edges."""
+    """Sync just Venue objects (name + Support Engineer + Abbreviation) — fast path,
+    skips Model/Device/Subvenue/edges."""
     client = JiraClient()
     t0 = time.time()
 
-    raw_venues = await client.fetch_all("Venue")
+    raw_venues, raw_abbreviations = await asyncio.gather(
+        client.fetch_all("Venue"),
+        client.fetch_all("Abbreviation"),
+    )
     fetch_time = time.time() - t0
-    logger.info("Fetched %d venues in %.1fs", len(raw_venues), fetch_time)
+    logger.info("Fetched %d venues, %d abbreviations in %.1fs", len(raw_venues), len(raw_abbreviations), fetch_time)
 
-    venue_records = transform_venues(raw_venues)
+    abbr_lookup = transform_abbreviations(raw_abbreviations)
+    venue_records = transform_venues(raw_venues, abbr_lookup=abbr_lookup)
 
     t1 = time.time()
     async with SessionLocal() as session:
@@ -478,23 +514,25 @@ async def run_sync() -> Dict[str, Any]:
     client = JiraClient()
     t0 = time.time()
 
-    # Fetch models, devices, subvenues, and venues in parallel
-    logger.info("Fetching Model, Device, Subvenue, and Venue objects from Jira in parallel...")
-    raw_models, raw_devices, raw_subvenues, raw_venues = await asyncio.gather(
+    # Fetch models, devices, subvenues, venues, and abbreviations in parallel
+    logger.info("Fetching Model, Device, Subvenue, Venue, and Abbreviation objects from Jira in parallel...")
+    raw_models, raw_devices, raw_subvenues, raw_venues, raw_abbreviations = await asyncio.gather(
         client.fetch_all("Model"),
         client.fetch_all("Device"),
         client.fetch_all("Subvenue"),
         client.fetch_all("Venue"),
+        client.fetch_all("Abbreviation"),
     )
 
     fetch_time = time.time() - t0
-    logger.info("Fetched %d models, %d devices, %d subvenues, %d venues in %.1fs",
-                len(raw_models), len(raw_devices), len(raw_subvenues), len(raw_venues), fetch_time)
+    logger.info("Fetched %d models, %d devices, %d subvenues, %d venues, %d abbreviations in %.1fs",
+                len(raw_models), len(raw_devices), len(raw_subvenues), len(raw_venues), len(raw_abbreviations), fetch_time)
 
     subvenue_map = transform_subvenues(raw_subvenues)
     model_records = transform_models(raw_models)
     device_records, edge_records = transform_devices(raw_devices, subvenue_map=subvenue_map)
-    venue_records = transform_venues(raw_venues)
+    abbr_lookup = transform_abbreviations(raw_abbreviations)
+    venue_records = transform_venues(raw_venues, abbr_lookup=abbr_lookup)
 
     t1 = time.time()
     async with SessionLocal() as session:

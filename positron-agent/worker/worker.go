@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +23,7 @@ type Worker struct {
 	testMode             bool
 	deviceLookup         devicelookup.Lookup
 	notFoundLookup       devicelookup.NotFoundCache
+	venueAbbrLookup      devicelookup.VenueAbbrLookup
 	// Stats tracking
 	statsLock    sync.RWMutex
 	currentStats *CollectionStats
@@ -47,6 +49,7 @@ func NewWorker(config *config.Config, positronService *positron.Service, ifServi
 		testMode:             false,
 		deviceLookup:         devicelookup.Load(),
 		notFoundLookup:       devicelookup.LoadNotFound(),
+		venueAbbrLookup:      devicelookup.LoadVenueAbbrLookup(),
 		currentStats:         &CollectionStats{},
 	}
 }
@@ -157,9 +160,10 @@ func (w *Worker) collectMetrics(ctx context.Context) {
 	w.statsLock.Unlock()
 
 	w.refreshDeviceLookupIfNeeded(endpoints, devices)
+	w.refreshVenueAbbrLookupIfNeeded()
 
 	for _, endpoint := range endpoints {
-		metric, ok := endpoint.ToMetricData(w.deviceLookup, w.config.Positron.EndpointComponentName, w.config.Positron.GAMComponentName)
+		metric, ok := endpoint.ToMetricData(w.deviceLookup, w.venueAbbrLookup, w.config.Positron.EndpointComponentName, w.config.Positron.GAMComponentName)
 		if !ok {
 			logrus.Warnf("Dropping endpoint (port %q): no Inventory MAC/serial/object key match and no own name reported", endpoint.ConfEndpointName)
 			continue
@@ -172,7 +176,7 @@ func (w *Worker) collectMetrics(ctx context.Context) {
 	}
 
 	for _, device := range devices {
-		metric, ok := device.ToMetricData(w.deviceLookup, w.config.Positron.GAMComponentName, w.config.Positron.EndpointComponentName)
+		metric, ok := device.ToMetricData(w.deviceLookup, w.venueAbbrLookup, w.config.Positron.GAMComponentName, w.config.Positron.EndpointComponentName)
 		if !ok {
 			logrus.Warnf("Dropping device %q: no Inventory serial/object key match and no own name reported", device.Name)
 			continue
@@ -314,7 +318,11 @@ func (w *Worker) refreshDeviceLookupIfNeeded(endpoints []positron.Endpoint, devi
 		if mac == "" && serial == "" && name == "" {
 			continue
 		}
-		items = append(items, devicelookup.Identifiers{MAC: mac, Serial: serial, Name: name})
+		rawMAC := ""
+		if mac != "" {
+			rawMAC = strings.TrimSpace(e.MacAddress)
+		}
+		items = append(items, devicelookup.Identifiers{MAC: mac, Serial: serial, Name: name, RawMAC: rawMAC})
 	}
 	for _, d := range devices {
 		name := devicelookup.CleanOwnName(d.Name)
@@ -388,4 +396,19 @@ func (w *Worker) refreshDeviceLookupIfNeeded(endpoints []positron.Endpoint, devi
 		}
 	}
 	devicelookup.SaveNotFound(w.notFoundLookup)
+}
+
+// refreshVenueAbbrLookupIfNeeded refreshes the venue-abbreviation lookup
+// (last-resort Zone fallback) on the same staleness cadence as the device
+// inventory cache.
+func (w *Worker) refreshVenueAbbrLookupIfNeeded() {
+	if len(w.venueAbbrLookup) != 0 && !devicelookup.IsVenueAbbrLookupStale(w.config.DeviceInventory.RefreshHours) {
+		return
+	}
+	va := devicelookup.RefreshVenueAbbrLookup(w.config.DeviceInventory)
+	if va == nil {
+		return
+	}
+	w.venueAbbrLookup = va
+	devicelookup.SaveVenueAbbrLookup(va)
 }

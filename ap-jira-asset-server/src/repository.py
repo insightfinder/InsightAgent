@@ -190,11 +190,40 @@ class DeviceRepository:
         result = await self.session.execute(sql, {"device_id": device_id, "max_depth": max_depth})
         return [dict(row._mapping) for row in result]
 
+    # ── bulk export ──────────────────────────────────────────────────────────
+    # For clients that need to resolve thousands of identifiers per run (e.g.
+    # jira-metadata) — one bulk fetch beats one HTTP round trip per identifier.
+
+    async def list_all_devices(self) -> List[Device]:
+        result = await self.session.execute(
+            select(Device).options(selectinload(Device.model))
+        )
+        return list(result.scalars().all())
+
+    async def list_all_edges(self) -> List[DeviceEdge]:
+        result = await self.session.execute(select(DeviceEdge))
+        return list(result.scalars().all())
+
     # ── venues ───────────────────────────────────────────────────────────────
 
     async def list_venues(self) -> List[Venue]:
         result = await self.session.execute(select(Venue).order_by(Venue.name))
         return list(result.scalars().all())
+
+    async def list_venue_abbreviations(self) -> List[Venue]:
+        """Venues that have a linked Abbreviation, ordered by the abbreviation code."""
+        stmt = (
+            select(Venue)
+            .where(Venue.abbreviation.isnot(None))
+            .order_by(Venue.abbreviation)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def find_venue_by_abbreviation(self, abbreviation: str) -> Optional[Venue]:
+        stmt = select(Venue).where(func.lower(Venue.abbreviation) == abbreviation.lower()).limit(1)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     # ── counts ───────────────────────────────────────────────────────────────
 

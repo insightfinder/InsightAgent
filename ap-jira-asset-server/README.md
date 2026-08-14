@@ -309,6 +309,36 @@ Response:
 
 ---
 
+### Venues
+
+#### `GET /venues/abbreviations`
+
+Abbreviation → Venue mapping for every Venue that has one linked in Jira Assets.
+
+```bash
+curl -H "X-API-Key: $API_KEY" http://localhost:8080/venues/abbreviations
+```
+
+```json
+[
+  {"abbreviation": "angk", "venue_name": "Angel Kings Venue", "venue_key": "IHS-100", "venue_id": "100"}
+]
+```
+
+#### `GET /venues/abbreviations/{abbreviation}`
+
+Look up the venue linked to a single abbreviation code (case-insensitive).
+
+```bash
+curl -H "X-API-Key: $API_KEY" http://localhost:8080/venues/abbreviations/angk
+```
+
+```json
+{"abbreviation": "angk", "venue_name": "Angel Kings Venue", "venue_key": "IHS-100", "venue_id": "100"}
+```
+
+---
+
 ### Sync
 
 #### `POST /sync`
