@@ -57,6 +57,8 @@ class Venue(Base):
     support_engineer_id = Column(String(255), index=True, nullable=True)     # AccessParks Personel object id
     support_engineer_key = Column(String(100), nullable=True)               # IHS-xxxxx
     support_engineer_name = Column(String(255), index=True, nullable=True)
+    abbreviation = Column(String(100), index=True, nullable=True)           # linked Abbreviation object's label, lowercased
+    abbreviation_key = Column(String(100), nullable=True)                   # linked Abbreviation object's IHS-xxxxx key
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

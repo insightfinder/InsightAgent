@@ -11,6 +11,15 @@
 //     device(s), building an instance name for each parent the same way
 //     (MAC > SERIAL > JIRAKEY), and reading its zone from meta.venue.
 //
+//     If the immediate (depth-1) parent's manufacturer/model matches a
+//     configured "passthrough_devices" entry (e.g. Tarana BN, Positron
+//     G1001-C G.hnEndPoint — passive hardware that is never itself a
+//     monitored instance), the depth-2 device from the same lookup is ALSO
+//     wired up as a parent of the instance. Both candidate pairs are kept;
+//     whichever parent isn't a known monitored instance is dropped in the
+//     validation pass below, so the instance still ends up with a working
+//     relation once the unmonitored passthrough device is filtered out.
+//
 // Once every project has been processed, all candidate pairs are validated
 // against the combined instance set of ALL configured projects (a parent may
 // live in a different project than its child), grouped by zone, and upserted
@@ -57,6 +66,11 @@ type Config struct {
 	FreshOnly         bool        `yaml:"fresh_only"`
 	MaxWorkers        int         `yaml:"max_workers"`
 	MetadataBatchSize int         `yaml:"metadata_batch_size"`
+	// DebugOutputFile is where the final validated parent/child relations are
+	// dumped as JSON (with source project and InsightFinder display name for
+	// both ends of every relation), for local debugging/search. Written on
+	// every run, including -dry-run. Defaults to "relations_debug.json".
+	DebugOutputFile string `yaml:"debug_output_file"`
 }
 
 type IFConfig struct {
@@ -72,6 +86,32 @@ type AssetConfig struct {
 	// UpstreamMaxDepth is the max_depth param sent to GET /devices/{id}/upstream.
 	// Defaults to 1 (immediate upstream device only).
 	UpstreamMaxDepth int `yaml:"upstream_max_depth"`
+	// PassthroughDevices lists manufacturer/model pairs that are treated as
+	// passive/unmonitored pass-through hardware. When an instance's immediate
+	// (depth-1) upstream device matches one of these, the depth-2 device found
+	// in the same upstream lookup is ALSO wired directly to the instance as a
+	// parent, in addition to the normal depth-1 parent relation.
+	PassthroughDevices []PassthroughDevice `yaml:"passthrough_devices"`
+}
+
+// PassthroughDevice identifies a manufacturer/model pair (e.g. a Tarana BN
+// bridge or a Positron G.hn endpoint) that sits immediately upstream of a
+// monitored device but is never itself the monitored/instance target for a
+// causal relation. Comparisons are case-insensitive.
+type PassthroughDevice struct {
+	Manufacturer string `yaml:"manufacturer"`
+	ModelName    string `yaml:"model_name"`
+}
+
+// matchesPassthrough reports whether (manufacturer, modelName) matches any
+// configured passthrough rule, case-insensitively.
+func matchesPassthrough(manufacturer, modelName string, rules []PassthroughDevice) bool {
+	for _, r := range rules {
+		if strings.EqualFold(manufacturer, r.Manufacturer) && strings.EqualFold(modelName, r.ModelName) {
+			return true
+		}
+	}
+	return false
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -122,6 +162,9 @@ func validateConfig(cfg *Config) error {
 	if cfg.MetadataBatchSize <= 0 {
 		cfg.MetadataBatchSize = 500
 	}
+	if cfg.DebugOutputFile == "" {
+		cfg.DebugOutputFile = "relations_debug.json"
+	}
 	return nil
 }
 
@@ -149,6 +192,8 @@ type UpstreamDevice struct {
 	MacAddress   string          `json:"mac_address"`
 	SerialNumber string          `json:"serial_number"`
 	Depth        int             `json:"depth"`
+	Manufacturer string          `json:"manufacturer"`
+	ModelName    string          `json:"model_name"`
 	Meta         json.RawMessage `json:"meta"`
 }
 
@@ -311,6 +356,18 @@ type relationCandidate struct {
 	Zone   string
 }
 
+// relationDebugEntry is one validated, deduped parent→child relation enriched
+// with debugging context, dumped to Config.DebugOutputFile every run.
+type relationDebugEntry struct {
+	Child               string `json:"child"`
+	Parent              string `json:"parent"`
+	Zone                string `json:"zone"`
+	ChildSourceProject  string `json:"child_source_project"`
+	ParentSourceProject string `json:"parent_source_project"`
+	ChildDisplayName    string `json:"child_display_name"`
+	ParentDisplayName   string `json:"parent_display_name"`
+}
+
 // resolveProjectRelations discovers parent/child relation candidates for every
 // instance in a project by querying the asset server's upstream API.
 func resolveProjectRelations(
@@ -335,6 +392,14 @@ func resolveProjectRelations(
 		ipByInstance = nil
 	}
 
+	// When passthrough rules are configured, we need visibility into depth-2
+	// devices to wire them up as an extra parent, even if the configured
+	// max_depth is shallower.
+	queryDepth := cfg.AssetServer.UpstreamMaxDepth
+	if len(cfg.AssetServer.PassthroughDevices) > 0 && queryDepth < 2 {
+		queryDepth = 2
+	}
+
 	jobs := make(chan string)
 	results := make(chan []relationCandidate)
 
@@ -344,7 +409,7 @@ func resolveProjectRelations(
 		go func() {
 			defer wg.Done()
 			for instanceName := range jobs {
-				results <- resolveInstanceRelations(ctx, instanceName, ipByInstance[instanceName], assets, cfg.AssetServer.UpstreamMaxDepth)
+				results <- resolveInstanceRelations(ctx, instanceName, ipByInstance[instanceName], assets, queryDepth, cfg.AssetServer.PassthroughDevices)
 			}
 		}()
 	}
@@ -367,7 +432,14 @@ func resolveProjectRelations(
 
 // resolveInstanceRelations finds the parent(s) of a single instance via the asset
 // server's upstream API, trying identifier candidates in order until one resolves.
-func resolveInstanceRelations(ctx context.Context, instanceName, ip string, assets *assetClient, maxDepth int) []relationCandidate {
+//
+// Normally only the depth-1 (immediate upstream) device becomes a parent relation.
+// If the depth-1 device matches one of passthroughDevices (e.g. a Tarana BN bridge
+// or Positron G.hn endpoint that is never itself a monitored instance), the depth-2
+// device from the same lookup is ALSO wired up as a parent, so the instance still
+// gets a valid relation once the unmonitored depth-1 device is filtered out during
+// instance-set validation.
+func resolveInstanceRelations(ctx context.Context, instanceName, ip string, assets *assetClient, maxDepth int, passthroughDevices []PassthroughDevice) []relationCandidate {
 	var candidates []string
 	if identifier, ok := parseIdentifier(instanceName); ok {
 		candidates = []string{identifier}
@@ -391,11 +463,29 @@ func resolveInstanceRelations(ctx context.Context, instanceName, ip string, asse
 		return nil
 	}
 
+	var depth1, depth2 []UpstreamDevice
+	for _, d := range upstream {
+		switch d.Depth {
+		case 1:
+			depth1 = append(depth1, d)
+		case 2:
+			depth2 = append(depth2, d)
+		}
+	}
+
+	passthroughMatched := false
+	for _, d := range depth1 {
+		if matchesPassthrough(d.Manufacturer, d.ModelName, passthroughDevices) {
+			passthroughMatched = true
+			break
+		}
+	}
+
 	var rels []relationCandidate
-	for _, parent := range upstream {
+	addRel := func(parent UpstreamDevice) {
 		parentName, ok := makeInstanceName(parent.MacAddress, parent.SerialNumber, parent.ObjectKey)
 		if !ok {
-			continue
+			return
 		}
 		var zone string
 		if meta := decodeMeta(parent.Meta); meta != nil {
@@ -404,6 +494,15 @@ func resolveInstanceRelations(ctx context.Context, instanceName, ip string, asse
 			}
 		}
 		rels = append(rels, relationCandidate{Parent: parentName, Child: instanceName, Zone: zone})
+	}
+
+	for _, parent := range depth1 {
+		addRel(parent)
+	}
+	if passthroughMatched {
+		for _, parent := range depth2 {
+			addRel(parent)
+		}
 	}
 	return rels
 }
@@ -446,6 +545,11 @@ func main() {
 	// ── Step 1: list instances for every project, building the combined set ────
 
 	instanceSet := map[string]struct{}{}
+	// instanceProject and displayNameByInstance track which project each instance
+	// came from and its InsightFinder display name, keyed by raw instance name —
+	// used only to enrich the local debug JSON dump, not for relation resolution.
+	instanceProject := map[string]string{}
+	displayNameByInstance := map[string]string{}
 	var allCandidates []relationCandidate
 
 	for _, project := range cfg.Projects {
@@ -459,11 +563,34 @@ func main() {
 		log.Printf("  %d instances", len(instances))
 		for _, name := range instances {
 			instanceSet[name] = struct{}{}
+			if _, exists := instanceProject[name]; !exists {
+				instanceProject[name] = project
+			}
+		}
+
+		displayNames, err := client.GetInstanceDisplayNames(ctx, project, cfg.InsightFinder.Username)
+		if err != nil {
+			log.Printf("  WARN  display name lookup failed: %v (debug dump will fall back to instance names)", err)
+		} else {
+			for _, d := range displayNames {
+				for _, instName := range d.InstanceSet {
+					if _, exists := displayNameByInstance[instName]; !exists {
+						displayNameByInstance[instName] = d.DisplayName
+					}
+				}
+			}
 		}
 
 		candidates := resolveProjectRelations(ctx, project, instances, client, assets, cfg)
 		log.Printf("  %d candidate relation(s) discovered", len(candidates))
 		allCandidates = append(allCandidates, candidates...)
+	}
+
+	displayNameFor := func(instanceName string) string {
+		if v, ok := displayNameByInstance[instanceName]; ok && v != "" {
+			return v
+		}
+		return instanceName
 	}
 
 	log.Printf("Discovered %d candidate relation(s) across %d project(s)", len(allCandidates), len(cfg.Projects))
@@ -478,6 +605,7 @@ func main() {
 	zoneOrder := []string{}
 	zoneMap := map[string]*zoneRelations{}
 	seenPair := map[string]struct{}{}
+	var debugEntries []relationDebugEntry
 
 	skipped, duplicates := 0, 0
 	for _, cand := range allCandidates {
@@ -502,11 +630,29 @@ func main() {
 			zoneMap[cand.Zone] = &zoneRelations{zone: cand.Zone}
 		}
 		zoneMap[cand.Zone].relations = append(zoneMap[cand.Zone].relations, dr)
+
+		debugEntries = append(debugEntries, relationDebugEntry{
+			Child:               cand.Child,
+			Parent:              cand.Parent,
+			Zone:                cand.Zone,
+			ChildSourceProject:  instanceProject[cand.Child],
+			ParentSourceProject: instanceProject[cand.Parent],
+			ChildDisplayName:    displayNameFor(cand.Child),
+			ParentDisplayName:   displayNameFor(cand.Parent),
+		})
 	}
 
 	valid := len(allCandidates) - skipped - duplicates
 	log.Printf("Valid pairs: %d / %d (skipped %d with missing instances, %d duplicates)",
 		valid, len(allCandidates), skipped, duplicates)
+
+	if b, err := json.MarshalIndent(debugEntries, "", "  "); err != nil {
+		log.Printf("  WARN  failed to marshal debug relations: %v", err)
+	} else if err := os.WriteFile(cfg.DebugOutputFile, b, 0644); err != nil {
+		log.Printf("  WARN  failed to write debug relations to %q: %v", cfg.DebugOutputFile, err)
+	} else {
+		log.Printf("Wrote %d relation(s) to debug file %q", len(debugEntries), cfg.DebugOutputFile)
+	}
 
 	if valid == 0 {
 		log.Println("No valid pairs to upload — exiting.")

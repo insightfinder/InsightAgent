@@ -1,7 +1,7 @@
 import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy import event
+from sqlalchemy import event, inspect, text
 
 DB_PATH = os.getenv("DATABASE_PATH", "./assets.db")
 
@@ -33,9 +33,20 @@ class Base(DeclarativeBase):
     pass
 
 
+def _add_missing_columns(conn):
+    # create_all() only creates missing tables, not missing columns on existing
+    # ones. This project has no migration tool, so new nullable columns added
+    # to an existing table (e.g. Venue.abbreviation) are backfilled here.
+    existing_cols = {col["name"] for col in inspect(conn).get_columns("venues")}
+    for col in ("abbreviation", "abbreviation_key"):
+        if col not in existing_cols:
+            conn.execute(text(f"ALTER TABLE venues ADD COLUMN {col} VARCHAR(100)"))
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_add_missing_columns)
 
 
 async def get_session():
