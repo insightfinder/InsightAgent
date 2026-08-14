@@ -63,7 +63,7 @@ func (e *Endpoint) resolveComponentName(endpointName, gamName string) string {
 // Returns ok=false if the device has no usable instance name (Inventory
 // miss and no own name) - the caller must drop it rather than send it under
 // any other fallback identifier.
-func (e *Endpoint) ToMetricData(dl devicelookup.Lookup, endpointName, gamName string) (*models.MetricData, bool) {
+func (e *Endpoint) ToMetricData(dl devicelookup.Lookup, va devicelookup.VenueAbbrLookup, endpointName, gamName string) (*models.MetricData, bool) {
 	ownMAC := devicelookup.NormalizeMAC(e.MacAddress)
 	ownSerial := devicelookup.NormalizeSerial(e.SerialNumber)
 	rawOwnName := e.OwnName()
@@ -73,6 +73,13 @@ func (e *Endpoint) ToMetricData(dl devicelookup.Lookup, endpointName, gamName st
 	instanceName, ok := devicelookup.BuildInstanceName(devInfo, ownName)
 	if !ok {
 		return nil, false
+	}
+
+	// Zone: Inventory only > venue-abbreviation fallback (from the device's
+	// own name prefix, for devices the Inventory lookup never matched at all).
+	zone := devInfo.Venue
+	if zone == "" {
+		zone = va.ZoneFor(rawOwnName)
 	}
 
 	// Use current Unix timestamp in seconds, will be converted to ms later
@@ -85,7 +92,7 @@ func (e *Endpoint) ToMetricData(dl devicelookup.Lookup, endpointName, gamName st
 		InstanceName:  instanceName,
 		DisplayName:   rawOwnName,
 		ComponentName: e.resolveComponentName(endpointName, gamName),
-		Zone:          devInfo.Venue,     // Inventory only, no default
+		Zone:          zone,
 		IP:            devInfo.IPAddress, // Endpoints report no IP of their own
 		Data: map[string]interface{}{
 			// Format metric names using safe formatting
@@ -121,7 +128,7 @@ func (d *Device) resolveComponentName(gamName, endpointName string) string {
 // (positron.gam_component_name / positron.endpoint_component_name) - see
 // resolveComponentName. Returns ok=false if the device has no usable
 // instance name (Inventory miss and no own name).
-func (d *Device) ToMetricData(dl devicelookup.Lookup, gamName, endpointName string) (*models.MetricData, bool) {
+func (d *Device) ToMetricData(dl devicelookup.Lookup, va devicelookup.VenueAbbrLookup, gamName, endpointName string) (*models.MetricData, bool) {
 	ownSerial := devicelookup.NormalizeSerial(d.SerialNumber)
 	rawOwnName := d.Name
 	ownName := devicelookup.CleanOwnName(rawOwnName)
@@ -130,6 +137,13 @@ func (d *Device) ToMetricData(dl devicelookup.Lookup, gamName, endpointName stri
 	instanceName, ok := devicelookup.BuildInstanceName(devInfo, ownName)
 	if !ok {
 		return nil, false
+	}
+
+	// Zone: Inventory only > venue-abbreviation fallback (from the device's
+	// own name prefix, for devices the Inventory lookup never matched at all).
+	zone := devInfo.Venue
+	if zone == "" {
+		zone = va.ZoneFor(rawOwnName)
 	}
 
 	// IP: Inventory ip_address > the device's own reported IP (excluding the
@@ -147,7 +161,7 @@ func (d *Device) ToMetricData(dl devicelookup.Lookup, gamName, endpointName stri
 		InstanceName:  instanceName,
 		DisplayName:   rawOwnName,
 		ComponentName: d.resolveComponentName(gamName, endpointName),
-		Zone:          devInfo.Venue, // Inventory only, no default
+		Zone:          zone,
 		IP:            ip,
 		Data: map[string]interface{}{
 			// Format metric names using safe formatting - Capacity Metrics
