@@ -238,6 +238,101 @@ def _extract_device_info(raw):
     }
 
 
+#########################
+#  VENUE ABBREVIATION   #
+#########################
+# Last-resort zone fallback for devices the inventory lookup above never
+# matched at all (no venue in DEVICE_LOOKUP): venue names follow a
+# "<ABBR>-<rest>" naming convention (e.g. "MEAD-LMRV-RAD_C5-Res-Budgett-1253"),
+# so the segment before the first "-" is looked up against every registered
+# venue abbreviation, once per run.
+
+VENUE_ABBR_LOOKUP_PATH = 'venue_abbreviations.json'
+VENUE_ABBR_LOOKUP_REFRESH_MINUTES_DEFAULT = 30
+# module-level cache: abbreviation(lower) -> venue name
+VENUE_ABBR_LOOKUP = {}
+
+
+def load_venue_abbr_lookup(logger):
+    """Load venue_abbreviations.json from disk into VENUE_ABBR_LOOKUP; returns entry count."""
+    global VENUE_ABBR_LOOKUP
+    path = abs_path_from_cur(VENUE_ABBR_LOOKUP_PATH)
+    if not os.path.exists(path):
+        VENUE_ABBR_LOOKUP = {}
+        return 0
+    try:
+        with open(path) as f:
+            VENUE_ABBR_LOOKUP = json.load(f)
+        logger.info(f'VenueAbbrLookup: loaded {len(VENUE_ABBR_LOOKUP)} entries from disk')
+        return len(VENUE_ABBR_LOOKUP)
+    except Exception as e:
+        logger.warning(f'VenueAbbrLookup: failed to load {path}: {e}')
+        VENUE_ABBR_LOOKUP = {}
+        return 0
+
+
+def venue_abbr_lookup_is_stale(refresh_minutes=VENUE_ABBR_LOOKUP_REFRESH_MINUTES_DEFAULT):
+    """Return True if venue_abbreviations.json is missing or older than refresh interval."""
+    path = abs_path_from_cur(VENUE_ABBR_LOOKUP_PATH)
+    if not os.path.exists(path):
+        return True
+    age_minutes = (time.time() - os.path.getmtime(path)) / 60
+    return age_minutes >= refresh_minutes
+
+
+def refresh_venue_abbr_lookup(logger, api_key, base_url, timeout, max_retry):
+    """Bulk-fetch every abbreviation -> venue mapping from the Asset Registry API
+    (one call, already cached server-side) and save to disk. Keeps the existing
+    lookup if the API is unreachable or returns nothing."""
+    global VENUE_ABBR_LOOKUP
+    if not api_key or not base_url:
+        return
+    url = f'{base_url}/venues/abbreviations'
+    headers = {'X-API-Key': api_key, 'Accept': 'application/json'}
+    for attempt in range(max_retry):
+        try:
+            resp = requests.get(url, headers=headers, timeout=timeout)
+            if resp.status_code != 200:
+                continue
+            venues = resp.json()
+            new_lookup = {
+                v['abbreviation'].lower(): v['venue_name']
+                for v in venues if v.get('abbreviation') and v.get('venue_name')
+            }
+            if not new_lookup:
+                logger.warning('VenueAbbrLookup: refresh returned 0 mappings, keeping previous '
+                               f'{len(VENUE_ABBR_LOOKUP)} entries')
+                return
+            path = abs_path_from_cur(VENUE_ABBR_LOOKUP_PATH)
+            tmp = path + '.tmp'
+            try:
+                with open(tmp, 'w') as f:
+                    json.dump(new_lookup, f, indent=2)
+                os.replace(tmp, path)
+            except Exception as e:
+                logger.warning(f'VenueAbbrLookup: failed to save to disk: {e}')
+            VENUE_ABBR_LOOKUP = new_lookup
+            logger.info(f'VenueAbbrLookup: refreshed {len(new_lookup)} abbreviation mappings')
+            return
+        except Exception as e:
+            if attempt < max_retry - 1:
+                time.sleep(0.5)
+            else:
+                logger.warning(f'VenueAbbrLookup: refresh failed: {e} (keeping existing lookup)')
+
+
+def abbreviation_candidate(name):
+    """Extracts the venue-abbreviation prefix from a device name: the segment
+    before the first "-" (e.g. "MEAD-LMRV-RAD_C5-Res-Budgett-1253" -> "mead").
+    Returns '' if there's no "-" or nothing precedes it."""
+    if not name:
+        return ''
+    idx = name.find('-')
+    if idx <= 0:
+        return ''
+    return name[:idx].lower()
+
+
 def normalize_mac_identifier(mac):
     """Mirror the mimosa/zabbix agents' MAC normalization: replace ':'
     with '-', trim leading/trailing '-', trim whitespace, and require at
@@ -914,6 +1009,17 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
             if device_lookup_is_stale(device_lookup_refresh_minutes) or not DEVICE_LOOKUP:
                 refresh_device_lookup(logger, metrics_data, agent_config_vars)
 
+            # Refresh venue abbreviation lookup (last-resort zone fallback) on the same cadence.
+            load_venue_abbr_lookup(logger)
+            if venue_abbr_lookup_is_stale(device_lookup_refresh_minutes) or not VENUE_ABBR_LOOKUP:
+                refresh_venue_abbr_lookup(
+                    logger,
+                    agent_config_vars.get('device_inventory_api_key', ''),
+                    agent_config_vars.get('device_inventory_base_url', ''),
+                    agent_config_vars.get('device_inventory_timeout_sec', 5),
+                    agent_config_vars.get('device_inventory_max_retry', 2),
+                )
+
             # Process the collected data
             for metric_data in metrics_data:
                 parse_messages_mimosa(
@@ -996,8 +1102,14 @@ def parse_messages_mimosa(logger, if_config_vars, agent_config_vars, metric_buff
         if dev_info.get('component_name') and dev_info['component_name'] != 'NONE-NONE':
             component_name = dev_info['component_name']
 
-        # Zone: inventory meta.venue > empty
+        # Zone: inventory meta.venue > venue-abbreviation fallback (from the
+        # device name's "<ABBR>-..." prefix, for devices the inventory lookup
+        # never matched at all) > empty
         zone = dev_info.get('venue') or ''
+        if not zone:
+            abbr = abbreviation_candidate(metric_data.get('device_name', ''))
+            if abbr:
+                zone = VENUE_ABBR_LOOKUP.get(abbr, '')
 
         # IP: devicelookup > Mimosa API
         if dev_info.get('ip_address'):
