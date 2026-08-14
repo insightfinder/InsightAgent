@@ -15,12 +15,9 @@ metric_disallowlist =
 max_workers = 1
 request_timeout =
 max_host_per_request =
-# delay in milliseconds between consecutive Zabbix API calls from this process. Default 0 (none).
-# Since this template is used to generate one conf.d file per host group (all hitting the same
-# Zabbix server), consider setting this (e.g. 200-500) if the server shows signs of overload.
+# delay in milliseconds between consecutive Zabbix API calls, default is 0 (no delay)
 request_delay_ms =
-# max number of conf.d-file processes allowed to actively query this Zabbix server at once.
-# Default empty (no limit). Consider setting this (e.g. 5) for the many-host-groups case above.
+# max number of conf.d processes allowed to query this Zabbix server at once, default is unlimited
 max_concurrent_zabbix =
 log_request_interval =
 applications = 
