@@ -1795,8 +1795,11 @@ def main():
     utc_now_time = int(arrow.utcnow().float_timestamp)
 
     # bound how many conf.d-file processes may be actively hitting Zabbix at once
+    # (must be a Manager-backed proxy, not a raw multiprocessing.Semaphore -- Pool
+    # sends task args to already-running workers through a queue, and raw
+    # Lock/Semaphore objects can only be pickled during process creation/inheritance)
     max_concurrent_zabbix = get_max_concurrent_zabbix(config_files)
-    zabbix_semaphore = multiprocessing.Semaphore(max_concurrent_zabbix) if max_concurrent_zabbix else None
+    zabbix_semaphore = m.Semaphore(max_concurrent_zabbix) if max_concurrent_zabbix else None
     if zabbix_semaphore is not None:
         main_logger.info('Limiting concurrent Zabbix connections across processes to {}'.format(max_concurrent_zabbix))
 
