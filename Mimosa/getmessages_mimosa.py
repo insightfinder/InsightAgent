@@ -323,11 +323,16 @@ def refresh_venue_abbr_lookup(logger, api_key, base_url, timeout, max_retry):
 
 def abbreviation_candidate(name):
     """Extracts the venue-abbreviation prefix from a device name: the segment
-    before the first "-" (e.g. "MEAD-LMRV-RAD_C5-Res-Budgett-1253" -> "mead").
-    Returns '' if there's no "-" or nothing precedes it."""
+    before the first "-" or "_", whichever comes first (e.g.
+    "MEAD-LMRV-RAD_C5-Res-Budgett-1253" -> "mead", "WB_device1" -> "wb").
+    Returns '' if neither delimiter is present or nothing precedes it."""
     if not name:
         return ''
-    idx = name.find('-')
+    idx = -1
+    for delim in ('-', '_'):
+        pos = name.find(delim)
+        if pos > 0 and (idx == -1 or pos < idx):
+            idx = pos
     if idx <= 0:
         return ''
     return name[:idx].lower()
@@ -372,8 +377,8 @@ def _inventory_api_is_healthy(logger, base_url, timeout):
 
 def refresh_device_lookup(logger, devices, agent_config_vars):
     """Query the Asset Registry API for all devices (20 concurrent) and save to disk.
-    Each device is looked up by MAC -> serial -> name (first match wins); the result is
-    cached under the device's lowercased MAC so parse_messages_mimosa can retrieve it.
+    Each device is looked up by MAC -> serial -> name -> IP (first match wins); the result
+    is cached under the device's lowercased MAC so parse_messages_mimosa can retrieve it.
     If the API is unreachable, keeps the existing lookup (devices fall back to UNKNOWN zone etc.)."""
     global DEVICE_LOOKUP
     api_key = agent_config_vars.get('device_inventory_api_key', '')
@@ -407,8 +412,12 @@ def refresh_device_lookup(logger, devices, agent_config_vars):
     start_time = time.time()
 
     def _lookup_one(dev):
-        # Priority chain mirrors the mimosa agent: MAC -> serial -> name
-        raw = _lookup_device([dev['mac'], dev['serial'], dev['name']], api_key, base_url, timeout, max_retry)
+        # Priority chain mirrors the mimosa agent: MAC -> serial -> name,
+        # falling back to IP (mirrors the jira-metadata agent's broader
+        # candidate set, which also tries IP) for devices whose MAC/serial/
+        # name don't match the asset registry's record for them.
+        raw = _lookup_device(
+            [dev['mac'], dev['serial'], dev['name'], dev['ip']], api_key, base_url, timeout, max_retry)
         return dev['mac'], raw
 
     new_lookup = {}
