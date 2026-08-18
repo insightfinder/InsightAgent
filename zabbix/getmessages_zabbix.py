@@ -10,6 +10,7 @@ import re
 import shlex
 import socket
 import sys
+import threading
 import time
 import traceback
 import urllib.parse
@@ -48,6 +49,25 @@ REQUESTS = dict()
 """
 This script gathers data to send to Insightfinder
 """
+
+
+class RateLimiter:
+    """Enforces a minimum spacing between successive Zabbix API calls made by
+    any thread sharing this instance. A no-op when min_interval_sec <= 0."""
+
+    def __init__(self, min_interval_sec):
+        self.min_interval = max(0.0, min_interval_sec)
+        self._lock = threading.Lock()
+        self._last_call = 0.0
+
+    def wait(self):
+        if self.min_interval <= 0:
+            return
+        with self._lock:
+            sleep_for = self.min_interval - (time.monotonic() - self._last_call)
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+            self._last_call = time.monotonic()
 
 
 def align_timestamp(timestamp, sampling_interval):
@@ -190,7 +210,7 @@ def apply_metric_transform(metric_name, value, transforms):
 
 
 def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_field_map, items_map, items_keys,
-                           cli_config_vars, agent_config_vars, if_config_vars, sampling_now):
+                           cli_config_vars, agent_config_vars, if_config_vars, sampling_now, rate_limiter):
     logger.info('Starting data processing worker {}/{}...'.format(idx + 1, total))
 
     # Add connection retry logic and delay
@@ -231,6 +251,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
             reset_track(track)
 
             if data_type == 'Log' or data_type == 'Metric':
+                rate_limiter.wait()
                 items_res = zapi.do_request('item.get', {'output': ['key_', 'itemid', 'name'], "hostids": hostids,"webitems": True,
                                                          'selectHosts': ['hostId'], 'filter': {'value_type': value_type_list}})
                 items_ids_map = {}
@@ -262,6 +283,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                             query = {'output': 'extend', "history": h_type, "hostids": hostids, "itemids": items_ids,
                                      'time_from': timestamp, 'time_till': timestamp + his_interval}
                             logger.debug('Begin history.get query {} from {} hosts'.format(query, len(hostids)))
+                            rate_limiter.wait()
                             history_res = zapi.do_request('history.get', query)
                             combined_results.extend(history_res['result'])
                         logger.info(
@@ -287,6 +309,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                         if attempt > 0:
                             time.sleep(retry_delay * attempt)
 
+                        rate_limiter.wait()
                         items_res = zapi.do_request('item.get', params)
                         logger.info('Query {} items from {} hosts with {} metrics in {} seconds'.format(len(items_res['result']),
                                                                                                     len(hostids),
@@ -304,6 +327,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                              'time_till': time_end, }
                     logger.info('Begin event.get query from {} hosts: {}'.format(len(hostids), query))
 
+                    rate_limiter.wait()
                     history_res = zapi.do_request('event.get', query)
 
                     parse_messages_zabbix(logger, data_type, history_res['result'], all_field_map, items_map, 'history',
@@ -313,6 +337,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                              'time_till': time_end, }
                     logger.info('Begin problem.get query from {} hosts: {}'.format(len(hostids), query))
 
+                    rate_limiter.wait()
                     history_res = zapi.do_request('problem.get', query)
 
                     logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids), (
@@ -331,6 +356,7 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
                              'time_from': timestamp, 'time_till': time_end}
                     logger.info('Begin history.get query from {} hosts. {}'.format(len(hostids), query))
 
+                    rate_limiter.wait()
                     history_res = zapi.do_request('history.get', query)
 
                     logger.info('Query {} items from {} hosts in {} seconds'.format(len(history_res['result']), len(hostids), (
@@ -351,7 +377,8 @@ def data_processing_worker(idx, total, logger, zapi, hostids, data_type, all_fie
     return idx + 1
 
 
-def start_data_processing(logger, config_name, cli_config_vars, agent_config_vars, if_config_vars, sampling_now):
+def start_data_processing(logger, config_name, cli_config_vars, agent_config_vars, if_config_vars, sampling_now,
+                          zabbix_semaphore=None):
 
     # Setup data_type
     if 'METRIC' in if_config_vars['project_type']:
@@ -363,140 +390,136 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
 
     logger.info('Starting fetch {} items......'.format(data_type))
 
-    # Create ZabbixAPI class instance
-    zabbix_config = agent_config_vars['zabbix_kwargs']
-    zabbix_url = zabbix_config['url']
-    zabbix_user = zabbix_config['user']
-    zabbix_password = zabbix_config['password']
-    max_workers = agent_config_vars['max_workers']
-    request_timeout = agent_config_vars['request_timeout']
-    zapi = ZabbixAPI(server=zabbix_url, timeout=request_timeout)
-    zapi.session.verify=False
-    zapi.login(user=zabbix_user, password=zabbix_password)
-    logger.info("Connected to Zabbix API Version %s" % zapi.api_version())
+    request_delay_ms = agent_config_vars['request_delay_ms']
+    rate_limiter = RateLimiter(request_delay_ms / 1000.0)
 
-    template_ids = agent_config_vars['template_ids'] or []
-    host_blocklist_map = agent_config_vars['host_blocklist_map'] or {}
-    metric_allowlist_map = agent_config_vars['metric_allowlist_map'] or {}
-    metric_disallowlist_map = agent_config_vars['metric_disallowlist_map'] or {}
-    device_field = agent_config_vars['device_field']
+    # Bound how many conf.d-file processes may be actively hitting Zabbix at once
+    if zabbix_semaphore is not None:
+        zabbix_semaphore.acquire()
+    try:
+        # Create ZabbixAPI class instance
+        zabbix_config = agent_config_vars['zabbix_kwargs']
+        zabbix_url = zabbix_config['url']
+        zabbix_user = zabbix_config['user']
+        zabbix_password = zabbix_config['password']
+        max_workers = agent_config_vars['max_workers']
+        request_timeout = agent_config_vars['request_timeout']
+        zapi = ZabbixAPI(server=zabbix_url, timeout=request_timeout)
+        zapi.session.verify=False
+        zapi.login(user=zabbix_user, password=zabbix_password)
+        logger.info("Connected to Zabbix API Version %s" % zapi.api_version())
 
-    # get host groups
-    host_groups_map = {}
-    host_groups_ids = []
+        template_ids = agent_config_vars['template_ids'] or []
+        host_blocklist_map = agent_config_vars['host_blocklist_map'] or {}
+        metric_allowlist_map = agent_config_vars['metric_allowlist_map'] or {}
+        metric_disallowlist_map = agent_config_vars['metric_disallowlist_map'] or {}
+        device_field = agent_config_vars['device_field']
 
-    if len(agent_config_vars['host_groups']) == 0:
-        logger.info("Query all host_groups")
-        host_groups_req_params = {'output': 'extend'}
-    else:
-        host_groups_req_params = {'output': 'extend', 'filter': {"name": agent_config_vars['host_groups']}}
+        # get host groups
+        host_groups_map = {}
+        host_groups_ids = []
 
-    host_groups_res = zapi.do_request('hostgroup.get', host_groups_req_params)
-    for item in host_groups_res['result']:
-        group_id = item['groupid']
-        name = item['name']
-        host_groups_ids.append(group_id)
-        host_groups_map[group_id] = name
-    logger.info("Zabbix host groups: %s" % json.dumps(host_groups_map))
-    max_host_per_request = agent_config_vars['max_host_per_request']
+        if len(agent_config_vars['host_groups']) == 0:
+            logger.info("Query all host_groups")
+            host_groups_req_params = {'output': 'extend'}
+        else:
+            host_groups_req_params = {'output': 'extend', 'filter': {"name": agent_config_vars['host_groups']}}
 
-    # get hosts
-    hosts_map = {}
-    hosts_group_map = {}
-    hosts_allgroups_map = {}
-    hosts_ip_map = {}
-    hosts_tags_map = {}
-    host_template_map = {}
-    hosts_ids = []
+        rate_limiter.wait()
+        host_groups_res = zapi.do_request('hostgroup.get', host_groups_req_params)
+        for item in host_groups_res['result']:
+            group_id = item['groupid']
+            name = item['name']
+            host_groups_ids.append(group_id)
+            host_groups_map[group_id] = name
+        logger.info("Zabbix host groups: %s" % json.dumps(host_groups_map))
+        max_host_per_request = agent_config_vars['max_host_per_request']
 
-    zabbix_params = {'output': ['name', 'hostid'], 'groupids': host_groups_ids,
-                                             'selectHostGroups': ['groupid', 'name'],
-                                             'selectParentTemplates': ['templateid', 'name'],
-                                             'selectInterfaces': ['ip', 'type', 'main'],
-                                             'selectTags': 'extend',
-                                             'filter': {"host": agent_config_vars['hosts']}, }
+        # get hosts
+        hosts_map = {}
+        hosts_group_map = {}
+        hosts_allgroups_map = {}
+        hosts_ip_map = {}
+        hosts_tags_map = {}
+        host_template_map = {}
+        hosts_ids = []
+
+        zabbix_params = {'output': ['name', 'hostid'], 'groupids': host_groups_ids,
+                                                 'selectHostGroups': ['groupid', 'name'],
+                                                 'selectParentTemplates': ['templateid', 'name'],
+                                                 'selectInterfaces': ['ip', 'type', 'main'],
+                                                 'selectTags': 'extend',
+                                                 'filter': {"host": agent_config_vars['hosts']}, }
 
 
-    # Remove hosts filter if not needed
-    if agent_config_vars['hosts'] == '':
-        zabbix_params['filter'] = {}
+        # Remove hosts filter if not needed
+        if agent_config_vars['hosts'] == '':
+            zabbix_params['filter'] = {}
 
-    hosts_res = zapi.do_request('host.get', zabbix_params)
-    for item in hosts_res['result']:
-        host_id = item['hostid']
-        host_name = item['name']
-        if not is_matching_block_regex(host_id, host_name, host_blocklist_map):
-            hostgroups = item.get('hostgroups') or []
-            # use the last hostgroup as the component name
-            host_group = hostgroups[len(hostgroups) - 1].get('name') or ''
+        rate_limiter.wait()
+        hosts_res = zapi.do_request('host.get', zabbix_params)
+        for item in hosts_res['result']:
+            host_id = item['hostid']
+            host_name = item['name']
+            if not is_matching_block_regex(host_id, host_name, host_blocklist_map):
+                hostgroups = item.get('hostgroups') or []
+                # use the last hostgroup as the component name
+                host_group = hostgroups[len(hostgroups) - 1].get('name') or ''
 
-            # get IP address from interfaces
-            interfaces = item.get('interfaces') or []
-            host_ip = ''
-            # Find the primary agent interface (type 1) or first available interface
-            for interface in interfaces:
-                if interface.get('main') == '1' and interface.get('type') == '1':  # Primary agent interface
-                    host_ip = interface.get('ip', '')
-                    break
-            # If no primary agent interface found, use the first interface with an IP
-            if not host_ip:
+                # get IP address from interfaces
+                interfaces = item.get('interfaces') or []
+                host_ip = ''
+                # Find the primary agent interface (type 1) or first available interface
                 for interface in interfaces:
-                    if interface.get('ip'):
+                    if interface.get('main') == '1' and interface.get('type') == '1':  # Primary agent interface
                         host_ip = interface.get('ip', '')
                         break
+                # If no primary agent interface found, use the first interface with an IP
+                if not host_ip:
+                    for interface in interfaces:
+                        if interface.get('ip'):
+                            host_ip = interface.get('ip', '')
+                            break
 
-            parent_templates = item.get('parentTemplates') or []
-            for template in parent_templates:
-                if template.get('templateid') not in host_template_map:
-                    host_template_map[template.get('templateid')] = template.get('name')
+                parent_templates = item.get('parentTemplates') or []
+                for template in parent_templates:
+                    if template.get('templateid') not in host_template_map:
+                        host_template_map[template.get('templateid')] = template.get('name')
 
-            hosts_ids.append(host_id)
-            hosts_map[host_id] = host_name
-            hosts_group_map[host_id] = host_group
-            hosts_allgroups_map[host_id] = [hg.get('name', '') for hg in hostgroups]
-            hosts_ip_map[host_id] = host_ip
-            hosts_tags_map[host_id] = {t['tag']: t['value'] for t in (item.get('tags') or [])}
+                hosts_ids.append(host_id)
+                hosts_map[host_id] = host_name
+                hosts_group_map[host_id] = host_group
+                hosts_allgroups_map[host_id] = [hg.get('name', '') for hg in hostgroups]
+                hosts_ip_map[host_id] = host_ip
+                hosts_tags_map[host_id] = {t['tag']: t['value'] for t in (item.get('tags') or [])}
 
-    host_template_ids = list(host_template_map.keys())
+        host_template_ids = list(host_template_map.keys())
 
-    logger.info("Zabbix hosts count: %s" % len(hosts_ids))
-    if len(hosts_ids) == 0:
-        logger.error('Hosts list is empty, quit')
-        return
+        logger.info("Zabbix hosts count: %s" % len(hosts_ids))
+        if len(hosts_ids) == 0:
+            logger.error('Hosts list is empty, quit')
+            return
 
-    # get data by hosts/applications
-    hosts_ids_list = [hosts_ids]
-    if len(hosts_ids) > max_host_per_request:
-        hosts_ids_list = [hosts_ids[i:i + max_host_per_request] for i in range(0, len(hosts_ids), max_host_per_request)]
+        # get data by hosts/applications
+        hosts_ids_list = [hosts_ids]
+        if len(hosts_ids) > max_host_per_request:
+            hosts_ids_list = [hosts_ids[i:i + max_host_per_request] for i in range(0, len(hosts_ids), max_host_per_request)]
 
-    items_map = {}
-    items_keys = []
-    if data_type == 'Metric':
-        # get the items based on the keys
-        item_output = ['name', 'itemid', 'key_']
-        if device_field:
-            item_output.append(device_field)
+        items_map = {}
+        items_keys = []
+        if data_type == 'Metric':
+            # get the items based on the keys
+            item_output = ['name', 'itemid', 'key_']
+            if device_field:
+                item_output.append(device_field)
 
-        # get the item keys based on the template
-        metric_template_ids = template_ids if len(template_ids) > 0 else host_template_ids
-        templates_res = zapi.do_request('template.get', {'output': ['name'], 'templateids': metric_template_ids,
-                                                         'selectItems': item_output})
-        for template in templates_res['result']:
-            items = template.get('items') or []
-            for item in items:
-                item_key = item['key_']
-                item_name = item['name']
-                if is_matching_allow_regex(item_name, metric_allowlist_map):
-                    if not is_matching_disallow_regex(item_name, metric_disallowlist_map):
-                        items_map[item_key] = item
-
-        # Get items on hosts directly
-        if agent_config_vars['collect_dedicated_items']:
-            logger.info("Collecting dedicated items other than those defined in templates.")
-            for host_id in hosts_ids_list:
-                items = zapi.item.get(
-                    hostids=host_id
-                )
+            # get the item keys based on the template
+            metric_template_ids = template_ids if len(template_ids) > 0 else host_template_ids
+            rate_limiter.wait()
+            templates_res = zapi.do_request('template.get', {'output': ['name'], 'templateids': metric_template_ids,
+                                                             'selectItems': item_output})
+            for template in templates_res['result']:
+                items = template.get('items') or []
                 for item in items:
                     item_key = item['key_']
                     item_name = item['name']
@@ -504,24 +527,42 @@ def start_data_processing(logger, config_name, cli_config_vars, agent_config_var
                         if not is_matching_disallow_regex(item_name, metric_disallowlist_map):
                             items_map[item_key] = item
 
-        items_keys = list(items_map.keys())
+            # Get items on hosts directly
+            if agent_config_vars['collect_dedicated_items']:
+                logger.info("Collecting dedicated items other than those defined in templates.")
+                for host_id in hosts_ids_list:
+                    rate_limiter.wait()
+                    items = zapi.item.get(
+                        hostids=host_id
+                    )
+                    for item in items:
+                        item_key = item['key_']
+                        item_name = item['name']
+                        if is_matching_allow_regex(item_name, metric_allowlist_map):
+                            if not is_matching_disallow_regex(item_name, metric_disallowlist_map):
+                                items_map[item_key] = item
 
-        if len(items_keys) == 0:
-            logger.error('Item list is empty')
-            return
+            items_keys = list(items_map.keys())
 
-        logger.info("Zabbix item count: %s" % len(items_keys))
+            if len(items_keys) == 0:
+                logger.error('Item list is empty')
+                return
 
-    all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map, 'hostallgroups': hosts_allgroups_map, 'hostip': hosts_ip_map, 'hosttags': hosts_tags_map}
+            logger.info("Zabbix item count: %s" % len(items_keys))
 
-    total = len(hosts_ids_list)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(data_processing_worker, idx, total, logger, zapi, hostids, data_type, all_field_map,
-                                   items_map, items_keys, cli_config_vars, agent_config_vars, if_config_vars,
-                                   sampling_now) for idx, hostids in enumerate(hosts_ids_list)]
-        for future in as_completed(futures):
-            logger.info('Data processing worker {}/{} finished'.format(future.result(), total))
-    logger.info('Data processing done')
+        all_field_map = {'hostid': hosts_map, 'hostgroup': hosts_group_map, 'hostallgroups': hosts_allgroups_map, 'hostip': hosts_ip_map, 'hosttags': hosts_tags_map}
+
+        total = len(hosts_ids_list)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(data_processing_worker, idx, total, logger, zapi, hostids, data_type, all_field_map,
+                                       items_map, items_keys, cli_config_vars, agent_config_vars, if_config_vars,
+                                       sampling_now, rate_limiter) for idx, hostids in enumerate(hosts_ids_list)]
+            for future in as_completed(futures):
+                logger.info('Data processing worker {}/{} finished'.format(future.result(), total))
+        logger.info('Data processing done')
+    finally:
+        if zabbix_semaphore is not None:
+            zabbix_semaphore.release()
 
 
 def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, replay_type, agent_config_vars, track,
@@ -820,6 +861,8 @@ def get_agent_config_vars(logger, config_ini):
             max_workers = config_parser.get('zabbix', 'max_workers')
             request_timeout = config_parser.get('zabbix', 'request_timeout')
             max_host_per_request = config_parser.get('zabbix', 'max_host_per_request')
+            request_delay_ms = config_parser.get('zabbix', 'request_delay_ms', fallback='')
+            max_concurrent_zabbix = config_parser.get('zabbix', 'max_concurrent_zabbix', fallback='')
 
             # log
             log_request_interval = config_parser.get('zabbix', 'log_request_interval')
@@ -906,6 +949,16 @@ def get_agent_config_vars(logger, config_ini):
         else:
             log_request_interval = 60
 
+        if len(request_delay_ms) != 0:
+            request_delay_ms = int(request_delay_ms)
+        else:
+            request_delay_ms = 0
+
+        if len(max_concurrent_zabbix) != 0:
+            max_concurrent_zabbix = int(max_concurrent_zabbix)
+        else:
+            max_concurrent_zabbix = None
+
         if len(his_time_range) != 0:
             his_time_range = [x for x in his_time_range.split(',') if x.strip()]
             his_time_range = [int(arrow.get(x).float_timestamp) for x in his_time_range]
@@ -985,6 +1038,7 @@ def get_agent_config_vars(logger, config_ini):
                        'metric_disallowlist_map': metric_disallowlist_map,
                        'max_workers': max_workers,
                        'request_timeout': request_timeout, 'max_host_per_request': max_host_per_request,
+                       'request_delay_ms': request_delay_ms, 'max_concurrent_zabbix': max_concurrent_zabbix,
                        'log_request_interval': log_request_interval, 'applications': applications,
                        'his_time_range': his_time_range, 'proxies': agent_proxies, 'data_format': data_format,
                        # 'project_field': project_fields,
@@ -1649,8 +1703,24 @@ def queue_configurer(q):
     root.setLevel(logging.INFO)
 
 
+def get_max_concurrent_zabbix(config_files):
+    """Lightweight pre-scan of conf.d files for the global max_concurrent_zabbix
+    cap, since it bounds the whole process pool rather than a single config file.
+    Returns the first non-empty value found, or None (no limit)."""
+    for config_file in config_files:
+        try:
+            parser = configparser.ConfigParser(interpolation=None)
+            parser.read(config_file)
+            value = parser.get('zabbix', 'max_concurrent_zabbix', fallback='').strip()
+            if value:
+                return int(value)
+        except (configparser.Error, ValueError):
+            continue
+    return None
+
+
 def worker_process(args):
-    (config_file, c_config, utc_now_time, q) = args
+    (config_file, c_config, utc_now_time, q, zabbix_semaphore) = args
 
     config_name = Path(config_file).stem
     level = c_config['log_level']
@@ -1684,7 +1754,8 @@ def worker_process(args):
         sampling_interval = if_config_vars['sampling_interval']
 
         sampling_now = align_timestamp((utc_now_time + target_timestamp_timezone) * 1000, sampling_interval)
-        start_data_processing(logger, config_name, c_config, agent_config_vars, if_config_vars, sampling_now)
+        start_data_processing(logger, config_name, c_config, agent_config_vars, if_config_vars, sampling_now,
+                              zabbix_semaphore)
     except Exception as e:
         logger.error('Worker failed for config {}: {}'.format(config_file, e))
 
@@ -1722,7 +1793,17 @@ def main():
 
     # get args
     utc_now_time = int(arrow.utcnow().float_timestamp)
-    arg_list = [(f, cli_config_vars, utc_now_time, queue) for f in config_files]
+
+    # bound how many conf.d-file processes may be actively hitting Zabbix at once
+    # (must be a Manager-backed proxy, not a raw multiprocessing.Semaphore -- Pool
+    # sends task args to already-running workers through a queue, and raw
+    # Lock/Semaphore objects can only be pickled during process creation/inheritance)
+    max_concurrent_zabbix = get_max_concurrent_zabbix(config_files)
+    zabbix_semaphore = m.Semaphore(max_concurrent_zabbix) if max_concurrent_zabbix else None
+    if zabbix_semaphore is not None:
+        main_logger.info('Limiting concurrent Zabbix connections across processes to {}'.format(max_concurrent_zabbix))
+
+    arg_list = [(f, cli_config_vars, utc_now_time, queue, zabbix_semaphore) for f in config_files]
 
     # start sub process by pool
     pool = multiprocessing.Pool(min(len(arg_list), 40))

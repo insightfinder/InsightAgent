@@ -13,9 +13,13 @@ metric_disallowlist =
 # metric_transform_script =
 # derived_metrics_script =
 max_workers = 1
-request_timeout = 
-max_host_per_request = 
-log_request_interval = 
+request_timeout =
+max_host_per_request =
+# delay in milliseconds between consecutive Zabbix API calls, default is 0 (no delay)
+request_delay_ms =
+# max number of conf.d processes allowed to query this Zabbix server at once, default is unlimited
+max_concurrent_zabbix =
+log_request_interval =
 applications = 
 his_time_range = 
 data_format = json
