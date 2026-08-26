@@ -62,6 +62,30 @@ class Venue(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class VenueAbbreviation(Base):
+    """Abbreviation -> Venue name, for device-name-prefix zone lookups (last resort,
+    used when a device can't be matched to Inventory directly by MAC/serial/name).
+
+    One row per distinct Abbreviation object actually linked from somewhere in Jira -
+    from a Venue (attr 242) or, far more commonly, from one of its Subvenues (attr 244).
+    A Venue with several Subvenues, each carrying a different Abbreviation, produces
+    several rows here, all pointing at that one venue_name. See
+    jira_sync.build_venue_abbreviation_records for how these are built.
+    """
+    __tablename__ = "venue_abbreviations"
+
+    id = Column(String(255), primary_key=True)                      # linked Abbreviation object's IHS-xxxxx key
+    abbreviation = Column(String(100), index=True, nullable=False)  # lowercased label
+    abbreviation_key = Column(String(100), nullable=True)           # same as id, kept for symmetry with Venue.abbreviation_key
+    venue_id = Column(String(255), nullable=True)
+    venue_name = Column(String(500), nullable=False)
+    venue_key = Column(String(100), nullable=True)                  # IHS-xxxxx
+    source = Column(String(20), nullable=False)                     # "venue" | "subvenue"
+    subvenue_id = Column(String(255), nullable=True)
+    subvenue_name = Column(String(500), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class DeviceEdge(Base):
     """source → target means source is upstream of target."""
     __tablename__ = "device_edges"

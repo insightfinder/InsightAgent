@@ -249,7 +249,16 @@ def transform_models(raw: List[Dict]) -> List[Dict]:
 
 
 def transform_subvenues(raw: List[Dict]) -> Dict[str, Dict[str, Optional[str]]]:
-    """Returns {subvenue_id: {name, key, venue_id, venue_name, venue_key}} by reading attr 225 from each Subvenue."""
+    """Returns {subvenue_id: {name, key, venue_id, venue_name, venue_key, abbreviation_key}}
+    by reading attr 225 (parent Venue) and the linked Abbreviation (see _get_abbreviation_key)
+    from each Subvenue.
+
+    The Abbreviation link is captured here, not only on Venue (see transform_venues), because
+    it's the common case: most Subvenues have their own Abbreviation, and device naming follows
+    it — a Venue can have multiple Subvenues each with a distinct abbreviation, or a Subvenue's
+    abbreviation can simply differ from its parent Venue's own (stale/unrelated) one. Both are
+    folded into a single abbreviation -> venue-name mapping by build_venue_abbreviation_records().
+    """
     result: Dict[str, Dict[str, Optional[str]]] = {}
     for obj in raw:
         obj_id = str(obj["id"])
@@ -269,11 +278,13 @@ def transform_subvenues(raw: List[Dict]) -> Dict[str, Dict[str, Optional[str]]]:
                     venue_key = ref_obj.get("objectKey")
                 break
         result[obj_id] = {
+            "id": obj_id,
             "name": subvenue_name,
             "key": subvenue_key,
             "venue_id": venue_id,
             "venue_name": venue_name,
             "venue_key": venue_key,
+            "abbreviation_key": _get_abbreviation_key(obj),
         }
     return result
 
@@ -284,11 +295,12 @@ def transform_abbreviations(raw: List[Dict]) -> Dict[str, str]:
 
 
 def _get_abbreviation_key(obj: Dict) -> Optional[str]:
-    """Returns the objectKey of the Abbreviation object linked to this Venue, or None.
+    """Returns the objectKey of the Abbreviation object linked to this Venue or Subvenue, or None.
 
     No dedicated attribute ID is known for this link (unlike VENUE_SUPPORT_ENGINEER_ATTR_ID
-    or SUBVENUE_VENUE_ATTR_ID above), so this scans every attribute for a referenced object
-    whose type is named "Abbreviation" — same approach as the reference script this was
+    or SUBVENUE_VENUE_ATTR_ID above) - it's attr 242 on Venue and attr 244 on Subvenue, and
+    both differ per object type - so this scans every attribute for a referenced object whose
+    type is named "Abbreviation" instead. Same approach as the reference script this was
     ported from (old-files/generate_abbreviation_venue_mapping.py).
     """
     for attr in obj.get("attributes", []):
@@ -297,6 +309,63 @@ def _get_abbreviation_key(obj: Dict) -> Optional[str]:
             if ref.get("objectType", {}).get("name", "").lower() == "abbreviation":
                 return ref.get("objectKey")
     return None
+
+
+def build_venue_abbreviation_records(
+    venue_records: List[Dict],
+    subvenue_map: Dict[str, Dict[str, Optional[str]]],
+    abbr_lookup: Dict[str, str],
+) -> List[Dict]:
+    """Merges Venue-level and Subvenue-level Abbreviation links into one
+    abbreviation -> venue-name mapping (one row per distinct Abbreviation
+    object actually linked from somewhere), keyed by the Abbreviation
+    object's own IHS-xxxxx key.
+
+    Subvenue links are written last so they win when a Venue and one of its
+    Subvenues happen to link the very same Abbreviation object (rare) -
+    Subvenue-level links are the authoritative, actively-maintained ones in
+    practice (most Subvenues have their own; device naming follows those).
+    A Venue with several Subvenues, each carrying a different abbreviation,
+    correctly produces several rows all resolving to that one venue_name.
+    """
+    records: Dict[str, Dict] = {}
+
+    for v in venue_records:
+        abbr_key = v.get("abbreviation_key")
+        if not abbr_key or not v.get("abbreviation"):
+            continue
+        records[abbr_key] = {
+            "id": abbr_key,
+            "abbreviation": v["abbreviation"],
+            "abbreviation_key": abbr_key,
+            "venue_id": v["id"],
+            "venue_name": v["name"],
+            "venue_key": v["key"],
+            "source": "venue",
+            "subvenue_id": None,
+            "subvenue_name": None,
+        }
+
+    for sv in subvenue_map.values():
+        abbr_key = sv.get("abbreviation_key")
+        if not abbr_key or not sv.get("venue_name"):
+            continue
+        label = abbr_lookup.get(abbr_key)
+        if not label:
+            continue
+        records[abbr_key] = {
+            "id": abbr_key,
+            "abbreviation": label.lower(),
+            "abbreviation_key": abbr_key,
+            "venue_id": sv.get("venue_id"),
+            "venue_name": sv["venue_name"],
+            "venue_key": sv.get("venue_key"),
+            "source": "subvenue",
+            "subvenue_id": sv.get("id"),
+            "subvenue_name": sv.get("name"),
+        }
+
+    return list(records.values())
 
 
 def transform_venues(raw: List[Dict], abbr_lookup: Optional[Dict[str, str]] = None) -> List[Dict]:
@@ -476,20 +545,26 @@ def transform_devices(
 
 
 async def run_venue_sync() -> Dict[str, Any]:
-    """Sync just Venue objects (name + Support Engineer + Abbreviation) — fast path,
-    skips Model/Device/Subvenue/edges."""
+    """Sync Venue + Subvenue objects (name + Support Engineer + Abbreviation) —
+    fast path, skips Model/Device/edges. Subvenue is included (unlike the rest)
+    because most Abbreviation links live there, not on Venue - see
+    transform_subvenues / build_venue_abbreviation_records."""
     client = JiraClient()
     t0 = time.time()
 
-    raw_venues, raw_abbreviations = await asyncio.gather(
+    raw_venues, raw_subvenues, raw_abbreviations = await asyncio.gather(
         client.fetch_all("Venue"),
+        client.fetch_all("Subvenue"),
         client.fetch_all("Abbreviation"),
     )
     fetch_time = time.time() - t0
-    logger.info("Fetched %d venues, %d abbreviations in %.1fs", len(raw_venues), len(raw_abbreviations), fetch_time)
+    logger.info("Fetched %d venues, %d subvenues, %d abbreviations in %.1fs",
+                len(raw_venues), len(raw_subvenues), len(raw_abbreviations), fetch_time)
 
     abbr_lookup = transform_abbreviations(raw_abbreviations)
     venue_records = transform_venues(raw_venues, abbr_lookup=abbr_lookup)
+    subvenue_map = transform_subvenues(raw_subvenues)
+    venue_abbr_records = build_venue_abbreviation_records(venue_records, subvenue_map, abbr_lookup)
 
     t1 = time.time()
     async with SessionLocal() as session:
@@ -499,10 +574,16 @@ async def run_venue_sync() -> Dict[str, Any]:
             if batch:
                 await repo.upsert_venues(batch)
                 await session.commit()
+        for i in range(0, len(venue_abbr_records) or 1, BATCH_SIZE):
+            batch = venue_abbr_records[i: i + BATCH_SIZE]
+            if batch:
+                await repo.upsert_venue_abbreviations(batch)
+                await session.commit()
     write_time = time.time() - t1
 
     return {
         "venues": len(venue_records),
+        "venue_abbreviations": len(venue_abbr_records),
         "fetch_seconds": round(fetch_time, 1),
         "write_seconds": round(write_time, 1),
         "total_seconds": round(time.time() - t0, 1),
@@ -533,6 +614,7 @@ async def run_sync() -> Dict[str, Any]:
     device_records, edge_records = transform_devices(raw_devices, subvenue_map=subvenue_map)
     abbr_lookup = transform_abbreviations(raw_abbreviations)
     venue_records = transform_venues(raw_venues, abbr_lookup=abbr_lookup)
+    venue_abbr_records = build_venue_abbreviation_records(venue_records, subvenue_map, abbr_lookup)
 
     t1 = time.time()
     async with SessionLocal() as session:
@@ -562,12 +644,19 @@ async def run_sync() -> Dict[str, Any]:
                 await repo.upsert_venues(batch)
                 await session.commit()
 
+        for i in range(0, len(venue_abbr_records) or 1, BATCH_SIZE):
+            batch = venue_abbr_records[i: i + BATCH_SIZE]
+            if batch:
+                await repo.upsert_venue_abbreviations(batch)
+                await session.commit()
+
     write_time = time.time() - t1
     return {
         "models": len(model_records),
         "devices": len(device_records),
         "edges": len(edge_records),
         "venues": len(venue_records),
+        "venue_abbreviations": len(venue_abbr_records),
         "fetch_seconds": round(fetch_time, 1),
         "write_seconds": round(write_time, 1),
         "total_seconds": round(time.time() - t0, 1),
