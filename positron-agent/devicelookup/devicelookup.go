@@ -300,11 +300,18 @@ func SaveVenueAbbrLookup(va VenueAbbrLookup) {
 // "MEAD-LMRV-RAD_C5-Res-Budgett-1253" -> "mead"). Returns "" if there's no
 // "-" or nothing precedes it.
 func AbbreviationCandidate(name string) string {
+	return strings.ToLower(rawAbbreviationCandidate(name))
+}
+
+// rawAbbreviationCandidate is AbbreviationCandidate without the lowercasing,
+// for callers that need to preserve the original casing (e.g. to prefix it
+// back onto a device name) rather than just use it as a lookup key.
+func rawAbbreviationCandidate(name string) string {
 	idx := strings.Index(name, "-")
 	if idx <= 0 {
 		return ""
 	}
-	return strings.ToLower(name[:idx])
+	return name[:idx]
 }
 
 // ZoneFor resolves name's venue-abbreviation prefix against the lookup,
@@ -318,6 +325,36 @@ func (va VenueAbbrLookup) ZoneFor(name string) string {
 		return ""
 	}
 	return va[abbr]
+}
+
+// ZoneForWithFallback resolves the venue-abbreviation Zone fallback for a
+// device, trying name first and - only if that has no "<ABBR>-" prefix or
+// the prefix isn't a registered abbreviation - falling back to systemName
+// (e.g. a Positron endpoint's parent GAM name, which reliably carries the
+// abbreviation even when the endpoint's own name doesn't).
+//
+// When systemName is what resolves the zone, its abbreviation (in its
+// original casing) is also returned as prefix so the caller can prepend it
+// to the device's own name, e.g. name "10075SE22ndPath-GN" + systemName
+// "SSVL-2236SE100thLane-GAM" -> zone for "ssvl", prefix "SSVL" so the caller
+// can build "SSVL-10075SE22ndPath-GN". prefix is "" whenever name alone
+// resolved the zone (nothing to prepend) or neither did.
+func (va VenueAbbrLookup) ZoneForWithFallback(name, systemName string) (zone string, prefix string) {
+	if zone := va.ZoneFor(name); zone != "" {
+		return zone, ""
+	}
+	if va == nil {
+		return "", ""
+	}
+	rawAbbr := rawAbbreviationCandidate(systemName)
+	if rawAbbr == "" {
+		return "", ""
+	}
+	zone = va[strings.ToLower(rawAbbr)]
+	if zone == "" {
+		return "", ""
+	}
+	return zone, rawAbbr
 }
 
 // NormalizeMAC replaces ':' with '-', trims leading/trailing '-'. No case

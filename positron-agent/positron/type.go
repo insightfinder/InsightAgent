@@ -69,6 +69,13 @@ type Endpoint struct {
 	// DeviceName          string `json:"deviceName"`
 	// CreationDate        string `json:"creationDate"`
 	// LastModifiedDate    string `json:"lastModifiedDate"`
+	// Gam is the parent GAM headend unit this endpoint is provisioned under.
+	// Its Name reliably follows the "<ABBR>-<rest>" venue-abbreviation
+	// convention even when the endpoint's own name (ConfEndpointName /
+	// ConfUserName) doesn't - see ZoneForWithFallback in devicelookup.
+	Gam struct {
+		Name string `json:"name"`
+	} `json:"gam"`
 }
 
 // Device represents a device from the device list API

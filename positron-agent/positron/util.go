@@ -70,16 +70,27 @@ func (e *Endpoint) ToMetricData(dl devicelookup.Lookup, va devicelookup.VenueAbb
 	ownName := devicelookup.CleanOwnName(rawOwnName)
 
 	devInfo := dl.GetDeviceInfo(ownMAC, ownSerial, ownName)
+
+	// Zone: Inventory only > venue-abbreviation fallback - own name prefix
+	// first, then (if that has no "<ABBR>-" prefix or it isn't a registered
+	// abbreviation) the parent GAM's name, which reliably carries the
+	// abbreviation even when the endpoint's own name doesn't. When the GAM
+	// fallback is what resolves the zone, its abbreviation is prefixed onto
+	// the device's own name too, e.g. "10075SE22ndPath-GN" ->
+	// "SSVL-10075SE22ndPath-GN", so instance/display name carry it.
+	zone := devInfo.Venue
+	if zone == "" {
+		var prefix string
+		zone, prefix = va.ZoneForWithFallback(rawOwnName, e.Gam.Name)
+		if prefix != "" {
+			rawOwnName = prefix + "-" + rawOwnName
+			ownName = devicelookup.CleanOwnName(rawOwnName)
+		}
+	}
+
 	instanceName, ok := devicelookup.BuildInstanceName(devInfo, ownName)
 	if !ok {
 		return nil, false
-	}
-
-	// Zone: Inventory only > venue-abbreviation fallback (from the device's
-	// own name prefix, for devices the Inventory lookup never matched at all).
-	zone := devInfo.Venue
-	if zone == "" {
-		zone = va.ZoneFor(rawOwnName)
 	}
 
 	// Use current Unix timestamp in seconds, will be converted to ms later
