@@ -28,11 +28,14 @@
 //     validation pass below, so the instance still ends up with a working
 //     relation once the unmonitored passthrough device is filtered out.
 //
-// Once every project has been processed, all candidate pairs are validated
-// against the combined instance set of ALL configured projects (a parent may
-// live in a different project than its child), grouped by zone, and upserted
-// into the single shared causal group in one final pass — existing relations
-// for other source/target pairs are preserved.
+// Once every project has been processed, all candidate pairs are deduped,
+// grouped by zone, and upserted into the single shared causal group in one
+// final pass — existing relations for other source/target pairs are
+// preserved. A pair is sent even if its parent and/or child name isn't
+// currently a live instance in any configured project's instance set (the
+// asset server's device/edge data is trusted as-is): the device may not have
+// onboarded/reported into InsightFinder yet, and the relation will resolve
+// once a matching instance appears.
 //
 // freshOnly mode (set "fresh_only: true" in config):
 //
@@ -751,13 +754,15 @@ func main() {
 	seenPair := map[string]struct{}{}
 	var debugEntries []relationDebugEntry
 
-	skipped, duplicates := 0, 0
+	unmatchedInstance, duplicates := 0, 0
 	for _, cand := range allCandidates {
+		// parentOK/childOK are logged for visibility only — a pair is no longer
+		// dropped just because one end isn't a currently-known live instance; see
+		// the package doc comment above for why.
 		_, parentOK := instanceSet[cand.Parent]
 		_, childOK := instanceSet[cand.Child]
 		if !parentOK || !childOK {
-			skipped++
-			continue
+			unmatchedInstance++
 		}
 
 		pairKey := cand.Parent + "→" + cand.Child
@@ -786,9 +791,9 @@ func main() {
 		})
 	}
 
-	valid := len(allCandidates) - skipped - duplicates
-	log.Printf("Valid pairs: %d / %d (skipped %d with missing instances, %d duplicates)",
-		valid, len(allCandidates), skipped, duplicates)
+	valid := len(allCandidates) - duplicates
+	log.Printf("Valid pairs: %d / %d (%d sent with no live instance match on parent and/or child, %d duplicates)",
+		valid, len(allCandidates), unmatchedInstance, duplicates)
 
 	if b, err := json.MarshalIndent(debugEntries, "", "  "); err != nil {
 		log.Printf("  WARN  failed to marshal debug relations: %v", err)
