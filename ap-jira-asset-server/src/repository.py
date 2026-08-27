@@ -3,7 +3,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import selectinload
 
-from .models import Device, DeviceEdge, DeviceModel, Venue
+from .models import Device, DeviceEdge, DeviceModel, Venue, VenueAbbreviation
 
 
 class DeviceRepository:
@@ -49,6 +49,17 @@ class DeviceRepository:
         if not records:
             return 0
         stmt = insert(Venue).values(records)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["id"],
+            set_={c: stmt.excluded[c] for c in records[0] if c != "id"},
+        )
+        await self.session.execute(stmt)
+        return len(records)
+
+    async def upsert_venue_abbreviations(self, records: List[Dict[str, Any]]) -> int:
+        if not records:
+            return 0
+        stmt = insert(VenueAbbreviation).values(records)
         stmt = stmt.on_conflict_do_update(
             index_elements=["id"],
             set_={c: stmt.excluded[c] for c in records[0] if c != "id"},
@@ -210,18 +221,18 @@ class DeviceRepository:
         result = await self.session.execute(select(Venue).order_by(Venue.name))
         return list(result.scalars().all())
 
-    async def list_venue_abbreviations(self) -> List[Venue]:
-        """Venues that have a linked Abbreviation, ordered by the abbreviation code."""
-        stmt = (
-            select(Venue)
-            .where(Venue.abbreviation.isnot(None))
-            .order_by(Venue.abbreviation)
-        )
+    async def list_venue_abbreviations(self) -> List[VenueAbbreviation]:
+        """Every Abbreviation -> Venue link (Venue-level or Subvenue-level), ordered by code."""
+        stmt = select(VenueAbbreviation).order_by(VenueAbbreviation.abbreviation)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def find_venue_by_abbreviation(self, abbreviation: str) -> Optional[Venue]:
-        stmt = select(Venue).where(func.lower(Venue.abbreviation) == abbreviation.lower()).limit(1)
+    async def find_venue_by_abbreviation(self, abbreviation: str) -> Optional[VenueAbbreviation]:
+        stmt = (
+            select(VenueAbbreviation)
+            .where(func.lower(VenueAbbreviation.abbreviation) == abbreviation.lower())
+            .limit(1)
+        )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 

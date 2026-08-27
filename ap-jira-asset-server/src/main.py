@@ -148,9 +148,9 @@ async def _build_venues_cache() -> _CacheEntry:
         return _encode_cache_entry([
             {
                 "abbreviation": v.abbreviation,
-                "venue_name": v.name,
-                "venue_key": v.key,
-                "venue_id": v.id,
+                "venue_name": v.venue_name,
+                "venue_key": v.venue_key,
+                "venue_id": v.venue_id,
             }
             for v in venues
         ])
@@ -459,9 +459,11 @@ async def get_support_engineers(session: AsyncSession = Depends(get_session)):
 @app.get("/venues/abbreviations", dependencies=[Depends(require_api_key)])
 async def list_venue_abbreviations(request: Request):
     """
-    Abbreviation → Venue mapping, sourced from the Venue object's linked
-    Abbreviation in Jira Assets. Served from an in-memory cache invalidated by
-    /sync and /sync/support-engineers.
+    Abbreviation → Venue mapping, sourced from the Venue's own linked
+    Abbreviation plus every one of its Subvenues' linked Abbreviation in Jira
+    Assets (the common case — see jira_sync.build_venue_abbreviation_records).
+    Served from an in-memory cache invalidated by /sync and
+    /sync/support-engineers.
     """
     return await _serve_bulk_cached("venues", request)
 
@@ -475,9 +477,9 @@ async def get_venue_by_abbreviation(abbreviation: str, session: AsyncSession = D
         raise HTTPException(status_code=404, detail=f"No venue found for abbreviation: {abbreviation}")
     return {
         "abbreviation": venue.abbreviation,
-        "venue_name": venue.name,
-        "venue_key": venue.key,
-        "venue_id": venue.id,
+        "venue_name": venue.venue_name,
+        "venue_key": venue.venue_key,
+        "venue_id": venue.venue_id,
     }
 
 
