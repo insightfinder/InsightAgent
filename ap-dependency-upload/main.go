@@ -23,10 +23,9 @@
 //     configured "passthrough_devices" entry (e.g. Tarana BN, Positron
 //     G1001-C G.hnEndPoint — passive hardware that is never itself a
 //     monitored instance), the depth-2 device from the same lookup is ALSO
-//     wired up as a parent of the instance. Both candidate pairs are kept;
-//     whichever parent isn't a known monitored instance is dropped in the
-//     validation pass below, so the instance still ends up with a working
-//     relation once the unmonitored passthrough device is filtered out.
+//     wired up as a parent of the instance. Both candidate pairs are kept
+//     and both get uploaded — neither is dropped for being an unmonitored
+//     passthrough device, see below.
 //
 // Once every project has been processed, all candidate pairs are deduped,
 // grouped by zone, and upserted into the single shared causal group in one
@@ -36,6 +35,18 @@
 // asset server's device/edge data is trusted as-is): the device may not have
 // onboarded/reported into InsightFinder yet, and the relation will resolve
 // once a matching instance appears.
+//
+// includeUnmonitoredDevices mode (set "include_unmonitored_devices: true" in config):
+//
+//	By default, relation resolution is only ever seeded from each project's
+//	ListInstances result — a device that has never appeared as a live
+//	InsightFinder instance can still show up as someone else's parent, but its
+//	own upstream is never resolved, so a dependency chain running entirely
+//	through such devices is invisible. When this is on, every device in the
+//	full asset-server export that isn't already covered by a project's
+//	instance list is ALSO used as a seed (via the same MAC/SERIAL/JIRAKEY
+//	naming and upstream walk), so the complete device/edge graph is mirrored
+//	into the causal map, not just the subset InsightFinder already monitors.
 //
 // freshOnly mode (set "fresh_only: true" in config):
 //
@@ -74,6 +85,12 @@ type Config struct {
 	CausalKey         string      `yaml:"causal_key"`
 	Projects          []string    `yaml:"projects"`
 	FreshOnly         bool        `yaml:"fresh_only"`
+	// IncludeUnmonitoredDevices, when true, additionally resolves relations for
+	// every asset-server device that never shows up as a live instance in any
+	// configured project — not just the ones seeded from ListInstances — so a
+	// dependency chain running entirely through devices InsightFinder has never
+	// seen as an instance still gets uploaded. Off by default.
+	IncludeUnmonitoredDevices bool `yaml:"include_unmonitored_devices"`
 	MaxWorkers        int         `yaml:"max_workers"`
 	MetadataBatchSize int         `yaml:"metadata_batch_size"`
 	// DebugOutputFile is where the final validated parent/child relations are
@@ -731,6 +748,46 @@ func main() {
 		candidates := resolveProjectRelations(ctx, project, instances, client, assets, cfg)
 		log.Printf("  %d candidate relation(s) discovered", len(candidates))
 		allCandidates = append(allCandidates, candidates...)
+	}
+
+	// ── Step 1.5: sweep every asset-server device not covered by any project's
+	// instance list, so a dependency chain running entirely through devices
+	// InsightFinder has never seen as an instance still gets resolved.
+	if cfg.IncludeUnmonitoredDevices {
+		queryDepth := cfg.AssetServer.UpstreamMaxDepth
+		if len(cfg.AssetServer.PassthroughDevices) > 0 && queryDepth < 2 {
+			queryDepth = 2
+		}
+
+		swept, sweptRelations := 0, 0
+		seenSweepName := map[string]struct{}{}
+		for i := range rawDevices {
+			d := &rawDevices[i]
+			name, ok := makeInstanceName(d.MacAddress, d.SerialNumber, d.ObjectKey)
+			if !ok {
+				continue
+			}
+			if _, isLiveInstance := instanceSet[name]; isLiveInstance {
+				continue // already resolved via a project's ListInstances above
+			}
+			if _, alreadySwept := seenSweepName[name]; alreadySwept {
+				continue
+			}
+			seenSweepName[name] = struct{}{}
+
+			rels := resolveInstanceRelations(name, "", assets, queryDepth, cfg.AssetServer.PassthroughDevices)
+			if len(rels) == 0 {
+				continue
+			}
+			swept++
+			sweptRelations += len(rels)
+			allCandidates = append(allCandidates, rels...)
+			if _, exists := instanceProject[name]; !exists {
+				instanceProject[name] = "(unmonitored device)"
+			}
+		}
+		log.Printf("Full device sweep: %d device(s) outside any project's instance list produced %d candidate relation(s)",
+			swept, sweptRelations)
 	}
 
 	displayNameFor := func(instanceName string) string {
