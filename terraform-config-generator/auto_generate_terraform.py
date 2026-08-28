@@ -27,6 +27,10 @@ config.yaml format:
                                             # true  → only emit metrics that have at least one
                                             #          escalated-incident or ignored component rule
                                             # false → emit every metric returned by the API
+      only_include_metrics: ["Alert Volume"]  # optional; default none (no restriction)
+                                            # when set, metric_configurations only includes
+                                            # metrics whose name is in this list (applied after
+                                            # only_include_escalated_ignored)
     PROD:
       base_url: https://app.insightfinder.com/
       username: mustafa
@@ -267,7 +271,8 @@ def fetch_project_data(session: requests.Session, host: str, username: str,
                        api_key: str, customer_name: str, project_name: str,
                        is_metric: bool = False,
                        only_escalated_ignored: bool = True,
-                       disable_metric_collection: bool = False) -> Dict:
+                       disable_metric_collection: bool = False,
+                       only_include_metrics: Optional[List[str]] = None) -> Dict:
     """Fetch all project-level API data. Returns a dict with all fetched data."""
     headers = api_headers(username, api_key)
     lic_headers = api_headers(username, api_key, use_license=True)
@@ -314,6 +319,7 @@ def fetch_project_data(session: requests.Session, host: str, username: str,
         metric_cfgs, pattern_id_rule = fetch_metric_configurations(
             session, host, username, api_key, customer_name, project_name,
             only_escalated_ignored=only_escalated_ignored,
+            only_include_metrics=only_include_metrics,
         )
         result["metric_configurations"] = metric_cfgs
         result["pattern_id_generation_rule"] = pattern_id_rule
@@ -354,7 +360,9 @@ def fetch_project_data(session: requests.Session, host: str, username: str,
 def fetch_metric_configurations(session: requests.Session, host: str, username: str,
                                 api_key: str, customer_name: str,
                                 project_name: str,
-                                only_escalated_ignored: bool = True) -> Tuple[Dict[str, Any], int]:
+                                only_escalated_ignored: bool = True,
+                                only_include_metrics: Optional[List[str]] = None,
+                                ) -> Tuple[Dict[str, Any], int]:
     """Fetch all metric configuration data for a metric project.
 
     Args:
@@ -362,6 +370,9 @@ def fetch_metric_configurations(session: requests.Session, host: str, username: 
             escalated-incident component or ignored component are included. When False, all
             metrics returned by the bulk componentmetricupdate API are included regardless of
             whether they have escalate/ignore rules.
+        only_include_metrics: When set (non-empty), restrict the result to metric names in
+            this list — applied after the only_escalated_ignored filter. None/empty means
+            no restriction.
 
     Returns:
         (metric_configs, pattern_id_generation_rule)
@@ -443,6 +454,10 @@ def fetch_metric_configurations(session: requests.Session, host: str, username: 
         all_metrics = sorted(set(escalate_map) | set(ignored_map))
     else:
         all_metrics = sorted(smetric_to_entry.keys())
+
+    if only_include_metrics:
+        allowed = set(only_include_metrics)
+        all_metrics = [m for m in all_metrics if m in allowed]
 
     for metric_name in all_metrics:
         entry = smetric_to_entry.get(metric_name)
@@ -978,10 +993,18 @@ def _tfvars(base_url: str, system_name: str, servicenow_host: str = "") -> str:
     return "\n".join(lines) + "\n"
 
 
-def _log_projects_tf(has_servicenow: bool) -> str:
+def _depends_on_block(depends_on: Optional[str]) -> List[str]:
+    """Return the HCL lines for a `depends_on = [...]` meta-argument, or [] if not set."""
+    if not depends_on:
+        return []
+    return ["", f"  depends_on = [{depends_on}]"]
+
+
+def _log_projects_tf(has_servicenow: bool, depends_on: Optional[str] = None) -> str:
     lines = [
         'module "log_projects" {',
         '  source = "./log-projects"',
+    ] + _depends_on_block(depends_on) + [
         "",
         "  system_name = var.system_name",
     ]
@@ -1404,7 +1427,7 @@ def generate_project_tf(project_name: str, project_data: Dict,
 
     # Process mode (from /api/v1/logdedicatedmode)
     mode = project_data.get("mode")
-    if mode is not None and mode != 0:
+    if mode is not None:
         cfg.append(f'  mode = {mode}')
 
     # ServiceNow block using var references for credentials
@@ -1501,10 +1524,11 @@ def generate_project_tf(project_name: str, project_data: Dict,
     return '\n'.join(cfg)
 
 
-def _metric_projects_tf() -> str:
+def _metric_projects_tf(depends_on: Optional[str] = None) -> str:
     lines = [
         'module "metric_projects" {',
         '  source = "./metric-projects"',
+    ] + _depends_on_block(depends_on) + [
         '',
         '  system_name = var.system_name',
         '',
@@ -1526,10 +1550,11 @@ variable "system_name" {
 '''
 
 
-def _l2m_projects_tf() -> str:
+def _l2m_projects_tf(depends_on: Optional[str] = None) -> str:
     lines = [
         'module "l2m_projects" {',
         '  source = "./l2m-projects"',
+    ] + _depends_on_block(depends_on) + [
         '',
         '  system_name = var.system_name',
         '',
@@ -1551,10 +1576,11 @@ variable "system_name" {
 '''
 
 
-def _trace_projects_tf() -> str:
+def _trace_projects_tf(depends_on: Optional[str] = None) -> str:
     lines = [
         'module "trace_projects" {',
         '  source = "./trace-projects"',
+    ] + _depends_on_block(depends_on) + [
         '',
         '  system_name = var.system_name',
         '',
@@ -1576,10 +1602,11 @@ variable "system_name" {
 '''
 
 
-def _change_events_projects_tf(has_servicenow: bool = False) -> str:
+def _change_events_projects_tf(has_servicenow: bool = False, depends_on: Optional[str] = None) -> str:
     lines = [
         'module "change_events_projects" {',
         '  source = "./change-events-projects"',
+    ] + _depends_on_block(depends_on) + [
         "",
         "  system_name = var.system_name",
     ]
@@ -1650,10 +1677,11 @@ def _change_events_projects_variables_tf(has_servicenow: bool = False) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _incident_projects_tf() -> str:
+def _incident_projects_tf(depends_on: Optional[str] = None) -> str:
     lines = [
         'module "incident_projects" {',
         '  source = "./incident-projects"',
+    ] + _depends_on_block(depends_on) + [
         '',
         '  system_name = var.system_name',
         '',
@@ -1940,7 +1968,7 @@ def generate_metric_project_tf(project_name: str, project_data: Dict,
 
     # process mode
     process_mode = settings_data.get('processMode')
-    if process_mode is not None and process_mode != 0:
+    if process_mode is not None:
         cfg.append(f'  mode = {process_mode}')
 
     # metric_configurations — populated from componentmetricupdate + metriccomponent APIs
@@ -1991,6 +2019,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
         project_types = [project_types]
     only_escalated_ignored: bool = env_cfg.get("only_include_escalated_ignored", True)
     disable_metric_collection: bool = env_cfg.get("disable_metric_collection", False)
+    only_include_metrics: Optional[List[str]] = env_cfg.get("only_include_metrics") or None
 
     all_projects_raw = system.get("projectDetailsList", system.get("projectDetailList", []))
     if isinstance(all_projects_raw, str):
@@ -2027,7 +2056,13 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
         if (p.get("projectName") or p.get("name") or "").lower().endswith("-l2m")
     ]
     l2m_project_names = {p.get("projectName") or p.get("name") or "" for p in l2m_projects_list}
-    metric_projects_list = [p for p in all_metric_projects if (p.get("projectName") or p.get("name") or "") not in l2m_project_names]
+    # LogFrequency projects (frequency-detection metric projects) are never generated —
+    # excluded from metric-projects/ regardless of environment/config.
+    metric_projects_list = [
+        p for p in all_metric_projects
+        if (p.get("projectName") or p.get("name") or "") not in l2m_project_names
+        and (p.get("projectCloudType") or "").strip().lower() != "logfrequency"
+    ]
     trace_projects_list = [p for p in projects if (p.get("dataType") or "").lower() == "trace"]
     change_events_projects_list = [p for p in projects if (p.get("dataType") or "").lower() == "deployment"]
     incident_projects_list = [p for p in projects if (p.get("dataType") or "").lower() == "incident"]
@@ -2063,9 +2098,22 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
     #     response, not just cloudType (which may be missing/incorrect in some envs) ---
     print(f"    Pre-fetching project data ({len(projects)} projects)...")
     prefetched: Dict[str, Any] = {}   # project_name -> project_data
+    # NOTE: uses all_metric_projects (not the filtered metric_projects_list) so that
+    # LogFrequency projects — excluded from metric-projects/ generation but still
+    # genuinely dataType=="Metric" — are still treated as metric for API-calling
+    # purposes (skip logtometricsetting, which 500s for non-Log projects; instead
+    # they'd only get metric_configurations fetched if not disable_metric_collection).
     metric_project_names = {
         p.get("projectName") or p.get("name") or ""
-        for p in metric_projects_list + l2m_projects_list
+        for p in all_metric_projects
+    }
+    # LogFrequency projects are metric-type (so they must skip logtometricsetting) but
+    # are never generated into metric-projects/ — no point fetching their metric
+    # configurations either.
+    logfrequency_names = {
+        p.get("projectName") or p.get("name") or ""
+        for p in all_metric_projects
+        if (p.get("projectCloudType") or "").strip().lower() == "logfrequency"
     }
     for proj in projects:
         project_name = proj.get("projectName") or proj.get("name") or ""
@@ -2082,7 +2130,8 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
                 session, base_url, username, api_key, username, project_name,
                 is_metric=is_metric,
                 only_escalated_ignored=only_escalated_ignored,
-                disable_metric_collection=disable_metric_collection,
+                disable_metric_collection=disable_metric_collection or project_name in logfrequency_names,
+                only_include_metrics=only_include_metrics,
             )
         except Exception as e:
             print(f"      Error pre-fetching {project_name!r}: {e}", file=sys.stderr)
@@ -2126,9 +2175,28 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
     write_file(os.path.join(system_dir, "variables.tf"),
                _system_variables_tf(), dry_run)
 
+    # --- Determine module apply order ---
+    # system_settings.tf references projects by name and the API needs them to
+    # already exist, so project modules must apply before it. Chain only the
+    # modules actually present for this environment, in this fixed order, so
+    # each depends on the nearest preceding present module.
+    _module_presence = [
+        ("metric_projects", bool(metric_projects_list)),
+        ("l2m_projects", bool(l2m_projects_list)),
+        ("trace_projects", bool(trace_projects_list)),
+        ("log_projects", bool(log_projects_list)),
+        ("change_events_projects", bool(change_events_projects_list)),
+        ("incident_projects", bool(incident_projects_list)),
+    ]
+    present_modules = [name for name, present in _module_presence if present]
+
+    def _depends_on_for(module_name: str) -> Optional[str]:
+        idx = present_modules.index(module_name)
+        return f"module.{present_modules[idx - 1]}" if idx > 0 else None
+
     if log_projects_list:
         write_file(os.path.join(system_dir, "log_projects.tf"),
-                   _log_projects_tf(has_servicenow), dry_run)
+                   _log_projects_tf(has_servicenow, depends_on=_depends_on_for("log_projects")), dry_run)
         write_file(os.path.join(log_projects_dir, "versions.tf"),
                    _projects_versions_tf(), dry_run)
         write_file(os.path.join(log_projects_dir, "variables.tf"),
@@ -2136,7 +2204,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
 
     if metric_projects_list:
         write_file(os.path.join(system_dir, "metric_projects.tf"),
-                   _metric_projects_tf(), dry_run)
+                   _metric_projects_tf(depends_on=_depends_on_for("metric_projects")), dry_run)
         write_file(os.path.join(metric_projects_dir, "versions.tf"),
                    _projects_versions_tf(), dry_run)
         write_file(os.path.join(metric_projects_dir, "variables.tf"),
@@ -2144,7 +2212,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
 
     if l2m_projects_list:
         write_file(os.path.join(system_dir, "l2m_projects.tf"),
-                   _l2m_projects_tf(), dry_run)
+                   _l2m_projects_tf(depends_on=_depends_on_for("l2m_projects")), dry_run)
         write_file(os.path.join(l2m_projects_dir, "versions.tf"),
                    _projects_versions_tf(), dry_run)
         write_file(os.path.join(l2m_projects_dir, "variables.tf"),
@@ -2152,7 +2220,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
 
     if trace_projects_list:
         write_file(os.path.join(system_dir, "trace_projects.tf"),
-                   _trace_projects_tf(), dry_run)
+                   _trace_projects_tf(depends_on=_depends_on_for("trace_projects")), dry_run)
         write_file(os.path.join(trace_projects_dir, "versions.tf"),
                    _projects_versions_tf(), dry_run)
         write_file(os.path.join(trace_projects_dir, "variables.tf"),
@@ -2160,7 +2228,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
 
     if change_events_projects_list:
         write_file(os.path.join(system_dir, "change_events_projects.tf"),
-                   _change_events_projects_tf(has_change_events_servicenow), dry_run)
+                   _change_events_projects_tf(has_change_events_servicenow, depends_on=_depends_on_for("change_events_projects")), dry_run)
         write_file(os.path.join(change_events_projects_dir, "versions.tf"),
                    _projects_versions_tf(), dry_run)
         write_file(os.path.join(change_events_projects_dir, "variables.tf"),
@@ -2168,7 +2236,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
 
     if incident_projects_list:
         write_file(os.path.join(system_dir, "incident_projects.tf"),
-                   _incident_projects_tf(), dry_run)
+                   _incident_projects_tf(depends_on=_depends_on_for("incident_projects")), dry_run)
         write_file(os.path.join(incident_projects_dir, "versions.tf"),
                    _projects_versions_tf(), dry_run)
         write_file(os.path.join(incident_projects_dir, "variables.tf"),
@@ -2200,6 +2268,8 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
             insights_report_data=insights_report_data,
             instance_down_items=instance_down_items if instance_down_items else None,
             miscellaneous_data=miscellaneous_data,
+            depends_on=f"module.{present_modules[-1]}" if present_modules else None,
+            customer_name=username,
         )
         write_file(os.path.join(system_dir, "system_settings.tf"),
                    sys_settings_content + "\n", dry_run)
