@@ -33,6 +33,13 @@ projects:
 # true: fetch the current map first and skip any pair that already exists there.
 fresh_only: false
 
+# false (default): only resolve relations for devices that are already live InsightFinder
+# instances (per project's ListInstances).
+# true: additionally resolve relations for every asset-server device not covered by any
+# project's instance list, so dependency chains running entirely through devices
+# InsightFinder has never monitored are still uploaded (mirrors the full asset-server graph).
+include_unmonitored_devices: true
+
 # Number of instances resolved against the asset server concurrently, per project.
 max_workers: 20
 
