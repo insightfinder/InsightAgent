@@ -196,6 +196,8 @@ def _parse_project_configs(raw: dict) -> dict:
                 pc.get("enableIncidentConsolidationInfoUpdate", False)
             ),
             "enable_incident_resolve_update": bool(pc.get("enableIncidentResolveUpdate", False)),
+            "enable_incident_field_sync": bool(pc.get("enableIncidentFieldSync", False)),
+            "enable_metric_value_update": bool(pc.get("enableMetricValueUpdate", False)),
             "configuration_item": pc.get("configurationItem", ""),
         }
     return result
@@ -450,6 +452,8 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
                 lines.append(f'      enable_ticket_update                      = {str(pc["enable_ticket_update"]).lower()}')
                 lines.append(f'      enable_incident_consolidation_info_update = {str(pc["enable_incident_consolidation_info_update"]).lower()}')
                 lines.append(f'      enable_incident_resolve_update            = {str(pc["enable_incident_resolve_update"]).lower()}')
+                lines.append(f'      enable_incident_field_sync                = {str(pc.get("enable_incident_field_sync", False)).lower()}')
+                lines.append(f'      enable_metric_value_update                = {str(pc.get("enable_metric_value_update", False)).lower()}')
                 ci_e = pc.get("configuration_item", "").replace('"', '\\"')
                 lines.append(f'      configuration_item                        = "{ci_e}"')
                 lines.append('    }')
@@ -867,7 +871,6 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
         'proxy': 'proxy',
         'rareAnomalyType': 'rare_anomaly_type',
         'rareEventAlertThresholds': 'rare_event_alert_thresholds',
-        'rareEventAutoIncidentFlag': 'rare_event_auto_incident_flag',
         'rareNumberLimit': 'rare_number_limit',
         'rootCauseCountThreshold': 'root_cause_count_threshold',
         'rootCauseLogMessageSearchRange': 'root_cause_log_message_search_range',
@@ -976,6 +979,14 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
     return '\n'.join(config)
 
 
+def _customer_expr(value: str, customer_name: str | None) -> str:
+    """HCL expression for a customer name field: var.if_username when it matches
+    this system's own account (the common case), otherwise a quoted literal."""
+    if customer_name and value == customer_name:
+        return "var.if_username"
+    return f'"{value}"'
+
+
 def _format_string_list(lst: list) -> str:
     """Format a Python list of strings as an HCL list literal: ["a", "b"]."""
     if not lst:
@@ -991,7 +1002,9 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
                                     system_down_data: dict | None = None,
                                     insights_report_data: dict | None = None,
                                     instance_down_items: list | None = None,
-                                    miscellaneous_data: dict | None = None) -> str:
+                                    miscellaneous_data: dict | None = None,
+                                    depends_on: str | None = None,
+                                    customer_name: str | None = None) -> str:
     """Generate an insightfinder_system_settings Terraform resource block.
 
     Args:
@@ -1010,6 +1023,9 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
     sn_value = system_name_expr if system_name_expr is not None else f'"{system_name}"'
     lines = []
     lines.append(f'resource "insightfinder_system_settings" "{resource_name}" {{')
+    if depends_on:
+        lines.append(f'  depends_on = [{depends_on}]')
+        lines.append('')
     lines.append(f'  system_name = {sn_value}')
 
     # --- knowledgebase_settings block ---
@@ -1091,7 +1107,10 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
             ('componentLevelDampening',             'component_level_dampening'),
             ('maxNotificationDelayTolerance',       'max_notification_delay_tolerance'),
             ('metricCoOccurrenceBufferMs',          'metric_co_occurrence_buffer_ms'),
+            ('anomalyScoreNotificationMinDelta',    'anomaly_score_notification_min_delta'),
         ]
+        # anomalyScoreNotificationSensitivity is intentionally NOT emitted here: it's
+        # Computed-only (read-only) in the provider schema and cannot be set via config.
         # Always emitted even when the API omits them (empty string default),
         # so a later drop from the API response doesn't silently delete the
         # attribute from state.
@@ -1118,6 +1137,14 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
         for api_key, tf_key, default in [('incidentCountThreshold', 'incident_count_threshold', {}),
                                           ('assignmentMap', 'assignment_map', None)]:
             val = notifications_data.get(api_key, default)
+            if val is not None:
+                lines.append(f'    {tf_key} = {format_terraform_value(val)}')
+
+        # localKbSensitivities (array) and notificationDelayConfig (object) — complex
+        # fields serialized as JSON strings, only emitted when present in the API response.
+        for api_key, tf_key in [('localKbSensitivities', 'local_kb_sensitivities'),
+                                 ('notificationDelayConfig', 'notification_delay_config')]:
+            val = notifications_data.get(api_key)
             if val is not None:
                 lines.append(f'    {tf_key} = {format_terraform_value(val)}')
 
@@ -1172,8 +1199,8 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
                 lines.append('      {')
                 lines.append(f'        source_project  = "{entry.get("ps", "")}"')
                 lines.append(f'        target_project  = "{entry.get("pt", "")}"')
-                lines.append(f'        source_customer = "{entry.get("cs", "")}"')
-                lines.append(f'        target_customer = "{entry.get("ct", "")}"')
+                lines.append(f'        source_customer = {_customer_expr(entry.get("cs", ""), customer_name)}')
+                lines.append(f'        target_customer = {_customer_expr(entry.get("ct", ""), customer_name)}')
                 lines.append(f'        duration        = {entry.get("d", 0)}')
                 if "st" in entry:
                     lines.append(f'        similarity_threshold = {entry.get("st")}')
@@ -1189,7 +1216,7 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
                 is_last = i == len(pldp) - 1
                 lines.append('      {')
                 lines.append(f'        project  = "{entry.get("p", "")}"')
-                lines.append(f'        customer = "{entry.get("c", "")}"')
+                lines.append(f'        customer = {_customer_expr(entry.get("c", ""), customer_name)}')
                 lines.append(f'        duration = {entry.get("d", 0)}')
                 lines.append('      }' + ('' if is_last else ','))
             lines.append('    ]')
