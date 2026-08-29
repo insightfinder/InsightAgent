@@ -422,21 +422,30 @@ type assetData struct {
 //	"JIRAKEY " → Jira object key, e.g. "IHS-23344"
 
 // parseIdentifier strips the InsightFinder identifier prefix from an instance name
-// and returns the raw value to use for an asset server lookup.
-// Returns ("", false) when no prefix is found.
-func parseIdentifier(instanceName string) (identifier string, ok bool) {
+// and returns the candidate values (nearest match first) to use for an asset
+// server lookup.
+// Returns (nil, false) when no prefix is found.
+func parseIdentifier(instanceName string) (candidates []string, ok bool) {
 	switch {
 	case strings.HasPrefix(instanceName, "MAC "):
 		// Instance names store MACs with dashes (e.g. "18-4B-0D-13-C3-70");
-		// the asset server expects colons ("18:4B:0D:13:C3:70").
+		// the asset server usually expects colons ("18:4B:0D:13:C3:70"), but
+		// some devices keep the dash format (e.g. "00-0e-d8-16-42-cc"), so
+		// try both.
 		mac := strings.TrimPrefix(instanceName, "MAC ")
-		return strings.ReplaceAll(mac, "-", ":"), true
+		colonMac := strings.ReplaceAll(mac, "-", ":")
+		dashMac := strings.ReplaceAll(mac, ":", "-")
+		candidates = []string{colonMac}
+		if dashMac != colonMac {
+			candidates = append(candidates, dashMac)
+		}
+		return candidates, true
 	case strings.HasPrefix(instanceName, "SERIAL "):
-		return strings.TrimPrefix(instanceName, "SERIAL "), true
+		return []string{strings.TrimPrefix(instanceName, "SERIAL ")}, true
 	case strings.HasPrefix(instanceName, "JIRAKEY "):
-		return strings.TrimPrefix(instanceName, "JIRAKEY "), true
+		return []string{strings.TrimPrefix(instanceName, "JIRAKEY ")}, true
 	}
-	return "", false
+	return nil, false
 }
 
 // identifierCandidates returns the ordered list of asset-server lookup identifiers
@@ -586,8 +595,8 @@ func resolveProjectRelations(
 // instance-set validation.
 func resolveInstanceRelations(instanceName, ip string, assets *assetData, maxDepth int, passthroughDevices []PassthroughDevice) []relationCandidate {
 	var candidates []string
-	if identifier, ok := parseIdentifier(instanceName); ok {
-		candidates = []string{identifier}
+	if idCandidates, ok := parseIdentifier(instanceName); ok {
+		candidates = idCandidates
 	} else {
 		candidates = identifierCandidates(instanceName, ip)
 	}
