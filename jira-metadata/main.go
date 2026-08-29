@@ -383,7 +383,8 @@ func (idx venueIndex) find(abbreviation string) *VenueResponse {
 // ── Instance name parsing ─────────────────────────────────────────────────────
 
 // parseIdentifier strips the InsightFinder identifier prefix from an instance name
-// and returns the raw value to use for an asset server lookup.
+// and returns the candidate values (nearest match first) to use for an asset
+// server lookup.
 //
 // Recognized prefixes (set by getmessages_zabbix.py):
 //
@@ -391,20 +392,28 @@ func (idx venueIndex) find(abbreviation string) *VenueResponse {
 //	"SERIAL "  → serial number, e.g. "ABC123SS"
 //	"JIRAKEY " → Jira object key, e.g. "IHS-23344"
 //
-// Returns ("", false) when no prefix is found.
-func parseIdentifier(instanceName string) (identifier string, ok bool) {
+// Returns (nil, false) when no prefix is found.
+func parseIdentifier(instanceName string) (candidates []string, ok bool) {
 	switch {
 	case strings.HasPrefix(instanceName, "MAC "):
 		// Zabbix agent stores MACs with dashes (e.g. "18-4B-0D-13-C3-70");
-		// the asset server expects colons ("18:4B:0D:13:C3:70").
+		// the asset server usually expects colons ("18:4B:0D:13:C3:70"), but
+		// some Jira assets keep the dash format (e.g. "00-0e-d8-16-42-cc"),
+		// so try both.
 		mac := strings.TrimPrefix(instanceName, "MAC ")
-		return strings.ReplaceAll(mac, "-", ":"), true
+		colonMac := strings.ReplaceAll(mac, "-", ":")
+		dashMac := strings.ReplaceAll(mac, ":", "-")
+		candidates = []string{colonMac}
+		if dashMac != colonMac {
+			candidates = append(candidates, dashMac)
+		}
+		return candidates, true
 	case strings.HasPrefix(instanceName, "SERIAL "):
-		return strings.TrimPrefix(instanceName, "SERIAL "), true
+		return []string{strings.TrimPrefix(instanceName, "SERIAL ")}, true
 	case strings.HasPrefix(instanceName, "JIRAKEY "):
-		return strings.TrimPrefix(instanceName, "JIRAKEY "), true
+		return []string{strings.TrimPrefix(instanceName, "JIRAKEY ")}, true
 	}
-	return "", false
+	return nil, false
 }
 
 // fetchInstanceIPs looks up the IP address of each instance name via InsightFinder's
@@ -607,8 +616,8 @@ func processProject(
 
 	for _, instanceName := range instances {
 		var candidates []string
-		if identifier, ok := parseIdentifier(instanceName); ok {
-			candidates = []string{identifier}
+		if idCandidates, ok := parseIdentifier(instanceName); ok {
+			candidates = idCandidates
 		} else {
 			noPrefix++
 			candidates = identifierCandidates(instanceName, ipByInstance[instanceName])
