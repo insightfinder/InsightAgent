@@ -1,0 +1,12 @@
+# Python 3.9+
+requests>=2.31.0
+python-dotenv>=1.0.0
+pyzabbix>=1.3.0
+
+# Imported directly (main.py, src/zabbix.py, src/insightfinder.py) and must be
+# 2.x: src/insightfinder.py passes Retry(backoff_jitter=...), which does not
+# exist in urllib3 1.26. requests alone permits 1.26, so this floor is load-bearing.
+urllib3>=2.0.0
+
+# Cambium only — also needs a one-time `playwright install chromium`
+playwright>=1.45
