@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """
-Look up each Zabbix host in the AccessParks device inventory.
+Match every Zabbix host against the AccessParks device inventory.
 
 Identifier priority per host: jira_device_key tag → zabbix_host_id → ip_address.
 
-Reads all conf.d/*.ini files to collect host_groups, connects to each Zabbix instance,
-then queries the inventory API for every unique host found — in parallel.
+Reads all conf.d/*.ini files to collect host_groups and connect to each Zabbix
+instance, then does exactly ONE bulk GET /devices/export call against the
+asset server and matches every host against it in memory — mirrors the
+jira-metadata agent's bulk-export pattern instead of one inventory API
+request per host.
+
+Can be run standalone (cron) or imported: getmessages_zabbix.py calls
+run_refresh() directly when devicelookup.json goes stale, so the lookup used
+for metric enrichment never depends on a separate cron job actually existing.
 
 Outputs (same directory as this script):
   devicelookup.json         — hosts found (zabbix_host_id → {host, identifier_used, device})
@@ -13,12 +20,12 @@ Outputs (same directory as this script):
 
 Safety guarantees:
   - Files are never overwritten if Zabbix returns no hosts (Zabbix down).
-  - Hosts that hit an API error are skipped — their existing entry is preserved.
-  - Files are never overwritten if every single lookup failed (inventory server down).
+  - Files are never overwritten if the bulk export fails or returns nothing
+    (inventory server down/empty).
   - Writes are atomic (temp file + rename) so a crash mid-write never corrupts the file.
 
 Usage:
-  python device_inventory_lookup.py [--workers N]   default: 20
+  python device_inventory_lookup.py
 """
 
 import argparse
@@ -27,10 +34,7 @@ import datetime
 import glob
 import json
 import logging
-import threading
 import time
-import urllib.parse
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import requests
@@ -38,67 +42,106 @@ from pyzabbix import ZabbixAPI
 
 requests.packages.urllib3.disable_warnings()
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 logger = logging.getLogger(__name__)
 
-INVENTORY_BASE_URL = "http://54.234.90.98"
+# Fallback defaults — normally overridden by device_inventory_api_key /
+# device_inventory_base_url in the [zabbix] section of conf.d/*.ini.
+INVENTORY_BASE_URL = ""
 INVENTORY_API_KEY = ""
+INVENTORY_TIMEOUT_SEC = 120
 
-# Shared session — connection pooling, keep-alive, reused across all threads
+DEVICE_LOOKUP_REFRESH_HOURS_DEFAULT = 24
+
+# Shared session — connection pooling, keep-alive
 _session = requests.Session()
-_session.headers.update({"Accept": "application/json", "X-API-Key": INVENTORY_API_KEY})
 _session.verify = False
 
 
-def lookup_device(identifier: str, by_zabbix_host_id: bool = False):
-    """GET /devices/{identifier}, or GET /devices/by-zabbix-host-id/{identifier} when
-    by_zabbix_host_id=True (strict zabbix_host_id match — avoids colliding with an
-    unrelated device whose own id/object_key happens to equal the same numeric string).
+def load_inventory_credentials(config_files):
+    """Read device_inventory_api_key/base_url/timeout_sec from the [zabbix] section
+    of the first config file that has them — the asset server is shared across all
+    Zabbix instances, so one set of credentials covers every conf.d/*.ini.
+    Falls back to the module-level constants (blank key) if none is configured."""
+    for config_file in config_files:
+        config_parser = configparser.ConfigParser(interpolation=None)
+        config_parser.read(config_file)
+        api_key = config_parser.get("zabbix", "device_inventory_api_key", fallback="")
+        if api_key:
+            base_url = config_parser.get("zabbix", "device_inventory_base_url", fallback=INVENTORY_BASE_URL)
+            timeout = config_parser.getint("zabbix", "device_inventory_timeout_sec", fallback=INVENTORY_TIMEOUT_SEC)
+            return api_key, base_url, timeout
+    logger.warning("device_inventory_api_key not set in any conf.d/*.ini — bulk export will fail auth")
+    return INVENTORY_API_KEY, INVENTORY_BASE_URL, INVENTORY_TIMEOUT_SEC
+
+
+def device_lookup_is_stale(path, refresh_hours=DEVICE_LOOKUP_REFRESH_HOURS_DEFAULT):
+    """Return True if the devicelookup.json at `path` is missing or older than refresh_hours."""
+    p = Path(path)
+    if not p.exists():
+        return True
+    age_hours = (time.time() - p.stat().st_mtime) / 3600
+    return age_hours >= refresh_hours
+
+
+def export_devices(base_url: str, api_key: str, timeout: int = INVENTORY_TIMEOUT_SEC):
+    """Bulk-fetch every device in one call via GET /devices/export (same pattern as
+    the jira-metadata agent's exportDevices) instead of one request per host.
     Returns:
-      list of dicts  — success (empty list = 404 / not found)
+      list of dicts  — success (may be empty)
       None           — network/server error (caller should treat as API down)
     """
-    quoted = urllib.parse.quote(str(identifier), safe="")
-    path = "devices/by-zabbix-host-id/{}".format(quoted) if by_zabbix_host_id else "devices/{}".format(quoted)
-    url = "{}/{}".format(INVENTORY_BASE_URL, path)
+    url = "{}/devices/export".format(base_url.rstrip("/"))
+    headers = {"Accept": "application/json", "X-API-Key": api_key}
     try:
-        resp = _session.get(url, timeout=10)
-        if resp.status_code == 404:
-            return []
+        resp = _session.get(url, headers=headers, timeout=timeout)
         resp.raise_for_status()
         data = resp.json()
-        return [data] if isinstance(data, dict) else data
-    except requests.HTTPError as e:
-        logger.warning("HTTP %d looking up %r", e.response.status_code, identifier)
-        return None
+        return data if isinstance(data, list) else []
     except requests.RequestException as e:
-        logger.warning("Request failed for %r: %s", identifier, e)
+        logger.warning("Bulk device export failed: %s", e)
         return None
 
 
-def find_in_inventory(host: dict):
-    """Try identifiers in priority order: jira_device_key → zabbix_host_id → ip.
+def build_device_index(devices: list):
+    """Build in-memory lookup indexes over the bulk-exported devices, keyed by
+    zabbix_host_id, jira object_key, and ip_address (case-insensitive) — mirrors
+    jira-metadata/main.go's deviceIndex, built once per run instead of one HTTP
+    request per identifier."""
+    by_zabbix_id, by_object_key, by_ip = {}, {}, {}
+    for d in devices:
+        zid = (d.get("zabbix_host_id") or "").strip().lower()
+        if zid:
+            by_zabbix_id[zid] = d
+        okey = (d.get("object_key") or "").strip().lower()
+        if okey:
+            by_object_key[okey] = d
+        ip = (d.get("ip_address") or "").strip().lower()
+        if ip:
+            by_ip[ip] = d
+    return {"zabbix_id": by_zabbix_id, "object_key": by_object_key, "ip": by_ip}
+
+
+def find_in_inventory(host: dict, index: dict):
+    """Try identifiers in priority order against the local index: jira_device_key
+    → zabbix_host_id → ip. Purely in-memory — no network calls.
 
     jira_device_key is a Zabbix host tag whose value is the inventory object_key (e.g. IHS-23344).
 
-    Returns:
-      (ident, device_dict, False)  — matched
-      (None,  None,        False)  — not found (all returned 404)
-      (None,  None,        True)   — API/network error; existing entry should be preserved
+    Returns (ident, device_dict) on match, else (None, None).
     """
-    for ident, strict_zabbix_id in (
-        (host.get("jira_key"), False),
-        (host["hostid"], True),
-        (host["ip"], False),
-    ):
-        if not ident:
-            continue
-        result = lookup_device(ident, by_zabbix_host_id=strict_zabbix_id)
-        if result is None:
-            return None, None, True   # server error — stop, preserve existing data
-        if result:
-            return ident, result[0], False
-    return None, None, False          # all identifiers tried, all returned 404
+    jira_key = (host.get("jira_key") or "").strip().lower()
+    if jira_key and jira_key in index["object_key"]:
+        return host["jira_key"], index["object_key"][jira_key]
+
+    hostid = str(host["hostid"]).strip().lower()
+    if hostid in index["zabbix_id"]:
+        return host["hostid"], index["zabbix_id"][hostid]
+
+    ip = (host.get("ip") or "").strip().lower()
+    if ip and ip in index["ip"]:
+        return host["ip"], index["ip"][ip]
+
+    return None, None
 
 
 def atomic_write_json(path: Path, data: dict) -> None:
@@ -183,24 +226,26 @@ def collect_hosts_from_config(config_file: str) -> list:
     return hosts
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Sync Zabbix hosts against the AccessParks device inventory.")
-    parser.add_argument("--workers", type=int, default=20,
-                        help="Number of parallel inventory API workers (default: 20)")
-    args = parser.parse_args()
+def run_refresh(config_files, api_key=None, base_url=None, timeout=None, script_dir=None):
+    """Refresh devicelookup.json / devicelookupnotfound.json with one bulk
+    GET /devices/export call, matched locally against every Zabbix host found
+    in config_files. Safe to call from another process (e.g. getmessages_zabbix.py)
+    on a staleness check — never touches the files on a failed/empty export.
 
-    script_dir = Path(__file__).parent
-    conf_d = script_dir / "conf.d"
-    config_files = sorted(glob.glob(str(conf_d / "*.ini")))
-
-    if not config_files:
-        logger.error("No *.ini files found in %s", conf_d)
-        return
+    Returns True if the files were updated, False otherwise.
+    """
+    script_dir = script_dir or Path(__file__).parent
+    if api_key is None or base_url is None or timeout is None:
+        cred_key, cred_url, cred_timeout = load_inventory_credentials(config_files)
+        api_key = api_key if api_key is not None else cred_key
+        base_url = base_url if base_url is not None else cred_url
+        timeout = timeout if timeout is not None else cred_timeout
 
     matched_path = script_dir / "devicelookup.json"
     not_found_path = script_dir / "devicelookupnotfound.json"
 
-    # Load existing data — baseline; we update entries in-place, never start from scratch
+    # Load existing data — baseline; matches/not-founds are overwritten wholesale
+    # on success, but kept as-is if any safety gate below trips.
     matched = {}
     not_found = {}
     for path, target in ((matched_path, matched), (not_found_path, not_found)):
@@ -219,61 +264,34 @@ def main():
     # Safety gate 1: Zabbix returned nothing — server may be down, don't touch files
     if not all_hosts:
         logger.warning("No hosts collected from Zabbix — JSON files not updated")
-        return
+        return False
+
+    logger.info("Bulk-exporting device inventory from %s ...", base_url)
+    devices = export_devices(base_url, api_key, timeout)
+
+    # Safety gate 2: export failed (network/auth/server error) — keep existing data
+    if devices is None:
+        logger.warning(
+            "Device export API unreachable — JSON files not updated (%d hosts pending)", len(all_hosts))
+        return False
+
+    # Safety gate 3: export succeeded but returned nothing — asset server likely empty/down
+    if not devices:
+        logger.warning("Device export returned 0 devices — JSON files not updated")
+        return False
 
     total = len(all_hosts)
-    logger.info("Total unique hosts to process: %d  (workers: %d)", total, args.workers)
+    logger.info("Fetched %d devices; matching against %d hosts", len(devices), total)
+    index = build_device_index(devices)
 
-    # Thread-safe counters and result accumulator
-    lock = threading.Lock()
-    error_count = 0
-    update_count = 0
-    completed = 0
-    results = []   # list of (hostid, host, ident_used, device, had_error)
-
-    def lookup_one(item):
-        hostid, host = item
-        ident_used, device, had_error = find_in_inventory(host)
-        return hostid, host, ident_used, device, had_error
-
-    with ThreadPoolExecutor(max_workers=args.workers) as executor:
-        futures = {executor.submit(lookup_one, item): item[0]
-                   for item in all_hosts.items()}
-
-        for future in as_completed(futures):
-            hostid, host, ident_used, device, had_error = future.result()
-
-            with lock:
-                completed += 1
-                if completed % 500 == 0 or completed == total:
-                    logger.info("Progress: %d/%d (%.0f%%)", completed, total, completed / total * 100)
-
-                if had_error:
-                    error_count += 1
-                    logger.warning("API error — preserved existing entry for hostid=%s", hostid)
-                    continue
-
-                update_count += 1
-                if device:
-                    matched[hostid] = {"host": host, "identifier_used": ident_used, "device": device}
-                    not_found.pop(hostid, None)
-                else:
-                    not_found[hostid] = {"host": host}
-                    matched.pop(hostid, None)
-
-    # Safety gate 2: every single lookup failed — inventory server is likely down
-    if update_count == 0:
-        logger.error(
-            "All %d inventory lookups returned API errors — inventory server may be down. "
-            "JSON files NOT overwritten to preserve existing data.", error_count
-        )
-        return
-
-    if error_count > 0:
-        logger.warning(
-            "%d/%d hosts had API errors and were skipped — their existing entries are preserved",
-            error_count, total
-        )
+    for hostid, host in all_hosts.items():
+        ident_used, device = find_in_inventory(host, index)
+        if device:
+            matched[hostid] = {"host": host, "identifier_used": ident_used, "device": device}
+            not_found.pop(hostid, None)
+        else:
+            not_found[hostid] = {"host": host}
+            matched.pop(hostid, None)
 
     # Atomic writes — temp file + rename so a crash never leaves a corrupt file
     matched["lastmodifiedtimedata"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -282,9 +300,27 @@ def main():
 
     matched_count = sum(1 for k in matched if k != "lastmodifiedtimedata")
     logger.info(
-        "Done. Matched: %d | Not found: %d | Errors (skipped): %d | Total hosts: %d",
-        matched_count, len(not_found), error_count, total
+        "Done. Matched: %d | Not found: %d | Total hosts: %d",
+        matched_count, len(not_found), total
     )
+    return True
+
+
+def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
+                         datefmt="%Y-%m-%d %H:%M:%S")
+    parser = argparse.ArgumentParser(description="Sync Zabbix hosts against the AccessParks device inventory.")
+    parser.parse_args()
+
+    script_dir = Path(__file__).parent
+    conf_d = script_dir / "conf.d"
+    config_files = sorted(glob.glob(str(conf_d / "*.ini")))
+
+    if not config_files:
+        logger.error("No *.ini files found in %s", conf_d)
+        return
+
+    run_refresh(config_files, script_dir=script_dir)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,8 @@ import regex
 import requests
 from pyzabbix import ZabbixAPI
 
+import device_inventory_lookup
+
 # declare a few vars
 TRUE = regex.compile(r"T(RUE)?", regex.IGNORECASE)
 FALSE = regex.compile(r"F(ALSE)?", regex.IGNORECASE)
@@ -1951,10 +1953,23 @@ def main():
         cli_data_block += '\n\t{}: {}'.format(kk, kv)
     main_logger.info(cli_data_block)
 
+    # Refresh devicelookup.json if it's stale, BEFORE loading it and forking the
+    # pool. This is the only place the lookup gets refreshed — there is no
+    # separate cron job to depend on. Failure here is non-fatal: we just fall
+    # back to whatever is already on disk (or an empty lookup, on first run).
+    device_lookup_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'devicelookup.json')
+    if device_inventory_lookup.device_lookup_is_stale(device_lookup_path):
+        main_logger.info('devicelookup.json missing or older than %dh — refreshing from asset inventory',
+                          device_inventory_lookup.DEVICE_LOOKUP_REFRESH_HOURS_DEFAULT)
+        try:
+            device_inventory_lookup.run_refresh(
+                config_files, script_dir=Path(os.path.dirname(os.path.abspath(__file__))))
+        except Exception as _e:
+            main_logger.warning('Device lookup refresh failed, using existing file: %s', _e)
+
     # Load device lookup into a module-level global BEFORE forking the pool.
     # Workers inherit it via fork() copy-on-write — no pickling, no per-task serialization cost.
     global _DEVICE_LOOKUP
-    device_lookup_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'devicelookup.json')
     if os.path.exists(device_lookup_path):
         try:
             with open(device_lookup_path) as _f:
