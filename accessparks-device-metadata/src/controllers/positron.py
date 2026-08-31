@@ -93,7 +93,7 @@ class PositronController:
                     controller=self.name,
                     name=_endpoint_own_name(rec),
                     ip="",  # endpoints report no IP of their own
-                    mac=(rec.get("macAddress") or "").lower(),
+                    mac=(rec.get("macAddress") or "").upper(),
                     serial=rec.get("serialNumber") or "",
                 )
             )

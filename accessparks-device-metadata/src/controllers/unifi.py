@@ -83,7 +83,7 @@ class UnifiController:
                         controller=self.name,
                         name=d.get("name") or "",
                         ip=d.get("ip") or "",
-                        mac=(d.get("mac") or "").lower(),
+                        mac=(d.get("mac") or "").upper(),
                         serial=d.get("serial") or "",
                         device_id=d.get("device_id") or "",
                     )

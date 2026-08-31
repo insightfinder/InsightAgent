@@ -94,7 +94,7 @@ class MimosaController:
                     controller=self.name,
                     name=d.get("friendlyName") or "",
                     ip=d.get("ipAddress") or "",
-                    mac=(d.get("macAddress") or "").lower(),
+                    mac=(d.get("macAddress") or "").upper(),
                     serial=d.get("serialNumber") or "",
                     device_id=str(d.get("id") or ""),
                 )

@@ -110,7 +110,7 @@ class RuckusController:
                     controller=self.name,
                     name=ap.get("deviceName") or "",
                     ip=ap.get("ip") or "",
-                    mac=(ap.get("apMac") or "").lower(),
+                    mac=(ap.get("apMac") or "").upper(),
                     serial=ap.get("serial") or "",
                 )
             )

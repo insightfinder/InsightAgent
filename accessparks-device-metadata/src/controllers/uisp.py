@@ -51,7 +51,7 @@ class UispController:
                     controller=self.name,
                     name=identification.get("name") or "",
                     ip=ip,
-                    mac=(identification.get("mac") or "").lower(),
+                    mac=(identification.get("mac") or "").upper(),
                     serial=identification.get("serialNumber") or "",
                     device_id=str(identification.get("id") or ""),
                 )

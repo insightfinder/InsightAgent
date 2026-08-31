@@ -183,7 +183,7 @@ class NetExperienceController:
                     controller=self.name,
                     name=eq.get("name") or "",
                     ip=ip,
-                    mac=((eq.get("baseMacAddress") or {}).get("addressAsString") or "").lower(),
+                    mac=((eq.get("baseMacAddress") or {}).get("addressAsString") or "").upper(),
                     serial=eq.get("serial") or "",
                     device_id=str(eq.get("id") or ""),
                 )

@@ -81,7 +81,7 @@ class JiraAssetClient:
                     JiraMatch(
                         object_key=result.get("object_key") or "",
                         ip=result.get("ip_address") or "",
-                        mac=result.get("mac_address") or "",
+                        mac=(result.get("mac_address") or "").upper(),
                         zabbix_host_id=result.get("zabbix_host_id") or "",
                     ),
                     False,

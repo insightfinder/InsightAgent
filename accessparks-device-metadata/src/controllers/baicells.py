@@ -225,7 +225,7 @@ class BaicellsController:
                     controller=self.name,
                     name=d.get("host_name") or "",
                     ip=ip_by_serial.get(serial, ""),
-                    mac=(d.get("mac_address") or "").lower(),
+                    mac=(d.get("mac_address") or "").upper(),
                     serial=serial,
                     device_id=serial,
                 )

@@ -163,9 +163,9 @@ class CambiumController:
                             controller=self.name,
                             name=cfg.get("name") or d.get("name") or "",
                             ip=net.get("wan") or net.get("ip") or "",
-                            mac=(d.get("mac") or "").lower(),
+                            mac=(d.get("mac") or "").upper(),
                             serial=d.get("sn") or "",
-                            device_id=(d.get("mac") or "").lower(),
+                            device_id=(d.get("mac") or "").upper(),
                         )
                     )
         logger.info("Cambium: collected %d device(s) total", len(devices))
