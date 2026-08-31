@@ -105,6 +105,44 @@ the summary is logged instead of printed to stdout in that mode.
 5 * * * * cd /path/to/accessparks-device-metadata && .venv/bin/python main.py >> agent.log 2>&1
 ```
 
+### Example EC2 deployment
+
+Deployed at `/home/ec2-user/accessparks-device-metadata/` with the venv at
+`venv/` (not `.venv/`). This box is **not** the Zabbix-Agent-Server box
+whitelisted for the Telrad BreezeVIEW CLI, so **both** tunnels — Zabbix
+(which also carries Positron) and Telrad — must run here.
+
+Both tunnels are started manually, once, as long-lived background
+processes (not managed by cron):
+
+```bash
+cd /home/ec2-user/accessparks-device-metadata
+nohup ./scripts/zabbix-tunnel.sh >> tunnel-zabbix.log 2>&1 &
+disown
+nohup ./scripts/telrad-breezeview-cli-tunnel.sh >> tunnel-telrad.log 2>&1 &
+disown
+```
+
+`nohup` keeps them alive after the SSH session ends; `disown` detaches them
+from the shell's job table. Verify both survived a reconnect with:
+
+```bash
+pgrep -f zabbix-tunnel.sh
+pgrep -f telrad-breezeview-cli-tunnel.sh
+```
+
+Only the agent itself is on cron (`crontab -e -u ec2-user`):
+
+```cron
+0 * * * * cd /home/ec2-user/accessparks-device-metadata && /home/ec2-user/accessparks-device-metadata/venv/bin/python main.py >> /home/ec2-user/accessparks-device-metadata/agent.log 2>&1
+```
+
+Tradeoff: since the tunnels aren't cron-supervised, a dropped SSH session,
+reboot, or OOM kill won't self-heal — check `agent.log` for connection
+failures and relaunch the affected tunnel by hand. For self-healing,
+migrate the tunnels to systemd services with `Restart=always` instead of
+raw `nohup`.
+
 ## Important notes
 
 - **SSH tunnel required before any run.** `scripts/zabbix-tunnel.sh` reads
