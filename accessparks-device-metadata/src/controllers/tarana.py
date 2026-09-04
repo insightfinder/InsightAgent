@@ -13,10 +13,10 @@ GET /api/nqs/v1/operators/{operatorId}/regions, where operatorId is the
 decoded here without signature verification since it's our own just-issued
 token, only for reading a claim). Verified live: operatorId 27 ->
 region 33 ("AccessParks") -> devices/search with ids:[33] returns real
-device rows. The device-search response DOES include macAddress (contrary
-to the tarana.go Device struct's field list) — kept as "" here anyway since
-that struct is the only documented contract and mapping an unverified field
-risks silently wrong data more than an empty mac does.
+device rows. The device-search response includes macAddress (contrary to the
+tarana.go Device struct's field list) — already colon-separated uppercase,
+verified live against the deployed regions, and mapped here so Tarana
+devices can be matched to Jira/Zabbix by MAC like every other vendor's.
 """
 
 from __future__ import annotations
@@ -132,7 +132,7 @@ class TaranaController:
                     controller=self.name,
                     name=d.get("hostName") or "",
                     ip=d.get("ip") or "",
-                    mac="",
+                    mac=(d.get("macAddress") or "").upper(),
                     serial=d.get("serialNumber") or "",
                     device_id=d.get("serialNumber") or "",
                 )

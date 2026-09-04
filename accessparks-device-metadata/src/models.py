@@ -23,21 +23,26 @@ class ControllerDevice:
 @dataclasses.dataclass
 class JiraMatch:
     object_key: str
+    device_name: str = ""
     ip: str = ""
     mac: str = ""
     zabbix_host_id: str = ""
+    # Human-readable identifier this device was matched on ("MAC address",
+    # "Device name", ...) — shipped to InsightFinder as jira.match_method so a
+    # weak (name-based) match is distinguishable there from a strong one.
+    match_method: str = ""
 
 
 @dataclasses.dataclass
 class ZabbixMatch:
     hostid: str
-    matched_by: str = ""
+    device_name: str = ""
+    match_method: str = ""
 
 
 @dataclasses.dataclass
 class ReconciledDevice:
     controller_device: ControllerDevice
     jira: JiraMatch | None
-    jira_error: bool
     zabbix: ZabbixMatch | None
     zabbix_error: bool = False

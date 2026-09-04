@@ -38,6 +38,24 @@ logger = logging.getLogger(__name__)
 
 JIRA_KEY_TAG = "jira_device_key"
 
+# Values reported as zabbix.match_method, ordered by how much we trust them.
+# Each names the record field whose value was used as the lookup key. Note
+# the fallbacks key off the *controller*, not Jira: only the first two tiers
+# use anything Jira supplied.
+#   jira.id             -> matched against the Zabbix host tag jira_device_key
+#   jira.zabbix_host_id -> that hostid, if it still exists in Zabbix
+#   controller.device_name -> Zabbix host/visible name
+#   controller.ip          -> Zabbix primary-interface IP
+MATCH_JIRA_KEY = "jira.id"
+MATCH_JIRA_HOST_ID = "jira.zabbix_host_id"
+MATCH_NAME = "controller.device_name"
+MATCH_IP = "controller.ip"
+
+
+def _host_name(host: dict) -> str:
+    """Zabbix's visible name, falling back to the technical host name."""
+    return (host.get("name") or host.get("host") or "").strip()
+
 
 class ZabbixIndex:
     def __init__(self, zapi: ZabbixAPI) -> None:
@@ -84,7 +102,7 @@ class ZabbixIndex:
 
     def _lookup_by_jira_key(self, jira_object_key: str) -> tuple[dict | None, bool]:
         """Returns (host, had_error) — same tri-state contract as
-        JiraAssetClient.find_device: an error is never returned as a plain
+        the Jira/Zabbix bulk fetches: an error is never returned as a plain
         miss, so a transient blip on this per-device RPC can't be misread by
         resolve() as "confirmed absent from Zabbix"."""
         try:
@@ -124,11 +142,22 @@ class ZabbixIndex:
             if had_error:
                 return None, True
             if host:
-                return ZabbixMatch(hostid=host["hostid"], matched_by="jira_device_key"), False
+                return (
+                    ZabbixMatch(
+                        hostid=host["hostid"],
+                        device_name=_host_name(host),
+                        match_method=MATCH_JIRA_KEY,
+                    ),
+                    False,
+                )
 
         if jira_zabbix_host_id and jira_zabbix_host_id in self.by_hostid:
             return (
-                ZabbixMatch(hostid=jira_zabbix_host_id, matched_by="jira_zabbix_host_id"),
+                ZabbixMatch(
+                    hostid=jira_zabbix_host_id,
+                    device_name=_host_name(self.by_hostid[jira_zabbix_host_id]),
+                    match_method=MATCH_JIRA_HOST_ID,
+                ),
                 False,
             )
 
@@ -136,12 +165,22 @@ class ZabbixIndex:
         if name_key:
             host = self.by_name.get(name_key)
             if host:
-                return ZabbixMatch(hostid=host["hostid"], matched_by="name"), False
+                return (
+                    ZabbixMatch(
+                        hostid=host["hostid"], device_name=_host_name(host), match_method=MATCH_NAME
+                    ),
+                    False,
+                )
 
         if device_ip:
             host = self.by_ip.get(device_ip)
             if host:
-                return ZabbixMatch(hostid=host["hostid"], matched_by="ip"), False
+                return (
+                    ZabbixMatch(
+                        hostid=host["hostid"], device_name=_host_name(host), match_method=MATCH_IP
+                    ),
+                    False,
+                )
 
         return None, False
 
@@ -194,6 +233,16 @@ def build_index(
         )["result"]
     except ZABBIX_ERRORS as e:
         raise RuntimeError(f"Zabbix host.get failed: {e}") from e
+
+    # Same hazard as an empty Jira export (see jira_assets.build_index): this
+    # instance has ~31k hosts, so an empty result is a broken query or a
+    # permissions change, not a genuinely empty Zabbix — and indexing it would
+    # report every device as missing from Zabbix.
+    if not hosts:
+        raise RuntimeError(
+            "Zabbix host.get returned 0 hosts — every device would otherwise be reported as "
+            "missing from Zabbix"
+        )
 
     index = ZabbixIndex(zapi)
     for host in hosts:
