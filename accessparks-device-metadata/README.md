@@ -12,11 +12,59 @@ found (or not) in each place:
 
 ```json
 {
-  "controller": {"name": "UniFi", "device_name": "LRF-Clubhouse-AP", "ip": "10.194.153.12", "mac": "0c:ea:14:4f:61:e1"},
-  "jira":       {"id": "IHS-68691", "ip": "10.194.153.12", "mac": "0C:EA:14:4F:61:E1"},
-  "zabbix":     {"id": "44598"}
+  "controller": {"name": "UniFi", "device_name": "LRF-Clubhouse-AP", "ip": "10.194.153.12", "mac": "0C:EA:14:4F:61:E1", "serial": "F4E2C6A1B3D9"},
+  "jira":       {"id": "IHS-68691", "device_name": "LRF-Clubhouse-AP", "ip": "10.194.153.12", "mac": "0C:EA:14:4F:61:E1", "zabbix_host_id": "44598", "match_method": "controller.mac"},
+  "zabbix":     {"id": "44598", "device_name": "LRF-Clubhouse-AP", "match_method": "jira.id"}
 }
 ```
+
+Every key is always present. A device that isn't in Jira or Zabbix — or one
+whose controller doesn't report an IP or MAC — gets `""` rather than a
+dropped key, so "missing from Jira" stays queryable and alertable in
+InsightFinder instead of vanishing from the record.
+
+`match_method` names **the field of this record whose value was used as the
+lookup key**, so you can see exactly what was matched on instead of
+inferring it. Identifiers are tried strongest-first and the first hit wins:
+
+| `jira.match_method` | Looked up | Matched against |
+| --- | --- | --- |
+| `controller.mac` | the controller's MAC | Jira `mac_address` |
+| `controller.serial` | the controller's serial | Jira `serial_number` |
+| `controller.device_name` | the controller's device name | Jira `name` |
+
+| `zabbix.match_method` | Looked up | Matched against |
+| --- | --- | --- |
+| `jira.id` | the Jira device key, e.g. `IHS-68691` | the Zabbix host tag `jira_device_key` |
+| `jira.zabbix_host_id` | the hostid Jira records | that Zabbix `hostid`, if it still exists |
+| `controller.device_name` | the controller's device name | Zabbix host / visible name |
+| `controller.ip` | the controller's IP | Zabbix primary-interface IP |
+
+Note the two Zabbix fallbacks key off the **controller**, not Jira — only
+the first two tiers use anything Jira supplied. Every field a `match_method`
+can name is present in the record, which is why `controller.serial` and
+`jira.zabbix_host_id` are emitted even though nothing else reads them.
+
+Jira matching is whitespace-insensitive: a Jira label is tried exactly
+(case-insensitively) first, then with all whitespace stripped, so the
+controller's `DKOA-DC723-RN` matches Jira's `DKOA-DC 723-RN` and a
+controller name with a stray leading space still matches. See
+`src/jira_assets.py` for why that requires matching locally against
+`GET /devices/export` rather than per-device registry lookups.
+
+Whitespace is ignored when *finding* and *comparing* devices, not when
+reporting them: every value in the record is shipped exactly as its source
+holds it, whitespace included, so the record stays a faithful picture of
+what each system actually contains. InsightFinder's ingestion rules
+constrain the **instance name**, not the log payload — that's handled by
+`sanitize_instance_name` (no space, `,`, `_`, `@`, `#`, `:`), which is the
+only place a value is rewritten to satisfy them.
+
+The `ip≠`/`mac≠` flags likewise compare whitespace-insensitively, so a
+device matched despite stray spacing isn't then reported as disagreeing with
+itself — Jira holds MACs recorded as `" 48:A9:8A:9B:EA:C9"` and
+`"48:A9:8A:B6: E7:8A"`, which are the same addresses their controllers
+report, not different ones.
 
 This is a cron job, not a daemon — one pass per invocation, no internal loop.
 
@@ -86,11 +134,12 @@ python main.py --limit 10                        # cap devices per controller (q
 `--table` output, e.g.:
 
 ```
-CONTROLLER  DEVICE            CTRL IP        CTRL MAC           JIRA KEY   JIRA IP        JIRA MAC           ZBX ID  STATUS
-UniFi       LRF-Clubhouse-AP  10.194.153.12  0c:ea:14:4f:61:e1  IHS-68691  10.194.153.12  0C:EA:14:4F:61:E1  44598   ok
-UniFi       U6+               10.194.192.20  0c:ea:14:e3:d5:05  -          -              -                  -       no-jira, no-zabbix
+CONTROLLER  DEVICE             CTRL IP        CTRL MAC           JIRA KEY   JIRA NAME          JIRA IP        JIRA MAC           JIRA VIA       ZBX ID  ZBX NAME           ZBX VIA          STATUS
+UniFi       LRF-Clubhouse-AP   10.194.153.12  0C:EA:14:4F:61:E1  IHS-68691  LRF-Clubhouse-AP   10.194.153.12  0C:EA:14:4F:61:E1  MAC address    44598   LRF-Clubhouse-AP   Jira device key  ok
+Tarana      DKOA-DC723-RN      172.27.68.142  04:F1:7D:06:11:34  IHS-67507  DKOA-DC 723-RN     10.195.96.129 ≠                   Device name    43171   DKOA-DC 723-RN     Jira device key  ip≠
+UniFi       U6+                10.194.192.20  0C:EA:14:E3:D5:05  -          -                  -              -                  -              -       -                  -                no-jira, no-zabbix
 
-33 devices | jira: 19 matched, 14 missing | zabbix: 19 matched, 14 missing | ip mismatch: 1 | mac mismatch: 0
+8410 devices | jira: 7288 matched, 1122 missing | zabbix: 7697 matched, 713 missing | ip mismatch: 449 | mac mismatch: 864
 ```
 
 The summary line prints on every run — it's the actual deliverable. With
@@ -151,10 +200,20 @@ raw `nohup`.
   and Positron over the same connection (`POSITRON_TUNNEL_*`) — no separate
   script needed for Positron.
 - **A partial picture is never silently published as "device is missing."**
-  If every controller returns zero devices, the whole run aborts. A Zabbix
-  login/`host.get` failure aborts the run. A device whose Jira lookup
-  *errors* (as opposed to a confirmed 404) is excluded from the batch and
-  counted separately — never reported as missing.
+  If every controller returns zero devices, the whole run aborts. So does a
+  Zabbix login/`host.get` failure, or a failed Jira Assets
+  `GET /devices/export` — a network problem is never shipped to
+  InsightFinder as a fleet-wide Jira or Zabbix gap. A device whose live
+  Zabbix tag lookup errors is reported as unresolved and counted separately,
+  never as missing.
+- **An ambiguous identifier is refused, not guessed.** Jira has MACs and
+  serials that appear on more than one device (placeholders like `-` and
+  `n/a`, but also real duplicates left behind by device replacements). Such
+  a value can't identify either device, so it's disabled as a match key and
+  matching falls through to the next identifier — which is how
+  `LKLV-Cabin11-GN` now matches its own asset instead of the `-GAM` sharing
+  its MAC. The run logs how many devices hit one, so the Jira data can be
+  cleaned up.
 - **UniFi** — the Site Manager API key must be a console-owner key; a
   restricted/invited key gets `403 insufficient permissions` on the Cloud
   Connector proxy paths.
@@ -164,14 +223,16 @@ raw `nohup`.
   login degrades to "skipped" in the run summary, never an aborted run.
 - **Telrad** — implements **CPEs only**, over SSH to the BreezeVIEW CLI
   (port 9383 — a different service from the REST NBI's port 9382 on the same
-  host); requires `sshpass`. Only `online` CPEs appear in a snapshot; neither
-  Telrad CPEs nor Tarana devices expose a MAC address.
+  host); requires `sshpass`. Only `online` CPEs appear in a snapshot, and
+  Telrad CPEs do not expose a MAC address.
 - **Baicells** — rate-limited to 20 requests/min account-wide; IP requires a
   per-device call cached to `.cache/baicells_ips.json` and capped per run by
   `BAICELLS_ENRICH_BUDGET_SECONDS` — a large fleet fills in IPs over several
   runs, so `ip=""` on a given run is expected, not an error.
 - **Tarana** — `TARANA_REGION_IDS` is pinned to `33,1203,1202`; leaving it
-  blank falls back to runtime discovery, which is known to miss regions.
+  blank falls back to runtime discovery, which is known to miss regions. The
+  device-search response carries `macAddress` even though `tarana-agent`'s
+  Go `Device` struct omits it, so Tarana devices do reconcile by MAC.
 - **NetExperience** — `NETEXPERIENCE_BASE_URL` is the tenant API host, *not*
   `www.netexperience.com`.
 - **Positron** — reached through the same SSH tunnel as Zabbix. Lists two
@@ -204,7 +265,7 @@ failing the run.
 | UniFi | `/v1/sites` (traversal only) → `/v1/connector/consoles/{hostId}/proxy/network/api/s/{slug}/stat/device` | `name` | `ip` | `mac` | `serial` |
 | UISP | `/nms/api/v2.1/devices` | `identification.name` | `ipAddress` (strip `/cidr`) | `identification.mac` | `identification.serialNumber` |
 | Mimosa | `/{network_id}/devices/?pageNumber&pageSize` | `friendlyName` | `ipAddress` | `macAddress` | `serialNumber` |
-| Tarana | `/api/nqs/v1/regions/devices/search` | `hostName` | `ip` | — | `serialNumber` |
+| Tarana | `/api/nqs/v1/regions/devices/search` | `hostName` | `ip` | `macAddress` | `serialNumber` |
 | Baicells | `/device/group` → `/device/query` per group → `/cpe/infos/{serial}` for ip | `host_name` | `ipAddress` (per-device call) | `mac_address` | `serial_number` |
 | NetExperience | `/portal/cmap/customer/forSp` → `/portal/equipment/forCustomer` → `/portal/status/forEquipment` for ip | `name` | `details.reportedIpV4Addr` (3rd call) | `baseMacAddress.addressAsString` | `serial` |
 | Cambium | `{base}/tree/devices` | `cfg.name` → `name` | `net.wan` → `net.ip` | `mac` | `sn` |

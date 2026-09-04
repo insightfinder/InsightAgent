@@ -8,7 +8,7 @@ import logging
 import re
 from collections import Counter
 
-from jira_assets import JiraAssetClient
+from jira_assets import JiraAssetIndex
 from models import ControllerDevice
 from models import ReconciledDevice
 from zabbix import ZabbixIndex
@@ -16,15 +16,14 @@ from zabbix import ZabbixIndex
 logger = logging.getLogger(__name__)
 
 
-def reconcile_device(device: ControllerDevice, jira_client: JiraAssetClient, zabbix_index: ZabbixIndex | None) -> ReconciledDevice:
-    jira_match, jira_error = jira_client.find_device(mac=device.mac, serial=device.serial, name=device.name)
+def reconcile_device(
+    device: ControllerDevice, jira_index: JiraAssetIndex, zabbix_index: ZabbixIndex | None
+) -> ReconciledDevice:
+    jira_match = jira_index.find_device(mac=device.mac, serial=device.serial, name=device.name)
 
     zabbix_match = None
     zabbix_error = False
-    # A Jira-lookup error makes the caller discard this record entirely, so
-    # skip the Zabbix RPC (which includes a live tag lookup) rather than
-    # spending it on a result nobody will use.
-    if zabbix_index is not None and not jira_error:
+    if zabbix_index is not None:
         zabbix_match, zabbix_error = zabbix_index.resolve(
             jira_object_key=jira_match.object_key if jira_match else "",
             jira_zabbix_host_id=jira_match.zabbix_host_id if jira_match else "",
@@ -35,11 +34,12 @@ def reconcile_device(device: ControllerDevice, jira_client: JiraAssetClient, zab
     return ReconciledDevice(
         controller_device=device,
         jira=jira_match,
-        jira_error=jira_error,
         zabbix=zabbix_match,
         zabbix_error=zabbix_error,
     )
 
+
+_WHITESPACE = re.compile(r"\s+")
 
 # InsightFinder instance-name rule: no space, ",", "_", "@", "#", ":".
 _SANITIZE_MAP = str.maketrans({" ": "-", ",": "-", "@": "-", "#": "-", "_": ".", ":": "-"})
@@ -90,7 +90,60 @@ def build_instance_tags(devices: list[ControllerDevice]) -> list[str]:
     return tags
 
 
+def _strip_whitespace(value: str) -> str:
+    """Every whitespace character removed. Used only to compare a controller
+    value against a Jira one, never to rewrite what gets shipped."""
+    return _WHITESPACE.sub("", value)
+
+
+def ip_mismatch(reconciled: ReconciledDevice) -> bool:
+    """True when the controller and Jira both report an IP and they differ.
+
+    Whitespace-insensitive, for the same reason matching is (see
+    jira_assets.JiraAssetIndex): stray spacing in a Jira field is a
+    formatting defect, not a different address, and a device matched despite
+    that whitespace must not then be reported as disagreeing with itself.
+    """
+    jira = reconciled.jira
+    if not (jira and jira.ip and reconciled.controller_device.ip):
+        return False
+    return _strip_whitespace(jira.ip) != _strip_whitespace(reconciled.controller_device.ip)
+
+
+def mac_mismatch(reconciled: ReconciledDevice) -> bool:
+    """True when the controller and Jira both report a MAC and they differ.
+    Case- and whitespace-insensitive — Jira holds MACs recorded as
+    " 48:A9:8A:9B:EA:C9" and "48:A9:8A:B6: E7:8A", which are the same
+    addresses their controllers report, not different ones."""
+    jira = reconciled.jira
+    if not (jira and jira.mac and reconciled.controller_device.mac):
+        return False
+    return (
+        _strip_whitespace(jira.mac).lower()
+        != _strip_whitespace(reconciled.controller_device.mac).lower()
+    )
+
+
 def build_log_data(reconciled: ReconciledDevice) -> dict:
+    """The InsightFinder log record for one device.
+
+    Every key is always present, with "" where a value is unknown or the
+    device wasn't found at all — a field that disappears when a device is
+    missing can't be queried or alerted on in InsightFinder, which is the
+    whole point of this agent.
+
+    Values are shipped exactly as each source reports them — whitespace
+    included. InsightFinder's ingestion rules constrain the *instance name*,
+    which build_instance_tags/sanitize_instance_name handles; the log record
+    itself is free-form, so rewriting a source's own value here would only
+    misrepresent what that source holds. Whitespace is ignored when finding
+    and comparing devices (see jira_assets.JiraAssetIndex, ip_mismatch,
+    mac_mismatch), not when reporting them.
+
+    Both match_method fields name a field of this record, so every field one
+    can name is present here — that's why controller.serial and
+    jira.zabbix_host_id are emitted even though nothing else reads them.
+    """
     d = reconciled.controller_device
     jira = reconciled.jira
     zabbix = reconciled.zabbix
@@ -98,15 +151,21 @@ def build_log_data(reconciled: ReconciledDevice) -> dict:
         "controller": {
             "name": d.controller,
             "device_name": d.name,
-            "ip": d.ip or None,
-            "mac": d.mac or None,
+            "ip": d.ip,
+            "mac": d.mac,
+            "serial": d.serial,
         },
         "jira": {
-            "id": jira.object_key if jira else None,
-            "ip": jira.ip if jira else None,
-            "mac": jira.mac if jira else None,
+            "id": jira.object_key if jira else "",
+            "device_name": jira.device_name if jira else "",
+            "ip": jira.ip if jira else "",
+            "mac": jira.mac if jira else "",
+            "zabbix_host_id": jira.zabbix_host_id if jira else "",
+            "match_method": jira.match_method if jira else "",
         },
         "zabbix": {
-            "id": zabbix.hostid if zabbix else None,
+            "id": zabbix.hostid if zabbix else "",
+            "device_name": zabbix.device_name if zabbix else "",
+            "match_method": zabbix.match_method if zabbix else "",
         },
     }

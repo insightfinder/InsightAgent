@@ -41,19 +41,23 @@ from controllers import build_controllers
 from insightfinder import Config as IFConfig
 from insightfinder import InsightFinder
 from jira_assets import JiraAssetClient
+from jira_assets import build_index as build_jira_index
 from models import ReconciledDevice
 from reconcile import build_instance_tags
 from reconcile import build_log_data
+from reconcile import ip_mismatch
+from reconcile import mac_mismatch
 from reconcile import reconcile_device
 from zabbix import build_index as build_zabbix_index
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 logger = logging.getLogger(__name__)
 
-# Each device does up to 3 sequential Jira Asset Registry lookups plus a live
-# Zabbix tag RPC — at fleet scale (thousands of devices) that's minutes of
-# per-device network latency. Bounded concurrency here matches the pattern
-# already used for NetExperience/Baicells per-device network loops.
+# Jira matching is a local dict lookup (see jira_assets.py), but each device
+# still costs a live Zabbix tag RPC — at fleet scale (thousands of devices)
+# that's minutes of per-device network latency. Bounded concurrency here
+# matches the pattern already used for NetExperience/Baicells per-device
+# network loops.
 RECONCILE_CONCURRENCY = 20
 
 
@@ -77,7 +81,21 @@ def parse_args() -> argparse.Namespace:
 
 
 def print_table(rows: list[ReconciledDevice]) -> None:
-    headers = ["CONTROLLER", "DEVICE", "CTRL IP", "CTRL MAC", "JIRA KEY", "JIRA IP", "JIRA MAC", "ZBX ID", "STATUS"]
+    headers = [
+        "CONTROLLER",
+        "DEVICE",
+        "CTRL IP",
+        "CTRL MAC",
+        "JIRA KEY",
+        "JIRA NAME",
+        "JIRA IP",
+        "JIRA MAC",
+        "JIRA VIA",
+        "ZBX ID",
+        "ZBX NAME",
+        "ZBX VIA",
+        "STATUS",
+    ]
     table: list[list[str]] = []
     for r in rows:
         d = r.controller_device
@@ -85,9 +103,7 @@ def print_table(rows: list[ReconciledDevice]) -> None:
         zabbix = r.zabbix
 
         status_parts = []
-        if r.jira_error:
-            status_parts.append("jira-error")
-        elif jira is None:
+        if jira is None:
             status_parts.append("no-jira")
         if r.zabbix_error:
             status_parts.append("zabbix-error")
@@ -96,10 +112,10 @@ def print_table(rows: list[ReconciledDevice]) -> None:
 
         jira_ip = jira.ip if jira else "-"
         jira_mac = jira.mac if jira else "-"
-        if jira and jira.ip and d.ip and jira.ip != d.ip:
+        if ip_mismatch(r):
             jira_ip += " ≠"
             status_parts.append("ip≠")
-        if jira and jira.mac and d.mac and jira.mac.lower() != d.mac.lower():
+        if mac_mismatch(r):
             jira_mac += " ≠"
             status_parts.append("mac≠")
 
@@ -110,9 +126,13 @@ def print_table(rows: list[ReconciledDevice]) -> None:
                 d.ip or "-",
                 d.mac or "-",
                 jira.object_key if jira else "-",
+                (jira.device_name if jira else "") or "-",
                 jira_ip,
                 jira_mac,
+                (jira.match_method if jira else "") or "-",
                 zabbix.hostid if zabbix else "-",
+                (zabbix.device_name if zabbix else "") or "-",
+                (zabbix.match_method if zabbix else "") or "-",
                 ", ".join(status_parts) or "ok",
             ]
         )
@@ -123,24 +143,19 @@ def print_table(rows: list[ReconciledDevice]) -> None:
         print("  ".join(c.ljust(w) for c, w in zip(row, widths)))
 
 
-def build_summary(rows: list[ReconciledDevice], jira_errors: int, zabbix_errors: int = 0) -> str:
+def build_summary(rows: list[ReconciledDevice], zabbix_errors: int = 0) -> str:
     total = len(rows)
     jira_matched = sum(1 for r in rows if r.jira)
-    jira_missing = sum(1 for r in rows if r.jira is None and not r.jira_error)
+    jira_missing = sum(1 for r in rows if r.jira is None)
     zabbix_matched = sum(1 for r in rows if r.zabbix)
     zabbix_missing = sum(1 for r in rows if r.zabbix is None and not r.zabbix_error)
-    ip_mismatch = sum(1 for r in rows if r.jira and r.jira.ip and r.controller_device.ip and r.jira.ip != r.controller_device.ip)
-    mac_mismatch = sum(
-        1
-        for r in rows
-        if r.jira and r.jira.mac and r.controller_device.mac and r.jira.mac.lower() != r.controller_device.mac.lower()
-    )
-    extra = f" | jira lookup errors (excluded): {jira_errors}" if jira_errors else ""
-    extra += f" | zabbix lookup errors (unresolved): {zabbix_errors}" if zabbix_errors else ""
+    ip_mismatches = sum(1 for r in rows if ip_mismatch(r))
+    mac_mismatches = sum(1 for r in rows if mac_mismatch(r))
+    extra = f" | zabbix lookup errors (unresolved): {zabbix_errors}" if zabbix_errors else ""
     return (
         f"{total} devices | jira: {jira_matched} matched, {jira_missing} missing"
         f" | zabbix: {zabbix_matched} matched, {zabbix_missing} missing"
-        f" | ip mismatch: {ip_mismatch} | mac mismatch: {mac_mismatch}{extra}"
+        f" | ip mismatch: {ip_mismatches} | mac mismatch: {mac_mismatches}{extra}"
     )
 
 
@@ -209,6 +224,12 @@ def main() -> int:
         return 1
 
     try:
+        jira_index = build_jira_index(jira_client)
+    except RuntimeError as e:
+        logger.error("%s — aborting, nothing sent.", e)
+        return 1
+
+    try:
         zabbix_index = build_zabbix_index(
             cfg.zabbix_url, cfg.zabbix_user, cfg.zabbix_password, pool_size=RECONCILE_CONCURRENCY
         )
@@ -221,18 +242,13 @@ def main() -> int:
     total = len(all_devices)
     logger.info("Reconciling %d device(s) against Jira Assets and Zabbix...", total)
     reconciled: list[ReconciledDevice] = []
-    jira_errors = 0
     zabbix_errors = 0
     completed = 0
     with ThreadPoolExecutor(max_workers=RECONCILE_CONCURRENCY) as executor:
-        for r in executor.map(lambda d: reconcile_device(d, jira_client, zabbix_index), all_devices):
+        for r in executor.map(lambda d: reconcile_device(d, jira_index, zabbix_index), all_devices):
             completed += 1
             if completed % 250 == 0 or completed == total:
                 logger.info("Reconciled %d/%d device(s)", completed, total)
-            if r.jira_error:
-                jira_errors += 1
-                logger.warning("Jira lookup error for %r — excluded from batch", r.controller_device.name)
-                continue
             if r.zabbix_error:
                 zabbix_errors += 1
                 logger.warning(
@@ -240,7 +256,16 @@ def main() -> int:
                 )
             reconciled.append(r)
 
-    summary = build_summary(reconciled, jira_errors, zabbix_errors)
+    if jira_index.ambiguous_hits:
+        logger.warning(
+            "%d device(s) hit a value shared by two or more Jira devices and were matched on a weaker "
+            "identifier (or left unmatched) rather than guessed — fix the duplicates in Jira "
+            "(strongest affected lookup key per device, e.g. %s)",
+            len(jira_index.ambiguous_hits),
+            ", ".join(f"{method}={value!r}" for method, value in jira_index.ambiguous_hits[:5]),
+        )
+
+    summary = build_summary(reconciled, zabbix_errors)
     if args.as_json:
         # Keep stdout as pure, pipeable JSON — the summary goes to the log instead.
         print(json.dumps([build_log_data(r) for r in reconciled], indent=2))
