@@ -213,7 +213,27 @@ raw `nohup`.
   matching falls through to the next identifier — which is how
   `LKLV-Cabin11-GN` now matches its own asset instead of the `-GAM` sharing
   its MAC. The run logs how many devices hit one, so the Jira data can be
-  cleaned up.
+  cleaned up. The run also logs the mirror-image problem — two controller
+  devices resolving to one Jira asset, usually a replaced unit still
+  reporting alongside its successor.
+- **Each identifier is matched through several normalizations**, strictest
+  first, because this Jira instance records the same value several ways. Per
+  identifier (see `src/jira_assets.py`):
+  - **MAC** — exact, whitespace-stripped, then hex-digits-only. 717 Jira MACs
+    use dashes (`00-0e-d8-19-89-8c`) where every controller uses colons. A
+    value that isn't 12 hex digits (Jira stores `-` for 286 devices) is not
+    used as a key.
+  - **Serial** — exact, then whitespace-stripped *and* the real serial pulled
+    out of a Positron composite (`ASY-2103-20,R14,01142017,24192` →
+    `01142017`), then both of those with leading zeros removed (Positron
+    reports `01126539` where Jira stores `1126539`).
+  - **Device label** — exact, whitespace-stripped, then `+`-stripped. Jira
+    spells the ILBI venue's combo units `ONT+HRAP` where UISP and every other
+    venue's records spell them `ONTHRAP`.
+
+  Each normalization owns its own table, so relaxing one can only add matches
+  and never redirect or destroy a stricter one. `jira.match_method` still
+  reports which *identifier* matched, not which normalization.
 - **UniFi** — the Site Manager API key must be a console-owner key; a
   restricted/invited key gets `403 insufficient permissions` on the Cloud
   Connector proxy paths.
@@ -239,7 +259,17 @@ raw `nohup`.
   disjoint populations: CPE endpoints (MAC, no IP) and GAM headend units
   (IP, no MAC).
 - **Ruckus** — no tunnel needed, reachable directly at `RUCKUS_URL`.
-  `RUCKUS_API_VERSION` is pinned to `v11_1`. Lists APs only.
+  `RUCKUS_API_VERSION` is pinned to `v11_1`, confirmed against this
+  deployment's `GET /wsg/api/public/apiInfo` (`v9_0`–`v11_1` all work). Lists
+  APs only. Devices come from **`GET /aps`** (name/mac/serial), and IP is
+  enriched afterwards from `POST /query/ap`. `query/ap` cannot be used to
+  enumerate the fleet: some AP record in it makes the controller answer
+  HTTP 500 (`For input string: ""`) for whichever page that record falls on —
+  page 2 onward at a page size of 500, page 9 or 17 at 100 — and the poisoned
+  page moves between runs, so no page size or retry count avoids it. A
+  `query/ap` page that keeps failing is skipped, so **`ip=""` is expected for
+  a subset of Ruckus APs**, as it already is for Baicells; the device list
+  itself stays complete.
 
 ## Adding a controller
 
@@ -270,6 +300,6 @@ failing the run.
 | NetExperience | `/portal/cmap/customer/forSp` → `/portal/equipment/forCustomer` → `/portal/status/forEquipment` for ip | `name` | `details.reportedIpV4Addr` (3rd call) | `baseMacAddress.addressAsString` | `serial` |
 | Cambium | `{base}/tree/devices` | `cfg.name` → `name` | `net.wan` → `net.ip` | `mac` | `sn` |
 | Telrad (CPEs only) | BreezeVIEW CLI `kpi-snapshot` over SSH | serial (no separate name) | `ip-wan` | — | `serial_number` |
-| Positron endpoints | `/api/v1/endpoint/list/all` | `confEndpointName` → `confUserName` | — | `macAddress` | `serialNumber` |
+| Positron endpoints | `/api/v1/endpoint/list/all` | `confEndpointName` → `confUserName` | — | `macAddress` | `serialNumber` (4-field composite, e.g. `ASY-2103-20,R14,01142017,24192`; field 3 is the serial Jira stores) |
 | Positron devices (GAMs) | `/api/v1/device/list` | `name` | `ipAddress` (excl. `0.0.0.0`) | — | `serialNumber` |
-| Ruckus | `POST /wsg/api/public/{version}/query/ap` | `deviceName` | `ip` | `apMac` | `serial` |
+| Ruckus | `GET /wsg/api/public/{version}/aps` for devices; `POST .../query/ap` for ip only | `name` | `ip` (via `query/ap`, best effort) | `mac` | `serial` |

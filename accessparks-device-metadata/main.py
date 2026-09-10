@@ -159,6 +159,42 @@ def build_summary(rows: list[ReconciledDevice], zabbix_errors: int = 0) -> str:
     )
 
 
+def warn_shared_jira_assets(rows: list[ReconciledDevice]) -> None:
+    """Warns when two or more controller devices resolved to the same Jira
+    asset — the mirror image of jira_index.ambiguous_hits, which reports one
+    Jira value sitting on several Jira devices.
+
+    Both are Jira data-quality signals, but this one is invisible from the
+    Jira side: the asset's identifiers are unique there, and it's the *fleet*
+    that has two devices answering to them — most often an old unit and its
+    "-New" replacement both still reporting to a controller, with only one
+    asset ever created for the pair. Reported per run rather than resolved
+    here: picking a winner would silently drop the other device's link to its
+    asset, and which one is stale is a question only the inventory owner can
+    answer.
+    """
+    owners: dict[str, list[str]] = {}
+    for r in rows:
+        if r.jira:
+            owners.setdefault(r.jira.object_key, []).append(r.controller_device.name)
+    shared = {key: names for key, names in owners.items() if len(names) > 1}
+    if not shared:
+        return
+    examples = ", ".join(
+        f"{key} <- {'/'.join(names[:2])}" for key, names in list(shared.items())[:3]
+    )
+    devices_in_groups = sum(len(names) for names in shared.values())
+    logger.warning(
+        "%d device(s) share only %d Jira asset(s) between them (%d more device(s) than assets) — "
+        "usually a replaced unit still reporting alongside its successor, with one asset for the "
+        "pair (e.g. %s)",
+        devices_in_groups,
+        len(shared),
+        devices_in_groups - len(shared),
+        examples,
+    )
+
+
 def main() -> int:
     args = parse_args()
     cfg = load_config()
@@ -264,6 +300,8 @@ def main() -> int:
             len(jira_index.ambiguous_hits),
             ", ".join(f"{method}={value!r}" for method, value in jira_index.ambiguous_hits[:5]),
         )
+
+    warn_shared_jira_assets(reconciled)
 
     summary = build_summary(reconciled, zabbix_errors)
     if args.as_json:

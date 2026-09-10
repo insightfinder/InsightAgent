@@ -26,6 +26,7 @@ class JiraMatch:
     device_name: str = ""
     ip: str = ""
     mac: str = ""
+    serial: str = ""
     zabbix_host_id: str = ""
     # Human-readable identifier this device was matched on ("MAC address",
     # "Device name", ...) — shipped to InsightFinder as jira.match_method so a

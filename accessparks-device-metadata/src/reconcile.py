@@ -9,6 +9,7 @@ import re
 from collections import Counter
 
 from jira_assets import JiraAssetIndex
+from jira_assets import mac_key
 from models import ControllerDevice
 from models import ReconciledDevice
 from zabbix import ZabbixIndex
@@ -112,12 +113,26 @@ def ip_mismatch(reconciled: ReconciledDevice) -> bool:
 
 def mac_mismatch(reconciled: ReconciledDevice) -> bool:
     """True when the controller and Jira both report a MAC and they differ.
-    Case- and whitespace-insensitive — Jira holds MACs recorded as
-    " 48:A9:8A:9B:EA:C9" and "48:A9:8A:B6: E7:8A", which are the same
-    addresses their controllers report, not different ones."""
+
+    Case-, whitespace- and separator-insensitive. Jira holds MACs recorded as
+    " 48:A9:8A:9B:EA:C9" and "48:A9:8A:B6: E7:8A", and 717 of them use dashes
+    ("00-0e-d8-19-89-8c") where the controllers use colons — all the same
+    addresses their controllers report, not different ones. Comparing on the
+    hex digits alone is what keeps a device matched on its dash-formatted Jira
+    MAC (see jira_assets.mac_key) from then being reported as disagreeing
+    with itself.
+
+    Values that aren't MACs at all fall back to the whitespace/case
+    comparison: Jira stores "-" and "n/a" in this field for hundreds of
+    devices, and those genuinely do disagree with a real controller MAC.
+    """
     jira = reconciled.jira
     if not (jira and jira.mac and reconciled.controller_device.mac):
         return False
+    jira_key = mac_key(jira.mac)
+    controller_key = mac_key(reconciled.controller_device.mac)
+    if jira_key and controller_key:
+        return jira_key != controller_key
     return (
         _strip_whitespace(jira.mac).lower()
         != _strip_whitespace(reconciled.controller_device.mac).lower()
@@ -160,6 +175,7 @@ def build_log_data(reconciled: ReconciledDevice) -> dict:
             "device_name": jira.device_name if jira else "",
             "ip": jira.ip if jira else "",
             "mac": jira.mac if jira else "",
+            "serial": jira.serial if jira else "",
             "zabbix_host_id": jira.zabbix_host_id if jira else "",
             "match_method": jira.match_method if jira else "",
         },
