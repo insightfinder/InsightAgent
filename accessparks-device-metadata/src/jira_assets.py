@@ -37,6 +37,7 @@ from models import JiraMatch
 logger = logging.getLogger(__name__)
 
 _WHITESPACE = re.compile(r"\s+")
+_NON_HEX = re.compile(r"[^0-9a-f]")
 
 # Values reported as jira.match_method, ordered by how much we trust them.
 # Each names the record field whose value was used as the lookup key, so a
@@ -57,6 +58,80 @@ def _loose_key(value: str) -> str:
     removed, lowercased. "ALBU-Ped  6-AP" and "albu-ped 6-ap" collapse to the
     same key."""
     return _WHITESPACE.sub("", value).lower()
+
+
+def mac_key(value: str) -> str:
+    """Separator-insensitive form of a MAC: every non-hex character removed,
+    lowercased. Jira records the same address both ways — 21,522 with colons
+    and 717 with dashes ("00-0e-d8-19-89-8c" for the controller's
+    "00:0E:D8:19:89:8C") — so neither form can be the only one indexed.
+
+    Returns "" unless the result is exactly 12 hex digits. Jira holds "-" as
+    the MAC of 286 devices and other placeholders like "n/a"; without the
+    length check those collapse into short keys that would collide devices
+    with each other rather than identify any of them."""
+    stripped = _NON_HEX.sub("", value.lower())
+    return stripped if len(stripped) == 12 else ""
+
+
+def _serial_core_key(value: str) -> str:
+    """The real serial inside a Positron composite serial: field 3 of the
+    4-field "ASY-2103-20,R14,01142017,24192" is "01142017", which is exactly
+    what Jira stores for that device. Returns "" for anything that isn't a
+    4-field comma composite — Positron's fleet has only those two shapes
+    (2,376 composite, 174 plain), so there is no third case to guess at.
+
+    Applied when indexing Jira too, not just when looking a device up: Jira
+    itself holds a handful of records carrying the whole composite string, and
+    normalizing both sides the same way is what lets those match."""
+    parts = [p.strip() for p in value.split(",")]
+    return parts[2].lower() if len(parts) == 4 else ""
+
+
+def _serial_zero_key(value: str) -> str:
+    """Leading-zero-insensitive serial. Positron reports "01126539" where Jira
+    stores "1126539" for the same device (LVKS-Ped333-GN), and 1,855 Jira
+    serials carry a leading zero while 737 are recorded without one. Only 6
+    values exist in Jira in both forms; those disable themselves as ambiguous
+    like any other shared identifier."""
+    return _loose_key(value).lstrip("0")
+
+
+def _serial_core_zero_key(value: str) -> str:
+    """_serial_core_key then _serial_zero_key — the real serial inside a
+    composite, with leading zeros removed. Positron's
+    "ASY-2103-20,R12,01126539,23321" reaches Jira's "1126539"
+    (LVKS-Ped333-GN) only through both reductions."""
+    core = _serial_core_key(value)
+    return _serial_zero_key(core) if core else ""
+
+
+def _name_key(value: str) -> str:
+    """Whitespace- and "+"-insensitive device label. Jira spells one venue's
+    combo units "ILBI-Lot 8-ONT+HRAP" (123 records, all ILBI) where UISP — and
+    every other venue's Jira records — spell the same hardware "ONTHRAP". The
+    "+" is a data-entry convention, not part of the device's identity."""
+    return _WHITESPACE.sub("", value).replace("+", "").lower()
+
+
+def _keys(value: str, keyfns) -> list[str]:
+    """The distinct, non-empty keys one tier's key functions produce for a
+    value, in declared order.
+
+    Ordered and de-duplicated rather than a set: a tier can hold several key
+    functions (see JiraAssetIndex._KEYFNS), and two of them can in principle
+    land on different Jira devices — a controller's composite serial whose
+    whole string is one device's serial and whose 3rd field is another's.
+    Iterating a set would resolve that by hash order, so the same device could
+    match a different asset from run to run. Declared order makes the stricter
+    key win, every time.
+    """
+    keys: list[str] = []
+    for keyfn in keyfns:
+        key = keyfn(value)
+        if key and key not in keys:
+            keys.append(key)
+    return keys
 
 
 class JiraAssetClient:
@@ -110,23 +185,25 @@ class JiraAssetClient:
 
 
 class JiraAssetIndex:
-    """Local, whitespace-insensitive index over the Asset Registry export.
+    """Local, normalization-tolerant index over the Asset Registry export.
 
     Identifiers are tried strongest-first — MAC, then serial, then the device
-    label — and each is looked up exactly (case-insensitively) before its
-    whitespace-stripped form. IP is deliberately not a match key: it isn't
-    stable enough to key identity on, and IP disagreement is one of the
-    things this agent exists to report. Neither is Jira's short `device_name`
-    ("AP", "GN", "GPONAP"): 29,697 of the 33k devices share one with another
-    device, and across a 2,000-device sample the unique remainder matched
-    nothing a stronger identifier hadn't already matched — so indexing it
-    only risks binding a device to an unrelated venue's asset.
+    label — and each identifier is looked up through an ordered tuple of
+    normalizations (_KEYFNS), strictest first: exact (case-insensitive), then
+    whitespace-stripped, then a per-identifier form that absorbs how this Jira
+    instance actually records that field. IP is deliberately not a match key:
+    it isn't stable enough to key identity on, and IP disagreement is one of
+    the things this agent exists to report. Neither is Jira's short
+    `device_name` ("AP", "GN", "GPONAP"): 29,697 of the 33k devices share one
+    with another device, and across a 2,000-device sample the unique remainder
+    matched nothing a stronger identifier hadn't already matched — so indexing
+    it only risks binding a device to an unrelated venue's asset.
 
-    Exact and whitespace-stripped keys live in separate tables so relaxing
-    whitespace can only add matches, never redirect or destroy an exact one.
-    Jira really does contain a device whose stripped label collides with a
-    different device's exact label ("DLPC-Home315-HMR"), which in a shared
-    table would take out the exact match too.
+    Each normalization gets its own table so relaxing one can only add
+    matches, never redirect or destroy a stricter one. Jira really does
+    contain a device whose whitespace-stripped label collides with a different
+    device's exact label ("DLPC-Home315-HMR"), which in a shared table would
+    take out the exact match too.
 
     A key claimed by two or more devices is disabled rather than resolved
     arbitrarily. Jira has 277 MACs and 180 serials sitting on more than one
@@ -140,16 +217,49 @@ class JiraAssetIndex:
 
     _METHODS = (MATCH_MAC, MATCH_SERIAL, MATCH_NAME)
 
+    # Per-identifier normalizations, strictest tier first. Each tier owns one
+    # table and may list several key functions, all of which write into — and
+    # read from — that one table, so they act as aliases of equal strictness
+    # rather than as separate tiers.
+    #
+    # That distinction is what makes the serial tiers work. _serial_core_key
+    # is not a normalization both sides share: it reduces a composite to the
+    # real serial, and Jira stores that same serial *plain*. Given its own
+    # table it would only ever meet other composites, so the controller's
+    # extracted "01142017" would miss Jira's plain "01142017" entirely. Paired
+    # with _loose_key in one tier, both forms land in the same table and match
+    # from either direction — which also covers the handful of Jira records
+    # that carry the whole composite string themselves.
+    #
+    # A key function returning "" means "doesn't apply to this value", and
+    # that key is skipped — how _serial_core_key ignores non-composites and
+    # mac_key ignores placeholder MACs.
+    _KEYFNS = {
+        MATCH_MAC: ((_exact_key,), (_loose_key,), (mac_key,)),
+        MATCH_SERIAL: (
+            (_exact_key,),
+            (_loose_key, _serial_core_key),
+            (_serial_zero_key, _serial_core_zero_key),
+        ),
+        MATCH_NAME: ((_exact_key,), (_loose_key,), (_name_key,)),
+    }
+
     def __init__(self) -> None:
-        # method -> key -> JiraMatch, or None once the key is known ambiguous.
-        self._exact: dict[str, dict[str, JiraMatch | None]] = {m: {} for m in self._METHODS}
-        self._loose: dict[str, dict[str, JiraMatch | None]] = {m: {} for m in self._METHODS}
+        # method -> tier index -> key -> JiraMatch, or None once the key is
+        # known ambiguous.
+        self._tables: dict[str, list[dict[str, JiraMatch | None]]] = {
+            m: [{} for _ in self._KEYFNS[m]] for m in self._METHODS
+        }
         # Identifier values disabled for being shared, held as
-        # (method, loose key). A set rather than a counter, and keyed on the
-        # loose form rather than the table key: each value is inserted into
-        # both the exact and the loose table, so an incrementing counter — or
-        # a set keyed on the table key, whose two forms differ whenever the
-        # value contains whitespace — would report each identifier twice.
+        # (method, whitespace-stripped key). A set rather than a counter, and
+        # keyed on one fixed normalization rather than per tier: each value is
+        # inserted into every tier's table, so an incrementing counter — or a
+        # set keyed per tier, whose forms differ whenever the value contains
+        # whitespace or separators — would report each identifier several
+        # times. _loose_key is the one used because it is the only
+        # normalization that never returns "" for a non-blank value; keying on
+        # the most relaxed tier would collapse every placeholder MAC ("-",
+        # "n/a") into a single empty key and undercount them.
         self._disabled: set[tuple[str, str]] = set()
         # One entry per device whose strongest identifier was ambiguous, so a
         # weaker one (or nothing) had to be used — a Jira data-quality signal
@@ -183,6 +293,7 @@ class JiraAssetIndex:
             device_name=record.get("name") or record.get("device_name") or "",
             ip=record.get("ip_address") or "",
             mac=(record.get("mac_address") or "").upper(),
+            serial=record.get("serial_number") or "",
             zabbix_host_id=record.get("zabbix_host_id") or "",
         )
         for method, value in (
@@ -192,8 +303,10 @@ class JiraAssetIndex:
         ):
             if not value.strip():
                 continue
-            disabled = self._put(self._exact[method], _exact_key(value), match)
-            disabled |= self._put(self._loose[method], _loose_key(value), match)
+            disabled = False
+            for table, keyfns in zip(self._tables[method], self._KEYFNS[method]):
+                for key in _keys(value, keyfns):
+                    disabled |= self._put(table, key, match)
             if disabled:
                 self._disabled.add((method, _loose_key(value)))
 
@@ -218,12 +331,12 @@ class JiraAssetIndex:
             if not value or not value.strip():
                 continue
             ambiguous = False
-            for table, keyfn in ((self._exact, _exact_key), (self._loose, _loose_key)):
-                key = keyfn(value)
-                match = table[method].get(key)
-                if match is not None:
-                    return dataclasses.replace(match, match_method=method)
-                ambiguous = ambiguous or key in table[method]
+            for table, keyfns in zip(self._tables[method], self._KEYFNS[method]):
+                for key in _keys(value, keyfns):
+                    match = table.get(key)
+                    if match is not None:
+                        return dataclasses.replace(match, match_method=method)
+                    ambiguous = ambiguous or key in table
             if ambiguous and not recorded:
                 self.ambiguous_hits.append((method, value))
                 recorded = True
