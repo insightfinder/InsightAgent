@@ -324,6 +324,16 @@ run_interval = 1
   * Comma-separated field names to sanitize for instance naming
   * Values sanitized but not used as instance name
 
+* **`sensitive_data_filter_enabled`** (Optional)
+  * Enable masking of sensitive data (PII, secrets, etc.) in the fields listed in `sensitive_data_config_file`
+  * Default: `false`
+
+* **`sensitive_data_config_file`** (Optional)
+  * Path to a YAML file (relative to `conf.d/`) mapping field name (dot notation for nested fields) to a list of regex patterns to check for that field
+  * Only fields listed in the YAML file are checked; any matched text (or capture group, if the pattern has one) is masked with asterisks of the same length
+  * See `conf.d/sensitive_data.yaml.template` for the format and an example
+  * Not needed if `sensitive_data_filter_enabled` is `false`
+
 * **`agent_http_proxy`** (Optional)
   * HTTP proxy URL
   * Example: `http://proxy.example.com:8080`

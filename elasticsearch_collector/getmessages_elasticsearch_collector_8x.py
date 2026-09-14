@@ -27,6 +27,7 @@ import arrow
 import pytz
 import regex
 import requests
+import yaml
 from elasticsearch import Elasticsearch
 from urllib3.exceptions import InsecureRequestWarning
 from pprint import pformat
@@ -533,6 +534,15 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                         if val is not None:
                             set_nested_field(message_source, field, make_safe_instance_string(str(val)))
 
+                # Mask sensitive data in individually configured fields
+                sensitive_data_field_patterns = agent_config_vars.get('sensitive_data_field_patterns', {})
+                if agent_config_vars['sensitive_data_filter_enabled'] and sensitive_data_field_patterns:
+                    for field, patterns in sensitive_data_field_patterns.items():
+                        field_path = field.split('.')
+                        val = safe_get(message_source, field_path)
+                        if val is not None:
+                            set_nested_field(message_source, field, sanitize_sensitive_data(val, patterns))
+
                 if len(message_source) > 0:
                     # get project
                     if agent_config_vars['project_field']:
@@ -888,6 +898,10 @@ def get_agent_config_vars(logger, config_ini):
             data_fields = config_parser.get('elasticsearch', 'data_fields', raw=True)
             aggregation_data_fields = config_parser.get('elasticsearch', 'aggregation_data_fields', raw=True)
             safe_instance_fields = config_parser.get('elasticsearch', 'safe_instance_fields', fallback='')
+            sensitive_data_filter_enabled = config_parser.get('elasticsearch', 'sensitive_data_filter_enabled',
+                                                               fallback='false')
+            sensitive_data_config_file = config_parser.get('elasticsearch', 'sensitive_data_config_file',
+                                                            fallback='')
 
         except configparser.NoOptionError as cp_noe:
             logger.error(cp_noe)
@@ -905,6 +919,19 @@ def get_agent_config_vars(logger, config_ini):
             es_uris = [x.strip() for x in es_uris.split(',') if x.strip()]
         else:
             return config_error(logger, 'es_uris')
+
+        sensitive_data_filter_enabled = sensitive_data_filter_enabled.strip().lower() == 'true'
+        sensitive_data_field_patterns = {}
+        if len(sensitive_data_config_file.strip()) != 0:
+            try:
+                sensitive_data_yaml_path = os.path.join(os.path.dirname(config_ini), sensitive_data_config_file)
+                with open(sensitive_data_yaml_path, 'r') as sensitive_data_yaml_file:
+                    field_pattern_map = yaml.safe_load(sensitive_data_yaml_file) or {}
+                for field_name, pattern_strings in field_pattern_map.items():
+                    sensitive_data_field_patterns[field_name] = [regex.compile(p) for p in pattern_strings]
+            except Exception as e:
+                logger.error(e)
+                return config_error(logger, 'sensitive_data_config_file')
 
         query_json = None
         if len(query_json_file) != 0:
@@ -1034,6 +1061,8 @@ def get_agent_config_vars(logger, config_ini):
         # add parsed variables to a global
         config_vars = {
             'safe_instance_fields': safe_instance_fields,
+            'sensitive_data_filter_enabled': sensitive_data_filter_enabled,
+            'sensitive_data_field_patterns': sensitive_data_field_patterns,
             'elasticsearch_kwargs': elasticsearch_kwargs,
             'es_uris': es_uris,
             'headers': headers,
@@ -1362,6 +1391,52 @@ def safe_get_data(dct, keys, logger):
         return ""
 
     return data
+
+
+def mask_matched_span(text, pattern):
+    """Mask regex matches in text with '*' of the same length.
+    If the pattern has capture groups, only the captured span(s) are masked;
+    otherwise the entire match is masked. Fails open (returns text unchanged)
+    on any error so a bad match never breaks the pipeline."""
+    try:
+        result = []
+        last_end = 0
+        for m in pattern.finditer(text):
+            match_start, match_end = m.span()
+            result.append(text[last_end:match_start])
+            piece = list(text[match_start:match_end])
+            if pattern.groups > 0:
+                spans = [m.span(i) for i in range(1, pattern.groups + 1) if m.group(i) is not None]
+            else:
+                spans = [(match_start, match_end)]
+            for s, e in spans:
+                for i in range(s - match_start, e - match_start):
+                    piece[i] = '*'
+            result.append(''.join(piece))
+            last_end = match_end
+        result.append(text[last_end:])
+        return ''.join(result)
+    except Exception:
+        return text
+
+
+def sanitize_sensitive_data(value, patterns):
+    """Mask sensitive data in value against the regex patterns configured for
+    its specific field. value is typically a string, but if the field holds
+    a nested dict/list, this recurses into it and masks every string leaf.
+    Non-string leaves (numbers, bools, None) pass through unchanged."""
+    if not patterns:
+        return value
+    if isinstance(value, dict):
+        return {k: sanitize_sensitive_data(v, patterns) for k, v in value.items()}
+    if isinstance(value, list):
+        return [sanitize_sensitive_data(v, patterns) for v in value]
+    if isinstance(value, str):
+        masked = value
+        for pattern in patterns:
+            masked = mask_matched_span(masked, pattern)
+        return masked
+    return value
 
 
 def prepare_data_entry(if_config_vars, timestamp, data, component_name, instance_name):

@@ -1,0 +1,15 @@
+# Map each field (dot notation for nested fields) to the list of regex patterns checked against it.
+# Only fields listed here are ever checked or masked. If a pattern has a capture group, only the
+# captured text is masked; otherwise the whole match is masked. Masking replaces matched characters
+# with '*' of the same length.
+#
+# Referenced from config.ini via: sensitive_data_config_file = sensitive_data.yaml
+#
+# Example:
+# _source.message:
+#   - '\b[\w.+-]+@[\w-]+\.[a-z]{2,}\b'
+# _source.user.ssn:
+#   - '(\d{3}-\d{2}-\d{4})'
+# _source.notes:
+#   - '\b[\w.+-]+@[\w-]+\.[a-z]{2,}\b'
+#   - '(\d{3}-\d{2}-\d{4})'
