@@ -1,0 +1,31 @@
+[project]
+name = "email-subagent"
+version = "0.1.0"
+description = "Email-drafting subagent (II-24784) -- its own Temporal-backed service, called over HTTP by main-agent"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.0",
+    # httpx: transitively required by shared/observability/__init__.py
+    # (imports .emitter, which imports httpx) -- also now used directly,
+    # since the anthropic SDK is httpx-based.
+    "httpx>=0.27.0",
+    "structlog>=24.1.0",
+    "temporalio[opentelemetry]>=1.4.0,<2",
+    "anthropic>=0.18.0,<1.0.0",
+    "opentelemetry-api>=1.22.0",
+    "opentelemetry-sdk>=1.22.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.22.0",
+    "opentelemetry-instrumentation-fastapi>=0.43b0",
+    "opentelemetry-instrumentation-httpx>=0.43b0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
