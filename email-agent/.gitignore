@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# Never commit credentials. The Anthropic API key, the SMTP password and the
+# trace license key are supplied at deploy time as Kubernetes Secrets, and
+# locally through a .env you create yourself -- see README.md.
+.env
+.env.*
+!.env.example
