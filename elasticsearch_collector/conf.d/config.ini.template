@@ -114,6 +114,11 @@ agent_https_proxy =
 # Comma-separated list of field names to be made safe for instance naming (values will be sanitized, but not used as instance name)
 safe_instance_fields =
 
+# Enable masking of sensitive data in the fields listed in sensitive_data_config_file
+sensitive_data_filter_enabled = false
+# Path to a YAML file (relative to this config.ini's directory) mapping field name (dot notation for nested fields) to a list of regex patterns that apply ONLY to that field. Only listed fields are checked; any matched text (or capture group, if the pattern has one) is masked with asterisks of the same length. See sensitive_data.yaml.template for an example.
+sensitive_data_config_file =
+
 [insightfinder]
 user_name =
 license_key =
