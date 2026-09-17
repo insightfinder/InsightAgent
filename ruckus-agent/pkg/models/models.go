@@ -127,19 +127,19 @@ type MetricData struct {
 }
 
 // Convert AP detail to metric data with filtering
+//
+// componentNameAsAP is no longer used: component name is fixed to "Ruckus Agent"
+// for all instances. The parameter is kept for call-site compatibility.
 func (ap *APDetail) ToMetricData(componentNameAsAP bool, filter MetricFilter) *MetricData {
 	cleanDeviceName := cleanDeviceName(ap.DeviceName)
-	componentName := ""
-	if componentNameAsAP {
-		componentName = "AP"
-	}
 
 	metric := &MetricData{
-		Timestamp:     time.Now().Unix(),
-		InstanceName:  cleanDeviceName,
-		Data:          map[string]interface{}{},
-		Zone:          ap.ZoneName,
-		ComponentName: componentName,
+		Timestamp:    time.Now().Unix(),
+		InstanceName: cleanDeviceName,
+		Data:         map[string]interface{}{},
+		// Zone (and subvenue) are intentionally left empty for now.
+		Zone:          "",
+		ComponentName: "Ruckus Agent",
 		IP:            ap.IP,
 	}
 
