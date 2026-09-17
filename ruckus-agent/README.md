@@ -8,9 +8,8 @@ Ruckus Agent is a Go-based data collection agent that fetches network performanc
 - **Client Enrichment**: Enriches per-AP metrics with RSSI, SNR, and TX statistics derived from individual client data
 - **5GHz-only Critical Metrics**: Computes corroboration KPIs and critical alert indicators exclusively for 5GHz clients
 - **Metric Filtering**: Per-metric enable/disable flags to control exactly what is sent to InsightFinder
-- **Zone Mapping**: Optional JSON-based zone name remapping
 - **Streaming Processing**: Processes APs in configurable chunks to bound memory usage
-- **Device Inventory Lookup**: Enriches instances with serial/venue/component data from the Device Inventory API (cached in `devicelookup.json`, refreshed every 24h)
+- **Device Inventory Lookup**: Enriches instances with serial/component data from the Device Inventory API (cached in `devicelookup.json`, refreshed every 24h). Zone and subvenue are intentionally left empty for now, and component name is fixed to `Ruckus Agent` for all instances.
 
 ## Architecture
 
@@ -140,11 +139,12 @@ Instance metadata:
 | Field | Source | Fallback |
 |-------|--------|----------|
 | Display name | Ruckus `deviceName` | `default_component_name` (used when Ruckus reports no device name) |
-| Component name | Inventory `manufacturer-device_class` (e.g. `Ruckus-Wifi.Indoor`) | `default_component_name` (used when the device is not in inventory) |
-| Zone | Inventory `meta.venue` only — the Ruckus controller's own `zoneName` is intentionally ignored | `UNKNOWN` |
+| Component name | Fixed to `Ruckus Agent` for all instances | n/a |
+| Zone | Intentionally left empty for now | n/a |
+| Subvenue | Intentionally left empty for now | n/a |
 | IP | Inventory `ip_address` | Ruckus `ip` |
 
-`default_component_name` (config: `ruckus` section, default `AP-Ruckus`) is a single fallback keyword reused for both display name and component name, mirroring the `AP-<Manufacturer>` convention used by the netexperience agent's `AP-Edgecore` fallback.
+`default_component_name` (config: `ruckus` section, default `AP-Ruckus`) is only used as the display-name fallback now — the component name itself is always reported as `Ruckus Agent`.
 
 ## Metrics Collected
 
