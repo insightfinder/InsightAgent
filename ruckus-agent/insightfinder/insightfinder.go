@@ -270,7 +270,7 @@ func (s *Service) SendMetricsBulk(metrics []models.MetricData) error {
 		// Get or create instance data
 		instanceData, exists := instanceDataMap[instanceName]
 		if !exists {
-			// build instance metadata string (im): idn=display name, cn=component, i=ip, z=zone
+			// build instance metadata string (im): idn=display name, cn=component, i=ip, z=zone, sv=subvenue
 			imData := map[string]string{}
 			if metric.DisplayName != "" {
 				imData["idn"] = metric.DisplayName
@@ -283,6 +283,9 @@ func (s *Service) SendMetricsBulk(metrics []models.MetricData) error {
 			}
 			if metric.Zone != "" {
 				imData["z"] = metric.Zone
+			}
+			if metric.Subvenue != "" {
+				imData["sv"] = metric.Subvenue
 			}
 			var imStr string
 			if len(imData) > 0 {
