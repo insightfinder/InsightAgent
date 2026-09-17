@@ -192,8 +192,9 @@ func (w *Worker) Start(quit <-chan os.Signal) {
 // Value mapping (fallbacks in parentheses):
 //   - Instance:     MAC {inv_mac} > SERIAL {inv_serial} > JIRAKEY {object_key} (else discard)
 //   - Display name: Ruckus deviceName, unmodified (config.DefaultComponentName, e.g. AP-Ruckus)
-//   - Component:    inventory manufacturer-device_class, excluding NONE-NONE (config.DefaultComponentName)
-//   - Zone:         inventory venue (UNKNOWN)
+//   - Component:    always "Ruckus Agent"
+//   - Zone:         left empty for now
+//   - Subvenue:     left empty for now
 //   - IP:           inventory ip_address (Ruckus AP IP)
 func (w *Worker) applyDeviceMetadata(metric *models.MetricData, ap *models.APDetail) bool {
 	devInfo, found := w.getDeviceLookup().Lookup(ap.APMAC)
@@ -222,15 +223,12 @@ func (w *Worker) applyDeviceMetadata(metric *models.MetricData, ap *models.APDet
 		metric.DisplayName = fallback
 	}
 
-	metric.ComponentName = fallback
-	if devInfo.ComponentName != "" && devInfo.ComponentName != "NONE-NONE" {
-		metric.ComponentName = devInfo.ComponentName
-	}
+	// Component is always reported as "Ruckus Agent".
+	metric.ComponentName = "Ruckus Agent"
 
-	metric.Zone = "UNKNOWN"
-	if devInfo.Venue != "" {
-		metric.Zone = devInfo.Venue
-	}
+	// Zone and Subvenue are intentionally left empty for now.
+	metric.Zone = ""
+	metric.Subvenue = ""
 
 	metric.IP = ap.IP
 	if devInfo.IPAddress != "" {

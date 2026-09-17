@@ -122,6 +122,7 @@ type MetricData struct {
 	DisplayName   string                 `json:"displayName,omitempty"`
 	Data          map[string]interface{} `json:"data"`
 	Zone          string                 `json:"zone,omitempty"`
+	Subvenue      string                 `json:"subvenue,omitempty"`
 	ComponentName string                 `json:"componentName,omitempty"`
 	IP            string                 `json:"ip,omitempty"`
 }
@@ -129,17 +130,15 @@ type MetricData struct {
 // Convert AP detail to metric data with filtering
 func (ap *APDetail) ToMetricData(componentNameAsAP bool, filter MetricFilter) *MetricData {
 	cleanDeviceName := cleanDeviceName(ap.DeviceName)
-	componentName := ""
-	if componentNameAsAP {
-		componentName = "AP"
-	}
 
 	metric := &MetricData{
-		Timestamp:     time.Now().Unix(),
-		InstanceName:  cleanDeviceName,
-		Data:          map[string]interface{}{},
-		Zone:          ap.ZoneName,
-		ComponentName: componentName,
+		Timestamp:    time.Now().Unix(),
+		InstanceName: cleanDeviceName,
+		Data:         map[string]interface{}{},
+		// Zone and Subvenue are intentionally left empty for now.
+		Zone:          "",
+		Subvenue:      "",
+		ComponentName: "Ruckus Agent",
 		IP:            ap.IP,
 	}
 
