@@ -11,8 +11,10 @@
 //     fallback identifier.
 //   - Display name: always the device's own raw name (uncleaned) - never
 //     falls back to the Inventory's name field.
-//   - Component name / Zone: Inventory only, no default value - omitted
-//     entirely if Inventory doesn't have them.
+//   - Component name: not from Inventory - fixed to "Positron Agent" for
+//     every instance.
+//   - Zone: intentionally left unset for now (removed pending a redesign of
+//     how it should be sourced).
 //   - IP: Inventory ip_address > the device's own reported IP.
 //   - No case conversion anywhere.
 package devicelookup
@@ -44,7 +46,6 @@ type DeviceInfo struct {
 	ObjectKey     string `json:"object_key"`
 	MACAddress    string `json:"mac_address"`
 	Name          string `json:"name"`
-	Venue         string `json:"venue"`
 	ComponentName string `json:"component_name"`
 	IPAddress     string `json:"ip_address"`
 }
@@ -185,176 +186,6 @@ func (nf NotFoundCache) IsKnownNotFound(candidates ...string) bool {
 		}
 	}
 	return false
-}
-
-// ── Venue abbreviation lookup ────────────────────────────────────────────────
-// Last-resort Zone fallback for devices the inventory lookup above never
-// matched at all (DeviceInfo.Venue empty): venue names follow a
-// "<ABBR>-<rest>" naming convention (e.g. "MEAD-LMRV-RAD_C5-Res-Budgett-1253"),
-// so the segment before the first "-" in the device's own name is looked up
-// against every registered venue abbreviation. Same convention used by the
-// jira-metadata and mimosa agents.
-
-const venueAbbrLookupPath = "venue_abbreviations.json"
-
-// VenueAbbrLookup maps a lowercased venue abbreviation to its venue name.
-type VenueAbbrLookup map[string]string
-
-// LoadVenueAbbrLookup reads venue_abbreviations.json from disk; returns an
-// empty lookup if absent or invalid.
-func LoadVenueAbbrLookup() VenueAbbrLookup {
-	data, err := os.ReadFile(venueAbbrLookupPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			logrus.Warnf("VenueAbbrLookup: failed to read %s: %v", venueAbbrLookupPath, err)
-		}
-		return make(VenueAbbrLookup)
-	}
-	var va VenueAbbrLookup
-	if err := json.Unmarshal(data, &va); err != nil {
-		logrus.Warnf("VenueAbbrLookup: failed to parse %s, starting fresh: %v", venueAbbrLookupPath, err)
-		return make(VenueAbbrLookup)
-	}
-	logrus.Infof("VenueAbbrLookup: loaded %d entries from disk", len(va))
-	return va
-}
-
-// IsVenueAbbrLookupStale reports whether venue_abbreviations.json is missing
-// or older than refreshHours.
-func IsVenueAbbrLookupStale(refreshHours int) bool {
-	info, err := os.Stat(venueAbbrLookupPath)
-	if err != nil {
-		return true
-	}
-	return time.Since(info.ModTime()) >= time.Duration(refreshHours)*time.Hour
-}
-
-// RefreshVenueAbbrLookup bulk-fetches every abbreviation -> venue mapping
-// from the Device Inventory API in one call (already cached server-side) and
-// returns it, or nil if the API is unreachable/misconfigured or the request
-// ultimately fails, so the caller can keep the existing lookup.
-func RefreshVenueAbbrLookup(cfg config.DeviceInventoryConfig) VenueAbbrLookup {
-	if cfg.APIKey == "" || cfg.BaseURL == "" {
-		return nil
-	}
-	client := &http.Client{Timeout: time.Duration(cfg.TimeoutSec) * time.Second}
-	retryDelay := time.Duration(cfg.RetryDelayMs) * time.Millisecond
-	url := cfg.BaseURL + "/venues/abbreviations"
-
-	for attempt := 1; attempt <= cfg.MaxRetry; attempt++ {
-		req, err := http.NewRequest(http.MethodGet, url, nil)
-		if err != nil {
-			return nil
-		}
-		req.Header.Set("X-API-Key", cfg.APIKey)
-		req.Header.Set("Accept", "application/json")
-
-		resp, err := client.Do(req)
-		if err != nil {
-			if attempt < cfg.MaxRetry {
-				time.Sleep(retryDelay)
-			}
-			continue
-		}
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil || resp.StatusCode != http.StatusOK {
-			if attempt < cfg.MaxRetry {
-				time.Sleep(retryDelay)
-			}
-			continue
-		}
-
-		var venues []struct {
-			Abbreviation string `json:"abbreviation"`
-			VenueName    string `json:"venue_name"`
-		}
-		if err := json.Unmarshal(body, &venues); err != nil {
-			logrus.Warnf("VenueAbbrLookup: failed to decode response: %v", err)
-			return nil
-		}
-		va := make(VenueAbbrLookup, len(venues))
-		for _, v := range venues {
-			if v.Abbreviation != "" && v.VenueName != "" {
-				va[strings.ToLower(v.Abbreviation)] = v.VenueName
-			}
-		}
-		if len(va) == 0 {
-			logrus.Warn("VenueAbbrLookup: refresh returned 0 mappings, keeping previous lookup")
-			return nil
-		}
-		logrus.Infof("VenueAbbrLookup: refreshed %d abbreviation mappings", len(va))
-		return va
-	}
-	logrus.Warn("VenueAbbrLookup: refresh failed, keeping existing lookup")
-	return nil
-}
-
-// SaveVenueAbbrLookup persists the venue abbreviation lookup to disk.
-func SaveVenueAbbrLookup(va VenueAbbrLookup) {
-	atomicWriteJSON(venueAbbrLookupPath, va)
-}
-
-// AbbreviationCandidate extracts the venue-abbreviation prefix from a
-// device's own name: the segment before the first "-" (e.g.
-// "MEAD-LMRV-RAD_C5-Res-Budgett-1253" -> "mead"). Returns "" if there's no
-// "-" or nothing precedes it.
-func AbbreviationCandidate(name string) string {
-	return strings.ToLower(rawAbbreviationCandidate(name))
-}
-
-// rawAbbreviationCandidate is AbbreviationCandidate without the lowercasing,
-// for callers that need to preserve the original casing (e.g. to prefix it
-// back onto a device name) rather than just use it as a lookup key.
-func rawAbbreviationCandidate(name string) string {
-	idx := strings.Index(name, "-")
-	if idx <= 0 {
-		return ""
-	}
-	return name[:idx]
-}
-
-// ZoneFor resolves name's venue-abbreviation prefix against the lookup,
-// returning "" if there's no candidate or no match.
-func (va VenueAbbrLookup) ZoneFor(name string) string {
-	if va == nil {
-		return ""
-	}
-	abbr := AbbreviationCandidate(name)
-	if abbr == "" {
-		return ""
-	}
-	return va[abbr]
-}
-
-// ZoneForWithFallback resolves the venue-abbreviation Zone fallback for a
-// device, trying name first and - only if that has no "<ABBR>-" prefix or
-// the prefix isn't a registered abbreviation - falling back to systemName
-// (e.g. a Positron endpoint's parent GAM name, which reliably carries the
-// abbreviation even when the endpoint's own name doesn't).
-//
-// When systemName is what resolves the zone, its abbreviation (in its
-// original casing) is also returned as prefix so the caller can prepend it
-// to the device's own name, e.g. name "10075SE22ndPath-GN" + systemName
-// "SSVL-2236SE100thLane-GAM" -> zone for "ssvl", prefix "SSVL" so the caller
-// can build "SSVL-10075SE22ndPath-GN". prefix is "" whenever name alone
-// resolved the zone (nothing to prepend) or neither did.
-func (va VenueAbbrLookup) ZoneForWithFallback(name, systemName string) (zone string, prefix string) {
-	if zone := va.ZoneFor(name); zone != "" {
-		return zone, ""
-	}
-	if va == nil {
-		return "", ""
-	}
-	rawAbbr := rawAbbreviationCandidate(systemName)
-	if rawAbbr == "" {
-		return "", ""
-	}
-	zone = va[strings.ToLower(rawAbbr)]
-	if zone == "" {
-		return "", ""
-	}
-	return zone, rawAbbr
 }
 
 // NormalizeMAC replaces ':' with '-', trims leading/trailing '-'. No case
@@ -663,7 +494,6 @@ func extractDeviceInfo(raw map[string]interface{}) DeviceInfo {
 		ObjectKey:     stringVal(dev, "object_key"),
 		MACAddress:    stringVal(dev, "mac_address"),
 		Name:          stringVal(dev, "name"),
-		Venue:         stringVal(meta, "venue"),
 		ComponentName: componentName,
 		IPAddress:     stringVal(dev, "ip_address"),
 	}
