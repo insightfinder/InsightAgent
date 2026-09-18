@@ -43,9 +43,10 @@ type Endpoint struct {
 	// ConfBwProfileUid    int    `json:"confBwProfileUid"`
 	// State               string `json:"state"`
 	// ModelType distinguishes a GAM headend unit ("GAM-C") exposed through
-	// this endpoint API from a regular CPE ("G1001-C"/"G1001-CR") - see
-	// resolveComponentName in util.go. Empty/"Unknown" when the endpoint is
-	// offline and Positron couldn't detect its model.
+	// this endpoint API from a regular CPE ("G1001-C"/"G1001-CR").
+	// Empty/"Unknown" when the endpoint is offline and Positron couldn't
+	// detect its model. Currently unused by ToMetricData - component name is
+	// fixed to "Positron Agent" for every instance.
 	ModelType string `json:"modelType"`
 	// ModelString         string `json:"modelString"`
 	// FwMismatch          bool   `json:"fwMismatch"`
@@ -70,9 +71,8 @@ type Endpoint struct {
 	// CreationDate        string `json:"creationDate"`
 	// LastModifiedDate    string `json:"lastModifiedDate"`
 	// Gam is the parent GAM headend unit this endpoint is provisioned under.
-	// Its Name reliably follows the "<ABBR>-<rest>" venue-abbreviation
-	// convention even when the endpoint's own name (ConfEndpointName /
-	// ConfUserName) doesn't - see ZoneForWithFallback in devicelookup.
+	// Currently unused by ToMetricData (was only used for Zone resolution,
+	// which is left empty for now).
 	Gam struct {
 		Name string `json:"name"`
 	} `json:"gam"`
@@ -83,8 +83,9 @@ type Device struct {
 	Name         string `json:"name"`
 	SerialNumber string `json:"serialNumber"`
 	IPAddress    string `json:"ipAddress"`
-	// ProductClass identifies the GAM model (e.g. "GAM4CX", "GAM4CXAC") -
-	// see resolveComponentName in util.go.
+	// ProductClass identifies the GAM model (e.g. "GAM4CX", "GAM4CXAC").
+	// Currently unused by ToMetricData - component name is fixed to
+	// "Positron Agent" for every instance.
 	ProductClass string `json:"productClass"`
 	// SoftwareVersion           string  `json:"softwareVersion"`
 	// SyncError                 *string `json:"syncError"`
