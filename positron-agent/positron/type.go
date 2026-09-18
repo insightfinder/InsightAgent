@@ -43,9 +43,10 @@ type Endpoint struct {
 	// ConfBwProfileUid    int    `json:"confBwProfileUid"`
 	// State               string `json:"state"`
 	// ModelType distinguishes a GAM headend unit ("GAM-C") exposed through
-	// this endpoint API from a regular CPE ("G1001-C"/"G1001-CR") - see
-	// resolveComponentName in util.go. Empty/"Unknown" when the endpoint is
-	// offline and Positron couldn't detect its model.
+	// this endpoint API from a regular CPE ("G1001-C"/"G1001-CR"). Empty/
+	// "Unknown" when the endpoint is offline and Positron couldn't detect
+	// its model. No longer used to pick componentName (see ComponentName in
+	// util.go), kept for reference/future use.
 	ModelType string `json:"modelType"`
 	// ModelString         string `json:"modelString"`
 	// FwMismatch          bool   `json:"fwMismatch"`
@@ -72,7 +73,8 @@ type Endpoint struct {
 	// Gam is the parent GAM headend unit this endpoint is provisioned under.
 	// Its Name reliably follows the "<ABBR>-<rest>" venue-abbreviation
 	// convention even when the endpoint's own name (ConfEndpointName /
-	// ConfUserName) doesn't - see ZoneForWithFallback in devicelookup.
+	// ConfUserName) doesn't. Currently unused - see ZoneForWithFallback in
+	// devicelookup, previously used to derive Zone, temporarily disabled.
 	Gam struct {
 		Name string `json:"name"`
 	} `json:"gam"`
@@ -83,8 +85,9 @@ type Device struct {
 	Name         string `json:"name"`
 	SerialNumber string `json:"serialNumber"`
 	IPAddress    string `json:"ipAddress"`
-	// ProductClass identifies the GAM model (e.g. "GAM4CX", "GAM4CXAC") -
-	// see resolveComponentName in util.go.
+	// ProductClass identifies the GAM model (e.g. "GAM4CX", "GAM4CXAC"). No
+	// longer used to pick componentName (see ComponentName in util.go), kept
+	// for reference/future use.
 	ProductClass string `json:"productClass"`
 	// SoftwareVersion           string  `json:"softwareVersion"`
 	// SyncError                 *string `json:"syncError"`
