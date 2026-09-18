@@ -11,6 +11,11 @@ import (
 
 var bareNumberRe = regexp.MustCompile(`^[0-9]+$`)
 
+// ComponentName is sent to InsightFinder for every endpoint and device
+// instance. It used to be picked per-record (GN vs GAM) from config, but is
+// now fixed for all instances.
+const ComponentName = "Positron Agent"
+
 // looksLikeName reports whether s is usable as a device name: non-empty and
 // not just a bare number (a port/slot index, not a hostname).
 func looksLikeName(s string) bool {
@@ -37,56 +42,22 @@ func (e *Endpoint) OwnName() string {
 	return e.ConfEndpointName
 }
 
-// resolveComponentName picks endpointName or gamName from config based on
-// what this record actually is - a GAM headend unit also gets surfaced
-// through /endpoint/list/all (not just /device/list), identified by
-// ModelType "GAM-C" as opposed to a regular CPE's "G1001-C"/"G1001-CR".
-// ModelType is empty/"Unknown" when the endpoint is offline and Positron
-// couldn't detect its model; in that case fall back to checking the
-// endpoint's own name for a "GAM" marker before defaulting to endpointName.
-func (e *Endpoint) resolveComponentName(endpointName, gamName string) string {
-	if e.ModelType == "GAM-C" {
-		return gamName
-	}
-	own := strings.ToUpper(e.ConfEndpointName + " " + e.ConfUserName)
-	if strings.Contains(own, "GAM") {
-		return gamName
-	}
-	return endpointName
-}
-
 // ToMetricData converts an Endpoint to MetricData, enriching it from the
 // Device Inventory lookup (MAC > serial > own name, first match wins).
-// componentName is endpointName or gamName from config
-// (positron.endpoint_component_name / positron.gam_component_name) - see
-// resolveComponentName.
+// ComponentName is fixed to ComponentName for every instance.
+// Zone/subvenue are intentionally left empty for now - see ComponentName's
+// doc comment; the venue/subvenue mapping is being revisited and will be
+// reinstated separately.
 // Returns ok=false if the device has no usable instance name (Inventory
 // miss and no own name) - the caller must drop it rather than send it under
 // any other fallback identifier.
-func (e *Endpoint) ToMetricData(dl devicelookup.Lookup, va devicelookup.VenueAbbrLookup, endpointName, gamName string) (*models.MetricData, bool) {
+func (e *Endpoint) ToMetricData(dl devicelookup.Lookup) (*models.MetricData, bool) {
 	ownMAC := devicelookup.NormalizeMAC(e.MacAddress)
 	ownSerial := devicelookup.NormalizeSerial(e.SerialNumber)
 	rawOwnName := e.OwnName()
 	ownName := devicelookup.CleanOwnName(rawOwnName)
 
 	devInfo := dl.GetDeviceInfo(ownMAC, ownSerial, ownName)
-
-	// Zone: Inventory only > venue-abbreviation fallback - own name prefix
-	// first, then (if that has no "<ABBR>-" prefix or it isn't a registered
-	// abbreviation) the parent GAM's name, which reliably carries the
-	// abbreviation even when the endpoint's own name doesn't. When the GAM
-	// fallback is what resolves the zone, its abbreviation is prefixed onto
-	// the device's own name too, e.g. "10075SE22ndPath-GN" ->
-	// "SSVL-10075SE22ndPath-GN", so instance/display name carry it.
-	zone := devInfo.Venue
-	if zone == "" {
-		var prefix string
-		zone, prefix = va.ZoneForWithFallback(rawOwnName, e.Gam.Name)
-		if prefix != "" {
-			rawOwnName = prefix + "-" + rawOwnName
-			ownName = devicelookup.CleanOwnName(rawOwnName)
-		}
-	}
 
 	instanceName, ok := devicelookup.BuildInstanceName(devInfo, ownName)
 	if !ok {
@@ -102,9 +73,10 @@ func (e *Endpoint) ToMetricData(dl devicelookup.Lookup, va devicelookup.VenueAbb
 		// uncleaned) - never falls back to Inventory's name field.
 		InstanceName:  instanceName,
 		DisplayName:   rawOwnName,
-		ComponentName: e.resolveComponentName(endpointName, gamName),
-		Zone:          zone,
-		IP:            devInfo.IPAddress, // Endpoints report no IP of their own
+		ComponentName: ComponentName,
+		// Zone/subvenue: left empty for now.
+		Zone: "",
+		IP:   devInfo.IPAddress, // Endpoints report no IP of their own
 		Data: map[string]interface{}{
 			// Format metric names using safe formatting
 			models.MakeSafeDataKey("DS PHY rate"): e.RxPhyRate,
@@ -117,29 +89,13 @@ func (e *Endpoint) ToMetricData(dl devicelookup.Lookup, va devicelookup.VenueAbb
 	return metric, true
 }
 
-// resolveComponentName picks gamName or endpointName from config. Every
-// device seen on /device/list is a GAM headend unit in practice (confirmed
-// by ProductClass, e.g. "GAM4CX"/"GAM4CXAC" - always populated), so gamName
-// is the default; the ProductClass/name checks only guard against a future
-// device that's genuinely not a GAM (ProductClass changes, or - like the
-// name says - isn't one).
-func (d *Device) resolveComponentName(gamName, endpointName string) string {
-	if strings.Contains(strings.ToUpper(d.ProductClass), "GAM") {
-		return gamName
-	}
-	if strings.Contains(strings.ToUpper(d.Name), "GN") {
-		return endpointName
-	}
-	return gamName
-}
-
 // ToMetricData converts a Device to MetricData, enriching it from the Device
 // Inventory lookup (serial > own name, first match wins - devices report no
-// MAC of their own). componentName is gamName or endpointName from config
-// (positron.gam_component_name / positron.endpoint_component_name) - see
-// resolveComponentName. Returns ok=false if the device has no usable
+// MAC of their own). ComponentName is fixed to ComponentName for every
+// instance. Zone/subvenue are intentionally left empty for now - see
+// ComponentName's doc comment. Returns ok=false if the device has no usable
 // instance name (Inventory miss and no own name).
-func (d *Device) ToMetricData(dl devicelookup.Lookup, va devicelookup.VenueAbbrLookup, gamName, endpointName string) (*models.MetricData, bool) {
+func (d *Device) ToMetricData(dl devicelookup.Lookup) (*models.MetricData, bool) {
 	ownSerial := devicelookup.NormalizeSerial(d.SerialNumber)
 	rawOwnName := d.Name
 	ownName := devicelookup.CleanOwnName(rawOwnName)
@@ -148,13 +104,6 @@ func (d *Device) ToMetricData(dl devicelookup.Lookup, va devicelookup.VenueAbbrL
 	instanceName, ok := devicelookup.BuildInstanceName(devInfo, ownName)
 	if !ok {
 		return nil, false
-	}
-
-	// Zone: Inventory only > venue-abbreviation fallback (from the device's
-	// own name prefix, for devices the Inventory lookup never matched at all).
-	zone := devInfo.Venue
-	if zone == "" {
-		zone = va.ZoneFor(rawOwnName)
 	}
 
 	// IP: Inventory ip_address > the device's own reported IP (excluding the
@@ -171,9 +120,10 @@ func (d *Device) ToMetricData(dl devicelookup.Lookup, va devicelookup.VenueAbbrL
 		Timestamp:     currentTime,
 		InstanceName:  instanceName,
 		DisplayName:   rawOwnName,
-		ComponentName: d.resolveComponentName(gamName, endpointName),
-		Zone:          zone,
-		IP:            ip,
+		ComponentName: ComponentName,
+		// Zone/subvenue: left empty for now.
+		Zone: "",
+		IP:   ip,
 		Data: map[string]interface{}{
 			// Format metric names using safe formatting - Capacity Metrics
 			models.MakeSafeDataKey("Ports"):       d.Ports,
