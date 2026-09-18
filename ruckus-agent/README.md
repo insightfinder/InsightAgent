@@ -140,11 +140,11 @@ Instance metadata:
 | Field | Source | Fallback |
 |-------|--------|----------|
 | Display name | Ruckus `deviceName` | `default_component_name` (used when Ruckus reports no device name) |
-| Component name | Inventory `manufacturer-device_class` (e.g. `Ruckus-Wifi.Indoor`) | `default_component_name` (used when the device is not in inventory) |
-| Zone | Inventory `meta.venue` only — the Ruckus controller's own `zoneName` is intentionally ignored | `UNKNOWN` |
+| Component name | Always `Ruckus Agent` for every instance | — |
+| Zone | Intentionally left empty for now | — |
 | IP | Inventory `ip_address` | Ruckus `ip` |
 
-`default_component_name` (config: `ruckus` section, default `AP-Ruckus`) is a single fallback keyword reused for both display name and component name, mirroring the `AP-<Manufacturer>` convention used by the netexperience agent's `AP-Edgecore` fallback.
+`default_component_name` (config: `ruckus` section, default `AP-Ruckus`) is used as the display name fallback when Ruckus reports no device name.
 
 ## Metrics Collected
 

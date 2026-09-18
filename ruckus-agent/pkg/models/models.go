@@ -138,7 +138,7 @@ func (ap *APDetail) ToMetricData(componentNameAsAP bool, filter MetricFilter) *M
 		Timestamp:     time.Now().Unix(),
 		InstanceName:  cleanDeviceName,
 		Data:          map[string]interface{}{},
-		Zone:          ap.ZoneName,
+		Zone:          "", // Zone is intentionally left empty for now
 		ComponentName: componentName,
 		IP:            ap.IP,
 	}
