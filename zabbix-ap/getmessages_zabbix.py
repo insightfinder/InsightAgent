@@ -797,6 +797,8 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             _manufacturer = _model.get('manufacturer') or _meta.get('manufacturer') or 'NONE'
             _device_class = _model.get('device_class') or 'NONE'
             inv_cn = '{}-{}'.format(_manufacturer, _device_class)
+            if instance and 'cpe' in instance.lower():
+                inv_cn = 'CPE Device'
             inv_ip = _dev.get('ip_address') or ip_address
             inv_venue = _meta.get('venue')
 
