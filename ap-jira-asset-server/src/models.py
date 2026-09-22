@@ -81,8 +81,8 @@ class VenueAbbreviation(Base):
     venue_name = Column(String(500), nullable=False)
     venue_key = Column(String(100), nullable=True)                  # IHS-xxxxx
     source = Column(String(20), nullable=False)                     # "venue" | "subvenue"
-    subvenue_id = Column(String(255), nullable=True)
-    subvenue_name = Column(String(500), nullable=True)
+     = Column(String(255), nullable=True)
+     = Column(String(500), nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

@@ -249,7 +249,7 @@ def transform_models(raw: List[Dict]) -> List[Dict]:
 
 
 def transform_subvenues(raw: List[Dict]) -> Dict[str, Dict[str, Optional[str]]]:
-    """Returns {subvenue_id: {name, key, venue_id, venue_name, venue_key, abbreviation_key}}
+    """Returns {: {name, key, venue_id, venue_name, venue_key, abbreviation_key}}
     by reading attr 225 (parent Venue) and the linked Abbreviation (see _get_abbreviation_key)
     from each Subvenue.
 
@@ -262,7 +262,7 @@ def transform_subvenues(raw: List[Dict]) -> Dict[str, Dict[str, Optional[str]]]:
     result: Dict[str, Dict[str, Optional[str]]] = {}
     for obj in raw:
         obj_id = str(obj["id"])
-        subvenue_name = obj.get("label") or ""
+         = obj.get("label") or ""
         subvenue_key = obj.get("objectKey") or ""
         venue_id: Optional[str] = None
         venue_name: Optional[str] = None
@@ -279,7 +279,7 @@ def transform_subvenues(raw: List[Dict]) -> Dict[str, Dict[str, Optional[str]]]:
                 break
         result[obj_id] = {
             "id": obj_id,
-            "name": subvenue_name,
+            "name": ,
             "key": subvenue_key,
             "venue_id": venue_id,
             "venue_name": venue_name,
@@ -342,8 +342,8 @@ def build_venue_abbreviation_records(
             "venue_name": v["name"],
             "venue_key": v["key"],
             "source": "venue",
-            "subvenue_id": None,
-            "subvenue_name": None,
+            "": None,
+            "": None,
         }
 
     for sv in subvenue_map.values():
@@ -361,8 +361,8 @@ def build_venue_abbreviation_records(
             "venue_name": sv["venue_name"],
             "venue_key": sv.get("venue_key"),
             "source": "subvenue",
-            "subvenue_id": sv.get("id"),
-            "subvenue_name": sv.get("name"),
+            "": sv.get("id"),
+            "": sv.get("name"),
         }
 
     return list(records.values())
@@ -498,7 +498,7 @@ def _transform_one_device(obj: Dict, subvenue_map: Optional[Dict[str, Dict[str, 
             if val_str:
                 device["meta"]["subvenue"] = val_str
             if ref_id:
-                device["meta"]["subvenue_id"] = ref_id
+                device["meta"][""] = ref_id
             if ref_obj.get("objectKey"):
                 device["meta"]["subvenue_key"] = ref_obj["objectKey"]
             if ref_id and subvenue_map:

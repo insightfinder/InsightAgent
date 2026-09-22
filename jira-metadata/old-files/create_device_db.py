@@ -16,8 +16,8 @@ def create_database():
         CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
             device_name TEXT PRIMARY KEY,
             device_id TEXT,
-            subvenue_name TEXT,
-            subvenue_id TEXT,
+             TEXT,
+             TEXT,
             location_name TEXT,
             location_id TEXT,
             venue_name TEXT,
@@ -37,8 +37,8 @@ def parse_and_insert_data():
 
     for venue_id, venue_data in data.items():
         venue_name = venue_data.get("details", {}).get("name")
-        for subvenue_id, subvenue_data in venue_data.get("subvenue", {}).items():
-            subvenue_name = subvenue_data.get("details", {}).get("name")
+        for , subvenue_data in venue_data.get("subvenue", {}).items():
+             = subvenue_data.get("details", {}).get("name")
             for location_id, location_data in subvenue_data.get("location", {}).items():
                 location_name = location_data.get("details", {}).get("name")
                 for device_id, device_data in location_data.get("device", {}).items():
@@ -48,9 +48,9 @@ def parse_and_insert_data():
                         sanitized_device_name = re.sub(r'[^a-zA-Z0-9]', '', device_name)
                         if sanitized_device_name:
                             c.execute(f'''
-                                INSERT OR REPLACE INTO {TABLE_NAME} (device_name, device_id, subvenue_name, subvenue_id, location_name, location_id, venue_name, venue_id)
+                                INSERT OR REPLACE INTO {TABLE_NAME} (device_name, device_id, , , location_name, location_id, venue_name, venue_id)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                            ''', (sanitized_device_name, device_id, subvenue_name, subvenue_id, location_name, location_id, venue_name, venue_id))
+                            ''', (sanitized_device_name, device_id, , , location_name, location_id, venue_name, venue_id))
 
     conn.commit()
     conn.close()
