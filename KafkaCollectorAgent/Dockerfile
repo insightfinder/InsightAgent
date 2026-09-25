@@ -8,6 +8,7 @@ RUN mvn package -DskipTests -B
 FROM eclipse-temurin:8-jre
 
 RUN apt-get update && \
+    apt-get upgrade -y && \
     apt-get install -y --no-install-recommends tzdata wget && \
     rm -rf /var/lib/apt/lists/*
 
