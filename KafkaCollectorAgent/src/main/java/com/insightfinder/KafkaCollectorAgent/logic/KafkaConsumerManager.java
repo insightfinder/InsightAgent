@@ -28,7 +28,7 @@ import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.TopicPartitionOffset;
 import org.springframework.kafka.support.converter.MessageConverter;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import java.util.*;
 import java.util.regex.Pattern;
 

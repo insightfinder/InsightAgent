@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>2.7.18</version>
+		<version>3.5.16</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.insightfinder</groupId>
@@ -14,22 +14,26 @@
 	<name>KafkaCollectorAgent</name>
 	<description>Kafka Collector Agent</description>
 	<properties>
-		<java.version>1.8</java.version>
-		<!-- CVE remediation: pin patched versions of Boot-managed dependencies.
-		     All of these remain Java 8 bytecode (verified: class file major version <= 52)
-		     and stay on the same major/minor line Spring Boot 2.7 was built against, so they
-		     are drop-in patch/minor upgrades - not a Spring Boot 3 / Java 17 migration. -->
-		<spring-framework.version>5.3.39</spring-framework.version>
-		<jackson-bom.version>2.21.5</jackson-bom.version>
-		<kafka.version>3.9.2</kafka.version>
-		<spring-kafka.version>2.9.13</spring-kafka.version>
-		<logback.version>1.2.13</logback.version>
+		<java.version>17</java.version>
+		<!-- CVE remediation: Boot 3.5.16 already ships patched Spring Framework 6.2.19,
+		     Spring Kafka 3.3.16, Kafka client 3.9.2, Micrometer 1.15.12 etc by default.
+		     Only netty.version needs an explicit bump past Boot's default (4.1.135.Final)
+		     to close CVE-2026-75595 (needs 4.1.137.Final), and jackson-bom is nudged to
+		     the latest 2.21.x patch. -->
 		<netty.version>4.1.137.Final</netty.version>
-		<reactor-bom.version>2020.0.47</reactor-bom.version>
-		<snakeyaml.version>2.3</snakeyaml.version>
-		<micrometer.version>1.15.12</micrometer.version>
+		<jackson-bom.version>2.21.5</jackson-bom.version>
 		<log4j2.version>2.26.1</log4j2.version>
 	</properties>
+	<dependencyManagement>
+		<dependencies>
+			<!-- transitive via kafka-clients; not covered by a spring-boot-dependencies property -->
+			<dependency>
+				<groupId>at.yawk.lz4</groupId>
+				<artifactId>lz4-java</artifactId>
+				<version>1.11.1</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

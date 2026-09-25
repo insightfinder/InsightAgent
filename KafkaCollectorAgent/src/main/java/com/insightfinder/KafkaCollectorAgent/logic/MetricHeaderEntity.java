@@ -1,6 +1,6 @@
 package com.insightfinder.KafkaCollectorAgent.logic;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
