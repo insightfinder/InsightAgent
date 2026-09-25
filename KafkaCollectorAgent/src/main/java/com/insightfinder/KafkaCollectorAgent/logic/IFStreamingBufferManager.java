@@ -38,7 +38,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -330,6 +330,15 @@ public class IFStreamingBufferManager {
         if (jsonArray != null) {
           jsonArray.add(logMessage.getOutputMessage());
           collectingLogDataMap.put(projectInfo, jsonArray);
+        }
+        if (logProjectResolver.selfReportsMetadataFromLogMessage()) {
+          Set<JsonObject> metadataSet = collectingLogMetadataMap.get(projectInfo);
+          if (metadataSet != null) {
+            LogMetadataMessage logMetadataMessage = logMessageHandler.processMetadataMessage(message);
+            if (logMetadataMessage != null && logMetadataMessage.getOutputMessage() != null) {
+              metadataSet.add(logMetadataMessage.getOutputMessage());
+            }
+          }
         }
       }
     }

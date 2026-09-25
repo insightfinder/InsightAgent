@@ -32,4 +32,14 @@ public interface LogProjectResolver {
    * no metadata broadcast flow.
    */
   List<ProjectInfo> getMetadataProjects();
+
+  /**
+   * Whether instance/component metadata should be derived from every log-data message itself
+   * (rather than from a dedicated metadata topic/message). Vendors without a separate metadata
+   * broadcast flow (e.g. Visa) override this to {@code true} so component names still reach
+   * InsightFinder.
+   */
+  default boolean selfReportsMetadataFromLogMessage() {
+    return false;
+  }
 }

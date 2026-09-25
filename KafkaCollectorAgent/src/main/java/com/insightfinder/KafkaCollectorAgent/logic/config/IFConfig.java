@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import lombok.Data;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -55,6 +55,9 @@ public class IFConfig {
   private List<String> logTimestampFieldPathList;
   private List<String> logInstanceFieldPathList;
   private List<String> logComponentFieldPathList;
+  // Static component name used for every log message, regardless of content. Takes precedence
+  // over logComponentFieldPathList when set.
+  private String logComponentName;
   private List<String> logMessageIdFieldList;
   // Visa: JSON field paths used to read the project / system directly from a log message.
   private List<String> logProjectFieldPathList;

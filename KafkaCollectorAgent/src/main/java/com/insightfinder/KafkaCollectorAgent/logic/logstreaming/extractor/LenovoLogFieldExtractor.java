@@ -37,6 +37,9 @@ public class LenovoLogFieldExtractor implements LogFieldExtractor {
 
   @Override
   public String extractComponentName(JsonObject content) {
+    if (StringUtils.isNotEmpty(ifConfig.getLogComponentName())) {
+      return ifConfig.getLogComponentName();
+    }
     List<List<String>> logComponentList = ifConfig.getLogComponentList();
     if (logComponentList == null || logComponentList.isEmpty()) {
       return null;

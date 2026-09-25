@@ -16,7 +16,9 @@ import org.springframework.stereotype.Component;
  * are never derived from the message content. When no system is configured, it falls back to the
  * project name.
  *
- * <p>Visa has no metadata broadcast flow, so {@link #getMetadataProjects()} returns an empty list.
+ * <p>Visa has no separate metadata topic; instead the fixed project/system is registered as its
+ * own metadata target, and instance/component metadata is derived from each log message itself
+ * (see {@link #selfReportsMetadataFromLogMessage()}).
  *
  * <p>Selected when {@code insight-finder.vendor=visa}.
  */
@@ -34,6 +36,21 @@ public class VisaLogProjectResolver implements LogProjectResolver {
 
   @Override
   public ProjectInfo resolveProject(LogMessage logMessage) {
+    return fixedProjectInfo();
+  }
+
+  @Override
+  public List<ProjectInfo> getMetadataProjects() {
+    ProjectInfo projectInfo = fixedProjectInfo();
+    return projectInfo == null ? Collections.emptyList() : Collections.singletonList(projectInfo);
+  }
+
+  @Override
+  public boolean selfReportsMetadataFromLogMessage() {
+    return true;
+  }
+
+  private ProjectInfo fixedProjectInfo() {
     String project = ifConfig.getLogProjectName();
     if (StringUtils.isEmpty(project)) {
       return null;
@@ -43,10 +60,5 @@ public class VisaLogProjectResolver implements LogProjectResolver {
       return null;
     }
     return ProjectInfo.builder().project(project).system(system).build();
-  }
-
-  @Override
-  public List<ProjectInfo> getMetadataProjects() {
-    return Collections.emptyList();
   }
 }
