@@ -331,6 +331,15 @@ public class IFStreamingBufferManager {
           jsonArray.add(logMessage.getOutputMessage());
           collectingLogDataMap.put(projectInfo, jsonArray);
         }
+        if (logProjectResolver.selfReportsMetadataFromLogMessage()) {
+          Set<JsonObject> metadataSet = collectingLogMetadataMap.get(projectInfo);
+          if (metadataSet != null) {
+            LogMetadataMessage logMetadataMessage = logMessageHandler.processMetadataMessage(message);
+            if (logMetadataMessage != null && logMetadataMessage.getOutputMessage() != null) {
+              metadataSet.add(logMetadataMessage.getOutputMessage());
+            }
+          }
+        }
       }
     }
   }
