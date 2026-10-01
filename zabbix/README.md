@@ -1,100 +1,121 @@
-# zabbix
-* This agent collects data from zabbix and sends it to Insightfinder.
-* The auto setup of agent is only support in Centos 7.
-* This agent use Python 3 to run script by default.
+# Zabbix Agent
 
-## Installing the Agent
+Collects metrics (and optionally alerts/logs) from the Zabbix API and sends them to InsightFinder.
 
-### Short Version
+- Requires Python 3.8+ on a Linux host that can reach both the Zabbix API and InsightFinder.
+- Each `*.ini` file in `conf.d/` is one job (e.g. one InsightFinder project). All of them are processed on every run.
+
+## Installation
+
+### 1. Get the agent
+
 ```bash
-bash <(curl -sS https://raw.githubusercontent.com/insightfinder/InsightAgent/master/utils/fetch-agent.sh) zabbix && cd zabbix
-vi config.ini
-sudo ./setup/install.sh --create  # install on localhost
-                                  ## or on multiple nodes
-sudo ./offline/remote-cp-run.sh list_of_nodes
+git clone https://github.com/insightfinder/InsightAgent.git
+cd InsightAgent/zabbix
 ```
 
-See the `offline` README for instructions on installing prerequisites.
+Or copy just the `zabbix/` directory to the target host. The steps below assume you are inside that directory. Run `pwd` to get its absolute path, which the cron job in step 5 needs.
 
-### Long Version
-###### Download the agent tarball and untar it:
+### 2. Set up the Python virtual environment
+
 ```bash
-curl -fsSLO https://github.com/insightfinder/InsightAgent/raw/master/zabbix/zabbix.tar.gz
-tar xvf zabbix.tar.gz && cd zabbix
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+deactivate
 ```
 
-###### Set up `config.ini`
-```bash
-python configure.py
-```
-See below for a further explanation of each variable. 
+### 3. Configure
 
-#### Automated Install (local or remote)
-###### Review propsed changes from install:
 ```bash
-sudo ./setup/install.sh
+cp conf.d/config.ini.template conf.d/config.ini
+vi conf.d/config.ini
 ```
 
-###### Once satisfied, run:
+At a minimum, set:
+
+| Section          | Key                                            | Description                                                                 |
+|------------------|------------------------------------------------|-----------------------------------------------------------------------------|
+| `[zabbix]`       | `url`, `user`, `password`                      | Zabbix server URL and API credentials                                       |
+| `[insightfinder]`| `user_name`, `license_key`                     | InsightFinder user and license key (Account Profile in the InsightFinder UI)|
+| `[insightfinder]`| `project_name`, `system_name`                  | Target project/system. These are created automatically if they don't exist.  |
+| `[insightfinder]`| `project_type`                                 | Usually `metric`. Use `alert` or `log` for alert/log collection.            |
+| `[insightfinder]`| `sampling_interval`, `run_interval`            | Both should be `5` (minutes) to match the cron schedule below               |
+| `[insightfinder]`| `if_url`                                       | InsightFinder URL, default `https://app.insightfinder.com`                  |
+
+To send data to more than one project, add one `.ini` file per project in `conf.d/`. Only files ending in `.ini` are loaded, so the `.template` file is ignored.
+
+### 4. Test
+
+Testing mode collects and parses data but doesn't send anything to InsightFinder:
+
 ```bash
-sudo ./setup/install.sh --create
+./venv/bin/python getmessages_zabbix.py -t
 ```
 
-###### To deploy on multiple hosts, instead call 
-```bash
-sudo ./offline/remote-cp-run.sh list_of_nodes -f <nodelist_file>
-```
-Where `list_of_nodes` is a list of nodes that are configured in `~/.ssh/config` or otherwise reachable with `scp` and `ssh`.
+Then do one real run and confirm that data shows up in the InsightFinder project:
 
-#### Manual Install (local only)
-###### Check Python version & upgrade if using Python 3
 ```bash
-if [[ $(python -V 2>&1 | awk '{ print substr($NF, 1, 1) }') == "3" ]]; then \
-2to3 -w getmessages_zabbix.py; \
-else echo "No upgrade needed"; fi
+./venv/bin/python getmessages_zabbix.py
 ```
 
-###### Setup pip & required packages:
+### 5. Schedule with cron (every 5 minutes)
+
 ```bash
-sudo ./setup/pip-config.sh
+crontab -e
 ```
 
-###### Test the agent:
-```bash
-python getmessages_zabbix.py -t
+Add this line, replacing `/path/to/zabbix` with the absolute path from step 1:
+
+```cron
+*/5 * * * * cd /path/to/zabbix && ./venv/bin/python getmessages_zabbix.py >> /path/to/zabbix/agent.log 2>&1
 ```
 
-###### If satisfied with the output, configure the agent to run continuously:
-```bash
-sudo ./setup/cron-config.sh
+Check the entry with `crontab -l`, and watch `agent.log` after the next 5-minute mark.
+
+Alternatively, put the job in a file under `/etc/cron.d/`, for example `/etc/cron.d/insightagent-zabbix`. Unlike `crontab -e`, entries in this file need a user field (here `ubuntu`) before the command:
+
+```cron
+*/5 * * * * ubuntu cd /path/to/zabbix && ./venv/bin/python getmessages_zabbix.py >> /path/to/zabbix/agent.log 2>&1
 ```
 
-### Config Variables
-* `url`: URL to zabbix api. Default: `ZABBIX_URL` or `https://localhost`
-* `user`: Zabbix user name. Default: `ZABBIX_USER` or `'Admin'`.
-* `password`: Zabbix user password. Default `ZABBIX_PASSWORD` or `zabbix`.
-* `host_groups`: Host groups to query for. If none specified, all host groups will be used
-* `hosts`: Hosts to query for. If none specified, all hosts will be used
-* `applications`: Applications to query for. If none specified, all applications will be used
-* `his_time_range`: History data time range, Example: 2020-04-14 00:00:00,2020-04-15 00:00:00. If this option is set, the agent will query metric values by time range.
-* **`data_format`**: The format of the data to parse: RAW, RAWTAIL, CSV, CSVTAIL, XLS, XLSX, JSON, JSONTAIL, AVRO, or XML. \*TAIL formats keep track of the current file being read & the position in the file.
-* `timestamp_format`: Format of the timestamp, in python [arrow](https://arrow.readthedocs.io/en/latest/#supported-tokens). If the timestamp is in Unix epoch, this can be set to `epoch`. If the timestamp is split over multiple fields, curlies can be used to indicate formatting, ie: `YYYY-MM-DD HH:mm:ss ZZ`; alternatively, if the timestamp can be in one of multiple fields, a priority list of field names can be given: `timestamp1,timestamp2`.
-* `timezone`: Timezone of the timestamp data stored in/returned by the DB. Note that if timezone information is not included in the data returned by the DB, then this field has to be specified. 
-* `timestamp_field`: Field name for the timestamp. Default is `timestamp`.
-* `target_timestamp_timezone`: Timezone of the timestamp data to be sent and stored in InsightFinder. Default value is UTC. Only if you wish to store data with a time zone other than UTC, this field should be specified to be the desired time zone.
-* `instance_field`: Field name for the instance name. If not set or the field is not found, the instance name is the hostname of the machine the agent is installed on. This can also use a priority list, field names can be given: `instance1,instance2`.
-* `device_field`: Field name for the device/container for containerized projects. This can also use a priority list, field names can be given: `device1,device2`.
-* `data_fields`: Comma-delimited list of field names to use as data fields. If not set, all fields will be reported. Each data field can either be a field name (`name`) or a labeled field (`<name>::<value>` or `<name>::==<value>`), where `<name>` and `<value>` can be raw strings (`fieldname::fieldvalue`), curly or complex formatted (`link!!ref=json&auth!!name::=={val} - {ue}`), or a combination. If `::==` is used as the separator, `<value>` is treated as a mathematical expression that can be evaluated with `eval()`.
-* `agent_http_proxy`: HTTP proxy used to connect to the agent.
-* `agent_https_proxy`: As above, but HTTPS.
-* **`user_name`**: User name in InsightFinder
-* **`license_key`**: License Key from your Account Profile in the InsightFinder UI. 
-* `token`: Token from your Account Profile in the InsightFinder UI. 
-* **`project_name`**: Name of the project created in the InsightFinder UI. 
-* **`project_type`**: Type of the project - one of `metric, metricreplay, log, logreplay, incident, incidentreplay, alert, alertreplay, deployment, deploymentreplay`.
-* **`sampling_interval`**: How frequently (in Minutes) data is collected. Should match the interval used in project settings.
-* **`run_interval`**: How frequently (in Minutes) the agent is ran. Should match the interval used in cron.
-* `chunk_size_kb`: Size of chunks (in KB) to send to InsightFinder. Default is `2048`.
-* `if_url`: URL for InsightFinder. Default is `https://app.insightfinder.com`.
-* `if_http_proxy`: HTTP proxy used to connect to InsightFinder.
-* `if_https_proxy`: As above, but HTTPS.
+The file must be owned by root and must not be group- or world-writable (`chmod 644`). Cron skips files whose names contain a `.`, so don't give it an extension.
+
+## Configuration reference
+
+[conf.d/config.ini.template](conf.d/config.ini.template) has a comment on every option. The ones used most often:
+
+**Filtering what gets collected (`[zabbix]`)**
+- `host_groups`: Pipe-separated (`|`) host group names. Empty means all host groups.
+- `hosts`: Hosts to query. Empty means all hosts.
+- `host_blocklist`: Comma-separated hosts to skip, given as IDs, names, or regexes.
+- `template_ids`: Collect the items defined in these templates.
+- `collect_dedicated_items`: Also collect items that aren't part of a template.
+- `metric_allowlist` / `metric_disallowlist`: Comma-separated metric names or regexes. Wrap a regex in `/`, e.g. `/^CPU.*/`.
+- `his_time_range`: Backfill a time range, e.g. `2020-04-14 00:00:00,2020-04-15 00:00:00`.
+
+**Instance/component naming (`[zabbix]`)**
+- `instance_field`: Default `hostid`.
+- `component_from_host_group`, `component_from_instance_name_re_sub`: Derive the component name from the host group, or from the instance name with `re.sub` pairs.
+- `component_name_script`: Path to a Python file that defines `generate_component_name(instance_name, hostgroup_name, tags)`. It takes precedence over the two options above. See [component_name_script.py](component_name_script.py).
+- `zone_from_host_group`, `subzone_from_instance_name_regex`: Zone and subzone mapping.
+
+**Metric post-processing (`[zabbix]`)**
+- `metric_transform_script`: Rename metrics or transform their values. See [metric_transforms_example.py](metric_transforms_example.py).
+- `derived_metrics_script`: Create synthetic metrics from conditions on tags and other metrics. See [derived_metrics_example.py](derived_metrics_example.py).
+
+**Performance and load on the Zabbix server (`[zabbix]`)**
+- `max_workers`: Parallel workers. Default is the number of CPU cores, capped at 10.
+- `max_host_per_request`: Default 100.
+- `request_timeout`: In seconds. Default 60.
+- `request_delay_ms`: Delay between consecutive API calls. Default 0.
+- `max_concurrent_zabbix`: Maximum number of `conf.d` files allowed to query the Zabbix server at the same time. Default is unlimited.
+
+**Proxies**
+- `agent_http_proxy` / `agent_https_proxy` in `[zabbix]`: Proxy used to reach Zabbix.
+- `if_http_proxy` / `if_https_proxy` in `[insightfinder]`: Proxy used to reach InsightFinder.
+
+## One config per host group
+
+For setups that send each Zabbix host group to its own project, [generate_hostgroup_configs.py](generate_hostgroup_configs.py) creates a `conf.d/<host-group>-metrics.ini` for every host group, based on [zabbix.ini.template](zabbix.ini.template). See [generate_hostgroup_configs_README.md](generate_hostgroup_configs_README.md).
