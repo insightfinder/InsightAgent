@@ -3,8 +3,8 @@
 -- InsightFinder's /api/v1/customprojectrawdata endpoint accepts a JSON body:
 --   {
 --     "userName": "...", "licenseKey": "...", "projectName": "...",
---     "systemName": "...", "insightAgentType": "LogStreaming",
---     "logDataList": [
+--     "systemName": "...", "agentType": "LogStreaming",
+--     "metricData": [
 --       {"timestamp": <epoch ms>, "tag": "<instance>", "componentName": "...", "data": "<log line>"}
 --     ]
 --   }
@@ -127,7 +127,7 @@ end
 -- Batching
 ---------------------------------------------------------------------------
 
-local buffer = {}       -- encoded logDataList entries
+local buffer = {}       -- encoded metricData entries
 local buffer_bytes = 0
 local first_buffered_at = nil
 
@@ -136,8 +136,8 @@ local ENVELOPE_PREFIX = "{"
     .. '"licenseKey":' .. encode_string(LICENSE_KEY) .. ","
     .. '"projectName":' .. encode_string(PROJECT_NAME) .. ","
     .. '"systemName":' .. encode_string(SYSTEM_NAME) .. ","
-    .. '"insightAgentType":"LogStreaming",'
-    .. '"logDataList":['
+    .. '"agentType":"LogStreaming",'
+    .. '"metricData":['
 
 local REQUEST_HEADERS = {
     ["Content-Type"] = "application/json",
