@@ -2,7 +2,7 @@
 
 Tails local log files with [Fluent Bit](https://fluentbit.io) and streams each line to an
 InsightFinder log project. No extra agent or relay is needed: a Lua filter builds the same
-payload the Go agents (e.g. `loki-agent`) send to `/api/v1/customprojectrawdata`.
+payload the Go agents (e.g. `kubernetes-agent`) send to `/api/v1/customprojectrawdata`.
 
 ## Files
 
@@ -24,8 +24,8 @@ Each request body looks like:
 ```json
 {
   "userName": "...", "licenseKey": "...", "projectName": "...", "systemName": "...",
-  "insightAgentType": "LogStreaming",
-  "logDataList": [
+  "agentType": "LogStreaming",
+  "metricData": [
     {"timestamp": 1791316229496, "tag": "web01", "componentName": "api", "data": "the log line"}
   ]
 }
