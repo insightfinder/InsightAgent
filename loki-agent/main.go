@@ -51,7 +51,7 @@ func main() {
 	logrus.Info("Enabled queries:")
 	for _, query := range cfg.Loki.Queries {
 		if query.Enabled {
-			logrus.Infof("  - %s: %s", query.Name, query.Query)
+			logrus.Infof("  - %s → project '%s': %s", query.Name, query.ProjectName, query.Query)
 		}
 	}
 

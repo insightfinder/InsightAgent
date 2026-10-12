@@ -93,7 +93,7 @@ loki_downloads/
   my_query_1704067200_1704153600.ndjson
 ```
 
-Each line in the file is a JSON-encoded InsightFinder log entry (with all transformations — tag extraction, component name, sensitive data masking — already applied).
+Each line in the file is a JSON-encoded InsightFinder log entry (with all transformations — tag extraction, component name, sensitive data masking — already applied). Each line also records the target `projectName` / `systemName` resolved from the query, so `replay` sends it to the right project.
 
 ```yaml
 agent:
@@ -108,6 +108,8 @@ agent:
 Reads the NDJSON files produced by `historical` mode and streams each entry to InsightFinder. Acts as a replay client — useful for re-sending previously downloaded logs without querying Loki again.
 
 `replay_path` may be a single `.ndjson` file or a directory (all `*.ndjson` files are replayed in sorted order).
+
+Each entry is sent to the project recorded in its line, and missing projects are created on first use. Lines without a project (files downloaded by older agent versions) go to `insightfinder.logs_project_name`.
 
 ```yaml
 agent:
@@ -176,6 +178,9 @@ loki:
       instance_name_field: "pod"              # Override default instance field
       component_name_field: "app"             # Field for component name
       container_name_field: "container"       # Field for container name (appended to instance)
+      # InsightFinder target (optional) — defaults to insightfinder.logs_project_name / logs_system_name
+      project_name: "my-query-project"
+      system_name: "my-query-system"
 ```
 
 ### Loki Configuration Options
@@ -209,6 +214,30 @@ Each query in the `queries` array supports the following options:
 | `container_name_field` | String | `""` | No | Field to extract container name from (appended to instance). Options: `"container"`, `"instance"`, `"node_name"`, `"pod"`, `"app"` |
 | `headers` | Map | `{}` | No | Per-query HTTP headers. Merged with `loki.headers`; per-query values take precedence for matching keys. See [HTTP Headers](#http-headers) |
 | `sensitive_data_filters` | List | `[]` | No | List of regex patterns to mask sensitive data. See [Sensitive Data Filtering](#sensitive-data-filtering) |
+| `project_name` | String | `insightfinder.logs_project_name` | No | InsightFinder project this query's logs are sent to. Created on startup if it doesn't exist. See [Per-Query Projects](#per-query-projects) |
+| `system_name` | String | `insightfinder.logs_system_name` | No | InsightFinder system used when creating `project_name` |
+
+### Per-Query Projects
+
+By default every query sends its logs to `insightfinder.logs_project_name`. Set `project_name` (and optionally `system_name`) on a query to route its logs to a different project. Each field falls back to its `insightfinder` default independently.
+
+```yaml
+loki:
+  queries:
+    - name: "audit_logs"
+      query: '{namespace="insightfinder"} |= `AuditLog`'
+      enabled: true
+      project_name: "loki-audit-logs"   # sent here, created in system "loki-system"
+    - name: "application_errors"
+      query: '{namespace="insightfinder"} |~ "ERROR"'
+      enabled: true                     # no project_name: sent to "loki-logs"
+
+insightfinder:
+  logs_project_name: "loki-logs"
+  logs_system_name: "loki-system"
+```
+
+On startup the agent checks every project used by an enabled query and creates the missing ones; if any of them can't be verified or created, the agent exits.
 
 ### HTTP Headers
 
@@ -393,8 +422,8 @@ insightfinder:
   license_key: "your_license_key"                # InsightFinder license key (required)
   
   # Project Configuration
-  logs_project_name: "loki-logs"                 # Project name for logs (required)
-  logs_system_name: "loki-system"                # System name for logs (optional)
+  logs_project_name: "loki-logs"                 # Default project for queries without project_name
+  logs_system_name: "loki-system"                # Default system for queries without system_name (optional)
   logs_project_type: "LOG"                       # Project type (default: "LOG")
   
   # Collection Settings
@@ -421,8 +450,8 @@ insightfinder:
 | `server_url` | String | `"https://app.insightfinder.com"` | No | InsightFinder server URL |
 | `username` | String | - | Yes | InsightFinder account username |
 | `license_key` | String | - | Yes | InsightFinder license key |
-| `logs_project_name` | String | - | Yes | Project name for log data |
-| `logs_system_name` | String | `""` | No | System name identifier |
+| `logs_project_name` | String | - | Yes* | Default project for queries without `project_name`. *Only required if an enabled query has no `project_name` |
+| `logs_system_name` | String | `""` | No | Default system for queries without `system_name` |
 | `logs_project_type` | String | `"LOG"` | No | Project type (should be "LOG" for this agent) |
 | `sampling_interval` | Integer | `60` | No | Collection interval in seconds |
 | `cloud_type` | String | `"OnPremise"` | No | Cloud provider type |
@@ -479,7 +508,7 @@ The agent validates the configuration on startup and will fail if required field
 - `loki.base_url`
 - `insightfinder.username`
 - `insightfinder.license_key`
-- `insightfinder.logs_project_name`
+- `insightfinder.logs_project_name`, unless every enabled query sets its own `project_name`
 - At least one enabled query in `loki.queries`
 
 ### Validation Rules

@@ -111,6 +111,12 @@ func setDefaults(config *Config) {
 		if query.Labels == nil {
 			query.Labels = make(map[string]string)
 		}
+		if query.ProjectName == "" {
+			query.ProjectName = config.InsightFinder.LogsProjectName
+		}
+		if query.SystemName == "" {
+			query.SystemName = config.InsightFinder.LogsSystemName
+		}
 		// Note: StartTime and EndTime are calculated dynamically using sampling_interval in worker
 	}
 }
@@ -130,9 +136,6 @@ func validateConfig(config *Config) error {
 		if config.InsightFinder.LicenseKey == "" {
 			return fmt.Errorf("insightfinder.license_key is required")
 		}
-		if config.InsightFinder.LogsProjectName == "" {
-			return fmt.Errorf("insightfinder.logs_project_name is required")
-		}
 	}
 
 	// Validate at least one query is configured
@@ -147,6 +150,13 @@ func validateConfig(config *Config) error {
 		}
 		if query.Query == "" {
 			return fmt.Errorf("query %d (%s): query string is required", i, query.Name)
+		}
+		// project_name was already defaulted from insightfinder.logs_project_name,
+		// so it is only empty when neither is set. Download-only historical mode
+		// does not send anything, and replay falls back to logs_project_name per line.
+		if query.Enabled && query.ProjectName == "" &&
+			config.Agent.Mode != "historical" && config.Agent.Mode != "replay" {
+			return fmt.Errorf("query '%s': project_name is required when insightfinder.logs_project_name is not set", query.Name)
 		}
 	}
 

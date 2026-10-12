@@ -65,6 +65,10 @@ loki:
       # precedence over default headers for matching keys.
       # headers:
       #   X-Scope-OrgID: "tenant-audit"
+      # Optional: InsightFinder project/system for this query's logs.
+      # Defaults to insightfinder.logs_project_name / logs_system_name; created if missing.
+      # project_name: "loki-audit-logs"
+      # system_name: "loki-system"
       # Optional: mask sensitive data before sending to InsightFinder.
       # Each entry matches the regex and replaces all matches with the replacement string.
       # sensitive_data_filters:
@@ -92,6 +96,7 @@ insightfinder:
   license_key: ""  # Fill this in
   
   # Logs project configuration (loki-agent only handles logs)
+  # Default project/system for queries that don't set project_name / system_name
   logs_project_name: "loki-logs"
   logs_system_name: "loki-system"
   logs_project_type: "LOG"

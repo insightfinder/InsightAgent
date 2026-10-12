@@ -65,17 +65,14 @@ func (w *Worker) Start(quit <-chan os.Signal) {
 		w.runHistoricalDownload(quit)
 		return
 	case "replay":
-		// Reads from disk and sends to InsightFinder.
-		if err := w.insightFinderService.Initialize(); err != nil {
-			logrus.Errorf("Failed to initialize InsightFinder service: %v", err)
-			return
-		}
+		// Reads from disk and sends to InsightFinder. Target projects come from
+		// the files, so they are created on first send instead of up front.
 		w.runReplay(quit)
 		return
 	}
 
 	// All remaining modes need InsightFinder.
-	if err := w.insightFinderService.Initialize(); err != nil {
+	if err := w.insightFinderService.Initialize(w.config.Loki.Queries); err != nil {
 		logrus.Errorf("Failed to initialize InsightFinder service: %v", err)
 		return
 	}
@@ -262,28 +259,39 @@ func (w *Worker) replayFile(path string, batchSize int, chunkWait time.Duration,
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 4*1024*1024), 4*1024*1024) // 4 MB line buffer
-	var batch []insightfinder.LogData
-	total := 0
 
-	flush := func() {
+	// Entries are batched per target project. Lines without a project (files
+	// written before per-query projects existed) go to the default project.
+	type target struct{ project, system string }
+	defaultTarget := target{w.config.InsightFinder.LogsProjectName, w.config.InsightFinder.LogsSystemName}
+	batches := make(map[target][]insightfinder.LogData)
+	total, skipped := 0, 0
+
+	flush := func(t target) {
+		batch := batches[t]
 		if len(batch) == 0 {
 			return
 		}
 		if !w.testMode {
-			if err := w.insightFinderService.SendLogDataInternal(batch); err != nil {
-				logrus.Errorf("Failed to send batch: %v", err)
+			if err := w.insightFinderService.SendLogDataInternal(t.project, t.system, batch); err != nil {
+				logrus.Errorf("Failed to send batch to project '%s': %v", t.project, err)
 			}
 		} else {
-			logrus.Infof("TEST MODE: Would send %d entries", len(batch))
+			logrus.Infof("TEST MODE: Would send %d entries to project '%s'", len(batch), t.project)
 		}
 		total += len(batch)
-		batch = batch[:0]
+		batches[t] = batch[:0]
+	}
+	flushAll := func() {
+		for t := range batches {
+			flush(t)
+		}
 	}
 
 	for scanner.Scan() {
 		select {
 		case <-quit:
-			flush()
+			flushAll()
 			return nil
 		default:
 		}
@@ -293,13 +301,23 @@ func (w *Worker) replayFile(path string, batchSize int, chunkWait time.Duration,
 			logrus.Warnf("Skipping invalid line in %s: %v", path, err)
 			continue
 		}
-		batch = append(batch, entry)
 
-		if len(batch) >= batchSize {
-			flush()
+		t := target{entry.ProjectName, entry.SystemName}
+		if t.project == "" {
+			t = defaultTarget
+		}
+		if t.project == "" {
+			skipped++
+			continue
+		}
+		batches[t] = append(batches[t], entry)
+
+		if len(batches[t]) >= batchSize {
+			flush(t)
 			if chunkWait > 0 {
 				select {
 				case <-quit:
+					flushAll()
 					return nil
 				case <-time.After(chunkWait):
 				}
@@ -307,7 +325,10 @@ func (w *Worker) replayFile(path string, batchSize int, chunkWait time.Duration,
 		}
 	}
 
-	flush()
+	flushAll()
+	if skipped > 0 {
+		logrus.Warnf("Skipped %d entries in %s with no project: set insightfinder.logs_project_name", skipped, path)
+	}
 	logrus.Infof("Replayed %d entries from %s", total, path)
 	return scanner.Err()
 }
@@ -418,8 +439,8 @@ func (w *Worker) processQuery(queryConfig config.QueryConfig) error {
 func (w *Worker) processQueryForRange(queryConfig config.QueryConfig, start, end time.Time) (int, error) {
 	queryStartTime := time.Now()
 
-	logrus.Infof("Querying '%s' from %s to %s",
-		queryConfig.Name, start.Format(time.RFC3339), end.Format(time.RFC3339))
+	logrus.Infof("Querying '%s' from %s to %s (project '%s')",
+		queryConfig.Name, start.Format(time.RFC3339), end.Format(time.RFC3339), queryConfig.ProjectName)
 
 	entries, err := w.fetchEntries(queryConfig, start, end)
 	if err != nil {

@@ -2,6 +2,7 @@ package insightfinder
 
 import (
 	"net/http"
+	"sync"
 
 	config "github.com/insightfinder/loki-agent/configs"
 )
@@ -9,9 +10,6 @@ import (
 type Service struct {
 	config              config.InsightFinderConfig
 	httpClient          *http.Client
-	ProjectName         string
-	LogProjectName      string
-	SystemName          string
 	CloudType           string
 	InstanceType        string
 	ProjectType         string // "Metric", "Log", "Trace", "Deployment", "Alert", "Incident"
@@ -20,6 +18,10 @@ type Service struct {
 	InsightAgentType    string
 	SamplingInterval    uint   // In seconds
 	defaultInstanceName string // Default field name to use for instance name
+
+	// Projects already verified or created in InsightFinder, keyed by project name
+	projectsMu sync.Mutex
+	projects   map[string]bool
 }
 
 // InsightFinder data structures (matching v2 API format)
@@ -87,6 +89,11 @@ type LogData struct {
 	ComponentName string      `json:"componentName"`
 	Data          interface{} `json:"data"`
 	IP            string      `json:"ipAddress,omitempty"`
+
+	// Target project/system, persisted in historical NDJSON files so replay
+	// can route each entry. Not part of the payload sent to InsightFinder.
+	ProjectName string `json:"projectName,omitempty"`
+	SystemName  string `json:"systemName,omitempty"`
 }
 
 type LogDataReceivePayload struct {
