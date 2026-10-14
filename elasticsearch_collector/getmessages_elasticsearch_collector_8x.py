@@ -127,15 +127,18 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
 
     if any(c in pit_target for c in '*?,'):
         try:
-            resolved = es_conn.transport.perform_request(
-                'GET',
-                f'/_resolve/index/{pit_target}?expand_wildcards=open',
-                headers=custom_headers,
-            )
-            # 7.x clients return the deserialized dict directly; 8.x+ clients wrap it
-            # in a TransportApiResponse - unwrap .body so this works on either.
-            resolved = getattr(resolved, 'body', resolved)
+            resolved = es_raw_request(es_conn, 'GET',
+                                      f'/_resolve/index/{pit_target}?expand_wildcards=open',
+                                      headers=custom_headers)
+            # A pattern can resolve to concrete indices, aliases and/or data streams -
+            # all three are valid PIT/search targets.
             authorized_indices = [i['name'] for i in resolved.get('indices', [])]
+            authorized_indices += [a['name'] for a in resolved.get('aliases', [])]
+            authorized_indices += [d['name'] for d in resolved.get('data_streams', [])]
+            # _cat/indices lists the backing indices of data streams, so include them
+            # when diffing to avoid flagging them as unauthorized.
+            backing_indices = [b for d in resolved.get('data_streams', [])
+                               for b in d.get('backing_indices', [])]
             if not authorized_indices:
                 logger.error(f"No authorized indices match pattern: {pit_target}")
                 for i in range(0, worker_process):
@@ -144,17 +147,13 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
                 return False
 
             try:
-                cat_response = es_conn.transport.perform_request(
-                    'GET',
-                    f'/_cat/indices/{pit_target}?h=index&expand_wildcards=open',
-                    headers=custom_headers,
-                )
-                cat_body = getattr(cat_response, 'body', cat_response)
-                # _cat returns plain text on success, or an error dict if the key lacks
-                # the 'monitor' privilege - only diff when we actually got text back.
-                if isinstance(cat_body, str):
-                    all_indices = set(cat_body.strip().splitlines())
-                    authorized_set = set(authorized_indices)
+                # Raises if the key lacks the 'monitor' privilege - the diff is best-effort.
+                cat_body = es_raw_request(es_conn, 'GET',
+                                          f'/_cat/indices/{pit_target}?h=index&expand_wildcards=open&format=json',
+                                          headers=custom_headers)
+                if isinstance(cat_body, list):
+                    all_indices = {i['index'] for i in cat_body}
+                    authorized_set = set(authorized_indices) | set(backing_indices)
                     unauthorized = sorted(all_indices - authorized_set)
                     if unauthorized:
                         logger.warning(
@@ -288,6 +287,17 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
     messages.close()
 
     logger.info('Finish getting data from ElasticSearch')
+
+
+def es_raw_request(es_conn, method, path, headers=None):
+    """ Perform a raw API request and return the deserialized body. """
+    # 8.x+: the client-level perform_request applies auth (basic_auth/api_key) and raises
+    # on HTTP errors; transport.perform_request does neither. 7.x only has the transport one.
+    if hasattr(es_conn, 'perform_request'):
+        response = es_conn.perform_request(method, path, headers=headers)
+    else:
+        response = es_conn.transport.perform_request(method, path, headers=headers)
+    return getattr(response, 'body', response)
 
 
 def get_es_connection(logger, agent_config_vars):
@@ -561,11 +571,15 @@ def process_parse_messages(log_queue, cli_config_vars, if_config_vars, agent_con
                     timestamp = safe_get(message_source, timestamp_field)
 
                     if isinstance(timestamp, str):
-                        if timestamp.isnumeric():
-                            timestamp = int(timestamp)
-                        else:
+                        # Epoch values may carry a fractional part, e.g. the OTel exporter
+                        # writes '@timestamp' as '1791999333000.0'
+                        try:
+                            timestamp = int(float(timestamp))
+                        except ValueError:
                             timestamp = int(arrow.get(timestamp).float_timestamp)
-                            
+                    elif isinstance(timestamp, float):
+                        timestamp = int(timestamp)
+
                     # check whether timestamp is epoch second or epoch millisecond
                     if len(str(timestamp)) == 10:
                         timestamp *= 1000
