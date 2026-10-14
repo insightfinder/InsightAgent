@@ -157,6 +157,11 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
             # when diffing to avoid flagging them as unauthorized.
             backing_indices = [b for d in resolved.get('data_streams', [])
                                for b in d.get('backing_indices', [])]
+            unavailable = find_unmatched_patterns(pit_target, authorized_indices + backing_indices)
+            # Every collector resolves the same pattern - only report once
+            if unavailable and collector_id == 0:
+                logger.warning(f"The following configured indices do not exist or are not "
+                               f"authorized for this API key, skipping them: {unavailable}")
             if not authorized_indices:
                 logger.error(f"No authorized indices match pattern: {pit_target}")
                 for i in range(0, worker_process):
@@ -305,6 +310,20 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
     messages.close()
 
     logger.info('Finish getting data from ElasticSearch')
+
+
+def find_unmatched_patterns(pit_target, resolved_names):
+    """ Return the comma-separated names/patterns in pit_target that match none of resolved_names. """
+    unmatched = []
+    for pattern in pit_target.split(','):
+        # '-' prefixed entries are exclusions, they are not expected to match anything
+        if not pattern or pattern.startswith('-'):
+            continue
+        # ES patterns only support '*' as a wildcard
+        regex_pattern = re.compile(re.escape(pattern).replace(r'\*', '.*'))
+        if not any(regex_pattern.fullmatch(name) for name in resolved_names):
+            unmatched.append(pattern)
+    return unmatched
 
 
 def es_raw_request(es_conn, method, path, headers=None):
