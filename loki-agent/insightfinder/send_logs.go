@@ -15,7 +15,7 @@ import (
 // Send log data using the same format as Python implementation
 
 // Send log data - format matching Python implementation
-func (s *Service) SendLogDataBasic(logEntries []LogData) error {
+func (s *Service) SendLogDataBasic(projectName string, logEntries []LogData) error {
 	if len(logEntries) == 0 {
 		return nil
 	}
@@ -33,11 +33,11 @@ func (s *Service) SendLogDataBasic(logEntries []LogData) error {
 		logDataList = append(logDataList, logData)
 	}
 
-	return s.SendLogDataAsMap(logDataList)
+	return s.SendLogDataAsMap(projectName, logDataList)
 }
 
 // SendLogDataAsMap sends raw log data as maps (preserves IP addresses and other fields)
-func (s *Service) SendLogDataAsMap(logs []map[string]interface{}) error {
+func (s *Service) SendLogDataAsMap(projectName string, logs []map[string]interface{}) error {
 	if len(logs) == 0 {
 		return nil
 	}
@@ -83,12 +83,12 @@ func (s *Service) SendLogDataAsMap(logs []map[string]interface{}) error {
 	form := url.Values{}
 	form.Add("userName", s.config.UserName)
 	form.Add("licenseKey", s.config.LicenseKey)
-	form.Add("projectName", s.LogProjectName)
+	form.Add("projectName", projectName)
 	form.Add("instanceName", hostname)
 	form.Add("agentType", "LogStreaming")
 	form.Add("metricData", string(metricDataJSON))
 
-	logrus.Debugln("logProjectName:", s.LogProjectName, "instanceName:", hostname)
+	logrus.Debugln("projectName:", projectName, "instanceName:", hostname)
 
 	apiURL := fmt.Sprintf("%s%s", s.config.ServerURL, LOG_DATA_API)
 
@@ -115,7 +115,7 @@ func (s *Service) SendLogDataAsMap(logs []map[string]interface{}) error {
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
-			logrus.Infof("Successfully sent %d log entries to InsightFinder", len(logs))
+			logrus.Infof("Successfully sent %d log entries to InsightFinder project %q", len(logs), projectName)
 			return nil
 		} else {
 			// Read response body for debugging

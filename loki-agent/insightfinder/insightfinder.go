@@ -35,15 +35,13 @@ func NewService(ifConfig config.InsightFinderConfig, lokiConfig config.LokiConfi
 	service := &Service{
 		config:              ifConfig,
 		httpClient:          client,
-		ProjectName:         ifConfig.LogsProjectName,
-		LogProjectName:      ifConfig.LogsProjectName,
-		SystemName:          ifConfig.LogsSystemName,
 		ProjectType:         "LOG",
 		Container:           ifConfig.IsContainer,
 		CloudType:           ifConfig.CloudType,
 		InstanceType:        ifConfig.InstanceType,
 		SamplingInterval:    uint(ifConfig.SamplingInterval),
 		defaultInstanceName: lokiConfig.DefaultInstanceNameField,
+		projects:            make(map[string]bool),
 	}
 
 	// Validate and set defaults
@@ -77,21 +75,8 @@ func (s *Service) Validate() bool {
 		logrus.Error("LicenseKey is required")
 		return false
 	}
-	if s.config.LogsProjectName == "" {
-		logrus.Error("LogsProjectName is required")
-		return false
-	}
 
 	// Set default values
-	if s.ProjectName == "" {
-		s.ProjectName = s.config.LogsProjectName
-	}
-	if s.LogProjectName == "" {
-		s.LogProjectName = s.config.LogsProjectName
-	}
-	if s.SystemName == "" {
-		s.SystemName = s.config.LogsSystemName
-	}
 	if s.ProjectType == "" {
 		s.ProjectType = "LOG"
 	}
@@ -108,13 +93,18 @@ func (s *Service) GetConfig() config.InsightFinderConfig {
 	return s.config
 }
 
-// Initialize initializes the InsightFinder service and creates projects if needed
-func (s *Service) Initialize() error {
+// Initialize initializes the InsightFinder service and creates the project of
+// every enabled query if needed, so a bad project config fails at startup.
+func (s *Service) Initialize(queries []config.QueryConfig) error {
 	logrus.Info("Initializing InsightFinder service...")
 
-	// Create project if it doesn't exist
-	if err := s.CreateLogsProjectIfNotExist(); err != nil {
-		return fmt.Errorf("failed to create logs project: %w", err)
+	for _, q := range queries {
+		if !q.Enabled {
+			continue
+		}
+		if err := s.EnsureProject(q.ProjectName, q.SystemName); err != nil {
+			return fmt.Errorf("query '%s': %w", q.Name, err)
+		}
 	}
 
 	logrus.Info("InsightFinder service initialized successfully")
@@ -165,6 +155,8 @@ func (s *Service) ConvertToLogData(entries []models.LogEntry, queryConfig config
 			Tag:           tag,
 			Data:          entry.Message,
 			ComponentName: componentName,
+			ProjectName:   queryConfig.ProjectName,
+			SystemName:    queryConfig.SystemName,
 		})
 	}
 
@@ -186,7 +178,7 @@ func (s *Service) SendLogData(entries []models.LogEntry, queryConfig config.Quer
 		totalBytes += len(entry.Message)
 	}
 
-	if err := s.SendLogDataInternal(logDataList); err != nil {
+	if err := s.SendLogDataInternal(queryConfig.ProjectName, queryConfig.SystemName, logDataList); err != nil {
 		return nil, err
 	}
 
@@ -197,50 +189,36 @@ func (s *Service) SendLogData(entries []models.LogEntry, queryConfig config.Quer
 	}, nil
 }
 
-// CreateLogsProjectIfNotExist creates the logs project if it doesn't exist
-func (s *Service) CreateLogsProjectIfNotExist() error {
-	// Temporarily switch to logs project settings
-	originalProjectName := s.ProjectName
-	originalSystemName := s.SystemName
-	originalProjectType := s.ProjectType
-
-	s.ProjectName = s.config.LogsProjectName
-	s.SystemName = s.config.LogsSystemName
-	s.ProjectType = s.config.LogsProjectType
-	s.updateDerivedTypes()
-
-	result := s.CreateProjectIfNotExist()
-
-	// Restore original settings
-	s.ProjectName = originalProjectName
-	s.SystemName = originalSystemName
-	s.ProjectType = originalProjectType
-	s.updateDerivedTypes()
-
-	if !result {
-		return fmt.Errorf("failed to create or verify logs project: %s", s.config.LogsProjectName)
+// EnsureProject creates the project if it doesn't exist. Projects that were
+// verified once are cached, so calling this before every send is cheap.
+func (s *Service) EnsureProject(projectName, systemName string) error {
+	if projectName == "" {
+		return fmt.Errorf("project name is empty")
 	}
+
+	s.projectsMu.Lock()
+	defer s.projectsMu.Unlock()
+	if s.projects[projectName] {
+		return nil
+	}
+
+	if !s.IsProjectExist(projectName, systemName) && !s.CreateProject(projectName, systemName) {
+		return fmt.Errorf("failed to create or verify project: %s", projectName)
+	}
+	s.projects[projectName] = true
 	return nil
 }
 
-// CreateProjectIfNotExist creates the project if it doesn't exist
-func (s *Service) CreateProjectIfNotExist() bool {
-	if !s.IsProjectExist() {
-		return s.CreateProject()
-	}
-	return true
-}
-
 // IsProjectExist checks if project exists
-func (s *Service) IsProjectExist() bool {
-	logrus.Infof("Checking if project '%s' exists in InsightFinder", s.ProjectName)
+func (s *Service) IsProjectExist(projectName, systemName string) bool {
+	logrus.Infof("Checking if project '%s' exists in InsightFinder", projectName)
 
 	form := url.Values{}
 	form.Add("operation", "check")
 	form.Add("userName", s.config.UserName)
 	form.Add("licenseKey", s.config.LicenseKey)
-	form.Add("projectName", s.ProjectName)
-	form.Add("systemName", s.SystemName)
+	form.Add("projectName", projectName)
+	form.Add("systemName", systemName)
 
 	url := fmt.Sprintf("%s%s", s.config.ServerURL, PROJECT_ENDPOINT)
 
@@ -272,10 +250,10 @@ func (s *Service) IsProjectExist() bool {
 
 	if checkResponse.IsSuccess {
 		if checkResponse.IsProjectExist {
-			logrus.Infof("Project '%s' exists in InsightFinder", s.ProjectName)
+			logrus.Infof("Project '%s' exists in InsightFinder", projectName)
 			return true
 		}
-		logrus.Infof("Project '%s' does not exist in InsightFinder", s.ProjectName)
+		logrus.Infof("Project '%s' does not exist in InsightFinder", projectName)
 		return false
 	}
 
@@ -284,15 +262,15 @@ func (s *Service) IsProjectExist() bool {
 }
 
 // CreateProject creates a new project
-func (s *Service) CreateProject() bool {
-	logrus.Infof("Creating project '%s' in InsightFinder", s.ProjectName)
+func (s *Service) CreateProject(projectName, systemName string) bool {
+	logrus.Infof("Creating project '%s' in InsightFinder", projectName)
 
 	request := CheckAndAddCustomProjectRequest{
 		Operation:        "create",
 		UserName:         s.config.UserName,
 		LicenseKey:       s.config.LicenseKey,
-		ProjectName:      s.ProjectName,
-		SystemName:       s.SystemName,
+		ProjectName:      projectName,
+		SystemName:       systemName,
 		InstanceType:     s.InstanceType,
 		ProjectCloudType: s.CloudType,
 		DataType:         s.DataType,
@@ -312,7 +290,7 @@ func (s *Service) CreateProject() bool {
 		return false
 	}
 
-	logrus.Infof("Project '%s' created successfully in InsightFinder", s.ProjectName)
+	logrus.Infof("Project '%s' created successfully in InsightFinder", projectName)
 	return true
 }
 
@@ -327,7 +305,14 @@ func (s *Service) getFieldValueFromEntry(entry models.LogEntry, fieldName string
 	return ""
 }
 
-// SendLogDataInternal sends LogData using the send_logs.go implementation
-func (s *Service) SendLogDataInternal(logEntries []LogData) error {
-	return s.SendLogDataBasic(logEntries)
+// SendLogDataInternal sends LogData to the given project using the send_logs.go
+// implementation, creating the project first if it doesn't exist yet.
+func (s *Service) SendLogDataInternal(projectName, systemName string, logEntries []LogData) error {
+	if len(logEntries) == 0 {
+		return nil
+	}
+	if err := s.EnsureProject(projectName, systemName); err != nil {
+		return err
+	}
+	return s.SendLogDataBasic(projectName, logEntries)
 }

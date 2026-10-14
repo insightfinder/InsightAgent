@@ -81,6 +81,11 @@ type QueryConfig struct {
 	// Sensitive data masking: applied to every log message for this query.
 	// Each entry matches the regex and replaces with the given string.
 	SensitiveDataFilters []SensitiveDataFilter `yaml:"sensitive_data_filters"`
+
+	// InsightFinder project/system this query's logs are sent to.
+	// Empty values fall back to insightfinder.logs_project_name / logs_system_name.
+	ProjectName string `yaml:"project_name"`
+	SystemName  string `yaml:"system_name"`
 }
 
 type InsightFinderConfig struct {
