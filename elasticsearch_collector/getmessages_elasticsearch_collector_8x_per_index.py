@@ -143,8 +143,10 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
 
     if any(c in pit_target for c in '*?,'):
         try:
+            # ignore_unavailable: skip non-wildcard names that don't exist instead of failing
+            # the whole request with index_not_found_exception.
             resolved = es_raw_request(es_conn, 'GET',
-                                      f'/_resolve/index/{pit_target}?expand_wildcards=open',
+                                      f'/_resolve/index/{pit_target}?expand_wildcards=open&ignore_unavailable=true',
                                       headers=custom_headers)
             # A pattern can resolve to concrete indices, aliases and/or data streams -
             # all three are valid PIT/search targets.
@@ -206,7 +208,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
         pit = None
         for attempt in range(1, 4):
             try:
-                pit_response = es_conn.open_point_in_time(index=pit_target_chunk, keep_alive="1m",
+                pit_response = es_conn.open_point_in_time(index=pit_target_chunk, keep_alive="1m", ignore_unavailable=True,
                                                           headers=custom_headers)
                 pit = pit_response['id']
                 break
