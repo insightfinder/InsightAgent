@@ -143,8 +143,10 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
 
     if any(c in pit_target for c in '*?,'):
         try:
+            # ignore_unavailable: skip non-wildcard names that don't exist instead of failing
+            # the whole request with index_not_found_exception.
             resolved = es_raw_request(es_conn, 'GET',
-                                      f'/_resolve/index/{pit_target}?expand_wildcards=open',
+                                      f'/_resolve/index/{pit_target}?expand_wildcards=open&ignore_unavailable=true',
                                       headers=custom_headers)
             # A pattern can resolve to concrete indices, aliases and/or data streams -
             # all three are valid PIT/search targets.
@@ -155,6 +157,11 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
             # when diffing to avoid flagging them as unauthorized.
             backing_indices = [b for d in resolved.get('data_streams', [])
                                for b in d.get('backing_indices', [])]
+            unavailable = find_unmatched_patterns(pit_target, authorized_indices + backing_indices)
+            # Every collector resolves the same pattern - only report once
+            if unavailable and collector_id == 0:
+                logger.warning(f"The following configured indices do not exist or are not "
+                               f"authorized for this API key, skipping them: {unavailable}")
             if not authorized_indices:
                 logger.error(f"No authorized indices match pattern: {pit_target}")
                 for i in range(0, worker_process):
@@ -206,7 +213,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
         pit = None
         for attempt in range(1, 4):
             try:
-                pit_response = es_conn.open_point_in_time(index=pit_target_chunk, keep_alive="1m",
+                pit_response = es_conn.open_point_in_time(index=pit_target_chunk, keep_alive="1m", ignore_unavailable=True,
                                                           headers=custom_headers)
                 pit = pit_response['id']
                 break
@@ -303,6 +310,20 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
     messages.close()
 
     logger.info('Finish getting data from ElasticSearch')
+
+
+def find_unmatched_patterns(pit_target, resolved_names):
+    """ Return the comma-separated names/patterns in pit_target that match none of resolved_names. """
+    unmatched = []
+    for pattern in pit_target.split(','):
+        # '-' prefixed entries are exclusions, they are not expected to match anything
+        if not pattern or pattern.startswith('-'):
+            continue
+        # ES patterns only support '*' as a wildcard
+        regex_pattern = re.compile(re.escape(pattern).replace(r'\*', '.*'))
+        if not any(regex_pattern.fullmatch(name) for name in resolved_names):
+            unmatched.append(pattern)
+    return unmatched
 
 
 def es_raw_request(es_conn, method, path, headers=None):
