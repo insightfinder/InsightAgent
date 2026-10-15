@@ -86,6 +86,11 @@ RETRY_WAIT_TIME_IN_SEC = 5
 BUFFER_CHECK_COUNT = 1000
 PARSE_DATA_LOG_COUNT = 5000
 CLOSED_MESSAGE = "CLOSED_MESSAGE"
+# Bound the inter-process queues so a fast ES reader blocks instead of buffering
+# the whole (historical) result set in memory while the IF sender catches up.
+MESSAGES_QUEUE_MAX_SIZE = 10000
+DATAS_QUEUE_MAX_SIZE = 10000
+PIT_KEEP_ALIVE = "5m"
 SESSION = requests.Session()
 LOG_DIR = "logs"
 AGENT_LOG_FILE = "./logs/agent.log"
@@ -213,7 +218,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
         pit = None
         for attempt in range(1, 4):
             try:
-                pit_response = es_conn.open_point_in_time(index=pit_target_chunk, keep_alive="1m", ignore_unavailable=True,
+                pit_response = es_conn.open_point_in_time(index=pit_target_chunk, keep_alive=PIT_KEEP_ALIVE, ignore_unavailable=True,
                                                           headers=custom_headers)
                 pit = pit_response['id']
                 break
@@ -251,7 +256,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
                             ],
                         },
                     },
-                    "pit": {'id': pit, 'keep_alive': '1m'},
+                    "pit": {'id': pit, 'keep_alive': PIT_KEEP_ALIVE},
                     "sort": [
                         {timestamp_field: {"order": "asc"}}
                     ]
@@ -290,7 +295,7 @@ def process_get_data(log_queue, cli_config_vars, if_config_vars, agent_config_va
                         ],
                     },
                 },
-                "pit": {'id': pit, 'keep_alive': '1m'},
+                "pit": {'id': pit, 'keep_alive': PIT_KEEP_ALIVE},
                 "sort": [
                     {timestamp_field: {"order": "asc"}}
                 ]
@@ -435,7 +440,8 @@ def query_messages_elasticsearch(logger, cli_config_vars, if_config_vars, agent_
         logger.error('Query es error: ' + str(response))
         return
 
-    logger.debug('Query result:\n' + str(response))
+    # lazy %s formatting: the (large) response is only stringified when DEBUG is enabled
+    logger.debug('Query result:\n%s', response)
 
     hits_data = response.get('hits', {}).get('hits', [])
     aggs_data = response.get('aggregations', {})
@@ -2115,9 +2121,9 @@ def main():
 
     # start run
     # raw data
-    messages = Queue()
+    messages = Queue(maxsize=MESSAGES_QUEUE_MAX_SIZE)
     # parsed data
-    datas = Queue()
+    datas = Queue(maxsize=DATAS_QUEUE_MAX_SIZE)
     # all processes
     processes = []
     worker_process = cli_config_vars['process']
