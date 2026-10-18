@@ -84,8 +84,8 @@ def start_data_processing(logger, c_config, if_config_vars, agent_config_vars, m
     thread_pool = ThreadPool(agent_config_vars['thread_pool'])
 
     def run_prometheus_query(timestamp):
-        query_list = []
         for query in prometheus_query:
+            query_list = []
             # If set batch size, first get all metrics
             metric_batch_size = query.get('metric_batch_size')
             batch_metric_filter_regex = query.get('batch_metric_filter_regex')
