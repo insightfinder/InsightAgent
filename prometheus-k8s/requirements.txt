@@ -5,3 +5,4 @@ requests
 apscheduler
 kubernetes
 urllib3>=2.5.0
+certifi>=2026.10.19
