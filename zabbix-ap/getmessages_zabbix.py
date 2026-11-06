@@ -854,6 +854,12 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
                 else:
                     data_value = message
             elif replay_type == 'live':
+                # Zabbix returns lastclock=0 / lastvalue="0" when the item has no value within the
+                # "Max history display period" (default 24h); that 0 is a placeholder, not real data.
+                if str(message.get('lastclock', '0')) == '0':
+                    logger.debug('Skipping item {} ({}) on {}: no recent value in Zabbix'.format(
+                        item_id, data_field, full_instance))
+                    continue
                 data_value = str(message['lastvalue'])
             else:
                 data_value = str(message['value'])
