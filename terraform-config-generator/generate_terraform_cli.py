@@ -105,6 +105,7 @@ def convert_keywords_to_log_labels(keywords_data):
 			"incidentFieldVerificationLabels": "incidentFieldVerification",
 			"incidentPriorityLabels":          "incidentPriority",
 			"extractionBlacklist":             "extractionBlacklist",
+			"rareEventEscalationExclusionLabels": "rareEventEscalationExclusion",
     }
     
     for keyword_type, label_type in keyword_type_mapping.items():
@@ -203,6 +204,15 @@ def _parse_project_configs(raw: dict) -> dict:
     return result
 
 
+def _hcl_regex_str(s: str) -> str:
+    """Quote a regex as an HCL string literal. Unlike the plain quote-escaping used
+    elsewhere, backslashes (\\d, \\b) and template sequences (${, %{) must be escaped
+    too, or HCL rejects / interpolates them."""
+    escaped = (str(s).replace('\\', '\\\\').replace('"', '\\"')
+               .replace('${', '$${').replace('%{', '%%{'))
+    return f'"{escaped}"'
+
+
 def _parse_resolution_code_rules(raw) -> list:
     """Convert a raw resolutionCodeRules list from the API into a normalised list of dicts."""
     result = []
@@ -250,6 +260,12 @@ def _parse_servicenow_entry(entry):
         "project_configs": {},
         "table_mapping": {},
         "resolution_code_rules": [],
+        "enable_resolution_notes_learning": bool(entry.get("enableResolutionNotesLearning", False)),
+        # The root-level regexes are the backend defaults, not stored values — the
+        # stored ones are read from the configs JSON below, so an unset regex stays
+        # unset in Terraform instead of pinning the backend default.
+        "resolution_notes_skip_regex": "",
+        "resolution_notes_pattern_strip_regex": "",
     }
 
     # Parse projectConfigs from root level
@@ -305,6 +321,10 @@ def _parse_servicenow_entry(entry):
                 rr_raw = configs.get("resolutionCodeRules")
                 if isinstance(rr_raw, list):
                     config["resolution_code_rules"] = _parse_resolution_code_rules(rr_raw)
+            if not config["enable_resolution_notes_learning"]:
+                config["enable_resolution_notes_learning"] = bool(configs.get("enableResolutionNotesLearning", False))
+            config["resolution_notes_skip_regex"] = configs.get("resolutionNotesSkipRegex") or ""
+            config["resolution_notes_pattern_strip_regex"] = configs.get("resolutionNotesPatternStripRegex") or ""
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
@@ -477,6 +497,12 @@ def generate_servicenow_env_config(sn_entries, include_provider=True, base_url="
                 lines.append(f'      outcome = "{outcome_e}"')
                 lines.append('    },')
             lines.append('  ]')
+
+        lines.append(f'  enable_resolution_notes_learning = {str(config.get("enable_resolution_notes_learning", False)).lower()}')
+        if config.get("resolution_notes_skip_regex"):
+            lines.append(f'  resolution_notes_skip_regex          = {_hcl_regex_str(config["resolution_notes_skip_regex"])}')
+        if config.get("resolution_notes_pattern_strip_regex"):
+            lines.append(f'  resolution_notes_pattern_strip_regex = {_hcl_regex_str(config["resolution_notes_pattern_strip_regex"])}')
 
         lines.append('}')
         lines.append('')
@@ -807,6 +833,7 @@ def generate_terraform_config(project_name, settings_data, keywords_data, servic
         'coldNumberLimit': 'cold_number_limit',
         'collectAllRareEventsFlag': 'collect_all_rare_events_flag',
         'componentNameAutoOverwrite': 'component_name_auto_overwrite',
+        'customSetting': 'custom_setting',
         'dailyModelSpan': 'daily_model_span',
         'disableLogCompressEvent': 'disable_log_compress_event',
         'disableModelKeywordStatsCollection': 'disable_model_keyword_stats_collection',
@@ -1003,6 +1030,7 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
                                     insights_report_data: dict | None = None,
                                     instance_down_items: list | None = None,
                                     miscellaneous_data: dict | None = None,
+                                    feedback_learning_data: dict | None = None,
                                     depends_on: str | None = None,
                                     customer_name: str | None = None) -> str:
     """Generate an insightfinder_system_settings Terraform resource block.
@@ -1015,6 +1043,8 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
         system_name_expr: HCL expression for system_name attribute. Defaults to a quoted literal.
         miscellaneous_data: Dict with longTerm, shouldAutoShare, rootCauseReverseEntryFilterThreshold,
                             enableCompositeTimeline (from sample_miscellaneous.json).
+        feedback_learning_data: Dict from the feedback-learning-setting API response (enabled,
+                                instanceLevel, minVoteCount, confidenceThreshold, blockExpiryDays).
 
     Returns:
         Terraform HCL string for the resource block.
@@ -1140,10 +1170,12 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
             if val is not None:
                 lines.append(f'    {tf_key} = {format_terraform_value(val)}')
 
-        # localKbSensitivities (array) and notificationDelayConfig (object) — complex
-        # fields serialized as JSON strings, only emitted when present in the API response.
+        # localKbSensitivities (array), notificationDelayConfig (object), and
+        # dependencyConsolidationSetting (object) — complex fields serialized as JSON
+        # strings, only emitted when present in the API response.
         for api_key, tf_key in [('localKbSensitivities', 'local_kb_sensitivities'),
-                                 ('notificationDelayConfig', 'notification_delay_config')]:
+                                 ('notificationDelayConfig', 'notification_delay_config'),
+                                 ('dependencyConsolidationSetting', 'dependency_consolidation_setting')]:
             val = notifications_data.get(api_key)
             if val is not None:
                 lines.append(f'    {tf_key} = {format_terraform_value(val)}')
@@ -1321,6 +1353,22 @@ def generate_system_settings_config(system_name: str, kb_global_data: dict | Non
                 lines.append(f'    {tf_key} = {format_terraform_value(miscellaneous_data[api_key])}')
         lines.append('  }')
 
+    # --- feedback_learning_setting block ---
+    if feedback_learning_data:
+        lines.append('')
+        lines.append('  feedback_learning_setting = {')
+        feedback_field_map = [
+            ('enabled',             'enabled'),
+            ('instanceLevel',       'instance_level'),
+            ('minVoteCount',        'min_vote_count'),
+            ('confidenceThreshold', 'confidence_threshold'),
+            ('blockExpiryDays',     'block_expiry_days'),
+        ]
+        for api_key, tf_key in feedback_field_map:
+            if api_key in feedback_learning_data:
+                lines.append(f'    {tf_key} = {format_terraform_value(feedback_learning_data[api_key])}')
+        lines.append('  }')
+
     lines.append('}')
     return '\n'.join(lines)
 
@@ -1392,6 +1440,8 @@ Examples:
                         help='Path to notifications/health-view settings JSON (sample_notifications.json)')
     parser.add_argument('--miscellaneous', dest='miscellaneous',
                         help='Path to miscellaneous system framework settings JSON (sample_miscellaneous.json)')
+    parser.add_argument('--feedback-learning', dest='feedback_learning',
+                        help='Path to feedback learning settings JSON (feedback-learning-setting API response)')
     
     args = parser.parse_args()
 
@@ -1583,6 +1633,17 @@ Examples:
         except json.JSONDecodeError as e:
             print(f"Warning: Invalid JSON in miscellaneous file: {e}", file=sys.stderr)
 
+    feedback_learning_data = None
+    if args.feedback_learning:
+        try:
+            with open(args.feedback_learning, 'r') as f:
+                feedback_learning_data = json.load(f)
+            print(f"Loaded feedback learning settings from: {args.feedback_learning}")
+        except FileNotFoundError:
+            print(f"Warning: Feedback learning file not found: {args.feedback_learning}", file=sys.stderr)
+        except json.JSONDecodeError as e:
+            print(f"Warning: Invalid JSON in feedback learning file: {e}", file=sys.stderr)
+
     # Generate Terraform configuration
     terraform_config = generate_terraform_config(
         project_name=project_name,
@@ -1600,7 +1661,8 @@ Examples:
     )
 
     # Append system-level settings block if any system data was provided
-    has_system_settings = kb_global_data or kb_incident_data or notifications_data or miscellaneous_data
+    has_system_settings = (kb_global_data or kb_incident_data or notifications_data or miscellaneous_data
+                           or feedback_learning_data)
     system_settings_config = ""
     if has_system_settings:
         system_settings_config = "\n\n" + generate_system_settings_config(
@@ -1609,6 +1671,7 @@ Examples:
             kb_incident_data=kb_incident_data,
             notifications_data=notifications_data,
             miscellaneous_data=miscellaneous_data,
+            feedback_learning_data=feedback_learning_data,
         )
 
     # Determine output file
@@ -1634,6 +1697,8 @@ Examples:
             blocks.append("notifications_settings")
         if miscellaneous_data:
             blocks.append("miscellaneous_settings")
+        if feedback_learning_data:
+            blocks.append("feedback_learning_setting")
         print(f"   System settings blocks: {', '.join(blocks)}")
 
     # Also generate environment-level ServiceNow config if provided alongside project

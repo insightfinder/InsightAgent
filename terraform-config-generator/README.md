@@ -9,8 +9,46 @@ Generates Terraform HCL files for InsightFinder projects, enabling IaC managemen
 | Script | Purpose |
 |--------|---------|
 | `auto_generate_terraform.py` | **Fully automated** — reads `config.yaml`, discovers all owned systems and projects via API, generates the complete `TerraformFiles/` directory structure |
+| `sync_environments.py` | **In-place sync** — re-pulls live settings for one already-existing NBC folder (or ServiceNow/Slack integration) and overwrites just its generated content, without touching hand-tuned backend keys/credentials. See `sync_targets.yaml` (gitignored, fill in credentials) |
 | `fetch_insightfinder_data.py` | Fetches raw API data for a single project and saves to JSON files |
 | `generate_terraform_cli.py` | Generates a `.tf` file from previously fetched JSON files |
+
+---
+
+## In-place sync (`sync_environments.py`)
+
+Unlike `auto_generate_terraform.py` (which generates a whole directory tree from
+scratch), this re-syncs **one folder that already exists** in the repo — useful when
+someone changed settings in the InsightFinder UI and you want the Terraform files to
+catch up, without regenerating (and risking clobbering) the backend state key,
+credentials, or hand-authored fields that differ between folders that look like
+duplicates (e.g. `NBC/NBC UAT/Prod Infra` vs `NBC/NBC UAT/Stage Infra` are genuinely
+different API hosts, not copies of each other).
+
+```bash
+# List every registered alias and copy pair
+python3 sync_environments.py list
+
+# Re-pull one NBC system's projects + system_settings.tf in place
+python3 sync_environments.py sync-nbcprod
+
+# Re-pull one ServiceNow/Slack integration (only the API-owned fields; never touches
+# password/app_id/app_key or hand-set fields the API doesn't return)
+python3 sync_environments.py sync-servicenow-nbcuat-system --host stg
+
+# Sync every registered alias
+python3 sync_environments.py sync-all
+
+# Mirror project files between infra duplicates (no API call)
+python3 sync_environments.py copy nbcuat-prod-to-stage
+
+# Preview any of the above without writing files
+python3 sync_environments.py sync-nbcprod --dry-run
+```
+
+Before first use, fill in the blank `username`/`licensekey` fields in
+`sync_targets.yaml` (gitignored — holds live credentials). Stale generated project
+files (removed upstream) are reported but kept unless you pass `--prune`.
 
 ---
 

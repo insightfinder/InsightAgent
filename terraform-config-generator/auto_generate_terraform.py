@@ -572,6 +572,19 @@ def fetch_miscellaneous_settings(session: requests.Session, host: str, username:
     return None
 
 
+def fetch_feedback_learning_setting(session: requests.Session, host: str, username: str,
+                                    api_key: str, customer_name: str,
+                                    system_id: str) -> Optional[Dict]:
+    """Return feedback learning settings for the given system, or None."""
+    headers = api_headers(username, api_key)
+    base = host.rstrip('/')
+    data = fetch_json(session, f"{base}/api/external/v1/feedback-learning-setting",
+                      headers, {"customerName": customer_name, "systemId": system_id})
+    if isinstance(data, dict) and data:
+        return data
+    return None
+
+
 def fetch_servicenow_env_configs(session: requests.Session, host: str,
                                  username: str, api_key: str) -> List[Dict]:
     """Fetch all environment-level ServiceNow configurations from the API.
@@ -1251,6 +1264,7 @@ def generate_project_tf(project_name: str, project_data: Dict,
     notification_settings: dict = summary_meta.get("notificationSetting", {})
     sn_notification_settings: dict = summary_meta.get("serviceNowNotificationSetting", {})
     sn_additional_setting: dict = summary_meta.get("serviceNowNotificationAdditionalSetting", {})
+    slack_additional_setting: dict = summary_meta.get("slackNotificationAdditionalSetting", {})
 
     jsonkeys_raw = project_data.get("jsonkeys") or {}
     if isinstance(jsonkeys_raw, list):
@@ -1324,6 +1338,7 @@ def generate_project_tf(project_name: str, project_data: Dict,
         'coldNumberLimit': 'cold_number_limit',
         'collectAllRareEventsFlag': 'collect_all_rare_events_flag',
         'componentNameAutoOverwrite': 'component_name_auto_overwrite',
+        'customSetting': 'custom_setting',
         'dailyModelSpan': 'daily_model_span',
         'disableLogCompressEvent': 'disable_log_compress_event',
         'disableLogProcessingFlag': 'disable_log_processing_flag',
@@ -1516,6 +1531,13 @@ def generate_project_tf(project_name: str, project_data: Dict,
         if desc_fmt:
             desc_escaped = desc_fmt.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('${', '$${')
             cfg.append(f'  service_now_description_format       = "{desc_escaped}"')
+
+    # slack_block_template
+    if slack_additional_setting:
+        slack_template = slack_additional_setting.get("slackBlockTemplate", "")
+        if slack_template:
+            slack_escaped = slack_template.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('${', '$${')
+            cfg.append(f'  slack_block_template = "{slack_escaped}"')
 
     # holiday_settings
     cfg.extend(_generate_holiday_settings_hcl(project_data.get("holidays") or {}))
@@ -1885,6 +1907,7 @@ def generate_metric_project_tf(project_name: str, project_data: Dict,
         'dynamicBaselineDetectionFlag': 'dynamic_baseline_detection_flag',
         'positiveBaselineViolationFactor': 'positive_baseline_violation_factor',
         'negativeBaselineViolationFactor': 'negative_baseline_violation_factor',
+        'shortTermWeight': 'short_term_weight',
         'enablePeriodAnomalyFilter': 'enable_period_anomaly_filter',
         'enableUBLDetect': 'enable_ubl_detect',
         'enableCumulativeDetect': 'enable_cumulative_detect',
@@ -1898,6 +1921,9 @@ def generate_metric_project_tf(project_name: str, project_data: Dict,
         'patternIdGenerationRule': 'pattern_id_generation_rule',
         'anomalyGapToleranceCount': 'anomaly_gap_tolerance_count',
         'filterByAnomalyInBaselineGeneration': 'filter_by_anomaly_in_baseline_generation',
+        'enableEmptyDataBaselineLearning': 'enable_empty_data_baseline_learning',
+        'logToMetricRollingWindowEnabled': 'log_to_metric_rolling_window_enabled',
+        'logToMetricRollingWindowMinutes': 'log_to_metric_rolling_window_minutes',
         'baselineDuration': 'baseline_duration',
         'anomalyDampening': 'anomaly_dampening',
         'instanceDownRatioThreshold': 'instance_down_ratio_threshold',
@@ -1970,6 +1996,7 @@ def generate_metric_project_tf(project_name: str, project_data: Dict,
     process_mode = settings_data.get('processMode')
     if process_mode is not None:
         cfg.append(f'  mode = {process_mode}')
+        cfg.append('  fetch_all_metrics_at_once = false')
 
     # metric_configurations — populated from componentmetricupdate + metriccomponent APIs
     metric_configs = project_data.get("metric_configurations") or {}
@@ -2080,7 +2107,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
     incident_projects_dir = os.path.join(system_dir, "incident-projects")
 
     # --- Fetch system-level settings ---
-    print(f"    Fetching system-level settings (KB, notifications, miscellaneous)...")
+    print(f"    Fetching system-level settings (KB, notifications, miscellaneous, feedback learning)...")
     kb_global, kb_incident, notifications = fetch_system_level_settings(
         session, base_url, username, api_key, username, system_id
     )
@@ -2091,6 +2118,9 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
         session, base_url, username, api_key, username, system_id
     )
     miscellaneous_data = fetch_miscellaneous_settings(
+        session, base_url, username, api_key, username, system_id
+    )
+    feedback_learning_data = fetch_feedback_learning_setting(
         session, base_url, username, api_key, username, system_id
     )
 
@@ -2256,7 +2286,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
     # --- Write system_settings.tf in system folder (not projects/) ---
     has_sys_settings = (kb_global or kb_incident or notifications
                         or system_down_data or insights_report_data or instance_down_items
-                        or miscellaneous_data)
+                        or miscellaneous_data or feedback_learning_data)
     if has_sys_settings:
         sys_settings_content = generate_system_settings_config(
             system_name=system_name,
@@ -2268,6 +2298,7 @@ def process_system(session: requests.Session, env_name: str, env_cfg: Dict,
             insights_report_data=insights_report_data,
             instance_down_items=instance_down_items if instance_down_items else None,
             miscellaneous_data=miscellaneous_data,
+            feedback_learning_data=feedback_learning_data,
             depends_on=f"module.{present_modules[-1]}" if present_modules else None,
             customer_name=username,
         )
