@@ -1,0 +1,8 @@
+# Keep credentials and local deploy files out of the image
+k8s-deploy-current/
+helm-values-*.yaml
+helm.command
+config copy.ini
+__pycache__/
+.venv/
+.git*
