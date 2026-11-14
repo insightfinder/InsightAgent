@@ -82,13 +82,18 @@ def get_agent_config_vars():
             url = parser.get('agent', 'url')
             genai_url = parser.get('agent', 'genai_url')
             genaichat_url = parser.get('agent', 'genaichat_url')
-            llmjudge_url = parser.get('agent', 'llmjudge_url')
+            llmjudge_url = parser.get('agent', 'llmjudge_url', fallback='').strip()
 
+            # Enable/disable toggles for each request type
+            enable_endpoint_monitoring = parser.getboolean('agent', 'enable_endpoint_monitoring', fallback=True)
+            enable_incident_summary_llm = parser.getboolean('agent', 'enable_incident_summary_llm', fallback=True)
+            enable_llm_chatbot = parser.getboolean('agent', 'enable_llm_chatbot', fallback=False)
+            enable_llm_judge = parser.getboolean('agent', 'enable_llm_judge', fallback=True)
 
             login_user = parser.get('agent', 'login_user')
             login_pass = decode(parser.get('agent', 'login_pass'))
 
-            monitor_urls = json.loads(parser.get('agent', 'monitor_urls', raw=True))
+            monitor_urls = json.loads(parser.get('agent', 'monitor_urls', raw=True, fallback='[]'))
             
             # Incident Summary and Recommendation LLM parameters
             system_name = parser.get('agent', 'system_name')
@@ -117,7 +122,7 @@ def get_agent_config_vars():
             if len(login_pass) == 0:
                 print("Agent not correctly configured(login_pass). Check config file.")
                 sys.exit(1)
-            if len(monitor_urls) == 0:
+            if enable_endpoint_monitoring and len(monitor_urls) == 0:
                 print("Agent not correctly configured(monitor_urls). Check config file.")
                 sys.exit(1)
     except IOError:
@@ -132,6 +137,10 @@ def get_agent_config_vars():
         'genai_url': genai_url,
         'genaichat_url': genaichat_url,
         'llmjudge_url': llmjudge_url,
+        'enable_endpoint_monitoring': enable_endpoint_monitoring,
+        'enable_incident_summary_llm': enable_incident_summary_llm,
+        'enable_llm_chatbot': enable_llm_chatbot,
+        'enable_llm_judge': enable_llm_judge,
         'login_user': login_user,
         'login_pass': login_pass,
         'monitor_urls': monitor_urls,
@@ -200,19 +209,22 @@ def run_if_endpoints(start_time, config_vars):
         futures = {}
         
         # Add regular endpoint monitoring tasks
-        for monitor_url in config_vars['monitor_urls']:
-            key = next(iter(monitor_url.keys()))
-            futures[key] = executor.submit(run_endpoint_request, url + monitor_url[key], headers, cookies)
-        
-        # # Add LLM Chatbot endpoint task
-        # futures['Realtime Chatbot LLM'] = executor.submit(
-        #     run_llm_chatbot_endpoint, url, headers, cookies
-        # )
-        
+        if config_vars['enable_endpoint_monitoring']:
+            for monitor_url in config_vars['monitor_urls']:
+                key = next(iter(monitor_url.keys()))
+                futures[key] = executor.submit(run_endpoint_request, url + monitor_url[key], headers, cookies)
+
+        # Add LLM Chatbot endpoint task
+        if config_vars['enable_llm_chatbot']:
+            futures['Realtime Chatbot LLM'] = executor.submit(
+                run_llm_chatbot_endpoint, url, headers, cookies
+            )
+
         # Add Incident Summary and Recommendation LLM endpoint task
-        futures['Incident Summary and Recommendation LLM'] = executor.submit(
-            run_incident_summary_recommendation_llm, url, headers, cookies, config_vars
-        )
+        if config_vars['enable_incident_summary_llm']:
+            futures['Incident Summary and Recommendation LLM'] = executor.submit(
+                run_incident_summary_recommendation_llm, url, headers, cookies, config_vars
+            )
 
         # Wait for all tasks to complete and get results
         for key, future in futures.items():
@@ -449,12 +461,20 @@ if __name__ == "__main__":
 
     # Use multiple threads to run multiple endpoints concurrently
     with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [
-            executor.submit(run_llm_judge_endpoint, start_time, if_host, llmjudge_url,
-                            "LLM Evaluation Service"),
+        futures = []
 
-            executor.submit(run_if_endpoints, start_time, config_vars)
-        ]
+        # Login + IF endpoints are only needed when at least one of them is enabled
+        if (config_vars['enable_endpoint_monitoring'] or config_vars['enable_incident_summary_llm']
+                or config_vars['enable_llm_chatbot']):
+            futures.append(executor.submit(run_if_endpoints, start_time, config_vars))
+        else:
+            print("[Config] Endpoint monitoring and IF LLM requests are disabled, skipping login")
+
+        if config_vars['enable_llm_judge'] and llmjudge_url:
+            futures.append(executor.submit(run_llm_judge_endpoint, start_time, if_host, llmjudge_url,
+                                           "LLM Evaluation Service"))
+        elif config_vars['enable_llm_judge']:
+            print("[Config] enable_llm_judge is true but llmjudge_url is empty, skipping LLM Judge request")
 
         # Wait for all tasks to complete
         wait(futures)
