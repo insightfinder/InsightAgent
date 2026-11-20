@@ -141,7 +141,7 @@ func (w *Worker) Start(quit <-chan os.Signal) {
 	if len(w.getDeviceLookup()) == 0 {
 		logrus.Info("DeviceLookup cache empty, running initial refresh before first metric cycle...")
 		w.refreshDeviceLookup()
-	} else if ruckus.DeviceLookupIsStale() {
+	} else if ruckus.DeviceLookupIsStale() || w.getDeviceLookup().MissingStatus() {
 		go w.refreshDeviceLookup()
 	}
 
@@ -198,6 +198,9 @@ func (w *Worker) Start(quit <-chan os.Signal) {
 func (w *Worker) applyDeviceMetadata(metric *models.MetricData, ap *models.APDetail) bool {
 	devInfo, found := w.getDeviceLookup().Lookup(ap.APMAC)
 	if !found {
+		return false
+	}
+	if !devInfo.IsInService() {
 		return false
 	}
 
@@ -324,7 +327,7 @@ func (w *Worker) collectAndSendStreaming() {
 		}
 		dropped := len(chunkMetrics) - len(filtered)
 		if dropped > 0 {
-			logrus.Infof("Discarded %d AP(s) not found in device inventory", dropped)
+			logrus.Infof("Discarded %d AP(s) not found in device inventory or not in service", dropped)
 		}
 		chunkMetrics = filtered
 

@@ -224,6 +224,14 @@ def is_device_ignored(inv_entry, ignore_device_rules):
     return False
 
 
+IN_SERVICE_STATUS = "in service"
+
+
+def is_in_service(inv_record):
+    status = ((inv_record or {}).get("meta") or {}).get("status")
+    return isinstance(status, str) and status.strip().lower() == IN_SERVICE_STATUS
+
+
 def load_metric_transforms(script_path, logger):
     """Load TRANSFORMS list from a user-provided Python script."""
     if not os.path.exists(script_path):
@@ -770,6 +778,9 @@ def parse_messages_zabbix(logger, data_type, result, all_field_map, items_map, r
             _actual_host_id = hosts[0].get('hostid') if hosts else None
             _inv_entry = _device_lookup.get(_actual_host_id) if _actual_host_id else None
             if not _inv_entry:
+                continue
+            if not is_in_service(_inv_entry.get('device')):
+                logger.debug('Skipping not-in-service device host_id=%s', _actual_host_id)
                 continue
             if is_device_ignored(_inv_entry, agent_config_vars.get('ignore_device_rules', [])):
                 logger.debug('Skipping ignored device host_id=%s', _actual_host_id)

@@ -263,6 +263,9 @@ func (w *Worker) sendMetricBatch(timestamp int64, metrics []*models.EquipmentMet
 		// Priority (matches zabbix agent's device-inventory rules):
 		// MAC(devicelookup) > serial(devicelookup) > object_key(devicelookup) > MAC(NE) > serial(NE) > equipment name
 		devInfo := w.getDeviceLookup().GetDeviceInfo(em.MACAddress)
+		if !devInfo.IsInService() {
+			continue
+		}
 		invMAC := normalizeMACIdentifier(devInfo.MACAddress)
 		ownMAC := normalizeMACIdentifier(em.MACAddress)
 		invSerial := normalizeSerialIdentifier(devInfo.SerialNumber)
