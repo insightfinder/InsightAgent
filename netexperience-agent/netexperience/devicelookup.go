@@ -24,6 +24,17 @@ type DeviceInfo struct {
 	Venue         string `json:"venue"`          // device.meta.venue → used as zone
 	ComponentName string `json:"component_name"` // manufacturer-device_class
 	IPAddress     string `json:"ip_address"`     // device.ip_address
+
+	Status *string `json:"status,omitempty"`
+}
+
+const inServiceStatus = "In service"
+
+func (d DeviceInfo) IsInService() bool {
+	if d.Status == nil {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(*d.Status), inServiceStatus)
 }
 
 // DeviceLookupEntry caches one device lookup result
@@ -302,6 +313,7 @@ func extractDeviceInfo(raw map[string]interface{}) DeviceInfo {
 	if deviceClass == "" {
 		deviceClass = "NONE"
 	}
+	status := stringVal(meta, "status")
 
 	return DeviceInfo{
 		SerialNumber:  stringVal(dev, "serial_number"),
@@ -310,6 +322,7 @@ func extractDeviceInfo(raw map[string]interface{}) DeviceInfo {
 		Venue:         stringVal(meta, "venue"),
 		ComponentName: manufacturer + "-" + deviceClass,
 		IPAddress:     stringVal(dev, "ip_address"),
+		Status:        &status,
 	}
 }
 

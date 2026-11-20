@@ -154,6 +154,14 @@ def inv_field(d: dict, key: str) -> str:
     return v
 
 
+IN_SERVICE_STATUS = "in service"
+
+
+def is_in_service(inv_record: dict) -> bool:
+    status = ((inv_record or {}).get("meta") or {}).get("status")
+    return isinstance(status, str) and status.strip().lower() == IN_SERVICE_STATUS
+
+
 def normalize_mac(mac: str) -> str:
     """':' -> '-', trim leading/trailing '-'. No case conversion."""
     mac = (mac or "").strip()
@@ -243,6 +251,8 @@ def build_idm(rows: list[dict], ts: int, derived_rules: list | None = None, ap_l
 
         lookup = ap_lookup or {}
         devices = (lookup.get(mac_raw) or {}).get("devices") or {}
+        if devices and not is_in_service(devices):
+            continue
 
         # Instance name: Inventory MAC > Inventory serial > Inventory object_key
         # > the AP's own name. If none of these are available (Inventory miss
