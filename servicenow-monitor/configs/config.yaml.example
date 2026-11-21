@@ -1,0 +1,39 @@
+agent:
+  log_level: INFO   # DEBUG, INFO, WARN, ERROR
+
+servicenow:
+  timeout_sec: 60
+  verify_ssl: true
+  short_description: "InsightFinder ServiceNow health check - test incident"
+  # Delete the test incident after it has been created and retrieved.
+  delete_after_check: false
+  # Create and read are each retried up to max_retries times before the
+  # instance is reported as failed (Success=0).
+  max_retries: 10
+  retry_interval_sec: 10
+
+  # Add one entry per ServiceNow instance. `name` is the InsightFinder
+  # instance name and defaults to the URL's subdomain (e.g. dev428447).
+  instances:
+    - name: dev428447
+      url: https://dev428447.service-now.com
+      username: admin
+      password: "changeme"
+      enabled: true
+
+    - name: dev296992
+      url: https://dev296992.service-now.com
+      username: admin
+      password: "changeme"
+      enabled: false
+
+insightfinder:
+  server_url: https://stg.insightfinder.com
+  username: ""
+  license_key: ""
+  project_name: servicenow-instance-monitor
+  system_name: IF Prod System
+  component_name: ServiceNow
+  cloud_type: OnPremise
+  instance_type: OnPremise
+  sampling_interval: 1800   # seconds; keep in sync with the cron schedule
