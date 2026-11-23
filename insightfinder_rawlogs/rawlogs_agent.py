@@ -64,6 +64,7 @@ class SourceConfig:
 
 @dataclass
 class DestinationConfig:
+    enabled: bool
     url: str
     user_name: str
     license_key: str
@@ -110,12 +111,19 @@ class LoggingConfig:
 
 
 @dataclass
+class LocalStorageConfig:
+    enabled: bool
+    directory: str
+
+
+@dataclass
 class AgentConfig:
     source: SourceConfig
     destination: DestinationConfig
     collection: CollectionConfig
     transform: TransformConfig
     logging: LoggingConfig
+    local_storage: LocalStorageConfig
 
 
 def _require(section: dict, key: str, section_name: str):
@@ -153,6 +161,7 @@ def load_config(path: str) -> AgentConfig:
     coll = raw.get('collection') or {}
     trans = raw.get('transform') or {}
     log_cfg = raw.get('logging') or {}
+    local_cfg = raw.get('local_storage') or {}
 
     src_url = _require(src, 'url', 'source')
     src_user = _require(src, 'user_name', 'source')
@@ -177,18 +186,25 @@ def load_config(path: str) -> AgentConfig:
         proxies=dict(src.get('proxies') or {}),
     )
 
-    dst_url = _require(dst, 'url', 'destination')
-    dst_user = _require(dst, 'user_name', 'destination')
-    dst_key = os.environ.get('IF_DEST_LICENSE_KEY') or dst.get('license_key')
-    if not dst_key:
-        raise ConfigError("Missing required config value: destination.license_key "
-                          "(or IF_DEST_LICENSE_KEY env var)")
+    dst_enabled = bool(dst.get('enabled', True))
+    if dst_enabled:
+        dst_url = _require(dst, 'url', 'destination')
+        dst_user = _require(dst, 'user_name', 'destination')
+        dst_key = os.environ.get('IF_DEST_LICENSE_KEY') or dst.get('license_key')
+        if not dst_key:
+            raise ConfigError("Missing required config value: destination.license_key "
+                              "(or IF_DEST_LICENSE_KEY env var)")
+    else:
+        dst_url = dst.get('url') or ''
+        dst_user = dst.get('user_name') or ''
+        dst_key = os.environ.get('IF_DEST_LICENSE_KEY') or dst.get('license_key') or ''
 
     project_type = (dst.get('project_type') or 'log').lower()
     if project_type not in ('log', 'logreplay'):
         raise ConfigError("destination.project_type must be 'log' or 'logreplay'")
 
     destination = DestinationConfig(
+        enabled=dst_enabled,
         url=dst_url,
         user_name=dst_user,
         license_key=dst_key,
@@ -245,8 +261,17 @@ def load_config(path: str) -> AgentConfig:
         backup_count=int(log_cfg.get('backup_count', 14)),
     )
 
+    local_storage = LocalStorageConfig(
+        enabled=bool(local_cfg.get('enabled', False)),
+        directory=local_cfg.get('directory') or './raw_logs',
+    )
+
+    if not destination.enabled and not local_storage.enabled:
+        raise ConfigError("Nothing to do: destination.enabled and local_storage.enabled "
+                          "are both false")
+
     return AgentConfig(source=source, destination=destination, collection=collection,
-                      transform=transform, logging=logging_cfg)
+                      transform=transform, logging=logging_cfg, local_storage=local_storage)
 
 
 #############
@@ -352,6 +377,63 @@ class RawLogsClient:
             results.append(ProjectExport(project_name=proj.get('projectName'),
                                         events=proj.get('events') or []))
         return results
+
+
+#############
+# Sink: LocalLogSink
+#############
+
+PROJECT_DIR_JUNK = re.compile(r'[^\w.-]')
+
+
+class LocalLogSink:
+    """Appends raw exported events to local JSONL files, one per source project
+    per UTC day, under `directory`. Independent of the remote destination send."""
+
+    def __init__(self, cfg: LocalStorageConfig):
+        self.cfg = cfg
+        self._locks = {}
+        self._locks_guard = Lock()
+        if cfg.enabled:
+            os.makedirs(cfg.directory, exist_ok=True)
+
+    def _lock_for(self, path: str) -> Lock:
+        with self._locks_guard:
+            if path not in self._locks:
+                self._locks[path] = Lock()
+            return self._locks[path]
+
+    @staticmethod
+    def _day_str(timestamp) -> str:
+        import datetime
+        if timestamp is None:
+            return 'unknown-date'
+        try:
+            dt = datetime.datetime.fromtimestamp(int(timestamp) / 1000, tz=datetime.timezone.utc)
+            return dt.strftime('%Y-%m-%d')
+        except (TypeError, ValueError, OSError):
+            return 'unknown-date'
+
+    def write(self, project_name: str, events: list):
+        if not self.cfg.enabled or not events:
+            return
+
+        by_day = {}
+        for event in events:
+            by_day.setdefault(self._day_str(event.get('timestamp')), []).append(event)
+
+        proj_dir = os.path.join(self.cfg.directory, PROJECT_DIR_JUNK.sub('_', project_name))
+        os.makedirs(proj_dir, exist_ok=True)
+
+        for day, day_events in by_day.items():
+            path = os.path.join(proj_dir, f"{day}.jsonl")
+            with self._lock_for(path):
+                try:
+                    with open(path, 'a', encoding='utf-8') as fp:
+                        for event in day_events:
+                            fp.write(json.dumps(event, ensure_ascii=False) + '\n')
+                except OSError as e:
+                    logger.error("Local storage write to '%s' failed: %s", path, e)
 
 
 #############
@@ -570,14 +652,15 @@ class RunSummary:
         return bool(self.failed_slices)
 
 
-def _process_slice(source: RawLogsClient, sink: InsightFinderSink, cfg: AgentConfig,
-                   start_ms: int, end_ms: int, dry_run: bool) -> dict:
+def _process_slice(source: RawLogsClient, sink: InsightFinderSink, local_sink: LocalLogSink,
+                   cfg: AgentConfig, start_ms: int, end_ms: int, dry_run: bool) -> dict:
     """Fetch + transform + send one time slice. Returns per-project stats."""
     stats = {'fetched': 0, 'sent': 0, 'skipped': set()}
     exports = source.export(start_ms, end_ms)
     for export in exports:
         stats['fetched'] += len(export.events)
-        if export.error:
+        local_sink.write(export.project_name, export.events)
+        if export.error or not cfg.destination.enabled:
             continue
 
         target = cfg.source.projects.get(export.project_name)
@@ -604,11 +687,15 @@ def run_once(cfg: AgentConfig, dry_run: bool = False) -> RunSummary:
                                        align=cfg.collection.align_to_interval)
         logger.info("Live window %d - %d", start_ms, end_ms)
 
+    if not cfg.destination.enabled:
+        logger.info("destination.enabled is false; storing locally only, not streaming.")
+
     summary = RunSummary(start_ms=start_ms, end_ms=end_ms)
     run_started = time.time()
 
     source = RawLogsClient(cfg.source)
     sink = InsightFinderSink(cfg.destination)
+    local_sink = LocalLogSink(cfg.local_storage)
 
     slice_list = list(slices(start_ms, end_ms, cfg.collection.slice_seconds))
     if not slice_list:
@@ -617,7 +704,7 @@ def run_once(cfg: AgentConfig, dry_run: bool = False) -> RunSummary:
 
     with ThreadPoolExecutor(max_workers=cfg.collection.workers) as pool:
         future_to_slice = {
-            pool.submit(_process_slice, source, sink, cfg, s, e, dry_run): (s, e)
+            pool.submit(_process_slice, source, sink, local_sink, cfg, s, e, dry_run): (s, e)
             for s, e in slice_list
         }
         for future in as_completed(future_to_slice):
