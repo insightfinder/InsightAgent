@@ -1,0 +1,17 @@
+input:
+  type: file
+
+# Input configuration
+file_input:
+  folder: ./data
+
+google_big_query_input:
+  # TODO
+
+output:
+  # otlp/grpc endpoint
+  grpc:
+    insecure: true
+    endpoint: 18.212.200.99:4317
+    # max size (bytes) of a single grpc message; keep in sync with the collector's limit
+    max_message_size: 4194304
