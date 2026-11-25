@@ -190,9 +190,9 @@ func (k *KubernetesServer) GetPodsContainerExitEvents(namespace string, startTim
 				containerLastTerminated := containerStatus.LastTerminationState.Terminated
 				if containerLastTerminated.FinishedAt.Time.After(startTime) && containerLastTerminated.FinishedAt.Time.Before(endTime) {
 
-					// Convert Exit 137 event to OOMKilled event
-					if containerLastTerminated.ExitCode == 137 {
-						containerLastTerminated.Reason = "OOMKilled"
+					note := fmt.Sprintf("Container %s Terminated with exit code %d.", containerStatus.Name, containerLastTerminated.ExitCode)
+					if containerLastTerminated.ExitCode == 137 && containerLastTerminated.Reason != "OOMKilled" {
+						note = fmt.Sprintf("Container %s Terminated with exit code 137 (SIGKILL, not reported as OOMKilled).", containerStatus.Name)
 					}
 
 					// Save the same event to cache to avoid duplicate events
@@ -202,7 +202,7 @@ func (k *KubernetesServer) GetPodsContainerExitEvents(namespace string, startTim
 						Time:      containerLastTerminated.FinishedAt.Time,
 						Type:      "Warning",
 						Reason:    containerLastTerminated.Reason,
-						Note:      fmt.Sprintf("Container %s Terminated with exit code %d.", containerStatus.Name, containerLastTerminated.ExitCode),
+						Note:      note,
 						Regarding: RegardingEntity{
 							Name:      Pod.Name,
 							Namespace: Pod.Namespace,
