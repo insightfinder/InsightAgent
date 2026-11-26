@@ -1,0 +1,5 @@
+config.yaml
+*.state
+grafana-tempo-agent
+grafana-tempo-agent.exe
+tempo-data/

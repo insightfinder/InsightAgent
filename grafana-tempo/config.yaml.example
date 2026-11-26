@@ -1,0 +1,61 @@
+tempo:
+  # Tempo HTTP API base URL (query-frontend in microservices mode, Tempo itself in single-binary mode).
+  endpoint: "http://localhost:3200"
+
+  # Optional basic auth, e.g. for Grafana Cloud Traces.
+  username: ""
+  password: ""
+
+  # Optional tenant id for multi-tenant Tempo; sent as the X-Scope-OrgID header.
+  tenant_id: ""
+
+  # Optional extra HTTP headers sent to Tempo.
+  headers: {}
+
+  insecure_skip_verify: false
+
+  # TraceQL query that selects the traces to stream. "{}" streams everything.
+  # Example: '{ resource.service.name = "checkout-service" }'
+  query: "{}"
+
+  # Max traces returned by one search. A window that hits the limit is split in half and searched again.
+  limit: 500
+
+  # Spans returned per span set in search results. Only the trace ID is used, so keep it small.
+  spans_per_span_set: 1
+
+  timeout: 30s
+
+insightfinder:
+  # InsightFinder trace server (OTLP gRPC), host:port.
+  trace_server: "stg-traceserver-temporal.insightfinder.com:443"
+  tls: true
+  insecure_skip_verify: false
+
+  username: ""
+  license_key: ""
+  # The trace project is created by the trace server if it does not exist.
+  project_name: ""
+  system_name: ""
+
+  # true: fetch traces from Tempo and log them, send nothing.
+  dry_run: false
+
+agent:
+  # Size of each query window.
+  interval: 1m
+
+  # How long to wait after a window closes before querying it, so late spans reach Tempo.
+  delay: 2m
+
+  # Optional RFC3339 start time to backfill from. Empty starts from now - delay - interval.
+  start_time: ""
+
+  # Optional RFC3339 end time. The agent exits once it reaches it. Empty runs forever.
+  end_time: ""
+
+  # Concurrent trace fetch + send workers.
+  workers: 5
+
+  # File that stores the end of the last processed window, so a restart resumes from it.
+  state_file: "grafana-tempo-agent.state"
