@@ -1,0 +1,38 @@
+stream_over_http_enabled: true
+
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9095
+  log_level: info
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "127.0.0.1:4317"
+        http:
+          endpoint: "127.0.0.1:4318"
+
+live_store:
+  shutdown_marker_dir: ./tempo-data/live-store/shutdown-marker
+  wal:
+    path: ./tempo-data/live-store/traces
+
+block_builder:
+  wal:
+    path: ./tempo-data/block-builder/traces
+
+backend_scheduler:
+  local_work_path: ./tempo-data/backend-scheduler
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: ./tempo-data/wal
+    local:
+      path: ./tempo-data/blocks
+
+usage_report:
+  reporting_enabled: false
