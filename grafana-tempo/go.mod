@@ -1,8 +1,9 @@
-module if-grafana-tempo-agent
+module github.com/insightfinder/grafana-tempo-agent
 
 go 1.26.0
 
 require (
+	github.com/sirupsen/logrus v1.9.3
 	go.opentelemetry.io/proto/otlp v1.11.1
 	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12

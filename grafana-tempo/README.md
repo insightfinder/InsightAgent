@@ -19,6 +19,18 @@ If a search returns `tempo.limit` traces, the window is split in half and search
 busy window is not cut short. Trace IDs already sent are skipped. The end of the last processed
 window is written to `agent.state_file`, so a restart continues where it stopped.
 
+## Layout
+
+| Path | Purpose |
+|---|---|
+| `main.go` | Loads the config, creates the services and starts the worker |
+| `configs/` | Config types, loading, defaults and validation; `config.yaml.example` |
+| `tempo/` | Tempo HTTP API client: trace search and trace by ID |
+| `insightfinder/` | OTLP gRPC export to the InsightFinder trace server |
+| `worker/` | Polling loop: query windows, window splitting, de-duplication, state file |
+| `tools/fakegen/` | Fake trace generator for demos |
+| `demo/` | Single-binary Tempo config for demos |
+
 ## Build
 
 ```shell
@@ -34,11 +46,12 @@ $env:GOOS="linux"; $env:GOARCH="amd64"; $env:CGO_ENABLED="0"; go build -o grafan
 ## Run
 
 ```shell
-cp config.yaml.example config.yaml
-./grafana-tempo-agent -c config.yaml
+cp configs/config.yaml.example configs/config.yaml
+./grafana-tempo-agent
 ```
 
-See `config.yaml.example` for every option. Useful ones:
+The agent reads `configs/config.yaml` by default; `-c <path>` uses another file.
+See `configs/config.yaml.example` for every option. Useful ones:
 
 | Option | Meaning |
 |---|---|
@@ -49,6 +62,7 @@ See `config.yaml.example` for every option. Useful ones:
 | `insightfinder.trace_server` | Trace server OTLP gRPC address, `host:port` |
 | `insightfinder.dry_run` | `true` fetches from Tempo and logs, sends nothing |
 | `agent.start_time` / `agent.end_time` | RFC3339 range for a backfill |
+| `agent.log_level` | `DEBUG`, `INFO`, `WARN` or `ERROR` |
 
 ## Demo with fake data
 
@@ -65,5 +79,5 @@ some failed payments and some slow database queries.
 go run ./tools/fakegen -endpoint http://localhost:4318 -n 5 -interval 10s
 
 # 3. Agent: dry run first, then set dry_run: false and the InsightFinder settings
-./grafana-tempo-agent -c config.yaml
+./grafana-tempo-agent
 ```

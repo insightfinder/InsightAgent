@@ -1,4 +1,4 @@
-package main
+package insightfinder
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	config "github.com/insightfinder/grafana-tempo-agent/configs"
 	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/grpc"
@@ -14,16 +15,19 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-const maxExportMessageBytes = 64 << 20
+const (
+	maxExportMessageBytes = 64 << 20
+	exportTimeout         = 30 * time.Second
+)
 
-type TraceSender struct {
-	cfg    InsightFinderConfig
+type Service struct {
+	config config.InsightFinderConfig
 	conn   *grpc.ClientConn
 	client coltracepb.TraceServiceClient
-	md     metadata.MD
+	header metadata.MD
 }
 
-func NewTraceSender(cfg InsightFinderConfig) (*TraceSender, error) {
+func NewService(cfg config.InsightFinderConfig) (*Service, error) {
 	var creds credentials.TransportCredentials
 	if cfg.TLS {
 		creds = credentials.NewTLS(&tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify})
@@ -35,13 +39,13 @@ func NewTraceSender(cfg InsightFinderConfig) (*TraceSender, error) {
 		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(maxExportMessageBytes)),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("connect trace server %s: %w", cfg.TraceServer, err)
+		return nil, fmt.Errorf("failed to connect trace server %s: %w", cfg.TraceServer, err)
 	}
-	return &TraceSender{
-		cfg:    cfg,
+	return &Service{
+		config: cfg,
 		conn:   conn,
 		client: coltracepb.NewTraceServiceClient(conn),
-		md: metadata.Pairs(
+		header: metadata.Pairs(
 			"ifuser", cfg.Username,
 			"iflicensekey", cfg.LicenseKey,
 			"ifproject", cfg.ProjectName,
@@ -50,20 +54,21 @@ func NewTraceSender(cfg InsightFinderConfig) (*TraceSender, error) {
 	}, nil
 }
 
-func (s *TraceSender) Send(ctx context.Context, td *tracepb.TracesData) error {
-	ctx = metadata.NewOutgoingContext(ctx, s.md)
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+func (s *Service) SendTrace(ctx context.Context, traces *tracepb.TracesData) error {
+	ctx = metadata.NewOutgoingContext(ctx, s.header)
+	ctx, cancel := context.WithTimeout(ctx, exportTimeout)
 	defer cancel()
-	resp, err := s.client.Export(ctx, &coltracepb.ExportTraceServiceRequest{ResourceSpans: td.ResourceSpans})
+
+	resp, err := s.client.Export(ctx, &coltracepb.ExportTraceServiceRequest{ResourceSpans: traces.ResourceSpans})
 	if err != nil {
 		return err
 	}
-	if ps := resp.GetPartialSuccess(); ps != nil && ps.GetRejectedSpans() > 0 {
-		return fmt.Errorf("trace server rejected %d spans: %s", ps.GetRejectedSpans(), ps.GetErrorMessage())
+	if partial := resp.GetPartialSuccess(); partial != nil && partial.GetRejectedSpans() > 0 {
+		return fmt.Errorf("trace server rejected %d spans: %s", partial.GetRejectedSpans(), partial.GetErrorMessage())
 	}
 	return nil
 }
 
-func (s *TraceSender) Close() error {
+func (s *Service) Close() error {
 	return s.conn.Close()
 }

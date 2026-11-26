@@ -42,6 +42,9 @@ insightfinder:
   dry_run: false
 
 agent:
+  # DEBUG, INFO, WARN or ERROR.
+  log_level: INFO
+
   # Size of each query window.
   interval: 1m
 
